@@ -107,7 +107,7 @@ sdlc-skills/
   human browsers of this README.
 -->
 
-### Agents (7)
+### Agents (8)
 
 | Agent | Role |
 |---|---|
@@ -118,6 +118,7 @@ sdlc-skills/
 | `js-dev` | JavaScript / TypeScript implementation — owns its own repo clone and branch |
 | `qa-engineer` | Tests PRs, reports findings on the GitHub issue |
 | `personal-assistant` | Conversational assistant: vault, email, calendar, daily brief |
+| `scout` | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 
 ### Workflow skills — SDLC-coupled (4)
 
@@ -128,7 +129,7 @@ sdlc-skills/
 | `implement-feature` | Feature implementation workflow used by devs |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 
-### Generic dev skills (11)
+### Generic dev skills (12)
 
 | Skill | What it does |
 |---|---|
@@ -141,6 +142,7 @@ sdlc-skills/
 | `goal-verifier` | Verify a task actually achieved its stated goal |
 | `context-gatherer` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
+| `memory` | Persistent file-based memory across conversations (user, feedback, project, reference) |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `msgraph` | Microsoft Graph (email / calendar / Teams) integration |
 
