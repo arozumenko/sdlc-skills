@@ -1,0 +1,11 @@
+# Octobots install config — read by setup-skill.sh, ignored by other agent clients
+dependencies:
+  mcp:
+    - name: playwright
+      command: npx
+      args: ["@playwright/mcp@latest"]
+      env: {}
+permissions:
+  filesystem: read
+  network: true
+  shell: false

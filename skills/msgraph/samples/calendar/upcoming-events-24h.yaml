@@ -1,0 +1,15 @@
+task: "List calendar events starting within the next 24 hours"
+script: scan-calendar.py
+sdk: msgraph-sdk
+endpoint: GET /me/calendarView
+params:
+  startDateTime: "{now}"
+  endDateTime: "{now+24h}"
+  $select: "id,subject,start,end,organizer,location,isAllDay,isCancelled,bodyPreview"
+  $top: 50
+scopes:
+  - Calendars.Read
+notes: "{now} expands to the current UTC timestamp. {now+24h} adds 24 hours.
+  $orderby is intentionally omitted — calendarView results are always ordered by
+  start time and setting $orderby causes a 400 error.
+  Use scan-calendar.py --hours-ahead 24 for the same effect in scheduled scans."

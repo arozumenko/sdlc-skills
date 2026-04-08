@@ -1,0 +1,20 @@
+task: "Find Teams messages that mention the current user"
+script: scan-teams.py
+sdk: msgraph-beta-sdk
+endpoint: GET /me/chats/getAllMessages
+params:
+  $filter: "mentions/any(m: m/mentioned/user/id eq '{meId}')"
+  $select: "id,createdDateTime,from,body,channelIdentity,mentions"
+  $top: 25
+scopes:
+  - Chat.Read
+  - ChannelMessage.Read.All
+notes: "⚠️  APPLICATION PERMISSION REQUIRED: GET /me/chats/getAllMessages requires
+  the 'Chat.Read.All' application permission. It does NOT work with delegated
+  (user-signed-in) auth, which is what this skill uses by default. This sample
+  is provided for reference only — use it only if you have configured app-level
+  auth separately.
+
+  Additionally, replace {meId} with the signed-in user's object ID (call
+  GET /me to retrieve it). This placeholder is NOT expanded automatically.
+  Pass --beta to query.py since this endpoint is beta-only."

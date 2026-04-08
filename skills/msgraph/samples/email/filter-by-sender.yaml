@@ -1,0 +1,14 @@
+task: "List recent unread emails from a specific sender"
+script: scan-email.py
+sdk: msgraph-sdk
+endpoint: GET /me/messages
+params:
+  $filter: "from/emailAddress/address eq 'sender@example.com'"
+  $select: "id,subject,from,receivedDateTime,bodyPreview,isRead"
+  $orderby: "receivedDateTime desc"
+  $top: 50
+scopes:
+  - Mail.Read
+notes: "Replace sender@example.com with the actual sender address. Single quotes
+  in email addresses (e.g. o'brien@example.com) must be escaped as two consecutive
+  single quotes: 'o''brien@example.com'. Use scan-email.py --sender for scheduled scans."

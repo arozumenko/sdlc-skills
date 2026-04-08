@@ -1,0 +1,5 @@
+# Octobots install config — read by setup-skill.sh, ignored by other agent clients
+permissions:
+  filesystem: read-write  # screenshots, PDFs, temp files
+  network: true           # CDP protocol + browser network requests
+  shell: true             # runs chrome-launcher.sh and cdp.mjs via bash/node

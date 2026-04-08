@@ -1,0 +1,13 @@
+task: "List unread emails received since the start of today"
+script: scan-email.py
+sdk: msgraph-sdk
+endpoint: GET /me/messages
+params:
+  $filter: "isRead eq false and receivedDateTime ge {today}"
+  $select: "id,subject,from,receivedDateTime,bodyPreview,hasAttachments"
+  $orderby: "receivedDateTime desc"
+  $top: 50
+scopes:
+  - Mail.Read
+notes: "{today} is expanded at runtime to midnight UTC of the current day.
+  Adjust the filter date manually if you need a different start time."

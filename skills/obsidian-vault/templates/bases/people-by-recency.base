@@ -1,0 +1,9 @@
+filters:
+  and:
+    - type == "person"
+views:
+  - type: table
+    name: People by Recency
+    order: [file.name, org, role, last_contact, urgency]
+    sort:
+      - { property: last_contact, direction: DESC }

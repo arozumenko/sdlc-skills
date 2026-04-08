@@ -1,0 +1,9 @@
+filters:
+  and:
+    - status == "inbox"
+views:
+  - type: table
+    name: Inbox
+    order: [file.name, type, source, created, people]
+    sort:
+      - { property: created, direction: DESC }

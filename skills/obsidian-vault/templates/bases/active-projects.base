@@ -1,0 +1,10 @@
+filters:
+  and:
+    - type == "project"
+    - status == "active"
+views:
+  - type: table
+    name: Active Projects
+    order: [file.name, next_action, blocker, target_date]
+    sort:
+      - { property: target_date, direction: ASC }

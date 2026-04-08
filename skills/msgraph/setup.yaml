@@ -1,0 +1,11 @@
+# Octobots install config — read by setup-skill.sh, ignored by other agent clients
+dependencies:
+  pip:
+    - msgraph-sdk>=1.5.0
+    - msgraph-beta-sdk>=1.5.0
+    - msal>=1.28.0
+    - azure-core>=1.30.0
+permissions:
+  filesystem: read-write
+  network: true
+  shell: true

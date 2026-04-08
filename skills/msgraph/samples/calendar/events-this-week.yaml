@@ -1,0 +1,16 @@
+task: "List all calendar events for the current ISO week"
+script: scan-calendar.py
+sdk: msgraph-sdk
+endpoint: GET /me/calendarView
+params:
+  startDateTime: "{week_start}"
+  endDateTime: "{week_end}"
+  $select: "id,subject,start,end,organizer,attendees,location,isAllDay,isCancelled"
+  $top: 100
+scopes:
+  - Calendars.Read
+notes: "{week_start} and {week_end} are expanded to Monday 00:00 UTC and Sunday
+  23:59:59 UTC of the current week. calendarView requires both startDateTime and
+  endDateTime as query parameters (not OData $filter). $orderby is intentionally
+  omitted — calendarView results are always ordered by start time and setting
+  $orderby causes a 400 error."

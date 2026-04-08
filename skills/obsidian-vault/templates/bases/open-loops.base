@@ -1,0 +1,6 @@
+filters:
+  and:
+    - file.name == "open-loops"
+views:
+  - type: cards
+    name: Open Loops

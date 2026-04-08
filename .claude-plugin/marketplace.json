@@ -1,0 +1,15 @@
+{
+  "name": "sdlc-skills",
+  "owner": {
+    "name": "Artem Rozumenko",
+    "url": "https://github.com/arozumenko"
+  },
+  "plugins": [
+    {
+      "name": "sdlc-skills",
+      "source": "./",
+      "description": "SDLC agents and skills for Claude Code: BA, Tech Lead, PM, devs, QA, personal assistant, plus workflow and generic dev skills.",
+      "version": "0.1.0"
+    }
+  ]
+}

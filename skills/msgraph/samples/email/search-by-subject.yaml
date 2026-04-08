@@ -1,0 +1,12 @@
+task: "Find emails whose subject contains a specific keyword"
+script: scan-email.py
+sdk: msgraph-sdk
+endpoint: GET /me/messages
+params:
+  $search: '"meeting notes"'
+  $select: "id,subject,from,receivedDateTime,bodyPreview"
+  $top: 25
+scopes:
+  - Mail.Read
+notes: "Replace 'meeting notes' with your search keyword. $search uses KQL syntax
+  and works across subject, body, and sender. Cannot be combined with $filter."

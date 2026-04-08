@@ -1,0 +1,14 @@
+task: "Read recent messages from a specific Teams channel"
+script: scan-teams.py
+sdk: msgraph-sdk
+endpoint: GET /teams/{teamId}/channels/{channelId}/messages
+params:
+  $top: 50
+  $select: "id,createdDateTime,from,body,importance,messageType"
+scopes:
+  - ChannelMessage.Read.All
+notes: "IMPORTANT: Replace {teamId} and {channelId} in the endpoint with real IDs
+  before running. These placeholders are NOT expanded automatically. Channel message
+  retrieval requires application permission ChannelMessage.Read.All or delegated
+  ChannelMessage.Read.Group. Results are ordered by createdDateTime descending
+  by default."

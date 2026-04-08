@@ -1,0 +1,12 @@
+task: "List all channels in a specific Microsoft Teams team"
+script: scan-teams.py
+sdk: msgraph-sdk
+endpoint: GET /teams/{teamId}/channels
+params:
+  $select: "id,displayName,description,membershipType,createdDateTime"
+scopes:
+  - Team.ReadBasic.All
+  - Channel.ReadBasic.All
+notes: "IMPORTANT: Replace {teamId} in the endpoint with a real team ID before
+  running. Team IDs can be found by calling GET /me/joinedTeams or via the Teams
+  admin portal. The placeholder is NOT expanded automatically."

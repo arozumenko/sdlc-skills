@@ -1,0 +1,13 @@
+task: "Search for calendar events whose subject contains a keyword"
+script: scan-calendar.py
+sdk: msgraph-sdk
+endpoint: GET /me/events
+params:
+  $search: '"quarterly review"'
+  $select: "id,subject,start,end,organizer,location,bodyPreview"
+  $top: 25
+scopes:
+  - Calendars.Read
+notes: "Replace 'quarterly review' with your search keyword. $search on /me/events
+  uses KQL and searches across subject and body. Use /me/calendarView with
+  startDateTime/endDateTime for a time-bounded lookup instead."

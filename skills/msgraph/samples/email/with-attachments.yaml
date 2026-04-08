@@ -1,0 +1,13 @@
+task: "List recent emails that have file attachments"
+script: scan-email.py
+sdk: msgraph-sdk
+endpoint: GET /me/messages
+params:
+  $filter: "hasAttachments eq true"
+  $select: "id,subject,from,receivedDateTime,hasAttachments,bodyPreview"
+  $orderby: "receivedDateTime desc"
+  $top: 50
+scopes:
+  - Mail.Read
+notes: "This returns all messages with attachments in the inbox, not just unread
+  ones. Add 'and isRead eq false' to the filter to restrict to unread messages."

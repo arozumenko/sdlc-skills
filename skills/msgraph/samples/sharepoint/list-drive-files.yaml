@@ -1,0 +1,12 @@
+task: "List files and folders at the root of the user's OneDrive"
+script: scan-sharepoint.py
+sdk: msgraph-sdk
+endpoint: GET /me/drive/root/children
+params:
+  $select: "id,name,size,lastModifiedDateTime,webUrl,file,folder,createdBy"
+  $orderby: "lastModifiedDateTime desc"
+  $top: 100
+scopes:
+  - Files.Read.All
+notes: "Returns items at the top level of the user's personal OneDrive. To list
+  a SharePoint document library use /sites/{siteId}/drive/root/children instead."

@@ -1,0 +1,20 @@
+version: '1.0'
+rules:
+  # Signals matching these are always escalated to user immediately
+  always_escalate:
+    senders: []          # email addresses or contact names
+    keywords: []         # subject/content keywords that trigger immediate ping
+    channels: []         # specific channel IDs
+
+  # Signals matching these are silently ignored
+  ignore:
+    senders: []
+    channels: []
+    patterns: []         # regex patterns on content
+
+  # Everything else: PA decides based on content
+  default_action: triage
+
+digest:
+  schedule: "09:00,18:00"   # times to send batched non-urgent items
+  quiet_hours: "23:00-08:00"

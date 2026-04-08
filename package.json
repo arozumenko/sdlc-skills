@@ -1,0 +1,25 @@
+{
+  "name": "sdlc-skills",
+  "version": "0.1.0",
+  "description": "SDLC agents and skills for Claude Code, Cursor, Windsurf, and GitHub Copilot. Installable via Claude plugin marketplace or npx for direct install into .claude/agents.",
+  "type": "module",
+  "bin": {
+    "init": "./bin/init.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arozumenko/sdlc-skills.git"
+  },
+  "author": "Artem Rozumenko",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "agents",
+    "skills",
+    "claude",
+    "cursor",
+    "windsurf",
+    "copilot",
+    "ai-development-team"
+  ]
+}

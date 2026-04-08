@@ -1,0 +1,11 @@
+filters:
+  and:
+    - type == "meeting"
+    - created >= date("now") - dur("30d")
+views:
+  - type: table
+    name: Recent Meetings
+    order: [file.name, attendees, created, duration_min]
+    group: attendees
+    sort:
+      - { property: created, direction: DESC }

@@ -1,0 +1,13 @@
+task: "Find files in OneDrive modified in the recent window"
+script: scan-sharepoint.py
+sdk: msgraph-sdk
+endpoint: GET /me/drive/recent
+params:
+  $select: "id,name,lastModifiedDateTime,size,webUrl,file,parentReference,lastModifiedBy"
+  $top: 50
+scopes:
+  - Files.Read.All
+notes: "/me/drive/recent returns recently viewed or modified items with strong
+  consistency, unlike search(q='') which has eventual consistency and may miss
+  items. Client-side date filtering is applied after the API call. Use
+  scan-sharepoint.py --since 24h for the scheduled equivalent."

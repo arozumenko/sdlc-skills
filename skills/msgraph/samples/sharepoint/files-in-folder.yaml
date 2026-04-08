@@ -1,0 +1,13 @@
+task: "List files inside a specific SharePoint or OneDrive folder"
+script: scan-sharepoint.py
+sdk: msgraph-sdk
+endpoint: GET /me/drive/items/{folderId}/children
+params:
+  $select: "id,name,size,lastModifiedDateTime,webUrl,file,folder,createdBy,lastModifiedBy"
+  $orderby: "name"
+  $top: 100
+scopes:
+  - Files.Read.All
+notes: "Replace {folderId} with the DriveItem ID of the folder. To list files in
+  a SharePoint site folder use /sites/{siteId}/drive/items/{folderId}/children.
+  Pass --drive-id and --path to query.py sharepoint files for an easier interface."
