@@ -9,16 +9,18 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import _bootstrap  # noqa: F401 — auto-installs deps, re-execs if needed
+
+import json
 import time
 import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 from _common import build_arg_parser, compute_since_dt, append_results, maybe_relay, build_output_item
 from auth import _build_credential, SCOPES

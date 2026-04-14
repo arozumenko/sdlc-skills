@@ -20,9 +20,13 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import _bootstrap  # noqa: F401 — auto-installs deps, re-execs if needed
+
 import tempfile
 import time
-from pathlib import Path
 from typing import Optional
 
 import msal

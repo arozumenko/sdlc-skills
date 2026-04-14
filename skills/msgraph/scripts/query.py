@@ -41,18 +41,20 @@ Sample YAML format:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import _bootstrap  # noqa: F401 — auto-installs deps, re-execs if needed
+
 import argparse
 import json
 import re
-import sys
 import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 from auth import _build_credential, SCOPES
 

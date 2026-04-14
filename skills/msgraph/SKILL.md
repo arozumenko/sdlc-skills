@@ -2,7 +2,7 @@
 name: msgraph
 description: Microsoft 365 signal scanning — email, Teams channels, calendar, SharePoint. LLM-less scripts for scheduled scans; query.py for interactive Claude use via Bash tool.
 license: Apache-2.0
-compatibility: Requires Python 3.10+, Azure AD app registration with delegated Graph permissions.
+compatibility: Requires Python 3.10+. Dependencies and Azure AD app are auto-configured on first run.
 metadata:
   author: octobots
   version: "0.1.0"
@@ -111,59 +111,49 @@ Sample YAML files in `samples/` describe pre-built queries that Claude can run b
 
 ## Authentication
 
-All scripts share authentication state managed by `scripts/auth.py`:
+Scripts auto-install Python dependencies into `~/.msgraph-skill/.venv/` on first
+run — no manual `pip install` or venv creation needed. A built-in Azure AD app ID
+is used by default, so no environment variables or Azure portal setup is required
+for most users.
 
-```
-python3 scripts/auth.py login    # Device-code flow — opens browser once, caches token
-python3 scripts/auth.py status   # Show token validity and granted scopes
-python3 scripts/auth.py logout   # Clear cached credentials
-```
+Token cache is stored at `~/.msgraph-skill/token_cache.json` (shared across all
+projects). Falls back to `.octobots/msgraph/token_cache.json` if the project has
+an `.octobots/` directory.
 
 ### Login flow (important for Claude)
 
-When the user is not authenticated, **do not** silently run `auth.py login` — the
-device-code flow requires the user to open a URL in their browser and enter a code.
-Instead:
-1. Run `auth.py login` via Bash tool.
-2. The output will contain a `LOGIN_URL` and `LOGIN_CODE` line — relay **both** to the
-   user in your response so they can see them and act on them.
-3. The script blocks until the user completes sign-in. Once it returns, confirm success.
+When the user is not authenticated, **run `auth.py login` via Bash tool**. The
+output will contain `LOGIN_URL=...` and `LOGIN_CODE=...` lines. **You must relay
+both values to the user in your response** — they need to open the URL in their
+browser and enter the code to complete sign-in. The script blocks until they do.
 
-The token cache is stored at `.octobots/msgraph/token_cache.json` (project-local, when
-`.octobots/` exists) or `~/.msgraph-skill/token_cache.json` (home fallback).
+```
+python3 scripts/auth.py login    # Device-code flow — relay URL and code to user
+python3 scripts/auth.py status   # Check token validity
+python3 scripts/auth.py logout   # Clear cached credentials
+```
 
-### Environment variables
+### Environment variables (optional)
 
 | Variable | Default | Description |
 |---|---|---|
-| `MSGRAPH_CLIENT_ID` | `084a3e9f-a9f4-43f7-89f9-d229cf97853e` | Azure AD app client ID |
-| `MSGRAPH_TENANT_ID` | `common` | Azure AD tenant (use tenant ID for single-org) |
+| `MSGRAPH_CLIENT_ID` | `084a3e9f-a9f4-43f7-89f9-d229cf97853e` | Override with your own Azure AD app |
+| `MSGRAPH_TENANT_ID` | `common` | Restrict to a specific tenant |
 
-Variables can be set via environment, or in a `.env` file at the skill root, project root, or cwd.
+Variables can be set via environment or in a `.env` file at the skill root, project
+root, or cwd. Most users do not need to set these.
 
-### Azure AD App Registration
+### Custom Azure AD app (advanced)
 
-You must register your own Azure AD application before using this skill:
+If your organisation blocks third-party app IDs or you need additional permissions,
+register your own Azure AD app:
 
-1. Go to [Azure portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps) and click **New registration**.
-2. Set a name (e.g. *octobots-msgraph*), choose **Accounts in this organizational directory only** or **Personal Microsoft accounts**, then click **Register**.
-3. Copy the **Application (client) ID** from the Overview page and export it:
-   ```bash
-   export MSGRAPH_CLIENT_ID="<your-application-id>"
-   # optional, for single-tenant orgs:
-   export MSGRAPH_TENANT_ID="<your-tenant-id>"
-   ```
-4. Under **API permissions → Add a permission → Microsoft Graph → Delegated permissions**, add:
-   `Mail.Read`, `Calendars.Read`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`,
-   `Sites.Read.All`, `Files.Read.All`
-5. Under **Authentication → Add a platform → Mobile and desktop applications**, enable the
+1. [Azure portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps) → New registration.
+2. Add delegated permissions: `Mail.Read`, `Calendars.Read`, `Team.ReadBasic.All`,
+   `Channel.ReadBasic.All`, `Sites.Read.All`, `Files.Read.All`.
+3. Under Authentication → Add platform → Mobile and desktop, enable the
    `https://login.microsoftonline.com/common/oauth2/nativeclient` redirect URI.
-6. Run `python3 scripts/auth.py login` to complete the device-code flow.
-
-### Required Microsoft Graph permissions (delegated)
-
-`Mail.Read`, `Calendars.Read`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`,
-`Sites.Read.All`, `Files.Read.All`
+4. Set `MSGRAPH_CLIENT_ID=<your-app-id>` in your `.env` and re-run login.
 
 ## Installation
 
@@ -179,20 +169,11 @@ You must register your own Azure AD application before using this skill:
 npx github:arozumenko/sdlc-skills init --skills msgraph --target claude
 ```
 
-This copies the skill into `.claude/skills/msgraph/`.
-
-### Python dependencies
-
-After installing the skill files, install the Python requirements into a venv:
-
-```bash
-cd .claude/skills/msgraph
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
+Python dependencies are installed automatically into `~/.msgraph-skill/.venv/`
+on first script run — no manual setup needed.
 
 ### First-time authentication
 
 ```bash
-.venv/bin/python3 scripts/auth.py login
+python3 scripts/auth.py login
 ```
