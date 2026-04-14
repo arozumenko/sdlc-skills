@@ -158,8 +158,8 @@ grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .octobots/ || ec
 ls .octobots/roles-manifest.yaml
 
 # Memory files present and non-empty for all roles
-ls .octobots/memory/
-wc -l .octobots/memory/*.md
+ls .claude/memory/
+wc -l .claude/memory/*.md
 ```
 
 Run the full readiness check:

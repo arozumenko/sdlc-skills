@@ -116,7 +116,7 @@ the agents standalone. Read this before you install.
 Several agents import runtime state via Claude Code's `@`-import syntax:
 
 ```markdown
-@.octobots/memory/<role>/snapshot.md
+@.claude/memory/<role>/snapshot.md
 ```
 
 These files are written by the supervisor's `memory` skill at launch. On

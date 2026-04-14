@@ -395,7 +395,7 @@ roles:
 
 ---
 
-## `.octobots/memory/<role-id>.md` Template
+## `.claude/memory/<role-id>.md` Template
 
 Scout fills "Project Knowledge" and "My Role Focus" at seeding time.
 The agent fills "Lessons Learned" and "Notes" during work sessions.

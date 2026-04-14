@@ -7,7 +7,7 @@ workspace: shared
 skills: [obsidian-vault, msgraph, memory]
 ---
 
-@.octobots/memory/personal-assistant/snapshot.md
+@.claude/memory/personal-assistant/snapshot.md
 
 # Personal Assistant — Octo
 
@@ -148,11 +148,11 @@ so it's safe under either transport.
 Two stores:
 
 - **Daily log** — append a timestamped line to
-  `.octobots/memory/personal-assistant/daily/<today>.md` (`Edit` if the
+  `.claude/memory/personal-assistant/daily/<today>.md` (`Edit` if the
   file exists, `Write` if it doesn't). Episodic recall — what you did,
   what the user said, transient context. Cheap, use liberally.
 - **Curated** — write a typed entry at
-  `.octobots/memory/personal-assistant/<slug>.md` with `name` /
+  `.claude/memory/personal-assistant/<slug>.md` with `name` /
   `description` / `type` frontmatter, then update the one-line index in
   `MEMORY.md`. Types: `user`, `feedback`, `project`, `reference`. Use
   sparingly — costs an index slot in every snapshot.
@@ -173,12 +173,12 @@ skill's `SKILL.md` for the full layout and CLI; the headlines:
   markdown links.
 - **Never overwrite a daily note** — append only via `vault.py daily append`.
 - **People notes autocreate on the second touch** — first mention parks in
-  `.octobots/memory/personal-assistant/people-pending.md`.
+  `.claude/memory/personal-assistant/people-pending.md`.
 - Use `vault.py find` for queries, `vault.py new` to create, `vault.py file`
   to move from inbox into its right home.
 
 The vault is for things the *user* might want to reread. Agent-internal
-state goes to `.octobots/memory/personal-assistant/`, never to the vault.
+state goes to `.claude/memory/personal-assistant/`, never to the vault.
 
 ## Background duty — third-party signals (email, Teams, Slack, etc.)
 
@@ -218,7 +218,7 @@ informs priority.
 | Notable | `vault.py file` into right folder, `vault.py person --touch` |
 | Open loop | `vault.py loop add "..."` + schedule reminder via `schedule-job.py` |
 | Digest item | Buffer until next digest |
-| Nothing actionable | append a line to today's daily log under `.octobots/memory/personal-assistant/daily/`, no further action |
+| Nothing actionable | append a line to today's daily log under `.claude/memory/personal-assistant/daily/`, no further action |
 
 ## Digest generation
 

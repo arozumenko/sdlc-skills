@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Per-role persistent memory — durable facts, preferences, decisions, and an episodic daily log stored as plain markdown under .octobots/memory/<role>/. Use when the user says "remember this", asks "what did you learn yesterday", says "log this", or whenever you discover something worth keeping across sessions.
+description: Per-role persistent memory — durable facts, preferences, decisions, and an episodic daily log stored as plain markdown under .claude/memory/<role>/. Use when the user says "remember this", asks "what did you learn yesterday", says "log this", or whenever you discover something worth keeping across sessions.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -16,11 +16,11 @@ any working directory, with or without the Octobots supervisor running.
 
 ## File layout
 
-Under `.octobots/memory/<role>/` (where `<role>` matches your agent's
+Under `.claude/memory/<role>/` (where `<role>` matches your agent's
 `name:` frontmatter — e.g. `project-manager`, `python-dev`, `scout`):
 
 ```
-.octobots/memory/<role>/
+.claude/memory/<role>/
 ├── MEMORY.md                 ← curated index, one line per entry
 ├── <slug>.md                 ← individual curated entries (frontmatter + body)
 ├── daily/
@@ -64,7 +64,7 @@ To record `<text>`:
 
 1. Determine today's date. Use the `Today's date is …` line in your
    environment context. If not present, run `date -u +%Y-%m-%d`.
-2. Target path: `.octobots/memory/<role>/daily/<today>.md`.
+2. Target path: `.claude/memory/<role>/daily/<today>.md`.
 3. If the file **does not exist**, `Write` it:
    ```
    # Daily log — <today>
@@ -85,7 +85,7 @@ and `<content>`:
 1. **Slugify** `<name>`: lowercase, replace non-alphanumerics with `_`,
    strip leading/trailing underscores. Example: `User Timezone` →
    `user_timezone`.
-2. **Target path**: `.octobots/memory/<role>/<slug>.md`.
+2. **Target path**: `.claude/memory/<role>/<slug>.md`.
 3. **`Write`** the file with this exact frontmatter (the supervisor's
    snapshot regenerator parses `name`, `description`, `type` — don't omit
    them, don't add extra keys, keep each on one line):
@@ -98,7 +98,7 @@ and `<content>`:
 
    <content>
    ```
-4. **Update the index** at `.octobots/memory/<role>/MEMORY.md`:
+4. **Update the index** at `.claude/memory/<role>/MEMORY.md`:
    - **If `MEMORY.md` doesn't exist**, `Write` it:
      ```markdown
      # Memory index — <role>
@@ -112,15 +112,15 @@ and `<content>`:
 
 ### Read — recall memory on demand
 
-1. **If a snapshot was auto-imported** (the `@.octobots/memory/<role>/snapshot.md`
+1. **If a snapshot was auto-imported** (the `@.claude/memory/<role>/snapshot.md`
    line at the top of your AGENT.md), you already have curated memory and
    recent daily logs in your context — don't re-read them.
 2. **If no snapshot loaded** (stock Claude Code, or first session on a
    fresh project), read memory directly:
-   - `Read .octobots/memory/<role>/MEMORY.md` for the curated index.
-   - `Read .octobots/memory/<role>/<slug>.md` for any entry the index
+   - `Read .claude/memory/<role>/MEMORY.md` for the curated index.
+   - `Read .claude/memory/<role>/<slug>.md` for any entry the index
      points you at.
-   - `Glob .octobots/memory/<role>/daily/*.md`, sort by filename
+   - `Glob .claude/memory/<role>/daily/*.md`, sort by filename
      descending, and `Read` the most recent 3 files.
 
 Bounded recall keeps your context small — don't tail the whole daily log
@@ -158,7 +158,7 @@ follow the spec above.
 (`supervisor/skills/memory/scripts/memory.py snapshot`) before each role
 spawn. It inlines `MEMORY.md`, every curated entry body, and the last 3
 days of daily logs into a single file that the agent's `AGENT.md`
-auto-imports via `@.octobots/memory/<role>/snapshot.md`.
+auto-imports via `@.claude/memory/<role>/snapshot.md`.
 
 You never write `snapshot.md` yourself. If it's missing, the `@import`
 becomes a no-op and you fall back to on-demand reads — no error, no

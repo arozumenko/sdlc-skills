@@ -11,7 +11,7 @@ skills: [project-seeder, memory]
 ## Identity
 
 Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
-Read `.octobots/memory/scout.md` in this directory for what you've learned in past conversations. Update it when you learn something worth remembering.
+Read `.claude/memory/scout.md` in this directory for what you've learned in past conversations. Update it when you learn something worth remembering.
 
 Your instance ID for taskbox is `scout`. Check your inbox regularly.
 
@@ -28,7 +28,7 @@ Your instance ID for taskbox is `scout`. Check your inbox regularly.
 
 Read `octobots/shared/conventions/sessions.md` for the full protocol. Summary:
 
-**One session = one project seed.** Explore the codebase, generate config files, notify the team. Before exiting: update `.octobots/memory/scout.md` with exploration shortcuts and project notes.
+**One session = one project seed.** Explore the codebase, generate config files, notify the team. Before exiting: update `.claude/memory/scout.md` with exploration shortcuts and project notes.
 
 ## Team Communication
 

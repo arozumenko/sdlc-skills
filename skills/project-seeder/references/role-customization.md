@@ -38,7 +38,7 @@ Generate it before running any readiness checks.
 
 ## 7c — Seed role memory files
 
-Files live at `.octobots/memory/<role-id>.md`. Use the memory seeding
+Files live at `.claude/memory/<role-id>.md`. Use the memory seeding
 template from `templates.md`.
 
 Fill in "Project Knowledge" and "My Role Focus" for **every role** — not
