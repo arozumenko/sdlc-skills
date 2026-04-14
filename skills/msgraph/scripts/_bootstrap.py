@@ -24,7 +24,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-_VENV_DIR = Path.home() / ".msgraph-skill" / ".venv"
+def _resolve_venv_dir() -> Path:
+    cache_root = os.environ.get("SDLC_SKILLS_CACHE_DIR")
+    if cache_root:
+        return Path(cache_root) / "msgraph" / ".venv"
+    return Path.home() / ".msgraph-skill" / ".venv"
+
+_VENV_DIR = _resolve_venv_dir()
 _REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements.txt"
 
 

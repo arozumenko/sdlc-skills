@@ -136,11 +136,12 @@ python3 scripts/auth.py logout   # Clear cached credentials
 
 | Variable | Default | Description |
 |---|---|---|
+| `SDLC_SKILLS_CACHE_DIR` | `~/.msgraph-skill` | Shared cache root for all sdlc-skills (token cache, venv). When set, msgraph stores its data under `$SDLC_SKILLS_CACHE_DIR/msgraph/`. |
 | `MSGRAPH_CLIENT_ID` | `084a3e9f-a9f4-43f7-89f9-d229cf97853e` | Override with your own Azure AD app |
 | `MSGRAPH_TENANT_ID` | `common` | Restrict to a specific tenant |
 
-Variables can be set via environment or in a `.env` file at the skill root, project
-root, or cwd. Most users do not need to set these.
+Variables can be set via environment or in a `.env` file at the skill root or cwd.
+Most users do not need to set these.
 
 ### Custom Azure AD app (advanced)
 

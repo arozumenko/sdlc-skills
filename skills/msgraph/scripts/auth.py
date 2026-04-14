@@ -84,11 +84,18 @@ SCOPES = [
 
 
 def _get_cache_path() -> Path:
-    """Return ``~/.msgraph-skill/token_cache.json``.
+    """Return the token cache path.
+
+    Resolution:
+      1. ``$SDLC_SKILLS_CACHE_DIR/msgraph/token_cache.json`` — if the env var is set.
+      2. ``~/.msgraph-skill/token_cache.json`` — default fallback.
 
     A single token cache is shared across all projects so the user only
     needs to authenticate once.
     """
+    cache_root = os.environ.get("SDLC_SKILLS_CACHE_DIR")
+    if cache_root:
+        return Path(cache_root) / "msgraph" / "token_cache.json"
     return Path.home() / ".msgraph-skill" / "token_cache.json"
 
 
