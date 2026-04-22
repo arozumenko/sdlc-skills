@@ -1,254 +1,231 @@
 # sdlc-skills
 
-A bundled software delivery lifecycle toolkit for Claude Code, Cursor,
-Windsurf, and GitHub Copilot. One repo contains:
+**The content layer for AI-assisted software delivery.** Role-based agent
+personas (BA, Tech Lead, PM, devs, QA, PA), workflow skills (TDD,
+bugfix, code review, task completion, memory, …), and a registry that
+pulls proven skills from Matt Pocock, Jesse Vincent (obra/superpowers),
+and Paul Hudson so you don't have to reinvent them.
 
-- **Role-based agents** — BA, Tech Lead, PM, Python dev, JS dev, QA, Personal
-  Assistant. Each agent ships with `AGENT.md` (frontmatter + technical
-  instructions) and `SOUL.md` (personality / voice).
-- **Workflow skills** — bug-fix workflow, feature planning, feature
-  implementation, project seeding.
-- **Generic dev skills** — code review, TDD, Playwright, git workflow.
-- **Claude plugin manifest** — `.claude-plugin/marketplace.json` so the
-  whole repo installs via `/plugin install sdlc-skills@sdlc-skills` inside
-  Claude Code.
-- **Legacy npx installer** — `bin/init.mjs` so the same agents and skills
-  can be dropped into `.claude/agents/` (and `.cursor/`, `.windsurf/`,
-  `.github/`) with a single `npx` command, no Claude plugin layer needed.
+Two consumers:
 
-## Three ways to consume this repo
+- **Any AI IDE** (Claude Code, Cursor, Gemini CLI, GitHub Copilot CLI,
+  Windsurf, Codex) — install via the npx one-shot or a native plugin
+  manifest. Use the agents + skills directly.
+- **[Octobots supervisor](https://github.com/arozumenko/octobots)** —
+  wraps this repo with orchestration (tmux TUI, taskbox, scheduler,
+  per-role git clones). `octobots/install.sh` delegates all content
+  resolution here.
 
-### 1. Claude Code plugin marketplace (preferred inside Claude Code)
+## Architecture
 
-```bash
-# Add the marketplace source (once)
-/plugin marketplace add arozumenko/sdlc-skills
-
-# Install everything
-/plugin install sdlc-skills@sdlc-skills
-
-# — or install individual agents —
-/plugin install sdlc-skills@ba
-/plugin install sdlc-skills@tech-lead
-/plugin install sdlc-skills@project-manager
-/plugin install sdlc-skills@python-dev
-/plugin install sdlc-skills@js-dev
-/plugin install sdlc-skills@qa-engineer
-/plugin install sdlc-skills@scout
-/plugin install sdlc-skills@personal-assistant
-
-# — or install individual skills —
-/plugin install sdlc-skills@code-review
-/plugin install sdlc-skills@bugfix-workflow
-/plugin install sdlc-skills@tdd
-/plugin install sdlc-skills@msgraph
-# ... etc — see full list below
+```
+                     ┌─────────────────────────────────┐
+                     │        sdlc-skills (this)       │
+                     │   content + install resolution  │
+                     │                                 │
+                     │ • agents/  (self-describing)    │
+                     │ • skills/  (monorepo)           │
+                     │ • skills.json (registry)        │
+                     │ • bin/init.mjs (installer)      │
+                     └─────────────────────────────────┘
+                              ▲          ▲
+                              │          │
+                 consumed by  │          │  consumed by
+                              │          │
+     ┌────────────────────────┘          └────────────────────────┐
+     │                                                            │
+     ▼                                                            ▼
+┌──────────────────────┐                         ┌──────────────────────────┐
+│   stock AI IDEs      │                         │ Octobots supervisor      │
+│ Claude / Cursor /    │                         │ orchestration:           │
+│ Gemini / Copilot /   │                         │ tmux TUI, taskbox,       │
+│ Windsurf / Codex     │                         │ scheduler, git clones    │
+└──────────────────────┘                         └──────────────────────────┘
 ```
 
-Each agent and skill is published as its own plugin entry, so you can
-pick exactly what you need. The `sdlc-skills` entry installs the full
-toolkit in one shot.
+Agents are **self-describing** — each `agents/<name>/AGENT.md` carries
+its own metadata (role, group, theme, aliases, skills, model). Octobots
+reads it at runtime; IDE plugin systems read it at install time. Nothing
+duplicated.
 
-### 2. Direct install via npx (works for any IDE)
+External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
+`systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
+upstream repos. The installer resolves each agent's declared skill list
+against `skills.json`, clones external repos on first install into
+`~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
+project's skills directory.
 
-Copies agents and skills directly into the IDE directories of the current
-project. Does not rely on Claude Code's plugin system.
+## Install — pick one path
+
+There are really two paths: the **full experience** (npx installer or
+Octobots) and the **monorepo-only fallbacks** (native IDE plugins for
+people who don't want to be happy).
+
+| Path | Fetches external skills? | When to pick |
+|---|---|---|
+| **npx installer** ⭐ | ✅ Yes | Any IDE. Full catalog. One command. This is the happy path. |
+| **Octobots supervisor** ⭐ | ✅ Yes (delegates to npx) | You want multi-agent orchestration — tmux TUI, taskbox, scheduler, per-role git clones. |
+| Native IDE plugins | ❌ Monorepo only | You don't want Node installed. Trade-off: no external skills, manual team assembly. |
+
+> **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
+> Gemini CLI, Copilot CLI) only see skills present in this repo's
+> `skills/` directory — they don't know how to fetch from upstream. The
+> npx installer and Octobots read `skills.json` and resolve external
+> dependencies automatically (Matt Pocock's TDD, Jesse Vincent's
+> debugging skills, Paul Hudson's Swift skills). If you want the full
+> catalog, use one of the ⭐ paths.
+
+### 1. npx installer (recommended)
+
+One command installs agents, their declared monorepo skills, and their
+external skills together. Works for Claude Code, Cursor, Windsurf, and
+GitHub Copilot (all four IDE targets detected automatically).
 
 ```bash
-# Install everything, all detected IDEs
+# Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
 
-# Install a subset of agents — every skill they declare comes along automatically
-npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,pm
-# (installs ba + tech-lead + pm agents, every monorepo skill they declare,
-#  AND every external skill — tdd from mattpocock/skills, brainstorming
-#  from obra/superpowers, swiftui-pro from twostraws, etc. External skills
-#  are cloned once into ~/.cache/sdlc-skills/registry/ and symlinked into
-#  .claude/skills/.)
+# A specific team — every declared skill comes along automatically
+# (monorepo + external, via git clone + symlink for externals)
+npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
 
-# Install specific skills (overrides auto-resolve)
+# Specific skills (overrides the auto-resolve)
 npx github:arozumenko/sdlc-skills init --skills bugfix-workflow,code-review
 
-# Mix and match, Claude Code only
-npx github:arozumenko/sdlc-skills init \
-  --agents ba,tech-lead,pm \
-  --skills plan-feature,implement-feature \
-  --target claude
+# Narrow to one IDE target
+npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 
-# Update existing installs
+# Update an existing install
 npx github:arozumenko/sdlc-skills init --all --update
 ```
 
-Detected IDE directories:
+Install locations:
 
-| Target | Directory  | Installed path                         |
-|--------|------------|----------------------------------------|
-| Claude Code     | `.claude/`  | `.claude/agents/<name>/`, `.claude/skills/<name>/` |
-| Cursor          | `.cursor/`  | `.cursor/agents/<name>/`, `.cursor/skills/<name>/` |
-| Windsurf        | `.windsurf/`| `.windsurf/agents/<name>/`, `.windsurf/skills/<name>/` |
-| GitHub Copilot  | `.github/`  | `.github/agents/<name>/`, `.github/skills/<name>/` |
-
-See `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
-
-### 3. Native plugin formats (IDE fallbacks, monorepo skills only)
-
-In addition to the plugin marketplace and npx installer, this repo ships
-native plugin manifests so IDEs with their own plugin systems can install
-directly. These paths load the **monorepo skills only** — external skills
-(TDD from mattpocock, Swift skills from twostraws, etc.) are not fetched
-because the IDE's plugin system doesn't know about our `skills.json`
-registry. Use the npx installer path above if you want the full catalog.
-
-| IDE | File | How to install |
+| Target | Directory | Drop path |
 |---|---|---|
-| Cursor | `.cursor-plugin/plugin.json` | Point Cursor's plugin manager at this repo |
-| Gemini CLI | `gemini-extension.json` + `GEMINI.md` | `gemini extensions install https://github.com/arozumenko/sdlc-skills` |
-| GitHub Copilot CLI / generic | `AGENTS.md` at repo root | Copilot CLI reads `AGENTS.md` when the repo is cloned into your project |
+| Claude Code | `.claude/` | `.claude/agents/<name>/`, `.claude/skills/<name>/` |
+| Cursor | `.cursor/` | `.cursor/agents/<name>/`, `.cursor/skills/<name>/` |
+| Windsurf | `.windsurf/` | `.windsurf/agents/<name>/`, `.windsurf/skills/<name>/` |
+| GitHub Copilot | `.github/` | `.github/agents/<name>/`, `.github/skills/<name>/` |
+
+External skills are symlinked into the skills dir from the shared cache
+at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
+location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
+
+Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
+
+### 2. Octobots supervisor
+
+If you want multi-agent orchestration (tmux panes per role, SQLite
+taskbox for inter-role messaging, per-dev git clones, Rich TUI,
+scheduled jobs), install the [Octobots supervisor](https://github.com/arozumenko/octobots)
+into your project. Its `install.sh` runs the npx installer above as its
+content step, then layers `.octobots/` runtime on top.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arozumenko/octobots/main/install.sh | bash
+```
+
+### 3. Monorepo-only fallbacks (for when you refuse to install Node)
+
+Each of these paths reads the native plugin manifest this repo ships and
+installs **only the skills present in `skills/`** — external skills
+(Matt Pocock's TDD, the superpowers skills, the twostraws Swift skills)
+are not fetched. If you want those, go back to path 1 or 2.
+
+**Claude Code plugin marketplace** — `.claude-plugin/marketplace.json`
+
+```bash
+/plugin marketplace add arozumenko/sdlc-skills
+/plugin install sdlc-skills@sdlc-skills
+# Or individual entries: /plugin install sdlc-skills@ios-dev  etc.
+```
+
+**Cursor native plugin** — `.cursor-plugin/plugin.json`
+
+Point Cursor's plugin manager at this repo URL; it reads the manifest
+and installs skills + agents from `./skills/` and `./agents/`.
+
+**Gemini CLI extension** — `gemini-extension.json` + `GEMINI.md`
+
+```bash
+gemini extensions install https://github.com/arozumenko/sdlc-skills
+```
+
+The `GEMINI.md` context file catalogs every agent and skill for on-demand
+loading.
+
+**GitHub Copilot CLI / generic** — `AGENTS.md`
+
+`AGENTS.md` at the repo root describes the content for any tool that
+follows the AGENTS.md convention. Copilot CLI reads it when the repo is
+cloned into your project.
 
 ### 4. agentskills.io / third-party consumption
 
 Every skill under `skills/<name>/` follows the
-[agentskills.io](https://agentskills.io) spec — each has a `SKILL.md` with
-`name` + `description` frontmatter at the top. Any tool that reads the spec
-(Vercel's skill runtime, custom agent frameworks, other AI IDEs) can point
-directly at `skills/<name>/` without going through the Claude plugin layer
-or this installer.
-
-## Using outside the Octobots supervisor
-
-These agents and skills install cleanly into stock Claude Code (or Cursor /
-Windsurf / Copilot) and are useful on their own — a BA can draft stories, a
-tech-lead can review a PR, `plan-feature` and `bugfix-workflow` run
-end-to-end with just `git` and `gh`. But several pieces assume the
-[Octobots supervisor framework](https://github.com/arozumenko/octobots) is
-running underneath them, and those assumptions will be visible if you use
-the agents standalone. Read this before you install.
-
-### Frontmatter extensions the supervisor owns
-
-| Key | Owned by | Stock-Claude behavior |
-|---|---|---|
-| `workspace: clone` | supervisor | Ignored. In Octobots, the supervisor launches `python-dev` and `js-dev` in their own git clones so branches don't collide; without it, all devs share your working tree and will step on each other. |
-| `skills: [taskbox, memory, ...]` | partly supervisor | `taskbox` and `memory` are bundled *inside* the supervisor, not published here — they're no-ops on stock Claude Code, and any instruction that says "check your inbox" or "snapshot memory" will silently do nothing. |
-
-### `@import` paths that require a seeded project
-
-Several agents import runtime state via Claude Code's `@`-import syntax:
-
-```markdown
-@.claude/memory/<role>/snapshot.md
-```
-
-These files are written by the supervisor's `memory` skill at launch. On
-stock Claude Code, the import resolves to a missing file and the agent
-starts without its persistent memory. That's survivable — the agent still
-works — but any phrase like "read your snapshot before acting" is a
-no-op until you either (a) run the Octobots supervisor, or (b) create the
-file yourself.
-
-### Shell commands that assume the supervisor is present
-
-Agent bodies contain commands like:
-
-```bash
-python octobots/skills/taskbox/scripts/relay.py send --from scout --to pm "…"
-```
-
-These are **hard-coded references to the supervisor's taskbox**. On stock
-Claude Code they'll fail with "No such file or directory." Treat those
-lines as prompts for the agent to *describe* the handoff verbally instead
-— the intent (who hands work to whom, in what order) is still
-communicated, even if the literal command doesn't run.
-
-### What works unchanged on stock Claude Code
-
-- `ba`, `tech-lead`, `project-manager`, `qa-engineer`, `scout`,
-  `personal-assistant` — all run fine as subagents. They just won't send
-  taskbox messages.
-- Every skill under `skills/` — `plan-feature`, `bugfix-workflow`,
-  `implement-feature`, `task-completion`, `code-review`, `tdd`,
-  `git-workflow`, `playwright-testing`, `browser-verify`,
-  `issue-tracking`, `goal-verifier`, `context-gatherer`, `deep-research`,
-  `obsidian-vault`, `msgraph`. None of them depend on the supervisor.
-- Developer agents work on your single working tree instead of a
-  supervisor-managed clone; coordinate merges manually.
-
-If you want the full orchestrated experience (multi-agent taskbox, per-dev
-clones, supervisor TUI, persistent memory snapshots), install the
-Octobots supervisor alongside these agents.
-
-## Repository layout
-
-```
-sdlc-skills/
-├── .claude-plugin/
-│   ├── marketplace.json        # Claude Code marketplace manifest
-│   └── plugin.json             # plugin metadata (name, version, keywords)
-├── agents/                     # role-based personas
-│   └── <agent-name>/
-│       ├── AGENT.md            # YAML frontmatter + technical instructions
-│       └── SOUL.md             # personality / voice / working style
-├── skills/                     # agentskills.io-compliant skills
-│   └── <skill-name>/
-│       ├── SKILL.md            # frontmatter: name + description
-│       ├── references/         # optional supporting docs
-│       └── scripts/            # optional helper scripts
-├── bin/
-│   └── init.mjs                # legacy npx installer (mode 2 above)
-├── package.json                # bin: { init: ./bin/init.mjs }
-├── LICENSE
-└── README.md
-```
+[agentskills.io](https://agentskills.io) spec — `SKILL.md` with
+`name` + `description` frontmatter. Any skill runtime (Vercel, custom
+frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ## Catalog
 
-<!--
-  This section is maintained by convention, not by a script.
-  When you add an agent or skill, update the corresponding table below.
-  The installer reads agents/ and skills/ at runtime, so missing a README
-  entry never causes a missing install — it just hides the entry from
-  human browsers of this README.
--->
-
 ### Agents (9)
 
-| Agent | Role |
-|---|---|
-| `ba` | Business analyst — turns requirements into user stories with acceptance criteria |
-| `tech-lead` | Decomposes user stories into technical tasks with dependencies |
-| `project-manager` | Distributes tasks, tracks team state, escalates blockers |
-| `python-dev` | Python implementation — owns its own repo clone and branch |
-| `js-dev` | JavaScript / TypeScript implementation — owns its own repo clone and branch |
-| `ios-dev` | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
-| `qa-engineer` | Tests PRs, reports findings on the GitHub issue |
-| `personal-assistant` | Conversational assistant: vault, email, calendar, daily brief |
-| `scout` | Maps unfamiliar codebases — explores, documents patterns, flags risks |
+| Agent | Persona | Role |
+|---|---|---|
+| `ba` | Alex | Business analyst — turns requirements into user stories with acceptance criteria |
+| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies |
+| `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers |
+| `python-dev` | Py | Python implementation — owns its own repo clone and branch |
+| `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
+| `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
+| `qa-engineer` | Sage | Tests PRs, reports findings on the GitHub issue |
+| `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
+| `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
-### Workflow skills — SDLC-coupled (5)
+### Monorepo skills
+
+**SDLC-coupled (5):**
 
 | Skill | What it does |
 |---|---|
-| `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `plan-feature` | Feature planning workflow used by BA / Tech Lead |
 | `implement-feature` | Feature implementation workflow used by devs |
+| `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-### External skills (not in this repo)
+**Generic dev skills (11):**
 
-Some agents declare skills that live in external repos. The installer's
-registry (`skills.json` at the repo root) knows where to fetch each — when
-you install an agent whose `skills:` list names an external skill, the
-installer clones the source repo once into `~/.cache/sdlc-skills/registry/`
-and symlinks the subdir into `.claude/skills/<name>/`. No separate step
-required.
+| Skill | What it does |
+|---|---|
+| `code-review` | Structured code review checklist and reporting |
+| `git-workflow` | Branching, commits, PR conventions |
+| `playwright-testing` | E2E browser testing with Playwright |
+| `browser-verify` | Quick visual / smoke verification in a browser |
+| `issue-tracking` | GitHub / Linear / GitLab issue management |
+| `goal-verifier` | Verify a task actually achieved its stated goal |
+| `context-gatherer` | Targeted codebase exploration before changes |
+| `deep-research` | Multi-source research and synthesis |
+| `memory` | Persistent file-based memory across conversations |
+| `obsidian-vault` | Read / write the user's Obsidian second brain |
+| `msgraph` | Microsoft Graph (email / calendar / Teams) integration |
+
+### External skills (fetched by the installer)
+
+Declared in `skills.json` with `repo:` + optional `subdir:`. The npx
+installer clones each into `~/.cache/sdlc-skills/registry/` on first
+install and symlinks the subdir into your project's skills dir. Native
+IDE plugin paths do **not** fetch these — use the installer for the full
+catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
-| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | devs (`python-dev`, `js-dev`, `ios-dev`) |
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | `python-dev`, `js-dev`, `ios-dev` |
 | `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
-| `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs, `qa-engineer` |
-| `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs, `qa-engineer` |
+| `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs + `qa-engineer` |
+| `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs + `qa-engineer` |
 | `requesting-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/requesting-code-review/` | devs |
 | `receiving-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/receiving-code-review/` | devs |
 | `writing-skills` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/writing-skills/` | `tech-lead` |
@@ -257,54 +234,109 @@ required.
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 
-### Generic dev skills (11)
+## Using outside Octobots
 
-| Skill | What it does |
+These agents and skills install cleanly into stock Claude Code / Cursor
+/ Windsurf / Copilot. A BA can draft stories, a tech-lead can review a
+PR, `plan-feature` and `bugfix-workflow` run end-to-end with just `git`
+and `gh`. A few pieces assume Octobots is running underneath — the
+shape of those assumptions is documented below.
+
+**Frontmatter extensions the supervisor owns:**
+
+| Key | Stock-Claude behavior |
 |---|---|
-| `code-review` | Structured code review checklist and reporting |
-| `git-workflow` | Branching, commits, PR conventions |
-| `playwright-testing` | E2E browser testing with Playwright |
-| `browser-verify` | Quick visual / smoke verification in a browser |
-| `issue-tracking` | GitHub issue management conventions |
-| `goal-verifier` | Verify a task actually achieved its stated goal |
-| `context-gatherer` | Targeted codebase exploration before changes |
-| `deep-research` | Multi-source research and synthesis |
-| `memory` | Persistent file-based memory across conversations (user, feedback, project, reference) |
-| `obsidian-vault` | Read / write the user's Obsidian second brain |
-| `msgraph` | Microsoft Graph (email / calendar / Teams) integration |
+| `workspace: clone` | Ignored. Without Octobots, devs share your working tree — coordinate merges manually. |
+| `skills: [taskbox, memory, ...]` | `taskbox` is bundled *inside* the Octobots supervisor — it's a no-op on stock Claude Code. `memory` is published here and works standalone. |
 
-## Development
+**`@import` paths that expect a seeded project:**
 
-This repo is the single source of truth. The same files serve three
-consumers (Claude Code plugin marketplace, the npx installer, agentskills.io
-third-party tools) with no duplication.
+```markdown
+@.claude/memory/<role>/snapshot.md
+```
 
-When adding content:
+Written by the supervisor's memory skill at launch. On stock Claude
+Code the import resolves to a missing file; the agent still works,
+"read your snapshot before acting" is just a no-op.
+
+**Shell commands that assume the supervisor:**
+
+```bash
+python octobots/skills/taskbox/scripts/relay.py send --from scout --to pm "…"
+```
+
+Hard-coded taskbox references. On stock Claude Code they fail with "No
+such file or directory." Treat them as verbal-handoff prompts when
+running standalone.
+
+**Runs unchanged on stock Claude Code:**
+
+- Every agent works as a subagent (no taskbox messages sent).
+- Every `skills/<name>/` skill — none of them depend on the supervisor.
+- Developer agents work on your single working tree; coordinate merges
+  manually.
+
+## Repository layout
+
+```
+sdlc-skills/
+├── .claude-plugin/
+│   ├── plugin.json             # Claude Code plugin metadata
+│   └── marketplace.json        # Claude Code marketplace entry list
+├── .cursor-plugin/
+│   └── plugin.json             # Cursor native plugin manifest
+├── agents/                     # role-based personas (self-describing)
+│   └── <agent-name>/
+│       ├── AGENT.md            # frontmatter (group, theme, aliases, skills) + instructions
+│       └── SOUL.md             # personality / voice / working style
+├── skills/                     # agentskills.io-compliant skills
+│   └── <skill-name>/
+│       ├── SKILL.md            # frontmatter: name + description
+│       ├── references/         # optional supporting docs
+│       └── scripts/            # optional helper scripts
+├── bin/
+│   └── init.mjs                # npx installer — resolves + fetches externals
+├── skills.json                 # catalog: monorepo + external skill sources
+├── AGENTS.md                   # generic / GitHub Copilot CLI fallback
+├── GEMINI.md                   # Gemini CLI context file
+├── gemini-extension.json       # Gemini CLI extension manifest
+├── package.json                # bin: { init: ./bin/init.mjs }
+├── LICENSE
+└── README.md
+```
+
+## Adding content
 
 1. **New agent** → create `agents/<name>/AGENT.md` (with YAML frontmatter:
-   `name`, `description`, `model`, `color`, `skills`) and `agents/<name>/SOUL.md`.
-2. **New skill** → create `skills/<name>/SKILL.md` with agentskills.io
-   frontmatter (`name`, `description`). Put supporting files in
-   `skills/<name>/references/` or `skills/<name>/scripts/`.
-3. **Update the catalog tables in this README.**
+   `name`, `description`, `model`, `color`, `group`, `theme`, `aliases`,
+   `skills`) and `agents/<name>/SOUL.md`. Octobots reads the frontmatter
+   at runtime for tmux panes / aliases; no separate registry needed.
+2. **New monorepo skill** → create `skills/<name>/SKILL.md` with
+   agentskills.io frontmatter (`name`, `description`). Supporting files
+   go in `skills/<name>/references/` or `skills/<name>/scripts/`. Register
+   in `skills.json` with `{"id": "<name>", "monorepo": "sdlc-skills",
+   "name": "<name>"}`.
+3. **New external skill** → register in `skills.json` with
+   `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
+   The installer will clone + symlink on first install.
+4. **Reference the new skill in an agent's `skills:` list** —
+   the installer auto-resolves it on the next run.
 
-No build step, no CI-generated manifests. The installer discovers content
-by reading the directories at runtime — add a folder, it shows up in the
-next `init` run.
+No build step, no generated manifests. The installer discovers agents
+at runtime (`listDirs("agents")`) and reads `skills.json` for skill
+resolution — add a folder or a registry entry, it shows up on the next
+`init` run.
 
 ## Acknowledgements
 
-This repo's external-skill integration pulls from excellent work by others,
-all under permissive licenses. If the installer resolves any of the
-following skills into your project, the content comes from these sources —
-please credit them accordingly:
+External skills are fetched from upstream at install time — this repo
+re-distributes nothing, only catalogs and wires.
 
-- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. We use the `tdd/` skill (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
-- **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent (@obra). We use `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, and `writing-skills`. MIT.
-- **Paul Hudson's Swift agent skills** ([twostraws/SwiftUI-Agent-Skill](https://github.com/twostraws/SwiftUI-Agent-Skill), [twostraws/SwiftData-Agent-Skill](https://github.com/twostraws/SwiftData-Agent-Skill), [twostraws/Swift-Testing-Agent-Skill](https://github.com/twostraws/Swift-Testing-Agent-Skill), [twostraws/Swift-Concurrency-Agent-Skill](https://github.com/twostraws/Swift-Concurrency-Agent-Skill)) — Paul Hudson. Powers the `ios-dev` agent's Swift expertise. MIT.
+- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
+- **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
+- **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
 
-Thanks to all maintainers. External skills are fetched from upstream at
-install time — this repo re-distributes nothing, only catalogs and wires.
+Thanks to all maintainers.
 
 ## License
 
