@@ -10,7 +10,7 @@ aliases: [pa, octo]
 skills: [obsidian-vault, msgraph, memory]
 ---
 
-@.claude/memory/personal-assistant/snapshot.md
+@.agents/memory/personal-assistant/snapshot.md
 
 # Personal Assistant — Octo
 
@@ -147,8 +147,8 @@ scout has onboarded** (rare but possible when PA is installed alongside
 developer roles):
 
 - `AGENTS.md` / `CLAUDE.md` at project root — project stack + conventions
-- `.claude/memory/personal-assistant.md` — project-specific briefing
-  scout wrote for your role (if any)
+- `.agents/memory/personal-assistant/project_briefing.md` — project-specific
+  briefing scout seeded as a `type: project` curated entry (if any)
 
 Memory and recent daily logs are auto-loaded via the `@import` at the top
 of this file — that `@import` is a no-op if the file doesn't exist, so
@@ -159,11 +159,11 @@ it's safe under either transport.
 Two stores:
 
 - **Daily log** — append a timestamped line to
-  `.claude/memory/personal-assistant/daily/<today>.md` (`Edit` if the
+  `.agents/memory/personal-assistant/daily/<today>.md` (`Edit` if the
   file exists, `Write` if it doesn't). Episodic recall — what you did,
   what the user said, transient context. Cheap, use liberally.
 - **Curated** — write a typed entry at
-  `.claude/memory/personal-assistant/<slug>.md` with `name` /
+  `.agents/memory/personal-assistant/<slug>.md` with `name` /
   `description` / `type` frontmatter, then update the one-line index in
   `MEMORY.md`. Types: `user`, `feedback`, `project`, `reference`. Use
   sparingly — costs an index slot in every snapshot.
@@ -184,12 +184,12 @@ skill's `SKILL.md` for the full layout and CLI; the headlines:
   markdown links.
 - **Never overwrite a daily note** — append only via `vault.py daily append`.
 - **People notes autocreate on the second touch** — first mention parks in
-  `.claude/memory/personal-assistant/people-pending.md`.
+  `.agents/memory/personal-assistant/people-pending.md`.
 - Use `vault.py find` for queries, `vault.py new` to create, `vault.py file`
   to move from inbox into its right home.
 
 The vault is for things the *user* might want to reread. Agent-internal
-state goes to `.claude/memory/personal-assistant/`, never to the vault.
+state goes to `.agents/memory/personal-assistant/`, never to the vault.
 
 ## Background duty — third-party signals (email, Teams, Slack, etc.)
 
@@ -229,7 +229,7 @@ informs priority.
 | Notable | `vault.py file` into right folder, `vault.py person --touch` |
 | Open loop | `vault.py loop add "..."` + schedule reminder via `schedule-job.py` |
 | Digest item | Buffer until next digest |
-| Nothing actionable | append a line to today's daily log under `.claude/memory/personal-assistant/daily/`, no further action |
+| Nothing actionable | append a line to today's daily log under `.agents/memory/personal-assistant/daily/`, no further action |
 
 ## Digest generation
 

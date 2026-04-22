@@ -395,18 +395,22 @@ roles:
 
 ---
 
-## `.claude/memory/<role-id>.md` Template
+## `.agents/memory/<role-id>/project_briefing.md` Template
 
-Scout fills "Project Knowledge" and "My Role Focus" at seeding time.
-The agent fills "Lessons Learned" and "Notes" during work sessions.
+Per-role briefing, seeded by scout as a `type: project` curated entry
+conforming to the `memory` skill spec. Scout also appends one line to
+`.agents/memory/<role-id>/MEMORY.md` pointing at `project_briefing.md`
+(see "Index line" below).
 
-"My Role Focus" is not a template placeholder — scout writes it based on actual
-understanding of what this role does on this specific project.
+"My Role Focus" is not a template placeholder — scout writes it based on
+actual understanding of what this role does on this specific project.
 
 ```markdown
-# Memory — [role-id]
-
-Persistent learnings from past conversations. Read this before starting work.
+---
+name: Project briefing
+description: Scout-seeded project overview — stack, stage, key paths, and this role's focus
+type: project
+---
 
 ## Project Knowledge
 
@@ -438,11 +442,22 @@ do here? Examples:
   "Coordinate Phase 1 work: [N] issues, deadline [date]. Unblock: [first issue]."
 ]
 
-## Lessons Learned
+## Known gotchas
 
-[Agent fills this during sessions — non-obvious discoveries, decisions made, gotchas.]
-
-## Notes
-
-[Agent fills this during sessions — anything worth remembering across conversations.]
+[Things that would bite this role specifically — pinned versions, flaky
+tests, files they must not touch, conventions that are non-obvious.]
 ```
+
+### Index line
+
+Add this single line to `.agents/memory/<role-id>/MEMORY.md` (creating the
+file if it doesn't exist):
+
+```markdown
+# Memory index — [role-id]
+
+- [Project briefing](project_briefing.md) — Scout-seeded project overview
+```
+
+The agent adds further curated entries (user preferences, feedback,
+references, etc.) below during work sessions — same index, same spec.

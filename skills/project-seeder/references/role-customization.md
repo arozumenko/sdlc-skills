@@ -38,8 +38,16 @@ Generate it before running any readiness checks.
 
 ## 7c — Seed role memory files
 
-Files live at `.claude/memory/<role-id>.md`. Use the memory seeding
-template from `templates.md`.
+Each role's briefing lives as a `type: project` curated entry at
+`.agents/memory/<role-id>/project_briefing.md`, with an index line in
+`.agents/memory/<role-id>/MEMORY.md`. Use the memory seeding template
+from `templates.md` (section `.agents/memory/<role-id>/project_briefing.md`).
+
+This is the same spec the `memory` skill uses for any curated entry —
+the agent reads it at session start via its orientation block (through
+the auto-loaded `snapshot.md` when under Octobots, or via direct read
+elsewhere), and further entries (user preferences, feedback, references)
+get appended by the agent later.
 
 Fill in "Project Knowledge" and "My Role Focus" for **every role** — not
 just customized ones. An unchanged role still needs to know the stack, key

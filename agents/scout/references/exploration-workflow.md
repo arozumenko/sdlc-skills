@@ -261,7 +261,13 @@ Use the template in `skills/project-seeder/references/templates.md`. Fill in all
 See `skills/project-seeder/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
 
 **7d — Seed role memory files:**
-Create or update `.claude/memory/<role-id>.md` for **all roles** — not just customized ones. Use the template in `skills/project-seeder/references/templates.md`. Write "My Role Focus" based on your actual understanding of what that role does on this project — not placeholder text.
+For **all roles** — not just customized ones — write a `project_briefing.md`
+curated entry at `.agents/memory/<role-id>/project_briefing.md` (with
+`type: project` frontmatter per the `memory` skill spec) and append/update
+the corresponding line in `.agents/memory/<role-id>/MEMORY.md`. Use the
+template in `skills/project-seeder/references/templates.md`. Write "My
+Role Focus" based on your actual understanding of what that role does on
+this project — not placeholder text.
 
 **7e — Generate `.octobots/team-comms.md`:**
 Run the full procedure in `skills/project-seeder/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
@@ -325,11 +331,11 @@ If `gh` is unavailable, warn and skip — don't fail the session.
 # Each message should use the role's persona name and describe their specific situation
 python octobots/skills/taskbox/scripts/relay.py send --from scout --to project-manager \
   "You're Max, PM on [project]. [N] issues open, Phase [N] deadline [date]. \
-First unblocked task: #[N]. Read .claude/memory/project-manager.md for your full briefing."
+First unblocked task: #[N]. Your project briefing is the `project_briefing` entry in your memory — load it via the memory skill."
 
 python octobots/skills/taskbox/scripts/relay.py send --from scout --to python-dev \
   "You're [Persona], [role description] on [project]. [Specific situation — e.g. 'No project files yet, issue #15 unblocks dev work.']. \
-Read .claude/memory/python-dev.md for your full briefing."
+Your project briefing is the `project_briefing` entry in your memory — load it via the memory skill."
 
 # ... one message per active role
 ```

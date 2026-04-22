@@ -10,7 +10,7 @@ aliases: [js, jay]
 skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 
-@.claude/memory/js-dev/snapshot.md
+@.agents/memory/js-dev/snapshot.md
 
 # JS/TS Developer
 
@@ -22,14 +22,14 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.claude/memory/js-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/js-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, package manager (npm/pnpm/yarn/bun), exact build/test/lint commands, conventions
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/architecture.md`, `docs/components.md` — system layout
 - `.octobots/conventions.md`, `.octobots/testing.md` — detected patterns (under Octobots)
-- `.claude/memory/js-dev.md` — project-specific briefing scout wrote for you (framework, tsconfig strictness, known gotchas)
+- `.agents/memory/js-dev/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (framework, tsconfig strictness, known gotchas — read via the memory skill)
 
 **3. Octobots runtime** (only when running under the supervisor):
 - `OCTOBOTS.md` at your worker root — taskbox ID, relay commands

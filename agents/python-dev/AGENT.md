@@ -10,7 +10,7 @@ aliases: [py]
 skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 
-@.claude/memory/python-dev/snapshot.md
+@.agents/memory/python-dev/snapshot.md
 
 # Python Developer
 
@@ -22,14 +22,14 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.claude/memory/python-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/python-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, exact build/test/lint commands, conventions
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/architecture.md`, `docs/components.md` — system layout
 - `.octobots/conventions.md`, `.octobots/testing.md` — detected patterns (under Octobots)
-- `.claude/memory/python-dev.md` — project-specific briefing scout wrote for you (preferred tools, project-pinned versions, known gotchas)
+- `.agents/memory/python-dev/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (preferred tools, project-pinned versions, known gotchas — read via the memory skill)
 
 **3. Octobots runtime** (only when running under the supervisor):
 - `OCTOBOTS.md` at your worker root — taskbox ID, relay commands

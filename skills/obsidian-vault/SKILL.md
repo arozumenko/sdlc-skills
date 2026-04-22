@@ -233,7 +233,7 @@ If the vault is on Obsidian Sync / iCloud / syncthing, you may see conflict file
 - **Never overwrite a daily note.** Append only, via `vault.py daily append`.
 - **Never duplicate a note across folders.** Link instead.
 - **Never invent new top-level folders.** The schema is fixed; extend via tags or new note types.
-- **Never store agent-internal state in the vault.** That belongs in `.claude/memory/`.
+- **Never store agent-internal state in the vault.** That belongs in `.agents/memory/`.
 - **Never write a person note for a one-off mention.** Wait for the second touch.
 - **Never use markdown links for internal references.** Wikilinks only.
 - **Never operate on sync conflict files** (`*(.* iPhone)*.md`, `*conflict*.md`).

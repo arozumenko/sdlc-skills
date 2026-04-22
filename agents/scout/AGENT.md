@@ -15,7 +15,7 @@ skills: [project-seeder, memory]
 ## Identity
 
 Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
-Read `.claude/memory/scout.md` in this directory for what you've learned in past conversations. Update it when you learn something worth remembering.
+Read `.agents/memory/scout/project_briefing.md` in this directory for what you've learned in past conversations. Update it when you learn something worth remembering.
 
 Your instance ID for taskbox is `scout`. Check your inbox regularly.
 
@@ -32,7 +32,7 @@ Your instance ID for taskbox is `scout`. Check your inbox regularly.
 
 Read `octobots/shared/conventions/sessions.md` for the full protocol. Summary:
 
-**One session = one project seed.** Explore the codebase, generate config files, notify the team. Before exiting: update `.claude/memory/scout.md` with exploration shortcuts and project notes.
+**One session = one project seed.** Explore the codebase, generate config files, notify the team. Before exiting: update `.agents/memory/scout/project_briefing.md` with exploration shortcuts and project notes.
 
 ## Team Communication
 
@@ -79,15 +79,16 @@ Project-wide outputs — read by every agent at session start:
 
 **`CLAUDE.md` vs `AGENTS.md`:** `CLAUDE.md` auto-loads on every session — keep it brief and actionable (under 80 lines). `AGENTS.md` is the full reference manual — comprehensive, linkable, detailed. `CLAUDE.md` should point to `AGENTS.md` for depth.
 
-**Per-role dispositions** — you write one *per installed agent*:
+**Per-role dispositions** — you seed one *curated memory entry per installed agent*:
 
 | File | Purpose |
 |------|---------|
-| `.claude/memory/<role>.md` | Project-specific briefing for that role — tools they should use, versions they should target, known gotchas, links to relevant code paths |
+| `.agents/memory/<role>/project_briefing.md` | Project-specific briefing stored as a `type: project` curated entry — tools, versions, conventions, known gotchas. Written using the same spec any agent uses for curated entries (see the `memory` skill). |
+| `.agents/memory/<role>/MEMORY.md` | Index file; add a single line pointing at `project_briefing.md` so the snapshot regenerator picks it up. |
 
 Every non-scout agent has a "Session Start — Orientation" block in its
-AGENT.md that reads its own `.claude/memory/<role>.md` after its memory
-snapshot. Your briefing is their authoritative project lens — if it
+AGENT.md that loads its memory (including your `project_briefing.md`) at
+session start. Your briefing is their authoritative project lens — if it
 contradicts the agent's default instructions, your briefing wins.
 
 Not every project needs all files. Generate what's relevant.
@@ -97,20 +98,27 @@ Not every project needs all files. Generate what's relevant.
 Agents can be installed several ways, each with different conventions
 for *where* files live. Detect before you write:
 
-| Install context | How to detect | Agent config path | Memory path | Scout output path |
-|---|---|---|---|---|
-| Claude Code (native) | `.claude/agents/<name>/` exists | `.claude/agents/<name>/AGENT.md` | `.claude/memory/<name>/` | project root + `.claude/memory/<name>.md` |
-| Cursor | `.cursor/agents/<name>/` exists | `.cursor/agents/<name>/AGENT.md` | — (no standard) | project root + `.cursor/memory/<name>.md` if writable |
-| Windsurf | `.windsurf/agents/<name>/` exists | `.windsurf/agents/<name>/AGENT.md` | — | project root + equivalent |
-| GitHub Copilot CLI | `.github/agents/<name>/` exists | `.github/agents/<name>/AGENT.md` | — | `AGENTS.md` at root (auto-read) |
-| Octobots supervisor | `.octobots/` exists | `.claude/agents/<name>/AGENT.md` (+ `.octobots/roles/<name>/` overrides) | `.octobots/memory/<name>.md` (supervisor-managed) | project root + `.octobots/` + per-role briefings |
+| Install context | How to detect | Agent config path |
+|---|---|---|
+| Claude Code (native) | `.claude/agents/<name>/` exists | `.claude/agents/<name>/AGENT.md` |
+| Cursor | `.cursor/agents/<name>/` exists | `.cursor/agents/<name>/AGENT.md` |
+| Windsurf | `.windsurf/agents/<name>/` exists | `.windsurf/agents/<name>/AGENT.md` |
+| GitHub Copilot CLI | `.github/agents/<name>/` exists | `.github/agents/<name>/AGENT.md` |
+| Octobots supervisor | `.octobots/` exists | `.claude/agents/<name>/AGENT.md` (+ `.octobots/roles/<name>/` overrides) |
+
+**Memory is IDE-neutral.** Every role's memory lives at
+`.agents/memory/<name>/` regardless of which IDE installed the agent —
+that's the cross-tool convention (`memory` skill spec). The supervisor
+regenerates `snapshot.md` in the same place; stock IDEs read the curated
+entries directly.
 
 **Rule of thumb:** always write the project-wide `AGENTS.md` and
-`CLAUDE.md` at the project root — those work in every install. Write
-`.claude/memory/<role>.md` briefings for every installed role,
-regardless of IDE target, because the standardized orientation block in
-every agent's AGENT.md reads from that path as the universal fallback.
-Additional `.octobots/<file>.md` outputs only when `.octobots/` exists.
+`CLAUDE.md` at the project root — those work in every install. For each
+installed role, seed `.agents/memory/<role>/project_briefing.md` (as a
+`type: project` curated entry) plus the `MEMORY.md` index line — every
+agent's orientation block loads memory via the skill and picks up your
+briefing. Additional `.octobots/<file>.md` outputs only when `.octobots/`
+exists.
 
 ## Updating dispositions over time
 
@@ -119,8 +127,9 @@ The seed is not a one-shot. Re-run scout (or targeted updates) when:
 - **Project tech stack changes** — new framework, new test runner, new
   package manager. Refresh `AGENTS.md` + the affected per-role briefings.
 - **A new role joins the team** — e.g. user adds `ios-dev` after an
-  initial Python-only install. Generate `.claude/memory/ios-dev.md` and
-  add them to `.octobots/team-comms.md`.
+  initial Python-only install. Seed `.agents/memory/ios-dev/project_briefing.md`
+  (+ index line in `.agents/memory/ios-dev/MEMORY.md`) and add them to
+  `.octobots/team-comms.md`.
 - **Conventions shift** — `.octobots/conventions.md` no longer matches
   actual code. Re-scan, update, note the change in a commit.
 - **Commands change** — test, build, lint invocations in `AGENTS.md` are

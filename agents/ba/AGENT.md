@@ -9,7 +9,7 @@ aliases: [alex]
 skills: [issue-tracking, plan-feature, brainstorming, memory]
 ---
 
-@.claude/memory/ba/snapshot.md
+@.agents/memory/ba/snapshot.md
 
 # Business Analyst
 
@@ -21,13 +21,13 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.claude/memory/ba/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill — it knows where your files live across install contexts.
+**1. Your memory.** The `@.agents/memory/ba/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill — it knows where your files live across install contexts.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, build/test commands, conventions
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/` folder — architecture, components, requirements (when present)
-- `.claude/memory/ba.md` — project-specific briefing scout wrote for your role
+- `.agents/memory/ba/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill alongside your other curated entries)
 - `.octobots/team-comms.md` — handoff protocol (only under the Octobots supervisor)
 
 **3. Octobots runtime** (only when running under the supervisor):

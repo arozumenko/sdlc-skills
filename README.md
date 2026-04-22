@@ -267,7 +267,7 @@ shape of those assumptions is documented below.
 **`@import` paths that expect a seeded project:**
 
 ```markdown
-@.claude/memory/<role>/snapshot.md
+@.agents/memory/<role>/snapshot.md
 ```
 
 Written by the supervisor's memory skill at launch. On stock Claude

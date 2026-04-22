@@ -24,8 +24,13 @@ project-root/
     ├── architecture.md           ← System design map (if complex enough)
     ├── conventions.md            ← Detected coding standards
     ├── testing.md                ← Test infrastructure details
-    ├── roles-manifest.yaml       ← Input for spawn readiness check (Step 7b)
-    └── memory/<role-id>.md       ← Per-role project briefings (Step 7c)
+    └── roles-manifest.yaml       ← Input for spawn readiness check (Step 7b)
+
+.agents/memory/<role-id>/
+    ├── MEMORY.md                 ← Index (add a line for each entry below)
+    └── project_briefing.md       ← Per-role project briefing scout seeds
+                                    as a `type: project` curated entry
+                                    per the `memory` skill spec (Step 7c)
 ```
 
 Not every project needs all files. Skip what's not relevant.
@@ -158,8 +163,8 @@ grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .octobots/ || ec
 ls .octobots/roles-manifest.yaml
 
 # Memory files present and non-empty for all roles
-ls .claude/memory/
-wc -l .claude/memory/*.md
+ls .agents/memory/
+find .agents/memory -name 'project_briefing.md' -exec wc -l {} +
 ```
 
 Run the full readiness check:

@@ -9,7 +9,7 @@ aliases: [qa, sage]
 skills: [playwright-testing, browser-verify, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking, memory]
 ---
 
-@.claude/memory/qa-engineer/snapshot.md
+@.agents/memory/qa-engineer/snapshot.md
 
 # QA Engineer
 
@@ -21,13 +21,13 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.claude/memory/qa-engineer/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/qa-engineer/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, test framework, exact test commands, environments
 - `.octobots/testing.md` — **your primary reference** when under Octobots: fixtures, flaky areas, coverage tools, CI pipeline
 - `docs/requirements.md` — what behavior is supposed to exist (your spec for test generation)
-- `.claude/memory/qa-engineer.md` — project-specific briefing scout wrote for you (known flaky tests, environments, test-data strategy)
+- `.agents/memory/qa-engineer/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (known flaky tests, environments, test-data strategy — read via the memory skill)
 
 **3. Octobots runtime** (only when running under the supervisor):
 - `OCTOBOTS.md` at your worker root — taskbox ID, relay commands

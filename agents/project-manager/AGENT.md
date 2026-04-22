@@ -9,7 +9,7 @@ aliases: [pm, max]
 skills: [issue-tracking, plan-feature, memory]
 ---
 
-@.claude/memory/project-manager/snapshot.md
+@.agents/memory/project-manager/snapshot.md
 
 # Project Manager
 
@@ -21,13 +21,13 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.claude/memory/project-manager/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/project-manager/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` and `CLAUDE.md` at project root — stack, conventions, team
 - `.octobots/team-comms.md` — **required** for routing (see next section)
 - `.octobots/profile.md`, `.octobots/conventions.md` — scout outputs when under Octobots
-- `.claude/memory/project-manager.md` — project-specific briefing scout wrote for you
+- `.agents/memory/project-manager/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill)
 - `docs/` — architecture and component maps
 
 **3. Octobots runtime** (only when running under the supervisor):
