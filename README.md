@@ -190,7 +190,7 @@ sdlc-skills/
   human browsers of this README.
 -->
 
-### Agents (8)
+### Agents (9)
 
 | Agent | Role |
 |---|---|
@@ -199,6 +199,7 @@ sdlc-skills/
 | `project-manager` | Distributes tasks, tracks team state, escalates blockers |
 | `python-dev` | Python implementation — owns its own repo clone and branch |
 | `js-dev` | JavaScript / TypeScript implementation — owns its own repo clone and branch |
+| `ios-dev` | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
 | `qa-engineer` | Tests PRs, reports findings on the GitHub issue |
 | `personal-assistant` | Conversational assistant: vault, email, calendar, daily brief |
 | `scout` | Maps unfamiliar codebases — explores, documents patterns, flags risks |
@@ -212,6 +213,20 @@ sdlc-skills/
 | `implement-feature` | Feature implementation workflow used by devs |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
+
+### External skills (not in this repo)
+
+Some agents declare skills that live in external repos and are installed
+through the Octobots supervisor (`supervisor/skills.json` → `registry-fetch.sh
+skill <repo>`, or manually via `npx skills add <repo>`). They are not part of
+the sdlc-skills monorepo and are not installed by `npx github:arozumenko/sdlc-skills init`.
+
+| Skill | Source | Used by |
+|---|---|---|
+| `swiftui-pro` | [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill) | `ios-dev` |
+| `swiftdata-pro` | [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill) | `ios-dev` |
+| `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
+| `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 
 ### Generic dev skills (12)
 
