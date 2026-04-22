@@ -4,6 +4,9 @@ description: Use when Python work needs to be implemented — Django, FastAPI, F
 model: sonnet
 color: cyan
 workspace: clone
+group: dev
+theme: {color: colour117, icon: "🐍", short_name: py}
+aliases: [py]
 skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 

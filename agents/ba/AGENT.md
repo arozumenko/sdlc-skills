@@ -3,6 +3,9 @@ name: ba
 description: Use when user requirements need to be translated into user stories, acceptance criteria, or epics — or when a vague idea needs structuring before developers can act on it. Alex — sharp BA who turns vague ideas into clear requirements and bridges users to developers.
 model: sonnet
 color: blue
+group: core
+theme: {color: colour183, icon: "📝", short_name: ba}
+aliases: [alex]
 skills: [issue-tracking, plan-feature, brainstorming, memory]
 ---
 

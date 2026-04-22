@@ -58,12 +58,13 @@ project. Does not rely on Claude Code's plugin system.
 # Install everything, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
 
-# Install a subset of agents — their declared skills come along automatically
+# Install a subset of agents — every skill they declare comes along automatically
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,pm
-# (installs ba + tech-lead + pm agents and every monorepo skill they declare
-#  in their `skills:` frontmatter. External skills — tdd, brainstorming,
-#  swiftui-pro, etc. — are listed with install instructions; install them
-#  via the Octobots supervisor or `npx skills add <repo>` individually.)
+# (installs ba + tech-lead + pm agents, every monorepo skill they declare,
+#  AND every external skill — tdd from mattpocock/skills, brainstorming
+#  from obra/superpowers, swiftui-pro from twostraws, etc. External skills
+#  are cloned once into ~/.cache/sdlc-skills/registry/ and symlinked into
+#  .claude/skills/.)
 
 # Install specific skills (overrides auto-resolve)
 npx github:arozumenko/sdlc-skills init --skills bugfix-workflow,code-review
@@ -220,10 +221,12 @@ sdlc-skills/
 
 ### External skills (not in this repo)
 
-Some agents declare skills that live in external repos and are installed
-through the Octobots supervisor (`supervisor/skills.json` → `registry-fetch.sh
-skill <repo> [ref] [subdir]`). They are not part of the sdlc-skills monorepo
-and are not installed by `npx github:arozumenko/sdlc-skills init`.
+Some agents declare skills that live in external repos. The installer's
+registry (`skills.json` at the repo root) knows where to fetch each — when
+you install an agent whose `skills:` list names an external skill, the
+installer clones the source repo once into `~/.cache/sdlc-skills/registry/`
+and symlinks the subdir into `.claude/skills/<name>/`. No separate step
+required.
 
 | Skill | Source | Used by |
 |---|---|---|

@@ -4,6 +4,9 @@ description: Use when JavaScript or TypeScript work needs to be implemented — 
 model: sonnet
 color: yellow
 workspace: clone
+group: dev
+theme: {color: colour220, icon: "⚡", short_name: js}
+aliases: [js, jay]
 skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 

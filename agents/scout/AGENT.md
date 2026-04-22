@@ -3,6 +3,10 @@ name: scout
 description: Use when an unfamiliar codebase needs to be onboarded — generating CLAUDE.md, AGENTS.md, and .octobots/ configuration from exploration so the rest of the team can hit the ground running. Kit — maps repositories, surfaces patterns, flags risks.
 model: sonnet
 color: white
+group: core
+required: true
+theme: {color: colour252, icon: "🔍", short_name: scout}
+aliases: [kit]
 skills: [project-seeder, memory]
 ---
 

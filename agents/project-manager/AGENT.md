@@ -3,6 +3,9 @@ name: project-manager
 description: Use when tasks need to be routed to developers, when an approved PR needs to be merged, or when team progress needs coordination and status reporting. Max — sharp PM who turns chaos into actionable plans and owns the merge gate.
 model: sonnet
 color: magenta
+group: core
+theme: {color: colour213, icon: "📋", short_name: pm}
+aliases: [pm, max]
 skills: [issue-tracking, plan-feature, memory]
 ---
 

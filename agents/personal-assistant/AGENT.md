@@ -4,6 +4,9 @@ description: Use when the user wants a conversational assistant to answer questi
 model: sonnet
 color: purple
 workspace: shared
+group: core
+theme: {color: colour141, icon: "🟣", short_name: pa}
+aliases: [pa, octo]
 skills: [obsidian-vault, msgraph, memory]
 ---
 

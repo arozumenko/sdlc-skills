@@ -29,14 +29,20 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
+  symlinkSync,
+  unlinkSync,
 } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline";
+import { execSync } from "child_process";
+import { homedir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -74,7 +80,99 @@ function loadCatalog() {
   return {
     agents: listDirs("agents"),
     skills: listDirs("skills"),
+    registry: loadSkillRegistry(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Skill registry — skills.json at the repo root describes every skill and
+// where to fetch it:
+//   monorepo entry: {id, monorepo: "sdlc-skills", name}  → copy from ./skills/<name>
+//   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone + symlink
+// ---------------------------------------------------------------------------
+
+function loadSkillRegistry() {
+  const registryPath = join(PKG_ROOT, "skills.json");
+  if (!existsSync(registryPath)) return { skills: [] };
+  try {
+    return JSON.parse(readFileSync(registryPath, "utf8"));
+  } catch (err) {
+    console.error(`  ! Failed to parse skills.json: ${err.message}`);
+    return { skills: [] };
+  }
+}
+
+function registryEntry(registry, skillId) {
+  return (registry.skills || []).find((e) => e.id === skillId) || null;
+}
+
+function cacheRoot() {
+  // XDG-ish cache dir so clones are shared across projects.
+  const base =
+    process.env.SDLC_SKILLS_CACHE_DIR ||
+    process.env.XDG_CACHE_HOME ||
+    join(homedir(), ".cache");
+  const dir = join(base, "sdlc-skills", "registry");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function shallowClone(repo, ref) {
+  const dest = join(cacheRoot(), repo.replace("/", "__"));
+  try {
+    if (existsSync(join(dest, ".git"))) {
+      execSync(`git -C "${dest}" fetch --quiet --depth 1 origin ${ref}`, {
+        stdio: "ignore",
+      });
+      execSync(`git -C "${dest}" checkout --quiet FETCH_HEAD`, {
+        stdio: "ignore",
+      });
+    } else {
+      if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+      execSync(
+        `git clone --quiet --depth 1 --branch ${ref} https://github.com/${repo} "${dest}"`,
+        { stdio: "ignore" }
+      );
+    }
+    return dest;
+  } catch (err) {
+    console.error(`  ! git clone ${repo}@${ref} failed: ${err.message}`);
+    return null;
+  }
+}
+
+function installExternalSkill(entry, targetDir) {
+  const ref = entry.ref || "main";
+  const clone = shallowClone(entry.repo, ref);
+  if (!clone) return { status: "error" };
+  const src = entry.subdir ? join(clone, entry.subdir) : clone;
+  if (!existsSync(src)) {
+    console.error(`  ! ${entry.id}: ${entry.subdir || "."} not found in ${entry.repo}`);
+    return { status: "error" };
+  }
+  // Skill name derives from SKILL.md `name:` (if present) else subdir basename.
+  let skillName = entry.id;
+  const skillMd = join(src, "SKILL.md");
+  if (existsSync(skillMd)) {
+    const match = readFileSync(skillMd, "utf8").match(/^name:\s*(.+)$/m);
+    if (match) skillName = match[1].trim().replace(/^["']|["']$/g, "");
+  } else if (entry.subdir) {
+    skillName = basename(entry.subdir);
+  }
+  const skillsDir = join(CWD, targetDir, "skills");
+  mkdirSync(skillsDir, { recursive: true });
+  const link = join(skillsDir, skillName);
+  if (existsSync(link) || lstatSync(link, { throwIfNoEntry: false })) {
+    // Already present. Don't overwrite unless --update (handled upstream).
+    return { status: "exists", name: skillName };
+  }
+  try {
+    symlinkSync(src, link);
+    return { status: "installed", name: skillName };
+  } catch (err) {
+    console.error(`  ! symlink ${src} → ${link} failed: ${err.message}`);
+    return { status: "error" };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,14 +212,24 @@ function parseAgentSkillDeps(agentName) {
     .filter(Boolean);
 }
 
-function inferSkillsFromAgents(agentNames, availableSkills) {
+function inferSkillsFromAgents(agentNames, availableSkills, registry) {
   const declared = new Set();
   for (const name of agentNames) {
     for (const skill of parseAgentSkillDeps(name)) declared.add(skill);
   }
-  const monorepo = [...declared].filter((s) => availableSkills.includes(s));
-  const external = [...declared].filter((s) => !availableSkills.includes(s));
-  return { monorepo, external };
+  const monorepo = [];
+  const external = [];
+  const unknown = [];
+  for (const id of declared) {
+    if (availableSkills.includes(id)) {
+      monorepo.push(id);
+      continue;
+    }
+    const entry = registryEntry(registry, id);
+    if (entry && entry.repo) external.push(entry);
+    else unknown.push(id);
+  }
+  return { monorepo, external, unknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -269,43 +377,43 @@ async function interactivePick(catalog, args) {
   } else {
     if (agentsSelection === null) agentsSelection = [];
     // --agents X without --skills → auto-resolve each agent's declared
-    // skill deps. Monorepo-resident ones get installed; external ones
-    // (not in this repo) are reported so the user can install them
-    // separately.
+    // skill deps. Monorepo skills install from this repo; externals
+    // (`repo:` entries in skills.json) clone + symlink into the target
+    // dir. Unknown skill ids (not in skills.json at all) are warned
+    // and skipped.
     if (skillsSelection === null) {
       if (agentsSelection.length > 0) {
-        const { monorepo, external } = inferSkillsFromAgents(
+        const { monorepo, external, unknown } = inferSkillsFromAgents(
           agentsSelection,
-          catalog.skills
+          catalog.skills,
+          catalog.registry
         );
         if (monorepo.length) {
           console.log(
-            `\n  Auto-installing skills required by selected agents:\n    ${monorepo.join(", ")}`
+            `\n  Monorepo skills required by selected agents:\n    ${monorepo.join(", ")}`
           );
         }
         if (external.length) {
           console.log(
-            `\n  Note: these agents also depend on external skills not in this repo:`
+            `\n  External skills required by selected agents (will be fetched):\n    ${external.map((e) => `${e.id} (${e.repo}${e.subdir ? "/" + e.subdir : ""})`).join("\n    ")}`
           );
-          for (const s of external) console.log(`    - ${s}`);
+        }
+        if (unknown.length) {
           console.log(
-            `  Install them via the Octobots supervisor (resolves automatically)`
-          );
-          console.log(
-            `  or individually with \`npx skills add <repo>\` — see the`
-          );
-          console.log(
-            `  "External skills" table in this repo's README for sources.`
+            `\n  ! Skills declared by agents but not in skills.json (skipped):\n    ${unknown.join(", ")}`
           );
         }
         skillsSelection = monorepo;
+        // Stash externals on the return so main() can install them after
+        // the monorepo-skills loop.
+        return { targets, agentsSelection, skillsSelection, externalSkills: external };
       } else {
         skillsSelection = [];
       }
     }
   }
 
-  return { targets, agentsSelection, skillsSelection };
+  return { targets, agentsSelection, skillsSelection, externalSkills: [] };
 }
 
 async function main() {
@@ -324,10 +432,8 @@ async function main() {
     return;
   }
 
-  const { targets, agentsSelection, skillsSelection } = await interactivePick(
-    catalog,
-    args
-  );
+  const { targets, agentsSelection, skillsSelection, externalSkills } =
+    await interactivePick(catalog, args);
 
   console.log("");
   let installed = 0;
@@ -357,6 +463,18 @@ async function main() {
         skipped++;
       } else {
         console.log(`      ! skill  ${name} (missing in repo)`);
+      }
+    }
+    for (const entry of externalSkills) {
+      const r = installExternalSkill(entry, t.dir);
+      if (r.status === "installed") {
+        console.log(`      ✓ skill  ${r.name} (external: ${entry.repo})`);
+        installed++;
+      } else if (r.status === "exists") {
+        console.log(`      — skill  ${r.name} (exists; use --update)`);
+        skipped++;
+      } else {
+        console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
     }
   }
