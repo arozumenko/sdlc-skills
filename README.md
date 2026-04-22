@@ -70,6 +70,51 @@ against `skills.json`, clones external repos on first install into
 `~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
 project's skills directory.
 
+## What lands in your project
+
+After `npx … init` + a scout run, your target project has two top-level
+directories plus the IDE's native install location:
+
+```
+your-project/
+├── .claude/                  ← IDE-native install (or .cursor/, .windsurf/, .github/)
+│   ├── agents/<role>/        agent config (AGENT.md + SOUL.md)
+│   └── skills/<name>/        skill content (SKILL.md + references)
+│
+├── .agents/                  ← IDE-neutral content — every agent reads
+│   ├── profile.md            scout output: project card
+│   ├── architecture.md       scout output: system design
+│   ├── conventions.md        scout output: coding standards
+│   ├── testing.md            scout output: test infrastructure
+│   ├── team-comms.md         scout output: transport + roster
+│   ├── onboarding.md         scout's audit trail
+│   └── memory/<role>/        memory-skill dir: MEMORY.md index,
+│                             curated entries (incl. scout-seeded
+│                             project_briefing.md), daily/, snapshot.md
+│
+├── .octobots/                ← supervisor runtime state (only if Octobots is installed)
+│   ├── relay.db              taskbox SQLite
+│   ├── board.md              team whiteboard
+│   ├── workers/<role>/       isolated worker environments + git clones
+│   ├── roles/                project role overrides
+│   ├── registry/             cached third-party agent/skill clones
+│   ├── schedule.json         persistent cron jobs
+│   └── roles-manifest.yaml   check-spawn-ready.py input (scout-generated)
+│
+├── AGENTS.md                 scout output: full team reference
+└── CLAUDE.md                 scout output: 80-line auto-loaded context
+```
+
+**The rule.** `.agents/` holds content agents read. `.octobots/` holds
+supervisor runtime state. Nothing in `.agents/` needs the supervisor to
+function; nothing in `.octobots/` is meaningful without it. That split
+is why `.agents/memory/<role>/` works identically under Claude Code,
+Cursor, Gemini CLI, Copilot CLI, Windsurf, and Octobots.
+
+Scout (`scout` agent, run once when onboarding) populates everything
+under `.agents/` plus `AGENTS.md` / `CLAUDE.md` at the root. Re-run
+scout whenever the stack evolves to refresh.
+
 ## Install — pick one path
 
 There are really two paths: the **full experience** (npx installer or
@@ -264,15 +309,18 @@ shape of those assumptions is documented below.
 | `workspace: clone` | Ignored. Without Octobots, devs share your working tree — coordinate merges manually. |
 | `skills: [taskbox, memory, ...]` | `taskbox` is bundled *inside* the Octobots supervisor — it's a no-op on stock Claude Code. `memory` is published here and works standalone. |
 
-**`@import` paths that expect a seeded project:**
+**`@import` paths auto-loaded at session start:**
 
 ```markdown
 @.agents/memory/<role>/snapshot.md
 ```
 
-Written by the supervisor's memory skill at launch. On stock Claude
-Code the import resolves to a missing file; the agent still works,
-"read your snapshot before acting" is just a no-op.
+Under Octobots the supervisor regenerates `snapshot.md` at every role
+launch (inlining the curated entries + recent daily logs). Under stock
+IDEs the import resolves to a missing file on first session and the
+agent falls back to reading `.agents/memory/<role>/MEMORY.md` +
+individual entries on demand — same memory, slightly more work per
+session. Nothing breaks either way.
 
 **Shell commands that assume the supervisor:**
 
