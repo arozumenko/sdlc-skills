@@ -18,29 +18,41 @@ Two consumers:
 
 ## Architecture
 
-```
-                     ┌─────────────────────────────────┐
-                     │        sdlc-skills (this)       │
-                     │   content + install resolution  │
-                     │                                 │
-                     │ • agents/  (self-describing)    │
-                     │ • skills/  (monorepo)           │
-                     │ • skills.json (registry)        │
-                     │ • bin/init.mjs (installer)      │
-                     └─────────────────────────────────┘
-                              ▲          ▲
-                              │          │
-                 consumed by  │          │  consumed by
-                              │          │
-     ┌────────────────────────┘          └────────────────────────┐
-     │                                                            │
-     ▼                                                            ▼
-┌──────────────────────┐                         ┌──────────────────────────┐
-│   stock AI IDEs      │                         │ Octobots supervisor      │
-│ Claude / Cursor /    │                         │ orchestration:           │
-│ Gemini / Copilot /   │                         │ tmux TUI, taskbox,       │
-│ Windsurf / Codex     │                         │ scheduler, git clones    │
-└──────────────────────┘                         └──────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph sdlc["sdlc-skills — content + install resolution"]
+        direction TB
+        agents["agents/<br/>self-describing personas"]
+        skills["skills/<br/>monorepo skills"]
+        registry["skills.json<br/>catalog: monorepo + external"]
+        installer["bin/init.mjs<br/>npx installer"]
+        agents --- skills
+        skills --- registry
+        registry --- installer
+    end
+
+    ides["Stock AI IDEs<br/>Claude Code • Cursor<br/>Gemini CLI • Copilot CLI<br/>Windsurf"]
+
+    octobots["Octobots supervisor<br/>tmux TUI • taskbox<br/>scheduler • per-role clones"]
+
+    ext_matt["mattpocock/skills<br/>tdd"]
+    ext_obra["obra/superpowers<br/>brainstorming, debugging,<br/>verification, ..."]
+    ext_tws["twostraws/*-Agent-Skill<br/>SwiftUI, SwiftData,<br/>Swift Testing, Concurrency"]
+
+    installer -->|fetch at install time| ext_matt
+    installer -->|fetch at install time| ext_obra
+    installer -->|fetch at install time| ext_tws
+
+    sdlc -->|direct install via<br/>plugin manifest or npx| ides
+    sdlc -->|install.sh delegates<br/>content to npx| octobots
+    octobots -.->|spawns agents in<br/>.claude/ runtime| ides
+
+    classDef layer fill:#e8f0ff,stroke:#3b5bdb,stroke-width:2px
+    classDef external fill:#fff4e6,stroke:#f08c00,stroke-width:1.5px
+    classDef consumer fill:#e6fcf5,stroke:#0ca678,stroke-width:1.5px
+    class sdlc layer
+    class ext_matt,ext_obra,ext_tws external
+    class ides,octobots consumer
 ```
 
 Agents are **self-describing** — each `agents/<name>/AGENT.md` carries
