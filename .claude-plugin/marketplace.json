@@ -90,12 +90,6 @@
       "version": "0.2.0"
     },
     {
-      "name": "tdd",
-      "source": "./skills/tdd",
-      "description": "Test-driven development workflow — write tests first, then implement.",
-      "version": "0.2.0"
-    },
-    {
       "name": "git-workflow",
       "source": "./skills/git-workflow",
       "description": "Git operations: branching, commits, PRs, rebasing, cherry-picks, releases.",

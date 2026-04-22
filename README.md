@@ -58,10 +58,14 @@ project. Does not rely on Claude Code's plugin system.
 # Install everything, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
 
-# Install a subset of agents
+# Install a subset of agents — their declared skills come along automatically
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,pm
+# (installs ba + tech-lead + pm agents and every monorepo skill they declare
+#  in their `skills:` frontmatter. External skills — tdd, brainstorming,
+#  swiftui-pro, etc. — are listed with install instructions; install them
+#  via the Octobots supervisor or `npx skills add <repo>` individually.)
 
-# Install specific skills
+# Install specific skills (overrides auto-resolve)
 npx github:arozumenko/sdlc-skills init --skills bugfix-workflow,code-review
 
 # Mix and match, Claude Code only
@@ -218,22 +222,28 @@ sdlc-skills/
 
 Some agents declare skills that live in external repos and are installed
 through the Octobots supervisor (`supervisor/skills.json` → `registry-fetch.sh
-skill <repo>`, or manually via `npx skills add <repo>`). They are not part of
-the sdlc-skills monorepo and are not installed by `npx github:arozumenko/sdlc-skills init`.
+skill <repo> [ref] [subdir]`). They are not part of the sdlc-skills monorepo
+and are not installed by `npx github:arozumenko/sdlc-skills init`.
 
 | Skill | Source | Used by |
 |---|---|---|
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | devs (`python-dev`, `js-dev`, `ios-dev`) |
+| `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
+| `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs, `qa-engineer` |
+| `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs, `qa-engineer` |
+| `requesting-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/requesting-code-review/` | devs |
+| `receiving-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/receiving-code-review/` | devs |
+| `writing-skills` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/writing-skills/` | `tech-lead` |
 | `swiftui-pro` | [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill) | `ios-dev` |
 | `swiftdata-pro` | [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill) | `ios-dev` |
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 
-### Generic dev skills (12)
+### Generic dev skills (11)
 
 | Skill | What it does |
 |---|---|
 | `code-review` | Structured code review checklist and reporting |
-| `tdd` | Test-driven development workflow |
 | `git-workflow` | Branching, commits, PR conventions |
 | `playwright-testing` | E2E browser testing with Playwright |
 | `browser-verify` | Quick visual / smoke verification in a browser |

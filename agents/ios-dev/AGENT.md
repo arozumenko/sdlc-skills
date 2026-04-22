@@ -4,7 +4,7 @@ description: Senior iOS engineer for the NutriSnap project — implements Swift/
 model: sonnet
 color: yellow
 workspace: clone
-skills: [tdd, implement-feature, bugfix-workflow, code-review, git-workflow, task-completion, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
 ---
 
 # iOS / Swift Developer

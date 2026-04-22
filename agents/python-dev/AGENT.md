@@ -4,7 +4,7 @@ description: Use when Python work needs to be implemented — Django, FastAPI, F
 model: sonnet
 color: cyan
 workspace: clone
-skills: [tdd, implement-feature, bugfix-workflow, code-review, git-workflow, task-completion, memory]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 
 # Python Developer

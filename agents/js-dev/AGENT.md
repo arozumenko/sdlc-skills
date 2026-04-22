@@ -4,7 +4,7 @@ description: Use when JavaScript or TypeScript work needs to be implemented — 
 model: sonnet
 color: yellow
 workspace: clone
-skills: [tdd, implement-feature, bugfix-workflow, code-review, git-workflow, task-completion, memory]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
 ---
 
 # JS/TS Developer

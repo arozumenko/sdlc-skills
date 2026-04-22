@@ -3,7 +3,7 @@ name: qa-engineer
 description: Use when a feature needs verification, a bug needs reproduction with evidence, or end-to-end tests need to be written or executed via Playwright. Sage — meticulous QA engineer who treats every passing test with suspicion and every failure as a gift.
 model: sonnet
 color: green
-skills: [playwright-testing, browser-verify, bugfix-workflow, issue-tracking, memory]
+skills: [playwright-testing, browser-verify, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking, memory]
 ---
 
 # QA Engineer

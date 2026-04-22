@@ -31,6 +31,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   statSync,
 } from "fs";
 import { join, dirname } from "path";
@@ -74,6 +75,53 @@ function loadCatalog() {
     agents: listDirs("agents"),
     skills: listDirs("skills"),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Agent → skill dependency resolution
+//
+// Each agent declares its required skills in the YAML frontmatter of
+// `agents/<name>/AGENT.md`:
+//
+//   skills: [tdd, implement-feature, memory, swiftui-pro]
+//
+// When the user runs `init --agents X,Y` without `--skills`, we read those
+// lists and auto-install the skills that live in this monorepo. Skills
+// declared by the agent but *not* present in this repo (external skills
+// like tdd, brainstorming, swiftui-pro) are surfaced as a warning with
+// install instructions. The supervisor resolves them automatically via
+// skills.json `repo:` entries; stock Claude users follow the README.
+// ---------------------------------------------------------------------------
+
+function parseAgentSkillDeps(agentName) {
+  const agentMd = join(PKG_ROOT, "agents", agentName, "AGENT.md");
+  if (!existsSync(agentMd)) return [];
+  let text;
+  try {
+    text = readFileSync(agentMd, "utf8");
+  } catch {
+    return [];
+  }
+  // Match the first `---` frontmatter block. Naive but sufficient — the
+  // frontmatter is authored by humans and always single-line `skills: [...]`.
+  const fm = text.match(/^---\s*\n([\s\S]*?)\n---/m);
+  if (!fm) return [];
+  const line = fm[1].match(/^skills:\s*\[([^\]]*)\]/m);
+  if (!line) return [];
+  return line[1]
+    .split(",")
+    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+}
+
+function inferSkillsFromAgents(agentNames, availableSkills) {
+  const declared = new Set();
+  for (const name of agentNames) {
+    for (const skill of parseAgentSkillDeps(name)) declared.add(skill);
+  }
+  const monorepo = [...declared].filter((s) => availableSkills.includes(s));
+  const external = [...declared].filter((s) => !availableSkills.includes(s));
+  return { monorepo, external };
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +268,41 @@ async function interactivePick(catalog, args) {
     skillsSelection = catalog.skills;
   } else {
     if (agentsSelection === null) agentsSelection = [];
-    if (skillsSelection === null) skillsSelection = [];
+    // --agents X without --skills → auto-resolve each agent's declared
+    // skill deps. Monorepo-resident ones get installed; external ones
+    // (not in this repo) are reported so the user can install them
+    // separately.
+    if (skillsSelection === null) {
+      if (agentsSelection.length > 0) {
+        const { monorepo, external } = inferSkillsFromAgents(
+          agentsSelection,
+          catalog.skills
+        );
+        if (monorepo.length) {
+          console.log(
+            `\n  Auto-installing skills required by selected agents:\n    ${monorepo.join(", ")}`
+          );
+        }
+        if (external.length) {
+          console.log(
+            `\n  Note: these agents also depend on external skills not in this repo:`
+          );
+          for (const s of external) console.log(`    - ${s}`);
+          console.log(
+            `  Install them via the Octobots supervisor (resolves automatically)`
+          );
+          console.log(
+            `  or individually with \`npx skills add <repo>\` — see the`
+          );
+          console.log(
+            `  "External skills" table in this repo's README for sources.`
+          );
+        }
+        skillsSelection = monorepo;
+      } else {
+        skillsSelection = [];
+      }
+    }
   }
 
   return { targets, agentsSelection, skillsSelection };

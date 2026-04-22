@@ -3,7 +3,7 @@ name: tech-lead
 description: Use when a user story needs technical decomposition into dependency-ordered tasks with interface contracts, or when a PR needs a blocking code review before merge. Rio — senior tech lead who turns stories into executable plans and owns architecture decisions.
 model: sonnet
 color: red
-skills: [code-review, plan-feature, git-workflow, memory]
+skills: [code-review, plan-feature, git-workflow, writing-skills, memory]
 ---
 
 # Tech Lead
