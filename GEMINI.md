@@ -30,6 +30,7 @@ are capability definitions, not always-on context.
 | `plan-feature` | A spec/requirement exists and implementation hasn't started |
 | `implement-feature` | A plan exists and you're about to write code |
 | `bugfix-workflow` | Reproducing and fixing a reported bug |
+| `xray-testing` | CRUD + results import on Xray entities (Test / Precondition / Set / Plan / Execution / Run) across Cloud (GraphQL) and Server/DC (REST) |
 | `code-review` | Reviewing a PR or diff |
 | `task-completion` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |
