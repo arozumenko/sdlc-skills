@@ -127,6 +127,12 @@ people who don't want to be happy).
 | **Octobots supervisor** ⭐ | ✅ Yes (delegates to npx) | You want multi-agent orchestration — tmux TUI, taskbox, scheduler, per-role git clones. |
 | Native IDE plugins | ❌ Monorepo only | You don't want Node installed. Trade-off: no external skills, manual team assembly. |
 
+> **Onboarding a test-automation pilot?** Existing framework, existing app,
+> existing MCP connectors? See
+> [`TEST-AUTOMATION-ONBOARDING.md`](TEST-AUTOMATION-ONBOARDING.md) for the
+> end-to-end step-by-step: install → MCP inventory → scout seed →
+> `.agents/test-automation.yaml` → single-case pilot → scale-up.
+
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
 > Gemini CLI, Copilot CLI) only see skills present in this repo's
 > `skills/` directory — they don't know how to fetch from upstream. The
@@ -274,29 +280,32 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ## Catalog
 
-### Agents (9)
+### Agents (10)
 
 | Agent | Persona | Role |
 |---|---|---|
 | `ba` | Alex | Business analyst — turns requirements into user stories with acceptance criteria |
-| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies |
-| `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers |
+| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; owns framework-scale decisions for test automation |
+| `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers, owns the merge gate |
 | `python-dev` | Py | Python implementation — owns its own repo clone and branch |
 | `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
 | `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
-| `qa-engineer` | Sage | Tests PRs, reports findings on the GitHub issue |
+| `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
+| `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
 ### Monorepo skills
 
-**SDLC-coupled (5):**
+**SDLC-coupled (7):**
 
 | Skill | What it does |
 |---|---|
 | `plan-feature` | Feature planning workflow used by BA / Tech Lead |
 | `implement-feature` | Feature implementation workflow used by devs |
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
+| `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
+| `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 

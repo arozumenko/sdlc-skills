@@ -54,6 +54,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "test-automation-engineer",
+      "source": "./agents/test-automation-engineer",
+      "description": "Test automation engineer agent — turns automation-ready specs into green tests inside the project's existing framework (Playwright, Cypress, pytest, JUnit, NUnit, WDIO).",
+      "version": "0.2.0"
+    },
+    {
       "name": "scout",
       "source": "./agents/scout",
       "description": "Codebase scout agent — maps unfamiliar repos, generates CLAUDE.md and project configuration.",
@@ -159,6 +165,18 @@
       "name": "task-completion",
       "source": "./skills/task-completion",
       "description": "Five-step task handoff protocol: commit → push → PR → comment → notify.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-case-analysis",
+      "source": "./skills/test-case-analysis",
+      "description": "Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer. Does not write automation code.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-automation-workflow",
+      "source": "./skills/test-automation-workflow",
+      "description": "End-to-end test automation workflow: explore → specify → implement → review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown).",
       "version": "0.2.0"
     }
   ]
