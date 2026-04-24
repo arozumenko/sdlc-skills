@@ -1,0 +1,11 @@
+# Octobots install config — read by setup-skill.sh, ignored by other agent clients.
+#
+# No `mcp:` entries: the `ToscaCloudMcpServer` that this skill talks to is
+# tenant-specific (the server URL embeds the tenant hostname + space ID).
+# Auto-merging a placeholder would ship broken config into the user's
+# .mcp.json. Manual wiring lives in `scripts/README.md § MCP wiring`.
+
+permissions:
+  filesystem: read-write   # writes .env, token.json, scratch artifacts
+  network: true            # OAuth token + MBT / Playlists / Inventory / E2G / MCP
+  shell: true              # invokes `tosca` / `python tosca_cli.py`

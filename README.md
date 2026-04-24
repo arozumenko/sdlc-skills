@@ -309,7 +309,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Generic dev skills (11):**
+**Generic dev skills (14):**
 
 | Skill | What it does |
 |---|---|
@@ -320,6 +320,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `issue-tracking` | GitHub / Linear / GitLab issue management |
 | `xray-testing` | Xray CRUD + results import — Tests, Preconditions, Test Sets/Plans, Executions, Runs. Xray Cloud (GraphQL) + Server/DC (REST). Stdlib Python CLI fallback |
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
+| `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
 | `goal-verifier` | Verify a task actually achieved its stated goal |
 | `context-gatherer` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
