@@ -1,6 +1,6 @@
 ---
 name: tosca-automation
-description: Tricentis TOSCA Cloud test automation — create / update / run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders; import / export TSU; work the MBT / Playlists / Inventory / E2G REST surfaces via the bundled `tosca_cli.py`. Use when the user asks to "create a TOSCA test case for <flow>", "run <playlist> and show failures", "move test cases into <folder>", or any TOSCA Cloud REST / CLI operation. Covers the full lifecycle discover → build → place → verify.
+description: Tricentis TOSCA Cloud test automation via the bundled `tosca_cli.py`. Create / update / run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders; import / export TSU. Use when the user asks to create a TOSCA test case, run a playlist and show failures, move test cases into a folder, or any TOSCA Cloud REST / CLI operation.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -114,7 +114,7 @@ Work sequentially, not in batches. Each build cycle is a complete loop:
 4. **Run** — personal agent via MCP for iterative debug, shared agent via CLI for CI/scheduled runs.
 5. **Inspect** — on failure, read the exact TBox message via `GetFailedTestSteps` (MCP) or `playlists logs` (CLI). Classify the failure (see next section) before changing anything.
 6. **Fix** — minimum-diff change: patch the offending module/step, not the whole case.
-7. **Confirm the write landed** — GET the artifact and check that the **`version` bumped** and the specific field you edited actually changed. A `✓ patched` / `204 No Content` from the API is **not** proof the delta was applied: MBT silently accepts unsupported JSON Patch ops (e.g. `remove` on an array element, deep JSON pointer paths like `/testCaseItems/1/items/2/testStepValues/0/value`, `move`) and returns 204 with zero changes. Inventory v3 PATCH has its own PascalCase/`{"operations":[…]}` wrapper — a request in MBT shape is accepted but ignored. Never report a change as done, never run the test, and never claim a fix based on the CLI's own "success" message alone. If PATCH did nothing, fall back to full PUT (`cases update` / `modules update` / `blocks update`).
+7. **Confirm the write landed** — the CLI enforces this automatically. Every write command (`cases update` / `cases patch` / `modules update` / `blocks update` / `inventory patch`) issues a follow-up GET and asserts **`version` bumped** + target field actually changed, via `_confirm_version_bump` + `_confirm_field` → `_exit_err` → `typer.Exit(1)` on silent no-op. A green `✓ confirmed` means the diff landed; a red `Error: … version unchanged` means MBT silently dropped the op (unsupported shape: deep JSON pointer paths, `remove` on array elements, `move`, or MBT-shape body on Inventory v3). Treat the CLI's exit code as truth. The `--no-confirm` flag exists to skip this check and **must not be used** on production writes — it's for debugging transport shape only.
 8. **Validate** — re-run and confirm the step that previously failed now passes. Don't move on until green (or the failure is a documented application defect).
 9. **Report** — IDs (entityId / moduleId / playlistId), folder placement, any remaining gaps.
 
@@ -257,10 +257,25 @@ tosca simulations create --name "api-mock.json" --file ./api-mock.json \
     --tags "api,v2" --components "Services,Runnables"
 tosca simulations delete <fileId>
 
-# AI helper — natural language → CLI command (requires OpenAI key)
+# AI helper — natural language → CLI command (OPTIONAL)
+# Requires `pip install openai` and `TOSCA_OPENAI_KEY` env var set.
+# Don't invoke without first confirming both are in place — otherwise the
+# command errors out.
 tosca ask "show all failed test cases"          # prints the command
 tosca ask "cancel run xyz" --dry-run            # preview only
 ```
+
+> **Install note.** Unlike the sibling `xray-testing` CLI (stdlib-only),
+> `tosca_cli.py` has four runtime deps: `httpx`, `typer[all]`, `rich`,
+> `python-dotenv`. Declared inline via PEP 723 + also in
+> `scripts/requirements.txt`. The sdlc-skills installer drops the files
+> but does **not** `pip install` them — do that once per project:
+> `pip install -r <install-path>/skills/tosca-automation/scripts/requirements.txt`.
+> This is a deliberate divergence from xray-testing's zero-dep convention:
+> the upstream CLI is 3.9k lines built on typer + httpx + rich, and a
+> stdlib rewrite would be a multi-week effort with real regression risk.
+> If you'd rather not add the deps, the skill's caveats / references /
+> MCP guidance remain useful; you can call TOSCA Cloud's REST directly.
 
 ### Enums you'll need when building JSON bodies
 
@@ -285,9 +300,9 @@ tosca ask "cancel run xyz" --dry-run            # preview only
 | Html module root `Engine` param | Manually created Html modules must have `{"name":"Engine","value":"Html","type":"Configuration"}` in the root-level `parameters` array. Without it: _XModules and XModuleAttributes have to provide the configuration param "Engine"_ |
 | Duplicate page elements | Modern pages render the same nav link in mobile + desktop. `Tag+InnerText+HREF` alone matches all copies. Use `browser_evaluate` to count matches; add `ClassName` to discriminate. |
 | Leftover browser tab | Start Precondition with `CloseBrowser Title="*"` before `OpenUrl` to avoid _"More than one matching tab"_ |
-| MBT PATCH ops | Lowercase: `replace`, `add`, `remove`. Response is 204 No Content — always GET the artifact afterwards and confirm `version` bumped and the target field actually changed. Unsupported ops (deep JSON-pointer paths into nested step trees, `remove` on array elements, `move`) are **silently ignored**: CLI still prints `✓ patched`, server still returns 204, but the body is unchanged. When the confirm-GET shows no diff, fall back to `cases update`/`modules update`/`blocks update` (full PUT). |
-| Inventory v3 PATCH body | Wrapper: `{"operations": [{"op": "Replace", ...}]}` — PascalCase op. Same confirm-GET rule: an MBT-shape body (bare array, lowercase op) is accepted and 204'd but applies no changes. |
-| Confirm writes before claiming success | Never trust the CLI's own `✓` line, an HTTP 204, or a `{}` response body as proof that your edit persisted. Always follow a write with a GET and assert the delta (usually: `version` field bumped). MBT PATCH has two silent-no-op cases (unsupported ops, deep paths); `modules update` returns `{}` on success too. One trivial probe — `{"op":"replace","path":"/description","value":"…"}` round-trip — is enough to calibrate whether the endpoint is accepting your shape before you batch real edits. |
+| MBT PATCH ops | Lowercase: `replace`, `add`, `remove`. Response is 204 No Content. Unsupported ops (deep JSON-pointer paths into nested step trees, `remove` on array elements, `move`) are silently dropped by the server — but the CLI catches this: `_confirm_version_bump` runs a GET after every PATCH and exits 1 with `Error: … version unchanged` when the op was a no-op. On that exit, fall back to full PUT (`cases update`/`modules update`/`blocks update`). |
+| Inventory v3 PATCH body | Wrapper: `{"operations": [{"op": "Replace", ...}]}` — PascalCase op. An MBT-shape body (bare array, lowercase op) is accepted and 204'd but applies no changes. The CLI's confirm-GET catches this shape-mismatch the same way it catches unsupported-op no-ops. |
+| CLI enforces confirm-GET on every write | `cases update` / `cases patch` / `modules update` / `blocks update` / `inventory patch` all run a follow-up GET and exit non-zero if `version` didn't bump or the target field didn't change. Green `✓ confirmed` = diff landed. Red `Error: … version unchanged` / `… did not apply` = silent no-op; fall back to full PUT. `--no-confirm` exists for debugging transport shape only — **never use on production writes**. |
 | Inventory search filter | Despite swagger, only lowercase works: `contains`, `and` |
 | SAP standard modules | Not in inventory. `SAP Logon`, `SAP Login`, `T-code` — use IDs directly from [SAP guide](references/sap-automation.md) |
 | TSU export field | `reusableTestStepBlockIds` (no double-e) |
