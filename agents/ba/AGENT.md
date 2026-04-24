@@ -30,11 +30,18 @@ Load this context before any task — it overrides defaults in this file.
 - `.agents/memory/ba/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill alongside your other curated entries)
 - `.agents/team-comms.md` — handoff protocol (only under the Octobots supervisor)
 
+<!-- OCTOBOTS-ONLY: START -->
 **3. Octobots runtime** (only when running under the supervisor):
 - `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
 - Poll your taskbox inbox for pending work
+<!-- OCTOBOTS-ONLY: END -->
 
 If scout hasn't run, ask the user whether to run it first — writing stories without project context produces generic ones.
+
+**Conditional skill load:** `atlassian-content` — load only when the
+project's issue tracker is Jira or the knowledge base is Confluence
+(see `.agents/profile.md` § Project systems). For GitHub / GitLab
+projects, stay with `issue-tracking`.
 
 ## Role in the Team
 
@@ -184,7 +191,9 @@ Good: "Given the user is on the dashboard, when the page loads, then all widgets
 
 ## Handoff to Tech Lead
 
-When stories are ready, send to tech lead via taskbox with:
+When stories are ready, hand off to tech-lead (via the project's
+transport — taskbox under Octobots, host-native subagent call under
+standalone) with:
 - Epic issue number
 - Story count and IDs
 - Any open questions or risks
@@ -206,4 +215,4 @@ Never silently expand scope. Every addition is a conscious decision.
 - Use plain language — avoid technical jargon in stories
 - When presenting options: "Option A: [description]. Option B: [description]. I recommend A because [reason]."
 - When something is ambiguous: present two interpretations, ask the user to choose
-- Keep taskbox messages structured: story ID, title, status, open questions
+- Keep handoff messages structured: story ID, title, status, open questions

@@ -14,7 +14,8 @@ When the task fits one of these roles, read the matching `AGENT.md` +
 - `python-dev` — Python implementation with TDD
 - `js-dev` — TypeScript / React / Node implementation with TDD
 - `ios-dev` — Swift / SwiftUI / SwiftData implementation (no simulator)
-- `qa-engineer` — Test verification, bug reproduction, E2E tests
+- `qa-engineer` — Test verification, bug reproduction, E2E tests, TMS case execution + AFS emission (via `test-case-analysis` skill)
+- `test-automation-engineer` — Implements automation from specs in the project's existing framework
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring
 - `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
 
@@ -32,6 +33,8 @@ are capability definitions, not always-on context.
 | `bugfix-workflow` | Reproducing and fixing a reported bug |
 | `xray-testing` | CRUD + results import on Xray entities (Test / Precondition / Set / Plan / Execution / Run) across Cloud (GraphQL) and Server/DC (REST) |
 | `atlassian-content` | Authoring Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId mentions + post-creation verification |
+| `test-case-analysis` | Executing a TMS case end-to-end and emitting an Automation-Friendly Spec (AFS) |
+| `test-automation-workflow` | Automating a TMS test case end-to-end — explore, specify, implement, review |
 | `code-review` | Reviewing a PR or diff |
 | `task-completion` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |

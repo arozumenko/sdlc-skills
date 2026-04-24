@@ -14,9 +14,8 @@ of native plugin formats and a shared npx installer.
   spec-compliant workflow skills: `plan-feature`, `implement-feature`,
   `bugfix-workflow`, `code-review`, `tdd`, `task-completion`,
   `git-workflow`, `memory`, `playwright-testing`, `browser-verify`,
-  `issue-tracking`, `xray-testing`, `goal-verifier`, `context-gatherer`,
-  `deep-research`, `obsidian-vault`, `msgraph`, `project-seeder`.
-  `issue-tracking`, `atlassian-content`, `goal-verifier`,
+  `issue-tracking`, `xray-testing`, `atlassian-content`,
+  `test-case-analysis`, `test-automation-workflow`, `goal-verifier`,
   `context-gatherer`, `deep-research`, `obsidian-vault`, `msgraph`,
   `project-seeder`.
 - **`skills.json`** — catalog of all skills, monorepo and external.
