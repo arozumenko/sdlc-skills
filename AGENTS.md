@@ -50,7 +50,7 @@ once if you want the full catalog.
 | Claude Code | `/plugin marketplace add arozumenko/sdlc-skills` → `/plugin install sdlc-skills@sdlc-skills` | No |
 | Cursor | Point Cursor's plugin system at `.cursor-plugin/plugin.json` (this repo) | No |
 | Gemini CLI | `gemini extensions install https://github.com/arozumenko/sdlc-skills` | No |
-| GitHub Copilot CLI | Reads this `AGENTS.md` when the repo is cloned into your project | No |
+| GitHub Copilot CLI | Reads this `AGENTS.md` when the repo is cloned in, **or** use the npx installer with `--target copilot` (it flattens agents to `.agent.md` + normalizes the `model:` field). Repair existing installs with `init fix-copilot`. | No |
 | Any IDE (full) | `npx github:arozumenko/sdlc-skills init --all` | **Yes** |
 
 ## Using an agent

@@ -166,13 +166,57 @@ Install locations:
 | Claude Code | `.claude/` | `.claude/agents/<name>/`, `.claude/skills/<name>/` |
 | Cursor | `.cursor/` | `.cursor/agents/<name>/`, `.cursor/skills/<name>/` |
 | Windsurf | `.windsurf/` | `.windsurf/agents/<name>/`, `.windsurf/skills/<name>/` |
-| GitHub Copilot | `.github/` | `.github/agents/<name>/`, `.github/skills/<name>/` |
+| GitHub Copilot CLI | `.github/` | `.github/agents/<name>.agent.md` (flat file), `.github/skills/<name>/` |
+
+**Copilot CLI note.** Copilot CLI expects agents as flat
+`<name>.agent.md` files, not as directories. The installer handles this
+automatically when `--target copilot` is selected: it flattens
+`AGENT.md` + `SOUL.md` into a single file with a `## Persona` section,
+and rewrites `model: sonnet` → `model: claude-sonnet-4.6` so Copilot CLI
+picks a concrete model. The other targets keep the directory layout.
+
+**Skills-inventory injection (non-Claude targets).** Claude Code
+preloads each SKILL.md declared in the agent's `skills:` frontmatter
+directly into the subagent's context at startup, so the agent already
+has the skill content before it reads its own AGENT.md. Copilot CLI,
+Cursor, and Windsurf have no documented preload — Copilot silently
+discards unknown frontmatter keys. The installer fills the gap only
+where it exists: for Copilot / Cursor / Windsurf targets, every
+installed AGENT.md gets a bracketed `<!-- SKILLS-INJECTED: START -->`
+section listing declared skills with their descriptions from
+`skills.json`. Claude Code agents do not receive this section (it
+would duplicate the preload). The block is idempotent on `--update` —
+re-runs replace in place, never duplicate.
 
 External skills are symlinked into the skills dir from the shared cache
 at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
 location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
+
+### Repairing an existing Copilot CLI install — `fix-copilot`
+
+If a project already has agents installed as directories under
+`.github/agents/<name>/` (older sdlc-skills release, manual drop,
+install from upstream before this fix landed), run:
+
+```bash
+npx github:arozumenko/sdlc-skills init fix-copilot
+```
+
+This scans `.github/agents/`, flattens each directory into
+`<name>.agent.md`, and rewrites the `model:` line for Copilot
+compatibility. Four modes for handling the paired `SOUL.md`:
+
+| `--soul <mode>` | What happens to `SOUL.md` |
+|---|---|
+| `memory` (default) | Relocated to `.agents/memory/<name>/SOUL.md` (IDE-neutral per-role dir, co-located with memory-skill content); source directory removed; in-file reference rewritten as an `@`-prefixed auto-import (matches the existing `@.agents/memory/<name>/snapshot.md` convention) |
+| `inline` | Appended as `## Persona` inside the flat agent file; source directory removed |
+| `keep` | Left in place at `<name>/SOUL.md`; flat agent file's reference rewritten |
+| `sibling` | Moved to `<name>.soul.md` next to the agent file; reference rewritten |
+
+Add `--dry-run` to preview, or `--no-normalize-model` to keep the
+original `model:` value. Full help: `init fix-copilot --help`.
 
 ### 2. Octobots supervisor
 
