@@ -97,9 +97,30 @@ Shared:
 # export XRAY_CACHE_DIR=".xray-cache"
 ```
 
-Never commit these values — `.env` and `token.json` should be in
-`.gitignore`. The CLI writes `.env` mode 0600 when you use
-`xray config set`.
+### Secrets hygiene — gitignore before first write
+
+Mode 0600 on `.env` (set by `xray config set`) only protects against
+other unix users. **It does NOT stop `git add`** — one stray commit
+and the file is published. Before running `xray config set` for the
+first time, make sure `.env` and `token.json` are gitignored:
+
+```bash
+# idempotent — appends only if missing
+grep -qxF '.env' .gitignore 2>/dev/null || cat >> .gitignore <<'EOF'
+
+# Local creds — never commit
+.env
+.xray-cache/
+EOF
+
+# token.json lives in XRAY_CACHE_DIR (default ~/.cache/xray, outside
+# the repo); only relevant if you set XRAY_CACHE_DIR=.xray-cache
+```
+
+This matters more if your `.env` already has tokens for other tools
+(`DATABASE_URL`, `AWS_ACCESS_KEY_ID`, `GH_TOKEN`, etc.) — `xray
+config set` preserves them all verbatim, but anything in the file
+travels with `git add`. Audit before staging.
 
 Sanity check:
 
