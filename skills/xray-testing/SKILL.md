@@ -158,12 +158,21 @@ post-write re-fetch discipline (exit 3 on mismatch). Common ops:
 
 ```bash
 xray auth-verify                          # reachability + status set check
-xray test get PROJ-T42                    # summary + step list
+xray test get PROJ-T42                    # summary + step list (Cloud: needs Jira creds)
+xray test get --issue-id 10042            # bypass Jira: use a known issueId directly
 xray test create --project PROJ --summary "..." --type Manual --steps steps.txt
 xray exec create --project PROJ --summary "Smoke 04-22" \
   --tests PROJ-T42,PROJ-T43 --plan PROJ-P7
 xray import junit target/junit.xml --project PROJ --plan PROJ-P7
 ```
+
+**Jira creds are command-scoped.** Cloud's Xray-only commands (`config`,
+`auth-verify`, `statuses`, `run *`, `import *`) work with **only** `XRAY_*`
+set. Anything that translates a Jira key → numeric `issueId` (`test *`,
+`testset *`, `testplan *`, `exec create`, `coverage`) needs `JIRA_BASE_URL`
++ `JIRA_USER` + `JIRA_TOKEN`. If you already have the `issueId` from
+elsewhere — Atlassian MCP, prior CLI call, JQL search — pass `--issue-id`
+where supported and skip the Jira-REST hop entirely.
 
 ## Entity model + coverage linking
 
