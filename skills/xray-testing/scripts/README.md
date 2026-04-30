@@ -28,7 +28,34 @@ depending on where sdlc-skills installed.
 
 ## Configure via environment
 
-Deployment is auto-detected. Override with `XRAY_DEPLOYMENT=cloud|server`.
+Three ways to get credentials in. Pick one:
+
+```bash
+# (a) Interactive — writes/updates .env in cwd, mode 0600
+xray config set \
+    --client-id "$XRAY_ID" --client-secret "$XRAY_SECRET" \
+    --jira-base-url https://<site>.atlassian.net \
+    --jira-user you@example.com --jira-token <pat>
+
+# (b) Drop a .env file — auto-loaded by xray.py at startup
+cp <install-path>/skills/xray-testing/scripts/.env.example .env
+$EDITOR .env
+
+# (c) Pre-export in your shell / direnv / CI runner
+export XRAY_CLIENT_ID=… XRAY_CLIENT_SECRET=…
+```
+
+**Precedence**: already-exported env vars > `.env` in cwd > nothing.
+The script never overrides a value that's already in `os.environ`,
+so a stray `.env` won't surprise a CI run that exports its own vars.
+
+**Project-wide config** (e.g. `.agents/test-automation.yaml` from the
+project-seeder skill) is read by the agent — not by this script. The
+agent translates the YAML into env vars before invoking `xray`. The
+CLI itself only knows about env vars + `.env`.
+
+Deployment is auto-detected from the fields you set. Override with
+`XRAY_DEPLOYMENT=cloud|server`.
 
 **Cloud** (Xray Cloud):
 
@@ -70,14 +97,36 @@ Shared:
 # export XRAY_CACHE_DIR=".xray-cache"
 ```
 
-Never commit these values. Store in a local `.env` your runner
-sources, or in your shell profile.
+### Secrets hygiene — gitignore before first write
+
+Mode 0600 on `.env` (set by `xray config set`) only protects against
+other unix users. **It does NOT stop `git add`** — one stray commit
+and the file is published. Before running `xray config set` for the
+first time, make sure `.env` and `token.json` are gitignored:
+
+```bash
+# idempotent — appends only if missing
+grep -qxF '.env' .gitignore 2>/dev/null || cat >> .gitignore <<'EOF'
+
+# Local creds — never commit
+.env
+.xray-cache/
+EOF
+
+# token.json lives in XRAY_CACHE_DIR (default ~/.cache/xray, outside
+# the repo); only relevant if you set XRAY_CACHE_DIR=.xray-cache
+```
+
+This matters more if your `.env` already has tokens for other tools
+(`DATABASE_URL`, `AWS_ACCESS_KEY_ID`, `GH_TOKEN`, etc.) — `xray
+config set` preserves them all verbatim, but anything in the file
+travels with `git add`. Audit before staging.
 
 Sanity check:
 
 ```bash
-xray config
-xray auth-verify
+xray config              # show effective config (resolved env-vars + .env)
+xray auth-verify         # one-shot reachability check
 ```
 
 ## Command surface
@@ -90,9 +139,15 @@ the target manually.
 ### Test
 
 ```bash
-# Read
+# Read — by Jira key (Cloud will resolve key → numeric issueId via Jira REST first)
 xray test get PROJ-T42
 xray test get PROJ-T42 --raw          # structured body (ADF / REST JSON)
+
+# Read — when you already have the issueId (e.g. via Atlassian MCP):
+# skips the Jira-REST lookup entirely. Lets the CLI work with only XRAY_*
+# creds set; no JIRA_BASE_URL / JIRA_USER / JIRA_TOKEN required.
+xray test get --issue-id 10042
+xray test get PROJ-T42 --issue-id 10042   # both forms; --issue-id wins
 
 # Create (Manual)
 #   --steps file: JSON array of {action,data,result}

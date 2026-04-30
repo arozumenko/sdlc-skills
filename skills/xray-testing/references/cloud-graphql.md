@@ -37,7 +37,7 @@ the repo.
 
 Xray's GraphQL schema keys entities by **internal Jira issueId**
 (numeric string). You'll usually have a Jira key (`PROJ-T42`);
-resolve to issueId via the Jira REST API:
+the canonical resolver is the Jira REST API:
 
 ```
 GET /rest/api/3/issue/PROJ-T42?fields=summary
@@ -45,6 +45,16 @@ GET /rest/api/3/issue/PROJ-T42?fields=summary
 ```
 
 Cache `key → issueId` per session.
+
+**Avoid the Jira hop when you can.** If the issueId is already in
+hand — from an Atlassian MCP (`mcp__Elitea_Dev__JiraIntegration_*`,
+`mcp__atlassian__*`, etc.), a prior CLI call's JSON output, or a
+JQL search via `getTests(jql: …) { results { issueId } }` —
+pass it directly. The bundled CLI exposes `--issue-id <numeric>` on
+commands that accept a key (e.g. `xray test get --issue-id 123456`),
+which skips the `/rest/api/3/issue` lookup entirely. That keeps the
+CLI usable on Cloud with **only** `XRAY_CLIENT_ID` / `XRAY_CLIENT_SECRET`
+set — no `JIRA_BASE_URL` / `JIRA_USER` / `JIRA_TOKEN` needed.
 
 Many queries accept a `jql` string as an alternative to
 `issueIds`; for ad-hoc filters, JQL is often simpler:

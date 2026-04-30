@@ -96,7 +96,44 @@ def _die(msg: str, code: int = 2) -> None:
     sys.exit(code)
 
 
+def _load_dotenv(path: Path = Path(".env")) -> None:
+    """Populate os.environ from a .env file in cwd.
+
+    Already-exported env vars always win — `setdefault` never overrides.
+    Silent if the file doesn't exist; warns (does not fail) on parse errors.
+    Format: KEY=VALUE per line. Blank lines and `#` comments ignored.
+    Surrounding single or double quotes around the value are stripped.
+    Inline `# comment` after an unquoted value is stripped.
+    """
+    if not path.is_file():
+        return
+    try:
+        for lineno, raw in enumerate(path.read_text().splitlines(), 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                print(f"xray: {path}:{lineno}: skipping malformed line", file=sys.stderr)
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key.startswith("export "):
+                key = key[len("export "):].strip()
+            value = value.strip()
+            if value and value[0] in ("'", '"') and value[-1] == value[0]:
+                value = value[1:-1]
+            else:
+                # Strip inline `# comment` only when value is unquoted
+                hash_at = value.find(" #")
+                if hash_at >= 0:
+                    value = value[:hash_at].rstrip()
+            os.environ.setdefault(key, value)
+    except OSError as e:
+        print(f"xray: could not read {path}: {e}", file=sys.stderr)
+
+
 def load_config() -> Config:
+    _load_dotenv()
     deployment = os.environ.get("XRAY_DEPLOYMENT", "").strip().lower()
     client_id = os.environ.get("XRAY_CLIENT_ID", "").strip()
     client_secret = os.environ.get("XRAY_CLIENT_SECRET", "").strip()
@@ -120,8 +157,10 @@ def load_config() -> Config:
     if deployment == "cloud":
         if not (client_id and client_secret):
             _die("cloud deployment requires XRAY_CLIENT_ID + XRAY_CLIENT_SECRET.")
-        if not jira_base_url:
-            _die("JIRA_BASE_URL is required on cloud.")
+        # JIRA_BASE_URL is NOT required at build time on Cloud — Xray-only commands
+        # (auth-verify, statuses, run *, import *, config) work with just XRAY_*.
+        # The check is deferred to _call_jira() / resolve_issue_id(), which fail with
+        # a precise message naming exactly what's missing for the command you ran.
         # Resolve Xray base URL: XRAY_BASE_URL (exact) > XRAY_REGION lookup > default global.
         raw_base = os.environ.get("XRAY_BASE_URL", "").strip()
         if raw_base:
@@ -285,10 +324,20 @@ def _call_xray(
 
 
 def _call_jira(cfg: Config, path: str, *, method: str = "GET", json_body: Any = None) -> Any:
-    if not cfg.jira_auth_header:
+    # Lazy validation — Jira creds are only required for commands that hit
+    # /rest/api/* (issueId / accountId / custom-field lookups). Build-time
+    # config is intentionally permissive; this is the gate.
+    missing: list[str] = []
+    if not cfg.jira_base_url:
+        missing.append("JIRA_BASE_URL")
+    if cfg.deployment == "cloud" and not cfg.jira_auth_header:
+        missing.append("JIRA_USER + JIRA_TOKEN")
+    if missing:
         _die(
-            "Jira REST call requires JIRA_USER (email) + JIRA_TOKEN on cloud. "
-            "Set both to enable issueId / accountId / field-id lookups."
+            "this command needs Jira REST: " + ", ".join(missing) + ". "
+            "Tip: pass --issue-id <numeric> on commands that support it to skip "
+            "the Jira lookup entirely. Otherwise set the missing vars (or run "
+            "`xray config set --jira-base-url … --jira-user … --jira-token …`)."
         )
     url = cfg.jira_base_url + path
     headers = {"Authorization": cfg.jira_auth_header, "Accept": "application/json"}
@@ -395,9 +444,22 @@ def _graphql(cfg: Config, query: str, variables: dict[str, Any] | None = None) -
 # Entity ops — dispatched on cfg.deployment
 # ────────────────────────────────────────────────────────────────────────
 
-def test_get(cfg: Config, key: str) -> dict:
+def test_get(cfg: Config, key: str | None = None, *, issue_id: str | None = None) -> dict:
+    """Fetch a Test by key OR by pre-resolved numeric issueId.
+
+    Pass `issue_id=` to skip Jira lookup entirely — useful when the id was
+    fetched via an Atlassian MCP, a previous CLI call, or any other path.
+    Cloud returns the key/summary in the GraphQL response, so omitting `key`
+    is fine when `issue_id` is given.
+
+    Server accepts the human key directly (no issueId translation), so on
+    Server `key` is required and `issue_id` is informational only.
+    """
     if cfg.deployment == "cloud":
-        issue_id = resolve_issue_id(cfg, key)
+        if not issue_id:
+            if not key:
+                _die("test get on cloud needs either a Jira key or --issue-id <numeric>.")
+            issue_id = resolve_issue_id(cfg, key)
         data = _graphql(cfg, """
             query($id: String!) {
               getTest(issueId: $id) {
@@ -411,7 +473,7 @@ def test_get(cfg: Config, key: str) -> dict:
               }
             }
         """, {"id": issue_id})
-        test = (data or {}).get("getTest") or _die(f"Test {key} not found.")
+        test = (data or {}).get("getTest") or _die(f"Test {key or issue_id} not found.")
         return test
     # server
     t = _call_xray(cfg, f"/api/test/{key}")
@@ -811,14 +873,31 @@ def build_parser() -> argparse.ArgumentParser:
                    help="emit JSON on stdout (default: human-readable).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("config", help="print effective configuration.")
+    cfg_p = sub.add_parser("config", help="show or set effective configuration.")
+    cfg_sub = cfg_p.add_subparsers(dest="config_action")  # optional — default 'show'
+    cfg_sub.add_parser("show", help="print effective configuration.")
+    cfg_set = cfg_sub.add_parser("set", help="write/update .env in cwd.")
+    cfg_set.add_argument("--client-id", dest="client_id", help="XRAY_CLIENT_ID (cloud)")
+    cfg_set.add_argument("--client-secret", dest="client_secret", help="XRAY_CLIENT_SECRET (cloud)")
+    cfg_set.add_argument("--jira-base-url", dest="jira_base_url", help="JIRA_BASE_URL")
+    cfg_set.add_argument("--jira-user", dest="jira_user", help="JIRA_USER (atlassian email)")
+    cfg_set.add_argument("--jira-token", dest="jira_token", help="JIRA_TOKEN (Jira API token / PAT)")
+    cfg_set.add_argument("--xray-region", dest="xray_region", choices=["global", "us", "eu"], help="XRAY_REGION")
+    cfg_set.add_argument("--xray-base-url", dest="xray_base_url", help="XRAY_BASE_URL (override region)")
+    cfg_set.add_argument("--xray-deployment", dest="xray_deployment", choices=["cloud", "server"], help="XRAY_DEPLOYMENT")
+    cfg_set.add_argument("--xray-cache-dir", dest="xray_cache_dir", help="XRAY_CACHE_DIR")
+    cfg_set.add_argument("--env-file", dest="env_file", default=".env", help="target file (default: .env)")
+    cfg_set.add_argument("--print", dest="print_after", action="store_true", help="print masked summary after write")
+
     sub.add_parser("statuses", help="list project-allowed Test Run statuses.")
     sub.add_parser("auth-verify", help="one-shot API reachability check.")
 
     # test
     t = sub.add_parser("test", help="Test CRUD.").add_subparsers(dest="sub", required=True)
-    tg = t.add_parser("get"); tg.add_argument("key")
-    tg.add_argument("--raw", action="store_true")
+    tg = t.add_parser("get")
+    tg.add_argument("key", nargs="?", help="Jira key (e.g. PROJ-T42). Omit if --issue-id is given.")
+    tg.add_argument("--issue-id", dest="issue_id", help="Numeric issueId — skip Jira lookup. Use when you already have the id (e.g. from an Atlassian MCP).")
+    tg.add_argument("--raw", action="store_true", help="emit raw response (alias for --json)")
     tc = t.add_parser("create")
     tc.add_argument("--project", required=True)
     tc.add_argument("--summary", required=True)
@@ -877,10 +956,102 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+_CONFIG_FIELDS: list[tuple[str, str]] = [
+    # (CLI dest, env var name) — order = .env write order
+    ("xray_deployment", "XRAY_DEPLOYMENT"),
+    ("client_id", "XRAY_CLIENT_ID"),
+    ("client_secret", "XRAY_CLIENT_SECRET"),
+    ("xray_region", "XRAY_REGION"),
+    ("xray_base_url", "XRAY_BASE_URL"),
+    ("jira_base_url", "JIRA_BASE_URL"),
+    ("jira_user", "JIRA_USER"),
+    ("jira_token", "JIRA_TOKEN"),
+    ("xray_cache_dir", "XRAY_CACHE_DIR"),
+]
+
+
+def cmd_config_set(args) -> None:
+    """Write/update the env-var file (default .env) in cwd.
+
+    Updates existing keys in place; appends new ones at the bottom under a
+    section header. Other lines (comments, unrelated vars) are preserved.
+    Mode is set to 0600 after write — credentials don't need to be readable
+    by other users.
+    """
+    target = Path(args.env_file)
+    updates: dict[str, str] = {}
+    for dest, env_var in _CONFIG_FIELDS:
+        v = getattr(args, dest, None)
+        if v is not None and v != "":
+            updates[env_var] = v
+    if not updates:
+        _die("no fields given — pass at least one of --client-id / --jira-token / etc.", 2)
+
+    existing = target.read_text() if target.is_file() else ""
+    lines = existing.splitlines()
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        if "=" in stripped and not stripped.startswith("#"):
+            key = stripped.partition("=")[0].strip()
+            if key.startswith("export "):
+                key = key[len("export "):].strip()
+            if key in updates:
+                out.append(f"{key}={updates[key]}")
+                seen.add(key)
+                continue
+        out.append(line)
+
+    new_keys = [(k, v) for k, v in updates.items() if k not in seen]
+    if new_keys:
+        # Reuse an existing "# xray-testing — added by ..." section if one is
+        # already in the file (we wrote it on a prior run). Insert new keys at
+        # the end of that section. Avoids stacking duplicate headers across
+        # re-runs of `config set`.
+        header = "# xray-testing — added by `xray config set`"
+        last_header_idx = -1
+        for i, line in enumerate(out):
+            if line.strip() == header:
+                last_header_idx = i
+        new_lines = [f"{k}={v}" for k, v in new_keys]
+        if last_header_idx >= 0:
+            # Insert at end of the existing section (header + its KEY=VAL lines).
+            end = last_header_idx + 1
+            while end < len(out):
+                stripped = out[end].lstrip()
+                if "=" in stripped and not stripped.startswith("#"):
+                    end += 1
+                else:
+                    break
+            out = out[:end] + new_lines + out[end:]
+        else:
+            if out and out[-1].strip() != "":
+                out.append("")
+            out.append(header)
+            out.extend(new_lines)
+
+    body = "\n".join(out).rstrip() + "\n"
+    target.write_text(body)
+    try:
+        target.chmod(0o600)
+    except OSError:
+        pass
+
+    summary = {k: ("***" if k in {"XRAY_CLIENT_SECRET", "JIRA_TOKEN"} else v) for k, v in updates.items()}
+    print(f"xray: wrote {len(updates)} key(s) to {target} (mode 0600)")
+    for k, v in summary.items():
+        print(f"  {k}={v}")
+
+
 def main() -> None:
     args = build_parser().parse_args()
 
     if args.cmd == "config":
+        action = getattr(args, "config_action", None) or "show"
+        if action == "set":
+            cmd_config_set(args)
+            return
         try:
             cfg = load_config()
         except SystemExit:
@@ -912,7 +1083,7 @@ def main() -> None:
         return
 
     if args.cmd == "test" and args.sub == "get":
-        t = test_get(cfg, args.key)
+        t = test_get(cfg, args.key, issue_id=getattr(args, "issue_id", None))
         if args.raw or getattr(args, "json", False):
             _out(args, t)
         else:
