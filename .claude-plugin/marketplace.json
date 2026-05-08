@@ -178,6 +178,12 @@
       "source": "./skills/test-automation-workflow",
       "description": "End-to-end test automation workflow: explore → specify → implement → review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown).",
       "version": "0.2.0"
+    },
+    {
+      "name": "qavajs",
+      "source": "./skills/qavajs",
+      "description": "BDD test automation on CucumberJS: config.ts schema, qavajs run CLI, memory + validation DSLs, page-object locator() hierarchy, composition (executeStep / Template / Fixture), and ~300 literal Gherkin step patterns across 11 @qavajs/steps-* packages (Playwright, WebdriverIO, API, SQL, files, Gmail, Lighthouse, visual-diff, axe).",
+      "version": "0.2.0"
     }
   ]
 }

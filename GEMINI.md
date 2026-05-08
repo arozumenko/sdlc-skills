@@ -34,6 +34,7 @@ are capability definitions, not always-on context.
 | `xray-testing` | CRUD + results import on Xray entities (Test / Precondition / Set / Plan / Execution / Run) across Cloud (GraphQL) and Server/DC (REST) |
 | `atlassian-content` | Authoring Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId mentions + post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules, Reusable Blocks, Playlists, Inventory folders, TSU import/export |
+| `qavajs` | BDD test automation on CucumberJS — config.ts, `qavajs run` CLI, memory + validation DSLs, page-object `locator()`, composition (`executeStep` / `Template` / `Fixture`), and ~300 literal Gherkin patterns from 11 `@qavajs/steps-*` packages |
 | `test-case-analysis` | Executing a TMS case end-to-end and emitting an Automation-Friendly Spec (AFS) |
 | `test-automation-workflow` | Automating a TMS test case end-to-end — explore, specify, implement, review |
 | `code-review` | Reviewing a PR or diff |

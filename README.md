@@ -309,7 +309,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Generic dev skills (14):**
+**Generic dev skills (15):**
 
 | Skill | What it does |
 |---|---|
@@ -321,6 +321,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `xray-testing` | Xray CRUD + results import — Tests, Preconditions, Test Sets/Plans, Executions, Runs. Xray Cloud (GraphQL) + Server/DC (REST). Stdlib Python CLI fallback |
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
+| `qavajs` | BDD test automation on CucumberJS — config.ts schema, `qavajs run` CLI, memory + validation DSLs, page-object `locator()` hierarchy, composition (`executeStep` / `Template` / `Fixture`), and ~300 literal Gherkin step patterns across 11 `@qavajs/steps-*` packages (Playwright / WebdriverIO / API / SQL / files / Gmail / Lighthouse / visual-diff / axe a11y). Bundled `refresh-catalogs.sh` to re-pull steps from upstream |
 | `goal-verifier` | Verify a task actually achieved its stated goal |
 | `context-gatherer` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
