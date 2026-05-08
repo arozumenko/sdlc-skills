@@ -41,7 +41,7 @@ A failing test in qavajs is usually one of seven things. Match the symptom to th
 
 1. Is the page-object path correct? Walk it: does `App.X` exist? Does `X.Y` exist on the component class? Capitalisation in Gherkin maps to camelCase property names with spaces stripped.
 2. Are you passing through a templated component (`'X (foo) > Y'`) without defining `X` as `locator.template(...)`?
-3. Is the parent's selector still right? Open DevTools and run the parent selector — if it returns nothing, the page changed.
+3. Is the parent's selector still right? Re-check against the live page — preferred order: [`playwright-testing`](../../playwright-testing/) MCP (`browser_snapshot` for the a11y tree, `browser_evaluate("document.querySelectorAll('…').length")` for uniqueness), then [`browser-verify`](../../browser-verify/) (CDP) when you need computed styles, shadow-DOM access, or device emulation. DevTools is a fallback when neither skill is loaded. If the count is `0` or `>1`, the page changed.
 4. Is the element inside a frame/shadow root? Use `NativeSelector` (Playwright `frameLocator`) or `ignoreHierarchy: true` for global elements.
 5. Check for race conditions: can you reach for `I refresh page until …` or `I expect X to be visible` before clicking?
 
@@ -81,7 +81,7 @@ A failing test in qavajs is usually one of seven things. Match the symptom to th
 
 ## 8. Element found in DevTools / MCP but `button:has-text()` returns nothing
 
-**Symptom**: you can see the element in the live DOM and the MCP browser confirms it exists, but Playwright's `locator('button:has-text("X")')` times out.
+**Symptom**: you can see the element in the live DOM and the [`playwright-testing`](../../playwright-testing/) MCP (or [`browser-verify`](../../browser-verify/) CDP) confirms it exists, but Playwright's `locator('button:has-text("X")')` times out.
 
 **Cause**: Many UI component libraries (Material UI, Ant Design, Mantine, Radix, etc.) render clickable elements as `<div role="button">` rather than a native `<button>`. CSS `button` tag selectors will miss them entirely.
 

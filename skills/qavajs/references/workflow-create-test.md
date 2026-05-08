@@ -26,6 +26,22 @@ From the config:
 
 If the project doesn't yet have a feature file, ask before creating one.
 
+## Step 1.5 — verify each new locator on the live page
+
+Before you reference a page-object name in Gherkin (or add one to
+`page_object/`), make sure the underlying CSS / accessibility selector
+**actually exists and is unique** on the live app. Use one of the two
+in-repo exploration skills — they replace `npx playwright codegen` and
+ad-hoc DevTools work:
+
+- **[`playwright-testing`](../../playwright-testing/) (Playwright MCP)** — default. `browser_navigate(url)` → `browser_snapshot()` for the accessibility tree, then `browser_evaluate("document.querySelectorAll('…').length")` to confirm uniqueness. Returned element refs are stable across the same snapshot.
+- **[`browser-verify`](../../browser-verify/) (CDP)** — when you need computed styles, cookies, storage, or a real mouse event the MCP can't deliver.
+
+Skip the live-page check **only** when the user explicitly said "use
+the existing `Foo` locator" — i.e., you're not adding a new selector.
+Inventing selectors from memory is the #1 cause of "Element not found"
+failures in qavajs (see [`workflow-fix-test.md`](workflow-fix-test.md) Step 3).
+
 ## Step 2 — draft the scenario
 
 Match the existing Gherkin style in the target file. Default conventions:

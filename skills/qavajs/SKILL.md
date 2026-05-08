@@ -2,7 +2,7 @@
 name: qavajs
 description: Guide to qavajs (https://qavajs.github.io), a BDD framework on CucumberJS with memory, validation, page-object DSL, fixtures, templates, and step libraries for Playwright, WebdriverIO, REST/GraphQL/WebSocket, Appium, Electron, SQL, files, Gmail, Lighthouse, visual-diff and axe a11y. Covers `npm create @qavajs`, `config.ts` schema, `qavajs run` CLI, `{value}`/`{validation}` types, memory (`$key`, `{$x}`, `$js()`), `locator()` DSL, composition (`executeStep`, `Template`, `Fixture`, `BeforeExecution`), parallel/sharding, ~300 literal Gherkin patterns from 11 `@qavajs/steps-*` packages, and standalone runners (Cypress, Playwright Test). Apply when the user mentions qavajs or `@qavajs/*`, writes Gherkin with `'A > B > C'` locators or `$`-prefixed memory refs, edits `config.ts` with `paths`/`require`/`memory`/`pageObject`/`browser`, configures Allure/ReportPortal/console formatters, or works on Cucumber+Playwright/WDIO/API tests — even without "qavajs" when patterns match (`locator().as()`, `executeStep`).
 license: Apache-2.0
-compatibility: Requires Node.js 18+. Uses `npm` / `npx`; no MCP server.
+compatibility: Requires Node.js 18+. Uses `npm` / `npx`. qavajs itself ships no MCP server — for live-page locator discovery, pair with the [`playwright-testing`](../playwright-testing/) MCP skill or the CDP-based [`browser-verify`](../browser-verify/) skill (see § Live-page exploration).
 metadata:
   author: octobots
   version: "0.1.0"
@@ -27,6 +27,37 @@ Trigger as soon as you spot any of:
 - Cucumber output in the `@qavajs/console-formatter` style, or an Allure / `cucumber-html-formatter` / ReportPortal report originating from `qavajs run`.
 
 If a request mentions "Cucumber + Playwright" or "Cucumber + WebdriverIO" without naming qavajs, **still consider this skill** — qavajs is the most ergonomic way to do that combo, and the user may not know its name yet. Suggest it explicitly.
+
+## Live-page exploration — discover locators before you author them
+
+qavajs steps drive Playwright / WebdriverIO under the hood, but the
+*selectors* you encode in `page_object/index.ts` only have value if they
+match the live DOM uniquely. **Never invent a selector from a remembered
+DOM shape** — the page may have shipped a redesign since the last time
+you saw it. Verify against the running app first, then write the
+locator.
+
+This repo ships two skills that fill that gap. Pair them with qavajs
+instead of reaching for `npx playwright codegen` or hand-running queries
+in DevTools:
+
+| Tool | When to load | What it gives you |
+|---|---|---|
+| [`playwright-testing`](../playwright-testing/) (Playwright MCP) | Default for web — `browser_navigate` → `browser_snapshot` → click/type → re-snapshot | Accessibility-tree element refs, screenshots, console + network logs. Single-shot uniqueness check via `browser_evaluate("document.querySelectorAll('…').length")` before pasting a CSS selector into `locator(...)`. |
+| [`browser-verify`](../browser-verify/) (CDP) | When the MCP can't reach the signal — computed styles, cookies, storage, real mouse events, device emulation | Lower-level DOM/CSS introspection; useful for the `'button'` vs `'[role="button"]'` class of failures (see [`troubleshooting.md`](references/troubleshooting.md) § 8). |
+
+The pairing is identical to the one [`tosca-automation`](../tosca-automation/)
+uses for module discovery: an MCP / CDP exploration tool **first**, then
+the framework-side authoring (here: qavajs). Verifying a selector with
+`browser_snapshot` + `browser_evaluate` in the same session you write
+the locator is the single highest-leverage habit for keeping qavajs
+suites green — qavajs accepts an ambiguous selector at save time and
+surfaces the failure only at runtime.
+
+The CLI alternatives (`npx playwright codegen`, `npx playwright open`)
+still work in projects that already use them, but they require a
+separate terminal and don't return programmatic uniqueness counts. Use
+them as fallback only.
 
 ## How qavajs is organised
 

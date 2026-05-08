@@ -2,6 +2,8 @@
 
 The qavajs page object is **a class tree of `locator(...)` fields**, registered as `config.pageObject`. The framework resolves a Gherkin path like `'Wikipedia > Search Input'` against this tree at runtime.
 
+> **Verify every new selector against the live page before committing it.** qavajs accepts an ambiguous or stale selector at save time and only surfaces the failure at runtime — by which point you've shipped a flaky test. Use the [`playwright-testing`](../../playwright-testing/) MCP (`browser_snapshot` for the accessibility tree, `browser_evaluate("document.querySelectorAll('…').length")` for a uniqueness count) or [`browser-verify`](../../browser-verify/) (CDP) for computed styles, shadow roots, and device-emulated layouts. These replace `npx playwright codegen` and ad-hoc DevTools work for the agentic loop.
+
 Three sibling implementations exist, depending on the runner:
 
 | Runner | DSL package | Import |
