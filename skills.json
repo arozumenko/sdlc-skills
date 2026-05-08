@@ -34,7 +34,7 @@
     {"id": "swift-testing-pro",     "repo": "twostraws/Swift-Testing-Agent-Skill",     "ref": "main", "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)"},
     {"id": "swift-concurrency-pro", "repo": "twostraws/Swift-Concurrency-Agent-Skill", "ref": "main", "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)"},
 
-    {"id": "tdd",                         "repo": "mattpocock/skills",   "ref": "main", "subdir": "tdd",                            "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)"},
+    {"id": "tdd",                         "repo": "mattpocock/skills",   "ref": "main", "subdir": "skills/engineering/tdd",         "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)"},
     {"id": "brainstorming",               "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/brainstorming",           "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)"},
     {"id": "systematic-debugging",        "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/systematic-debugging",    "description": "Root-cause tracing, condition-based waiting, defense-in-depth for reproducing and fixing bugs (from obra/superpowers)"},
     {"id": "verification-before-completion", "repo": "obra/superpowers", "ref": "main", "subdir": "skills/verification-before-completion", "description": "Pre-handoff check — verify the work against the spec before calling it done (from obra/superpowers)"},

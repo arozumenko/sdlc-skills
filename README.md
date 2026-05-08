@@ -39,7 +39,7 @@ flowchart TB
 
     subgraph externals["upstream external skill sources"]
         direction LR
-        ext_matt[["mattpocock/skills<br/>tdd"]]
+        ext_matt[["mattpocock/skills<br/>skills/engineering/tdd"]]
         ext_obra[["obra/superpowers<br/>brainstorming, debugging,<br/>verification, ..."]]
         ext_tws[["twostraws/*-Agent-Skill<br/>SwiftUI, SwiftData,<br/>Swift Testing, Concurrency"]]
     end
@@ -338,7 +338,7 @@ catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
-| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | `python-dev`, `js-dev`, `ios-dev` |
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `skills/engineering/tdd/` | `python-dev`, `js-dev`, `ios-dev` |
 | `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
 | `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs + `qa-engineer` |
 | `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs + `qa-engineer` |
@@ -451,7 +451,7 @@ resolution — add a folder or a registry entry, it shows up on the next
 External skills are fetched from upstream at install time — this repo
 re-distributes nothing, only catalogs and wires.
 
-- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
+- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `skills/engineering/tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
 - **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
 
