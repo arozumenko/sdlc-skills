@@ -28,7 +28,7 @@ Issue tracker. Scout's Step 0.7 records one of:
 |---|---|
 | `github-issues` *(default)* | `gh` CLI |
 | `gitlab-issues` | `glab` CLI |
-| `jira` | Atlassian MCP (create / comment / transition) + `atlassian-content` skill for ADF body shape |
+| `jira` | Atlassian MCP (create / comment / transition); body must be in ADF |
 | `azure-devops` | Azure DevOps MCP (`az boards` as a fallback) |
 | `linear` | Linear CLI (`linear`) or Linear MCP |
 | `Unconfirmed` | Default to `gh`; surface the gap to the operator so scout can fill the field |
@@ -45,43 +45,45 @@ Body shapes are tracker-agnostic markdown — they live in
 [`references/templates.md`](references/templates.md) and are reused
 across all trackers. Pick:
 
-- **Bug Report** — defect filing (the canonical entry point for QA
-  during `test-case-analysis`); for lightweight clarifications, use
-  the same template at `[INFO]` severity
+- **Bug Report** — defect filing (severity, environment, steps,
+  expected, actual, evidence, frequency, workaround); for
+  lightweight clarifications, use the same template at `[INFO]`
+  severity
 - **Task** — implementation task under an epic
 - **Epic** — multi-task feature umbrella
 
 Render the markdown body, then hand it to the tracker-specific
-command below. Jira / ADO need the body in ADF — use `atlassian-content`
-to convert.
+command below. Jira / Azure DevOps require ADF (Atlassian Document
+Format) rather than markdown — convert via whatever ADF-authoring
+capability your agent has wired.
 
-## File a defect (the QA entry point)
+## File a defect
 
-The most common reason this skill is invoked: QA discovers a defect
-during `test-case-analysis` or verification work and needs to file
-it. Standard flow:
+Standard flow when the caller is filing a new defect:
 
 1. Read `.agents/profile.md` § Project systems § Issue tracker (see
-   Step 0 above) and § Bug filing (`github-issue` / `story-subtask`
-   / `separate-ticket` + Bug filing target).
-2. Fill the **Bug Report** template from `references/templates.md`:
-   severity, environment, steps, expected, actual, evidence,
-   frequency, workaround.
+   Step 0 above) and § Bug filing — the latter records:
+   - **Bug filing style**: `github-issue` (standalone) / `story-subtask`
+     (sub-task under a parent story; Jira / ADO only) / `separate-ticket`
+     (filed into a dedicated QA/bugs project)
+   - **Bug filing target**: when style is `separate-ticket`, the
+     destination project/board key
+2. Fill the **Bug Report** template from `references/templates.md`.
 3. Open the ticket via the tracker's create command (see *Create
-   issue* below). For `story-subtask`, fetch the parent story ID via
-   the TMS adapter's `get_test_case_links` first, then create the
-   sub-task with the parent linked. For `separate-ticket`, target
-   the project named in § Bug filing target.
-4. Return the ticket ID to the caller (Sage notes it in the AFS §
-   Known Defects Found; Axel references it in the test's
-   `Known defect:` comment).
+   issue* below). For `story-subtask`, the caller is responsible for
+   providing the parent story ID; pass it as the parent when invoking
+   the tracker's create command. For `separate-ticket`, target the
+   project named in § Bug filing target.
+4. Return the ticket ID and URL to the caller. What the caller does
+   with that ID (note in an AFS, attach to a test, link in a PR
+   body) is caller policy, not this skill's concern.
 
-Body-template language for in-flight bug **state updates** (during
-fix, after fix, etc. — "🔧 Investigating", "✅ Reproduced", "🔍 Root
-Cause", "✅ Fixed") lives in `bugfix-workflow` Step 1 + Step 7. Those
-are dev-side comments, not the create-template — use this skill for
-the initial filing, `bugfix-workflow` for the lifecycle comments
-once a dev picks the bug up.
+This skill files tickets and posts/queries/closes them. It does **not**
+own the in-flight comment language a developer posts while *fixing*
+a bug (investigating / reproduced / root-cause / fixed) — that belongs
+to whatever dev-fix-lifecycle skill the project uses. Callers who
+need both file the initial defect through this skill, then drive the
+fix lifecycle separately.
 
 ## Create issue
 
@@ -109,7 +111,8 @@ Call the Atlassian MCP's create-issue tool with:
 - `projectKey` from `.agents/profile.md` § Issue tracker key
 - `issueType` (`Bug` / `Task` / `Story` / `Sub-task`)
 - `summary` (title)
-- `description` (body — convert markdown → ADF with `atlassian-content`)
+- `description` (body — must be ADF, not markdown; convert via the
+  agent's wired ADF-authoring capability before this call)
 - `parentKey` for `story-subtask`
 - `labels` / `priority` per project conventions
 

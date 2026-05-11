@@ -105,10 +105,10 @@ Status per case (goes in the AFS metadata block):
   captured, no blockers
 - **blocked** — analyst hit a wall (access, data, env); the AFS's
   "Blocked Steps" section lists what's needed to unblock
-- **defect-found** — real product bug prevents completion. File it
-  via the tracker named in `.agents/profile.md` § Project systems §
-  Bug filing (see *When you find a defect* below) before emitting the
-  AFS; reference the bug ID in the AFS
+- **defect-found** — real product bug prevents completion. File the
+  ticket via your agent's bug-filing capability (see *When you find a
+  defect* below for the routing rules) before emitting the AFS;
+  reference the bug ID in the AFS
 - **un-automatable** — keep as manual; do not emit an AFS; update
   the TMS note
 
@@ -124,9 +124,11 @@ When you find a defect during execution:
 
   **Issue tracker** — the *system* the ticket lands in
   (`github-issues` / `gitlab-issues` / `jira` / `azure-devops` /
-  `linear` / …). The [`issue-tracking`](../issue-tracking/) skill is
-  tracker-aware: it reads this field and dispatches to the matching
-  CLI or MCP. Don't reimplement the dispatch here — invoke the skill.
+  `linear` / …). Your agent has a bug-filing capability wired in; use
+  it. Filing the ticket itself is not this skill's job — this skill
+  hands you the *what* (severity, repro, evidence) and the *where*
+  (tracker + style + target); your agent's bug-filing skill does
+  the *how*.
 
   **Bug filing style** — the *shape* of the ticket. Three styles:
   - **`github-issue`** *(default)* — open a standalone issue in the
@@ -135,8 +137,8 @@ When you find a defect during execution:
   - **`story-subtask`** — create a sub-task under the originating
     story (Jira / Azure DevOps only; the story the TMS case is
     linked to). Fetch the story ID via the TMS adapter's
-    `get_test_case_links`, then pass it as the parent when invoking
-    `issue-tracking`.
+    `get_test_case_links`, then pass it as the parent when handing
+    off to the bug-filing skill.
   - **`separate-ticket`** — file in a dedicated QA/bugs project,
     not the main development tracker. Target is named in
     profile.md § Bug filing target. Same tracker system, different
@@ -174,22 +176,16 @@ When you find a defect during execution:
       from the AFS (e.g. "comment-3" or a permalink fragment).
     Without both, `strict-per-bug` is the safe default; one more
     ticket is cheaper than a missed clarification.
-- Open the ticket via [`issue-tracking`](../issue-tracking/) — that
-  skill owns the create command per tracker and reuses the **Bug
-  Report** body template at
-  `issue-tracking/references/templates.md` (severity, environment,
-  steps, expected, actual, evidence, frequency, workaround). Do
-  **not** invoke `bugfix-workflow` to file the ticket — that's a
-  dev skill whose middle steps (failing test → RCA → implement fix →
-  verify) are not your job during analysis. `bugfix-workflow`'s
-  state-update comment language (`🔧 Investigating`, `🔍 Root Cause`,
-  `✅ Fixed`) applies once a dev picks the bug up; the *initial
-  filing* belongs to `issue-tracking`.
-- If `.agents/profile.md` § Bug filing is `Unconfirmed`, or the
-  named tracker has no wired MCP/CLI in `issue-tracking`'s reach,
-  stop and ask the operator before filing — don't pick a default
-  silently. Flag the gap in the AFS so scout can fill the field on
-  the next onboarding pass.
+- Hand the body, tracker, style, and (for `story-subtask`) parent
+  story ID to your agent's bug-filing skill. Do not run a dev-side
+  fix lifecycle (failing test → RCA → implement fix → verify) — those
+  steps belong to whoever picks the defect up later, not to you
+  during analysis. You file and walk away.
+- If `.agents/profile.md` § Bug filing is `Unconfirmed`, or your
+  agent has no wired tooling for the named tracker, stop and ask the
+  operator before filing — don't pick a default silently. Flag the
+  gap in the AFS so scout can fill the field on the next onboarding
+  pass.
 - Note the finding in the AFS under "Known Defects Found" with the
   ticket ID, filing style, and a recommendation — soft-expect
   (isolated) or natural-fail (blocking). Under `bundle-per-case`,
