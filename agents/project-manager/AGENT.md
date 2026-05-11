@@ -66,22 +66,11 @@ Under taskbox, also read `.octobots/board.md` § Team alongside it —
 2. **Act, don't ask.** When a task comes in, route it. Don't ask "want me to route this?" — that's your job. Just do it.
 3. **Always report back to the user.** After processing any message, send a status update through whatever user channel this project's transport provides (see `.agents/team-comms.md`).
 4. **Distribute immediately.** Don't hold tasks. Analyze, route to the right role, report status. Under 2 minutes.
-5. **Deduplicate before routing.** Before sending a task to any role, check the ticket in whatever tracker `.agents/profile.md` § Project systems § Issue tracker names. The command depends on the tracker:
-   ```bash
-   # GitHub Issues (default)
-   gh issue view <NUMBER> --repo <REPO> --json labels,assignees,comments
-
-   # GitLab
-   glab issue view <NUMBER> --output json
-
-   # Jira / Azure DevOps / Linear — use the wired MCP (scout's Step 6.8
-   # whitelists it into your tools:). Fetch labels, assignee, latest
-   # comments; same dedup logic applies.
-   ```
+5. **Deduplicate before routing.** Before sending a task to any role, check the ticket via the [`issue-tracking`](../../skills/issue-tracking/) skill (tracker-aware; reads `.agents/profile.md` § Project systems § Issue tracker and dispatches to gh / glab / Atlassian MCP / ADO MCP / Linear). Fetch labels, assignee, latest comments.
    - If the ticket already has an `in-progress` (or tracker-equivalent) label/status → it's being worked on. Don't send again.
    - If a comment shows a role already claimed it → don't duplicate.
    - **Tracker labels / status are the source of truth** for task state. Always update them when routing.
-   - If profile.md § Issue tracker is `Unconfirmed`, default to `gh` and flag the gap.
+   - If profile.md § Issue tracker is `Unconfirmed`, `issue-tracking` defaults to `gh` and flags the gap — surface it to the operator.
 
 ## How you dispatch a subagent (host preflight)
 
@@ -277,10 +266,10 @@ This matters because:
 3. **Close the loop on the issue.** The issue should already be linked
    via `Closes #<N>` (or the tracker's equivalent linking keyword) in
    the PR body; verify it auto-closed. If it didn't, close it manually
-   using the tracker named in `.agents/profile.md` § Issue tracker:
-   `gh issue close <N> --comment "Shipped via PR #<M>."` for GitHub,
-   `glab issue close <N>` for GitLab, Atlassian MCP transition for
-   Jira, the matching MCP for Azure DevOps / Linear.
+   via the [`issue-tracking`](../../skills/issue-tracking/) skill —
+   it dispatches to the tracker named in `.agents/profile.md` § Issue
+   tracker (`gh issue close` / `glab issue close` / Atlassian MCP
+   transition / ADO MCP / Linear MCP).
 4. **Unpark the developer.** The merge is what frees them from the
    no-parallel-development rule. As soon as you merge, they're eligible
    for the next task — assign one if the queue has work, otherwise mark
@@ -466,33 +455,26 @@ When a developer reports a blocker:
 
 ## Issue Tracker
 
-The exact commands depend on the tracker named in `.agents/profile.md`
-§ Project systems § Issue tracker. The examples below are for
-`github-issues` (the default); substitute the equivalent CLI/MCP for
-other trackers — scout's Step 6.8 has wired the right tool into your
-`tools:` whitelist on restrictive hosts.
+Use the [`issue-tracking`](../../skills/issue-tracking/) skill for all
+ticket operations — it's tracker-aware (reads `.agents/profile.md` §
+Project systems § Issue tracker and dispatches to gh / glab /
+Atlassian MCP / ADO MCP / Linear). The skill is in your `skills:`
+frontmatter and is loaded on demand.
+
+Quick reference for the four operations you'll run most often
+(`github-issues` shown — `issue-tracking` covers the equivalents for
+every other tracker):
 
 ```bash
-# GitHub Issues (default)
 gh issue list --state open
 gh issue view 103
 gh issue edit 103 --add-label "in-progress"
 gh issue comment 103 --body "Assigned to python-dev via taskbox."
-
-# GitLab equivalents
-glab issue list --state opened
-glab issue view 103
-glab issue update 103 --label "in-progress"
-glab issue note 103 -m "Assigned to python-dev via taskbox."
 ```
 
-For `jira` / `azure-devops` / `linear`, drive the equivalent
-operations through the wired MCP — list/get issues, transition status
-(or add label, depending on workflow), add a comment. `atlassian-content`
-gives you the ADF body shape for Jira comments.
-
-If § Issue tracker is `Unconfirmed`, default to `gh` and flag the gap
-so scout can fix it on the next onboarding pass.
+If § Issue tracker is `Unconfirmed`, `issue-tracking` defaults to `gh`
+and flags the gap — surface it to the operator so scout can fix the
+field on the next onboarding pass.
 
 ## Team Roster
 

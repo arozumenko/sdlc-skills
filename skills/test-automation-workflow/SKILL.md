@@ -25,8 +25,10 @@ one context breaks the bot; the skill split keeps each workspace lean
 even though only two personas touch it.
 
 **Re-used skills:** composes on top of `playwright-testing`,
-`browser-verify`, `bugfix-workflow`, `code-review`, `tdd`,
-`task-completion`, and `project-seeder`. It does not reinvent them.
+`browser-verify`, `issue-tracking` *(tracker-aware defect filing)*,
+`bugfix-workflow` *(dev-side fix lifecycle, only after a dev picks
+up a filed defect)*, `code-review`, `tdd`, `task-completion`, and
+`project-seeder`. It does not reinvent them.
 
 ## Routing — how PM resolves slots to agents
 
@@ -77,8 +79,9 @@ project; the defaults above are the sdlc-skills baseline. See
 ### The three-step flow
 
 1. **Analyst slot.** Executes the case end-to-end against the live
-   app, captures stable selectors, files defects via `bugfix-workflow`
-   if any, and emits an AFS at
+   app, captures stable selectors, files defects via `issue-tracking`
+   (tracker-aware — reads `.agents/profile.md` § Bug filing) if any,
+   and emits an AFS at
    `test-specs/<feature>/l<pri>_<slug>_<tms-id>.md`. Returns AFS path
    plus a status:
    `ready-for-automation` / `blocked` / `defect-found` / `un-automatable`.
@@ -296,8 +299,8 @@ Key additions beyond a plain test case:
   ARIA role > label > text > CSS — last resort)
 - **Test data inventory** — what already exists, what must be generated,
   what must be cleaned up
-- **Defects found during exploration** — opened as issues via
-  [`bugfix-workflow`](../bugfix-workflow/) handoff; the AFS lists them as
+- **Defects found during exploration** — filed via the tracker-aware
+  [`issue-tracking`](../issue-tracking/) skill; the AFS lists them as
   known-failing expectations
 - **Blocked steps** — steps Sage could not execute (access, environment,
   missing data) — Axel must resolve or escalate
@@ -408,7 +411,7 @@ isolated symptom — that's how the regression-impact problem starts.
 |---|---|
 | Infrastructure (bad selector, timing, env) | Fix selector/wait/env. Re-run. |
 | Product defect, isolated step | `expect.soft()` (or framework equivalent) with `// Known defect: <id>` comment. Rest of test runs. |
-| Product defect, blocks execution | Let it fail naturally. Open ticket via `bugfix-workflow`. Do NOT `test.fail()`. |
+| Product defect, blocks execution | Let it fail naturally. Open ticket via [`issue-tracking`](../issue-tracking/) (tracker-aware). Do NOT invoke `bugfix-workflow` end-to-end — that's a dev skill. Do NOT `test.fail()`. |
 
 Forbidden — regardless of any scope argument:
 

@@ -7,7 +7,7 @@ workspace: clone
 group: qa
 theme: {color: colour208, icon: "🤖", short_name: tae}
 aliases: [test-automation-engineer, axel, automation]
-skills: [test-automation-workflow, playwright-testing, browser-verify, tdd, code-review, bugfix-workflow, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, git-workflow, task-completion, memory]
+skills: [test-automation-workflow, playwright-testing, browser-verify, tdd, code-review, bugfix-workflow, issue-tracking, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, git-workflow, task-completion, memory]
 ---
 
 @.agents/memory/test-automation-engineer/snapshot.md
@@ -78,7 +78,7 @@ skill — load it when completing tasks. The five steps, in order:
 1. **Verify locally** — single test green, CI command green, lint clean, diff reviewed
 2. **Commit on a feature branch** — `automation/<case-id>-<slug>`, cut from the **base branch declared in `.agents/profile.md` § Automation PR policy** (typically `main`, but teams piloting against a dedicated line like `feature/test-automation-pilot` set this explicitly). Never commit directly to the base branch itself.
 3. **Push & open PR** — `gh pr create --base <base-from-policy>` with title `test(CASE-ID): <one-line-summary>`, linking the AFS path and the originating story. Omitting `--base` and letting `gh` default to the repo's default branch is a bug when the policy says otherwise.
-4. **Comment on the originating story/issue** — with PR link. Use the tracker named in `.agents/profile.md` § Project systems § Issue tracker: `gh issue comment <N>` for `github-issues`, `glab issue note <N>` for `gitlab-issues`, Atlassian MCP `add_comment` for `jira`, the matching MCP for `azure-devops` / `linear`. If the field is `Unconfirmed`, default to `gh` and flag the gap so scout can fix it next pass.
+4. **Comment on the originating story/issue** with PR link — via the [`issue-tracking`](../../skills/issue-tracking/) skill (tracker-aware; reads `.agents/profile.md` § Issue tracker and dispatches to gh / glab / Atlassian MCP / ADO MCP / Linear).
 5. **Back-write the TMS execution** — via the adapter declared in `.agents/test-automation.yaml` (prefer `transport: mcp` when the host has the server configured; HTTP otherwise). A green test whose TMS still says "not executed" is half done.
 
 "I wrote the code and it works" is not done. Skipping any step leaves the task unfinished.
@@ -126,7 +126,7 @@ read its SKILL.md plus `references/commands.md` before starting.
 |---|---|
 | Infrastructure (bad selector, timing, env) | Fix selector / wait / env. Re-run. |
 | Product defect, isolated step | `expect.soft()` (or framework equivalent) with `// Known defect: <id>` comment. Rest of test keeps running. |
-| Product defect, blocks execution | Let the test fail naturally. File a bug via the tracker named in `.agents/profile.md` § Bug filing (Atlassian MCP for `jira`, `gh issue create` for `github-issues`, `glab issue create` for `gitlab-issues`, …). Borrow the body template from [`bugfix-workflow`](../../skills/bugfix-workflow/) Step 1 + Step 7 — do NOT run its dev-side middle steps. Do NOT `test.fail()`, `xit()`, `@Ignore`, or `pytest.skip()`. |
+| Product defect, blocks execution | Let the test fail naturally. File a bug via the [`issue-tracking`](../../skills/issue-tracking/) skill (it's tracker-aware — reads `.agents/profile.md` § Bug filing). Do NOT invoke `bugfix-workflow` end-to-end — that's a dev skill. Do NOT `test.fail()`, `xit()`, `@Ignore`, or `pytest.skip()`. |
 
 **Forbidden — regardless of any scope or schedule argument:**
 

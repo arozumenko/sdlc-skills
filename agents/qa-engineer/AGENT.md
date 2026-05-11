@@ -147,55 +147,36 @@ npx playwright test auth.spec.ts
 
 `bugfix-workflow` is a **dev** skill — its middle steps (write failing
 test → RCA → implement fix → verify) are the developer's job, not
-yours. You file the ticket and walk away; the dev (or future-you in
-a different role) picks it up. So during `test-case-analysis` or
-verification work, never invoke `bugfix-workflow` end-to-end. Use this
-procedure instead:
+yours. You file the ticket and walk away; the dev picks it up. So
+during `test-case-analysis` or verification work, **never invoke
+`bugfix-workflow` to file the initial defect**. Use the
+[`issue-tracking`](../../skills/issue-tracking/) skill — it's
+tracker-aware (reads `.agents/profile.md` § Project systems § Issue
+tracker, dispatches to the matching CLI or MCP) and owns the Bug
+Report template.
 
-**1. Read the destination from `.agents/profile.md` § Project
-systems § Bug filing.** Two orthogonal fields drive the routing:
+Your procedure:
 
-- **Issue tracker** — the *system* (`github-issues` / `gitlab-issues` /
-  `jira` / `azure-devops` / `linear` / …)
-- **Bug filing style** — the *shape*: `github-issue` (standalone),
-  `story-subtask` (sub-task under the originating story; Jira / ADO
-  only), or `separate-ticket` (filed into a dedicated QA/bugs project;
-  target named in § Bug filing target)
+1. Read `.agents/profile.md` § Project systems § Bug filing — both
+   **Issue tracker** (`github-issues` / `gitlab-issues` / `jira` /
+   `azure-devops` / `linear` / …) and **Bug filing style**
+   (`github-issue` — standalone; `story-subtask` — sub-task under
+   the originating story for Jira / ADO; `separate-ticket` — filed
+   into a dedicated QA/bugs project named in § Bug filing target).
+2. Invoke [`issue-tracking`](../../skills/issue-tracking/) § *File a
+   defect* — it handles the create command per tracker. For
+   `story-subtask`, fetch the parent story ID via the TMS adapter's
+   `get_test_case_links` first, then pass it as the parent.
+3. Note the ticket ID in the AFS § Known Defects Found with the
+   filing style and recommended handling (soft-expect for isolated,
+   natural-fail for blocking). See
+   [`test-case-analysis` § Step 5](../../skills/test-case-analysis/SKILL.md)
+   for the bundling / classification logic.
 
-**2. Pick the tooling** that matches Issue tracker — scout's Step 6.8
-has already wired the right MCP/CLI into your `tools:` whitelist
-(under Copilot) or assumed Claude's permissive default:
-
-| Issue tracker | Filing tool you should use |
-|---|---|
-| `github-issues` | `gh issue create/comment` (via `issue-tracking` skill, or `bugfix-workflow` § Step 1 + Step 7 templates as a body source) |
-| `gitlab-issues` | `glab issue create/comment` |
-| `jira` | Atlassian MCP for create/comment + `atlassian-content` skill for ADF body |
-| `azure-devops` | Azure DevOps MCP / `az boards work-item create` |
-| `linear` | Linear CLI or MCP |
-
-**3. Borrow the body template from `bugfix-workflow` Step 1 + Step 7**
-— the `🔧 **Investigating**` / `✅ **Reproduced**` heading style and
-the Steps / Expected / Actual / Evidence block. Swap the *destination
-command* per the table above; do **not** run the dev-side middle
-steps.
-
-**4. Note the finding in the AFS** under "Known Defects Found" with
-the ticket ID (e.g. `JIRA SCRUM-BUG-42`, `GH#234`, `LIN ENG-501`),
-the filing style, and the recommended handling (soft-expect for
-isolated, natural-fail for blocking). See
-[`test-case-analysis` § Step 5](../../skills/test-case-analysis/SKILL.md)
-for the full bundling / classification logic.
-
-**Fallback ordering when profile.md is incomplete:**
-
-1. Issue tracker `Unconfirmed` → stop, ask the operator, flag the
-   gap so scout can fill it on the next onboarding pass. Don't pick
-   a tracker silently.
-2. Issue tracker named but no matching MCP/CLI wired (Step 6.8 missed
-   it) → escalate to PM. The operator may grant a one-off fallback
-   to `bugfix-workflow`'s GitHub-shaped commands; surface the gap so
-   it gets fixed properly next session.
+If profile.md § Bug filing is `Unconfirmed`, or the named tracker
+has no wired MCP/CLI on this host, stop and ask the operator — don't
+pick a default silently. Flag the gap in the AFS so scout can fix it
+on the next onboarding pass.
 
 ## Playwright MCP Testing
 
