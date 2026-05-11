@@ -106,7 +106,8 @@ Status per case (goes in the AFS metadata block):
 - **blocked** — analyst hit a wall (access, data, env); the AFS's
   "Blocked Steps" section lists what's needed to unblock
 - **defect-found** — real product bug prevents completion. File it
-  via [`bugfix-workflow`](../bugfix-workflow/) before emitting the
+  via the tracker named in `.agents/profile.md` § Project systems §
+  Bug filing (see *When you find a defect* below) before emitting the
   AFS; reference the bug ID in the AFS
 - **un-automatable** — keep as manual; do not emit an AFS; update
   the TMS note
@@ -118,19 +119,47 @@ When you find a defect during execution:
   finding (clarification, question, blocker, full defect) gets
   tracked somewhere the team sees. How depends on profile.md.
 - Determine **where** the ticket lands by reading
-  `.agents/profile.md` § Project systems § Bug filing. Three
-  destinations are supported (operator configured during scout
-  seeding):
+  `.agents/profile.md` § Project systems § Bug filing. Scout's Step
+  0.7 records two orthogonal fields you need:
+
+  **Issue tracker** — names the *system* the ticket lands in. The
+  scout enum is `github-issues` / `gitlab-issues` / `jira` /
+  `azure-devops` / `linear` / ... — pick the tooling that matches.
+  Step 6.8 (agent-tools-wiring) has already wired the corresponding
+  MCP/CLI into the qa-engineer agent based on what's actually
+  installed on this host. Common bindings:
+
+  | Issue tracker | Filing tooling |
+  |---|---|
+  | `github-issues` | `gh issue create/comment` (via `issue-tracking` skill, or the create-template in `bugfix-workflow` Step 1+7 as a fallback) |
+  | `gitlab-issues` | `glab issue create/comment` |
+  | `jira` / `azure-devops` (when Atlassian/ADO MCP is wired) | Atlassian MCP / Azure DevOps MCP + `atlassian-content` for ADF body |
+  | `linear` | Linear CLI / MCP |
+
+  If the host doesn't have the matching MCP/CLI wired (see
+  `.github/agents/qa-engineer.agent.md` § `tools:` under Copilot, or
+  Claude's permissive default), stop and report the gap to PM — don't
+  silently fall back to the wrong tracker.
+
+  **Bug filing style** — names the *shape* of the ticket. Three
+  styles are supported (operator configured during scout seeding):
   - **`github-issue`** *(default)* — open a standalone issue in the
-    repo's tracker. Use `bugfix-workflow` templates + the
-    `issue-tracking` skill.
+    repo's tracker. Same shape regardless of tracker system (a
+    standalone issue in GitHub, GitLab, Jira, …). The system is
+    determined by Issue tracker, not by this label.
   - **`story-subtask`** — create a sub-task under the originating
-    Jira/Azure story (the story the TMS case is linked to). Fetch
-    the story ID via the TMS adapter's `get_test_case_links`, then
-    create the sub-task via the issue-tracker's API / MCP.
+    story (Jira / Azure DevOps; the story the TMS case is linked to).
+    Fetch the story ID via the TMS adapter's `get_test_case_links`,
+    then create the sub-task via the matching MCP from the table
+    above.
   - **`separate-ticket`** — file in a dedicated QA/bugs project,
     not the main development tracker. Target is named in
-    profile.md § Bug filing target.
+    profile.md § Bug filing target. Same tracker system, different
+    project key.
+
+  `bugfix-workflow` *(GitHub-shaped)* is the fallback when the
+  Issue tracker field is `Unconfirmed` or the host has no wired MCP
+  for the named tracker — see the last bullet in this section.
 - Determine **whether to bundle or split** by reading
   § Bundling policy and classifying the finding's severity:
   - **Classify the finding first**:
@@ -165,11 +194,20 @@ When you find a defect during execution:
     Without both, `strict-per-bug` is the safe default; one more
     ticket is cheaper than a missed clarification.
 - Open the ticket (or add the comment) with reproduction steps,
-  severity, evidence (screenshot, console, network) — `bugfix-workflow`
-  has the body template; adapt the destination + bundling per
-  profile.md.
-- If `.agents/profile.md` § Bug filing is `Unconfirmed`, stop and ask
-  the operator before filing — don't pick a default silently.
+  severity, evidence (screenshot, console, network). Body shape
+  (heading layout, the "Steps / Expected / Actual / Evidence" block,
+  the `🔧 Investigating` / `✅ Reproduced` template language) is
+  borrowed from `bugfix-workflow` Step 1 + Step 7 — copy the body
+  template, swap the *destination* command (`gh issue` → Atlassian
+  MCP / `glab` / Linear MCP / …) per the table above. Do **not** run
+  `bugfix-workflow`'s middle steps (3–6: failing test, RCA, fix,
+  verify) — those are dev work, not QA's job during analysis.
+- If `.agents/profile.md` § Bug filing is `Unconfirmed`, or the
+  named tracker has no wired MCP/CLI in your tools whitelist, stop
+  and ask the operator before filing — don't pick a default silently.
+  As a last resort the operator may direct you to fall back to
+  `bugfix-workflow`'s GitHub path; flag the gap in the AFS so scout
+  can fill the field on next onboarding pass.
 - Note the finding in the AFS under "Known Defects Found" with the
   ticket ID, filing style, and a recommendation — soft-expect
   (isolated) or natural-fail (blocking). Under `bundle-per-case`,

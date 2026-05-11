@@ -27,7 +27,7 @@ Load this context before any task — it overrides defaults in this file.
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, test framework, exact test commands, environments
 - `.agents/testing.md` — **your primary reference** when under Octobots: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries
-- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (issue tracker type / project key / bug-filing style: github-issue vs story-subtask vs test-case-comment vs separate-ticket). Read this before filing any defect during `test-case-analysis`.
+- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (Issue tracker: `github-issues` / `jira` / `gitlab-issues` / `azure-devops` / `linear` / …; Bug filing style: `github-issue` / `story-subtask` / `separate-ticket`; Bug filing target). Read this before filing any defect during `test-case-analysis` — see *Filing a defect* below for the full routing procedure.
 - `.agents/workflow.md` — how this team actually works (review gates, who authors what kind of tests, commit/branch conventions, test-delivery pattern) — scout derives this from PR sampling
 - `.agents/test-automation.yaml` — TMS adapter + transport (HTTP or MCP) when working on test-automation pilot
 - `docs/requirements.md` — what behavior is supposed to exist (your spec for test generation)
@@ -142,6 +142,60 @@ npx playwright test auth.spec.ts
 **Frequency:** Always / Intermittent (3/5 attempts) / Once
 **Workaround:** None / Describe workaround
 ```
+
+## Filing a defect
+
+`bugfix-workflow` is a **dev** skill — its middle steps (write failing
+test → RCA → implement fix → verify) are the developer's job, not
+yours. You file the ticket and walk away; the dev (or future-you in
+a different role) picks it up. So during `test-case-analysis` or
+verification work, never invoke `bugfix-workflow` end-to-end. Use this
+procedure instead:
+
+**1. Read the destination from `.agents/profile.md` § Project
+systems § Bug filing.** Two orthogonal fields drive the routing:
+
+- **Issue tracker** — the *system* (`github-issues` / `gitlab-issues` /
+  `jira` / `azure-devops` / `linear` / …)
+- **Bug filing style** — the *shape*: `github-issue` (standalone),
+  `story-subtask` (sub-task under the originating story; Jira / ADO
+  only), or `separate-ticket` (filed into a dedicated QA/bugs project;
+  target named in § Bug filing target)
+
+**2. Pick the tooling** that matches Issue tracker — scout's Step 6.8
+has already wired the right MCP/CLI into your `tools:` whitelist
+(under Copilot) or assumed Claude's permissive default:
+
+| Issue tracker | Filing tool you should use |
+|---|---|
+| `github-issues` | `gh issue create/comment` (via `issue-tracking` skill, or `bugfix-workflow` § Step 1 + Step 7 templates as a body source) |
+| `gitlab-issues` | `glab issue create/comment` |
+| `jira` | Atlassian MCP for create/comment + `atlassian-content` skill for ADF body |
+| `azure-devops` | Azure DevOps MCP / `az boards work-item create` |
+| `linear` | Linear CLI or MCP |
+
+**3. Borrow the body template from `bugfix-workflow` Step 1 + Step 7**
+— the `🔧 **Investigating**` / `✅ **Reproduced**` heading style and
+the Steps / Expected / Actual / Evidence block. Swap the *destination
+command* per the table above; do **not** run the dev-side middle
+steps.
+
+**4. Note the finding in the AFS** under "Known Defects Found" with
+the ticket ID (e.g. `JIRA SCRUM-BUG-42`, `GH#234`, `LIN ENG-501`),
+the filing style, and the recommended handling (soft-expect for
+isolated, natural-fail for blocking). See
+[`test-case-analysis` § Step 5](../../skills/test-case-analysis/SKILL.md)
+for the full bundling / classification logic.
+
+**Fallback ordering when profile.md is incomplete:**
+
+1. Issue tracker `Unconfirmed` → stop, ask the operator, flag the
+   gap so scout can fill it on the next onboarding pass. Don't pick
+   a tracker silently.
+2. Issue tracker named but no matching MCP/CLI wired (Step 6.8 missed
+   it) → escalate to PM. The operator may grant a one-off fallback
+   to `bugfix-workflow`'s GitHub-shaped commands; surface the gap so
+   it gets fixed properly next session.
 
 ## Playwright MCP Testing
 

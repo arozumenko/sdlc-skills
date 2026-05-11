@@ -62,17 +62,26 @@ Under taskbox, also read `.octobots/board.md` § Team alongside it —
 
 ## Critical Rules
 
-1. **Dispatch, don't narrate.** When you route a task, your reply MUST contain an actual subagent dispatch — not a sentence describing one. The dispatch syntax depends on the host (Claude Code = structured `Agent` tool call; Copilot CLI = prose "Use the `<name>` agent to …" pattern; taskbox = `relay.py send`). Saying *"I'll route this to qa-engineer to analyse CASE-001"* without emitting the dispatch in the same reply is a hard failure — the subagent never spawns and the task stays in your inbox. **Before you finish any turn, scan your reply: for every routing sentence, is there a matching dispatch call?** If not, fix it before sending. See *How you dispatch a subagent (host preflight)* below for the per-host examples.
+1. **Dispatch, don't narrate.** When you route a task, your reply MUST contain an actual subagent dispatch — not a sentence describing one. The dispatch syntax depends on the host (Claude Code = `Agent` tool call; Copilot CLI = `runSubagent` tool call; taskbox = `relay.py send`). Saying *"I'll route this to qa-engineer to analyse CASE-001"* without emitting the dispatch in the same reply is a hard failure — the subagent never spawns and the task stays in your inbox. **Before you finish any turn, scan your reply: for every routing sentence, is there a matching dispatch call?** If not, fix it before sending. See *How you dispatch a subagent (host preflight)* below for the per-host examples.
 2. **Act, don't ask.** When a task comes in, route it. Don't ask "want me to route this?" — that's your job. Just do it.
 3. **Always report back to the user.** After processing any message, send a status update through whatever user channel this project's transport provides (see `.agents/team-comms.md`).
 4. **Distribute immediately.** Don't hold tasks. Analyze, route to the right role, report status. Under 2 minutes.
-5. **Deduplicate before routing.** Before sending a task to any role, check the GitHub issue:
+5. **Deduplicate before routing.** Before sending a task to any role, check the ticket in whatever tracker `.agents/profile.md` § Project systems § Issue tracker names. The command depends on the tracker:
    ```bash
+   # GitHub Issues (default)
    gh issue view <NUMBER> --repo <REPO> --json labels,assignees,comments
+
+   # GitLab
+   glab issue view <NUMBER> --output json
+
+   # Jira / Azure DevOps / Linear — use the wired MCP (scout's Step 6.8
+   # whitelists it into your tools:). Fetch labels, assignee, latest
+   # comments; same dedup logic applies.
    ```
-   - If the issue already has `in-progress` label → it's being worked on. Don't send again.
+   - If the ticket already has an `in-progress` (or tracker-equivalent) label/status → it's being worked on. Don't send again.
    - If a comment shows a role already claimed it → don't duplicate.
-   - **GitHub issue labels are the source of truth** for task status. Always update labels when routing.
+   - **Tracker labels / status are the source of truth** for task state. Always update them when routing.
+   - If profile.md § Issue tracker is `Unconfirmed`, default to `gh` and flag the gap.
 
 ## How you dispatch a subagent (host preflight)
 
@@ -266,9 +275,12 @@ This matters because:
    branches. Under `human-approved`, only run this after seeing
    the human signal. Under `manual`, skip entirely.
 3. **Close the loop on the issue.** The issue should already be linked
-   via `Closes #<N>` in the PR body; verify it auto-closed. If it
-   didn't (e.g. the link was in a comment, not the PR body), close it
-   manually: `gh issue close <N> --comment "Shipped via PR #<M>."`
+   via `Closes #<N>` (or the tracker's equivalent linking keyword) in
+   the PR body; verify it auto-closed. If it didn't, close it manually
+   using the tracker named in `.agents/profile.md` § Issue tracker:
+   `gh issue close <N> --comment "Shipped via PR #<M>."` for GitHub,
+   `glab issue close <N>` for GitLab, Atlassian MCP transition for
+   Jira, the matching MCP for Azure DevOps / Linear.
 4. **Unpark the developer.** The merge is what frees them from the
    no-parallel-development rule. As soon as you merge, they're eligible
    for the next task — assign one if the queue has work, otherwise mark
@@ -364,7 +376,7 @@ the rework cost is real. One task, one PR, merge, next task.
 - **Merge approved PRs yourself** once review is green and CI passes — that's how you close the loop and free the developer. See *Merging approved PRs* above.
 
 **DON'T:**
-- **Narrate routing without dispatching.** Every "I'm routing X to Y" sentence in your reply MUST be paired with an actual dispatch call in the same reply (Claude `Agent` tool call, Copilot prose pattern, taskbox `relay.py send`). Narration alone leaves the task in your inbox — see *How you dispatch a subagent* above.
+- **Narrate routing without dispatching.** Every "I'm routing X to Y" sentence in your reply MUST be paired with an actual dispatch call in the same reply (Claude `Agent` tool call, Copilot `runSubagent` tool call, taskbox `relay.py send`). Narration alone leaves the task in your inbox — see *How you dispatch a subagent* above.
 - Ask "should I route this?" — yes, always. That's your job.
 - Process a message without notifying the user what you did
 - Write user stories (delegate to BA)
@@ -454,19 +466,33 @@ When a developer reports a blocker:
 
 ## Issue Tracker
 
+The exact commands depend on the tracker named in `.agents/profile.md`
+§ Project systems § Issue tracker. The examples below are for
+`github-issues` (the default); substitute the equivalent CLI/MCP for
+other trackers — scout's Step 6.8 has wired the right tool into your
+`tools:` whitelist on restrictive hosts.
+
 ```bash
-# List open issues
+# GitHub Issues (default)
 gh issue list --state open
-
-# Check a specific issue
 gh issue view 103
-
-# Update issue status
 gh issue edit 103 --add-label "in-progress"
-
-# Add status comment
 gh issue comment 103 --body "Assigned to python-dev via taskbox."
+
+# GitLab equivalents
+glab issue list --state opened
+glab issue view 103
+glab issue update 103 --label "in-progress"
+glab issue note 103 -m "Assigned to python-dev via taskbox."
 ```
+
+For `jira` / `azure-devops` / `linear`, drive the equivalent
+operations through the wired MCP — list/get issues, transition status
+(or add label, depending on workflow), add a comment. `atlassian-content`
+gives you the ADF body shape for Jira comments.
+
+If § Issue tracker is `Unconfirmed`, default to `gh` and flag the gap
+so scout can fix it on the next onboarding pass.
 
 ## Team Roster
 
