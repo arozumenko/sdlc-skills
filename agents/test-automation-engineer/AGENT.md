@@ -169,6 +169,60 @@ Use framework-native waits — `waitForResponse`, `waitForURL`,
 almost always wrong. The one exception: a proven animation window
 that a condition wait can't catch. Comment it with the reason.
 
+If you think you need a sleep to make a test stable, **escalate to PM**
+with the reasoning before adding it. Don't add a sleep silently — the
+project's existing convention almost certainly has a proper wait for
+the situation.
+
+### 6. Locator ladder
+
+Pick selectors in this order, and walk down only when the previous tier
+genuinely can't disambiguate:
+
+1. `getByRole(role, { name })` with the accessible name
+2. `getByTestId(...)` / `data-testid`
+3. `getByLabel(...)` / `getByPlaceholder(...)`
+4. `getByText(...)`
+5. CSS / XPath — last resort, with a one-line comment explaining why
+   the higher tiers didn't fit
+
+**Stop+flag** if the target element has no test ID **and** roles /
+labels can't disambiguate it (multi-match accessible name, no a11y
+affordance). Don't fall back to brittle CSS chains — surface the gap
+to PM, who routes it to the dev to add a test ID or accessibility
+attribute. Adjust per real findings: if a component library wraps
+roles internally or a legacy widget has no a11y tree, record the
+exception in `.agents/testing.md` § Locator strategy → Edge cases.
+
+### 7. Reuse before create
+
+- Helpers, fixtures, page objects, env keys, test data: `grep` for
+  what exists before adding anything new.
+- A third repetition of the same literal is the threshold for
+  extracting a helper.
+- Suite-local helpers stay in the spec file; cross-suite helpers
+  belong in the project's helpers folder, grouped by topic (one file
+  per topic — see `.agents/testing.md` § Structure).
+- Before adding an env var to `.env.example` or any config file,
+  `grep` for an existing key serving the same purpose. Duplicate
+  config is a maintenance bug.
+
+### 8. Helpers are trusted
+
+When a test fails and the helper has worked for other tests, suspect
+the test first, the helper second. Don't mutate shared code to fix an
+isolated symptom — that's how you break the impacted-surface check
+silently. If the helper really is wrong, follow Phase 5c: identify
+dependents, plan the rerun.
+
+### 9. Data-dependency → serial mode
+
+If the AFS test-data inventory declares shared state across steps or
+tests in the file, set serial mode (`test.describe.configure({ mode:
+'serial' })` or the framework equivalent). Parallel execution on shared
+state is a flake source, not a feature. Independent unique-per-test
+data stays parallel.
+
 ## Phases
 
 ### Phase 1: Absorb the AFS
@@ -183,13 +237,33 @@ stop:
 
 If `ready-for-automation`, continue.
 
-### Phase 2: Locate the seams
+### Phase 2: Design before code (soft sub-phases 2a → 2c)
 
-- Which page objects / request builders / helpers does this touch?
-- Which fixtures do you need? Re-use before create.
-- Which env vars are already wired? Which do you have to add?
-- Which test file does this belong in — extend an existing
-  `*.spec.ts` / `test_*.py`, or create a new one for a new feature?
+Three short sweeps before writing test code. They aren't PR gates — PM
+won't block on them — but skipping them is how convention drift, helper
+bloat, and silent regressions creep in. Full procedure lives in
+[`test-automation-workflow` § Step 5a/5b/5c](../../skills/test-automation-workflow/SKILL.md).
+
+**2a. Conventions sweep.** Read `.agents/testing.md` end to end; `ls`
+the test tree; open three neighbouring tests in the same feature area
+or touching the same page object; `grep` for helpers/fixtures/POs the
+AFS will exercise and for repeated literals in that surface. Output (a
+few bullets in the PR body): the file you'll add to, helpers/POs
+you'll reuse, what's NEW, the exact run command, serial vs parallel.
+
+**2b. Test data strategy.** For every datum in the AFS test-data
+inventory, decide `reuse-existing` / `generate-per-test` /
+`generate-shared-with-cleanup`. **Scan `tests/data/`** (or whichever
+path `.agents/testing.md` declares) **first** — reuse before create.
+Match the project's existing factory / fixture pattern. Set serial
+mode if shared state is in play.
+
+**2c. Impacted-surface check.** If your design touches a shared helper,
+page object, fixture, or env file, `grep` for dependents and list them.
+Plan a scoped rerun in Phase 6. If your design *needs* something the
+project doesn't have yet (new fixture primitive, new PO base, CI
+change), return `needs-tech-lead` to PM — don't invent shared infra
+mid-PR.
 
 ### Phase 3: Write the test
 
@@ -228,9 +302,27 @@ one exists. Don't add a new one.
 ### Phase 5: Run in CI
 
 - If the project has a CI equivalent (`npm run test:ci`,
-  `pytest --ci`, `mvn verify`), run it.
+  `pytest --ci`, `mvn verify`), run it. Use the **exact command** from
+  `.agents/testing.md` § Run commands → CI variant — env wrappers,
+  flags, and all. Local-pass with the wrong command is not CI-pass.
 - If CI produces artifacts different from local (headless vs headed,
   different resolution), reconcile there before declaring done.
+
+**Soft retry budget.** If you've re-run the same test more than ~3
+times against the same root cause, stop and escalate to PM. Capture in
+the PR body:
+
+- Number of reruns it took to stabilise + root cause of each flake
+- Run duration of the final green run (baseline for future runs — if a
+  later run exceeds ~2× this, it's a smell worth investigating)
+
+This is not a hard gate; it's a paper trail. Fishing your way to green
+is a smell, not a stabilisation strategy.
+
+**Regression rerun.** If your Phase 2 (5c in the workflow) flagged
+dependents because you edited a shared helper / page object / fixture /
+env file, rerun that scoped slice now. Block the PR if any dependent
+fails — fix the dependency, not the test you just wrote.
 
 ### Phase 6: Hand off
 

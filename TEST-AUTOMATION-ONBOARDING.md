@@ -140,7 +140,46 @@ tms:
   cases_dir: test-specs
 ```
 
-### 4. Pilot one case end-to-end
+### 4. Smoke-test PM dispatch (30 seconds)
+
+Before running a real case, prove that PM actually **dispatches** a
+subagent on this host — not just narrates what it would do. PM (Max,
+Sonnet) occasionally drifts to "I'll route this to qa-engineer to do X"
+without emitting the host-specific dispatch call. Catching that here is
+much cheaper than catching it mid-pilot.
+
+Launch PM and hand it this no-op routing prompt:
+
+> Smoke-test the routing wiring. Dispatch a one-line task to
+> qa-engineer asking it to read the first two lines of
+> `.agents/testing.md` and return them verbatim. Do **not** read the
+> file yourself — the point is to prove that the dispatch actually
+> fires, not to retrieve the content.
+
+**Pass criteria:**
+
+- PM's reply contains an actual subagent call matching the host
+  declared in `.agents/team-comms.md` — a Claude `Agent(...)` tool
+  call, a Copilot prose dispatch ("Use the `qa-engineer` agent to
+  …"), or a taskbox `relay.py send`.
+- qa-engineer's reply contains the **actual** two lines from
+  `.agents/testing.md`, not a paraphrase or refusal.
+
+**Fail signals:**
+
+- PM says "I've routed this to qa-engineer" but no tool call / prose
+  dispatch appears in the same reply — the subagent never spawned.
+- PM emits the wrong syntax for the host (Claude `Agent(...)`
+  printed as code under Copilot; Copilot prose printed as text
+  under Claude) — dispatch landed as plain text, not a call.
+
+If the smoke fails, the dispatch wiring is broken on this host. See
+[`agents/project-manager/AGENT.md` § How you dispatch a subagent
+(host preflight)](agents/project-manager/AGENT.md) and re-read
+`.agents/team-comms.md` for the per-host invocation pattern. Re-run
+the smoke until it passes before continuing.
+
+### 5. Pilot one case end-to-end
 
 Pick a case you already know passes manually. Keep it small — login,
 a navigation, a simple form. The point is to prove the pipeline, not
@@ -164,7 +203,7 @@ Shape:
 5. **PM merges** per `.agents/profile.md` § Automation PR policy
    (`auto-merge` / `human-approved` / `manual`).
 
-### 5. Scale up
+### 6. Scale up
 
 Once one case works end-to-end, batch is safe. Parallelism and
 serialization rules (page-object collisions, independent-surface
@@ -199,8 +238,9 @@ owns it.
 4. **Launch test-automation-engineer** with tech-lead's plan. Axel
    creates the initial config files + one smoke test proving the
    scaffold works.
-5. **From here, follow the existing-project flow** (Step 4 above)
-   with the first real case (or markdown case).
+5. **From here, follow the existing-project flow** — Step 4 (smoke-test
+   PM dispatch) and then Step 5 (pilot one case) above — with the
+   first real case (or markdown case).
 
 Tech-lead's full escalation contract lives in
 [`agents/tech-lead/AGENT.md` § Test-Automation Escalations](agents/tech-lead/AGENT.md).

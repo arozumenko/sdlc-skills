@@ -309,18 +309,98 @@ un-automatable cases.
 ### 5. Implement automation (automation engineer)
 
 The [`test-automation-engineer`](../../agents/test-automation-engineer/)
-agent — persona **Axel** — reads the AFS and:
+agent — persona **Axel** — reads the AFS and works through three
+**recommended** sub-phases (5a → 5b → 5c) before writing test code, then
+implements (5d).
 
-1. Loads the AFS plus the detected framework conventions.
-2. Locates or creates the page object / request-builder / helper that
-   owns the target surface.
-3. Writes the test using the framework's conventions — never imposes
-   foreign patterns. Page Object Model for UI, fixture scope per the
-   existing pattern, assertions that fail loudly.
-4. Uses environment variables from the project's `.env` — never hardcodes
-   URLs, creds, test data.
-5. Applies a TDD mindset: run-fail-fix-run until green, never
-   demote assertions.
+Sub-phases 5a–5c are **soft guidelines**, not PR gates: PM doesn't
+reject a PR for missing them. They're how Axel avoids the most common
+quality failures (foreign conventions, duplicated helpers, broken
+shared infra, missed serial-mode dependencies). On simple, isolated
+cases Axel can fold them into a few quick checks; on cases touching
+shared infra, they should produce an explicit short design note that
+becomes part of the PR body.
+
+#### 5a. Conventions sweep (recommended)
+
+Before writing, sweep the existing tests for the surface this AFS
+touches:
+
+- Read `.agents/testing.md` end to end. Note the run command, locator
+  ladder, serial policy, helpers organisation, steps-extraction style,
+  and test-data layout this project actually uses.
+- `ls` the test directory tree; confirm folder roles match `testing.md`.
+- Open **three neighbouring tests** in the same feature area or
+  touching the same page object. The conventions are in the muscle
+  memory of those files, not just the README.
+- `grep` for the helpers / fixtures / page objects the AFS will
+  exercise — re-use before create.
+- `grep` for repeated literals (URLs, selectors, strings) in the
+  surface you'll extend; a third repetition signals a helper.
+
+Output (informally — a few bullets in the PR body, or a longer note for
+shared-infra cases): the file you'll add to, the helpers/fixtures/POs
+you'll reuse, what's NEW, the exact run command, serial vs parallel
+mode.
+
+#### 5b. Test data strategy (recommended)
+
+For every datum the AFS lists in its test-data inventory, decide:
+
+| Class | When to use | Cleanup |
+|---|---|---|
+| `reuse-existing` | A static fixture already exists and the test doesn't mutate it | None |
+| `generate-per-test` | The test needs a fresh unique record (preferred for write-heavy paths) | `afterEach` |
+| `generate-shared-with-cleanup` | Multiple tests share an expensive setup | `afterAll`, owned by the describe |
+
+**Scan the test-data directory first** (path lives in `.agents/testing.md`).
+Reuse before creating. If creating, match the existing factory /
+fixture pattern — don't introduce a new mechanism.
+
+When the AFS data inventory declares **shared state** across steps or
+tests in the file, set serial mode (`test.describe.configure({ mode:
+'serial' })` or the framework equivalent). Parallel execution on
+shared state is a flake source, not a feature.
+
+#### 5c. Impacted-surface check (recommended)
+
+If your design from 5a touches a shared helper, page object, fixture,
+or environment file:
+
+- `grep` (by symbol or path) for everything that depends on it
+- List the dependents in the design note
+- Plan to rerun the dependent slice as part of Phase 6 — scope by
+  symbol/file, not full-suite
+
+If you're only adding to an isolated test file with no shared edits,
+mark "no shared edits — isolated test" and skip the rerun.
+
+If your design **needs** something the project doesn't have yet (a new
+page-object base, a new fixture primitive, a CI-config change, a TMS
+adapter beyond the supported set), return `needs-tech-lead` to PM.
+Don't invent shared infra mid-PR.
+
+#### 5d. Implementation
+
+Now write the test:
+
+1. Match the framework conventions 1:1. Page Object Model only on the
+   upgraded scaffold path (see `references/framework-scaffold.md`) or
+   when the existing project already uses it. On flat / primitive-heavy
+   projects, use the framework's own primitives directly.
+2. Extend existing page objects / helpers / fixtures; don't duplicate.
+3. Use the locator ladder (see `references/framework-scaffold.md` —
+   `getByRole` first, then testid, then label/text, CSS last). Stop+flag
+   if the app has no test IDs and roles/labels aren't sufficient.
+4. Use environment variables from the project's existing loader — never
+   hardcode URLs, creds, test data. Before adding a new env key,
+   `grep` the existing `.env*` files; reuse over duplicate.
+5. Apply a TDD mindset: run-fail-fix-run until green, never demote
+   assertions.
+
+**Helpers are trusted.** When the test fails and the helper has worked
+elsewhere, suspect the test first. Don't mutate shared code to fix an
+isolated symptom — that's how the regression-impact problem starts.
 
 **No Defect Masking Rule:**
 
@@ -341,9 +421,40 @@ Forbidden — regardless of any scope argument:
 ### 6. Run & stabilize
 
 The test runs reliably (pass or fails for a *real* product reason). Run
-it locally, then whatever the CI equivalent is. Flaky tests are not done
-— identify the source (network, timing, data) and fix it, or mark the
-test `@flaky` only if the project already has that tagging convention.
+it locally with the exact command from `.agents/testing.md` § Run
+commands (single test), then the CI variant. Local-green and CI-green
+can differ (headless vs headed, viewport, retry); reconcile both
+before declaring done.
+
+Flaky tests are not done — identify the source (network, timing,
+data) and fix it. Mark `@flaky` only if the project already has that
+tagging convention.
+
+#### 6a. Soft retry budget (recommended)
+
+If you're re-running the same test more than ~3 times against the same
+root cause, **stop and escalate** to PM rather than keep adjusting.
+"Retry until green" is fishing, not debugging.
+
+Capture in the PR body:
+
+- How many reruns it took to get a stable signal
+- The root cause of any flakes you fixed along the way
+- Total run duration of the final green run (becomes a baseline for
+  future regressions — if a future rerun exceeds ~2× this, it's a
+  smell worth investigating)
+
+This is not a hard gate; it's a paper trail. PM uses the rerun count
+and root-cause notes as a signal when reviewing.
+
+#### 6b. Regression rerun (when 5c flagged dependents)
+
+If Phase 5c listed dependent tests (because you edited a shared helper,
+page object, fixture, or env file), rerun that scoped slice as part of
+Phase 6. Use grep on the symbol or path to find them; don't run the
+full suite unless the dependents really are the full suite. Block the
+PR if any dependent test fails — fix the dependency, not the test
+you just wrote.
 
 ### 7. Review
 

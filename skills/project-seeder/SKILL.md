@@ -59,6 +59,9 @@ Each major step has a focused reference file:
   — full Step 6.95 procedure (OCTOBOTS / STANDALONE marker stripping)
 - **[references/role-customization.md](references/role-customization.md)**
   — full Step 7 procedure (persona repurposing for non-default stacks)
+- **[references/templates.md](references/templates.md)** §
+  `.worktreeinclude` — Step 6.97 template (only when Claude target +
+  test-automation agents are being installed)
 
 ---
 
@@ -241,6 +244,36 @@ content; re-running scout in a different mode re-strips accordingly.
 detection signals, strip procedure, idempotence rules, report
 format — lives in
 **[references/deployment-modes.md](references/deployment-modes.md)**.
+
+## Step 6.97 — Seed `.worktreeinclude` (Claude + test-automation)
+
+When the install set includes at least one isolated test-automation agent
+(`test-automation-engineer` or `qa-engineer`) AND a Claude Code target is
+present (`.claude/agents/` will exist after install), scout writes a
+`.worktreeinclude` at the project root so subagent worktrees include the
+gitignored environment files automation needs (`.env`, `playwright/.auth/`,
+etc.).
+
+Without this file, every isolated Axel/Sage worktree starts with no
+`$BASE_URL`, no creds, and the first browser step of every test fails.
+
+**Skip when:**
+
+- No test-automation agents are being installed
+- No Claude target is involved (Copilot / Cursor / Windsurf only)
+- `.worktreeinclude` already exists at the project root — operator-owned;
+  do NOT overwrite
+
+Use the `.worktreeinclude` template in
+**[references/templates.md](references/templates.md)**. After writing, note
+the file in the scout onboarding report and add a one-liner to
+`.agents/testing.md` § Known Issues pointing operators at it ("env files
+copied via `.worktreeinclude`; edit there if automation needs additional
+gitignored files inside isolated subagent worktrees").
+
+This step is idempotent on absence only — first run writes; re-runs always
+leave an existing file alone, because the operator may have added project-
+specific patterns.
 
 ## Step 7 — Role customization (non-default stacks)
 
