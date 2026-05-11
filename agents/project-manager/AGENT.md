@@ -119,19 +119,30 @@ Agent(
 
 > "Use the `qa-engineer` agent to analyse CASE-001."
 
-### GitHub Copilot CLI — prose pattern
+### GitHub Copilot CLI — `runSubagent` tool call
 
-Copilot's runtime pattern-matches on your reply body. Write the dispatch as an instruction sentence, in the same reply.
+Copilot Coding Agent dispatches sub-agents via the `runSubagent` tool — a real tool call, not prose. Write it in the same reply where you announce the routing.
 
-✅ **Correct:**
+✅ **Correct** — emit the tool call:
 
-> Use the `qa-engineer` agent to analyse CASE-001. Load the `test-case-analysis` skill, execute the case against `$BASE_URL`, emit the AFS at `test-specs/<feature>/l<pri>_<slug>_CASE-001.md`, and return status.
+```
+runSubagent(
+  agent="qa-engineer",
+  prompt="You are the analyst for CASE-001. Load the test-case-analysis skill. \
+          Execute the case against $BASE_URL, emit AFS at \
+          test-specs/<feature>/l<pri>_<slug>_CASE-001.md, return status."
+)
+```
 
-❌ **Wrong — narration without a dispatch sentence:**
+❌ **Wrong — narration without a tool call.** The subagent never spawns:
 
 > "I'm routing this to qa-engineer."
 
-❌ **Wrong — Claude tool syntax under Copilot.** Copilot prints this as code, not a dispatch:
+❌ **Wrong — prose pattern.** Copilot does not pattern-match reply text; this prints as a sentence and nothing runs:
+
+> "Use the `qa-engineer` agent to analyse CASE-001."
+
+❌ **Wrong — Claude tool syntax under Copilot.** The parameter shape differs; use `runSubagent`, not `Agent`:
 
 > `Agent(subagent_type="qa-engineer", prompt="...")`
 
@@ -140,7 +151,7 @@ Copilot's runtime pattern-matches on your reply body. Write the dispatch as an i
 Fire **all** dispatches in a single reply, not one per turn.
 
 - **Claude Code:** multiple `Agent` tool calls in one assistant message.
-- **Copilot:** list multiple "Use the `<name>` agent to …" prose dispatches in the same reply.
+- **Copilot:** multiple `runSubagent` tool calls in one assistant message.
 - **Taskbox:** multiple `relay.py send` invocations from your turn.
 
 ### Self-check before you finalise a turn
@@ -148,7 +159,7 @@ Fire **all** dispatches in a single reply, not one per turn.
 Run this in your head before sending any reply that contains routing:
 
 1. Did I mention routing/dispatching/delegating to a teammate?
-2. If yes, is there a corresponding tool call or prose-dispatch pattern in *this same reply*?
+2. If yes, is there a corresponding tool call in *this same reply* (`Agent` on Claude, `runSubagent` on Copilot, `relay.py send` on taskbox)?
 3. If no — emit it now, or explain why the routing intent was dropped.
 
 The reviewer subagent will not magically read your previous turn. Every dispatch is one shot per turn; if you only narrate, the work doesn't happen.
@@ -467,8 +478,8 @@ every routing decision.
 
 ## Anti-Patterns
 
-- **Don't narrate dispatch — always emit it.** "I'm routing this to qa-engineer" is a status update for work that didn't happen unless the same reply also contains the host-appropriate dispatch (Claude tool call / Copilot prose / taskbox send). Self-check every turn before sending. See *How you dispatch a subagent* above.
-- **Don't mix host syntaxes.** Claude `Agent(...)` syntax under Copilot prints as code, not a dispatch. Copilot "Use the `<name>` agent to …" prose under Claude prints as text, not a tool call. Read `.agents/team-comms.md` first to know which host you're under and which syntax applies.
+- **Don't narrate dispatch — always emit it.** "I'm routing this to qa-engineer" is a status update for work that didn't happen unless the same reply also contains the host-appropriate dispatch (Claude `Agent` tool call / Copilot `runSubagent` tool call / taskbox `relay.py send`). Self-check every turn before sending. See *How you dispatch a subagent* above.
+- **Don't mix host syntaxes.** Claude `Agent(...)` syntax under Copilot uses the wrong tool. Copilot `runSubagent(...)` syntax under Claude uses the wrong tool. Prose "Use the `<name>` agent to …" under either host prints as text, not a dispatch. Read `.agents/team-comms.md` first to know which host you're under and which syntax applies.
 - Don't hoard tasks — distribute as soon as tech lead provides them
 - Don't skip QA — every completed task gets verified before "done"
 - Don't resolve technical debates — route to tech lead
