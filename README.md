@@ -362,7 +362,7 @@ shape of those assumptions is documented below.
 
 | Key | Stock-Claude behavior |
 |---|---|
-| `workspace: clone` | The installer additively injects `isolation: worktree` alongside it on the Claude target. Claude Code 4+ honours `isolation:` natively — subagent dispatches get a temporary git worktree per call. The original `workspace: clone` is preserved so Octobots' per-role-clone logic still works when the supervisor is later layered on top. Cursor / Windsurf / Copilot: still ignored (no runtime equivalent yet). See `.worktreeinclude` in [TEST-AUTOMATION-ONBOARDING.md](TEST-AUTOMATION-ONBOARDING.md) for copying `.env` and other gitignored files into those worktrees. |
+| `workspace: clone` | Preserved verbatim in installed agent files. Octobots' per-role-clone logic reads it when the supervisor is layered on top. Stock Claude / Cursor / Windsurf / Copilot have no runtime equivalent and ignore it — the key is harmless noise on those hosts. Subagent dispatches on all hosts share the parent's working tree; serialize same-surface dispatches (page-object edits, shared fixtures) in the caller. |
 | `skills: [taskbox, memory, ...]` | `taskbox` is bundled *inside* the Octobots supervisor — it's a no-op on stock Claude Code. `memory` is published here and works standalone. |
 
 **`@import` paths auto-loaded at session start:**

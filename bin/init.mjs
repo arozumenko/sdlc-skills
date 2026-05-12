@@ -342,15 +342,6 @@ function copyItem(kind, name, target, update, registry) {
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(src, dest, { recursive: true, force: update });
 
-  // Translate the source `workspace:` frontmatter (an octobots-supervisor
-  // hint) into the per-host equivalent. Claude Code honours
-  // `isolation: worktree` natively for subagent dispatches; Cursor and
-  // Windsurf have no documented equivalent and the unknown key is just
-  // noise, so we strip it. Copilot is handled in transformAgentForCopilot.
-  if (kind === "agents") {
-    rewriteWorkspaceFrontmatter(join(dest, "AGENT.md"), target.id);
-  }
-
   // Inject a skills-inventory section into the installed agent body —
   // but only for hosts that don't preload the `skills:` frontmatter
   // field. Claude Code preloads each listed SKILL.md into subagent
@@ -367,68 +358,6 @@ function copyItem(kind, name, target, update, registry) {
   }
 
   return { status: "installed", dest };
-}
-
-// ---------------------------------------------------------------------------
-// `workspace:` → additive `isolation: worktree` for Claude Code
-//
-// Source agent files in this monorepo declare `workspace: clone` (or
-// `workspace: shared`) as an octobots-supervisor hint. The supervisor
-// reads it from `.claude/agents/<name>/AGENT.md` after this installer
-// runs (octobots' `install.sh` invokes `npx ... sdlc-skills init
-// --target claude` as its content step, then reads what we wrote).
-//
-// Claude Code 4+ also honours an `isolation: worktree` subagent
-// frontmatter field — it auto-creates a temporary git worktree per
-// subagent dispatch. Same intent as `workspace: clone`, different key.
-//
-// To get the benefit on Claude Code without breaking the octobots
-// supervisor (which still needs the original `workspace:` key on the
-// same file), the translation is **additive**: when we see
-// `workspace: clone` on the Claude target, we inject an extra
-// `isolation: worktree` line right after it. Both keys coexist.
-//
-//   - Claude Code reads `isolation: worktree` and isolates subagents.
-//   - Octobots supervisor reads `workspace: clone` and runs per-role
-//     git clones, exactly as before.
-//   - `workspace: shared` is left untouched (Claude's absence-of-
-//     `isolation:` default already matches "shared").
-//   - Cursor / Windsurf / Copilot don't understand either key today —
-//     we leave the source `workspace:` line in place so the file is
-//     identical to the monorepo source aside from the additive line;
-//     keeps room for future host runtimes that adopt either field.
-//
-// Idempotent: if `isolation:` is already present, we don't add a
-// duplicate.
-// ---------------------------------------------------------------------------
-
-function rewriteWorkspaceFrontmatter(agentFile, targetId) {
-  // Only Claude Code currently has a runtime equivalent. Other hosts:
-  // leave the source frontmatter alone, even if `workspace:` is unknown
-  // to them — it's harmless noise, and stripping it would risk breaking
-  // an octobots+secondary-host coexistence path we haven't fully mapped.
-  if (targetId !== "claude") return;
-  if (!existsSync(agentFile)) return;
-
-  const text = readFileSync(agentFile, "utf8");
-  const fm = text.match(/^(---\s*\n)([\s\S]*?)(\n---)/);
-  if (!fm) return;
-  let frontmatter = fm[2];
-
-  // Only act on `workspace: clone`. `workspace: shared` matches
-  // Claude's default (no isolation), no injection needed.
-  if (!/^workspace:\s*clone\s*$/m.test(frontmatter)) return;
-  // Already has an explicit isolation field — respect it.
-  if (/^isolation:\s*\S+/m.test(frontmatter)) return;
-
-  // Inject `isolation: worktree` on the next line, preserving
-  // `workspace: clone` for the octobots supervisor.
-  frontmatter = frontmatter.replace(
-    /^(workspace:\s*clone\s*)$/m,
-    "$1\nisolation: worktree",
-  );
-
-  writeFileSync(agentFile, fm[1] + frontmatter + fm[3] + text.slice(fm[0].length));
 }
 
 // ---------------------------------------------------------------------------
@@ -636,7 +565,6 @@ function transformAgentForCopilot(
   // `workspace:` is preserved verbatim — it's an octobots-supervisor
   // hint with no Copilot runtime today, but harmless to keep, and
   // octobots may read the flat Copilot file in coexistence scenarios.
-  // See rewriteWorkspaceFrontmatter() above for the full rationale.
 
   // Inject the skills-inventory section as the final transform step so
   // it lands in Copilot's flat `.agent.md` file too (Copilot ignores

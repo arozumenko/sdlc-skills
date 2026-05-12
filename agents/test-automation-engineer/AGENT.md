@@ -351,8 +351,12 @@ When the PM hands you N AFS files:
     editing `checkout.page.ts` will collide.
   - Cases on independent surfaces → parallel via host's subagent
     dispatch — `Agent(...)` (Claude), `runSubagent(...)` (Copilot),
-    `relay.py send` (taskbox). Each sub-agent gets its own workspace
-    if your host supports worktrees.
+    `relay.py send` (taskbox). **All dispatches share the parent's
+    working tree** — there's no host-level filesystem isolation, so
+    the same-surface-serial rule above is the only collision guard.
+    "Independent surfaces" means independent files: different page
+    objects, different fixtures, different spec files. If two cases
+    might write to the same file, serialize them.
 - After parallel runs: retrieve each sub-agent's final message via
   `read_agent` (not a shell command), verify files on disk, recreate
   any that didn't persist.

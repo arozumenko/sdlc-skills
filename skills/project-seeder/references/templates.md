@@ -610,47 +610,6 @@ restating them.
 
 ---
 
-## `.worktreeinclude` Template (Claude Code + test-automation only)
-
-Claude Code creates a fresh git worktree per isolated subagent dispatch. A
-fresh worktree is a clean checkout, so untracked files like `.env` and
-`playwright/.auth/` — which test-automation agents need to talk to the app
-— are not present by default. `.worktreeinclude` lists patterns (gitignore
-syntax) for files to copy in. Only files that match the patterns **and** are
-gitignored get copied; tracked files are never duplicated.
-
-**Write only when:**
-
-- A Claude target is detected (`.claude/agents/` exists or will be created), AND
-- The install set includes test-automation agents (`test-automation-engineer` and/or `qa-engineer`), AND
-- `.worktreeinclude` does not already exist at the project root.
-
-Once written, treat as operator-owned: re-running scout must NOT overwrite it.
-
-```gitignore
-# .worktreeinclude — patterns copied into isolated subagent worktrees.
-# Gitignore syntax. Only files that match AND are gitignored are copied;
-# tracked files are never duplicated. Edit freely.
-
-# Test environment configuration (whichever your project uses)
-.env
-.env.local
-.env.test
-.env.development
-
-# Browser auth state captured by Playwright fixtures
-playwright/.auth/
-
-# Local fixture/data caches some frameworks write outside git
-test-results/.cache/
-
-# Add project-specific gitignored files that automation needs:
-# fixtures/local-only-data.json
-# config/secrets.json
-```
-
----
-
 ## `.octobots/roles-manifest.yaml` Template
 
 Source of truth for role configuration. Read by `octobots/scripts/check-spawn-ready.py`.

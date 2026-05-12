@@ -90,24 +90,13 @@ Agent(
 )
 ```
 
-Most test-automation agents (`test-automation-engineer`, `qa-engineer`,
-dev agents) declare `isolation: worktree` in their installed frontmatter,
-so Claude Code automatically gives each dispatch its own temporary
-worktree — you don't pass anything extra. The `.worktreeinclude` at the
-project root controls which gitignored files (e.g. `.env`,
-`playwright/.auth/`) get copied into those worktrees.
-
-You'd only pass `isolation: "worktree"` per-call as an **override** when
-spawning an agent that doesn't declare it in frontmatter:
-
-```
-Agent(
-  subagent_type="<agent-without-frontmatter-isolation>",
-  description="...",
-  isolation: "worktree",
-  prompt="..."
-)
-```
+All dispatches share the parent's working tree — there's no host-level
+filesystem isolation. When you dispatch multiple subagents in parallel,
+the caller (you, the PM) is responsible for collision avoidance:
+serialize cases that edit the same page object, fixture, or shared
+helper; parallelize only when surfaces are genuinely independent. See
+the Batching sections in `test-automation-engineer/AGENT.md` and
+`test-case-analysis` § Batching cases for the same-surface-serial rule.
 
 ❌ **Wrong — narration without a tool call.** The subagent never spawns:
 
