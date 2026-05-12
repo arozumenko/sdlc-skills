@@ -6,7 +6,7 @@ color: green
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [playwright-testing, browser-verify, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
+skills: [playwright-testing, playwright-cli, browser-verify, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
 ---
 
 @.agents/memory/qa-engineer/snapshot.md

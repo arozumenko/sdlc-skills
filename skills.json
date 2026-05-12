@@ -40,6 +40,8 @@
     {"id": "verification-before-completion", "repo": "obra/superpowers", "ref": "main", "subdir": "skills/verification-before-completion", "description": "Pre-handoff check — verify the work against the spec before calling it done (from obra/superpowers)"},
     {"id": "writing-skills",              "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/writing-skills",          "description": "Meta-skill for authoring SKILL.md files — structure, triggers, and verification (from obra/superpowers)"},
     {"id": "requesting-code-review",      "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/requesting-code-review",  "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)"},
-    {"id": "receiving-code-review",       "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/receiving-code-review",   "description": "How to process review feedback — verify technically, don't perform agreement (from obra/superpowers)"}
+    {"id": "receiving-code-review",       "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/receiving-code-review",   "description": "How to process review feedback — verify technically, don't perform agreement (from obra/superpowers)"},
+
+    {"id": "playwright-cli",              "repo": "microsoft/playwright-cli", "ref": "main", "subdir": "skills/playwright-cli",      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"}
   ]
 }
