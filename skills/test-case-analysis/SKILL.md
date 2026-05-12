@@ -1,6 +1,6 @@
 ---
 name: test-case-analysis
-description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case end-to-end and emit an AFS", or any TMS-case exploration before automation. Does not write automation code — pairs with test-automation-workflow downstream.
+description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case end-to-end and emit an AFS", or any TMS-case exploration before automation. Does not write automation code — emits a spec the implementer picks up downstream.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -22,9 +22,8 @@ flags defects, and only then produces a spec.
 
 - **No automation code.** No `.spec.ts`, no `test_*.py`, no step
   definitions. The output is a markdown AFS file. Automation is
-  implemented by a downstream engineer (see
-  [`test-automation-workflow`](../test-automation-workflow/) and the
-  `test-automation-engineer` role).
+  implemented downstream — your agent knows which role / workflow
+  picks the AFS up.
 - **No automating un-automatable cases.** Physical device, visual
   judgment that can't be asserted, flows that genuinely can't be
   scripted — mark the AFS `un-automatable` and stop.
@@ -36,7 +35,7 @@ flags defects, and only then produces a spec.
 ```
 1. Fetch the case         → TMS adapter (pluggable; see test-automation.yaml)
 2. Read app context       → .agents/architecture.md + previous AFS files
-3. Execute                → playwright-testing or browser-verify, step-by-step
+3. Execute                → browser-driving capability (your agent's wired MCP), step-by-step
 4. Capture selectors      → stable, accessible, fallback-ready
 5. Classify findings      → ready / blocked / defect-found / un-automatable
 6. Emit AFS               → test-specs/<feature>/l<pri>_<slug>_<tms-id>.md
@@ -64,15 +63,17 @@ linked story, attachments.
 
 ### 3. Execute
 
-Primary tool: the [`playwright-testing`](../playwright-testing/) skill
-(`browser_navigate`, `browser_snapshot`, `browser_click`, …). Prefer
-`browser_snapshot` for accessible-name discovery — it yields both the
-ref you need to click and the role-name pair you'll assert on.
+Use the browser-driving capability your agent has wired — typically a
+Playwright-MCP toolset providing `browser_navigate`,
+`browser_snapshot`, `browser_click`, etc. Prefer `browser_snapshot`
+for accessible-name discovery — it yields both the ref you need to
+click and the role-name pair you'll assert on.
 
-Fallback / deep inspection:
-[`browser-verify`](../browser-verify/) — use when you need computed
-styles, real CDP input events, storage/cookies, or axe accessibility
-audits.
+For deeper inspection (computed styles, real CDP input events,
+storage/cookies, axe accessibility audits) use whichever
+verification-grade browser tooling your agent has — different from
+the standard MCP and intended for ground-truth checks the snapshot
+API can't answer.
 
 For each step:
 
@@ -223,14 +224,13 @@ When handed multiple cases:
 
 - Single case → run directly. No delegation.
 - Multiple cases → delegate one sub-agent per case via the host's
-  `Agent` / `runSubagent` / `task` tool. Each sub-agent gets its own
+  subagent dispatch — `Agent(...)` (Claude), `runSubagent(...)`
+  (Copilot), `relay.py send` (taskbox). Each sub-agent gets its own
   browser context.
 - After sub-agents finish, retrieve each one's final message via the
-  host's `read_agent` tool (NOT a shell command), extract the AFS
-  path, **verify the file exists on disk**, and recreate it yourself
-  from the returned content if it didn't persist. See
-  [`test-automation-workflow/references/commands.md`](../test-automation-workflow/references/commands.md)
-  for host-specific recipes.
+  host's result-retrieval tool (NOT a shell command), extract the
+  AFS path, **verify the file exists on disk**, and recreate it
+  yourself from the returned content if it didn't persist.
 
 ## Handoff
 
@@ -238,8 +238,9 @@ When the AFS is ready:
 
 1. Commit the AFS on a feature branch — `test(spec): add AFS for <id>`
 2. Push; open a small PR if the project reviews specs before
-   automation starts, otherwise hand the path directly to the
-   automation engineer (see `test-automation-workflow`)
+   automation starts, otherwise hand the AFS path directly back to
+   the caller (your agent knows whether the automation role expects
+   the spec via PR or via direct handoff)
 3. If a defect was found, link the issue in the PR body
 4. If the case is `blocked` or `un-automatable`, stop here and
    report up — do not pass a broken spec downstream

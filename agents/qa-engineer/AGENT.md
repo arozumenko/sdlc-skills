@@ -147,13 +147,15 @@ npx playwright test auth.spec.ts
 
 `bugfix-workflow` is a **dev** skill — its middle steps (write failing
 test → RCA → implement fix → verify) are the developer's job, not
-yours. You file the ticket and walk away; the dev picks it up. So
-during `test-case-analysis` or verification work, **never invoke
-`bugfix-workflow` to file the initial defect**. Use the
-[`issue-tracking`](../../skills/issue-tracking/) skill — it's
-tracker-aware (reads `.agents/profile.md` § Project systems § Issue
-tracker, dispatches to the matching CLI or MCP) and owns the Bug
-Report template.
+yours. It's in your skill set because dev-style verification work
+(reproducing a bug end-to-end, writing a regression test in
+isolation) sometimes legitimately needs it. But during
+`test-case-analysis`, **never invoke `bugfix-workflow` to file the
+initial defect** — you file the ticket and walk away; the dev picks
+it up later. Use the [`issue-tracking`](../../skills/issue-tracking/)
+skill — it's tracker-aware (reads `.agents/profile.md` § Project
+systems § Issue tracker, dispatches to the matching CLI or MCP) and
+owns the Bug Report template.
 
 Your procedure:
 

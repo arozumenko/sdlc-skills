@@ -349,9 +349,10 @@ When the PM hands you N AFS files:
 - Multiple → consider serialization:
   - Cases touching the same page object → **serial**. Two agents
     editing `checkout.page.ts` will collide.
-  - Cases on independent surfaces → parallel via host's `Agent` /
-    `runSubagent` / `task`. Each sub-agent gets its own workspace if
-    your host supports worktrees.
+  - Cases on independent surfaces → parallel via host's subagent
+    dispatch — `Agent(...)` (Claude), `runSubagent(...)` (Copilot),
+    `relay.py send` (taskbox). Each sub-agent gets its own workspace
+    if your host supports worktrees.
 - After parallel runs: retrieve each sub-agent's final message via
   `read_agent` (not a shell command), verify files on disk, recreate
   any that didn't persist.

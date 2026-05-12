@@ -78,6 +78,16 @@ directory. For Copilot users who see directories where `.agent.md`
 files should be: `npx github:arozumenko/sdlc-skills init fix-copilot`
 (see [README.md](README.md) for the `--soul` modes).
 
+**Heads-up on the agent roster.** If you skip a dedicated agent for
+a workflow slot (e.g. you don't install `test-automation-engineer`),
+scout's Step 6.9 substitutes the closest installed agent and writes
+the override into `.agents/role-overrides.md` with a fallback-tier
+warning. The pipeline runs, but a tech-lead or generic dev filling
+Axel's slot ships less framework-faithful tests than Axel would —
+prefer installing the dedicated agent when you can. See
+[`skills/project-seeder/references/role-overrides.md`](skills/project-seeder/references/role-overrides.md)
+for the substitution table.
+
 ### 2. Seed via scout
 
 Launch scout and paste the prompt below. Scout already carries the
@@ -158,20 +168,24 @@ Launch PM and hand it this no-op routing prompt:
 
 **Pass criteria:**
 
-- PM's reply contains an actual subagent call matching the host
-  declared in `.agents/team-comms.md` — a Claude `Agent(...)` tool
-  call, a Copilot prose dispatch ("Use the `qa-engineer` agent to
-  …"), or a taskbox `relay.py send`.
+- PM's reply contains an actual subagent **tool call** matching the
+  host declared in `.agents/team-comms.md` — a Claude `Agent(...)`
+  tool call, a Copilot `runSubagent(...)` tool call, or a taskbox
+  `relay.py send` invocation.
 - qa-engineer's reply contains the **actual** two lines from
   `.agents/testing.md`, not a paraphrase or refusal.
 
 **Fail signals:**
 
-- PM says "I've routed this to qa-engineer" but no tool call / prose
-  dispatch appears in the same reply — the subagent never spawned.
-- PM emits the wrong syntax for the host (Claude `Agent(...)`
-  printed as code under Copilot; Copilot prose printed as text
-  under Claude) — dispatch landed as plain text, not a call.
+- PM says "I've routed this to qa-engineer" but no tool call appears
+  in the same reply — the subagent never spawned (narration without
+  dispatch).
+- PM emits the wrong host syntax — Claude `Agent(...)` under Copilot,
+  or `runSubagent(...)` under Claude. The call lands in the wrong
+  dispatcher and nothing runs.
+- PM emits prose like "Use the `qa-engineer` agent to …" under
+  *any* host. That's text, not a dispatch call — both Claude and
+  Copilot require an actual tool call.
 
 If the smoke fails, the dispatch wiring is broken on this host. See
 [`agents/project-manager/AGENT.md` § How you dispatch a subagent
@@ -241,6 +255,14 @@ owns it.
 5. **From here, follow the existing-project flow** — Step 4 (smoke-test
    PM dispatch) and then Step 5 (pilot one case) above — with the
    first real case (or markdown case).
+
+**Expect the first 2–3 cases to look thin on Phase 2a.** Axel's
+"conventions sweep" sub-phase normally reads neighbouring tests for
+existing patterns — on a fresh scaffold there are none yet, so the
+sweep will produce a short note ("no neighbours; following the
+scaffold tech-lead just laid down"). That's fine. The sweep gets
+real once 3–4 cases have shipped and a body of convention exists to
+mirror.
 
 Tech-lead's full escalation contract lives in
 [`agents/tech-lead/AGENT.md` § Test-Automation Escalations](agents/tech-lead/AGENT.md).
