@@ -56,7 +56,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "fs";
@@ -110,7 +109,12 @@ function loadCatalog() {
 // Skill registry — skills.json at the repo root describes every skill and
 // where to fetch it:
 //   monorepo entry: {id, monorepo: "sdlc-skills", name}  → copy from ./skills/<name>
-//   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone + symlink
+//   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone to
+//                   ~/.cache/sdlc-skills/registry/<repo>/, then copy the
+//                   subdir into the project's skills/ directory. The
+//                   project tree stays self-contained (committable,
+//                   portable, CI-safe). Older releases symlinked instead;
+//                   legacy installs auto-migrate to real copies.
 // ---------------------------------------------------------------------------
 
 function loadSkillRegistry() {
@@ -163,7 +167,17 @@ function shallowClone(repo, ref) {
   }
 }
 
-function installExternalSkill(entry, targetDir) {
+function installExternalSkill(entry, targetDir, update) {
+  // External skills are git-cloned to a shared cache under
+  // ~/.cache/sdlc-skills/registry/, then COPIED into the project's skills
+  // directory so the project tree is self-contained (committable, portable
+  // across machines, surviveable on CI without the cache populated).
+  //
+  // Older sdlc-skills releases symlinked from cache into the project — that
+  // saved disk but produced dangling links the moment the repo was cloned
+  // by anyone else. Legacy symlink installs are auto-migrated to copies
+  // here regardless of --update, because keeping a broken symlink is never
+  // the user's intent.
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
   if (!clone) return { status: "error" };
@@ -183,16 +197,35 @@ function installExternalSkill(entry, targetDir) {
   }
   const skillsDir = join(CWD, targetDir, "skills");
   mkdirSync(skillsDir, { recursive: true });
-  const link = join(skillsDir, skillName);
-  if (existsSync(link) || lstatSync(link, { throwIfNoEntry: false })) {
-    // Already present. Don't overwrite unless --update (handled upstream).
-    return { status: "exists", name: skillName };
+  const dest = join(skillsDir, skillName);
+
+  // Three states for `dest`:
+  //   1. absent          → install fresh
+  //   2. symlink         → legacy install; always replace with a real copy
+  //                        (regardless of --update — symlinks are never the
+  //                        intended target shape)
+  //   3. real directory  → respect --update: replace if true, skip if false
+  const destStat = lstatSync(dest, { throwIfNoEntry: false });
+  let migratedFromSymlink = false;
+  if (destStat) {
+    if (destStat.isSymbolicLink()) {
+      unlinkSync(dest);
+      migratedFromSymlink = true;
+    } else if (!update) {
+      return { status: "exists", name: skillName };
+    } else {
+      rmSync(dest, { recursive: true, force: true });
+    }
   }
+
   try {
-    symlinkSync(src, link);
-    return { status: "installed", name: skillName };
+    cpSync(src, dest, { recursive: true, dereference: true, force: true });
+    return {
+      status: migratedFromSymlink ? "migrated" : "installed",
+      name: skillName,
+    };
   } catch (err) {
-    console.error(`  ! symlink ${src} → ${link} failed: ${err.message}`);
+    console.error(`  ! copy ${src} → ${dest} failed: ${err.message}`);
     return { status: "error" };
   }
 }
@@ -271,6 +304,7 @@ function parseArgs(argv) {
     skills: null,
     targets: null,
   };
+  const unknown = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--all") out.all = true;
@@ -282,7 +316,51 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
+    } else {
+      unknown.push(a);
     }
+  }
+  if (unknown.length) {
+    // Catch the two failure modes that used to fail silently:
+    //   1. Typo'd flags (`--moe standalone` instead of `--mode`)
+    //   2. Shell-split list args (`--skills a,b,c, d,e` becomes `--skills a,b,c,`
+    //      plus positional `d,e` — only the first chunk made it through).
+    // Both are silent under-installs in the old parser. Now they're loud.
+    console.error(
+      `\n  ! Unrecognised argument(s) for 'init': ${unknown.join(", ")}\n`,
+    );
+    const looksCommaSplit = unknown.some(
+      (a) => a.includes(",") && !a.startsWith("-"),
+    );
+    if (looksCommaSplit) {
+      console.error(
+        "  Looks like a comma-separated list was split by the shell. Common cause:",
+      );
+      console.error(
+        "    --skills a,b,c, d,e   ← space after a comma → shell splits at the space.",
+      );
+      console.error("  Fix: remove the spaces, or quote the whole list:");
+      console.error('    --skills "a,b,c,d,e"   (or just --skills a,b,c,d,e)');
+    }
+    const looksLikeStripFlag = unknown.some((a) =>
+      ["--mode", "--dir", "--dry-run"].includes(a),
+    );
+    if (looksLikeStripFlag) {
+      console.error(
+        "\n  '--mode', '--dir', and '--dry-run' belong to the 'init strip' subcommand,",
+      );
+      console.error(
+        "  not 'init' itself. Run them separately:",
+      );
+      console.error(
+        "    npx ... init --update --agents X,Y --skills A,B,C",
+      );
+      console.error(
+        "    npx ... init strip          # re-applies deployment-mode marker stripping",
+      );
+    }
+    console.error("\n  Re-run with --help to see supported flags.\n");
+    process.exit(1);
   }
   return out;
 }
@@ -669,7 +747,8 @@ async function interactivePick(catalog, args) {
   // Resolve skills with awareness of externals from skills.json. An
   // explicit --skills list may contain both monorepo ids (installed by
   // copy from this repo) and external ids (cloned from skills.json
-  // `repo:` entries and symlinked into the target dir).
+  // `repo:` entries, then copied into the target dir — see
+  // installExternalSkill for details on cache + copy semantics).
   let skillsSelection;          // monorepo ids to install via copyItem
   let externalFromFlag = [];    // external registry entries to install via installExternalSkill
   if (args.skills === null) {
@@ -714,9 +793,9 @@ async function interactivePick(catalog, args) {
     if (agentsSelection === null) agentsSelection = [];
     // --agents X without --skills → auto-resolve each agent's declared
     // skill deps. Monorepo skills install from this repo; externals
-    // (`repo:` entries in skills.json) clone + symlink into the target
-    // dir. Unknown skill ids (not in skills.json at all) are warned
-    // and skipped.
+    // (`repo:` entries in skills.json) are cloned to the shared cache
+    // and copied into the target dir. Unknown skill ids (not in
+    // skills.json at all) are warned and skipped.
     if (skillsSelection === null) {
       if (agentsSelection.length > 0) {
         const { monorepo, external, unknown } = inferSkillsFromAgents(
@@ -1236,9 +1315,14 @@ async function main() {
       }
     }
     for (const entry of externalSkills) {
-      const r = installExternalSkill(entry, t.dir);
+      const r = installExternalSkill(entry, t.dir, args.update);
       if (r.status === "installed") {
         console.log(`      ✓ skill  ${r.name} (external: ${entry.repo})`);
+        installed++;
+      } else if (r.status === "migrated") {
+        console.log(
+          `      ✓ skill  ${r.name} (external: ${entry.repo}) — migrated from symlink to real copy`,
+        );
         installed++;
       } else if (r.status === "exists") {
         console.log(`      — skill  ${r.name} (exists; use --update)`);

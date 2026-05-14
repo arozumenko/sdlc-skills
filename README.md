@@ -66,11 +66,15 @@ reads it at runtime; IDE plugin systems read it at install time. Nothing
 duplicated.
 
 External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
-`systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
-upstream repos. The installer resolves each agent's declared skill list
-against `skills.json`, clones external repos on first install into
-`~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
-project's skills directory.
+`systematic-debugging` / etc., Paul Hudson's Swift skills, Microsoft's
+`playwright-cli`) live in their upstream repos. The installer resolves
+each agent's declared skill list against `skills.json`, clones external
+repos on first install into the shared cache
+`~/.cache/sdlc-skills/registry/`, and **copies** the subdir into your
+project's skills directory. The project tree stays self-contained —
+commits survive across machines, CI works without a populated cache,
+and `git status` shows real files. Legacy installs that used symlinks
+auto-migrate to real copies on the next `init --update`.
 
 ## What lands in your project
 
@@ -154,7 +158,8 @@ GitHub Copilot (all four IDE targets detected automatically).
 npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically
-# (monorepo + external, via git clone + symlink for externals)
+# (monorepo + external; externals are git-cloned to the shared cache
+# and copied into the project — see README § External skills below)
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
 
 # Specific skills (overrides the auto-resolve)
@@ -196,9 +201,13 @@ section listing declared skills with their descriptions from
 would duplicate the preload). The block is idempotent on `--update` —
 re-runs replace in place, never duplicate.
 
-External skills are symlinked into the skills dir from the shared cache
-at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
-location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
+External skills are git-cloned to the shared cache at
+`~/.cache/sdlc-skills/registry/<owner>__<repo>/`, then **copied** into
+the project's skills dir on each install. The project tree is self-
+contained — `git status` shows real files, commits survive across
+machines, and CI works without a populated cache. Override the cache
+location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`. Legacy
+symlink installs auto-migrate to real copies on the next `init --update`.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
@@ -335,9 +344,9 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 Declared in `skills.json` with `repo:` + optional `subdir:`. The npx
 installer clones each into `~/.cache/sdlc-skills/registry/` on first
-install and symlinks the subdir into your project's skills dir. Native
-IDE plugin paths do **not** fetch these — use the installer for the full
-catalog.
+install and **copies** the subdir into your project's skills dir.
+Native IDE plugin paths do **not** fetch these — use the installer for
+the full catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
@@ -447,7 +456,8 @@ sdlc-skills/
    "name": "<name>"}`.
 3. **New external skill** → register in `skills.json` with
    `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
-   The installer will clone + symlink on first install.
+   The installer will clone the upstream repo into the shared cache
+   and copy the subdir into the target project on first install.
 4. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 

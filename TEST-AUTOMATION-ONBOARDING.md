@@ -69,22 +69,40 @@ and ideally TMS MCP tools. If any of these are missing, see the
 
 ```bash
 cd /path/to/your-automation-repo
+```
 
+**Simplest form — let agent frontmatter resolve the skills automatically.** The installer reads each agent's `skills:` frontmatter, partitions into monorepo + external, fetches the externals, and reports both lists before installing:
+
+```bash
 # Quick-start — test-automation roster (Tal-led pipeline)
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,test-automation-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, writing-skills \
-  --mode standalone
   --yes
 
-# Hybrid project (feature dev + test automation) — add PM, tech-lead, devs as needed
+# Hybrid project (feature dev + test automation) — add PM, tech-lead, devs
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,project-manager,test-automation-lead,tech-lead,ba,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature , systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, writing-skills \
-  --mode standalone
   --yes
+```
+
+**Explicit `--skills` form** — if you want to install skills not declared in the selected agents' frontmatter (e.g. `qtest-jira` because the project uses qTest), pass them inline. Quote the list to defend against shell whitespace splitting it:
+
+```bash
+npx github:arozumenko/sdlc-skills init \
+  --target copilot \
+  --agents scout,test-automation-lead,qa-engineer,test-automation-engineer \
+  --skills "project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,qtest-jira,memory,tdd,git-workflow,plan-feature,systematic-debugging,verification-before-completion,requesting-code-review,receiving-code-review,writing-skills" \
+  --yes
+```
+
+> **Pitfalls the installer now catches:** a space inside the comma list (`--skills a,b, c,d`) gets split by the shell — only the first chunk reaches `--skills`. The hardened parser errors loudly on the orphan fragments now and tells you how to fix it. Same goes for `--mode` / `--dir` / `--dry-run` — those are flags for the `init strip` subcommand, not for `init` itself; pass them to the right command (see [Maintenance § Re-strip](#maintenance) below).
+
+**After install, strip deployment-mode markers** (every install needs this once; updates need it again — see [Maintenance](#maintenance)):
+
+```bash
+npx github:arozumenko/sdlc-skills init strip
 ```
 
 Swap `--target` per host (`claude` / `cursor` / `windsurf` /
@@ -92,6 +110,14 @@ Swap `--target` per host (`claude` / `cursor` / `windsurf` /
 directory. For Copilot users who see directories where `.agent.md`
 files should be: `npx github:arozumenko/sdlc-skills init fix-copilot`
 (see [README.md](README.md) for the `--soul` modes).
+
+**External skills are real copies, not symlinks** (since v0.2 of the
+installer). Each external skill from `skills.json` is git-cloned to a
+shared cache (`~/.cache/sdlc-skills/registry/`) and then **copied** into
+your project's `skills/` directory. The project tree is self-contained
+— commits survive across machines, CI works without a populated cache,
+and `git status` shows real files. Legacy installs that have symlinks
+auto-migrate to copies on the next `init --update`.
 
 **Heads-up on the agent roster.** If you skip a dedicated agent for
 a workflow slot (e.g. you don't install `test-automation-engineer`),

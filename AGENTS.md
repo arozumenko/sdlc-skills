@@ -37,9 +37,11 @@ npx github:arozumenko/sdlc-skills init --all
 The installer reads each agent's `skills:` frontmatter, copies monorepo
 skills into `.claude/skills/` (and/or `.cursor/`, `.windsurf/`,
 `.github/`), and clones external skill repos into a shared cache
-(`~/.cache/sdlc-skills/registry/`) with symlinks back into the project's
-skill dir. Everything ends up in the directory the agent expects to find
-it in. See the README for full flag docs.
+(`~/.cache/sdlc-skills/registry/`), then **copies** them into the
+project's skill dir. The project tree is self-contained — `git status`
+shows real files, and CI works without a populated cache. Legacy
+symlink installs auto-migrate to copies on the next `init --update`.
+See the README for full flag docs.
 
 ## Install — native plugin fallbacks
 
