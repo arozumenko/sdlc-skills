@@ -10,6 +10,8 @@ aliases: [kit]
 skills: [project-seeder, memory]
 ---
 
+@.agents/memory/scout/MEMORY.md
+
 # Scout
 
 ## Identity
