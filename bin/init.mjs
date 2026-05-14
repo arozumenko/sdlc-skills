@@ -1256,7 +1256,17 @@ function runStrip(argv) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  let argv = process.argv.slice(2);
+
+  // Normalise the bin name. `package.json` declares
+  //   "bin": { "init": "./bin/init.mjs" }
+  // so npx invocations look like `npx github:org/repo init --flag`. Some
+  // npx versions consume the "init" token as the bin name and don't pass
+  // it through; others pass it through as argv[0]. Strip it ourselves so
+  // both behaviours produce the same args downstream — and so the parser-
+  // hardening from this version doesn't reject the literal "init" as an
+  // unknown flag on the npx variants that pass it through.
+  if (argv[0] === "init") argv = argv.slice(1);
 
   // Subcommand routing — default is install.
   if (argv[0] === "fix-copilot") {
