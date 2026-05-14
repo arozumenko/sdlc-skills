@@ -1,12 +1,22 @@
 # Confluence storage format — the XHTML-ish markup
 
+> **Scope: Cloud AND Server / Data Center.** Confluence's
+> storage format is the same XHTML-ish dialect on both
+> deployments — Cloud inherited it from Server. Everything in
+> this file (headings, lists, tables, `<ac:structured-macro>`,
+> code / info / panel macros) applies to both. The bits that
+> differ between deployments — base URL, mention syntax,
+> `body.wiki` input shortcut, auth — are in
+> `references/confluence-server.md`.
+
 Confluence REST expects pages in **storage format**: an XHTML
 dialect with custom `<ac:*>` (Atlassian Confluence) and `<ri:*>`
 (resource identifier) elements for macros, links, and rich content.
 
-Markdown does not work. Wiki markup works only through a legacy
-converter endpoint. Storage format is the supported, stable
-surface for automation.
+Markdown does not work. Wiki markup works only through input
+representations (`body.wiki` on Server, conversion endpoint on
+both). Storage format is the supported, stable surface for
+automation.
 
 ## API version — v1 is used here; v2 is the future
 
@@ -262,9 +272,10 @@ Place at the top of long pages.
 
 ## Mentions
 
-Mentions in Confluence REST use an `<ac:link>` wrapping a
-`<ri:user>` with `ri:account-id`:
+Mentions in Confluence use an `<ac:link>` wrapping a `<ri:user>`,
+but the user-id attribute differs by deployment:
 
+**Cloud** — `ri:account-id`:
 ```html
 <p>
   Hi
@@ -275,10 +286,33 @@ Mentions in Confluence REST use an `<ac:link>` wrapping a
 </p>
 ```
 
-See `mentions.md` for accountId lookup. The same `accountId` works
-across Jira and Confluence in the same tenant.
+**Server / Data Center** — `ri:userkey` (preferred) or
+`ri:username`:
+```html
+<p>
+  Hi
+  <ac:link>
+    <ri:user ri:userkey="ff8080814ba236dc014ba236f4e40001" />
+  </ac:link>,
+  please review.
+</p>
+```
+
+Posting `ri:account-id` on Server, or `ri:userkey` / `ri:username`
+on Cloud, produces a broken-link placeholder in the rendered page.
+
+See `mentions.md` for lookup recipes per deployment. On Cloud, the
+same `accountId` works across Jira and Confluence in the same
+tenant. On Server, Jira and Confluence are typically separate
+installs — don't reuse identifiers across them.
 
 ## Worked example — a decision page with mention, code block, panel, table
+
+The example below is **Cloud-shaped** — endpoint `/wiki/rest/api/content`
+and `ri:account-id` for the mention. On Server / DC the endpoint
+is `/rest/api/content` (no `/wiki/`) and the mention uses
+`ri:userkey` or `ri:username`; everything between
+`"value": "..."` is otherwise identical.
 
 ```json
 POST /wiki/rest/api/content

@@ -7,6 +7,10 @@ checklist for turning "accepted" into "good".
 Run this every time. No exceptions. Ugly tickets are evidence of
 skipped verification.
 
+**Deployment matters.** Endpoint paths differ between Cloud and
+Server / Data Center — every snippet below has both forms. Detect
+deployment first (see `SKILL.md` § "Detect deployment first").
+
 > **If `.agents/profile.md` isn't populated yet** (project not
 > seeded, or seeded without the `Project systems` block), ask the
 > operator for the Jira base URL, auth env var, and — for
@@ -21,10 +25,15 @@ Verification covers the **after**. This section covers the
 comment, or Confluence page, always fetch the current body in its
 **raw structured view** before writing the update.
 
-"Raw" means the body as the API stores it — the ADF JSON for Jira,
-the storage-format XHTML string for Confluence. NOT the rendered
-HTML (`renderedFields.description` / `body.view.value`) which is
-output-only and loses macros, custom nodes, and structural hints.
+"Raw" means the body as the API stores it:
+
+- **Jira Cloud** → the ADF JSON document.
+- **Jira Server / DC** → the wiki-markup string.
+- **Confluence (any deployment)** → the storage-format XHTML string.
+
+NOT the rendered HTML (`renderedFields.description` /
+`body.view.value`) which is output-only and loses macros, custom
+nodes, and structural hints.
 
 ### Why
 
@@ -49,7 +58,7 @@ project. Pick the variant that returns the raw ADF / storage
 string, not a pre-rendered / human-readable summary.
 
 ```
-# --- Raw REST API ---
+# --- Raw REST API — Cloud ---
 
 # Jira issue description (and other rich-text fields)
 GET /rest/api/3/issue/{key}?fields=description,comment
@@ -63,6 +72,21 @@ GET /rest/api/3/issue/{key}/comment/{id}
 GET /wiki/rest/api/content/{id}?expand=body.storage,version
 → body.storage.value is the XHTML you'll edit;
   version.number is the number you must increment in the PUT
+
+# --- Raw REST API — Server / Data Center ---
+
+# Jira issue description
+GET /rest/api/2/issue/{key}?fields=description,comment
+→ fields.description is the wiki-markup string you'll edit
+
+# Jira comment
+GET /rest/api/2/issue/{key}/comment/{id}
+→ body is the wiki-markup string
+
+# Confluence page (note: no /wiki/ prefix on Server)
+GET /rest/api/content/{id}?expand=body.storage,version
+→ body.storage.value is the XHTML;
+  version.number must be incremented in the PUT
 ```
 
 ```
@@ -137,29 +161,58 @@ source you submitted and the rendered output, compare.
 
 ### Jira issue
 
+**Cloud:**
 ```
 GET /rest/api/3/issue/{key}?expand=renderedFields
 ```
-
 - `fields.description` → the ADF you posted.
 - `renderedFields.description` → the HTML Jira renders.
 
+**Server / DC:**
+```
+GET /rest/api/2/issue/{key}?expand=renderedFields
+```
+- `fields.description` → the wiki-markup string you posted.
+- `renderedFields.description` → the HTML Jira renders.
+
 Sanity check: rendered HTML is non-empty and contains the expected
-shape (headings, lists, code blocks, mentions as `<a class="user-hover">`).
+shape (headings, lists, code blocks, mentions as `<a
+class="user-hover">`).
+
+**Server-specific renderer check.** If the rendered HTML contains
+literal `h2.` text instead of `<h2>` elements, or literal
+`*asterisks*` instead of `<strong>`, the field is configured for
+the **Default Text Renderer** (see
+`references/jira-wiki-server.md` § "The renderer trap"). Your
+wiki markup is correct; the field config is the problem. Either
+ask the operator to flip the renderer scheme, or fall back to
+plain text for that field.
 
 ### Jira comment
 
+**Cloud:**
 ```
 GET /rest/api/3/issue/{key}/comment/{id}?expand=renderedBody
 ```
 
-- `body` → the ADF you posted.
+**Server / DC:**
+```
+GET /rest/api/2/issue/{key}/comment/{id}?expand=renderedBody
+```
+
+- `body` → the body you posted (ADF on Cloud, wiki string on Server).
 - `renderedBody` → the HTML Jira renders.
 
 ### Confluence page
 
+**Cloud:**
 ```
 GET /wiki/rest/api/content/{id}?expand=body.storage,body.view,version
+```
+
+**Server / DC** (no `/wiki/` prefix):
+```
+GET /rest/api/content/{id}?expand=body.storage,body.view,version
 ```
 
 - `body.storage.value` → the storage format you submitted.
@@ -173,9 +226,15 @@ For each created resource, confirm ALL of these:
 ### Mentions
 - [ ] Every `@mention` you intended appears as a mention node /
       linked user in the rendered HTML.
-- [ ] No literal `@username` strings anywhere you meant to mention.
-- [ ] `accountId` resolved to a real display name (not "Unknown
-      user" / greyed-out badge).
+- [ ] No literal `@username` / `[~username]` strings anywhere you
+      meant to mention.
+- [ ] Identifier resolved to a real display name (not "Unknown
+      user" / greyed-out badge / broken-link macro placeholder).
+- [ ] (Cloud) `accountId` resolved correctly.
+- [ ] (Jira Server) `[~username]` matched a real `name` from
+      `/rest/api/2/user/search`.
+- [ ] (Confluence Server) `ri:userkey` / `ri:username` resolved to
+      a real user.
 
 ### Headings
 - [ ] Headings render as headings (`<h1>`–`<h6>` in rendered HTML),
@@ -214,6 +273,9 @@ For each created resource, confirm ALL of these:
 - [ ] No literal `**bold**` / `*italic*` / `_italic_` markdown
       artefacts.
 - [ ] No half-rendered HTML tags (e.g. `<br>` visible in body).
+- [ ] (Jira Server) No literal `h2.` / `*asterisks*` / `||pipes||`
+      in the rendered HTML — that signals the field is on the
+      Default Text Renderer (not a bug in your markup).
 
 ### Hygiene
 - [ ] No API tokens / secrets leaked into body text.
@@ -228,24 +290,32 @@ later" ticket. The repair is cheap.
 
 ### Jira issue description
 
+**Cloud:**
 ```
 PUT /rest/api/3/issue/{key}
-{
-  "fields": {
-    "description": { /* corrected ADF doc */ }
-  }
-}
+{ "fields": { "description": { /* corrected ADF doc */ } } }
+```
+
+**Server / DC:**
+```
+PUT /rest/api/2/issue/{key}
+{ "fields": { "description": "<corrected wiki-markup string>" } }
 ```
 
 ### Jira comment
 
 Jira comments update via:
 
+**Cloud:**
 ```
 PUT /rest/api/3/issue/{key}/comment/{id}
-{
-  "body": { /* corrected ADF doc */ }
-}
+{ "body": { /* corrected ADF doc */ } }
+```
+
+**Server / DC:**
+```
+PUT /rest/api/2/issue/{key}/comment/{id}
+{ "body": "<corrected wiki-markup string>" }
 ```
 
 If the comment is wrong in a minor way (typo), editing is fine.
@@ -255,10 +325,28 @@ the thread about the repost.
 
 ### Confluence page
 
-Page updates require the next version number:
+Page updates require the next version number (Cloud and Server
+behave identically on this — only the endpoint differs).
 
+**Cloud:**
 ```
 PUT /wiki/rest/api/content/{id}
+{
+  "type": "page",
+  "title": "<same or updated>",
+  "version": { "number": <current_version_number + 1> },
+  "body": {
+    "storage": {
+      "value": "<corrected storage xhtml>",
+      "representation": "storage"
+    }
+  }
+}
+```
+
+**Server / DC** (no `/wiki/` prefix):
+```
+PUT /rest/api/content/{id}
 {
   "type": "page",
   "title": "<same or updated>",
