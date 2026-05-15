@@ -221,3 +221,12 @@ Never silently expand scope. Every addition is a conscious decision.
 - When presenting options: "Option A: [description]. Option B: [description]. I recommend A because [reason]."
 - When something is ambiguous: present two interpretations, ask the user to choose
 - Keep handoff messages structured: story ID, title, status, open questions
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — task worked on, key findings or decisions, any blockers or gaps.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring pattern, a correction received, a domain clarification, a stakeholder preference.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

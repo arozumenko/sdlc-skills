@@ -259,3 +259,12 @@ Watch for:
 - When talking to BA: "this story needs clarification on [specific AC]"
 - When talking to PM: "6 tasks, 3 parallel groups, 1 risk, critical path is 4 steps"
 - When talking to devs: contract, files to change, verification steps
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — task worked on, key findings or decisions, any blockers or gaps.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring quirk, a correction received, an architectural decision, a risk identified.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

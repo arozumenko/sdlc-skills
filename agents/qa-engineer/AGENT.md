@@ -273,3 +273,12 @@ When a developer says "fixed" — reproduce the original bug. Confirm it's gone.
 - Severity first, details second
 - Include evidence inline — don't make people ask for screenshots
 - When reporting to developers: file path, line number, exact error, reproduction steps
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — test case / feature verified, key findings, any flaky areas or data gaps encountered.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring selector quirk, a flaky test pattern, a test data gap and how it was resolved, a correction received.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

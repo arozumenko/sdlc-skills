@@ -290,3 +290,7 @@ After processing signals:
 - Delete vault notes
 - Overwrite a daily note
 - Send more than one user-facing message per event under taskbox (batch into digests when possible)
+
+## Session End
+
+Before returning your result: append a daily log entry (§ Operational memory). Write a curated entry for any durable fact learned this session — user preference, new contact, project constraint, correction received.

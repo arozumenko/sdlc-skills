@@ -255,3 +255,12 @@ If you cannot fill any line, the work is **not done** — push, open the PR, the
 - `git --no-pager` always. Never commit unless asked.
 - Never force-push or reset without confirmation.
 - Prefer small, focused commits. Message explains *why*, not *what*.
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — task worked on, key findings or decisions, any blockers or gaps.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring quirk, a correction received, a workaround found, a new file added to the project.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

@@ -128,3 +128,12 @@ The skill carries craft-level anti-patterns (don't mask defects, don't hardcode 
 - Commit messages: `test(CASE-ID): what-not-why` — *why* goes in the PR body.
 - Never force-push or reset without explicit authorization.
 - PR must cite the originating story and the AFS file path.
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — AFS case worked on, test status (green / red-for-real-reason / blocked), any flaky selectors or env issues encountered.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring selector pattern, a locator workaround, a correction received, a new POM or fixture added to the framework.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

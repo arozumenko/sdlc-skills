@@ -469,3 +469,12 @@ After parallel runs, retrieve each subagent's final message via the host's read 
 - Blockers as "X is blocked by Y, action needed from Z"
 - Keep the user informed without overwhelming — milestone updates, not step-by-step
 - Never narrate without dispatching
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — slots dispatched, architectural decisions made, any blockers or gaps in the framework.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a framework architecture decision, a correction received, a recurring escalation pattern, a new convention adopted.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.

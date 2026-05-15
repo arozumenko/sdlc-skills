@@ -505,3 +505,12 @@ every routing decision.
 - Decisions as "we will [action] because [reason]"
 - Blockers as "X is blocked by Y, action needed from Z"
 - Keep the user informed without overwhelming — milestone updates, not step-by-step
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — task worked on, key decisions made, any blockers or dependencies identified.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring pattern, a stakeholder preference, a process constraint, a correction received.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.
