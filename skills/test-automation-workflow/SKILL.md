@@ -1,217 +1,42 @@
 ---
 name: test-automation-workflow
-description: End-to-end test automation workflow — Explore → Specify → Implement → Review — with a pluggable TMS (Zephyr Scale / TestRail / Xray / Azure Test Plans / markdown). Load for "automate TC-NNN", "convert this case to Playwright", "wire these Zephyr cases into the framework", or any flow from a manual test case to green framework-resident tests.
+description: IC-facing test automation process — implementer six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), AFS-driven workflow, no-defect-masking rules, run-report template. Pluggable TMS adapters (Zephyr Scale / TestRail / Xray / Azure Test Plans / markdown). Load when implementing tests from an AFS, or when you need the canonical IC process for analyst → implementer → reviewer slots. Orchestration (slot routing, dispatch templates, AFS gating, automation merge gate) is owned by the `test-automation-lead` agent, not this skill.
 license: Apache-2.0
 metadata:
   author: octobots
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
-## Test Automation Workflow: Explore → Specify → Implement → Review
+## Test Automation Workflow — the IC process
 
-**Core philosophy:** do not automate what you have not executed. Every case is
-run manually (via `browser-verify` or Playwright MCP) first — defects, missing
-data, and environmental gaps are surfaced *before* a line of automation code is
-written. Then a separate engineer implements the automation inside the
-project's existing framework. Then a reviewer re-runs it.
+This skill describes how individual contributors (analyst, implementer, reviewer) do their craft inside the analyst → implementer → reviewer pipeline. **Orchestration of that pipeline is the `test-automation-lead` agent's job.** TAL owns slot routing, dispatch templates, AFS quality gating, status discipline, automation merge gate, and framework architecture decisions. This skill describes what each IC slot does once dispatched.
 
-**Why split the work into two agents:** context. The analysis pass
-carries exploration state (DOM snapshots, test data, console noise)
-through the `test-case-analysis` skill — Sage (qa-engineer) owns that.
-The automation engineer carries framework state (page objects,
-fixtures, CI config) — Axel owns that. Review is a natural third step
-but re-uses Sage once the test is written. Cramming all of that into
-one context breaks the bot; the skill split keeps each workspace lean
-even though only two personas touch it.
+If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
 
-**Composed capabilities (not reinvented here):** browser-driving for
-analyst execution, bug filing for defects discovered along the way,
-code review for the PR step, test-completion / TMS back-write for
-handoff, project context from scout. Which specific skills provide
-those capabilities is the calling agents' concern — this workflow
-describes the *flow*, not the toolchain.
+**Core philosophy:** do not automate what you have not executed. Every case is run manually first (pick whichever browser tool is wired and fits the challenge — `playwright-testing` over MCP, `playwright-cli` from the shell, `browser-verify` over CDP; full triage in [`references/browser-tools.md`](references/browser-tools.md)) so defects, missing data, and environmental gaps surface *before* a line of automation code is written. Then a separate engineer implements the automation inside the project's existing framework. Then a reviewer re-runs it.
 
-## Routing — how PM resolves slots to agents
+**Why split the work across slots:** context. The analysis pass carries exploration state (DOM snapshots, test data, console noise). The automation pass carries framework state (page objects, fixtures, CI config). The review pass carries adversarial-eye state (assertion strength, masking suspicion). Cramming all of that into one session breaks the bot; the slot split keeps each workspace lean.
 
-This section is PM's **source of truth** for the flow. PM's own
-AGENT.md keeps only the triage-row entry and a pointer back here —
-the details below are what PM loads when the first TMS-case request
-lands.
-
-The pipeline has three **slots** — each a separate session, gated on
-intermediate status:
-
-- **Analyst slot** — execute the case, emit an AFS
-- **Implementer slot** — AFS → green test → PR
-- **Reviewer slot** — approve the PR
-
-```
-User drops TMS case / batch
-   ↓
-PM (Max)    — routes intake, owns merge gate
-   ↓
-Analyst slot → AFS file on disk + status
-   ↓ (PM gates on status before forwarding)
-Implementer slot → green test + PR
-   ↓ (PM routes for review)
-Reviewer slot (+ code-review skill) → approval
-   ↓
-PM          — merges, closes the issue, confirms TMS back-write
-```
-
-### Slot defaults
-
-When all dedicated agents are installed:
-
-| Slot | Agent | Skill loaded |
-|---|---|---|
-| Analyst | `qa-engineer` (Sage) | `test-case-analysis` |
-| Implementer | `test-automation-engineer` (Axel) | `test-automation-workflow` |
-| Reviewer | `qa-engineer` (fresh session) | `code-review` |
-
-**If `.agents/role-overrides.md` is present** (scout's Step 6.9
-output, auto-imported at the top of PM's AGENT.md via
-`@.agents/role-overrides.md`), use its mappings instead — some slots
-will be filled by substitute agents (typically a language-matched
-dev when Axel isn't installed). The file is authoritative for the
-project; the defaults above are the sdlc-skills baseline. See
-`project-seeder` § Step 6.9 for how scout writes the overrides.
-
-### The three-step flow
-
-1. **Analyst slot.** Executes the case end-to-end against the live
-   app, captures stable selectors, files defects (via the analyst
-   agent's bug-filing capability — see profile.md § Bug filing) if
-   any, and emits an AFS at
-   `test-specs/<feature>/l<pri>_<slug>_<tms-id>.md`. Returns AFS path
-   plus a status:
-   `ready-for-automation` / `blocked` / `defect-found` / `un-automatable`.
-
-2. **PM gates on the status before forwarding.** Only
-   `ready-for-automation` advances. For the others:
-   - `blocked` → unblock (access, data, env) or escalate
-   - `defect-found` → route the filed bug through the normal bug
-     pipeline; parked automation resumes after the fix
-   - `un-automatable` → close the request with a note; do not route
-
-3. **Implementer slot.** Reads AFS, writes the test in the project's
-   existing framework (per `.agents/testing.md`), runs it locally and
-   in CI, opens a PR, back-writes the TMS execution.
-
-4. **Reviewer slot.** Runs the `code-review` skill for code quality +
-   test-correctness checks.
-
-PM merges once both gates pass (see `project-manager` § Merging
-approved PRs for the merge protocol — that lives with PM because the
-merge gate is PM's responsibility regardless of work type).
-
-### Handoff prompts name the slot
-
-Always name the slot in the handoff so the agent is clear about its
-role in the pipeline. Under substitution, this framing lets any
-installed agent pick up the slot without confusion:
-
-> You are the **implementer** for SCRUM-T101 (AFS at
-> `test-specs/checkout/l2_apply-promo_SCRUM-T101.md`). Follow
-> `test-automation-workflow` Step 5–6.
-
-### Why three separate sessions (even when one persona fills two slots)
-
-Each *session* carries different context — analysis holds DOM
-snapshots and test data, implementation holds framework state and
-page-object code, review holds test-honesty suspicion. Cramming all
-of that into one session fragments context and breaks the bot, even
-when the persona is the same.
-
-**Freshness is the default, not a host-specific mechanism.** On
-every host relevant to this workflow — Claude Code, Copilot CLI,
-Cursor, Windsurf, Octobots — invoking a subagent spawns an
-**isolated context**: `messages=[]`, only the task prompt flows
-in, only the final message comes back. Nothing from the analysis
-session leaks into review. PM just calls the reviewer subagent
-normally.
-
-**What PM does have to get right is the prompt.** The reviewer
-subagent starts with no memory of who wrote the code, so PM must
-frame the task explicitly:
-
-> You are the **reviewer** for SCRUM-T101. You did NOT write this
-> code — another session of qa-engineer wrote the AFS and
-> test-automation-engineer implemented the PR. Load the
-> `code-review` skill, read AFS at `test-specs/checkout/l2_…md`
-> and PR `<url>`, and report findings with file:line references.
-> Be honest about assertions, selector stability, and defect
-> masking.
-
-Without that framing, the subagent might assume it wrote the
-code and rubber-stamp. See `code-review` skill § review prompt
-for the full template.
-
-### When to involve tech-lead (Rio) instead
-
-The routine flow is self-contained: analyst → implementer → reviewer.
-Tech-lead is **not** in the hot path for routine TMS cases — pulling
-tech-lead into every review defeats the pipeline's throughput. PM
-routes through tech-lead for three situations:
-
-1. **Greenfield framework bootstrap.** No existing test framework in
-   the repo. Tech-lead picks the scaffold per language (see
-   [references/framework-scaffold.md](references/framework-scaffold.md)),
-   defines the page-object and fixture conventions, and writes /
-   approves the initial `.agents/testing.md`. The implementer (Axel
-   or substitute) then executes that plan for the first case.
-2. **Framework-scale work.** New fixture infrastructure, new
-   page-object base class, CI pipeline changes, framework version
-   upgrades, new TMS adapter beyond the supported set — tech-lead
-   owns the decision. Route: PM → tech-lead (plan) → implementer
-   (execution) → reviewer slot + tech-lead (PR review, paired).
-3. **Mid-flow architectural escalation.** When analyst or implementer
-   explicitly returns `needs-tech-lead` — a gap surfaced that the
-   existing conventions don't cover (shared auth-state problem,
-   missing fixture primitive, cross-cutting page-object refactor).
-   PM pauses the case, pairs tech-lead with the escalator to resolve,
-   then resumes the flow from where it paused.
-
-If unsure whether a request is routine or framework-scale: check
-`.agents/testing.md`. If the framework is named and the AFS fits the
-existing page-object / fixture model, it's routine. If the AFS needs
-something `.agents/testing.md` doesn't describe, it's an escalation.
-
-**If `tech-lead` isn't installed**, PM uses the substitute named in
-`.agents/role-overrides.md` (scout's Step 6.9 output) — typically
-the language-matched dev (`python-dev` for a Python project,
-`js-dev` for TS/JS, etc., per the fallback table in
-`project-seeder` `references/role-overrides.md`). Axel's
-"return `needs-tech-lead` to PM" protocol still works: the return
-lands at PM, PM reads `role-overrides.md`, PM routes to the
-substitute. Axel doesn't need to know who the substitute is.
-
-### Status gating, restated
-
-PM must not forward a `blocked` / `defect-found` / `un-automatable`
-AFS downstream. The implementer will refuse and it's a wasted
-round-trip. Resolve or close upstream first.
-
-## The eight steps
+## The eight steps (IC view)
 
 ```
 1. Discover framework          (read what scout produced)
 2. Ingest case from TMS         (pluggable adapter)
 3. Execute manually             (analyst slot via `test-case-analysis`)
 4. Produce automation-ready spec (analyst emits AFS markdown)
-5. Implement automation         (implementer slot — project framework)
-6. Run & stabilize              (implementer — green or real defect)
+5. Implement automation         (implementer six-phase loop — see § Implementer below)
+6. Run & stabilize              (implementer — green or real defect; Run Report)
 7. Review                       (reviewer slot + code-review skill)
 8. Deliver & sync TMS           (task-completion + TMS adapter back-write)
 ```
 
-Steps 1–4 belong to the analyst slot. Steps 5–6 belong to the
-implementer slot. Step 7 is the reviewer slot. Step 8 is the
-handoff. PM resolves each slot to a concrete agent at routing time.
+Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](../test-case-analysis/SKILL.md)). Steps 5–6 belong to the implementer slot (driven by this skill — see § Implementer six-phase loop below). Step 7 is the reviewer slot (driven by [`code-review`](../code-review/SKILL.md)). Step 8 is the handoff.
+
+`test-automation-lead` resolves each slot to a concrete agent at dispatch time. ICs don't need to know the routing rules — they need to know how to execute their phase once dispatched.
 
 ### 1. Discover framework
 
-Before anything, read what the scout / project-seeder already produced:
+Before anything, read what scout / project-seeder produced:
 
 - `AGENTS.md` — tech stack, test commands
 - `.agents/testing.md` — test framework, commands, fixtures, CI
@@ -219,311 +44,307 @@ Before anything, read what the scout / project-seeder already produced:
 - `.agents/profile.md` — languages, default branch
 - `.agents/test-automation.yaml` — TMS config + framework hints (if present)
 
-**If none of these exist**, run [`project-seeder`](../project-seeder/) first.
-Do not try to automate into a codebase you have not mapped.
+**If none of these exist**, ask `test-automation-lead` to run scout first. Do not try to automate into a codebase you have not mapped.
 
-Detect the framework yourself if `testing.md` doesn't name it:
+Framework detection patterns (if `testing.md` doesn't name it):
 
 ```bash
-# Playwright
 test -f playwright.config.ts -o -f playwright.config.js && echo "playwright"
-# Cypress
 test -f cypress.config.ts -o -f cypress.config.js && echo "cypress"
-# Selenium / Java
 find . -name "pom.xml" -maxdepth 3 -exec grep -l "selenium\|playwright" {} \;
-# Pytest + Playwright-python
 grep -r "pytest-playwright\|playwright.sync_api" --include="*.txt" --include="*.toml" . 2>/dev/null | head
-# WebdriverIO
 test -f wdio.conf.ts -o -f wdio.conf.js && echo "wdio"
 ```
 
-**No framework yet?** Scaffold a minimal one aligned with the project's
-language (see [references/framework-scaffold.md](references/framework-scaffold.md)).
-Never import a foreign stack — if the project is Python, don't ship a
-Node-based framework.
+**No framework yet?** Return `needs-tal` (mid-flow escalation). TAL owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) § Framework Architecture. Once TAL hands back an approved plan, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
 
 ### 2. Ingest case from TMS
 
-TMS is pluggable along two axes — **adapter** (which TMS) and
-**transport** (HTTP or MCP). The active combination is declared in
-`.agents/test-automation.yaml` (see [references/tms-adapters.md](references/tms-adapters.md)).
+TMS is pluggable along two axes — **adapter** (which TMS) and **transport** (HTTP or MCP). The active combination is declared in `.agents/test-automation.yaml` (see [`references/tms-adapters.md`](references/tms-adapters.md)).
 
-Supported adapters out of the box: `zephyr-scale`, `testrail`, `xray`,
-`azure-test-plans`, `markdown` (plain files). Each adapter exposes the
-same verbs regardless of transport:
+Supported adapters out of the box: `zephyr-scale`, `testrail`, `xray`, `azure-test-plans`, `markdown` (plain files). Each adapter exposes the same verbs regardless of transport:
 
 ```
 fetch_case(id)       → returns { id, name, preconditions, steps, expected, cleanup, links }
 update_execution(id, status, evidence) → back-writes result
 ```
 
+**Full-field fetch is mandatory.** TMS adapters typically expose a "quick search" verb (returns minimal fields) and a "full fetch" verb (returns all custom fields including step + expected text). **Always use full fetch.** If your adapter has only quick-search and the step text comes back null, the case is unusable — stop and ask `test-automation-lead` how to get the full content (open the case in the browser and copy, if necessary). Never proceed on a partial case.
+
 **Transport choice:**
 
-- `transport: mcp` — preferred when the host already has a TMS MCP
-  server configured (Elitea, Atlassian Remote MCP, a vendor TestRail /
-  Xray MCP). The adapter calls `mcp__<server>__<tool>` instead of
-  issuing HTTP. Secrets live in the host's MCP config, never in the
-  project repo.
-- `transport: http` — the TMS's public API with credentials from env
-  vars. Works everywhere without host integration.
+- `transport: mcp` — preferred when the host has a TMS MCP server configured (Elitea, Atlassian Remote MCP, vendor TestRail / Xray MCP). The adapter calls `mcp__<server>__<tool>` instead of issuing HTTP. Secrets live in the host's MCP config.
+- `transport: http` — the TMS's public API with credentials from env vars. Works everywhere without host integration.
 
-If no adapter is configured, default to `markdown`: cases live in
-`test-specs/{feature}/l{priority}_{name}.md`.
+If no adapter is configured, default to `markdown`: cases live in `test-specs/{feature}/l{priority}_{name}.md`.
 
 **Never hardcode a TMS.** All TMS logic flows through the adapter.
 
-### 3. Execute manually (Sage via `test-case-analysis`)
+### 3. Execute manually (analyst slot)
 
-The [`qa-engineer`](../../agents/qa-engineer/) agent — persona **Sage** —
-runs the case step-by-step with the real application, using the
-[`test-case-analysis`](../test-case-analysis/) skill:
+The analyst — typically `qa-engineer` (Sage), occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](../test-case-analysis/) skill:
 
-- UI cases → [`playwright-testing`](../playwright-testing/) MCP tools,
-  preferring `browser_snapshot` for accessible-name discovery.
-- Fallback / deep inspection → [`browser-verify`](../browser-verify/)
-  (CDP — real input events, computed styles, storage).
+- UI cases → [`playwright-testing`](../playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
+- Fallback / deep inspection → [`browser-verify`](../browser-verify/) (CDP — real input events, computed styles, storage).
 - API cases → `curl` / project's HTTP client.
 
 For every step: screenshot, console, network. For every assertion: proof.
 
-**Output of this phase is truth, not code.** What actually happened, not
-what the case says should happen.
+**Output of this phase is truth, not code.** What actually happened, not what the case says should happen.
 
 ### 4. Produce automation-ready spec (AFS)
 
-Sage (running `test-case-analysis`) writes an **Automation-Friendly Spec** (AFS) — a markdown file
-in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and
-required sections live in [../test-case-analysis/references/spec-format.md](../test-case-analysis/references/spec-format.md).
-Key additions beyond a plain test case:
+The analyst writes an **Automation-Friendly Spec** (AFS) — a markdown file in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and required sections live in [`../test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md).
 
-- **Stable selectors** discovered during exploration (`data-testid` >
-  ARIA role > label > text > CSS — last resort)
-- **Test data inventory** — what already exists, what must be generated,
-  what must be cleaned up
-- **Defects found during exploration** — filed via the analyst
-  agent's bug-filing capability; the AFS lists them as known-failing
-  expectations
-- **Blocked steps** — steps Sage could not execute (access, environment,
-  missing data) — Axel must resolve or escalate
+**AFS quality bar — implementer-readable contract.** Every AFS must satisfy:
 
-If the case cannot be automated at all (e.g. physical card reader),
-Sage says so explicitly and stops. Don't write automation for
-un-automatable cases.
+- **User selection section** — explicitly names the env var keys (e.g. `${TEST_USER}` / `${TRIAL_USER}` for projects with multi-credential sets).
+- **Test data inventory** — three buckets: `reuse-existing` / `generate-per-test` / `generate-shared-with-cleanup`. Every datum classified.
+- **Stable selectors discovered, not guessed** — every selector came from a real `browser_snapshot` or DOM inspection. Unobserved selectors marked "to-verify in implementer Phase 2 (Explore)".
+- **Known Defects Found** — every defect filed with ticket ID + recommended handling (`expect.soft()` or natural-fail).
+- **Cleanup steps** — state mutations + reset between runs.
 
-### 5. Implement automation (automation engineer)
+An AFS missing any of these is `blocked`, not `ready-for-automation`. `test-automation-lead` enforces this gate before forwarding to the implementer.
 
-The [`test-automation-engineer`](../../agents/test-automation-engineer/)
-agent — persona **Axel** — reads the AFS and works through three
-**recommended** sub-phases (5a → 5b → 5c) before writing test code, then
-implements (5d).
+If the case cannot be automated at all (e.g. physical card reader), the analyst says so explicitly and stops. Don't write automation for un-automatable cases.
 
-Sub-phases 5a–5c are **soft guidelines**, not PR gates: PM doesn't
-reject a PR for missing them. They're how Axel avoids the most common
-quality failures (foreign conventions, duplicated helpers, broken
-shared infra, missed serial-mode dependencies). On simple, isolated
-cases Axel can fold them into a few quick checks; on cases touching
-shared infra, they should produce an explicit short design note that
-becomes part of the PR body.
+## Implementer six-phase loop
 
-#### 5a. Conventions sweep (recommended)
+**Absorb → Explore → Automate → Execute → Debug → Handoff.** Six phases. Each ends with a checkpoint. Skip nothing.
 
-Before writing, sweep the existing tests for the surface this AFS
-touches:
+### Phase 1 — Absorb
 
-- Read `.agents/testing.md` end to end. Note the run command, locator
-  ladder, serial policy, helpers organisation, steps-extraction style,
-  and test-data layout this project actually uses.
-- `ls` the test directory tree; confirm folder roles match `testing.md`.
-- Open **three neighbouring tests** in the same feature area or
-  touching the same page object. The conventions are in the muscle
-  memory of those files, not just the README.
-- `grep` for the helpers / fixtures / page objects the AFS will
-  exercise — re-use before create.
-- `grep` for repeated literals (URLs, selectors, strings) in the
-  surface you'll extend; a third repetition signals a helper.
+Read the AFS end-to-end. Re-read `.agents/testing.md`. Open three neighbouring tests in the same feature area. If AFS § Status is not `ready-for-automation`, refuse:
 
-Output (informally — a few bullets in the PR body, or a longer note for
-shared-infra cases): the file you'll add to, the helpers/fixtures/POs
-you'll reuse, what's NEW, the exact run command, serial vs parallel
-mode.
+- `blocked` → report up to TAL with the unblock requirement.
+- `defect-found` → confirm the defect ticket exists in the project EPIC AND the AFS specifies handling (`expect.soft()` for isolated, let-it-fail-naturally for blocking). If unclear, refuse.
+- `un-automatable` → reject; analyst should not have sent this.
 
-#### 5b. Test data strategy (recommended)
+### Phase 2 — Explore (skip if AFS selectors are confirmed against current DOM)
 
-For every datum the AFS lists in its test-data inventory, decide:
+If your Absorb pass surfaces a discrepancy between AFS selectors and the live DOM (UI changed since analyst pass, or AFS noted "to-verify" selectors), **explore before writing code**:
 
-| Class | When to use | Cleanup |
+1. Use the project's browser-driving capability (`playwright-cli` codegen, `playwright-testing` MCP, or `browser-verify` for computed styles).
+2. Diff observed selectors vs AFS-stated selectors.
+3. **Amend the AFS in-place** with a `docs(afs): amend selectors per implementer exploration` commit — do NOT silently drift from the AFS.
+4. If the gap is too wide (multiple steps obsolete, app flow changed), **return `needs-analyst-rerun` to TAL** — re-exploration is the analyst's job, not yours.
+
+Phase 2 has a budget: **30 minutes of exploration** before escalating to TAL.
+
+### Phase 3 — Automate
+
+Write the test. Follow the framework's conventions 1:1. Five rules (full detail in § Hard Rules below):
+
+1. Match the project's framework — read three neighbouring tests first.
+2. Extend existing page objects; never duplicate.
+3. Locator ladder: getByRole → testid → label → text → CSS (last resort).
+4. Env vars from `.env` via the project's existing loader. Never hardcode.
+5. No `waitForTimeout` / `sleep`. Use web-first assertions.
+
+Apply the **No Defect Masking Rule** (§ Hard Rules → 2 below). Forbidden: `test.fail()`, `xit()`, `@Ignore`, `pytest.skip()`, demoted expects, weakened assertions.
+
+### Phase 4 — Execute
+
+Run the single test locally with the exact CI command from `.agents/testing.md`. Capture the **Run Report** template (mandatory — see § Run Report below).
+
+If green: proceed to handoff.
+If red: enter Phase 5 — Debug.
+
+### Phase 5 — Debug
+
+Classify the failure honestly:
+
+| Class | Action |
+|---|---|
+| **Infrastructure** (selector mismatch, timing, env var, framework upgrade) | Fix the test or POM. Re-run. |
+| **Product-isolated** (one assertion fails for product reason, rest of flow works) | `expect.soft()` with `// Known defect: <TICKET>` comment. File the defect via `atlassian-content` / `issue-tracking` if not already filed. |
+| **Product-blocking** (downstream steps can't run) | **Let it fail naturally.** File the defect. Return task status `blocked` to TAL. Forbidden: `test.fail()`. |
+
+**Soft retry budget:** ≤ 3 reruns against the same root cause. After the 3rd, **stop and escalate to TAL** with the rerun count + root-cause notes per rerun. Fishing your way to green is a smell, not a strategy.
+
+Read failure artifacts: `test-results/`, `playwright-report/`, `allure-results/`, `error-context.md`. The framework usually pinpoints the exact mismatch.
+
+**When the artifacts aren't informative.** Three tiers of logging enhancement, three different authorities:
+
+| Tier | What to do | Authority |
 |---|---|---|
-| `reuse-existing` | A static fixture already exists and the test doesn't mutate it | None |
-| `generate-per-test` | The test needs a fresh unique record (preferred for write-heavy paths) | `afterEach` |
-| `generate-shared-with-cleanup` | Multiple tests share an expensive setup | `afterAll`, owned by the describe |
+| **In-test logging** — `test.step()` annotations, `console.log` for one-off noise, richer POM error messages | Add freely — local to the spec/POM, no config touched | Implementer's call |
+| **Additive reporter** — wire a SECONDARY reporter alongside the existing one (Playwright `reporter: [['html'], ['junit'], ['list']]`, pytest `-v` plugin, Cypress `mocha-multi-reporters`, custom log file utility) | Implementer adds in the PR; **PR description flags the addition explicitly** so TAL reviews specifically for: existing reporter output unchanged, CI/TMS consumers still work, no significant runtime/disk cost | Implementer adds, TAL reviews — never silent |
+| **Reporter replacement / removal** — swap `['junit']` for `['allure']`, change output schema, drop an existing reporter | Return `needs-tal` to TAL. Framework-scale decision; the existing reporter is almost certainly feeding TMS back-write or CI dashboards | TAL only |
 
-**Scan the test-data directory first** (path lives in `.agents/testing.md`).
-Reuse before creating. If creating, match the existing factory /
-fixture pattern — don't introduce a new mechanism.
+**Hard rule: never remove or replace an existing reporter mid-PR.** The reporter contract is downstream-facing. Additive is reversible (one line removed and you're back to baseline); replacement breaks integrations silently. If the existing reporter is "wrong format" or "noisy," that's a `needs-tal` escalation.
 
-When the AFS data inventory declares **shared state** across steps or
-tests in the file, set serial mode (`test.describe.configure({ mode:
-'serial' })` or the framework equivalent). Parallel execution on
-shared state is a flake source, not a feature.
+**Recommended pattern: parallel verbose reporter.** Add a stdout-only reporter alongside the existing file reporter:
 
-#### 5c. Impacted-surface check (recommended)
+```ts
+// playwright.config.ts — example
+reporter: [
+  ['html', { open: 'never' }],   // existing — keep verbatim
+  ['junit', { outputFile: 'test-results/junit.xml' }],  // existing — keep verbatim
+  ['list'],  // ADDED — stdout only, no file
+],
+```
 
-If your design from 5a touches a shared helper, page object, fixture,
-or environment file:
+The existing reporter's output file (`junit.xml` above) is unchanged, so anything parsing it (TMS adapter, CI pipeline, dashboard) keeps working. The stdout `['list']` gives the implementer richer console output during debug runs.
 
-- `grep` (by symbol or path) for everything that depends on it
-- List the dependents in the design note
-- Plan to rerun the dependent slice as part of Phase 6 — scope by
-  symbol/file, not full-suite
+### Phase 6 — Handoff
 
-If you're only adding to an isolated test file with no shared edits,
-mark "no shared edits — isolated test" and skip the rerun.
+Five-step task-completion protocol (see [`task-completion`](../task-completion/) skill):
 
-If your design **needs** something the project doesn't have yet (a new
-page-object base, a new fixture primitive, a CI-config change, a TMS
-adapter beyond the supported set), return `needs-tech-lead` to PM.
-Don't invent shared infra mid-PR.
+1. **Verify locally** — single test green, lint clean, diff reviewed.
+2. **Commit on a feature branch** — match the convention from `.agents/workflow.md` (typically `tests/<TMS-ID>-<slug>` or `automation/<case-id>-<slug>`).
+3. **Push & open PR** via the project's PR tool — `gh pr create` (GitHub), `glab mr create` (GitLab), `az repos pr create` (Azure DevOps). Target branch per `.agents/profile.md` § Automation PR policy.
+4. **Comment on the originating story/issue** with the PR link via `issue-tracking` (tracker-aware; reads `.agents/profile.md` § Issue tracker).
+5. **Back-write the TMS execution** via the configured adapter.
 
-#### 5d. Implementation
+Return the **Run Report** to TAL as your final message.
 
-Now write the test:
+---
 
-1. Match the framework conventions 1:1. Page Object Model only on the
-   upgraded scaffold path (see `references/framework-scaffold.md`) or
-   when the existing project already uses it. On flat / primitive-heavy
-   projects, use the framework's own primitives directly.
-2. Extend existing page objects / helpers / fixtures; don't duplicate.
-3. Use the locator ladder (see `references/framework-scaffold.md` —
-   `getByRole` first, then testid, then label/text, CSS last). Stop+flag
-   if the app has no test IDs and roles/labels aren't sufficient.
-4. Use environment variables from the project's existing loader — never
-   hardcode URLs, creds, test data. Before adding a new env key,
-   `grep` the existing `.env*` files; reuse over duplicate.
-5. Apply a TDD mindset: run-fail-fix-run until green, never demote
-   assertions.
+## Run Report — mandatory template
 
-**Helpers are trusted.** When the test fails and the helper has worked
-elsewhere, suspect the test first. Don't mutate shared code to fix an
-isolated symptom — that's how the regression-impact problem starts.
+End every implementer / runner session with this exact structure (no prose summary — TAL scans the structured block):
 
-**No Defect Masking Rule:**
+```markdown
+## Run Report — {TEST_TAG}
+- **Verdict:** GREEN | RED | BLOCKED
+- **Duration:** {n}s
+- **Steps passed:** (list each AFS step that ran clean, by name)
+- **Failed step:** {step name} — POM method {Page.method()} — {file:line}
+- **Failure type:** infrastructure | product-isolated | product-blocking
+- **Locator that failed:** `{selector}` — timeout {n}ms
+- **Console errors:** (paste, or "none")
+- **Network failures:** (4xx/5xx requests, or "none")
+- **Artifacts:** `test-results/...`, `playwright-report/...`
+- **Reruns:** {n} (root cause of each — infrastructure / product / flake)
+- **Final run duration baseline:** {n}s (TAL uses this for future regression checks)
+- **Recommendation:** route to (analyst rerun / implementer fix / TAL merge / file bug {PROJECT-NNNN})
+```
+
+Missing fields are unacceptable — every field has a defensible "none" or "n/a" value if not applicable.
+
+---
+
+## Hard Rules — implementer
+
+### 1. Match the project's framework, don't import your own
+
+- Read `.agents/testing.md` first. Whatever framework it names, that's your framework.
+- If nothing is documented, detect it (see § Discover framework above). First hit wins.
+- No framework at all? Return `needs-tal` — framework bootstrap is TAL's call.
+
+### 2. No Defect Masking
 
 | Failure type | Permitted action |
 |---|---|
-| Infrastructure (bad selector, timing, env) | Fix selector/wait/env. Re-run. |
+| Infrastructure (bad selector, timing, env) | Fix selector / wait / env. Re-run. |
 | Product defect, isolated step | `expect.soft()` (or framework equivalent) with `// Known defect: <id>` comment. Rest of test runs. |
-| Product defect, blocks execution | Let it fail naturally. Open a ticket via your agent's bug-filing capability (per profile.md § Bug filing). Do NOT run a dev-side fix lifecycle from inside the test run. Do NOT `test.fail()`. |
+| Product defect, blocks execution | Let the test fail naturally. File a bug via `issue-tracking` / `atlassian-content` (tracker-aware). Do NOT invoke `bugfix-workflow` end-to-end — that's a dev skill. Do NOT `test.fail()`, `xit()`, `@Ignore`, or `pytest.skip()`. |
 
-Forbidden — regardless of any scope argument:
+**Forbidden — regardless of any scope or schedule argument:**
 
-- Removing an assertion to turn green
-- Demoting `expect()` to `console.warn`
-- Swapping the failing assertion for a weaker one
+- Removing an assertion that fails to turn green
+- Demoting `expect()` to `console.warn` / `log.info`
+- Swapping a failing assertion for a weaker one (e.g. `toHaveAttribute` → `toBeVisible`)
 - Using `page.evaluate()` to bypass a CSS/DOM check the AC requires
-- Using `test.fail()` / `xit()` / `@Ignore` to hide a real product bug
+- Using `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` to hide a real product bug
+- Re-scoping: "this assertion belongs to a different test so I'll delete it from this one" — if the AFS says assert it, assert it
 
-### 6. Run & stabilize
+> **TAL-side gate.** TAL also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on TAL, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to TAL with the violation noted.
 
-The test runs reliably (pass or fails for a *real* product reason). Run
-it locally with the exact command from `.agents/testing.md` § Run
-commands (single test), then the CI variant. Local-green and CI-green
-can differ (headless vs headed, viewport, retry); reconcile both
-before declaring done.
+**A red test exposing a real product bug is a correct test.** Your job is to keep it honest, not to keep it green.
 
-Flaky tests are not done — identify the source (network, timing,
-data) and fix it. Mark `@flaky` only if the project already has that
-tagging convention.
+### 3. Respect the page object layer
 
-#### 6a. Soft retry budget (recommended)
+- Extend existing page objects. Don't duplicate. Don't introduce a second `LoginPage` next to the existing one.
+- If a page object doesn't exist for the surface you're testing, create it — in the exact style the existing ones use.
+- Centralize selectors in the page object. A `data-testid` should appear in exactly one file.
+- Semantic method names (`login()`, `applyPromoCode()`), not `clickButton3()`.
 
-If you're re-running the same test more than ~3 times against the same
-root cause, **stop and escalate** to PM rather than keep adjusting.
-"Retry until green" is fishing, not debugging.
+### 4. Environment variables, never hardcoded values
 
-Capture in the PR body:
+URLs, credentials, IDs, feature flags — all through the project's existing env loader (`process.env`, `os.environ`, `System.getenv`, whatever the project uses). If a value the AFS expects isn't wired yet, add it to `.env.example` and wire it through the same pattern the project already uses.
 
-- How many reruns it took to get a stable signal
-- The root cause of any flakes you fixed along the way
-- Total run duration of the final green run (becomes a baseline for
-  future regressions — if a future rerun exceeds ~2× this, it's a
-  smell worth investigating)
+### 5. No sleeps
 
-This is not a hard gate; it's a paper trail. PM uses the rerun count
-and root-cause notes as a signal when reviewing.
+Use framework-native waits — `waitForResponse`, `waitForURL`, `wait_for_selector`, auto-waiting assertions. A raw `sleep(2000)` is almost always wrong. The one exception: a proven animation window that a condition wait can't catch. Comment it with the reason.
 
-#### 6b. Regression rerun (when 5c flagged dependents)
+If you think you need a sleep to make a test stable, **escalate to TAL** with the reasoning before adding it.
 
-If Phase 5c listed dependent tests (because you edited a shared helper,
-page object, fixture, or env file), rerun that scoped slice as part of
-Phase 6. Use grep on the symbol or path to find them; don't run the
-full suite unless the dependents really are the full suite. Block the
-PR if any dependent test fails — fix the dependency, not the test
-you just wrote.
+### 6. Locator ladder
 
-### 7. Review
+Pick selectors in this order, walking down only when the previous tier genuinely can't disambiguate:
 
-Two reviewers in parallel:
+1. `getByRole(role, { name })` with the accessible name
+2. `getByTestId(...)` / `data-testid`
+3. `getByLabel(...)` / `getByPlaceholder(...)`
+4. `getByText(...)`
+5. CSS / XPath — last resort, with a one-line comment explaining why the higher tiers didn't fit
 
-- **[`qa-engineer`](../../agents/qa-engineer/)** (Sage) — does the test
-  actually prove the AC? Is the assertion strong enough? Would a
-  refactor survive? Is the sad path covered?
-- **[`code-review`](../code-review/)** skill — code quality, fixture
-  discipline, selector stability, naming, dead code.
-NOTE: Reviewer must be explicitely informed that it reviews someone else's work, not its own. Otherwise it will be biased and less effective. See `code-review` skill for review prompt details.
-Reviewer comments feed back to Axel. Re-run after changes.
+**Stop+flag** if the target element has no test ID **and** roles / labels can't disambiguate it. Surface the gap to TAL, who routes it to the dev to add a test ID or accessibility attribute.
 
-### 8. Deliver & sync TMS
+### 7. Reuse before create
 
-Follow [`task-completion`](../task-completion/) — commit on a feature
-branch, push, `gh pr create`, comment on the originating issue. Then use
-the TMS adapter to back-write the execution result (`update_execution`)
-so the TMS dashboard reflects reality.
+- Helpers, fixtures, page objects, env keys, test data: `grep` for what exists before adding anything new.
+- A third repetition of the same literal is the threshold for extracting a helper.
+- Suite-local helpers stay in the spec file; cross-suite helpers belong in the project's helpers folder.
+- Before adding an env var to `.env.example` or any config file, `grep` for an existing key serving the same purpose.
+
+### 8. Helpers are trusted
+
+When a test fails and the helper has worked for other tests, suspect the test first, the helper second. Don't mutate shared code to fix an isolated symptom.
+
+### 9. Data-dependency → serial mode
+
+If the AFS test-data inventory declares shared state across steps or tests in the file, set serial mode (`test.describe.configure({ mode: 'serial' })` or the framework equivalent). Parallel execution on shared state is a flake source, not a feature.
+
+---
+
+## Reviewer slot
+
+Two reviewers in parallel (TAL dispatches both):
+
+- **`qa-engineer` (Sage) — fresh session** with the `code-review` skill loaded. Reviewer must be explicitly informed they did NOT write the code, to keep the review adversarial. See `code-review` skill for the review prompt template.
+- **Optional `tech-lead` (Rio)** for framework-scale changes only — not for routine test PRs.
+
+Reviewer checks:
+- Assertion strength (no demoted expects, no missing toBeEnabled guards)
+- Selector stability (locator ladder per testing.md)
+- Defect masking (no test.fail, no xit, no weakened assertions)
+- POM discipline (no raw selectors in spec files)
+- Naming + dead code
+- AFS amendments — any selector drift between AFS and implementation must be reflected in an AFS docs commit
+
+Verdict: `APPROVED` | `CHANGES_REQUESTED` with file:line findings. Findings go back to implementer; TAL decides ship-vs-amend.
+
+---
 
 ## Batching multiple cases
 
-When the user drops a bag of cases ("automate all of SPRINT-42's regression
-suite"):
+When TAL hands you N AFS files (rare — usually one at a time):
 
-- **Analysis phase** parallelizes well. Spawn one Sage sub-agent per
-  case (each runs the `test-case-analysis` skill in its own session)
-  — each gets its own browser context and its own AFS output file.
-  Collect results, verify files on disk, recreate any that didn't persist.
-- **Automation phase** can also parallelize, *but* guard the page-object
-  layer — two agents racing to edit `login.page.ts` will collide. Serialize
-  any case that touches the same page object.
-- **Review phase** — batch is fine; one reviewer pass per PR, not per case.
+- Cases touching the same page object → **serial**. Two agents editing `checkout.page.ts` will collide.
+- Cases on independent surfaces → can be parallelized by TAL via host subagent dispatch.
 
-See [references/commands.md](references/commands.md) for concrete
-`runSubagent` / `Agent` / `Task` recipes by host.
+All dispatches share the parent's working tree; the same-surface-serial rule is the only collision guard. See [`references/commands.md`](references/commands.md) for concrete recipes.
+
+---
 
 ## Anti-patterns
 
-- **Automating an unexecuted case.** You don't know what the app does
-  until you've driven it. Don't skip step 3.
-- **Copying framework conventions from a different project.** Read
-  `.agents/testing.md` and the existing `tests/` directory. Match
-  what's there.
-- **Hardcoding the TMS.** Everything goes through the adapter. If the
-  project migrates from Zephyr to TestRail, you swap one config line,
-  not the workflow.
-- **Masking a product defect with `test.fail()`, `xit`, or `@Ignore`.**
-  A red test is the correct signal. File the bug, don't hide it.
-- **One-shot mega-agent.** Context fragmentation is a feature, not a
-  bug. Respect the three-role split.
-- **"I wrote the code and it compiles."** Not done. Not until the test
-  ran green (or red for a real product reason), evidence captured, PR
-  open, TMS updated.
+- **Automating an unexecuted case.** You don't know what the app does until you've driven it. Don't skip step 3.
+- **Copying framework conventions from a different project.** Read `.agents/testing.md` and the existing `tests/` directory. Match what's there.
+- **Hardcoding the TMS.** Everything goes through the adapter.
+- **Masking a product defect with `test.fail()`, `xit`, `@Ignore`, or weakened assertions.** A red test is the correct signal. File the bug, don't hide it.
+- **One-shot mega-agent.** Context fragmentation is a feature, not a bug. Respect the slot split.
+- **Bypassing TAL on routing decisions.** TAL is the orchestrator; ICs execute their phase and return status. Don't decide who runs next yourself.
+- **"I wrote the code and it compiles."** Not done. Not until the test ran green (or red for a real product reason), evidence captured, PR open, TMS updated.
 
 ## References
 
-- [../test-case-analysis/references/spec-format.md](../test-case-analysis/references/spec-format.md) — Automation-Friendly
-  Spec (AFS) structure, required sections, examples.
-- [references/tms-adapters.md](references/tms-adapters.md) — adapter contract,
-  supported TMSes (Zephyr Scale / TestRail / Xray / Azure Test Plans /
-  markdown), `.agents/test-automation.yaml` schema.
-- [references/commands.md](references/commands.md) — concrete recipes:
-  framework detection, sub-agent spawning per host (Claude / taskbox /
-  Copilot), TMS CLI examples, the AFS template in copy-pasteable form.
-- [references/framework-scaffold.md](references/framework-scaffold.md) —
-  minimal scaffolds for projects that don't yet have a framework,
-  per language (JS/TS, Python, Java, C#).
+- [`../test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md) — AFS structure, required sections, examples.
+- [`references/tms-adapters.md`](references/tms-adapters.md) — adapter contract, supported TMSes, `.agents/test-automation.yaml` schema.
+- [`references/commands.md`](references/commands.md) — framework detection, sub-agent spawning per host, TMS CLI examples, AFS template.
+- [`references/framework-scaffold.md`](references/framework-scaffold.md) — minimal scaffolds for projects without a framework, per language.
+- [`references/browser-tools.md`](references/browser-tools.md) — browser-tool triage for analyst execution.
+- [`../../agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.

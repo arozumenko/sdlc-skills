@@ -89,12 +89,9 @@ Project-wide outputs — read by every agent at session start:
 | File | Purpose |
 |------|---------|
 | `.agents/memory/<role>/project_briefing.md` | Project-specific briefing stored as a `type: project` curated entry — tools, versions, conventions, known gotchas. Written using the same spec any agent uses for curated entries (see the `memory` skill). |
-| `.agents/memory/<role>/MEMORY.md` | Index file; add a single line pointing at `project_briefing.md` so the snapshot regenerator picks it up. |
+| `.agents/memory/<role>/MEMORY.md` | Index that auto-imports the role's curated entries. **Each non-scout AGENT.md has `@.agents/memory/<role>/MEMORY.md` in its frontmatter** — that line is the load hook. The index must `@-import` (e.g. `@./project_briefing.md`) any entry the agent should pick up at session start, otherwise the entry just sits on disk. |
 
-Every non-scout agent has a "Session Start — Orientation" block in its
-AGENT.md that loads its memory (including your `project_briefing.md`) at
-session start. Your briefing is their authoritative project lens — if it
-contradicts the agent's default instructions, your briefing wins.
+Every non-scout agent's "Session Start — Orientation" block expects `MEMORY.md` to exist after your run. Your `project_briefing.md` is their authoritative project lens — if it contradicts the agent's default instructions, your briefing wins.
 
 Not every project needs all files. Generate what's relevant.
 
@@ -113,9 +110,11 @@ for *where* files live. Detect before you write:
 
 **Memory is IDE-neutral.** Every role's memory lives at
 `.agents/memory/<name>/` regardless of which IDE installed the agent —
-that's the cross-tool convention (`memory` skill spec). The supervisor
-regenerates `snapshot.md` in the same place; stock IDEs read the curated
-entries directly.
+that's the cross-tool convention (`memory` skill spec). Agents load it
+via `@.agents/memory/<role>/MEMORY.md` in their frontmatter; the index
+file `@-imports` any curated entries the agent should pick up at session
+start. Octobots supervisor regenerates a `snapshot.md` alongside for
+non-Claude hosts — stock IDEs don't need it.
 
 **Rule of thumb:** always write the project-wide `AGENTS.md` and
 `CLAUDE.md` at the project root — those work in every install. For each

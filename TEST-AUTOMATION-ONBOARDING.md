@@ -15,22 +15,27 @@ follow the links as you go.
 ## The pipeline, one picture
 
 ```
-TMS case → analyst slot → AFS → implementer slot → green test → reviewer slot → PM merges
+User → test-automation-lead (Tal) → analyst slot → AFS → implementer slot → reviewer slot → TAL merges
 ```
 
 Role defaults:
 
 | Slot | Agent | Skill |
 |---|---|---|
+| Orchestrator | `test-automation-lead` (Tal) | `test-automation-workflow` (routing lives in TAL's AGENT.md) |
 | Analyst | `qa-engineer` (Sage) | `test-case-analysis` |
-| Implementer | `test-automation-engineer` (Axel) | `test-automation-workflow` |
+| Implementer | `test-automation-engineer` (Axel) | `test-automation-workflow` (IC-facing six-phase loop) |
 | Reviewer | `qa-engineer` (fresh session) | `code-review` |
 
-PM (Max) owns routing and the merge gate. Tech-lead (Rio) is
-**not** in the hot path — PM pulls them in for framework bootstrap,
-framework-scale work, or mid-flow architectural escalation. Full
-routing rules:
-[`skills/test-automation-workflow/SKILL.md` § Routing](skills/test-automation-workflow/SKILL.md).
+`test-automation-lead` (Tal) is a **top-level orchestrator launched directly
+by the user** — not a subagent of `project-manager`. Tal owns slot routing,
+AFS gating, automation merge, and test-framework architecture
+(greenfield bootstrap, framework-scale work, mid-flow escalations).
+Tech-lead (Rio) is no longer in the test-automation path. PM (Max)
+remains the orchestrator for feature-development work; on hybrid
+projects, PM and TAL coexist as peers, and PM points TA traffic at Tal
+via a user-readable prompt (not a subagent dispatch). Full routing
+rules: [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -65,10 +70,20 @@ and ideally TMS MCP tools. If any of these are missing, see the
 ```bash
 cd /path/to/your-automation-repo
 
+# Quick-start — test-automation roster (Tal-led pipeline)
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
-  --agents scout,project-manager,tech-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
+  --agents scout,test-automation-lead,qa-engineer,test-automation-engineer \
+  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, writing-skills \
+  --mode standalone
+  --yes
+
+# Hybrid project (feature dev + test automation) — add PM, tech-lead, devs as needed
+npx github:arozumenko/sdlc-skills init \
+  --target copilot \
+  --agents scout,project-manager,test-automation-lead,tech-lead,ba,qa-engineer,test-automation-engineer \
+  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature , systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, writing-skills \
+  --mode standalone
   --yes
 ```
 
@@ -150,15 +165,15 @@ tms:
   cases_dir: test-specs
 ```
 
-### 4. Smoke-test PM dispatch (30 seconds)
+### 4. Smoke-test TAL dispatch (30 seconds)
 
-Before running a real case, prove that PM actually **dispatches** a
-subagent on this host — not just narrates what it would do. PM (Max,
-Sonnet) occasionally drifts to "I'll route this to qa-engineer to do X"
-without emitting the host-specific dispatch call. Catching that here is
-much cheaper than catching it mid-pilot.
+Before running a real case, prove that `test-automation-lead` actually
+**dispatches** a subagent on this host — not just narrates what it would
+do. Sonnet-tier orchestrators occasionally drift to "I'll route this to
+qa-engineer to do X" without emitting the host-specific dispatch call.
+Catching that here is much cheaper than catching it mid-pilot.
 
-Launch PM and hand it this no-op routing prompt:
+Launch `test-automation-lead` and hand it this no-op routing prompt:
 
 > Smoke-test the routing wiring. Dispatch a one-line task to
 > qa-engineer asking it to read the first two lines of
@@ -168,7 +183,7 @@ Launch PM and hand it this no-op routing prompt:
 
 **Pass criteria:**
 
-- PM's reply contains an actual subagent **tool call** matching the
+- TAL's reply contains an actual subagent **tool call** matching the
   host declared in `.agents/team-comms.md` — a Claude `Agent(...)`
   tool call, a Copilot `runSubagent(...)` tool call, or a taskbox
   `relay.py send` invocation.
@@ -177,19 +192,19 @@ Launch PM and hand it this no-op routing prompt:
 
 **Fail signals:**
 
-- PM says "I've routed this to qa-engineer" but no tool call appears
+- TAL says "I've routed this to qa-engineer" but no tool call appears
   in the same reply — the subagent never spawned (narration without
   dispatch).
-- PM emits the wrong host syntax — Claude `Agent(...)` under Copilot,
+- TAL emits the wrong host syntax — Claude `Agent(...)` under Copilot,
   or `runSubagent(...)` under Claude. The call lands in the wrong
   dispatcher and nothing runs.
-- PM emits prose like "Use the `qa-engineer` agent to …" under
+- TAL emits prose like "Use the `qa-engineer` agent to …" under
   *any* host. That's text, not a dispatch call — both Claude and
   Copilot require an actual tool call.
 
 If the smoke fails, the dispatch wiring is broken on this host. See
-[`agents/project-manager/AGENT.md` § How you dispatch a subagent
-(host preflight)](agents/project-manager/AGENT.md) and re-read
+[`agents/test-automation-lead/AGENT.md` § How you dispatch a subagent
+(host preflight)](agents/test-automation-lead/AGENT.md) and re-read
 `.agents/team-comms.md` for the per-host invocation pattern. Re-run
 the smoke until it passes before continuing.
 
@@ -199,8 +214,11 @@ Pick a case you already know passes manually. Keep it small — login,
 a navigation, a simple form. The point is to prove the pipeline, not
 the app.
 
-The full slot-by-slot flow lives in
-[`skills/test-automation-workflow/SKILL.md` § Routing](skills/test-automation-workflow/SKILL.md).
+The full slot-by-slot routing flow lives in TAL —
+[`agents/test-automation-lead/AGENT.md` § The pipeline](agents/test-automation-lead/AGENT.md).
+The IC-facing process for each slot (analyst six-phase loop, implementer
+six-phase loop, AFS rules, no-defect-masking, run-report template) is in
+[`skills/test-automation-workflow/SKILL.md`](skills/test-automation-workflow/SKILL.md).
 Shape:
 
 1. **Analyst (qa-engineer + `test-case-analysis`)** executes the
@@ -214,14 +232,14 @@ Shape:
 4. **Reviewer (qa-engineer, fresh session, + `code-review` skill)**
    checks assertions, selectors, defect-masking, cleanup. Reports
    with file:line refs.
-5. **PM merges** per `.agents/profile.md` § Automation PR policy
+5. **TAL merges** per `.agents/profile.md` § Automation PR policy
    (`auto-merge` / `human-approved` / `manual`).
 
 ### 6. Scale up
 
 Once one case works end-to-end, batch is safe. Parallelism and
 serialization rules (page-object collisions, independent-surface
-parallelism, reviewer batching): skill § Routing → *Batching* and
+parallelism, reviewer batching): [`agents/test-automation-lead/AGENT.md` § Batching](agents/test-automation-lead/AGENT.md) and
 [`skills/test-automation-workflow/references/commands.md`](skills/test-automation-workflow/references/commands.md)
 for host-specific sub-agent spawning recipes.
 
@@ -230,42 +248,42 @@ for host-specific sub-agent spawning recipes.
 ## Greenfield
 
 You have no existing test framework. sdlc-skills doesn't bootstrap
-one unilaterally — that's an architectural decision. Tech-lead (Rio)
-owns it.
+one unilaterally — that's an architectural decision. **`test-automation-lead`
+(Tal) owns it.**
 
-1. **Install** with the same command as above — include `tech-lead`
-   in `--agents`.
+1. **Install** with the test-automation roster — make sure
+   `test-automation-lead` is included.
 2. **Seed via scout** with `TMS: markdown` and `Automation PR base:
    main` (adjust later). Skip framework-specific fields; scout writes
    a stub `.agents/testing.md` with a note that the framework isn't
    picked yet.
-3. **Launch tech-lead** with the `test-automation-workflow` skill:
+3. **Launch `test-automation-lead`** with the `test-automation-workflow`
+   skill (it's already in TAL's frontmatter — preloaded). Hand it:
 
    > Bootstrap a test-automation scaffold for this empty repo. Pick
    > the framework per the project's primary language per
    > [`skills/test-automation-workflow/references/framework-scaffold.md`](skills/test-automation-workflow/references/framework-scaffold.md).
    > Define page-object style, fixture pattern, naming, run command,
    > and CI command. Write the chosen conventions into
-   > `.agents/testing.md`. Hand back the scaffold plan; do not write
-   > test code yourself — that's the implementer's job.
+   > `.agents/testing.md`. Then dispatch `test-automation-engineer` to
+   > create the initial config files + one smoke test proving the
+   > scaffold works.
 
-4. **Launch test-automation-engineer** with tech-lead's plan. Axel
-   creates the initial config files + one smoke test proving the
-   scaffold works.
+4. **TAL dispatches `test-automation-engineer`** (Axel) with the scaffold
+   plan. Axel creates the initial config files + one smoke test.
 5. **From here, follow the existing-project flow** — Step 4 (smoke-test
-   PM dispatch) and then Step 5 (pilot one case) above — with the
+   TAL dispatch) and then Step 5 (pilot one case) above — with the
    first real case (or markdown case).
 
-**Expect the first 2–3 cases to look thin on Phase 2a.** Axel's
-"conventions sweep" sub-phase normally reads neighbouring tests for
-existing patterns — on a fresh scaffold there are none yet, so the
-sweep will produce a short note ("no neighbours; following the
-scaffold tech-lead just laid down"). That's fine. The sweep gets
-real once 3–4 cases have shipped and a body of convention exists to
-mirror.
+**Expect the first 2–3 cases to look thin on Phase 3 (Automate).** Axel's
+"conventions sweep" normally reads neighbouring tests for existing
+patterns — on a fresh scaffold there are none yet, so the sweep will
+produce a short note ("no neighbours; following the scaffold TAL just
+laid down"). That's fine. The sweep gets real once 3–4 cases have
+shipped and a body of convention exists to mirror.
 
-Tech-lead's full escalation contract lives in
-[`agents/tech-lead/AGENT.md` § Test-Automation Escalations](agents/tech-lead/AGENT.md).
+TAL's full framework-architecture contract lives in
+[`agents/test-automation-lead/AGENT.md` § Framework Architecture](agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -297,7 +315,59 @@ Tech-lead's full escalation contract lives in
 
 ## Maintenance
 
-Updating sdlc-skills once you've installed it: [MAINTENANCE.md](MAINTENANCE.md).
+General update / sync notes live in [MAINTENANCE.md](MAINTENANCE.md). Two
+flows specific to the test-automation roster matter often enough to put
+inline:
+
+### Re-strip after `npx ... init --update`
+
+The installer copies fresh source agent files into your project on every
+update. The source carries both `OCTOBOTS-ONLY` and `STANDALONE-ONLY`
+marker-bracketed regions — scout strips the inactive set on first seed,
+but **a subsequent `--update` re-introduces them** (the installer doesn't
+re-strip).
+
+To restore the stripped state, run the standalone strip subcommand:
+
+```bash
+# Reads .agents/profile.md § Deployment mode and re-strips. No flags needed.
+npx github:arozumenko/sdlc-skills init strip
+
+# Or override the mode explicitly:
+npx github:arozumenko/sdlc-skills init strip --mode standalone
+
+# Preview without writing:
+npx github:arozumenko/sdlc-skills init strip --dry-run
+```
+
+Mode resolution: `--mode` flag → `.agents/profile.md § Deployment mode`
+→ default `octobots`. The default is `octobots` because the Octobots
+supervisor's `install.sh` delegates to this installer — a no-flag call
+from there does the right thing for that path. Standalone projects pick
+up `standalone` automatically from `profile.md` after scout's first seed,
+so the same `init strip` command works for both modes.
+
+Strip is idempotent: files already clean in the target mode are reported
+as such and not rewritten. Block + inline marker pairs are both handled.
+Underlying procedure is the same one scout runs at
+[`skills/project-seeder/references/deployment-modes.md`](skills/project-seeder/references/deployment-modes.md)
+§ Strip procedure — this subcommand just exposes it directly so you
+don't have to launch scout for a one-line maintenance task.
+
+### Adding `test-automation-lead` to an existing install
+
+If you onboarded before TAL existed (or you originally installed only PM
+and now want the TA pipeline), pull just TAL and its skills:
+
+```bash
+npx github:arozumenko/sdlc-skills init --update \
+  --agents test-automation-lead \
+  --skills test-automation-workflow,test-case-analysis,code-review,task-completion,issue-tracking,atlassian-content
+```
+
+Then re-run scout as above so the new agent file gets stripped per your
+deployment mode and so scout's frontmatter audit (project-seeder Step
+6.97) verifies the @-import wiring for the new role.
 
 ---
 

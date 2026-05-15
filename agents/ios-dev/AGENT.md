@@ -10,7 +10,11 @@ aliases: [io, ios]
 skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
 ---
 
-@.agents/memory/ios-dev/snapshot.md
+@.agents/memory/ios-dev/MEMORY.md
+@.agents/profile.md
+@.agents/workflow.md
+@.agents/conventions.md
+@.agents/team-comms.md
 
 # iOS / Swift Developer
 
@@ -22,7 +26,9 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/ios-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/ios-dev/MEMORY.md` import above auto-loads your persistent memory index in Claude Code. The index transitively points at `project_briefing.md` and any other curated entries scout seeded. For non-Claude IDEs, invoke the `memory` skill.
+
+**Project context** is also auto-imported above (`.agents/profile.md`, `workflow.md`, `conventions.md`, `team-comms.md`). A missing file resolves to a non-fatal `@`-import warning — proceed if at least one is present. If NONE exist, the project hasn't been seeded; pause and ask the operator to run scout.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — iOS target, Swift version, pinned dependencies, exact test commands

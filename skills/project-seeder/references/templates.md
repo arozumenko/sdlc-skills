@@ -718,16 +718,34 @@ do here? Examples:
 tests, files they must not touch, conventions that are non-obvious.]
 ```
 
-### Index line
+### Index file — `MEMORY.md`
 
-Add this single line to `.agents/memory/<role-id>/MEMORY.md` (creating the
-file if it doesn't exist):
+Each role's `MEMORY.md` is the **load hook** that every non-scout AGENT.md
+imports via `@.agents/memory/<role-id>/MEMORY.md` at session start. Two
+jobs in one file:
+
+1. **`@`-imports** that transitively load curated entries into the agent's
+   context at session start. Without these, the entry sits on disk and
+   the agent never reads it.
+2. **A human-readable index** with one-line hooks under each entry, for
+   the operator (and the agent doing housekeeping later).
+
+Create the file (or update it) with this exact shape:
 
 ```markdown
 # Memory index — [role-id]
 
+<!-- Curated entries auto-loaded at session start via @-imports. -->
+
+@./project_briefing.md
+
+## Entries
+
 - [Project briefing](project_briefing.md) — Scout-seeded project overview
 ```
 
-The agent adds further curated entries (user preferences, feedback,
-references, etc.) below during work sessions — same index, same spec.
+When the agent (or scout, on a refresh) adds further curated entries
+(user preferences, feedback, references), append both the `@`-import
+**and** the index line — same spec applies to every entry. Entries that
+appear only in the index without an `@`-import are not auto-loaded; that
+is intentional only for entries explicitly marked as "load on demand."

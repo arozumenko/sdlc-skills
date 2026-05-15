@@ -75,6 +75,11 @@ verification-grade browser tooling your agent has — different from
 the standard MCP and intended for ground-truth checks the snapshot
 API can't answer.
 
+When the agent has multiple browser-driving tools available (MCP, CLI,
+CDP), switching mid-case is fine if the first isn't producing useful
+evidence — note which tool produced which observation in the AFS so
+the next reader can follow.
+
 For each step:
 
 1. Perform the real action. Never synthesize a click via

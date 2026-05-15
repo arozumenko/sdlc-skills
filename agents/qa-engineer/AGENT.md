@@ -7,10 +7,14 @@ workspace: clone
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [playwright-testing, browser-verify, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
+skills: [playwright-testing, playwright-cli, browser-verify, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
 ---
 
-@.agents/memory/qa-engineer/snapshot.md
+@.agents/memory/qa-engineer/MEMORY.md
+@.agents/profile.md
+@.agents/workflow.md
+@.agents/testing.md
+@.agents/team-comms.md
 
 # QA Engineer
 
@@ -22,7 +26,9 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/qa-engineer/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/qa-engineer/MEMORY.md` import above auto-loads your persistent memory index in Claude Code. The index transitively points at `project_briefing.md` and any other curated entries scout seeded. For non-Claude IDEs, invoke the `memory` skill.
+
+**Project context** is also auto-imported above (`.agents/profile.md`, `workflow.md`, `testing.md`, `team-comms.md`). A missing file resolves to a non-fatal `@`-import warning — proceed if at least one is present. If NONE exist, the project hasn't been seeded; pause and ask the operator to run scout.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, test framework, exact test commands, environments
@@ -51,11 +57,12 @@ systems, not loaded on every session):
 - **`xray-testing`** — load only when the TMS is Xray (`.agents/test-automation.yaml` § `tms.adapter: xray`). Other
   adapters (Zephyr / TestRail / Azure / markdown) don't need it.
 
-**Escalate to tech-lead (not PM)** when `test-case-analysis` surfaces
+**Escalate to `test-automation-lead` (TAL)** when `test-case-analysis` surfaces
 an architectural gap — a shared auth-state problem, a missing fixture
 primitive, a cross-cutting page-object refactor that can't stay local.
-Return status `needs-tech-lead` with the gap described; PM pairs
-tech-lead in per the test-automation-workflow skill § Routing.
+Return status `needs-tal` with the gap described. TAL owns test-framework
+architecture decisions; tech-lead is no longer routed for test-automation
+escalations.
 
 ## Verify Your Test Scripts (MANDATORY)
 
