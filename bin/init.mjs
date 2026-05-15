@@ -30,6 +30,15 @@
  *        npx github:arozumenko/sdlc-skills init fix-copilot --dry-run
  *        npx github:arozumenko/sdlc-skills init fix-copilot --help
  *
+ *      To re-apply deployment-mode marker stripping after an update
+ *      (the installer re-introduces OCTOBOTS-ONLY / STANDALONE-ONLY
+ *      blocks every time it copies fresh source files; this subcommand
+ *      strips the inactive mode's blocks from installed agent files):
+ *        npx github:arozumenko/sdlc-skills init strip
+ *        npx github:arozumenko/sdlc-skills init strip --mode standalone
+ *        npx github:arozumenko/sdlc-skills init strip --dry-run
+ *        npx github:arozumenko/sdlc-skills init strip --help
+ *
  *   3. agentskills.io / Vercel / any third-party tool: point directly at
  *      skills/<name>/SKILL.md — the agentskills.io spec frontmatter is
  *      authoritative at that path.
@@ -306,6 +315,13 @@ function printHelp() {
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
+
+  Subcommands:
+    init fix-copilot           Flatten .github/agents/<name>/ → <name>.agent.md
+    init strip                 Re-apply deployment-mode marker stripping
+                               (run after --update to remove the re-introduced
+                               OCTOBOTS-ONLY / STANDALONE-ONLY blocks)
+    init <subcommand> --help   Subcommand-specific help
 `);
 }
 
@@ -918,12 +934,257 @@ function runFixCopilot(argv) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// strip subcommand — re-apply deployment-mode marker stripping after the
+// installer copied fresh source files on top of a previously-stripped
+// install. Mirrors what scout's project-seeder Step 6.95 does, but
+// callable standalone so the operator doesn't have to launch scout just
+// to re-strip.
+//
+// Mode resolution order:
+//   1. --mode flag (explicit override)
+//   2. `.agents/profile.md § Deployment mode` (what scout wrote on first seed)
+//   3. Default: `octobots` — because the Octobots supervisor's install.sh
+//      delegates to this installer, and a no-flag call from there should
+//      keep OCTOBOTS-ONLY content. Standalone users either let the
+//      profile.md auto-detect kick in (set once by scout) or pass
+//      `--mode standalone` explicitly.
+// ---------------------------------------------------------------------------
+
+const STRIP_VALID_MODES = ["octobots", "standalone", "taskbox"];
+const STRIP_AGENT_DIRS = [
+  ".claude/agents",
+  ".cursor/agents",
+  ".windsurf/agents",
+  ".github/agents",
+];
+
+function parseStripArgs(argv) {
+  const out = { mode: null, dirs: [], dryRun: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--mode") {
+      const v = argv[++i];
+      if (!STRIP_VALID_MODES.includes(v)) {
+        console.error(
+          `  ! Invalid --mode: ${v} (expected: ${STRIP_VALID_MODES.join("|")})`,
+        );
+        process.exit(1);
+      }
+      out.mode = v;
+    } else if (a === "--dir") {
+      out.dirs.push(argv[++i]);
+    } else if (a === "--dry-run") {
+      out.dryRun = true;
+    } else if (a === "-h" || a === "--help") {
+      printStripHelp();
+      process.exit(0);
+    } else {
+      console.error(`  ! Unknown flag for strip: ${a}`);
+      printStripHelp();
+      process.exit(1);
+    }
+  }
+  return out;
+}
+
+function printStripHelp() {
+  console.log(`
+  sdlc-skills strip — re-apply deployment-mode marker stripping
+
+  Removes the inactive mode's marker-bracketed regions from every
+  installed agent file (AGENT.md / SOUL.md / RULES.md for directory
+  layouts, <name>.agent.md for Copilot's flat layout).
+
+  Mode targets:
+    octobots   → strip STANDALONE-ONLY blocks; keep OCTOBOTS-ONLY (default)
+    standalone → strip OCTOBOTS-ONLY blocks; keep STANDALONE-ONLY
+    taskbox    → same as octobots
+
+  Mode resolution:
+    1. --mode flag (explicit override)
+    2. .agents/profile.md § Deployment mode (set by scout on first seed)
+    3. Default: octobots (Octobots install.sh delegates to this installer)
+
+  Both block markers and inline markers are removed:
+    <!-- TARGET: START -->...<!-- TARGET: END -->
+    <!-- TARGET: inline START -->...<!-- TARGET: inline END -->
+
+  Options:
+    --mode <m>       octobots | standalone | taskbox
+    --dir <path>     Agents directory to scan; repeatable. Default:
+                     every detected install dir from
+                       .claude/agents, .cursor/agents,
+                       .windsurf/agents, .github/agents
+    --dry-run        Preview; don't write
+    -h, --help       Show this help
+
+  Examples:
+    npx github:arozumenko/sdlc-skills init strip
+    npx github:arozumenko/sdlc-skills init strip --mode standalone
+    npx github:arozumenko/sdlc-skills init strip --dir .claude/agents --dry-run
+`);
+}
+
+function readProfileDeploymentMode() {
+  const profile = join(CWD, ".agents", "profile.md");
+  if (!existsSync(profile)) return null;
+  let text;
+  try {
+    text = readFileSync(profile, "utf8");
+  } catch {
+    return null;
+  }
+  // Find the `## Deployment mode` section (stop at the next `## ` or EOF).
+  const section = text.match(/##\s+Deployment mode[\s\S]*?(?=\n##\s+|$)/i);
+  if (!section) return null;
+  // Pull `Mode: <value>` (tolerate `**Mode**:`, `- **Mode:**`, etc.).
+  const m = section[0].match(/[-*]?\s*\*{0,2}Mode\*{0,2}\s*:\s*([A-Za-z]+)/i);
+  if (!m) return null;
+  const v = m[1].toLowerCase();
+  return STRIP_VALID_MODES.includes(v) ? v : null;
+}
+
+function stripDeploymentMarkers(text, target) {
+  // target is the marker prefix to remove (e.g. "OCTOBOTS-ONLY").
+  // Block form — match the whole region including a trailing newline so
+  // we don't leave a stranded blank line on every strip.
+  const blockPat = new RegExp(
+    `[ \\t]*<!--\\s*${target}:\\s*START\\s*-->[\\s\\S]*?<!--\\s*${target}:\\s*END\\s*-->[ \\t]*\\n?`,
+    "g",
+  );
+  // Inline form — leave surrounding text in place, only excise the
+  // marker pair and what sits between them on the same logical paragraph.
+  const inlinePat = new RegExp(
+    `<!--\\s*${target}:\\s*inline\\s+START\\s*-->[\\s\\S]*?<!--\\s*${target}:\\s*inline\\s+END\\s*-->`,
+    "g",
+  );
+  let stripped = text.replace(blockPat, "").replace(inlinePat, "");
+  // Collapse 3+ blank lines (often left behind by adjacent block strips)
+  // down to 2 — preserves intentional paragraph breaks, removes noise.
+  stripped = stripped.replace(/\n{3,}/g, "\n\n");
+  return stripped;
+}
+
+function countDeploymentMarkers(text, target) {
+  const block = (text.match(
+    new RegExp(`<!--\\s*${target}:\\s*START\\s*-->`, "g"),
+  ) || []).length;
+  const inline = (text.match(
+    new RegExp(`<!--\\s*${target}:\\s*inline\\s+START\\s*-->`, "g"),
+  ) || []).length;
+  return block + inline;
+}
+
+function findInstalledAgentFiles(rootRelDir) {
+  const abs = resolve(CWD, rootRelDir);
+  if (!existsSync(abs)) return [];
+  const files = [];
+  let entries;
+  try {
+    entries = readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const p = join(abs, entry.name);
+    if (entry.isDirectory()) {
+      // Directory layout (Claude / Cursor / Windsurf, or pre-fix-copilot
+      // Copilot installs): pick up AGENT.md, SOUL.md, RULES.md when
+      // present. Anything else in the dir (references/, etc.) is left
+      // alone — those don't carry deployment markers.
+      for (const fname of ["AGENT.md", "SOUL.md", "RULES.md"]) {
+        const fpath = join(p, fname);
+        if (existsSync(fpath)) files.push(fpath);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".agent.md")) {
+      // Flat layout (Copilot CLI after install --target copilot or
+      // fix-copilot): one file per agent.
+      files.push(p);
+    }
+  }
+  return files;
+}
+
+function runStrip(argv) {
+  const opts = parseStripArgs(argv);
+
+  // Resolve mode: flag → profile → default.
+  let mode = opts.mode;
+  let modeSource = mode ? "--mode flag" : null;
+  if (!mode) {
+    const profileMode = readProfileDeploymentMode();
+    if (profileMode) {
+      mode = profileMode;
+      modeSource = ".agents/profile.md § Deployment mode";
+    }
+  }
+  if (!mode) {
+    mode = "octobots";
+    modeSource = "default (no --mode, no profile.md)";
+  }
+
+  const target = mode === "standalone" ? "OCTOBOTS-ONLY" : "STANDALONE-ONLY";
+
+  // Resolve target directories.
+  const dirs = opts.dirs.length > 0
+    ? opts.dirs
+    : STRIP_AGENT_DIRS.filter((d) => existsSync(join(CWD, d)));
+
+  if (dirs.length === 0) {
+    console.error(
+      "  ! No agent directories found. Run from a project root with agents installed,",
+    );
+    console.error(
+      "    or pass --dir <path> to point at a specific install location.",
+    );
+    process.exit(1);
+  }
+
+  console.log(`\n  sdlc-skills strip — mode=${mode} (${modeSource})`);
+  console.log(`  Removing: <!-- ${target}: ... --> blocks (paired + inline)`);
+  if (opts.dryRun) console.log("  DRY RUN — nothing will be written.\n");
+  else console.log("");
+
+  let touched = 0;
+  let clean = 0;
+  let totalRegions = 0;
+
+  for (const dir of dirs) {
+    const files = findInstalledAgentFiles(dir);
+    if (files.length === 0) continue;
+    console.log(`  → ${dir}/`);
+    for (const fpath of files) {
+      const text = readFileSync(fpath, "utf8");
+      const count = countDeploymentMarkers(text, target);
+      const rel = fpath.replace(CWD + "/", "");
+      if (count === 0) {
+        clean++;
+        continue;
+      }
+      const stripped = stripDeploymentMarkers(text, target);
+      console.log(`      ✓ ${rel} — stripped ${count} region(s)`);
+      totalRegions += count;
+      touched++;
+      if (!opts.dryRun) writeFileSync(fpath, stripped);
+    }
+  }
+
+  console.log(
+    `\n  Done: ${touched} file(s) ${opts.dryRun ? "would be" : ""} touched (${totalRegions} regions), ${clean} already clean.\n`,
+  );
+}
+
 async function main() {
   const argv = process.argv.slice(2);
 
   // Subcommand routing — default is install.
   if (argv[0] === "fix-copilot") {
     return runFixCopilot(argv.slice(1));
+  }
+  if (argv[0] === "strip") {
+    return runStrip(argv.slice(1));
   }
 
   const args = parseArgs(argv);

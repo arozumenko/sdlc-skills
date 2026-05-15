@@ -41,6 +41,7 @@ are capability definitions, not always-on context.
 | `git-workflow` | Branching, commits, PRs, rebasing |
 | `memory` | Need to remember something across sessions |
 | `playwright-testing` | Writing or running E2E browser tests |
+| `playwright-cli` | Driving Playwright from the CLI — interactive browser sessions, snapshot/locator interaction, network mocking, tracing, test generation (external, by Microsoft) |
 | `browser-verify` | Quick visual / smoke check in a browser |
 | `issue-tracking` | Managing GitHub / Linear / GitLab issues |
 | `goal-verifier` | Checking whether a task actually achieved its outcome |

@@ -39,14 +39,16 @@ flowchart TB
 
     subgraph externals["upstream external skill sources"]
         direction LR
-        ext_matt[["mattpocock/skills<br/>tdd"]]
+        ext_matt[["mattpocock/skills<br/>skills/engineering/tdd"]]
         ext_obra[["obra/superpowers<br/>brainstorming, debugging,<br/>verification, ..."]]
         ext_tws[["twostraws/*-Agent-Skill<br/>SwiftUI, SwiftData,<br/>Swift Testing, Concurrency"]]
+        ext_msft[["microsoft/playwright-cli<br/>playwright-cli"]]
     end
 
     installer ==>|fetch at install time| ext_matt
     installer ==>|fetch at install time| ext_obra
     installer ==>|fetch at install time| ext_tws
+    installer ==>|fetch at install time| ext_msft
 
     sdlc ==>|direct install via<br/>plugin manifest or npx| ides
     sdlc ==>|install.sh delegates<br/>content to npx| octobots
@@ -280,19 +282,20 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ## Catalog
 
-### Agents (10)
+### Agents (11)
 
 | Agent | Persona | Role |
 |---|---|---|
 | `ba` | Alex | Business analyst — turns requirements into user stories with acceptance criteria |
-| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; owns framework-scale decisions for test automation |
-| `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers, owns the merge gate |
+| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; system architect for application code (test-framework architecture is owned by `test-automation-lead`) |
+| `project-manager` | Max | Distributes feature-development tasks (BA → tech-lead → devs), tracks team state, owns the dev-merge gate. Forwards test-automation work to `test-automation-lead` |
+| `test-automation-lead` | Tal | **Owns the test-automation pipeline end-to-end** — routes analyst → implementer → reviewer slots, gates AFS quality, enforces no-defect-masking, owns test-framework architecture decisions (greenfield bootstrap, framework-scale work, mid-flow escalations), owns the automation-PR merge gate |
 | `python-dev` | Py | Python implementation — owns its own repo clone and branch |
 | `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
 | `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
 | `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
-| `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
+| `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks, wires up @-imports |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
 ### Monorepo skills
@@ -305,7 +308,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `implement-feature` | Feature implementation workflow used by devs |
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
-| `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
+| `test-automation-workflow` | IC-facing test automation process — implementer six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), AFS-driven workflow, no-defect-masking rules, run-report template. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP. **Orchestration owned by `test-automation-lead` agent** |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
@@ -338,7 +341,7 @@ catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
-| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | `python-dev`, `js-dev`, `ios-dev` |
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `skills/engineering/tdd/` | `python-dev`, `js-dev`, `ios-dev` |
 | `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
 | `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs + `qa-engineer` |
 | `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs + `qa-engineer` |
@@ -349,6 +352,7 @@ catalog.
 | `swiftdata-pro` | [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill) | `ios-dev` |
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
+| `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
 
 ## Using outside Octobots
 
@@ -368,15 +372,21 @@ shape of those assumptions is documented below.
 **`@import` paths auto-loaded at session start:**
 
 ```markdown
-@.agents/memory/<role>/snapshot.md
+@.agents/memory/<role>/MEMORY.md
+@.agents/profile.md
+@.agents/workflow.md
+@.agents/testing.md         # qa-engineer, TAE, test-automation-lead
+@.agents/architecture.md    # tech-lead
+@.agents/conventions.md     # devs
+@.agents/team-comms.md
 ```
 
-Under Octobots the supervisor regenerates `snapshot.md` at every role
-launch (inlining the curated entries + recent daily logs). Under stock
-IDEs the import resolves to a missing file on first session and the
-agent falls back to reading `.agents/memory/<role>/MEMORY.md` +
-individual entries on demand — same memory, slightly more work per
-session. Nothing breaks either way.
+`MEMORY.md` is the agent's memory index — it `@-imports` the curated
+entries (project briefing, user prefs, feedback) the agent needs at
+session start. The project-context files are scout's outputs; missing
+files resolve to non-fatal warnings (the agent runs with defaults).
+Scout's `project-seeder` Step 6.97 verifies the wiring after every
+seed — see [`skills/project-seeder/SKILL.md`](skills/project-seeder/SKILL.md).
 
 **Shell commands that assume the supervisor:**
 
@@ -451,9 +461,10 @@ resolution — add a folder or a registry entry, it shows up on the next
 External skills are fetched from upstream at install time — this repo
 re-distributes nothing, only catalogs and wires.
 
-- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
+- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `skills/engineering/tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
 - **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
+- **[`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli)** — Microsoft Playwright. `skills/playwright-cli/` (drive Playwright from the command line — browser launch, navigation, snapshot/locator interaction, tabs and storage, network mocking, tracing, test generation). Used by `qa-engineer` and `test-automation-engineer`. Apache-2.0.
 
 Thanks to all maintainers.
 

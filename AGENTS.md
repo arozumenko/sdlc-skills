@@ -20,7 +20,8 @@ of native plugin formats and a shared npx installer.
   `obsidian-vault`, `msgraph`, `project-seeder`.
 - **`skills.json`** — catalog of all skills, monorepo and external.
   The installer uses it to resolve + fetch external skills (from
-  `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`).
+  `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`,
+  `microsoft/playwright-cli`).
 
 ## Install — the recommended path
 
