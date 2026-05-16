@@ -492,61 +492,120 @@ Detected from codebase analysis. These are descriptive (what IS), not prescripti
 
 ## .agents/testing.md Template
 
+Scout's read by Sage (qa-engineer) and Axel (test-automation-engineer)
+before they touch tests. **Treat the sections below as themes, not
+required fields.** Scout fills what the repo actually evidences; unknown
+or absent topics are flagged under § Unconfirmed so agents know to ask
+PM before improvising. Stay short — link to deeper docs rather than
+restating them.
+
 ```markdown
-# Test Infrastructure
+# Testing
+
+> Scout-generated. Update when the framework, run commands, or
+> conventions change. Agents read this before adding tests.
 
 ## Framework
-- **Unit/Integration:** pytest / jest / vitest
-- **E2E:** Playwright / Cypress / none
-- **API:** httpx / supertest / curl
+- **Name + version:** e.g. Playwright 1.47 / Cypress 13 / pytest 8 +
+  playwright-python 0.4 / WDIO 8 / JUnit 5 + Playwright-Java / NUnit 4
+- **Why this stack** (only if non-obvious from the repo)
 
-## Commands
-```bash
-# All tests
-[command]
-
-# Unit only
-[command]
-
-# Integration (requires DB)
-[command]
-
-# E2E (requires running app)
-[command]
-
-# Coverage
-[command]
-```
+## Run commands
+- **Single test, local:** exact command (include env wrappers and
+  reporter flags if the project uses them — e.g.
+  `npx cross-env TEST_ENV_NAME=SIT1 LOCAL_RUN=true npx playwright test path/to/spec --grep TC-001 --reporter=list`)
+- **Whole suite, local:** exact command
+- **CI variant — what the pipeline actually runs:** exact command,
+  verbatim. Tests Axel writes must be runnable with this command.
+- **Differences to flag** (headless vs headed, viewport, retry count,
+  env, …) — anything that changes test behavior between local and CI.
 
 ## Structure
-```
-tests/
-├── unit/              ← No external deps, fast
-├── integration/       ← Real DB, slower
-├── e2e/               ← Full stack, Playwright
-├── conftest.py        ← Shared fixtures
-└── fixtures/          ← Test data files
-```
+- **Tests live in:** `tests/` / `e2e/` / `cypress/e2e/` /
+  `src/test/java/` / …
+- **Folder roles** (one line each — omit folders that don't exist; don't
+  invent):
+  - `<dir>/specs/` or `<dir>/` — test files; grouped by feature, not by
+    ticket ID
+  - `<dir>/pages/` — Page Object classes (if used)
+  - `<dir>/steps/` — extracted `test.step` helpers (if extracted; some
+    teams keep `test.step()` inline in spec files instead — record which)
+  - `<dir>/fixtures/` — framework fixtures (Playwright / pytest /
+    JUnit-extensions)
+  - `<dir>/helpers/` — utility functions, **grouped by topic** (one file
+    per topic, e.g. `helpers/auth.ts`, `helpers/api/orders.ts`).
+    Suite-local helpers stay in the spec file
+  - `<dir>/data/` — test data (JSON / CSV / SQL fixtures)
 
-## Fixtures & Setup
-- Database: [real / mocked / in-memory SQLite]
-- Auth: [fixture / factory / skip]
-- Test data: [factories / fixtures / inline]
+## Test data strategy
+- **Where data lives** (path)
+- **Generation pattern:** generate-per-test / reuse-shared-with-cleanup /
+  static-fixtures / mixed — and **how to tell which applies for a new
+  test**
+- **Cleanup ownership:** afterEach / afterAll / external script / none
+- **Anything project-specific** (tenant scoping, env-keyed subfolders
+  like `data/sit1/`, factories vs JSON, …)
 
-## Patterns Detected
-- Arrange-Act-Assert structure
-- One test file per source module
-- Shared fixtures in conftest.py
-- Test markers: @pytest.mark.slow, @pytest.mark.integration
+## Hooks, fixtures, and run-mode policy
+- **Auto-applied hooks** the framework wires in (authed session,
+  base URL, browser context …) — name + where they live
+- **Project-wide teardown / reset** — name + trigger
+- **Serial vs parallel rule:** when does the project enforce serial
+  mode (`test.describe.configure({ mode: 'serial' })` or equivalent)?
+  Data dependency is the usual reason — document the rule explicitly so
+  Axel applies it correctly when AFS test-data inventory signals shared
+  state.
 
-## CI Integration
-- Tests run on: [push / PR / both]
-- Config: `.github/workflows/test.yml`
-- Timeout: [X minutes]
-- Coverage threshold: [X% or none]
+## Locator strategy
+- **Ladder** (preferred order):
+  `getByRole` with accessible name → `getByTestId` / `data-testid` →
+  `getByLabel` / `getByPlaceholder` → `getByText` →
+  CSS / XPath as last resort (with a comment explaining why)
+- **Stop+flag rule:** if a target element has no test ID **and** roles
+  / labels are insufficient (multi-match accessible name, no a11y
+  affordance), Axel pauses and surfaces the gap to PM rather than
+  falling back to brittle CSS chains.
+- **Edge cases & project exceptions** — record any selectors where the
+  default ladder doesn't fit (e.g. a component library that wraps role
+  internally; legacy widgets with no accessibility tree)
+- **Existing testid convention** — pattern + example
+  (e.g. `data-testid="<feature>-<element>"`)
 
-## Known Issues
-- [Any flaky tests, slow tests, skip reasons]
+## Reporters & evidence
+- **Local artifacts:** where the framework writes them
+  (`playwright-report/`, `test-results/screenshots/`, …)
+- **CI artifacts:** what the pipeline uploads (HTML report, JSON,
+  videos)
+- **Step logger / reporter:** Allure / `test.step` / custom — name and
+  how to extend, so Axel integrates rather than introducing a new one
+
+## CI integration
+- **Workflow file:** `.github/workflows/<name>.yml` (or GitLab CI /
+  Azure Pipelines equivalent)
+- **Trigger:** on push / PR / both
+- **Timeout & retry policy:** [X min; project-default retry count]
+- **Coverage threshold:** [X% or N/A]
+
+## Conventions to follow when adding tests
+> Bullets — short, observed-from-repo. Aspirational rules go in the
+> framework guide; this section captures what the project actually does.
+- One `describe` per feature file; tests grouped by feature
+- Steps inline OR extracted to `<dir>/steps/` — pick whichever the
+  project uses
+- Helpers grouped by topic; suite-local helpers stay in the spec file
+- Env values via the project's existing loader; **grep for an existing
+  key before adding a new one** (no duplicate config)
+- Data-dependent tests run in serial mode
+- Helpers are trusted: when a test fails and the helper has worked
+  elsewhere, suspect the test first
+
+## Known issues
+- [Flaky areas, slow suites, environments with known incompatibilities,
+  any framework-version pitfalls]
+
+## Unconfirmed
+- [Scout's flagged gaps — Axel and Sage ask PM/user before improvising
+  on these]
 ```
 
 ---
@@ -659,16 +718,34 @@ do here? Examples:
 tests, files they must not touch, conventions that are non-obvious.]
 ```
 
-### Index line
+### Index file — `MEMORY.md`
 
-Add this single line to `.agents/memory/<role-id>/MEMORY.md` (creating the
-file if it doesn't exist):
+Each role's `MEMORY.md` is the **load hook** that every non-scout AGENT.md
+imports via `@.agents/memory/<role-id>/MEMORY.md` at session start. Two
+jobs in one file:
+
+1. **`@`-imports** that transitively load curated entries into the agent's
+   context at session start. Without these, the entry sits on disk and
+   the agent never reads it.
+2. **A human-readable index** with one-line hooks under each entry, for
+   the operator (and the agent doing housekeeping later).
+
+Create the file (or update it) with this exact shape:
 
 ```markdown
 # Memory index — [role-id]
 
+<!-- Curated entries auto-loaded at session start via @-imports. -->
+
+@./project_briefing.md
+
+## Entries
+
 - [Project briefing](project_briefing.md) — Scout-seeded project overview
 ```
 
-The agent adds further curated entries (user preferences, feedback,
-references, etc.) below during work sessions — same index, same spec.
+When the agent (or scout, on a refresh) adds further curated entries
+(user preferences, feedback, references), append both the `@`-import
+**and** the index line — same spec applies to every entry. Entries that
+appear only in the index without an `@`-import are not auto-loaded; that
+is intentional only for entries explicitly marked as "load on demand."

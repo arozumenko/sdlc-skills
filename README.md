@@ -66,11 +66,15 @@ reads it at runtime; IDE plugin systems read it at install time. Nothing
 duplicated.
 
 External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
-`systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
-upstream repos. The installer resolves each agent's declared skill list
-against `skills.json`, clones external repos on first install into
-`~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
-project's skills directory.
+`systematic-debugging` / etc., Paul Hudson's Swift skills, Microsoft's
+`playwright-cli`) live in their upstream repos. The installer resolves
+each agent's declared skill list against `skills.json`, clones external
+repos on first install into the shared cache
+`~/.cache/sdlc-skills/registry/`, and **copies** the subdir into your
+project's skills directory. The project tree stays self-contained —
+commits survive across machines, CI works without a populated cache,
+and `git status` shows real files. Legacy installs that used symlinks
+auto-migrate to real copies on the next `init --update`.
 
 ## What lands in your project
 
@@ -154,7 +158,8 @@ GitHub Copilot (all four IDE targets detected automatically).
 npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically
-# (monorepo + external, via git clone + symlink for externals)
+# (monorepo + external; externals are git-cloned to the shared cache
+# and copied into the project — see README § External skills below)
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
 
 # Specific skills (overrides the auto-resolve)
@@ -196,9 +201,13 @@ section listing declared skills with their descriptions from
 would duplicate the preload). The block is idempotent on `--update` —
 re-runs replace in place, never duplicate.
 
-External skills are symlinked into the skills dir from the shared cache
-at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
-location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
+External skills are git-cloned to the shared cache at
+`~/.cache/sdlc-skills/registry/<owner>__<repo>/`, then **copied** into
+the project's skills dir on each install. The project tree is self-
+contained — `git status` shows real files, commits survive across
+machines, and CI works without a populated cache. Override the cache
+location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`. Legacy
+symlink installs auto-migrate to real copies on the next `init --update`.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
@@ -282,19 +291,20 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ## Catalog
 
-### Agents (10)
+### Agents (11)
 
 | Agent | Persona | Role |
 |---|---|---|
 | `ba` | Alex | Business analyst — turns requirements into user stories with acceptance criteria |
-| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; owns framework-scale decisions for test automation |
-| `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers, owns the merge gate |
+| `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; system architect for application code (test-framework architecture is owned by `test-automation-lead`) |
+| `project-manager` | Max | Distributes feature-development tasks (BA → tech-lead → devs), tracks team state, owns the dev-merge gate. Forwards test-automation work to `test-automation-lead` |
+| `test-automation-lead` | Tal | **Owns the test-automation pipeline end-to-end** — routes analyst → implementer → reviewer slots, gates AFS quality, enforces no-defect-masking, owns test-framework architecture decisions (greenfield bootstrap, framework-scale work, mid-flow escalations), owns the automation-PR merge gate |
 | `python-dev` | Py | Python implementation — owns its own repo clone and branch |
 | `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
 | `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
 | `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
-| `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
+| `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks, wires up @-imports |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
 ### Monorepo skills
@@ -307,7 +317,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `implement-feature` | Feature implementation workflow used by devs |
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
-| `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
+| `test-automation-workflow` | IC-facing test automation process — implementer six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), AFS-driven workflow, no-defect-masking rules, run-report template. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP. **Orchestration owned by `test-automation-lead` agent** |
 | `project-seeder` | Scout's project onboarding / configuration flow |
 | `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
@@ -335,9 +345,9 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 Declared in `skills.json` with `repo:` + optional `subdir:`. The npx
 installer clones each into `~/.cache/sdlc-skills/registry/` on first
-install and symlinks the subdir into your project's skills dir. Native
-IDE plugin paths do **not** fetch these — use the installer for the full
-catalog.
+install and **copies** the subdir into your project's skills dir.
+Native IDE plugin paths do **not** fetch these — use the installer for
+the full catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
@@ -366,21 +376,27 @@ shape of those assumptions is documented below.
 
 | Key | Stock-Claude behavior |
 |---|---|
-| `workspace: clone` | Ignored. Without Octobots, devs share your working tree — coordinate merges manually. |
+| `workspace: clone` | Preserved verbatim in installed agent files. Octobots' per-role-clone logic reads it when the supervisor is layered on top. Stock Claude / Cursor / Windsurf / Copilot have no runtime equivalent and ignore it — the key is harmless noise on those hosts. Subagent dispatches on all hosts share the parent's working tree; serialize same-surface dispatches (page-object edits, shared fixtures) in the caller. |
 | `skills: [taskbox, memory, ...]` | `taskbox` is bundled *inside* the Octobots supervisor — it's a no-op on stock Claude Code. `memory` is published here and works standalone. |
 
 **`@import` paths auto-loaded at session start:**
 
 ```markdown
-@.agents/memory/<role>/snapshot.md
+@.agents/memory/<role>/MEMORY.md
+@.agents/profile.md
+@.agents/workflow.md
+@.agents/testing.md         # qa-engineer, TAE, test-automation-lead
+@.agents/architecture.md    # tech-lead
+@.agents/conventions.md     # devs
+@.agents/team-comms.md
 ```
 
-Under Octobots the supervisor regenerates `snapshot.md` at every role
-launch (inlining the curated entries + recent daily logs). Under stock
-IDEs the import resolves to a missing file on first session and the
-agent falls back to reading `.agents/memory/<role>/MEMORY.md` +
-individual entries on demand — same memory, slightly more work per
-session. Nothing breaks either way.
+`MEMORY.md` is the agent's memory index — it `@-imports` the curated
+entries (project briefing, user prefs, feedback) the agent needs at
+session start. The project-context files are scout's outputs; missing
+files resolve to non-fatal warnings (the agent runs with defaults).
+Scout's `project-seeder` Step 6.97 verifies the wiring after every
+seed — see [`skills/project-seeder/SKILL.md`](skills/project-seeder/SKILL.md).
 
 **Shell commands that assume the supervisor:**
 
@@ -441,7 +457,8 @@ sdlc-skills/
    "name": "<name>"}`.
 3. **New external skill** → register in `skills.json` with
    `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
-   The installer will clone + symlink on first install.
+   The installer will clone the upstream repo into the shared cache
+   and copy the subdir into the target project on first install.
 4. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 

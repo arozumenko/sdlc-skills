@@ -125,7 +125,8 @@ Agent({
 
 ### Taskbox / Copilot / host-native
 
-Use the host's equivalent of `runSubagent` / `task` / `Agent`. Pass the
+Use the host's subagent dispatch — `Agent(...)` (Claude),
+`runSubagent(...)` (Copilot), `relay.py send` (taskbox). Pass the
 same prompt. The `qa-engineer` persona lives in `.github/agents/`
 (Copilot), `.claude/agents/` (Claude), or `.octobots/agents/`
 (taskbox). The `test-case-analysis` skill it loads lives under the

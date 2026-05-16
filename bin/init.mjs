@@ -30,6 +30,15 @@
  *        npx github:arozumenko/sdlc-skills init fix-copilot --dry-run
  *        npx github:arozumenko/sdlc-skills init fix-copilot --help
  *
+ *      To re-apply deployment-mode marker stripping after an update
+ *      (the installer re-introduces OCTOBOTS-ONLY / STANDALONE-ONLY
+ *      blocks every time it copies fresh source files; this subcommand
+ *      strips the inactive mode's blocks from installed agent files):
+ *        npx github:arozumenko/sdlc-skills init strip
+ *        npx github:arozumenko/sdlc-skills init strip --mode standalone
+ *        npx github:arozumenko/sdlc-skills init strip --dry-run
+ *        npx github:arozumenko/sdlc-skills init strip --help
+ *
  *   3. agentskills.io / Vercel / any third-party tool: point directly at
  *      skills/<name>/SKILL.md — the agentskills.io spec frontmatter is
  *      authoritative at that path.
@@ -47,7 +56,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "fs";
@@ -101,7 +109,12 @@ function loadCatalog() {
 // Skill registry — skills.json at the repo root describes every skill and
 // where to fetch it:
 //   monorepo entry: {id, monorepo: "sdlc-skills", name}  → copy from ./skills/<name>
-//   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone + symlink
+//   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone to
+//                   ~/.cache/sdlc-skills/registry/<repo>/, then copy the
+//                   subdir into the project's skills/ directory. The
+//                   project tree stays self-contained (committable,
+//                   portable, CI-safe). Older releases symlinked instead;
+//                   legacy installs auto-migrate to real copies.
 // ---------------------------------------------------------------------------
 
 function loadSkillRegistry() {
@@ -154,7 +167,17 @@ function shallowClone(repo, ref) {
   }
 }
 
-function installExternalSkill(entry, targetDir) {
+function installExternalSkill(entry, targetDir, update) {
+  // External skills are git-cloned to a shared cache under
+  // ~/.cache/sdlc-skills/registry/, then COPIED into the project's skills
+  // directory so the project tree is self-contained (committable, portable
+  // across machines, surviveable on CI without the cache populated).
+  //
+  // Older sdlc-skills releases symlinked from cache into the project — that
+  // saved disk but produced dangling links the moment the repo was cloned
+  // by anyone else. Legacy symlink installs are auto-migrated to copies
+  // here regardless of --update, because keeping a broken symlink is never
+  // the user's intent.
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
   if (!clone) return { status: "error" };
@@ -174,16 +197,35 @@ function installExternalSkill(entry, targetDir) {
   }
   const skillsDir = join(CWD, targetDir, "skills");
   mkdirSync(skillsDir, { recursive: true });
-  const link = join(skillsDir, skillName);
-  if (existsSync(link) || lstatSync(link, { throwIfNoEntry: false })) {
-    // Already present. Don't overwrite unless --update (handled upstream).
-    return { status: "exists", name: skillName };
+  const dest = join(skillsDir, skillName);
+
+  // Three states for `dest`:
+  //   1. absent          → install fresh
+  //   2. symlink         → legacy install; always replace with a real copy
+  //                        (regardless of --update — symlinks are never the
+  //                        intended target shape)
+  //   3. real directory  → respect --update: replace if true, skip if false
+  const destStat = lstatSync(dest, { throwIfNoEntry: false });
+  let migratedFromSymlink = false;
+  if (destStat) {
+    if (destStat.isSymbolicLink()) {
+      unlinkSync(dest);
+      migratedFromSymlink = true;
+    } else if (!update) {
+      return { status: "exists", name: skillName };
+    } else {
+      rmSync(dest, { recursive: true, force: true });
+    }
   }
+
   try {
-    symlinkSync(src, link);
-    return { status: "installed", name: skillName };
+    cpSync(src, dest, { recursive: true, dereference: true, force: true });
+    return {
+      status: migratedFromSymlink ? "migrated" : "installed",
+      name: skillName,
+    };
   } catch (err) {
-    console.error(`  ! symlink ${src} → ${link} failed: ${err.message}`);
+    console.error(`  ! copy ${src} → ${dest} failed: ${err.message}`);
     return { status: "error" };
   }
 }
@@ -262,6 +304,7 @@ function parseArgs(argv) {
     skills: null,
     targets: null,
   };
+  const unknown = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--all") out.all = true;
@@ -273,7 +316,51 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
+    } else {
+      unknown.push(a);
     }
+  }
+  if (unknown.length) {
+    // Catch the two failure modes that used to fail silently:
+    //   1. Typo'd flags (`--moe standalone` instead of `--mode`)
+    //   2. Shell-split list args (`--skills a,b,c, d,e` becomes `--skills a,b,c,`
+    //      plus positional `d,e` — only the first chunk made it through).
+    // Both are silent under-installs in the old parser. Now they're loud.
+    console.error(
+      `\n  ! Unrecognised argument(s) for 'init': ${unknown.join(", ")}\n`,
+    );
+    const looksCommaSplit = unknown.some(
+      (a) => a.includes(",") && !a.startsWith("-"),
+    );
+    if (looksCommaSplit) {
+      console.error(
+        "  Looks like a comma-separated list was split by the shell. Common cause:",
+      );
+      console.error(
+        "    --skills a,b,c, d,e   ← space after a comma → shell splits at the space.",
+      );
+      console.error("  Fix: remove the spaces, or quote the whole list:");
+      console.error('    --skills "a,b,c,d,e"   (or just --skills a,b,c,d,e)');
+    }
+    const looksLikeStripFlag = unknown.some((a) =>
+      ["--mode", "--dir", "--dry-run"].includes(a),
+    );
+    if (looksLikeStripFlag) {
+      console.error(
+        "\n  '--mode', '--dir', and '--dry-run' belong to the 'init strip' subcommand,",
+      );
+      console.error(
+        "  not 'init' itself. Run them separately:",
+      );
+      console.error(
+        "    npx ... init --update --agents X,Y --skills A,B,C",
+      );
+      console.error(
+        "    npx ... init strip          # re-applies deployment-mode marker stripping",
+      );
+    }
+    console.error("\n  Re-run with --help to see supported flags.\n");
+    process.exit(1);
   }
   return out;
 }
@@ -306,6 +393,13 @@ function printHelp() {
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
+
+  Subcommands:
+    init fix-copilot           Flatten .github/agents/<name>/ → <name>.agent.md
+    init strip                 Re-apply deployment-mode marker stripping
+                               (run after --update to remove the re-introduced
+                               OCTOBOTS-ONLY / STANDALONE-ONLY blocks)
+    init <subcommand> --help   Subcommand-specific help
 `);
 }
 
@@ -562,6 +656,10 @@ function transformAgentForCopilot(
     );
   }
 
+  // `workspace:` is preserved verbatim — it's an octobots-supervisor
+  // hint with no Copilot runtime today, but harmless to keep, and
+  // octobots may read the flat Copilot file in coexistence scenarios.
+
   // Inject the skills-inventory section as the final transform step so
   // it lands in Copilot's flat `.agent.md` file too (Copilot ignores
   // unknown frontmatter keys, so without this the `skills:` list is
@@ -649,7 +747,8 @@ async function interactivePick(catalog, args) {
   // Resolve skills with awareness of externals from skills.json. An
   // explicit --skills list may contain both monorepo ids (installed by
   // copy from this repo) and external ids (cloned from skills.json
-  // `repo:` entries and symlinked into the target dir).
+  // `repo:` entries, then copied into the target dir — see
+  // installExternalSkill for details on cache + copy semantics).
   let skillsSelection;          // monorepo ids to install via copyItem
   let externalFromFlag = [];    // external registry entries to install via installExternalSkill
   if (args.skills === null) {
@@ -694,9 +793,9 @@ async function interactivePick(catalog, args) {
     if (agentsSelection === null) agentsSelection = [];
     // --agents X without --skills → auto-resolve each agent's declared
     // skill deps. Monorepo skills install from this repo; externals
-    // (`repo:` entries in skills.json) clone + symlink into the target
-    // dir. Unknown skill ids (not in skills.json at all) are warned
-    // and skipped.
+    // (`repo:` entries in skills.json) are cloned to the shared cache
+    // and copied into the target dir. Unknown skill ids (not in
+    // skills.json at all) are warned and skipped.
     if (skillsSelection === null) {
       if (agentsSelection.length > 0) {
         const { monorepo, external, unknown } = inferSkillsFromAgents(
@@ -914,12 +1013,267 @@ function runFixCopilot(argv) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// strip subcommand — re-apply deployment-mode marker stripping after the
+// installer copied fresh source files on top of a previously-stripped
+// install. Mirrors what scout's project-seeder Step 6.95 does, but
+// callable standalone so the operator doesn't have to launch scout just
+// to re-strip.
+//
+// Mode resolution order:
+//   1. --mode flag (explicit override)
+//   2. `.agents/profile.md § Deployment mode` (what scout wrote on first seed)
+//   3. Default: `octobots` — because the Octobots supervisor's install.sh
+//      delegates to this installer, and a no-flag call from there should
+//      keep OCTOBOTS-ONLY content. Standalone users either let the
+//      profile.md auto-detect kick in (set once by scout) or pass
+//      `--mode standalone` explicitly.
+// ---------------------------------------------------------------------------
+
+const STRIP_VALID_MODES = ["octobots", "standalone", "taskbox"];
+const STRIP_AGENT_DIRS = [
+  ".claude/agents",
+  ".cursor/agents",
+  ".windsurf/agents",
+  ".github/agents",
+];
+
+function parseStripArgs(argv) {
+  const out = { mode: null, dirs: [], dryRun: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--mode") {
+      const v = argv[++i];
+      if (!STRIP_VALID_MODES.includes(v)) {
+        console.error(
+          `  ! Invalid --mode: ${v} (expected: ${STRIP_VALID_MODES.join("|")})`,
+        );
+        process.exit(1);
+      }
+      out.mode = v;
+    } else if (a === "--dir") {
+      out.dirs.push(argv[++i]);
+    } else if (a === "--dry-run") {
+      out.dryRun = true;
+    } else if (a === "-h" || a === "--help") {
+      printStripHelp();
+      process.exit(0);
+    } else {
+      console.error(`  ! Unknown flag for strip: ${a}`);
+      printStripHelp();
+      process.exit(1);
+    }
+  }
+  return out;
+}
+
+function printStripHelp() {
+  console.log(`
+  sdlc-skills strip — re-apply deployment-mode marker stripping
+
+  Removes the inactive mode's marker-bracketed regions from every
+  installed agent file (AGENT.md / SOUL.md / RULES.md for directory
+  layouts, <name>.agent.md for Copilot's flat layout).
+
+  Mode targets:
+    octobots   → strip STANDALONE-ONLY blocks; keep OCTOBOTS-ONLY (default)
+    standalone → strip OCTOBOTS-ONLY blocks; keep STANDALONE-ONLY
+    taskbox    → same as octobots
+
+  Mode resolution:
+    1. --mode flag (explicit override)
+    2. .agents/profile.md § Deployment mode (set by scout on first seed)
+    3. Default: octobots (Octobots install.sh delegates to this installer)
+
+  Both block markers and inline markers are removed:
+    <!-- TARGET: START -->...<!-- TARGET: END -->
+    <!-- TARGET: inline START -->...<!-- TARGET: inline END -->
+
+  Options:
+    --mode <m>       octobots | standalone | taskbox
+    --dir <path>     Agents directory to scan; repeatable. Default:
+                     every detected install dir from
+                       .claude/agents, .cursor/agents,
+                       .windsurf/agents, .github/agents
+    --dry-run        Preview; don't write
+    -h, --help       Show this help
+
+  Examples:
+    npx github:arozumenko/sdlc-skills init strip
+    npx github:arozumenko/sdlc-skills init strip --mode standalone
+    npx github:arozumenko/sdlc-skills init strip --dir .claude/agents --dry-run
+`);
+}
+
+function readProfileDeploymentMode() {
+  const profile = join(CWD, ".agents", "profile.md");
+  if (!existsSync(profile)) return null;
+  let text;
+  try {
+    text = readFileSync(profile, "utf8");
+  } catch {
+    return null;
+  }
+  // Find the `## Deployment mode` section (stop at the next `## ` or EOF).
+  const section = text.match(/##\s+Deployment mode[\s\S]*?(?=\n##\s+|$)/i);
+  if (!section) return null;
+  // Pull `Mode: <value>` (tolerate `**Mode**:`, `- **Mode:**`, etc.).
+  const m = section[0].match(/[-*]?\s*\*{0,2}Mode\*{0,2}\s*:\s*([A-Za-z]+)/i);
+  if (!m) return null;
+  const v = m[1].toLowerCase();
+  return STRIP_VALID_MODES.includes(v) ? v : null;
+}
+
+function stripDeploymentMarkers(text, target) {
+  // target is the marker prefix to remove (e.g. "OCTOBOTS-ONLY").
+  // Block form — match the whole region including a trailing newline so
+  // we don't leave a stranded blank line on every strip.
+  const blockPat = new RegExp(
+    `[ \\t]*<!--\\s*${target}:\\s*START\\s*-->[\\s\\S]*?<!--\\s*${target}:\\s*END\\s*-->[ \\t]*\\n?`,
+    "g",
+  );
+  // Inline form — leave surrounding text in place, only excise the
+  // marker pair and what sits between them on the same logical paragraph.
+  const inlinePat = new RegExp(
+    `<!--\\s*${target}:\\s*inline\\s+START\\s*-->[\\s\\S]*?<!--\\s*${target}:\\s*inline\\s+END\\s*-->`,
+    "g",
+  );
+  let stripped = text.replace(blockPat, "").replace(inlinePat, "");
+  // Collapse 3+ blank lines (often left behind by adjacent block strips)
+  // down to 2 — preserves intentional paragraph breaks, removes noise.
+  stripped = stripped.replace(/\n{3,}/g, "\n\n");
+  return stripped;
+}
+
+function countDeploymentMarkers(text, target) {
+  const block = (text.match(
+    new RegExp(`<!--\\s*${target}:\\s*START\\s*-->`, "g"),
+  ) || []).length;
+  const inline = (text.match(
+    new RegExp(`<!--\\s*${target}:\\s*inline\\s+START\\s*-->`, "g"),
+  ) || []).length;
+  return block + inline;
+}
+
+function findInstalledAgentFiles(rootRelDir) {
+  const abs = resolve(CWD, rootRelDir);
+  if (!existsSync(abs)) return [];
+  const files = [];
+  let entries;
+  try {
+    entries = readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const p = join(abs, entry.name);
+    if (entry.isDirectory()) {
+      // Directory layout (Claude / Cursor / Windsurf, or pre-fix-copilot
+      // Copilot installs): pick up AGENT.md, SOUL.md, RULES.md when
+      // present. Anything else in the dir (references/, etc.) is left
+      // alone — those don't carry deployment markers.
+      for (const fname of ["AGENT.md", "SOUL.md", "RULES.md"]) {
+        const fpath = join(p, fname);
+        if (existsSync(fpath)) files.push(fpath);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".agent.md")) {
+      // Flat layout (Copilot CLI after install --target copilot or
+      // fix-copilot): one file per agent.
+      files.push(p);
+    }
+  }
+  return files;
+}
+
+function runStrip(argv) {
+  const opts = parseStripArgs(argv);
+
+  // Resolve mode: flag → profile → default.
+  let mode = opts.mode;
+  let modeSource = mode ? "--mode flag" : null;
+  if (!mode) {
+    const profileMode = readProfileDeploymentMode();
+    if (profileMode) {
+      mode = profileMode;
+      modeSource = ".agents/profile.md § Deployment mode";
+    }
+  }
+  if (!mode) {
+    mode = "octobots";
+    modeSource = "default (no --mode, no profile.md)";
+  }
+
+  const target = mode === "standalone" ? "OCTOBOTS-ONLY" : "STANDALONE-ONLY";
+
+  // Resolve target directories.
+  const dirs = opts.dirs.length > 0
+    ? opts.dirs
+    : STRIP_AGENT_DIRS.filter((d) => existsSync(join(CWD, d)));
+
+  if (dirs.length === 0) {
+    console.error(
+      "  ! No agent directories found. Run from a project root with agents installed,",
+    );
+    console.error(
+      "    or pass --dir <path> to point at a specific install location.",
+    );
+    process.exit(1);
+  }
+
+  console.log(`\n  sdlc-skills strip — mode=${mode} (${modeSource})`);
+  console.log(`  Removing: <!-- ${target}: ... --> blocks (paired + inline)`);
+  if (opts.dryRun) console.log("  DRY RUN — nothing will be written.\n");
+  else console.log("");
+
+  let touched = 0;
+  let clean = 0;
+  let totalRegions = 0;
+
+  for (const dir of dirs) {
+    const files = findInstalledAgentFiles(dir);
+    if (files.length === 0) continue;
+    console.log(`  → ${dir}/`);
+    for (const fpath of files) {
+      const text = readFileSync(fpath, "utf8");
+      const count = countDeploymentMarkers(text, target);
+      const rel = fpath.replace(CWD + "/", "");
+      if (count === 0) {
+        clean++;
+        continue;
+      }
+      const stripped = stripDeploymentMarkers(text, target);
+      console.log(`      ✓ ${rel} — stripped ${count} region(s)`);
+      totalRegions += count;
+      touched++;
+      if (!opts.dryRun) writeFileSync(fpath, stripped);
+    }
+  }
+
+  console.log(
+    `\n  Done: ${touched} file(s) ${opts.dryRun ? "would be" : ""} touched (${totalRegions} regions), ${clean} already clean.\n`,
+  );
+}
+
 async function main() {
-  const argv = process.argv.slice(2);
+  let argv = process.argv.slice(2);
+
+  // Normalise the bin name. `package.json` declares
+  //   "bin": { "init": "./bin/init.mjs" }
+  // so npx invocations look like `npx github:org/repo init --flag`. Some
+  // npx versions consume the "init" token as the bin name and don't pass
+  // it through; others pass it through as argv[0]. Strip it ourselves so
+  // both behaviours produce the same args downstream — and so the parser-
+  // hardening from this version doesn't reject the literal "init" as an
+  // unknown flag on the npx variants that pass it through.
+  if (argv[0] === "init") argv = argv.slice(1);
 
   // Subcommand routing — default is install.
   if (argv[0] === "fix-copilot") {
     return runFixCopilot(argv.slice(1));
+  }
+  if (argv[0] === "strip") {
+    return runStrip(argv.slice(1));
   }
 
   const args = parseArgs(argv);
@@ -971,9 +1325,14 @@ async function main() {
       }
     }
     for (const entry of externalSkills) {
-      const r = installExternalSkill(entry, t.dir);
+      const r = installExternalSkill(entry, t.dir, args.update);
       if (r.status === "installed") {
         console.log(`      ✓ skill  ${r.name} (external: ${entry.repo})`);
+        installed++;
+      } else if (r.status === "migrated") {
+        console.log(
+          `      ✓ skill  ${r.name} (external: ${entry.repo}) — migrated from symlink to real copy`,
+        );
         installed++;
       } else if (r.status === "exists") {
         console.log(`      — skill  ${r.name} (exists; use --update)`);

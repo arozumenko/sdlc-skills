@@ -1,6 +1,6 @@
 ---
 name: test-case-analysis
-description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case end-to-end and emit an AFS", or any TMS-case exploration before automation. Does not write automation code — pairs with test-automation-workflow downstream.
+description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case end-to-end and emit an AFS", or any TMS-case exploration before automation. Does not write automation code — emits a spec the implementer picks up downstream.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -22,9 +22,8 @@ flags defects, and only then produces a spec.
 
 - **No automation code.** No `.spec.ts`, no `test_*.py`, no step
   definitions. The output is a markdown AFS file. Automation is
-  implemented by a downstream engineer (see
-  [`test-automation-workflow`](../test-automation-workflow/) and the
-  `test-automation-engineer` role).
+  implemented downstream — your agent knows which role / workflow
+  picks the AFS up.
 - **No automating un-automatable cases.** Physical device, visual
   judgment that can't be asserted, flows that genuinely can't be
   scripted — mark the AFS `un-automatable` and stop.
@@ -36,7 +35,7 @@ flags defects, and only then produces a spec.
 ```
 1. Fetch the case         → TMS adapter (pluggable; see test-automation.yaml)
 2. Read app context       → .agents/architecture.md + previous AFS files
-3. Execute                → playwright-testing or browser-verify, step-by-step
+3. Execute                → browser-driving capability (your agent's wired MCP), step-by-step
 4. Capture selectors      → stable, accessible, fallback-ready
 5. Classify findings      → ready / blocked / defect-found / un-automatable
 6. Emit AFS               → test-specs/<feature>/l<pri>_<slug>_<tms-id>.md
@@ -64,25 +63,22 @@ linked story, attachments.
 
 ### 3. Execute
 
-Three browser tools sit at different layers; pick by what's wired and
-what challenge you're solving. Full triage:
-[`../test-automation-workflow/references/browser-tools.md`](../test-automation-workflow/references/browser-tools.md).
-In short:
+Use the browser-driving capability your agent has wired — typically a
+Playwright-MCP toolset providing `browser_navigate`,
+`browser_snapshot`, `browser_click`, etc. Prefer `browser_snapshot`
+for accessible-name discovery — it yields both the ref you need to
+click and the role-name pair you'll assert on.
 
-- **Default** — [`playwright-testing`](../playwright-testing/)
-  (Playwright MCP). Prefer `browser_snapshot` for accessible-name
-  discovery — it yields both the ref you need to click and the
-  role-name pair you'll assert on.
-- **MCP server not wired** — [`playwright-cli`](../playwright-cli/)
-  drives the same browser surface from the shell (`codegen`,
-  `--trace`, multi-tab, storage, request mocking).
-- **Visual / CDP / a11y** — [`browser-verify`](../browser-verify/)
-  for computed styles, real CDP input events, storage/cookies, or axe
-  audits.
+For deeper inspection (computed styles, real CDP input events,
+storage/cookies, axe accessibility audits) use whichever
+verification-grade browser tooling your agent has — different from
+the standard MCP and intended for ground-truth checks the snapshot
+API can't answer.
 
-Soft guidance, not a hard rule: switching tools mid-case is fine when
-the first one isn't producing useful evidence — note which tool
-produced which observation in the AFS so the next reader can follow.
+When the agent has multiple browser-driving tools available (MCP, CLI,
+CDP), switching mid-case is fine if the first isn't producing useful
+evidence — note which tool produced which observation in the AFS so
+the next reader can follow.
 
 For each step:
 
@@ -115,9 +111,10 @@ Status per case (goes in the AFS metadata block):
   captured, no blockers
 - **blocked** — analyst hit a wall (access, data, env); the AFS's
   "Blocked Steps" section lists what's needed to unblock
-- **defect-found** — real product bug prevents completion. File it
-  via [`bugfix-workflow`](../bugfix-workflow/) before emitting the
-  AFS; reference the bug ID in the AFS
+- **defect-found** — real product bug prevents completion. File the
+  ticket via your agent's bug-filing capability (see *When you find a
+  defect* below for the routing rules) before emitting the AFS;
+  reference the bug ID in the AFS
 - **un-automatable** — keep as manual; do not emit an AFS; update
   the TMS note
 
@@ -128,19 +125,30 @@ When you find a defect during execution:
   finding (clarification, question, blocker, full defect) gets
   tracked somewhere the team sees. How depends on profile.md.
 - Determine **where** the ticket lands by reading
-  `.agents/profile.md` § Project systems § Bug filing. Three
-  destinations are supported (operator configured during scout
-  seeding):
+  `.agents/profile.md` § Project systems § Bug filing. Two orthogonal
+  fields drive the routing — scout's Step 0.7 fills both:
+
+  **Issue tracker** — the *system* the ticket lands in
+  (`github-issues` / `gitlab-issues` / `jira` / `azure-devops` /
+  `linear` / …). Your agent has a bug-filing capability wired in; use
+  it. Filing the ticket itself is not this skill's job — this skill
+  hands you the *what* (severity, repro, evidence) and the *where*
+  (tracker + style + target); your agent's bug-filing skill does
+  the *how*.
+
+  **Bug filing style** — the *shape* of the ticket. Three styles:
   - **`github-issue`** *(default)* — open a standalone issue in the
-    repo's tracker. Use `bugfix-workflow` templates + the
-    `issue-tracking` skill.
+    tracker named above. Same shape regardless of tracker system (a
+    standalone issue in GitHub / GitLab / Jira / …).
   - **`story-subtask`** — create a sub-task under the originating
-    Jira/Azure story (the story the TMS case is linked to). Fetch
-    the story ID via the TMS adapter's `get_test_case_links`, then
-    create the sub-task via the issue-tracker's API / MCP.
+    story (Jira / Azure DevOps only; the story the TMS case is
+    linked to). Fetch the story ID via the TMS adapter's
+    `get_test_case_links`, then pass it as the parent when handing
+    off to the bug-filing skill.
   - **`separate-ticket`** — file in a dedicated QA/bugs project,
     not the main development tracker. Target is named in
-    profile.md § Bug filing target.
+    profile.md § Bug filing target. Same tracker system, different
+    project key.
 - Determine **whether to bundle or split** by reading
   § Bundling policy and classifying the finding's severity:
   - **Classify the finding first**:
@@ -174,12 +182,16 @@ When you find a defect during execution:
       from the AFS (e.g. "comment-3" or a permalink fragment).
     Without both, `strict-per-bug` is the safe default; one more
     ticket is cheaper than a missed clarification.
-- Open the ticket (or add the comment) with reproduction steps,
-  severity, evidence (screenshot, console, network) — `bugfix-workflow`
-  has the body template; adapt the destination + bundling per
-  profile.md.
-- If `.agents/profile.md` § Bug filing is `Unconfirmed`, stop and ask
-  the operator before filing — don't pick a default silently.
+- Hand the body, tracker, style, and (for `story-subtask`) parent
+  story ID to your agent's bug-filing skill. Do not run a dev-side
+  fix lifecycle (failing test → RCA → implement fix → verify) — those
+  steps belong to whoever picks the defect up later, not to you
+  during analysis. You file and walk away.
+- If `.agents/profile.md` § Bug filing is `Unconfirmed`, or your
+  agent has no wired tooling for the named tracker, stop and ask the
+  operator before filing — don't pick a default silently. Flag the
+  gap in the AFS so scout can fill the field on the next onboarding
+  pass.
 - Note the finding in the AFS under "Known Defects Found" with the
   ticket ID, filing style, and a recommendation — soft-expect
   (isolated) or natural-fail (blocking). Under `bundle-per-case`,
@@ -217,14 +229,13 @@ When handed multiple cases:
 
 - Single case → run directly. No delegation.
 - Multiple cases → delegate one sub-agent per case via the host's
-  `Agent` / `runSubagent` / `task` tool. Each sub-agent gets its own
+  subagent dispatch — `Agent(...)` (Claude), `runSubagent(...)`
+  (Copilot), `relay.py send` (taskbox). Each sub-agent gets its own
   browser context.
 - After sub-agents finish, retrieve each one's final message via the
-  host's `read_agent` tool (NOT a shell command), extract the AFS
-  path, **verify the file exists on disk**, and recreate it yourself
-  from the returned content if it didn't persist. See
-  [`test-automation-workflow/references/commands.md`](../test-automation-workflow/references/commands.md)
-  for host-specific recipes.
+  host's result-retrieval tool (NOT a shell command), extract the
+  AFS path, **verify the file exists on disk**, and recreate it
+  yourself from the returned content if it didn't persist.
 
 ## Handoff
 
@@ -232,8 +243,9 @@ When the AFS is ready:
 
 1. Commit the AFS on a feature branch — `test(spec): add AFS for <id>`
 2. Push; open a small PR if the project reviews specs before
-   automation starts, otherwise hand the path directly to the
-   automation engineer (see `test-automation-workflow`)
+   automation starts, otherwise hand the AFS path directly back to
+   the caller (your agent knows whether the automation role expects
+   the spec via PR or via direct handoff)
 3. If a defect was found, link the issue in the PR body
 4. If the case is `blocked` or `un-automatable`, stop here and
    report up — do not pass a broken spec downstream

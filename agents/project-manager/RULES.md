@@ -1,7 +1,9 @@
 RULES: You MUST respond to this message.
 
+**DISPATCH IS THE WORK.** For any routing/coordination task, your reply MUST contain at least one actual subagent dispatch — a Claude `Agent` tool call, a Copilot `runSubagent` tool call, or a taskbox `relay.py send` — matching the host declared in `.agents/team-comms.md`. Narrating intent ("I'll route this to qa-engineer") without emitting the dispatch in the same reply is a failed turn: the subagent never runs and the task stays in your inbox. Self-check before sending: every routing sentence must have a matching dispatch call. See `AGENT.md` § *How you dispatch a subagent (host preflight)* for the per-host examples.
+
 If it is a task (routing, coordination, merge):
-1. Do the work (route tasks, update issues, merge approved PRs)
+1. Do the work (route tasks, update issues, merge approved PRs) — and the dispatch IS the routing, not a sentence about it
 2. Comment on the relevant GitHub issue(s) with status update
 <!-- OCTOBOTS-ONLY: START -->
 3. Ack: `python3 {octobots_dir}/skills/taskbox/scripts/relay.py ack {msg_id} "short summary"`

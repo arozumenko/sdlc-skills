@@ -153,15 +153,22 @@ value or `ASK`:
 4. **Bug filing style** — where a defect discovered during
    `test-case-analysis` lands. A ticket is **always** filed (so
    nothing slips through tracking); these options only differ on
-   *which tracker*:
+   *shape*, not on tracker system (which is field 1 above):
    - `github-issue` *(default)* — open a standalone issue in the
-     repo's tracker via `bugfix-workflow`
+     tracker named in field 1. Despite the legacy name, applies to
+     any tracker (GitHub Issues, GitLab Issues, a standalone Jira
+     issue, etc.).
    - `story-subtask` — create a sub-task linked to the originating
-     Jira/Azure story (the story the TMS case is linked to)
+     story. **Only valid when Issue tracker is `jira` or
+     `azure-boards`** — GitHub Issues and GitLab Issues have no
+     sub-task primitive. If a flat `github-issues` / `gitlab-issues`
+     / `linear` setup is paired with `story-subtask`, the
+     combination is incoherent — see the coherence check below.
    - `separate-ticket` — file in a dedicated QA/bugs project
-     different from the main development tracker
-5. **Bug filing target** — target project/board when different from
-   the main issue tracker (e.g. `QA-BUGS` sub-project).
+     different from the main development tracker. Target is named
+     in field 5.
+5. **Bug filing target** — target project/board when style is
+   `separate-ticket` (e.g. `QA-BUGS` sub-project).
 6. **Bundling policy** — governs whether multiple findings on the
    same test case get separate tickets or share one:
    - `strict-per-bug` *(default)* — every finding gets its own
@@ -194,6 +201,35 @@ value or `ASK`:
     `squash`. Override if branch-protection demands a different
     strategy.
 
+### Coherence checks (before writing profile.md)
+
+Some field combinations are incoherent — record + flag, don't fix
+silently:
+
+- **`Bug filing style: story-subtask` requires `Issue tracker: jira`
+  or `azure-boards`.** Sub-task is a Jira/ADO primitive; GitHub
+  Issues / GitLab Issues / Linear have no equivalent. If the operator
+  pre-filled `story-subtask` with a flat tracker, ask interactively
+  rather than silently degrading to `github-issue`. Note the answer
+  in the Step 0.7 report.
+- **`Bug filing target` is meaningful only when `Bug filing style:
+  separate-ticket`.** Empty otherwise. If the operator set both
+  `style: github-issue` and a non-empty `target`, ask whether they
+  meant `separate-ticket`.
+- **`Test case storage: tms` or `both-synced` requires
+  `TMS != none`.** A TMS-storage policy without a TMS adapter is
+  unwriteable. Ask the operator, or downgrade to `markdown` and flag.
+- **`Automation PR base` should match `Merge policy` reality.** If
+  the base is the project's default branch *and* `Merge policy:
+  manual`, that's a contradiction worth surfacing — the team
+  presumably wants PM to merge somewhere protected; confirm the base
+  is what they meant.
+
+The check happens after the operator pre-fill and any interactive
+asks, before scout writes `profile.md`. Surface incoherent
+combinations in the Step 0.7 report alongside the resolved values so
+the operator sees what was changed and why.
+
 ### Destination
 
 `.agents/profile.md` § Project systems (see [templates.md](templates.md)
@@ -201,9 +237,12 @@ value or `ASK`:
 at runtime:
 
 - `test-case-analysis` reads § Bug filing style + § Bug filing target +
-  § Bundling policy when Sage needs to file a defect.
-- `bugfix-workflow` reads § Issue tracker to know which CLI to invoke
-  (`gh issue create` vs. Jira create vs. …).
+  § Bundling policy when Sage needs to file a defect — and hands off
+  to the agent's tracker-aware filing capability (typically
+  `issue-tracking`, which reads § Issue tracker to dispatch to the
+  right CLI/MCP).
+- `issue-tracking` reads § Issue tracker to know which CLI / MCP to
+  invoke (`gh issue create` vs. Atlassian MCP vs. `glab` vs. …).
 - `test-automation-workflow` reads § Test case storage to decide
   whether AFS files should be written to git under `test-specs/`,
   pushed back to the TMS, or both.
