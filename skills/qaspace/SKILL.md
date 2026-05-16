@@ -1,19 +1,21 @@
 ---
-name: qtest-jira
-description: Query and navigate EPAM TM (Test Management) Plugin tests in a Jira Server / Data Center instance. Load when the user asks about TM-plugin test runs, test folders, test status, "qtest", folder trees, or any JQL involving the TM custom fields (cf[23100] test run id, cf[23101] folder id, cf[24000] run name, cf[24001] folder path, cf[31500] Test Type, cf[31501] Test Status). Phrases like "show me tests in run X", "which tests failed in folder Y", "get the folder tree for project Z", "list manual tests not yet automated", "fetch tests by folder ID" all trigger this skill. Works via an MCP-wired Jira tool or direct REST API.
+name: qaspace
+description: Query and navigate EPAM qaspace Test Management Plugin tests in a Jira Server / Data Center instance. Load when the user asks about qaspace (sometimes mistakenly called "qtest") test runs, test folders, test status, folder trees, or any JQL involving the qaspace TM custom fields (cf[23100] test run id, cf[23101] folder id, cf[24000] run name, cf[24001] folder path, cf[31500] Test Type, cf[31501] Test Status). Phrases like "show me tests in run X", "which tests failed in folder Y", "get the folder tree for project Z", "list manual tests not yet automated", "fetch tests by folder ID" all trigger this skill. Works via an MCP-wired Jira tool or direct REST API.
 license: Apache-2.0
 metadata:
   author: octobots
   version: "0.1.0"
 ---
 
-# EPAM TM Plugin — Jira Server Test Query Skill
+# EPAM qaspace Test Management Plugin — Jira Server Test Query Skill
 
-The **EPAM TM (Test Management) Plugin** stores test runs, test
-folders, and test executions inside a Jira Server / Data Center
-instance as standard `Test`-issuetype issues plus a set of TM
-custom fields. Querying it is just JQL with a handful of custom
-fields — once you know which ones and what their types are.
+The **EPAM qaspace Test Management Plugin** (the `TM` plugin —
+*not* Tricentis qTest, despite the common "qtest" misnomer)
+stores test runs, test folders, and test executions inside a
+Jira Server / Data Center instance as standard `Test`-issuetype
+issues plus a set of TM custom fields. Querying it is just JQL
+with a handful of custom fields — once you know which ones and
+what their types are.
 
 This skill is for **Jira Server / Data Center** deployments
 (REST API v2, Bearer-token auth). If you're on a different TMS
@@ -129,7 +131,7 @@ TM_FIELD_NAMES = {
 }
 # Some installs use a slightly different label for cf[23101] —
 # look for any field whose `name` contains "Folder" and whose
-# `schema.custom` mentions TM/qtest if you don't find an exact
+# `schema.custom` mentions TM/qaspace if you don't find an exact
 # "Folder id" entry.
 
 mapping = {}
@@ -153,7 +155,7 @@ fits this repo's conventions:
 ```yaml
 # .agents/profile.md  (or a per-project notes file)
 tms:
-  adapter: qtest-jira
+  adapter: qaspace
   jira_base_url: https://<your-jira-server>
   project_key: <PROJECT>
   canonical_run_name: "Test Library"
