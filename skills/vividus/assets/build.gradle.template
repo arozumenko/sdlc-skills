@@ -1,0 +1,55 @@
+// Vividus build.gradle template — copy to project root and edit:
+//   1. Set project.description and group
+//   2. Bump vividus-bom version (latest: https://github.com/vividus-framework/vividus/releases)
+//   3. Add only the plugins you actually use (each adds dependencies + steps)
+
+project.description = 'Replace with project description'
+group = 'org.example.tests'
+
+ext.buildSystemPath = "${System.env.VIVIDUS_BUILD_SYSTEM_HOME ?: buildSystemRootDir}/${buildSystemVersion}"
+apply from: "${buildSystemPath}/vividus-test-project.gradle"
+
+dependencies {
+    implementation platform('org.vividus:vividus-bom:0.6.18')
+    implementation('org.vividus:vividus')
+
+    // ── Web (pick one: Selenium OR Playwright) ──
+    implementation('org.vividus:vividus-plugin-web-app')
+    // implementation('org.vividus:vividus-plugin-web-app-playwright')
+
+    // ── REST API (almost always pair with json plugin) ──
+    implementation('org.vividus:vividus-plugin-rest-api')
+    implementation('org.vividus:vividus-plugin-json')
+
+    // ── Mobile (uncomment if needed) ──
+    // implementation('org.vividus:vividus-plugin-mobile-app')
+
+    // ── Database (uncomment if needed) ──
+    // implementation('org.vividus:vividus-plugin-db')
+
+    // ── Data formats (uncomment as needed) ──
+    // implementation('org.vividus:vividus-plugin-csv')
+    // implementation('org.vividus:vividus-plugin-excel')
+    // implementation('org.vividus:vividus-plugin-xml')
+    // implementation('org.vividus:vividus-plugin-yaml')
+    // implementation('org.vividus:vividus-plugin-html')
+
+    // ── Visual / accessibility / performance (uncomment as needed) ──
+    // implementation('org.vividus:vividus-plugin-visual')
+    // implementation('org.vividus:vividus-plugin-applitools')
+    // implementation('org.vividus:vividus-plugin-accessibility')
+    // implementation('org.vividus:vividus-plugin-lighthouse')
+
+    // ── Cloud test grids (uncomment if needed) ──
+    // implementation('org.vividus:vividus-plugin-browserstack')
+    // implementation('org.vividus:vividus-plugin-saucelabs')
+    // implementation('org.vividus:vividus-plugin-lambdatest')
+
+    // ── Messaging / cloud (uncomment as needed) ──
+    // implementation('org.vividus:vividus-plugin-kafka')
+    // implementation('org.vividus:vividus-plugin-rabbitmq')
+    // implementation('org.vividus:vividus-plugin-aws-s3')
+
+    // ── AI / MCP ──
+    // implementation('org.vividus:vividus-mcp-server')
+}
