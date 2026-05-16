@@ -10,10 +10,14 @@ metadata:
 ## Test Automation Workflow: Explore → Specify → Implement → Review
 
 **Core philosophy:** do not automate what you have not executed. Every case is
-run manually (via `browser-verify` or Playwright MCP) first — defects, missing
-data, and environmental gaps are surfaced *before* a line of automation code is
-written. Then a separate engineer implements the automation inside the
-project's existing framework. Then a reviewer re-runs it.
+run manually first — pick whichever browser tool is wired and fits the
+challenge (`playwright-testing` over MCP, `playwright-cli` from the shell,
+`browser-verify` over CDP; full triage in
+[`references/browser-tools.md`](references/browser-tools.md)) — so defects,
+missing data, and environmental gaps are surfaced *before* a line of
+automation code is written. Then a separate engineer implements the
+automation inside the project's existing framework. Then a reviewer
+re-runs it.
 
 **Why split the work into two agents:** context. The analysis pass
 carries exploration state (DOM snapshots, test data, console noise)
@@ -25,8 +29,11 @@ one context breaks the bot; the skill split keeps each workspace lean
 even though only two personas touch it.
 
 **Re-used skills:** composes on top of `playwright-testing`,
-`browser-verify`, `bugfix-workflow`, `code-review`, `tdd`,
-`task-completion`, and `project-seeder`. It does not reinvent them.
+`playwright-cli`, `browser-verify`, `bugfix-workflow`, `code-review`,
+`tdd`, `task-completion`, and `project-seeder`. It does not reinvent
+them. The browser-tool triage (which of the three Playwright/CDP
+skills to use for a given challenge) lives in
+[`references/browser-tools.md`](references/browser-tools.md).
 
 ## Routing — how PM resolves slots to agents
 

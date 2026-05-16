@@ -15,12 +15,13 @@ of native plugin formats and a shared npx installer.
   `bugfix-workflow`, `code-review`, `tdd`, `task-completion`,
   `git-workflow`, `memory`, `playwright-testing`, `browser-verify`,
   `issue-tracking`, `xray-testing`, `atlassian-content`,
-  `tosca-automation`, `qavajs`, `test-case-analysis`,
+  `tosca-automation`, `vividus`, `qavajs`, `test-case-analysis`,
   `test-automation-workflow`, `goal-verifier`, `context-gatherer`,
   `deep-research`, `obsidian-vault`, `msgraph`, `project-seeder`.
 - **`skills.json`** — catalog of all skills, monorepo and external.
   The installer uses it to resolve + fetch external skills (from
-  `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`).
+  `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`,
+  `microsoft/playwright-cli`).
 
 ## Install — the recommended path
 

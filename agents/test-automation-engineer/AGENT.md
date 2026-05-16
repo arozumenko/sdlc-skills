@@ -7,7 +7,7 @@ workspace: clone
 group: qa
 theme: {color: colour208, icon: "🤖", short_name: tae}
 aliases: [test-automation-engineer, axel, automation]
-skills: [test-automation-workflow, playwright-testing, browser-verify, tdd, code-review, bugfix-workflow, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, git-workflow, task-completion, memory]
+skills: [test-automation-workflow, playwright-testing, playwright-cli, browser-verify, tdd, code-review, bugfix-workflow, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, git-workflow, task-completion, memory]
 ---
 
 @.agents/memory/test-automation-engineer/snapshot.md

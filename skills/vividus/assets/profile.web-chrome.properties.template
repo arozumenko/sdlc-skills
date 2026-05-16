@@ -1,0 +1,26 @@
+# Profile properties template for desktop Chrome.
+# Copy to: src/main/resources/properties/profile/web/desktop/chrome/profile.properties
+#
+# Profiles cascade by path. Activate with:
+#   configuration.profiles=web/desktop/chrome
+# Vividus loads, in order:
+#   properties/profile/web/profile.properties          (if present)
+#   properties/profile/web/desktop/profile.properties  (if present)
+#   properties/profile/web/desktop/chrome/profile.properties  (this file)
+
+web.driver=CHROME
+
+# Local ChromeDriver (default). For remote grid, set:
+# selenium.grid.url=http://hub.example.com:4444/wd/hub
+# selenium.grid.platform=LINUX
+# selenium.grid.version=stable
+selenium.grid.url=
+
+# Common Chrome flags
+web.driver.chrome.command-line-arguments=--start-maximized,--disable-gpu,--no-sandbox
+
+# Headless for CI
+# web.driver.chrome.command-line-arguments=--headless=new,--start-maximized,--disable-gpu,--no-sandbox
+
+# Highlight elements during run (debug aid; disable for CI)
+web.element.highlighting.enabled=true

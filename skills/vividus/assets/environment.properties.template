@@ -1,0 +1,22 @@
+# Environment properties template.
+# Copy per-environment to: src/main/resources/properties/environment/<env-name>/environment.properties
+#
+# Activate with: configuration.environments=<env-name>
+# Override at runtime: -Pvividus.configuration.environments=<env-name>
+
+# ── Web ──
+web-application.main-page-url=https://staging.example.com
+
+# ── REST ──
+rest-api.http.endpoint=https://api.staging.example.com
+
+# ── DB (per connection key — referenced from stories as `app-db`, etc.) ──
+# db.connection.app-db.driver-class-name=org.postgresql.Driver
+# db.connection.app-db.url=jdbc:postgresql://staging-db.example.com:5432/app
+# db.connection.app-db.username=
+# db.connection.app-db.password=
+
+# ── Secrets ──
+# Read from env vars to keep them out of git:
+#   db.connection.app-db.password=${DB_PASSWORD}
+# Then export DB_PASSWORD before running.

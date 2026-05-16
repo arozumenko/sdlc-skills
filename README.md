@@ -39,14 +39,16 @@ flowchart TB
 
     subgraph externals["upstream external skill sources"]
         direction LR
-        ext_matt[["mattpocock/skills<br/>tdd"]]
+        ext_matt[["mattpocock/skills<br/>skills/engineering/tdd"]]
         ext_obra[["obra/superpowers<br/>brainstorming, debugging,<br/>verification, ..."]]
         ext_tws[["twostraws/*-Agent-Skill<br/>SwiftUI, SwiftData,<br/>Swift Testing, Concurrency"]]
+        ext_msft[["microsoft/playwright-cli<br/>playwright-cli"]]
     end
 
     installer ==>|fetch at install time| ext_matt
     installer ==>|fetch at install time| ext_obra
     installer ==>|fetch at install time| ext_tws
+    installer ==>|fetch at install time| ext_msft
 
     sdlc ==>|direct install via<br/>plugin manifest or npx| ides
     sdlc ==>|install.sh delegates<br/>content to npx| octobots
@@ -321,6 +323,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `xray-testing` | Xray CRUD + results import — Tests, Preconditions, Test Sets/Plans, Executions, Runs. Xray Cloud (GraphQL) + Server/DC (REST). Stdlib Python CLI fallback |
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
+| `vividus` | Vividus BDD framework — bootstrap, configure, author `.story` files. 47+ plugins (web, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment triple, MCP-server grounding. Templates in `assets/` |
 | `qavajs` | BDD test automation on CucumberJS — config.ts schema, `qavajs run` CLI, memory + validation DSLs, page-object `locator()` hierarchy, composition (`executeStep` / `Template` / `Fixture`), and ~300 literal Gherkin step patterns across 11 `@qavajs/steps-*` packages (Playwright / WebdriverIO / API / SQL / files / Gmail / Lighthouse / visual-diff / axe a11y). Bundled `refresh-catalogs.sh` to re-pull steps from upstream |
 | `goal-verifier` | Verify a task actually achieved its stated goal |
 | `context-gatherer` | Targeted codebase exploration before changes |
@@ -339,7 +342,7 @@ catalog.
 
 | Skill | Source | Used by |
 |---|---|---|
-| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `tdd/` | `python-dev`, `js-dev`, `ios-dev` |
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `skills/engineering/tdd/` | `python-dev`, `js-dev`, `ios-dev` |
 | `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
 | `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs + `qa-engineer` |
 | `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs + `qa-engineer` |
@@ -350,6 +353,7 @@ catalog.
 | `swiftdata-pro` | [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill) | `ios-dev` |
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
+| `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
 
 ## Using outside Octobots
 
@@ -452,9 +456,10 @@ resolution — add a folder or a registry entry, it shows up on the next
 External skills are fetched from upstream at install time — this repo
 re-distributes nothing, only catalogs and wires.
 
-- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
+- **[`mattpocock/skills`](https://github.com/mattpocock/skills)** — Matt Pocock. `skills/engineering/tdd/` (vertical-slice tracer bullets, integration-style tests, interface design for testability). MIT.
 - **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
+- **[`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli)** — Microsoft Playwright. `skills/playwright-cli/` (drive Playwright from the command line — browser launch, navigation, snapshot/locator interaction, tabs and storage, network mocking, tracing, test generation). Used by `qa-engineer` and `test-automation-engineer`. Apache-2.0.
 
 Thanks to all maintainers.
 
