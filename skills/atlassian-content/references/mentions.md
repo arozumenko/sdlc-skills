@@ -1,17 +1,31 @@
-# Mentions — the correct way, on both surfaces
+# Mentions — the correct way, on every deployment / surface
+
+Mentions are the highest-leverage and most-failed piece of content
+to get right. A free-text `@username` string posts as literal
+text — no notification, no link, no profile card — on **every**
+surface. The right way depends on the deployment.
+
+| Deployment / surface | Identifier | Syntax in body |
+|---|---|---|
+| **Jira Cloud** | `accountId` | ADF `mention` node |
+| **Confluence Cloud** | `accountId` | `<ri:user ri:account-id="…"/>` |
+| **Jira Server / Data Center** | login `name` (the username) | `[~username]` inside wiki markup |
+| **Confluence Server / Data Center** | `userKey` (preferred) or `username` | `<ri:user ri:userkey="…"/>` or `<ri:user ri:username="…"/>` |
+
+The first task is always: **identify the deployment** (see
+`SKILL.md` § "Detect deployment first"), then use the lookup +
+syntax for that deployment.
+
+## 1. Cloud — `accountId`
 
 Atlassian Cloud mentions are backed by an **accountId** — an
-opaque string per user within a tenant (e.g.
-`61e1a042e67ea2006b5b2157`). `@username` / `@email` strings are
-**not mentions** when posted through the API — they render as
-literal text, no notification, no profile card, no link.
+opaque string per user within a tenant
+(e.g. `61e1a042e67ea2006b5b2157`). The same `accountId` works
+across Jira and Confluence in the same Cloud tenant.
 
-The same `accountId` works across Jira and Confluence in the same
-tenant.
+### 1.1 Look up the accountId
 
-## 1. Look up the accountId
-
-### From an email
+From an email:
 
 ```
 GET /rest/api/3/user/search?query=alexander@example.com
@@ -20,35 +34,23 @@ GET /rest/api/3/user/search?query=alexander@example.com
       "emailAddress": "alexander@example.com", ... } ]
 ```
 
-### From a display name (fuzzier — may return multiples)
+From a display name (fuzzier — may return multiples):
 
 ```
 GET /rest/api/3/user/search?query=Alexander Bychinskiy
 ```
 
-Verify: the `displayName` you get back matches what you searched
-for. If multiple users match, don't guess — ask the operator or
-fall back to plain text.
-
-### From the current authenticated user (myself)
+Self:
 
 ```
 GET /rest/api/3/myself
 → { "accountId": "...", "displayName": "...", ... }
 ```
 
-### Caching
+Verify the `displayName` you get back matches what you searched
+for. Multiple matches → ask the operator; don't guess.
 
-Cache accountIds per session, keyed by email or normalized
-display-name. Resolving the same user twice in one run is wasted
-calls; resolving them five times is a bug.
-
-Caching across sessions belongs in `.agents/memory/` or the
-project's profile, not in this skill.
-
-## 2. Use it in a Jira mention (ADF)
-
-Inside any inline-node context (paragraph, table cell, list item):
+### 1.2 Jira mention (ADF)
 
 ```json
 { "type": "mention",
@@ -57,12 +59,10 @@ Inside any inline-node context (paragraph, table cell, list item):
 ```
 
 - `id` → the accountId.
-- `text` → the **display fallback**, shown only when the mention
-  fails to render. Match the user's display name verbatim with a
-  leading `@` (e.g. `"@Alexander Bychinskiy"`); modern Atlassian
-  UIs render spaces fine.
+- `text` → the display fallback shown only if rendering fails.
+  Match the user's display name with a leading `@`.
 
-Full paragraph example:
+Full paragraph:
 
 ```json
 { "type": "paragraph",
@@ -75,9 +75,7 @@ Full paragraph example:
   ] }
 ```
 
-## 3. Use it in a Confluence mention (storage format)
-
-Inside any body content (paragraph, table cell, list item):
+### 1.3 Confluence mention (storage format)
 
 ```html
 <ac:link>
@@ -85,24 +83,118 @@ Inside any body content (paragraph, table cell, list item):
 </ac:link>
 ```
 
-Full paragraph example:
-
-```html
-<p>
-  Hi
-  <ac:link>
-    <ri:user ri:account-id="61e1a042e67ea2006b5b2157" />
-  </ac:link>,
-  please review.
-</p>
-```
-
 Confluence's renderer substitutes the user's current display name
 inside the anchor — you don't provide a fallback text node.
 
+## 2. Jira Server / Data Center — `[~username]`
+
+On Server, the mention token is the **login username** — the
+`name` field from `/rest/api/2/user/search`, NOT the display
+name, NOT the email, NOT an `accountId`.
+
+### 2.1 Look up the username
+
+```
+GET /rest/api/2/user/search?username=alexander
+→ [ { "self": "https://jira.company.com/rest/api/2/user?username=jsmith",
+      "key": "JIRAUSER10042",
+      "name": "jsmith",                    ← this goes in [~name]
+      "emailAddress": "jsmith@company.com",
+      "displayName": "Jane Smith",
+      "active": true } ]
+```
+
+For fuzzier search across username + display name + email:
+
+```
+GET /rest/api/2/user/picker?query=jane
+→ { "users": [ { "name": "jsmith", "html": "...", ... } ], ... }
+```
+
+- `name` is the login username — feed it verbatim into `[~name]`.
+- `key` (e.g. `JIRAUSER10042`) is the stable per-instance
+  identifier. On GDPR-anonymized installs (Jira 8.7+), `name`
+  becomes a `jirauserNNNN` alias and `[~jirauserNNNN]` works
+  against that alias.
+
+### 2.2 Use it in wiki markup
+
+```
+cc [~jsmith] — can you triage by EOD?
+```
+
+Full description snippet (Server v2 description is a JSON string,
+so `\n` is a literal newline):
+
+```json
+{
+  "fields": {
+    "description": "h2. Investigation\n\nLikely null-pointer in {{AddressValidator}}. cc [~jsmith] and [~agonzalez]."
+  }
+}
+```
+
+Username escaping:
+
+- `+`, `.`, `_` characters are usually fine.
+- `|`, `]`, `[`, `{`, `}` must be escaped with backslash.
+- **Case matters** on most installs — use the exact `name` from
+  the API.
+
+The Cloud-style `[~accountid:KEY]` syntax is **not officially
+supported on Server** and renders as literal text on most
+installs. Do not use it.
+
+## 3. Confluence Server / Data Center — `ri:userkey` / `ri:username`
+
+Cloud uses `ri:account-id`. **Server does not.** Use either of:
+
+```html
+<ac:link>
+  <ri:user ri:userkey="ff8080814ba236dc014ba236f4e40001" />
+</ac:link>
+```
+
+```html
+<ac:link>
+  <ri:user ri:username="jsmith" />
+</ac:link>
+```
+
+Confluence Server normalises `ri:username` → `ri:userkey` on save.
+The `userkey` is the stable per-instance identifier.
+
+Posting `ri:account-id="…"` on Server produces a broken-link
+placeholder in the rendered page.
+
+### 3.1 Look up the userkey on Server
+
+```
+GET /rest/api/user?username=jsmith
+→ { "username": "jsmith",
+    "userKey": "ff8080814ba236dc014ba236f4e40001",
+    "displayName": "Jane Smith",
+    "type": "known" }
+```
+
+Cache by username, store `userKey`. Note the lowercase
+`userKey` key in the JSON response vs the lowercase-and-hyphenated
+`ri:userkey` attribute in storage format — they refer to the same
+value.
+
+### 3.2 Cross-product on Server
+
+Jira and Confluence on Server are usually separate installs with
+separate user directories — DON'T reuse a Jira `name` as a
+Confluence `username` unless the operator confirms shared SSO /
+the same user directory. Look up each side independently.
+
 ## 4. Mentioning multiple users
 
-Fine — concatenate inline nodes separated by text:
+Patterns are the same on every surface — concatenate inline
+nodes / elements / tokens separated by text.
+
+**Jira Cloud (ADF):**
 
 ```json
 { "type": "paragraph",
@@ -117,38 +209,75 @@ Fine — concatenate inline nodes separated by text:
   ] }
 ```
 
-Confluence:
+**Jira Server (wiki):**
+
+```
+FYI [~anna] and [~bob]: please review.
+```
+
+**Confluence (any deployment, storage format):**
 
 ```html
 <p>
   FYI
-  <ac:link><ri:user ri:account-id="ACCOUNTID-A" /></ac:link>
+  <ac:link><ri:user ri:account-id="ACCOUNTID-A" /></ac:link>   <!-- Cloud -->
   and
-  <ac:link><ri:user ri:account-id="ACCOUNTID-B" /></ac:link>:
-  please review.
+  <ac:link><ri:user ri:userkey="USERKEY-B" /></ac:link>        <!-- Server -->
+  : please review.
 </p>
 ```
+
+(Don't actually mix Cloud and Server identifiers in one page —
+the line above is illustrative; in practice both mentions use the
+same deployment's identifier.)
 
 ## 5. Failure modes
 
 - **User search returns empty** → the user doesn't exist in this
-  tenant (may have left the company, may be a different tenant, or
-  the search term is too broad/narrow). Do not invent a mention;
-  fall back to plain text (`"Hi Alexander, "`).
-- **Multiple matches** → if you can't narrow down via email, ask
-  the operator which accountId to use.
-- **Deactivated user** → mention still posts, but shows as greyed
+  tenant / instance (may have left, may be a different
+  tenant/install, search term too narrow). Do not invent a
+  mention; fall back to plain text (`"Hi Alexander, "`).
+- **Multiple matches** → if you can't narrow down via email
+  (Cloud) or username (Server), ask the operator. Never guess.
+- **Deactivated user** → mention still posts, but shows greyed
   out. Decide whether that's useful (historical record) or
-  misleading (expecting a response) — often better to use plain
-  text with the name.
-- **Group mentions** → Jira supports `groupId`-based mention-like
-  behavior via **team mentions** (not covered here). Confluence
-  does not have built-in group mention in storage format. For
-  "the platform team", mention the team lead individually or add
-  a `@label` convention agreed with the team.
+  misleading (expecting a response).
+- **(Server) `[~name]` renders as plain text** → either the
+  field is on the Default Text Renderer, or the username is
+  wrong / case-mismatched. Probe via `?expand=renderedFields`
+  to disambiguate.
+- **(Server) `ri:userkey` doesn't render** → the key was
+  imported from a different Confluence instance (`userKey` is
+  per-instance). Re-look it up in the destination instance.
+- **Wrong identifier for the deployment** → `accountId` posted
+  to Server, or `[~username]` written into ADF, produces literal
+  text. Detect the deployment FIRST.
+- **Group mentions** → Jira Cloud supports `groupId`-based team
+  mentions (not covered here). Confluence does not have built-in
+  group mentions in storage format. Server has the same gap.
+  For "the platform team", mention the team lead individually or
+  use a `@label` convention agreed with the team.
 
-## 6. Privacy note
+## 6. Caching
 
-`accountId` is safe to log / persist internally — it's not PII by
-itself. Email addresses ARE PII — if you cache an email → accountId
-lookup, respect the project's data-handling policy.
+Cache lookups per session:
+
+- Cloud: key by email or normalized display-name → `accountId`.
+- Jira Server: key by email or display-name → `{ name, key }`.
+- Confluence Server: key by username → `{ userKey, displayName }`.
+
+Resolving the same user twice in one run is wasted calls;
+resolving them five times is a bug.
+
+Cross-session caching belongs in `.agents/memory/` or the
+project's profile, not in this skill.
+
+## 7. Privacy note
+
+- `accountId` (Cloud) is safe to log / persist internally — not
+  PII by itself.
+- `userKey` (Server) is similarly opaque and safe.
+- Login `name` (Server) is often a derivation of the user's real
+  name (`jsmith`, `alexander.b`) — treat as moderately sensitive.
+- Email addresses ARE PII — if you cache email → identifier,
+  respect the project's data-handling policy.

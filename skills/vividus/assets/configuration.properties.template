@@ -1,0 +1,18 @@
+# Master Vividus configuration — copy to src/main/resources/properties/configuration.properties
+#
+# Three orthogonal axes (all comma-separated; first declared wins inside a tier):
+#   configuration.suites       — which suites to run (story directories + batch settings)
+#   configuration.profiles     — which platform/browser/device (cascading by path)
+#   configuration.environments — which host/endpoints/credentials
+#
+# Override at runtime with `-Pvividus.<key>=<value>`.
+
+configuration.suites=web_app
+configuration.profiles=web/desktop/chrome
+configuration.environments=dev
+
+# Optional: bundle a triple under one preset key, then activate.
+# configuration-set.api-staging.suites=rest_api
+# configuration-set.api-staging.profiles=
+# configuration-set.api-staging.environments=staging
+# configuration-set.active=api-staging
