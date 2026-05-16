@@ -1,10 +1,18 @@
-# Jira ADF (Atlassian Document Format) — API v3
+# Jira ADF (Atlassian Document Format) — Cloud, API v3
 
-**JIRA SYNTAX REFERENCE:**
+> **Scope: Atlassian Cloud only.** Jira Server / Data Center
+> does NOT accept ADF — it uses wiki markup against API v2.
+> If you're hitting `https://<host>.atlassian.net/...`, you're
+> on Cloud and this file is the right reference. For any
+> custom-domain Jira (`https://jira.company.com/...`), switch to
+> `references/jira-wiki-server.md`. See `SKILL.md` § "Detect
+> deployment first" for how to tell.
+
+**JIRA SYNTAX REFERENCE (Cloud):**
 
 - Use **ADF** (Atlassian Document Format) — a structured JSON document.
-- Use **API v3** — `/rest/api/3/*`. API v2 accepts wiki markup, not
-  ADF, and is legacy for Cloud.
+- Use **API v3** — `/rest/api/3/*`. API v2 on Cloud accepts wiki
+  markup, not ADF, and is legacy.
 - Recommended: create professional, well-formatted Jira issues /
   comments with user mentions, code blocks, panels, tables, and
   links by assembling ADF documents and POSTing them.

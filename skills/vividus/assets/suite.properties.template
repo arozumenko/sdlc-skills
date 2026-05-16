@@ -1,0 +1,32 @@
+# Suite properties template — copy to src/main/resources/properties/suite/<suite-name>/suite.properties
+#
+# A suite has one or more batches. Batches run sequentially; stories inside a
+# batch run in parallel (controlled by `batch-N.threads`).
+
+# ── Batch 1 ──
+batch-1.name=Web smoke
+batch-1.resource-location=story/web_app
+batch-1.resource-include-patterns=*.story
+# batch-1.resource-exclude-patterns=skip-*.story
+batch-1.threads=1
+batch-1.fail-fast=false
+# Filter by Meta tags (Groovy). Example: "groovy: smoke && !skip"
+# batch-1.meta-filters=
+# batch-1.story-execution-timeout=PT30M
+# Inject batch-scoped variables (visible as ${name} in stories)
+# batch-1.variables.user=alice
+
+# ── Optional Batch 2 (runs after Batch 1) ──
+# batch-2.name=Web regression
+# batch-2.resource-location=story/web_app/regression
+# batch-2.threads=4
+
+# ── Engine + plugin tweaks scoped to this suite ──
+# Composite step files for this suite
+engine.composite-paths=steps/web_app/*.steps,steps/common/*.steps
+
+# Web-specific (only when this suite drives a browser)
+# web.driver.chrome.command-line-arguments=--ignore-certificate-errors,--start-maximized
+
+# REST-specific (only when this suite calls APIs)
+# http.ssl.check-certificate=false

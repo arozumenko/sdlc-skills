@@ -64,15 +64,25 @@ linked story, attachments.
 
 ### 3. Execute
 
-Primary tool: the [`playwright-testing`](../playwright-testing/) skill
-(`browser_navigate`, `browser_snapshot`, `browser_click`, …). Prefer
-`browser_snapshot` for accessible-name discovery — it yields both the
-ref you need to click and the role-name pair you'll assert on.
+Three browser tools sit at different layers; pick by what's wired and
+what challenge you're solving. Full triage:
+[`../test-automation-workflow/references/browser-tools.md`](../test-automation-workflow/references/browser-tools.md).
+In short:
 
-Fallback / deep inspection:
-[`browser-verify`](../browser-verify/) — use when you need computed
-styles, real CDP input events, storage/cookies, or axe accessibility
-audits.
+- **Default** — [`playwright-testing`](../playwright-testing/)
+  (Playwright MCP). Prefer `browser_snapshot` for accessible-name
+  discovery — it yields both the ref you need to click and the
+  role-name pair you'll assert on.
+- **MCP server not wired** — [`playwright-cli`](../playwright-cli/)
+  drives the same browser surface from the shell (`codegen`,
+  `--trace`, multi-tab, storage, request mocking).
+- **Visual / CDP / a11y** — [`browser-verify`](../browser-verify/)
+  for computed styles, real CDP input events, storage/cookies, or axe
+  audits.
+
+Soft guidance, not a hard rule: switching tools mid-case is fine when
+the first one isn't producing useful evidence — note which tool
+produced which observation in the AFS so the next reader can follow.
 
 For each step:
 

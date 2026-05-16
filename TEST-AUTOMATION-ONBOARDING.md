@@ -68,7 +68,7 @@ cd /path/to/your-automation-repo
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,project-manager,tech-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
+  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
   --yes
 ```
 
