@@ -324,6 +324,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
 | `vividus` | Vividus BDD framework — bootstrap, configure, author `.story` files. 47+ plugins (web, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment triple, MCP-server grounding. Templates in `assets/` |
+| `qavajs` | BDD test automation on CucumberJS — config.ts schema, `qavajs run` CLI, memory + validation DSLs, page-object `locator()` hierarchy, composition (`executeStep` / `Template` / `Fixture`), and ~300 literal Gherkin step patterns across 11 `@qavajs/steps-*` packages (Playwright / WebdriverIO / API / SQL / files / Gmail / Lighthouse / visual-diff / axe a11y). Bundled `refresh-catalogs.sh` to re-pull steps from upstream |
 | `goal-verifier` | Verify a task actually achieved its stated goal |
 | `context-gatherer` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |

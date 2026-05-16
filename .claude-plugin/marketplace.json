@@ -184,6 +184,12 @@
       "source": "./skills/vividus",
       "description": "Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based .story files with 47+ plugins (web, REST, mobile, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment configuration.",
       "version": "0.2.0"
+    },
+    {
+      "name": "qavajs",
+      "source": "./skills/qavajs",
+      "description": "BDD test automation on CucumberJS: config.ts schema, qavajs run CLI, memory + validation DSLs, page-object locator() hierarchy, composition (executeStep / Template / Fixture), and ~300 literal Gherkin step patterns across 11 @qavajs/steps-* packages (Playwright, WebdriverIO, API, SQL, files, Gmail, Lighthouse, visual-diff, axe).",
+      "version": "0.2.0"
     }
   ]
 }

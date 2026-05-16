@@ -1,0 +1,11 @@
+# Octobots install config — read by setup-skill.sh, ignored by other agent clients.
+#
+# qavajs has no MCP server: the framework is a CucumberJS extension consumed
+# via `npm create @qavajs` and `npx qavajs run`. The skill is pure reference
+# + assets + a `scripts/refresh-catalogs.sh` that re-pulls upstream step
+# packages on demand.
+
+permissions:
+  filesystem: read-write   # scaffolds projects, edits config.ts, refreshes catalogs
+  network: true            # `npm` / `npx`, and `refresh-catalogs.sh` clones from github.com/qavajs
+  shell: true              # invokes `npm`, `npx qavajs run`, `git clone` (refresh-catalogs)
