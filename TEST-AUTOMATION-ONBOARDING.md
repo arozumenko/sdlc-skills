@@ -87,13 +87,13 @@ npx github:arozumenko/sdlc-skills init \
   --yes
 ```
 
-**Explicit `--skills` form** — if you want to install skills not declared in the selected agents' frontmatter (e.g. `qtest-jira` because the project uses qTest), pass them inline. Quote the list to defend against shell whitespace splitting it:
+**Explicit `--skills` form** — if you want to install skills not declared in the selected agents' frontmatter (e.g. `qaspace` because the project uses the EPAM qaspace Test Management Plugin), pass them inline. Quote the list to defend against shell whitespace splitting it:
 
 ```bash
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,test-automation-lead,qa-engineer,test-automation-engineer \
-  --skills "project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,qtest-jira,memory,tdd,git-workflow,plan-feature,systematic-debugging,verification-before-completion,requesting-code-review,receiving-code-review,writing-skills" \
+  --skills "project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,qaspace,memory,tdd,git-workflow,plan-feature,systematic-debugging,verification-before-completion,requesting-code-review,receiving-code-review,writing-skills" \
   --yes
 ```
 

@@ -198,7 +198,7 @@ Project context (read at session start; auto-imported via @-blocks):
 
 User set: {USER_SET} (per .agents/profile.md § Roles & sample users).
 
-TMS adapter: {qtest-jira | xray-testing | testrail-... | markdown}.
+TMS adapter: {qaspace | xray-testing | testrail-... | markdown}.
   Fetch the case with ALL core fields (steps + expected). Adapter-specific
   field lists live in the adapter's SKILL.md.
 
