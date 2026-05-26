@@ -178,7 +178,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Three
+files** into the project — one command instead of hand-listing roles. Four
 ship today:
 
 | Bundle | Roster | What it's for |
