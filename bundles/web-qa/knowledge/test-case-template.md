@@ -4,6 +4,7 @@ title: <verb + subject, e.g. "Login with valid credentials">
 priority: critical     # critical | high | medium | low
 type: functional       # functional | regression | smoke | integration | exploratory
 module: <feature area>
+size:                  # S | M | L — set by test-sizer (optional)
 requirements: []       # [REQ-001] or remove if no requirement IDs
 tags: []               # [smoke, login, happy-path]
 ---

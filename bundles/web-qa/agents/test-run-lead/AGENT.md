@@ -63,7 +63,7 @@ Attach all three fields to the result object.
 
 **If a test-runner produces no JSON**, record:
 ```json
-{ "tc_id": "...", "title": "(test-runner produced no response)", "result": "BLOCKED", "failure_reason": "Test-runner agent did not return a result", "tokens": 0, "tool_uses": 0, "duration_ms": 0 }
+{ "tc_id": "...", "title": "(test-runner produced no response)", "size": null, "result": "BLOCKED", "failure_reason": "Test-runner agent did not return a result", "tokens": 0, "tool_uses": 0, "duration_ms": 0 }
 ```
 
 **If the `<usage>` block is absent**, set `tokens: null, tool_uses: null, duration_ms: null` — the test-reporter will omit the Performance Metrics section gracefully.

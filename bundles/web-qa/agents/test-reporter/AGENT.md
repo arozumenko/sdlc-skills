@@ -26,7 +26,7 @@ You receive a message with:
 ## Result Object Fields
 
 ```
-tc_id, title, result (PASS|FAIL|BLOCKED), steps_total, steps_completed,
+tc_id, title, size (S|M|L|null), result (PASS|FAIL|BLOCKED), steps_total, steps_completed,
 failure_step, failure_reason, screenshot, duration_seconds, console_errors, notes,
 tokens, tool_uses, duration_ms
 ```
@@ -75,24 +75,34 @@ date: {date}
 | ✅ Passed    | N     | XX.X%  |
 | ❌ Failed    | N     | XX.X%  |
 | ⏸ Blocked   | N     | XX.X%  |
+| 🔹 Size S    | N     | XX.X%  |
+| 🔸 Size M    | N     | XX.X%  |
+| 🔴 Size L    | N     | XX.X%  |
+
+_(Omit the Size rows if all `size` values are null.)_
 
 ## Results
 
-| ID      | Title                        | Status   | Steps | Wall Clock |
-|---------|------------------------------|----------|-------|------------|
-| TC-NNN  | {title}                      | ✅ PASS  | N/N   | Xs         |
+| ID      | Title                        | Size | Status   | Steps | Wall Clock |
+|---------|------------------------------|------|----------|-------|------------|
+| TC-NNN  | {title}                      | S    | ✅ PASS  | N/N   | Xs         |
+
+_(Omit the Size column if all `size` values are null.)_
 
 ## Performance Metrics
 
 _(Include only if tokens/tool_uses/duration_ms fields are present in results)_
 
-| ID      | Wall Clock | Tool Uses | Tokens       |
-|---------|------------|-----------|--------------|
-| TC-NNN  | Xs         | N         | N,NNN        |
-| **Total**   | **Xm Ys**  | **N**     | **NNN,NNN**  |
-| **Average** | **Xs**     | **N**     | **NN,NNN**   |
+| ID      | Size | Wall Clock | Tool Uses | Tokens       |
+|---------|------|------------|-----------|--------------|
+| TC-NNN  | S    | Xs         | N         | N,NNN        |
+| **Total**   |  | **Xm Ys**  | **N**     | **NNN,NNN**  |
+| **Average** |  | **Xs**     | **N**     | **NN,NNN**   |
 
 > **Total tokens:** NNN,NNN — **Avg per TC:** NN,NNN — **Total tool uses:** NNN
+> **Avg tokens by size:** S = NN,NNN | M = NN,NNN | L = NN,NNN
+
+_(Omit the Size column and the by-size line if all `size` values are null.)_
 
 ## Failed Tests
 
@@ -137,7 +147,9 @@ _(Only if failures exist)_
 - Total tool uses: sum of all `tool_uses` values
 - Average tool uses: `total_tool_uses / count`, rounded to 1 decimal
 - Defect severity: from the result's `priority` — `critical`/`high` → High, `medium` → Medium, `low` → Low; if `priority` is absent, default to Medium.
-- Omit Failed Tests, Blocked Tests, Defects Found, Performance Metrics sections if there are no entries / no data
+- Size distribution: count results by `size` value; **omit the Size rows/column and the by-size line if all `size` values are null**
+- Avg tokens by size: group results by `size`, average `tokens` per group; include only groups with ≥1 result
+- Omit Failed Tests, Blocked Tests, Defects Found, Performance Metrics, and size rows/columns if there are no entries / no data
 
 ## Verification
 

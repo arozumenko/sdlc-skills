@@ -39,6 +39,7 @@ title: Login with valid credentials          # short, verb+object
 priority: critical                           # critical | high | medium | low
 type: functional                             # functional | regression | smoke | integration | exploratory
 module: authentication                       # feature area
+size: M                                      # S | M | L — assigned by test-sizer (optional)
 requirements: [REQ-001, REQ-002]             # traceability (omit if no req IDs)
 tags: [smoke, login, happy-path]             # free-form, used for filtering
 ---
