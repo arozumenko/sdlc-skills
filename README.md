@@ -267,7 +267,7 @@ are not fetched. If you want those, go back to path 1 or 2.
 ```bash
 /plugin marketplace add arozumenko/sdlc-skills
 /plugin install sdlc-skills@sdlc-skills
-# Or individual entries: /plugin install sdlc-skills@ios-dev  etc.
+# Or individual entries: /plugin install ios-dev@sdlc-skills  etc.
 ```
 
 **Cursor native plugin** — `.cursor-plugin/plugin.json`

@@ -152,7 +152,8 @@ register your own Azure AD app:
 ### Claude Code plugin marketplace
 
 ```
-/plugin install sdlc-skills@microsoft-365
+/plugin marketplace add arozumenko/sdlc-skills
+/plugin install microsoft-365@sdlc-skills
 ```
 
 ### Direct install via npx
