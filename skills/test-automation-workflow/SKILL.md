@@ -1,6 +1,6 @@
 ---
 name: test-automation-workflow
-description: End-to-end test automation workflow — Explore, Specify, Implement, Review — over a pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown). Load for "automate TC-NNN", "convert this case to Playwright", or any flow from a manual test case to green framework tests.
+description: Use when a TMS test case needs to become an automated test, or when automating a regression batch — "automate TC-NNN", "convert this case to Playwright", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
 license: Apache-2.0
 metadata:
   author: "Alexander Bychinkii (git: bermudas)"

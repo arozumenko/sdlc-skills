@@ -1,6 +1,6 @@
 ---
 name: root-cause-analysis
-description: Trace a confirmed bug to its exact cause — execution-path tracing, root-cause classification, confidence, and impact/regression analysis, reported on the ticket. Use after a bug is reproduced, before proposing a fix. Investigation only — does not edit code.
+description: Use after a bug is reproduced/confirmed and before proposing a fix, or when the user says "investigate issue", to trace a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.
 license: Apache-2.0
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"

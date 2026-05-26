@@ -1,6 +1,6 @@
 ---
 name: bugfix-workflow
-description: End-to-end bugfix workflow — reproduce, test-first, RCA, fix, verify, document. Use when the user says "fix bug", "investigate issue", "fix #NNN", or whenever you hit a failing test or reproducible defect, before you start patching.
+description: Use when the user says "fix bug", "fix #NNN", or you hit a failing test or reproducible defect that needs fixing end-to-end (not investigation alone). The full bugfix workflow from reproduction through a verified, documented fix.
 license: Apache-2.0
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
@@ -11,6 +11,14 @@ metadata:
 
 **Core philosophy:** reproduce before you fix, verify after you fix, link
 everything to the ticket.
+
+## Platform & systems
+
+`gh issue …` / `gh pr …` below are the **GitHub reference**. Translate to your
+tracker per `.agents/profile.md` § Project systems (jira / gitlab-issues /
+azure-boards / linear) and your code host's CLI per `.agents/workflow.md`
+(GitLab `glab`, Azure DevOps `az repos`, Bitbucket `bb`, Gitea `tea`). If scout
+hasn't recorded them, ask before assuming GitHub.
 
 ## The seven steps
 
