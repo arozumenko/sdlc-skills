@@ -47,7 +47,7 @@ doesn't exist, migrate it before your first write:
 |---|---|
 | `.claude/memory/<role>/` (directory) | `.agents/memory/<role>/` — move the whole dir |
 | `.octobots/memory/<role>/` (directory, from Octobots supervisor) | `.agents/memory/<role>/` — move the whole dir |
-| `.claude/memory/<role>.md` (flat file, from old project-seeder) | `.agents/memory/<role>/project_briefing.md` — wrap the existing content with `type: project` frontmatter (see "Write" op below), add one index line to `MEMORY.md` |
+| `.claude/memory/<role>.md` (flat file, from old seeding-a-project) | `.agents/memory/<role>/project_briefing.md` — wrap the existing content with `type: project` frontmatter (see "Write" op below), add one index line to `MEMORY.md` |
 
 Migrate with `Bash` (`mv` for directories) or `Read`/`Write` (for the flat
 file → curated entry conversion). Do this once; afterwards ignore the old

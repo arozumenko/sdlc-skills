@@ -126,14 +126,14 @@
       "version": "0.2.0"
     },
     {
-      "name": "context-gatherer",
-      "source": "./skills/context-gatherer",
+      "name": "gathering-context",
+      "source": "./skills/gathering-context",
       "description": "Cross-channel context gathering — local KB, email, Teams, web — before responding.",
       "version": "0.2.0"
     },
     {
-      "name": "goal-verifier",
-      "source": "./skills/goal-verifier",
+      "name": "verifying-outcomes",
+      "source": "./skills/verifying-outcomes",
       "description": "Goal-backward verification — checks whether the desired outcome was actually achieved.",
       "version": "0.2.0"
     },
@@ -144,8 +144,8 @@
       "version": "0.2.0"
     },
     {
-      "name": "msgraph",
-      "source": "./skills/msgraph",
+      "name": "microsoft-365",
+      "source": "./skills/microsoft-365",
       "description": "Microsoft 365 integration — email, Teams, calendar, SharePoint via Graph API.",
       "version": "0.2.0"
     },
@@ -156,14 +156,14 @@
       "version": "0.2.0"
     },
     {
-      "name": "project-seeder",
-      "source": "./skills/project-seeder",
+      "name": "seeding-a-project",
+      "source": "./skills/seeding-a-project",
       "description": "Generate AGENTS.md, .agents/ project docs, and per-role memory briefings after codebase exploration.",
       "version": "0.2.0"
     },
     {
-      "name": "task-completion",
-      "source": "./skills/task-completion",
+      "name": "completing-a-task",
+      "source": "./skills/completing-a-task",
       "description": "Five-step task handoff protocol: commit → push → PR → comment → notify.",
       "version": "0.2.0"
     },

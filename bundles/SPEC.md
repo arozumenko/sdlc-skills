@@ -87,7 +87,7 @@ bundles/<id>/
    if missing; `CLAUDE.md` is auto-loaded and scout-owned (kept lean), so its
    block is only refreshed when the file already exists — never created.
    When scout later regenerates `AGENTS.md`/`CLAUDE.md`, the
-   `project-seeder` skill preserves `<!-- BUNDLE:* -->` blocks verbatim, so
+   `seeding-a-project` skill preserves `<!-- BUNDLE:* -->` blocks verbatim, so
    a bundle's conventions survive onboarding.
 4. **Hooks** — for each target in `targets ∩ installed targets`, merge
    `hooks/hooks.json` into `<target>/settings.json` under `hooks` (tagged

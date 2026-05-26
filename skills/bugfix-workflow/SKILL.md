@@ -72,7 +72,7 @@ ship a fix that breaks something else.
 ### 7. Document on ticket
 
 Post a `✅ **Fixed**` comment with root cause summary, what changed, regression
-test name, and PR number. Commit and open the PR. The `task-completion` skill
+test name, and PR number. Commit and open the PR. The `completing-a-task` skill
 covers the full commit → PR → notify handoff.
 
 ## Command recipes

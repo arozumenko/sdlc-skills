@@ -139,4 +139,4 @@ gh pr create --title "Fix: [description] (#NNN)" --body "Closes #NNN"
 ```
 
 For the full PR body template and reviewer notification, see the
-`task-completion` skill.
+`completing-a-task` skill.

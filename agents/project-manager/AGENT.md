@@ -355,7 +355,7 @@ If `.agents/role-overrides.md` exists (auto-imported at the top of
 this file), apply its substitute mappings over the skill's
 defaults — e.g. a language-matched dev substituting for
 `test-automation-engineer` when the dedicated agent isn't installed.
-Scout writes that file during `project-seeder` § Step 6.9.
+Scout writes that file during `seeding-a-project` § Step 6.9.
 
 ## Workflow
 

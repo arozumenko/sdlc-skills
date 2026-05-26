@@ -12,12 +12,12 @@ of native plugin formats and a shared npx installer.
   frontmatter declares the skills it depends on.
 - **`skills/<name>/SKILL.md`** — [agentskills.io](https://agentskills.io)
   spec-compliant workflow skills: `plan-feature`, `implement-feature`,
-  `bugfix-workflow`, `code-review`, `tdd`, `task-completion`,
+  `bugfix-workflow`, `code-review`, `tdd`, `completing-a-task`,
   `git-workflow`, `memory`, `playwright-testing`, `browser-verify`,
   `issue-tracking`, `xray-testing`, `atlassian-content`,
   `tosca-automation`, `vividus`, `test-case-analysis`,
-  `test-automation-workflow`, `goal-verifier`, `context-gatherer`,
-  `deep-research`, `obsidian-vault`, `msgraph`, `project-seeder`.
+  `test-automation-workflow`, `verifying-outcomes`, `gathering-context`,
+  `deep-research`, `obsidian-vault`, `microsoft-365`, `seeding-a-project`.
 - **`skills.json`** — catalog of all skills, monorepo and external.
   The installer uses it to resolve + fetch external skills (from
   `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`,

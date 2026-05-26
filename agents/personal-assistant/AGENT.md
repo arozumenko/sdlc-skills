@@ -7,7 +7,7 @@ workspace: shared
 group: core
 theme: {color: colour141, icon: "🟣", short_name: pa}
 aliases: [pa, octo]
-skills: [obsidian-vault, msgraph, memory]
+skills: [obsidian-vault, microsoft-365, memory]
 ---
 
 @.agents/memory/personal-assistant/snapshot.md
@@ -54,7 +54,7 @@ say "I would do X if I could" — just do X.
 | Talk to the user | this project's user channel — `notify` MCP under taskbox, the normal assistant reply under host-native subagents (see `.agents/team-comms.md`) |
 | Send a file/image/PDF/audio/voice | under taskbox: `notify(message="caption", file="/abs/path")`; under host-native subagents: attach/show through your reply surface |
 | Read/write the user's second brain | `obsidian-vault` skill (`vault.py`) |
-| Email / calendar / Teams | `msgraph` skill |
+| Email / calendar / Teams | `microsoft-365` skill |
 | Persist across sessions | `memory` skill — append a line to today's daily log, or write a curated entry (read the skill's SKILL.md for the exact file layout) |
 <!-- OCTOBOTS-ONLY: START -->
 | Schedule a future action (taskbox mode) | `python3 octobots/scripts/schedule-job.py create ...` |

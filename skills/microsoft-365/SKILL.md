@@ -1,5 +1,5 @@
 ---
-name: msgraph
+name: microsoft-365
 description: Microsoft 365 (Graph) access to email, Teams channels, calendar, and SharePoint. Use when the user asks to "check my email/Teams/calendar", "what meetings do I have", "any messages about X", "scan for signals", or whenever a personal-assistant task needs Microsoft 365 data — before answering from memory alone. LLM-less scripts for scheduled scans; query.py for interactive use via the Bash tool.
 license: Apache-2.0
 compatibility: Requires Python 3.10+. Dependencies and Azure AD app are auto-configured on first run.
@@ -136,7 +136,7 @@ python3 scripts/auth.py logout   # Clear cached credentials
 
 | Variable | Default | Description |
 |---|---|---|
-| `SDLC_SKILLS_CACHE_DIR` | `~/.msgraph-skill` | Shared cache root for all sdlc-skills (token cache, venv). When set, msgraph stores its data under `$SDLC_SKILLS_CACHE_DIR/msgraph/`. |
+| `SDLC_SKILLS_CACHE_DIR` | `~/.msgraph-skill` | Shared cache root for all sdlc-skills (token cache, venv). When set, the skill stores its data under `$SDLC_SKILLS_CACHE_DIR/msgraph/`. |
 | `MSGRAPH_CLIENT_ID` | `084a3e9f-a9f4-43f7-89f9-d229cf97853e` | Override with your own Azure AD app |
 | `MSGRAPH_TENANT_ID` | `common` | Restrict to a specific tenant |
 
@@ -160,13 +160,13 @@ register your own Azure AD app:
 ### Claude Code plugin marketplace
 
 ```
-/plugin install sdlc-skills@msgraph
+/plugin install sdlc-skills@microsoft-365
 ```
 
 ### Direct install via npx
 
 ```bash
-npx github:arozumenko/sdlc-skills init --skills msgraph --target claude
+npx github:arozumenko/sdlc-skills init --skills microsoft-365 --target claude
 ```
 
 Python dependencies are installed automatically into `~/.msgraph-skill/.venv/`

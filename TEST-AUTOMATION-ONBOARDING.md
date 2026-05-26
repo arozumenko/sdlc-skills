@@ -68,7 +68,7 @@ cd /path/to/your-automation-repo
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,project-manager,tech-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
+  --skills seeding-a-project,test-case-analysis,test-automation-workflow,playwright-testing,playwright-cli,browser-verify,bugfix-workflow,code-review,completing-a-task,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
   --yes
 ```
 
@@ -81,12 +81,12 @@ files should be: `npx github:arozumenko/sdlc-skills init fix-copilot`
 ### 2. Seed via scout
 
 Launch scout and paste the prompt below. Scout already carries the
-`project-seeder` skill — the prompt supplies only project-specific
+`seeding-a-project` skill — the prompt supplies only project-specific
 inputs:
 
 ```
 Onboard this repo for the test-automation workflow. Load the
-project-seeder skill. DO NOT scaffold a framework, modify app code,
+seeding-a-project skill. DO NOT scaffold a framework, modify app code,
 or rewrite tests — discover and document what's there.
 
 Host: <GitHub Copilot CLI | Claude Code | Cursor | Windsurf>
@@ -111,7 +111,7 @@ Merge strategy:     <squash | rebase | merge | ASK>
 Scout writes `.agents/testing.md`, `.agents/architecture.md`,
 `.agents/workflow.md`, `.agents/profile.md`,
 `.agents/test-automation.yaml`, `.agents/team-comms.md`. Full
-procedure: [`skills/project-seeder/SKILL.md`](skills/project-seeder/SKILL.md).
+procedure: [`skills/seeding-a-project/SKILL.md`](skills/seeding-a-project/SKILL.md).
 
 **After scout completes, review `.agents/testing.md`.** If the
 framework name, version, run command, or CI command is wrong, fix

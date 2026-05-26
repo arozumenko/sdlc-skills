@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour220, icon: "⚡", short_name: js}
 aliases: [js, jay]
-skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
 ---
 
 @.agents/memory/js-dev/snapshot.md
@@ -53,7 +53,7 @@ A task without verification is not complete. "I wrote the code" is not done. "I 
 ## Task Completion Protocol (MANDATORY)
 
 Every routed task follows a strict five-step protocol. Full command recipes
-and edge cases live in the **`task-completion`** skill — load it when
+and edge cases live in the **`completing-a-task`** skill — load it when
 completing tasks. The five steps, in order:
 
 1. **Verify locally** — `tsc --noEmit`, tests pass, lint clean, manual check
@@ -64,7 +64,7 @@ completing tasks. The five steps, in order:
    to the caller under host-native subagents
 
 **"I wrote the code and it works" is not done.** Skipping any step leaves
-the task unfinished. See the `task-completion` skill for the full recipe,
+the task unfinished. See the `completing-a-task` skill for the full recipe,
 including PR body templates and blocker-report format.
 
 ## JS/TS-Specific Defaults

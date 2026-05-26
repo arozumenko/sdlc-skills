@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour117, icon: "🐍", short_name: py}
 aliases: [py]
-skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
 ---
 
 @.agents/memory/python-dev/snapshot.md
@@ -53,7 +53,7 @@ A task without verification is not complete. "I wrote the code" is not done. "I 
 ## Task Completion Protocol (MANDATORY)
 
 Every routed task follows a strict five-step protocol. Full command recipes
-and edge cases live in the **`task-completion`** skill — load it when
+and edge cases live in the **`completing-a-task`** skill — load it when
 completing tasks. The five steps, in order:
 
 1. **Verify locally** — `python -m py_compile`, tests pass, mypy clean if configured
@@ -64,7 +64,7 @@ completing tasks. The five steps, in order:
    to the caller under host-native subagents
 
 **"I wrote the code and it works" is not done.** Skipping any step leaves
-the task unfinished. See the `task-completion` skill for the full recipe,
+the task unfinished. See the `completing-a-task` skill for the full recipe,
 including PR body templates and blocker-report format.
 
 ## Python-Specific Defaults
@@ -166,5 +166,5 @@ py_compile → tests → diff stat. Fix failures before moving on.
 
 - `git --no-pager` always.
 - Never commit directly to `main`/`master` — always a feature branch. Never force-push or reset a shared branch without explicit confirmation.
-- For assigned task work, committing and pushing is part of task completion — the `task-completion` skill is your authoritative guide. For ad-hoc exploration in a user-driven interactive session, ask before committing.
+- For assigned task work, committing and pushing is part of task completion — the `completing-a-task` skill is your authoritative guide. For ad-hoc exploration in a user-driven interactive session, ask before committing.
 - Prefer small, focused commits. Message explains *why*, not *what*.

@@ -4,7 +4,7 @@ The full 10-phase procedure scout follows when onboarding a new codebase.
 This file is loaded by scout at session start; the main AGENT.md keeps only
 role identity, behavioral rules, and a pointer here.
 
-File generation (Phase 7 onward) uses the `project-seeder` skill — read that
+File generation (Phase 7 onward) uses the `seeding-a-project` skill — read that
 skill's SKILL.md and references for templates and composition guidance.
 
 ---
@@ -245,8 +245,8 @@ Proceed? [yes / no / adjust]
 
 Execute everything approved in Phase 6. Report each file as you generate it: `✓ SOUL.md — python-dev → Vad (Godot GDScript)`
 
-**File generation uses the `project-seeder` skill.** Read
-`sdlc-skills/skills/project-seeder/SKILL.md` for the generation flow, and
+**File generation uses the `seeding-a-project` skill.** Read
+`sdlc-skills/skills/seeding-a-project/SKILL.md` for the generation flow, and
 the skill's `references/` directory for templates:
 
 - `references/templates.md` — CLAUDE.md / AGENTS.md / `.agents/{profile, architecture, conventions, testing}.md` templates, plus `.octobots/roles-manifest.yaml` and per-role `project_briefing.md` memory-seeding templates
@@ -262,22 +262,22 @@ the skill's `references/` directory for templates:
 `CLAUDE.md` lives at the project root. It is symlinked into worker workspaces by the supervisor at launch.
 
 **7b — Generate `.octobots/roles-manifest.yaml`:**
-Use the template in `skills/project-seeder/references/templates.md`. Fill in all roles — customized and unchanged. This file is the input for the spawn readiness check.
+Use the template in `skills/seeding-a-project/references/templates.md`. Fill in all roles — customized and unchanged. This file is the input for the spawn readiness check.
 
 **7c — Tune SOUL.md and AGENT.md for repurposed roles:**
-See `skills/project-seeder/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
+See `skills/seeding-a-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
 
 **7d — Seed role memory files:**
 For **all roles** — not just customized ones — write a `project_briefing.md`
 curated entry at `.agents/memory/<role-id>/project_briefing.md` (with
 `type: project` frontmatter per the `memory` skill spec) and append/update
 the corresponding line in `.agents/memory/<role-id>/MEMORY.md`. Use the
-template in `skills/project-seeder/references/templates.md`. Write "My
+template in `skills/seeding-a-project/references/templates.md`. Write "My
 Role Focus" based on your actual understanding of what that role does on
 this project — not placeholder text.
 
 **7e — Generate `.agents/team-comms.md`:**
-Run the full procedure in `skills/project-seeder/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
+Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
 
 **Legacy marker cleanup.** Earlier iterations of this design used `<!-- SCOUT:TEAM-ROSTER:BEGIN -->` / `END` markers inside agent files. Those are gone. If a re-run encounters one, strip the marker block cleanly and log what you removed.
 

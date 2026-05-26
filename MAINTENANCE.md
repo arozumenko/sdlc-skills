@@ -36,7 +36,7 @@ cd /path/to/your-automation-repo
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,project-manager,tech-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
+  --skills seeding-a-project,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,completing-a-task,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
   --update --yes
 ```
 
@@ -99,16 +99,16 @@ it on every push/PR). See [`bundles/SPEC.md`](bundles/SPEC.md).
    npx github:<your-ref> init fix-copilot
    ```
 
-2. **Check whether scout's project-seeder has new steps.** If the
-   update pulled in new project-seeder steps (e.g. Step 6.8 tool
+2. **Check whether scout's seeding-a-project has new steps.** If the
+   update pulled in new seeding-a-project steps (e.g. Step 6.8 tool
    wiring, 6.9 role substitutions, 6.95 deployment-mode marker
    stripping) and your install predates them, re-run scout with a
    prompt that tells it to execute **only the new steps**:
 
    ```
    You are scout. Do NOT regenerate existing content docs.
-   Execute ONLY the project-seeder steps introduced since my last
-   install: read <SKILLS_ROOT>/project-seeder/SKILL.md and run
+   Execute ONLY the seeding-a-project steps introduced since my last
+   install: read <SKILLS_ROOT>/seeding-a-project/SKILL.md and run
    whichever of Step 6.8, Step 6.9, Step 6.95 are present and not
    already applied. Report what you changed.
    ```

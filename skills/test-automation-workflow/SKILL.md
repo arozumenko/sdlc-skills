@@ -30,7 +30,7 @@ even though only two personas touch it.
 
 **Re-used skills:** composes on top of `playwright-testing`,
 `playwright-cli`, `browser-verify`, `bugfix-workflow`, `code-review`,
-`tdd`, `task-completion`, and `project-seeder`. It does not reinvent
+`tdd`, `completing-a-task`, and `seeding-a-project`. It does not reinvent
 them. The browser-tool triage (which of the three Playwright/CDP
 skills to use for a given challenge) lives in
 [`references/browser-tools.md`](references/browser-tools.md).
@@ -79,7 +79,7 @@ output, auto-imported at the top of PM's AGENT.md via
 will be filled by substitute agents (typically a language-matched
 dev when Axel isn't installed). The file is authoritative for the
 project; the defaults above are the sdlc-skills baseline. See
-`project-seeder` § Step 6.9 for how scout writes the overrides.
+`seeding-a-project` § Step 6.9 for how scout writes the overrides.
 
 ### The three-step flow
 
@@ -184,7 +184,7 @@ something `.agents/testing.md` doesn't describe, it's an escalation.
 `.agents/role-overrides.md` (scout's Step 6.9 output) — typically
 the language-matched dev (`python-dev` for a Python project,
 `js-dev` for TS/JS, etc., per the fallback table in
-`project-seeder` `references/role-overrides.md`). Axel's
+`seeding-a-project` `references/role-overrides.md`). Axel's
 "return `needs-tech-lead` to PM" protocol still works: the return
 lands at PM, PM reads `role-overrides.md`, PM routes to the
 substitute. Axel doesn't need to know who the substitute is.
@@ -205,7 +205,7 @@ round-trip. Resolve or close upstream first.
 5. Implement automation         (implementer slot — project framework)
 6. Run & stabilize              (implementer — green or real defect)
 7. Review                       (reviewer slot + code-review skill)
-8. Deliver & sync TMS           (task-completion + TMS adapter back-write)
+8. Deliver & sync TMS           (completing-a-task + TMS adapter back-write)
 ```
 
 Steps 1–4 belong to the analyst slot. Steps 5–6 belong to the
@@ -214,7 +214,7 @@ handoff. PM resolves each slot to a concrete agent at routing time.
 
 ### 1. Discover framework
 
-Before anything, read what the scout / project-seeder already produced:
+Before anything, read what the scout / seeding-a-project already produced:
 
 - `AGENTS.md` — tech stack, test commands
 - `.agents/testing.md` — test framework, commands, fixtures, CI
@@ -222,7 +222,7 @@ Before anything, read what the scout / project-seeder already produced:
 - `.agents/profile.md` — languages, default branch
 - `.agents/test-automation.yaml` — TMS config + framework hints (if present)
 
-**If none of these exist**, run [`project-seeder`](../project-seeder/) first.
+**If none of these exist**, run [`seeding-a-project`](../seeding-a-project/) first.
 Do not try to automate into a codebase you have not mapped.
 
 Detect the framework yourself if `testing.md` doesn't name it:
@@ -366,7 +366,7 @@ Reviewer comments feed back to Axel. Re-run after changes.
 
 ### 8. Deliver & sync TMS
 
-Follow [`task-completion`](../task-completion/) — commit on a feature
+Follow [`completing-a-task`](../completing-a-task/) — commit on a feature
 branch, push, `gh pr create`, comment on the originating issue. Then use
 the TMS adapter to back-write the execution result (`update_execution`)
 so the TMS dashboard reflects reality.

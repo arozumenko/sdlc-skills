@@ -320,8 +320,8 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
-| `project-seeder` | Scout's project onboarding / configuration flow |
-| `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
+| `seeding-a-project` | Scout's project onboarding / configuration flow |
+| `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
 **Generic dev skills (15):**
 
@@ -336,12 +336,12 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
 | `vividus` | Vividus BDD framework — bootstrap, configure, author `.story` files. 47+ plugins (web, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment triple, MCP-server grounding. Templates in `assets/` |
-| `goal-verifier` | Verify a task actually achieved its stated goal |
-| `context-gatherer` | Targeted codebase exploration before changes |
+| `verifying-outcomes` | Verify a task actually achieved its stated goal |
+| `gathering-context` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
-| `msgraph` | Microsoft Graph (email / calendar / Teams) integration |
+| `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 
 ### External skills (fetched by the installer)
 

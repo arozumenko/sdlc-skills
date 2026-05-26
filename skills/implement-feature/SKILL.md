@@ -69,7 +69,7 @@ changes matches expectations. Don't ship if anything fails — fix it first.
 ### 7. Commit & PR
 
 Feature branch, focused commit, `gh pr create` with proper title and body.
-The `task-completion` skill has the full protocol.
+The `completing-a-task` skill has the full protocol.
 
 ### 8. Document on ticket
 

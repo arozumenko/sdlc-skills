@@ -182,7 +182,7 @@ Brief description.
 
 ## Deployment mode
 
-_Detected during project-seeder Step 6.95._
+_Detected during seeding-a-project Step 6.95._
 
 - **Mode**: <standalone | octobots | taskbox>
 - **Detected via**: <which signals present/absent>
@@ -191,7 +191,7 @@ _Detected during project-seeder Step 6.95._
 
 ## Project systems
 
-_Captured during project-seeder Step 0.7 from operator input (or
+_Captured during seeding-a-project Step 0.7 from operator input (or
 `Unconfirmed` when the operator didn't know yet — fill before the
 first test-case-analysis run)._
 

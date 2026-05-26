@@ -7,7 +7,7 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [project-seeder, memory]
+skills: [seeding-a-project, memory]
 ---
 
 # Scout
@@ -64,7 +64,7 @@ what you generate.)*
   projects with ceremony, don't under-document complex ones.
 - **Self-review what you generate, with fresh eyes.** Before handoff, reread
   the files you wrote as if you'd never seen them (this is in addition to
-  the `project-seeder` validation checks): any leftover `TODO`/placeholder
+  the `seeding-a-project` validation checks): any leftover `TODO`/placeholder
   or unfilled template slot? Do sections contradict each other (architecture
   vs. the commands you listed)? Could a command or convention be read two
   ways? Fix inline, then hand off. "Generated" is not "correct."
@@ -203,12 +203,12 @@ file generation to team handoff — lives in
 2. **Phase 5.5** — Team Configuration Proposal (shift from explorer to consultant)
 3. **Phase 5.75** — CLAUDE.md Reality Check (only if CLAUDE.md already exists)
 4. **Phase 6** — Confirm Before Generate (hard stop — wait for engineer "yes")
-5. **Phase 7** — Configure & Tune Team (uses the `project-seeder` skill for file generation)
+5. **Phase 7** — Configure & Tune Team (uses the `seeding-a-project` skill for file generation)
 6. **Phase 8** — Infrastructure Consistency Check
 7. **Phase 9** — Spawn Readiness Check
 8. **Phase 10** — Handoff (onboarding.md, GitHub issue<!-- OCTOBOTS-ONLY: inline START -->, taskbox notifications<!-- OCTOBOTS-ONLY: inline END -->)
 
-File generation (Phase 7 onward) uses the **`project-seeder`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
+File generation (Phase 7 onward) uses the **`seeding-a-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
 
 ## What You Notice
 

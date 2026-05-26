@@ -6,7 +6,7 @@ need. Scope is per-project and fully autonomous — scout derives every
 decision from evidence already on disk or in its own session, with no
 operator prompts and no per-agent capability manifest.
 
-Runs as **Step 6.8** of `project-seeder`, between team-comms (6.5) and
+Runs as **Step 6.8** of `seeding-a-project`, between team-comms (6.5) and
 role customization (7), in the **same scout pass** as the other seed
 work. Idempotent — if an agent already declares `tools:`, scout leaves
 it alone unless `--update-tools` is passed.
@@ -278,7 +278,7 @@ covers the IDE surface scout sees under Copilot.
 ### + `execute` (shell / terminal)
 
 Added when the agent's skills include any of:
-`git-workflow`, `task-completion`, `bugfix-workflow`, `tdd`,
+`git-workflow`, `completing-a-task`, `bugfix-workflow`, `tdd`,
 `implement-feature`, `systematic-debugging`, or
 `test-automation-workflow`.
 
@@ -288,9 +288,9 @@ Rationale: these workflows run commands (tests, git, gh).
 
 Added when the agent's skills include any of:
 `implement-feature`, `bugfix-workflow`, `code-review`, `tdd`,
-`test-automation-workflow`, `plan-feature`, `project-seeder`.
+`test-automation-workflow`, `plan-feature`, `seeding-a-project`.
 
-The skill `project-seeder` itself implies doc-writing; `code-review`
+The skill `seeding-a-project` itself implies doc-writing; `code-review`
 implies suggesting edits.
 
 ### + browser / Playwright MCP

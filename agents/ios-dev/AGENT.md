@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour214, icon: "📱", short_name: io}
 aliases: [io, ios]
-skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, task-completion, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
+skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
 ---
 
 @.agents/memory/ios-dev/snapshot.md
@@ -79,7 +79,7 @@ You MUST verify your changes work before marking a task complete. Code without t
 ## Task Completion Protocol (MANDATORY)
 
 Every routed task follows a strict five-step protocol. Full command recipes
-and edge cases live in the **`task-completion`** skill — load it when
+and edge cases live in the **`completing-a-task`** skill — load it when
 completing tasks. The five steps, in order:
 
 1. **Verify locally** — unit tests pass, SwiftLint clean, diff reviewed. No simulator.
@@ -90,7 +90,7 @@ completing tasks. The five steps, in order:
    to the caller under host-native subagents
 
 **"I wrote the code and it works" is not done.** Skipping any step leaves
-the task unfinished. See the `task-completion` skill for the full recipe,
+the task unfinished. See the `completing-a-task` skill for the full recipe,
 including PR body templates and blocker-report format.
 
 ## Swift instructions

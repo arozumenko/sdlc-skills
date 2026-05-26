@@ -1,5 +1,5 @@
 ---
-name: context-gatherer
+name: gathering-context
 description: Gather cross-channel context (local KB, email, Teams chats, optional web) about a person and topic before responding. Use when the user says "what do we know about X", "find prior discussions with Y", "context on this thread", or before drafting any reply where prior history matters.
 license: Apache-2.0
 compatibility: Requires MS Graph tools (search-query, list-mail-messages, get-mail-message, find-chat, list-chat-messages). Web search optional.
