@@ -32,10 +32,10 @@
     {"id": "obsidian-vault",     "monorepo": "sdlc-skills", "name": "obsidian-vault",     "description": "Read/write the user's Obsidian second brain"},
     {"id": "microsoft-365",            "monorepo": "sdlc-skills", "name": "microsoft-365",            "description": "Microsoft Graph (email/calendar/Teams) integration"},
 
-    {"id": "swiftui-pro",           "repo": "twostraws/SwiftUI-Agent-Skill",           "ref": "main", "description": "SwiftUI code review and authoring — modern APIs, performance, accessibility (by Paul Hudson)"},
-    {"id": "swiftdata-pro",         "repo": "twostraws/SwiftData-Agent-Skill",         "ref": "main", "description": "SwiftData code review and authoring — modern APIs, CloudKit compatibility (by Paul Hudson)"},
-    {"id": "swift-testing-pro",     "repo": "twostraws/Swift-Testing-Agent-Skill",     "ref": "main", "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)"},
-    {"id": "swift-concurrency-pro", "repo": "twostraws/Swift-Concurrency-Agent-Skill", "ref": "main", "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)"},
+    {"id": "swiftui-pro",           "repo": "twostraws/SwiftUI-Agent-Skill",           "ref": "main", "subdir": "swiftui-pro",           "description": "SwiftUI code review and authoring — modern APIs, performance, accessibility (by Paul Hudson)"},
+    {"id": "swiftdata-pro",         "repo": "twostraws/SwiftData-Agent-Skill",         "ref": "main", "subdir": "swiftdata-pro",         "description": "SwiftData code review and authoring — modern APIs, CloudKit compatibility (by Paul Hudson)"},
+    {"id": "swift-testing-pro",     "repo": "twostraws/Swift-Testing-Agent-Skill",     "ref": "main", "subdir": "swift-testing-pro",     "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)"},
+    {"id": "swift-concurrency-pro", "repo": "twostraws/Swift-Concurrency-Agent-Skill", "ref": "main", "subdir": "swift-concurrency-pro", "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)"},
 
     {"id": "tdd",                         "repo": "mattpocock/skills",   "ref": "main", "subdir": "skills/engineering/tdd",         "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)"},
     {"id": "brainstorming",               "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/brainstorming",           "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)"},
