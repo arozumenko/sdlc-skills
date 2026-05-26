@@ -16,27 +16,16 @@ For each role being repurposed:
 
 - **Read the existing `AGENT.md` fully.** Update the YAML frontmatter
   `name` and `description` fields, the identity paragraph, and the mission
-  statement. Leave session lifecycle, taskbox commands, and communication
-  conventions intact — those are structural scaffolding.
+  statement. Leave session lifecycle and communication conventions intact —
+  those are structural scaffolding.
 
-**Surgical rule:** if a section is about *how to operate* (taskbox, inbox,
-restart protocol), leave it. If it's about *who you are and what you know*,
-update it.
-
----
-
-## 7b — Generate `.octobots/roles-manifest.yaml`
-
-Use the template in `templates.md`. Fill in all roles — customized and
-unchanged. Set `customized: true` and add `repurposed_for` for any
-repurposed roles.
-
-This file is the input for `octobots/scripts/check-spawn-ready.py`.
-Generate it before running any readiness checks.
+**Surgical rule:** if a section is about *how to operate* (session
+lifecycle, communication conventions), leave it. If it's about *who you
+are and what you know*, update it.
 
 ---
 
-## 7c — Seed role memory files
+## 7b — Seed role memory files
 
 Each role's briefing lives as a `type: project` curated entry at
 `.agents/memory/<role-id>/project_briefing.md`, with an index line in
@@ -44,10 +33,9 @@ Each role's briefing lives as a `type: project` curated entry at
 from `templates.md` (section `.agents/memory/<role-id>/project_briefing.md`).
 
 This is the same spec the `memory` skill uses for any curated entry —
-the agent reads it at session start via its orientation block (through
-the auto-loaded `snapshot.md` when under Octobots, or via direct read
-elsewhere), and further entries (user preferences, feedback, references)
-get appended by the agent later.
+the agent reads it at session start via its orientation block, and
+further entries (user preferences, feedback, references) get appended
+by the agent later.
 
 Fill in "Project Knowledge" and "My Role Focus" for **every role** — not
 just customized ones. An unchanged role still needs to know the stack, key

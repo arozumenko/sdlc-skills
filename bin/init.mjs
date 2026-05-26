@@ -552,8 +552,8 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
 // lists and auto-install the skills that live in this monorepo. Skills
 // declared by the agent but *not* present in this repo (external skills
 // like tdd, brainstorming, swiftui-pro) are surfaced as a warning with
-// install instructions. The supervisor resolves them automatically via
-// skills.json `repo:` entries; stock Claude users follow the README.
+// install instructions, resolved from skills.json `repo:` entries (see
+// the README).
 // ---------------------------------------------------------------------------
 
 function parseAgentSkillDeps(agentName, agentsRoot = join(PKG_ROOT, "agents")) {

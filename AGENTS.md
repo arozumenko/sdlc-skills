@@ -70,9 +70,3 @@ matches a skill's description (see its `SKILL.md` frontmatter), load the
 `SKILL.md` and follow its workflow. Don't paraphrase it — skill
 instructions are their own source of truth.
 
-## Integrating with Octobots
-
-The [Octobots supervisor](https://github.com/arozumenko/octobots) treats
-this repo as its content layer: agents + skills live here, orchestration
-(tmux TUI, taskbox, scheduler, team-board) lives there. Octobots'
-`install.sh` delegates all content resolution to this repo's installer.

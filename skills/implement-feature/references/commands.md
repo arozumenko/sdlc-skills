@@ -14,13 +14,8 @@ gh issue view <NUMBER>
 Identify acceptance criteria, interface contract, dependencies, explicit
 in/out scope.
 
-Ask clarifying questions via taskbox before starting if anything is unclear:
-
-```bash
-python3 octobots/skills/taskbox/scripts/relay.py send \
-  --from $OCTOBOTS_ID --to tech-lead \
-  "Question about #NNN: [specific question]"
-```
+Ask clarifying questions via a subagent call or tracker comment before
+starting if anything is unclear.
 
 Started comment:
 
@@ -169,11 +164,10 @@ gh issue comment <NUMBER> --body "$(cat <<'EOF'
 All tests passing. Ready for review.
 EOF
 )"
-
-python3 octobots/skills/taskbox/scripts/relay.py send \
-  --from $OCTOBOTS_ID --to project-manager \
-  "TASK (#NNN) complete. PR #XX ready for review. [one-line summary]"
 ```
+
+Include `PR #XX ready for review — [one-line summary]` in your final reply
+to PM so the handoff is complete.
 
 For the full five-step handoff protocol (commit → PR → issue comment →
 notify), see the `completing-a-task` skill.

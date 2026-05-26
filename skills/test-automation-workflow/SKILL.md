@@ -128,7 +128,7 @@ when the persona is the same.
 
 **Freshness is the default, not a host-specific mechanism.** On
 every host relevant to this workflow — Claude Code, Copilot CLI,
-Cursor, Windsurf, Octobots — invoking a subagent spawns an
+Cursor, Windsurf — invoking a subagent spawns an
 **isolated context**: `messages=[]`, only the task prompt flows
 in, only the final message comes back. Nothing from the analysis
 session leaks into review. PM just calls the reviewer subagent
@@ -414,8 +414,8 @@ See [references/commands.md](references/commands.md) for concrete
   supported TMSes (Zephyr Scale / TestRail / Xray / Azure Test Plans /
   markdown), `.agents/test-automation.yaml` schema.
 - [references/commands.md](references/commands.md) — concrete recipes:
-  framework detection, sub-agent spawning per host (Claude / taskbox /
-  Copilot), TMS CLI examples, the AFS template in copy-pasteable form.
+  framework detection, sub-agent spawning per host (Claude Code / Copilot),
+  TMS CLI examples, the AFS template in copy-pasteable form.
 - [references/framework-scaffold.md](references/framework-scaffold.md) —
   minimal scaffolds for projects that don't yet have a framework,
   per language (JS/TS, Python, Java, C#).

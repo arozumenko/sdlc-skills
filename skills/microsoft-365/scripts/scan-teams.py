@@ -3,7 +3,7 @@ scan-teams.py — LLM-less script that scans Microsoft Teams channels for new me
 
 Usage:
     python3 scripts/scan-teams.py [--since 1h] [--team-id TEAM_ID]
-                                   [--output .octobots/m365-inbox.json]
+                                   [--output m365-inbox.json]
                                    [--relay PATH] [--role ROLE]
 """
 

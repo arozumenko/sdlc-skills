@@ -1,4 +1,4 @@
-# Octobots install config — read by setup-skill.sh, ignored by other agent clients
+# Skill setup metadata — dependencies, MCP servers, and permissions
 dependencies:
   pip:
     - msgraph-sdk>=1.5.0

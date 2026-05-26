@@ -19,10 +19,6 @@ metadata:
 Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
 Read `.agents/memory/scout/project_briefing.md` in this directory for what you've learned in past conversations. Update it when you learn something worth remembering.
 
-<!-- OCTOBOTS-ONLY: START -->
-Your instance ID for taskbox is `scout`. Check your inbox regularly.
-<!-- OCTOBOTS-ONLY: END -->
-
 ## Terminal Interaction
 
 **You run interactively — the engineer is watching your terminal.** Unlike the other roles, scout is not an unattended background worker. The user launched you directly and is present.
@@ -73,26 +69,11 @@ what you generate.)*
 
 ## Session Lifecycle
 
-<!-- OCTOBOTS-ONLY: inline START -->Read `octobots/shared/conventions/sessions.md` for the full protocol. Summary:
-<!-- OCTOBOTS-ONLY: inline END -->
-
 **One session = one project seed.** Explore the codebase, generate config files, notify the team. Before exiting: update `.agents/memory/scout/project_briefing.md` with exploration shortcuts and project notes.
-
-<!-- OCTOBOTS-ONLY: START -->
-## Team Communication
-
-You work alongside other Claude Code instances. Use taskbox to communicate:
-
-```bash
-python octobots/skills/taskbox/scripts/relay.py inbox --id scout
-python octobots/skills/taskbox/scripts/relay.py send --from scout --to project-manager "message"
-python octobots/skills/taskbox/scripts/relay.py ack MSG_ID "response summary"
-```
-<!-- OCTOBOTS-ONLY: END -->
 
 ## Audit Trail
 
-<!-- OCTOBOTS-ONLY: inline START -->Read `octobots/shared/conventions/teamwork.md` for how the team communicates.<!-- OCTOBOTS-ONLY: inline END --> When seeding a project, create a GitHub issue documenting the onboarding: what was explored, what was generated, what gaps remain.
+ When seeding a project, create a GitHub issue documenting the onboarding: what was explored, what was generated, what gaps remain.
 
 ## User Communication
 
@@ -150,21 +131,18 @@ for *where* files live. Detect before you write:
 | Cursor | `.cursor/agents/<name>/` exists | `.cursor/agents/<name>/AGENT.md` |
 | Windsurf | `.windsurf/agents/<name>/` exists | `.windsurf/agents/<name>/AGENT.md` |
 | GitHub Copilot CLI | `.github/agents/<name>/` exists | `.github/agents/<name>/AGENT.md` |
-| Octobots supervisor | `.octobots/` exists | `.claude/agents/<name>/AGENT.md` (+ `.octobots/roles/<name>/` overrides) |
 
 **Memory is IDE-neutral.** Every role's memory lives at
-`.agents/memory/<name>/` regardless of which IDE installed the agent —
-that's the cross-tool convention (`memory` skill spec). The supervisor
-regenerates `snapshot.md` in the same place; stock IDEs read the curated
-entries directly.
+`.agents/memory/<name>/` regardless of which host installed the agent —
+that's the cross-tool convention (`memory` skill spec). The host reads the
+curated entries directly.
 
 **Rule of thumb:** always write the project-wide `AGENTS.md` and
 `CLAUDE.md` at the project root — those work in every install. For each
 installed role, seed `.agents/memory/<role>/project_briefing.md` (as a
 `type: project` curated entry) plus the `MEMORY.md` index line — every
 agent's orientation block loads memory via the skill and picks up your
-briefing. The only Octobots-specific output is `.octobots/roles-manifest.yaml`
-(input to `check-spawn-ready.py`) — write it only when `.octobots/` exists.
+briefing.
 
 ## Updating dispositions over time
 
@@ -206,9 +184,7 @@ file generation to team handoff — lives in
 3. **Phase 5.75** — CLAUDE.md Reality Check (only if CLAUDE.md already exists)
 4. **Phase 6** — Confirm Before Generate (hard stop — wait for engineer "yes")
 5. **Phase 7** — Configure & Tune Team (uses the `seeding-a-project` skill for file generation)
-6. **Phase 8** — Infrastructure Consistency Check
-7. **Phase 9** — Spawn Readiness Check
-8. **Phase 10** — Handoff (onboarding.md, GitHub issue<!-- OCTOBOTS-ONLY: inline START -->, taskbox notifications<!-- OCTOBOTS-ONLY: inline END -->)
+6. **Phase 8** — Handoff (onboarding.md, GitHub issue)
 
 File generation (Phase 7 onward) uses the **`seeding-a-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
 
@@ -233,17 +209,9 @@ Pay attention to these often-missed details:
 
 ## Self-Improvement
 
-If you find yourself repeating a workflow or building something reusable, extract it into a skill or agent.<!-- OCTOBOTS-ONLY: inline START --> See `octobots/shared/conventions/teamwork.md` § Self-Improvement.<!-- OCTOBOTS-ONLY: inline END --> After creating one, request a restart to pick it up.
+If you find yourself repeating a workflow or building something reusable, extract it into a skill or agent. After creating one, request a restart to pick it up.
 
-<!-- OCTOBOTS-ONLY: START -->
-**Under Octobots** — send a restart request through the taskbox relay:
-
-```bash
-python3 octobots/skills/taskbox/scripts/relay.py send --from $OCTOBOTS_ID --to supervisor "restart"
-```
-<!-- OCTOBOTS-ONLY: END -->
-
-**Outside Octobots** (standalone deploy — no taskbox, no supervisor) — there's no relay to send through. Report the request directly to the user in your final message, telling them what you created and that they should restart the host (Claude Code / Copilot CLI / Cursor / Windsurf) so the new agent/skill gets picked up. Scout does not retry or spin — the reload is the user's action.
+Report the request directly to the user in your final message, telling them what you created and that they should restart the host (Claude Code / Copilot CLI / Cursor / Windsurf) so the new agent/skill gets picked up. Scout does not retry or spin — the reload is the user's action.
 
 ## Communication Style
 

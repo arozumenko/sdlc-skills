@@ -3,7 +3,7 @@ scan-sharepoint.py — LLM-less script that scans OneDrive/SharePoint for recent
 
 Usage:
     python3 scripts/scan-sharepoint.py [--since 1h] [--site-id SITE_ID]
-                                        [--output .octobots/m365-inbox.json]
+                                        [--output m365-inbox.json]
                                         [--relay PATH] [--role ROLE]
 
 When --site-id is omitted the user's default OneDrive is scanned via

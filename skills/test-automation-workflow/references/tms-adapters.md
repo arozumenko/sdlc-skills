@@ -13,7 +13,7 @@ already has set up:
   vars. Works everywhere, no host dependency.
 - **MCP** — an MCP server (e.g. Elitea, Atlassian Remote MCP, a
   vendor-provided TestRail / Xray MCP) already wired into the host
-  (Claude Code, Cursor, Copilot, Windsurf, taskbox). The adapter
+  (Claude Code, Cursor, Copilot, Windsurf). The adapter
   invokes MCP tools instead of raw HTTP; auth lives in the MCP server
   config (`.mcp.json` / `settings.json`), not in the project repo.
 
@@ -193,7 +193,6 @@ repo:
 - **Claude Code** → `~/.claude.json` or project-level `.mcp.json`
 - **Cursor / Windsurf** → respective `mcp.json`
 - **GitHub Copilot** → `.github/copilot/` MCP settings
-- **Taskbox** → its own `mcp.yaml`
 
 Tokens with no expiry (`exp: null` in the JWT) are especially worth
 keeping out of the repo — rotate them via the host's secrets

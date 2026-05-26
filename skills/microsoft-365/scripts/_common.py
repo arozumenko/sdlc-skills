@@ -27,13 +27,13 @@ def build_arg_parser(description: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output",
-        default=".octobots/m365-inbox.json",
-        help="Path for JSON output (default: .octobots/m365-inbox.json)",
+        default="m365-inbox.json",
+        help="Path for JSON output (default: m365-inbox.json)",
     )
     parser.add_argument(
         "--relay",
         default=None,
-        help="Path to a relay/taskbox script called when items are found",
+        help="Path to a script or webhook called when items are found",
     )
     parser.add_argument(
         "--role",

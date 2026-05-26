@@ -27,8 +27,8 @@ Four scripts run autonomously on a schedule without involving an LLM:
 
 ```
 --since     Lookback window, e.g. 1h, 4h, 24h, 7d  (default: 1h)
---output    Path for JSON output                     (default: .octobots/m365-inbox.json)
---relay     Path to a relay/taskbox script to call when items are found
+--output    Path for JSON output                     (default: m365-inbox.json)
+--relay     Path to a script or webhook to call when items are found
 --role      Role name passed to the relay for routing
 ```
 
@@ -49,7 +49,8 @@ Four scripts run autonomously on a schedule without involving an LLM:
    ```
    python3 <relay> --role <role> --data <output_path>
    ```
-   The relay is responsible for pushing a taskbox notification to the named role.
+   The relay script is called with the found items and is responsible for
+   any further routing or notification.
 
 ### Output record shape
 
@@ -68,7 +69,7 @@ Every item in the output JSON array has the following fields:
 ### Example cron entry
 
 ```
-0 * * * *  cd /path/to/project && python3 scripts/scan-email.py --since 1h --relay .octobots/relay.py --role triage
+0 * * * *  cd /path/to/project && python3 scripts/scan-email.py --since 1h --relay scripts/notify.py --role triage
 ```
 
 ## Mode 2 — Interactive Query via Claude (Bash Tool)

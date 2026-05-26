@@ -1,34 +1,22 @@
 # Team Comms Generation Workflow (Step 6.5)
 
 The full procedure scout follows to generate `.agents/team-comms.md`.
-Every project — taskbox *or* host-native — gets a single scout-generated
-communication document at `.agents/team-comms.md`. It lives next to
-`architecture.md` and friends, and any agent that needs to route work to a
-teammate reads it first.
+Every project gets a single scout-generated communication document at
+`.agents/team-comms.md`. It lives next to `architecture.md` and friends,
+and any agent that needs to route work to a teammate reads it first.
 
 **Why a doc, not a skill.** Delegation mechanics are genuinely
 project-specific (which host, which personas are installed, which invocation
 syntax applies). Baking this into an installable skill would mean shipping
-mutually-exclusive packages and rewriting frontmatter on every seed. A
+different packages and rewriting frontmatter on every seed. A
 scout-generated doc is simpler: scout detects the project's shape once,
 writes tailored content, every agent points at the same file.
 
 ---
 
-## 6.5a — Detect the transport and hosts
-
-A project uses **`taskbox`** (octobots supervisor mode) if any of these are
-present: `.octobots/relay.db`, `.octobots/board.md`, or `$OCTOBOTS_ID` is
-set. Otherwise it uses **host-native subagents** (plain Claude Code /
-Copilot / Cursor / Windsurf, no supervisor).
+## 6.5a — Detect the installed hosts
 
 ```bash
-if [ -f .octobots/relay.db ] || [ -f .octobots/board.md ] || [ -n "$OCTOBOTS_ID" ]; then
-  transport=taskbox
-else
-  transport=direct
-fi
-
 [ -d .claude/agents ]   && have_claude=1
 [ -d .github/agents ]   && have_copilot=1
 [ -d .cursor/agents ]   && have_cursor=1
@@ -42,21 +30,17 @@ contains one section per host.
 
 ## 6.5b — Enumerate installed personas
 
-- **`transport=direct`:** list each detected host's agent directory
-  (`.claude/agents/`, `.github/agents/`, etc.) and read each entry's
-  `AGENT.md` YAML frontmatter for `name` and `description`. Only list
-  personas actually present.
-- **`transport=taskbox`:** parse `.octobots/board.md` § Team to enumerate
-  active Worker IDs. That is the authoritative roster under the supervisor.
+List each detected host's agent directory (`.claude/agents/`,
+`.github/agents/`, etc.) and read each entry's `AGENT.md` YAML frontmatter
+for `name` and `description`. Only list personas actually present.
 
 ---
 
 ## 6.5c — Write `.agents/team-comms.md` from templates
 
 Use the templates in `team-comms-templates.md`. Pick the template(s)
-matching the detected transport and hosts, fill in the enumerated roster,
-substitute `<YYYY-MM-DD>`, and write (or overwrite)
-`.agents/team-comms.md`.
+matching the detected host(s), fill in the enumerated roster, substitute
+`<YYYY-MM-DD>`, and write (or overwrite) `.agents/team-comms.md`.
 
 **Every generated file must start with the line:**
 
@@ -68,35 +52,15 @@ This header is non-negotiable — it marks the file as scout-owned so that
 future seeds know it is safe to overwrite, and so human readers don't
 hand-edit content that will be clobbered.
 
-Multi-host direct projects (e.g. both Claude Code and Copilot installed)
+Multi-host projects (e.g. both Claude Code and Copilot installed)
 concatenate the matching host templates into a single file, with a one-line
 note at the top telling each runtime which section applies.
 
 ---
 
-## 6.5d — Add `taskbox` to `skills:` (taskbox mode only)
+## 6.5d — Declare Copilot subagent capability (Copilot only)
 
-Source `AGENT.md` files in the sdlc-skills monorepo are transport-neutral —
-they do **not** ship with `taskbox` in their `skills:` list. Under the
-octobots supervisor, every installed agent needs the `taskbox` skill to
-send / receive / ack messages, so scout appends it:
-
-- **If `transport=taskbox`:** for every agent present in the host's agent
-  directory, add `taskbox` to its `skills:` YAML list if missing. Leave
-  every other entry intact.
-- **If `transport=direct`:** do nothing. There is no transport skill in
-  this mode — delegation lives in `.agents/team-comms.md`, which is a
-  document, not an installable skill.
-
-This edit is idempotent: never duplicate `taskbox` in a list that already
-contains it.
-
----
-
-## 6.5e — Declare Copilot subagent capability (direct + Copilot only)
-
-This sub-step only runs when **both** `transport=direct` and
-`have_copilot=1` hold.
+This sub-step only runs when `have_copilot=1`.
 
 GitHub Copilot requires every agent that spawns subagents to declare the
 capability in its YAML frontmatter. For each installed Copilot agent file
@@ -112,10 +76,10 @@ itself, by the Copilot name in the file's frontmatter. Safe default: "all
 others." If scout has reason to narrow the whitelist for a specific
 persona, narrow explicitly and document inline.
 
-Include `shared/agents/` helpers (e.g. `taskbox-listener`,
-`issue-reproducer`, `rca-investigator`) in the whitelist **only if they
-were actually installed as Copilot agents** in this project — do not add
-placeholders for helpers that are not present.
+Include `shared/agents/` helpers (e.g. `issue-reproducer`,
+`rca-investigator`) in the whitelist **only if they were actually installed
+as Copilot agents** in this project — do not add placeholders for helpers
+that are not present.
 
 **Claude-flavoured AGENT.md files need no `tools` / `agents` fields** —
 Claude Code resolves subagent targets by directory name at call time and
@@ -132,15 +96,15 @@ no declaration is documented, note the gap in your scout report.
 
 ---
 
-## 6.5f — Add the `team-comms.md` reference to agent "Project Context"
+## 6.5e — Add the `team-comms.md` reference to agent "Project Context"
 
 PM, PA, and any worker whose "Project Context" already points at
 `AGENTS.md` should also point at `.agents/team-comms.md`. Scout adds a
 one-liner near the existing `AGENTS.md` reference only if it's missing:
 
 > Read `.agents/team-comms.md` for this project's communication setup —
-> it tells you which transport is in use, who's on the team right now, and
-> how to hand work off to another persona.
+> it tells you the host, who's on the team right now, and how to hand
+> work off to another persona.
 
 Do not add this to every file — only to agents that actually route work
 (PM/PA, and workers that frequently fan out, e.g. tech-lead). Devs and QA
@@ -148,7 +112,7 @@ can read it on demand.
 
 ---
 
-## 6.5g — Idempotence
+## 6.5f — Idempotence
 
 Re-running scout on an already-seeded project must be safe:
 

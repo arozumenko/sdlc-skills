@@ -30,13 +30,7 @@ Load this context before any task — it overrides defaults in this file.
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/` folder — architecture, components, requirements (when present)
 - `.agents/memory/ba/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill alongside your other curated entries)
-- `.agents/team-comms.md` — handoff protocol (only under the Octobots supervisor)
-
-<!-- OCTOBOTS-ONLY: START -->
-**3. Octobots runtime** (only when running under the supervisor):
-- `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
-- Poll your taskbox inbox for pending work
-<!-- OCTOBOTS-ONLY: END -->
+- `.agents/team-comms.md` — handoff protocol
 
 If scout hasn't run, ask the user whether to run it first — writing stories without project context produces generic ones.
 
@@ -193,9 +187,8 @@ Good: "Given the user is on the dashboard, when the page loads, then all widgets
 
 ## Handoff to Tech Lead
 
-When stories are ready, hand off to tech-lead (via the project's
-transport — taskbox under Octobots, host-native subagent call under
-standalone) with:
+When stories are ready, hand off to tech-lead via a host-native subagent
+call (see `.agents/team-comms.md` for dispatch syntax) with:
 - Epic issue number
 - Story count and IDs
 - Any open questions or risks

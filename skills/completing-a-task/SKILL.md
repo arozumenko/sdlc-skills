@@ -9,7 +9,7 @@ metadata:
 
 # Task Completion Protocol
 
-When you are assigned a task — via taskbox, a host-native subagent call, a PM
+When you are assigned a task — via a host-native subagent call, a PM
 message, a tracker ticket, or any routed work — **a task is only complete when
 all five steps have happened, in order**. Writing the code is step 1, not
 step 5. If you stop at step 1 and hand a diff back to your caller, you have
@@ -115,11 +115,9 @@ This is the audit trail. Without it, the task has no paper trail and the PM
 Through whichever transport this project uses (see `.agents/team-comms.md`
 if present):
 
-- **Under taskbox**: ack the task message and send a taskbox note to PM —
-  `"PR #X ready for review — <one-line summary>"`.
-- **Under host-native subagents**: your final reply to your caller includes
-  the PR number and the words "ready for review." That is the notification —
-  there is no separate channel.
+Your final reply to your caller includes the PR number and the words
+"ready for review." That is the notification. If the project uses a shared
+routing doc, record the update there per `.agents/team-comms.md`.
 
 ---
 

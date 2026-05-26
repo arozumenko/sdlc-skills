@@ -101,15 +101,15 @@ it on every push/PR). See [`bundles/SPEC.md`](bundles/SPEC.md).
 
 2. **Check whether scout's seeding-a-project has new steps.** If the
    update pulled in new seeding-a-project steps (e.g. Step 6.8 tool
-   wiring, 6.9 role substitutions, 6.95 deployment-mode marker
-   stripping) and your install predates them, re-run scout with a
+   wiring, 6.9 role substitutions) and your install predates them,
+   re-run scout with a
    prompt that tells it to execute **only the new steps**:
 
    ```
    You are scout. Do NOT regenerate existing content docs.
    Execute ONLY the seeding-a-project steps introduced since my last
    install: read <SKILLS_ROOT>/seeding-a-project/SKILL.md and run
-   whichever of Step 6.8, Step 6.9, Step 6.95 are present and not
+   whichever of Step 6.8, Step 6.9 are present and not
    already applied. Report what you changed.
    ```
 
