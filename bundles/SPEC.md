@@ -86,9 +86,9 @@ bundles/<id>/
    needed. `AGENTS.md` (the full team reference every agent reads) is created
    if missing; `CLAUDE.md` is auto-loaded and scout-owned (kept lean), so its
    block is only refreshed when the file already exists — never created.
-   _Note:_ if scout later regenerates `AGENTS.md`, project-seeder must
-   preserve `<!-- BUNDLE:* -->` blocks (follow-up in step 7's Octobots/scout
-   integration).
+   When scout later regenerates `AGENTS.md`/`CLAUDE.md`, the
+   `project-seeder` skill preserves `<!-- BUNDLE:* -->` blocks verbatim, so
+   a bundle's conventions survive onboarding.
 4. **Hooks** — for each target in `targets ∩ installed targets`, merge
    `hooks/hooks.json` into `<target>/settings.json` under `hooks` (tagged
    entries, merge-not-clobber, back up first); copy `hooks/scripts/` and
@@ -139,13 +139,6 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   exists, every `skills[]` id resolves in `skills.json`/`skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, and each
   `localAgents` entry has an `AGENT.md`.
-
-## Octobots tie-in
-
-`bundle.json.agents[]` is the input Octobots needs for
-`.octobots/roles-manifest.yaml`. The supervisor derives the manifest from
-the bundle — a single source of truth shared by IDE installs and the
-supervisor.
 
 ## Current bundles
 

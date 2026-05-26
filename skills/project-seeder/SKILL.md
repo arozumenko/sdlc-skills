@@ -120,7 +120,8 @@ cat CLAUDE.md 2>/dev/null && echo "EXISTS" || echo "NOT FOUND"
   verified that isn't listed). Fix only clear errors. Do not
   restructure, reword, or "improve" prose — the wording is
   intentional. When in doubt, leave it alone and ask the engineer
-  directly.
+  directly. **Preserve any `<!-- BUNDLE:<id> START -->` … `END -->`
+  block verbatim** — it's a team bundle's conventions, not yours to edit.
 
 **What belongs here:** one-paragraph project overview, 3–5 most
 important commands (install, dev, test), critical conventions, key
@@ -150,6 +151,12 @@ CI/CD, environment.
 - Note inconsistencies: "README says `npm test` but CI runs
   `npx jest --ci`".
 - Keep it under 200 lines. Link to `.agents/` files for details.
+- **Preserve bundle blocks.** If `AGENTS.md` already contains any
+  `<!-- BUNDLE:<id> START -->` … `<!-- BUNDLE:<id> END -->` block, copy
+  it through verbatim — it was installed by a team bundle and holds that
+  team's working agreements. Read existing `AGENTS.md` before
+  regenerating; keep every bundle block intact (placement doesn't
+  matter — keep it whole). Never edit or drop the marker lines.
 
 ## Step 3 — Generate .agents/profile.md
 
@@ -270,6 +277,9 @@ wc -l AGENTS.md  # should be under 200 lines
 
 # No secrets leaked anywhere scout wrote
 grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .agents/ .octobots/ 2>/dev/null || echo "clean"
+
+# Bundle blocks survived regeneration (paired START/END markers, if any)
+grep -c "<!-- BUNDLE:.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
 
 # roles-manifest.yaml generated under .octobots/ (if roles were customized and Octobots is in play)
 ls .octobots/roles-manifest.yaml 2>/dev/null
