@@ -51,6 +51,10 @@
 
     {"id": "fastapi",                     "repo": "fastapi/fastapi", "ref": "master", "subdir": "fastapi/.agents/skills/fastapi", "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)"},
     {"id": "fastmcp-server",              "repo": "davila7/claude-code-templates", "ref": "main", "subdir": "cli-tool/components/skills/development/fastmcp-server", "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)"},
-    {"id": "vercel-react-best-practices", "repo": "vercel-labs/agent-skills", "ref": "main", "subdir": "skills/react-best-practices", "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"}
+    {"id": "vercel-react-best-practices", "repo": "vercel-labs/agent-skills", "ref": "main", "subdir": "skills/react-best-practices", "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"},
+
+    {"id": "environment-setup-xcuitest",  "repo": "appium/skills", "ref": "main", "subdir": "skills/environment-setup-xcuitest",  "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)"},
+    {"id": "xcuitest-real-device-config", "repo": "appium/skills", "ref": "main", "subdir": "skills/xcuitest-real-device-config", "description": "Prepare a real iOS/tvOS device for Appium XCUITest automation — device trust, Developer Mode, provisioning, WebDriverAgent code-signing (official Appium)"},
+    {"id": "appium-troubleshooting",      "repo": "appium/skills", "ref": "main", "subdir": "skills/appium-troubleshooting",      "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)"}
   ]
 }
