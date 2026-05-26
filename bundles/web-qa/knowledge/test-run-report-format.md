@@ -119,6 +119,7 @@ Each executor agent outputs one JSON block. The reporter consumes an array of th
 {
   "tc_id": "TC-001",
   "title": "Login with valid credentials",
+  "priority": "high",
   "result": "PASS",
   "steps_total": 5,
   "steps_completed": 5,

@@ -4,6 +4,7 @@ description: Use when turning rough test ideas (prose, bullets, bug reports, use
 model: sonnet
 group: qa
 color: green
+theme: {color: colour156, icon: "✍️", short_name: tcw}
 aliases: [tc-writer, tcw]
 tools: Read, Write, Glob
 skills: []

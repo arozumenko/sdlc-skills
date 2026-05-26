@@ -4,6 +4,7 @@ description: Use when turning an array of executor JSON results into a Markdown 
 model: haiku
 color: blue
 group: qa
+theme: {color: colour33, icon: "📊", short_name: rep}
 aliases: [reporter]
 tools: Read, Write
 skills: []
@@ -127,13 +128,13 @@ _(Only if failures exist)_
 
 - Pass rate: `round(passed / total * 100, 1)`
 - Total duration: sum of all `duration_ms` (if present), else sum of `duration_seconds`; format as `Xm Ys` or `Xs`
-- Wall Clock per TC: `duration_ms / 1000`, formatted as `Xs` (e.g. `136s`) or `Xm Ys` if ≥ 60s
+- Wall Clock per TC: `duration_ms / 1000` if present, else `duration_seconds`; format as `Xs` (e.g. `14s`) or `Xm Ys` if ≥ 60s
 - Average wall clock: `total_duration_ms / count / 1000`, same formatting
 - Total tokens: sum of all `tokens` values; format with thousands separator (e.g. `335,231`)
 - Average tokens: `total_tokens / count`, rounded to nearest integer, with thousands separator
 - Total tool uses: sum of all `tool_uses` values
 - Average tool uses: `total_tool_uses / count`, rounded to 1 decimal
-- Defect severity: `critical` or `high` priority TC → `High`; `medium` → `Medium`; `low` → `Low`
+- Defect severity: from the result's `priority` — `critical`/`high` → High, `medium` → Medium, `low` → Low; if `priority` is absent, default to Medium.
 - Omit Failed Tests, Blocked Tests, Defects Found, Performance Metrics sections if there are no entries / no data
 
 ## Verification

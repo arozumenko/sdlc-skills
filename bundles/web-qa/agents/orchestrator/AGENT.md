@@ -4,6 +4,7 @@ description: Use when running a full manual-QA suite — discovers all test case
 model: sonnet
 group: qa
 color: green
+theme: {color: colour156, icon: "🎯", short_name: orch}
 aliases: [orchestrator, orch]
 tools: Glob, Read, Write, Agent
 skills: [verification-before-completion, systematic-debugging]
@@ -60,7 +61,7 @@ Attach all three fields to the result object.
 
 **If an executor produces no JSON**, record:
 ```json
-{ "tc_id": "...", "result": "BLOCKED", "failure_reason": "Executor agent did not return a result", "tokens": 0, "tool_uses": 0, "duration_ms": 0 }
+{ "tc_id": "...", "title": "(executor produced no response)", "result": "BLOCKED", "failure_reason": "Executor agent did not return a result", "tokens": 0, "tool_uses": 0, "duration_ms": 0 }
 ```
 
 **If the `<usage>` block is absent**, set `tokens: null, tool_uses: null, duration_ms: null` — the reporter will omit the Performance Metrics section gracefully.

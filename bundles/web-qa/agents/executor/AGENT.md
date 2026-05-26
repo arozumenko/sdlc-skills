@@ -4,6 +4,7 @@ description: Use when executing one manual test case against a running web app v
 model: sonnet
 color: red
 group: qa
+theme: {color: colour196, icon: "▶️", short_name: exec}
 aliases: [executor]
 tools: Read, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_type, mcp__playwright__browser_select_option, mcp__playwright__browser_hover, mcp__playwright__browser_press_key, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_evaluate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, verification-before-completion, systematic-debugging]
@@ -57,7 +58,7 @@ Prefer in order: `data-testid` → ARIA role → visible text → `name` attribu
 
 ## Execution Protocol
 
-1. **Read** the test case file
+1. **Read** the test case file — note the `priority` value from the YAML frontmatter (`critical` / `high` / `medium` / `low`)
 2. **Read** `.agents/web-qa/app_profile.md` if it exists — note any selector hints for this test's module
 3. **Substitute `{{base_url}}`** with the actual URL provided
 4. **For each step** in the Steps table:
@@ -90,6 +91,7 @@ End your response with exactly one JSON block:
 {
   "tc_id": "TC-001",
   "title": "Login with valid credentials",
+  "priority": "<critical|high|medium|low from the TC frontmatter>",
   "result": "PASS",
   "steps_total": 5,
   "steps_completed": 5,

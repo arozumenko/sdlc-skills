@@ -4,6 +4,7 @@ description: Use when onboarding a new or changed web app for manual QA — inte
 model: sonnet
 group: qa
 color: green
+theme: {color: colour156, icon: "🔍", short_name: setup}
 aliases: [setup]
 tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader]
@@ -62,7 +63,7 @@ Use MCP tools to explore. Take a screenshot at each major page.
 browser_navigate → {base_url}
 browser_wait_for → networkidle or main content
 browser_snapshot → understand structure, note nav items
-browser_take_screenshot → save to knowledge/screenshots/home.png
+browser_take_screenshot → save to .agents/web-qa/screenshots/home.png
 ```
 
 ### 2b. Authentication flow (if login required)
@@ -80,7 +81,7 @@ For each flow mentioned:
 ```
 browser_navigate → relevant page
 browser_snapshot → structure, interactive elements, URL
-browser_take_screenshot → save to knowledge/screenshots/{page}.png
+browser_take_screenshot → save to .agents/web-qa/screenshots/{page}.png
 ```
 
 ### 2d. Extract reliable selectors
