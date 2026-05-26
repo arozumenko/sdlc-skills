@@ -1,0 +1,11 @@
+{
+  "id": "web-qa",
+  "title": "Web QA Team",
+  "description": "Standalone agentic manual-QA team for web apps — onboard the app, author test cases, run them live via Playwright MCP, and report.",
+  "agents": [],
+  "localAgents": ["setup", "tc-writer", "orchestrator", "executor", "reporter"],
+  "skills": [],
+  "seed": { "knowledge": ".agents/web-qa/knowledge" },
+  "instructions": "instructions.md",
+  "targets": ["claude"]
+}
