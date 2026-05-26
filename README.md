@@ -155,6 +155,7 @@ GitHub Copilot (all four IDE targets detected automatically).
 npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
 npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
 npx github:arozumenko/sdlc-skills init --bundle web-qa     # standalone manual-QA team (live browser testing via Playwright MCP)
+npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -177,7 +178,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Three
+files** into the project — one command instead of hand-listing roles. Four
 ship today:
 
 | Bundle | Roster | What it's for |
@@ -185,6 +186,7 @@ ship today:
 | `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
 | `web-qa` | 5 bundle-local agents (setup, tc-writer, orchestrator, executor, reporter) | Standalone manual-QA team — onboard an app, author test cases, run them live via Playwright MCP, and report. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
+| `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
 author your own.
@@ -462,7 +464,7 @@ sdlc-skills/
 │   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
 ├── bundles/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # team-web, team-ios, web-qa
+│   └── <bundle-id>/            # team-web, team-ios, web-qa, test-automation
 │       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
