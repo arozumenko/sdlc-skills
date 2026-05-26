@@ -29,7 +29,7 @@ date: 2026-05-18
 
 **Environment:** https://app.example.com  
 **Duration:** 2m 43s  
-**Executed by:** QA Agent (claude-sonnet-4-6)
+**Executed by:** Web QA Team
 
 ## Summary
 

@@ -63,7 +63,7 @@ date: {date}
 
 **Environment:** {environment}  
 **Duration:** {total_duration_formatted}  
-**Executed by:** QA Agent (claude-sonnet-4-6)
+**Executed by:** Web QA Team
 
 ## Summary
 
