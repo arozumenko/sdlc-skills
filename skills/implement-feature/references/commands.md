@@ -1,5 +1,18 @@
 # Implement Feature — Command Recipes
 
+## Contents
+
+- [Step 1: Load the plan](#step-1-load-the-plan)
+- [Step 2: Test case templates](#step-2-test-case-templates)
+- [Step 3: Verify-after-edit commands](#step-3-verify-after-edit-commands)
+- [Step 4: Manual verification by feature type](#step-4-manual-verification-by-feature-type)
+- [Step 5: Integration test template](#step-5-integration-test-template)
+- [Step 6: Full suite commands](#step-6-full-suite-commands)
+- [Step 7: Commit & PR](#step-7-commit--pr)
+- [Summary](#summary)
+- [Test Plan](#test-plan)
+- [Step 8: Done comment + PM notification](#step-8-done-comment--pm-notification)
+
 Detailed command templates and verification patterns for each step of the
 feature implementation workflow. Load this file when you need the exact
 heredoc, test template, or handoff command; the main SKILL.md has the

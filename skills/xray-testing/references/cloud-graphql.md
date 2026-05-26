@@ -1,5 +1,15 @@
 # Xray Cloud — GraphQL API v2
 
+## Contents
+
+- [1. Authentication](#1-authentication)
+- [2. Everything uses `issueId`, not `issueKey` — usually](#2-everything-uses-issueid-not-issuekey-usually)
+- [3. Core queries](#3-core-queries)
+- [4. Core mutations](#4-core-mutations)
+- [5. Fragments — reusable shapes](#5-fragments-reusable-shapes)
+- [6. Error handling](#6-error-handling)
+- [7. Worked example — end-to-end](#7-worked-example-end-to-end)
+
 Xray Cloud exposes its primary API at
 **`https://xray.cloud.getxray.app/api/v2/graphql`**. A small set
 of REST endpoints exist for auth and results import; everything

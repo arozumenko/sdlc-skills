@@ -12,7 +12,7 @@ metadata:
 Persistent per-role memory as plain markdown. You — the agent — read and
 write these files directly using your `Read`, `Write`, `Edit`, and `Glob`
 tools. No CLI, no script, no shell-path fragility. Works on any host, from
-any working directory, on any host.
+any working directory.
 
 ## File layout
 

@@ -1,8 +1,8 @@
 ---
 name: git-workflow
-description: Git operations, branching, commits, PRs, and release workflows. Use when the user asks to "commit", "create PR", "branch", "merge", "rebase", "cherry-pick", "tag", or manage git history.
+description: Use when the user asks to "commit", "create PR", "branch", "merge", "rebase", "cherry-pick", "tag", or otherwise manage git history. Guides disciplined git operations — branching, commits, PRs, and recovery.
 license: Apache-2.0
-compatibility: Requires git CLI and gh CLI for GitHub operations
+compatibility: Requires git CLI; gh/glab/az/bb/tea for your host's PR/MR operations
 allowed-tools: Bash(git:*) Bash(gh:*)
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
@@ -12,6 +12,13 @@ metadata:
 # Git Workflow
 
 Disciplined git operations for professional codebases.
+
+## Platform & systems
+
+Commands below use **GitHub `gh`** as the reference. Translate to your code host
+per `.agents/workflow.md` § Git host — GitLab `glab`, Bitbucket `bb`, Azure
+DevOps `az repos`, Gitea `tea`. "PR" means PR or MR. If scout hasn't recorded a
+host, ask before assuming GitHub.
 
 ## Before Any Git Operation
 

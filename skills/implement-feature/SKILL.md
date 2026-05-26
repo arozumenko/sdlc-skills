@@ -1,6 +1,6 @@
 ---
 name: implement-feature
-description: End-to-end feature implementation — plan review, test-first, build, verify, deliver. Use when the user says "implement", "build feature", "work on task", or once a plan or story is approved and you're about to start building.
+description: Use when the user says "implement", "build feature", "work on task", or once a plan or story is approved and you're about to start building. The end-to-end feature-implementation workflow; delegates the final handoff to completing-a-task.
 license: Apache-2.0
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
@@ -11,6 +11,14 @@ metadata:
 
 **Core philosophy:** understand the plan, write tests first, implement to pass
 them, verify everything, ship clean.
+
+## Platform & systems
+
+`gh issue …` / `gh pr …` below are the **GitHub reference**. Translate to your
+tracker per `.agents/profile.md` § Project systems (jira / gitlab-issues /
+azure-boards / linear) and your code host's CLI per `.agents/workflow.md`
+(GitLab `glab`, Azure DevOps `az repos`, Bitbucket `bb`, Gitea `tea`). If scout
+hasn't recorded them, ask before assuming GitHub.
 
 ## The eight steps
 

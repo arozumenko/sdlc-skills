@@ -1,5 +1,17 @@
 # Xray entity model — field reference
 
+## Contents
+
+- [Test — the test case](#test-the-test-case)
+- [Precondition — shared setup steps](#precondition-shared-setup-steps)
+- [Test Set — pure organizational grouping](#test-set-pure-organizational-grouping)
+- [Test Plan — planning container with rolled-up status](#test-plan-planning-container-with-rolled-up-status)
+- [Test Execution — one run event](#test-execution-one-run-event)
+- [Test Run — status + evidence for one Test inside one Execution](#test-run-status-evidence-for-one-test-inside-one-execution)
+- [Coverage model](#coverage-model)
+- [Status catalogue](#status-catalogue)
+- [Common field-shape confusions](#common-field-shape-confusions)
+
 All six entities are **Jira issues** (except Test Run). They share
 standard Jira fields (project, summary, description, assignee,
 priority, labels, components, fixVersions) plus Xray-specific

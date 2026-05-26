@@ -1,5 +1,25 @@
 # Automation-Friendly Spec (AFS)
 
+## Contents
+
+- [Location](#location)
+- [Required structure](#required-structure)
+- [Metadata](#metadata)
+- [Preconditions](#preconditions)
+- [Test Data](#test-data)
+- [Test Steps](#test-steps)
+- [Expected Results](#expected-results)
+- [Cleanup](#cleanup)
+- [Stable Selectors (discovered during exploration)](#stable-selectors-discovered-during-exploration)
+- [Network Behavior](#network-behavior)
+- [Known Defects Found During Exploration](#known-defects-found-during-exploration)
+- [Blocked Steps](#blocked-steps)
+- [Automation Hints](#automation-hints)
+- [What the analyst MUST fill in](#what-the-analyst-must-fill-in)
+- [What the analyst MAY skip](#what-the-analyst-may-skip)
+- [Variable convention](#variable-convention)
+- [Status vocabulary](#status-vocabulary)
+
 The AFS is the handoff artifact between the analyst and the automation
 engineer. It is a superset of a classic test case — everything a manual
 tester needs, plus everything an engineer needs to go straight to code

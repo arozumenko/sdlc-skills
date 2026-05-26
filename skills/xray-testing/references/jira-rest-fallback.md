@@ -1,5 +1,13 @@
 # Jira-REST fallback — what works without Xray Cloud credentials
 
+## Contents
+
+- [Authentication (Jira REST only)](#authentication-jira-rest-only)
+- [What IS reachable](#what-is-reachable)
+- [What is NOT reachable via Jira REST](#what-is-not-reachable-via-jira-rest)
+- [Decision tree for degraded mode](#decision-tree-for-degraded-mode)
+- [Surfacing the blocker](#surfacing-the-blocker)
+
 When the Xray Cloud API is unreachable — credentials rejected,
 `client_id`/`client_secret` not yet issued, regional endpoint
 mis-set, or the tenant is mid-outage — you can still do a

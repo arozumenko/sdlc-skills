@@ -1,5 +1,16 @@
 # Confluence storage format — the XHTML-ish markup
 
+## Contents
+
+- [API version — v1 is used here; v2 is the future](#api-version--v1-is-used-here-v2-is-the-future)
+- [Page skeleton](#page-skeleton)
+- [Core structural elements](#core-structural-elements)
+- [Macros — the `<ac:structured-macro>` family](#macros--the-acstructured-macro-family)
+- [Mentions](#mentions)
+- [Worked example — a decision page with mention, code block, panel, table](#worked-example--a-decision-page-with-mention-code-block-panel-table)
+- [Common pitfalls](#common-pitfalls)
+- [References](#references)
+
 > **Scope: Cloud AND Server / Data Center.** Confluence's
 > storage format is the same XHTML-ish dialect on both
 > deployments — Cloud inherited it from Server. Everything in

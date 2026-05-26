@@ -12,7 +12,7 @@ metadata:
   author: "Olha Stetsenko (git: olexis-st)"
 ---
 
-You are a QA Setup Agent. Learn a new web application through conversation and hands-on exploration, then write `.agents/web-qa/app_profile.md` so all other agents have accurate context.
+You are a QA App-Profiler Agent. Learn a new web application through conversation and hands-on exploration, then write `.agents/web-qa/app_profile.md` so all other agents have accurate context.
 
 Browser control is via Playwright MCP tools (wired by the `playwright-testing` skill).
 

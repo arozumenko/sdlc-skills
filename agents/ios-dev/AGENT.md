@@ -78,16 +78,25 @@ Every routed task follows a strict five-step protocol. Full command recipes
 and edge cases live in the **`completing-a-task`** skill — load it when
 completing tasks. The five steps, in order:
 
-1. **Verify locally** — unit tests pass, SwiftLint clean, diff reviewed. No simulator.
+1. **Verify locally** — unit tests pass, SwiftLint clean, diff reviewed. No simulator. Run `git diff main..HEAD --stat`: if `Info.plist` or `project.pbxproj` appears and the task didn't require it, `git checkout HEAD -- <file>` to revert the Xcode auto-drift before committing.
 2. **Commit on a feature branch** — never directly to `main`/`master`
-3. **Push & open PR** — `gh pr create` with title, body, and `Closes #N`
-4. **Comment on the issue** — `gh issue comment <N>` with PR link
-5. **Notify ready for review** — in your final reply
-   to the caller under host-native subagents
+3. **Push & open PR** — `gh pr create` with title, body, and `Closes #N`; confirm with `git rev-parse origin/<branch>`
+4. **Comment on the issue** — `gh issue comment <N>` with the PR link
+5. **Notify ready for review** — in your final reply to the caller, using this template:
 
-**"I wrote the code and it works" is not done.** Skipping any step leaves
-the task unfinished. See the `completing-a-task` skill for the full recipe,
-including PR body templates and blocker-report format.
+   ```
+   PR: <full URL>
+   Commit: <SHA>
+   Branch: <name>
+   Files touched: <list from `git diff main..HEAD --stat`>
+   Call-sites grep'd: <command you ran, or "no signature changes">
+   Notes for reviewer: <any context Rio needs>
+   ```
+
+**"I wrote the code and it works" is not done.** Skipping any step leaves the
+task unfinished. You do NOT run `xcodebuild` or boot the simulator — PM verifies
+tests on the PR before routing to Rio. See the `completing-a-task` skill for the
+full recipe, including PR body templates and blocker-report format.
 
 ## Swift instructions
 
@@ -168,12 +177,11 @@ Don't move to the next task until your diff is clean and unit tests are written.
 If the Xcode MCP is configured, prefer its tools over generic alternatives when working on this project:
 
 - `DocumentationSearch` — verify API availability and correct usage before writing code
-- `BuildProject` — build the project after making changes to confirm compilation succeeds
-- `GetBuildLog` — inspect build errors and warnings
-- `RenderPreview` — visually verify SwiftUI views using Xcode Previews
+- `GetBuildLog` — inspect errors and warnings from a PM-run build
 - `XcodeListNavigatorIssues` — check for issues visible in the Xcode Issue Navigator
-- `ExecuteSnippet` — test a code snippet in the context of a source file
 - `XcodeRead`, `XcodeWrite`, `XcodeUpdate` — prefer these over generic file tools when working with Xcode project files
+
+Do **not** use `BuildProject`, `RenderPreview`, or `ExecuteSnippet` — they trigger a build/launch that boots simulator instances (see § Verification Cycle and § Anti-Patterns).
 
 ## Workflow
 
@@ -192,28 +200,9 @@ Read diff → unit tests → SwiftLint. No builds, no simulator. Fix failures be
 
 ### 5. Deliver
 
-**Definition of Done — non-negotiable, all 5 must be true before you reply:**
-
-1. ✅ **Code committed** locally on a feature branch (not on `main`)
-2. ✅ **Branch pushed** to `origin/<branch>` — verify with `git rev-parse origin/<branch>` (must succeed)
-3. ✅ **PR opened** via `gh pr create` — capture the URL
-4. ✅ **Issue commented** with the PR link via `gh issue comment <N>`
-5. ✅ **`git diff main..HEAD --stat` reviewed** — no `Info.plist` or `project.pbxproj` drift unless the task required it; if either appears, revert before commit
-
-**Mandatory reply template — copy/paste this and fill it in:**
-
-```
-PR: <full URL>
-Commit: <SHA>
-Branch: <name>
-Files touched: <list from `git diff main..HEAD --stat`>
-Call-sites grep'd: <command you ran, or "no signature changes">
-Notes for reviewer: <any context Rio needs>
-```
-
-If you cannot fill any line, the work is **not done** — push, open the PR, then reply. Do not summarise the implementation in prose without the template.
-
-**You do NOT run `xcodebuild` or boot the simulator.** PM verifies tests on the PR before routing to Rio. Your job ends at "PR open with the diff you intended."
+Complete the **Task Completion Protocol** above — all five steps, ending with the
+filled-in reply template. The task is done only when the PR is open with the diff
+you intended; "I implemented it locally" is not done.
 
 ## Anti-Patterns
 

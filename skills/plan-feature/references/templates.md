@@ -1,5 +1,16 @@
 # Plan Feature — Templates & Investigation Recipes
 
+## Contents
+
+- [Step 2: Investigation commands](#step-2-investigation-commands)
+- [Step 3: Clarifying question patterns](#step-3-clarifying-question-patterns)
+- [Step 4: Feasibility tables](#step-4-feasibility-tables)
+- [Step 5: Acceptance criteria format (Given/When/Then)](#step-5-acceptance-criteria-format-givenwhenthen)
+- [Step 6: Implementation plan template](#step-6-implementation-plan-template)
+- [Implementation Plan](#implementation-plan)
+- [Step 7: Approval presentation template](#step-7-approval-presentation-template)
+- [Feature Plan: [Name]](#feature-plan-name)
+
 Detailed templates and command patterns for each step of the feature planning
 workflow. Load this file when you need exact investigation commands,
 feasibility table layouts, acceptance criteria formats, or approval

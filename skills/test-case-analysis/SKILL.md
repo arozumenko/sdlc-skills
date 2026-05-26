@@ -1,6 +1,6 @@
 ---
 name: test-case-analysis
-description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case and emit an AFS", or any TMS-case exploration before automation. Does not write test code.
+description: Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — "analyse SCRUM-T101", "run this case and emit an AFS", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.
 license: Apache-2.0
 metadata:
   author: "Alexander Bychinkii (git: bermudas)"
@@ -70,7 +70,7 @@ what challenge you're solving. Full triage:
 In short:
 
 - **Default** — [`playwright-testing`](../playwright-testing/)
-  (Playwright MCP). Prefer `browser_snapshot` for accessible-name
+  (Playwright MCP). Prefer its accessibility-snapshot tool for accessible-name
   discovery — it yields both the ref you need to click and the
   role-name pair you'll assert on.
 - **MCP server not wired** — [`playwright-cli`](../playwright-cli/)

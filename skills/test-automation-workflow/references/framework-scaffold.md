@@ -1,5 +1,15 @@
 # Framework Scaffold (Fallback Only)
 
+## Contents
+
+- [Decision tree](#decision-tree)
+- [Playwright (TypeScript) — minimal](#playwright-typescript-minimal)
+- [pytest + playwright-python — minimal](#pytest-playwright-python-minimal)
+- [JUnit 5 + Playwright-Java — minimal](#junit-5-playwright-java-minimal)
+- [NUnit + Playwright.NET — minimal](#nunit-playwrightnet-minimal)
+- [Non-negotiables regardless of framework](#non-negotiables-regardless-of-framework)
+- [When you bootstrap](#when-you-bootstrap)
+
 When a project has no existing test framework *and* the user explicitly
 asks to bootstrap one, pick the minimal scaffold that matches the
 project's language. **If any framework is already in place, extend it —

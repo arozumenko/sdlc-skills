@@ -11,7 +11,7 @@ Usage from other scripts:
     client = get_client()          # v1.0 GraphServiceClient
     client = get_client(beta=True) # beta GraphServiceClient
 
-Environment variables (can also be set in .env at project root or skill root):
+Environment variables (can also be set in .env at the skill root or cwd):
     MSGRAPH_CLIENT_ID  - Azure AD app client ID (default: public client)
     MSGRAPH_TENANT_ID  - Azure AD tenant ID (default: "common" for multi-tenant)
 """
@@ -37,7 +37,7 @@ from azure.core.credentials import AccessToken, TokenCredential
 # ---------------------------------------------------------------------------
 
 def _load_dotenv() -> None:
-    """Load .env files (skill root → cwd → project root) without overwriting
+    """Load .env files (skill root → cwd) without overwriting
     variables that are already set in the real environment."""
     candidates = [
         Path(__file__).resolve().parent.parent / ".env",  # skill root

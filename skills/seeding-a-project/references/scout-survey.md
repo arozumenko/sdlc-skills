@@ -1,5 +1,10 @@
 # Scout survey — PR sampling + project-systems capture
 
+## Contents
+
+- [Step 0.5 — PR-sampling survey](#step-05--pr-sampling-survey)
+- [Step 0.7 — Project-systems capture](#step-07--project-systems-capture)
+
 Full procedure for the two pre-write phases scout runs before it
 emits any content files: sampling the team's PR history to understand
 *how they actually work*, and capturing the project-systems map

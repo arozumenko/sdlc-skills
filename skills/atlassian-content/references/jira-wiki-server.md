@@ -1,5 +1,16 @@
 # Jira Server / Data Center — wiki markup, API v2
 
+## Contents
+
+- [Document skeleton](#document-skeleton)
+- [The renderer trap — read this first](#the-renderer-trap--read-this-first)
+- [Wiki markup syntax — what you'll actually use](#wiki-markup-syntax--what-youll-actually-use)
+- [Authentication on Server](#authentication-on-server)
+- [Reading content back](#reading-content-back)
+- [Worked example — a well-formatted bug report](#worked-example--a-well-formatted-bug-report)
+- [Common pitfalls](#common-pitfalls)
+- [References](#references)
+
 **JIRA SYNTAX REFERENCE (Server / Data Center):**
 
 - Use **wiki markup** — a plain string. Not JSON, not ADF.

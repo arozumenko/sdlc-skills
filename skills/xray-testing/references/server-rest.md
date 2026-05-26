@@ -1,5 +1,14 @@
 # Xray Server / Data Center — REST API
 
+## Contents
+
+- [1. Authentication](#1-authentication)
+- [2. Endpoint map (v2 unless noted)](#2-endpoint-map-v2-unless-noted)
+- [3. Results import (brief — full details in results-import.md)](#3-results-import-brief-full-details-in-results-importmd)
+- [4. Worked example — end-to-end](#4-worked-example-end-to-end)
+- [5. Error responses](#5-error-responses)
+- [6. Cloud ↔ Server parity notes](#6-cloud-server-parity-notes)
+
 Xray Server / DC exposes its API under the Jira instance — no
 separate service. Base:
 

@@ -1,5 +1,14 @@
 # Role overrides — Step 6.9 full procedure
 
+## Contents
+
+- [Lightweight injection vs. full customization (when to defer to Step 7)](#lightweight-injection-vs-full-customization-when-to-defer-to-step-7)
+- [Role-similarity rules](#role-similarity-rules)
+- [How scout delivers the overrides — externalized via @-import](#how-scout-delivers-the-overrides--externalized-via--import)
+- [Why this design (principle recap)](#why-this-design-principle-recap)
+- [What workflow skills do (and don't do)](#what-workflow-skills-do-and-dont-do)
+- [Report (end of Step 6.9)](#report-end-of-step-69)
+
 Scout compares the **workflow slots** the project needs (derived from
 which workflow skills are installed and from the project's stated
 pipelines) against the **installed agent roster**. For any slot that

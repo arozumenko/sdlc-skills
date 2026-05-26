@@ -1,6 +1,6 @@
 ---
 name: completing-a-task
-description: Use when you've finished implementing a routed task and need to commit, push, open a PR, comment on the issue, and notify your reviewer. The five-step protocol that marks a task truly "done" — writing code is step 1, handoff is step 5.
+description: Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.
 license: Apache-2.0
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"

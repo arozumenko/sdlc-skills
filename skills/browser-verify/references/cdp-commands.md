@@ -1,5 +1,13 @@
 # CDP Commands — Extended Reference
 
+## Contents
+
+- [Advanced Evaluate Patterns](#advanced-evaluate-patterns)
+- [QA Audit Specialist Scripts](#qa-audit-specialist-scripts)
+- [Multi-Tab Verification](#multi-tab-verification)
+- [Environment Variables](#environment-variables)
+- [Troubleshooting](#troubleshooting)
+
 ## Advanced Evaluate Patterns
 
 ### Check for JavaScript Errors

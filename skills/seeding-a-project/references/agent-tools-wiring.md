@@ -1,5 +1,17 @@
 # Agent Tools Wiring
 
+## Contents
+
+- [When this step actually writes anything](#when-this-step-actually-writes-anything)
+- [Inputs scout reads (all evidence-based, no operator prompts)](#inputs-scout-reads-all-evidence-based-no-operator-prompts)
+- [Scout self-service — probe MCP, write per-agent `tools:`](#scout-self-service--probe-mcp-write-per-agent-tools)
+- [When scout pauses (rare)](#when-scout-pauses-rare)
+- [Decision heuristics](#decision-heuristics)
+- [Sketch of the per-agent result (Copilot CLI, Elitea MCP, Playwright)](#sketch-of-the-per-agent-result-copilot-cli-elitea-mcp-playwright)
+- [Procedure (scout executes, autonomously)](#procedure-scout-executes-autonomously)
+- [What scout does NOT do](#what-scout-does-not-do)
+- [Failure modes + what scout does about them](#failure-modes--what-scout-does-about-them)
+
 Inject a `tools:` whitelist into each installed agent's frontmatter so
 the host (especially Copilot CLI) actually grants them the tools they
 need. Scope is per-project and fully autonomous — scout derives every

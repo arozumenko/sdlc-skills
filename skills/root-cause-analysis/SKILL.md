@@ -1,6 +1,6 @@
 ---
 name: root-cause-analysis
-description: Trace a confirmed bug to its exact cause — execution-path tracing, root-cause classification, confidence, and impact/regression analysis, reported on the ticket. Use after a bug is reproduced, before proposing a fix. Investigation only — does not edit code.
+description: Use after a bug is reproduced/confirmed and before proposing a fix, or when the user says "investigate issue", to trace a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.
 license: Apache-2.0
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
@@ -21,10 +21,8 @@ the tracker scout recorded in `.agents/profile.md § Project systems`. The
 
 ## When to use
 
-- A bug is reproduced/confirmed (ideally via `reproducing-issues`) and needs
-  deep investigation before a fix.
-- Pairs with **`systematic-debugging`** — use its rigor (reproduce reliably,
-  condition-based waiting) to trace; produce the structured report here.
+Pairs with **`systematic-debugging`** — use its rigor (reproduce reliably,
+condition-based waiting) to trace, then produce the structured report here.
 
 ## Methodology — 4 phases
 
@@ -69,6 +67,20 @@ Suspected.
   function + cause + the offending code), execution path, impact analysis,
   suggested remediation, and dependencies (what this blocks / relates to).
 - **One line to user/PM**: root cause + location + confidence.
+
+**RCA comment template:**
+
+```
+## Root Cause — <ticket-id>
+
+**Summary:** <what & why, one paragraph>
+**Classification:** <Logic|Data|Concurrency|Configuration|Integration|Resource> · confidence <Confirmed|Likely|Suspected> · severity <…>
+**Root cause:** `path/to/file.ext:line` in `<function>` — <the offending logic>
+**Execution path:** <entry → … → failure point>
+**Impact:** <callers / regression risk / test coverage>
+**Suggested remediation:** <fix direction, not the patch>
+**Blocks / relates to:** <links>
+```
 
 ## You do NOT
 

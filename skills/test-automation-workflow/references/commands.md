@@ -1,5 +1,18 @@
 # Test Automation — Command Recipes
 
+## Contents
+
+- [Phase 1: Framework discovery](#phase-1-framework-discovery)
+- [Phase 2: Ingest case from TMS](#phase-2-ingest-case-from-tms)
+- [Phase 3–4: Analyst execution + AFS output](#phase-34-analyst-execution-afs-output)
+- [Phase 5–6: Automation implementation](#phase-56-automation-implementation)
+- [Phase 7: Review](#phase-7-review)
+- [Phase 8: Deliver + TMS sync](#phase-8-deliver-tms-sync)
+- [Summary](#summary)
+- [Test plan](#test-plan)
+- [Sub-agent result collection pattern (cross-host)](#sub-agent-result-collection-pattern-cross-host)
+- [Evidence paths (convention)](#evidence-paths-convention)
+
 Concrete commands for each phase. Load this file when you need the
 copy-pasteable template; the main `SKILL.md` has the conceptual flow.
 

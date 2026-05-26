@@ -1,5 +1,10 @@
 # team-comms.md templates
 
+## Contents
+
+- [Template 1 — Claude Code host](#template-1--claude-code-host)
+- [Template 2 — GitHub Copilot host](#template-2--github-copilot-host)
+
 Scout writes `.agents/team-comms.md` during project seeding. The content
 depends on the detected host. Pick the matching template below, substitute
 the enumerated roster, and write the file.

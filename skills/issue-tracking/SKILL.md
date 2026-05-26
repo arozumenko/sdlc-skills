@@ -13,6 +13,14 @@ metadata:
 
 Create, query, and manage issues across trackers. Defaults to GitHub Issues via `gh` CLI.
 
+## Platform & systems
+
+The recipes below use **GitHub `gh`** as the reference. For other trackers,
+translate the operation per `.agents/profile.md` § Project systems: GitLab
+`glab issue …`, Azure Boards `az boards work-item …`, Linear via its CLI/MCP,
+Jira via the `atlassian-content` skill. The concepts (title, body, labels,
+state) map across — only the command changes.
+
 ## Create Issue
 
 ```bash

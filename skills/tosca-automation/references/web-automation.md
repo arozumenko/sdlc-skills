@@ -1,5 +1,21 @@
 # Web Automation (Html Engine) — Detailed Guide
 
+## Contents
+
+- [Discovery workflow with Playwright](#discovery-workflow-with-playwright)
+- [Module structure](#module-structure)
+- [businessType by element](#businesstype-by-element)
+- [Value expression reference](#value-expression-reference)
+- [Standard framework module IDs](#standard-framework-module-ids)
+- [4-folder test case structure](#4-folder-test-case-structure)
+- [OpenUrl step template (all 3 params required)](#openurl-step-template-all-3-params-required)
+- [Verify steps](#verify-steps)
+- [Test case config params](#test-case-config-params)
+- [Password fields](#password-fields)
+- [Conditional steps — `ControlFlowItemV2` for optional elements](#conditional-steps-controlflowitemv2-for-optional-elements)
+- [Debugging a failed run](#debugging-a-failed-run)
+- [Creation workflow](#creation-workflow)
+
 ## Discovery workflow with Playwright
 
 ```
