@@ -47,6 +47,9 @@
     {"id": "subagent-driven-development", "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/subagent-driven-development", "description": "Execute an implementation plan by dispatching a fresh subagent per task with two-stage review (spec compliance, then code quality), in the current session (from obra/superpowers)"},
     {"id": "dispatching-parallel-agents", "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/dispatching-parallel-agents", "description": "Dispatch one focused agent per independent problem domain and run them concurrently — for 2+ tasks with no shared state or sequential dependencies (from obra/superpowers)"},
 
-    {"id": "playwright-cli",              "repo": "microsoft/playwright-cli", "ref": "main", "subdir": "skills/playwright-cli",      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"}
+    {"id": "playwright-cli",              "repo": "microsoft/playwright-cli", "ref": "main", "subdir": "skills/playwright-cli",      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"},
+
+    {"id": "code-review-excellence",      "repo": "awesome-skills/code-review-skill", "ref": "main", "description": "Comprehensive code-review guidance across React/TypeScript, Python/Django, and 14+ other languages/frameworks; catches bugs, security, quality issues (review-only; MIT, community-maintained). Web tech-lead reviewer skill"},
+    {"id": "vercel-react-best-practices", "repo": "vercel-labs/agent-skills", "ref": "main", "subdir": "skills/react-best-practices", "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"}
   ]
 }

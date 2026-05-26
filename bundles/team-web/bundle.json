@@ -10,6 +10,10 @@
     "qa-engineer": "briefings/qa-engineer.md",
     "test-automation-engineer": "briefings/test-automation-engineer.md"
   },
+  "skillOverlays": {
+    "tech-lead": { "add": ["code-review-excellence"] },
+    "js-dev": { "add": ["vercel-react-best-practices"] }
+  },
   "instructions": "instructions.md",
   "localAgents": [],
   "targets": ["claude"]
