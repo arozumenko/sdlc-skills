@@ -3,7 +3,7 @@ name: implement-feature
 description: End-to-end feature implementation — plan review, test-first, build, verify, deliver. Use when the user says "implement", "build feature", "work on task", or once a plan or story is approved and you're about to start building.
 license: Apache-2.0
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

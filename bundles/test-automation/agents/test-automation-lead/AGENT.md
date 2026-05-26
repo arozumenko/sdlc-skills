@@ -7,6 +7,8 @@ group: qa
 theme: {color: colour51, icon: "🎯", short_name: tal}
 aliases: [tal, ta-lead, automation-lead]
 skills: [test-automation-workflow, test-case-analysis, code-review, issue-tracking, atlassian-content, completing-a-task, git-workflow, plan-feature, memory]
+metadata:
+  author: "Alexander Bychinkii (git: bermudas)"
 ---
 
 @.agents/memory/test-automation-lead/MEMORY.md

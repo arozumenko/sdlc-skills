@@ -3,7 +3,7 @@ name: vividus
 description: Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based, config-first .story files spanning web/REST/mobile/DB via 47+ plugins. Use when the user mentions Vividus, .story files, vividus-bom/-starter, backtick-parameter BDD, or ./gradlew runStories.
 license: Apache-2.0
 metadata:
-  author: octobots
+  author: "Alexander Bychinkii (git: bermudas)"
   version: "1.0.0"
   framework: vividus
   framework-version: "0.6.x"

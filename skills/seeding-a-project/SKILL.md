@@ -4,7 +4,7 @@ description: Generate AGENTS.md and .octobots/ configuration files for a new pro
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

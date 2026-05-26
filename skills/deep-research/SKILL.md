@@ -4,7 +4,7 @@ description: Disk-first, checkpointed research workflow with three modes — tre
 license: Apache-2.0
 compatibility: Requires tavily_search/extract tools; Context7 (resolve-library-id, query-docs) optional for technical topics
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

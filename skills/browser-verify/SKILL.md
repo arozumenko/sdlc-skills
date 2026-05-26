@@ -4,7 +4,7 @@ description: Use when you need to run arbitrary JS in a page, inspect cookies/lo
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium and Node 22+. No npm install needed.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

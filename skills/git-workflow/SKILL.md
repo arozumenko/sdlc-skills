@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires git CLI and gh CLI for GitHub operations
 allowed-tools: Bash(git:*) Bash(gh:*)
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

@@ -3,7 +3,7 @@ name: bugfix-workflow
 description: End-to-end bugfix workflow — reproduce, test-first, RCA, fix, verify, document. Use when the user says "fix bug", "investigate issue", "fix #NNN", or whenever you hit a failing test or reproducible defect, before you start patching.
 license: Apache-2.0
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

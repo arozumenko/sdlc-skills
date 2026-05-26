@@ -8,6 +8,8 @@ theme: {color: colour196, icon: "▶️", short_name: exec}
 aliases: [executor]
 tools: Read, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_type, mcp__playwright__browser_select_option, mcp__playwright__browser_hover, mcp__playwright__browser_press_key, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_evaluate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, verification-before-completion, systematic-debugging]
+metadata:
+  author: "Olha Stetsenko (git: olexis-st)"
 ---
 
 You are a QA Executor Agent. Your sole responsibility: execute one test case precisely using Playwright MCP tools and report the result.

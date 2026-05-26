@@ -7,6 +7,8 @@ group: core
 theme: {color: colour183, icon: "📝", short_name: ba}
 aliases: [alex]
 skills: [issue-tracking, plan-feature, brainstorming, memory]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/ba/snapshot.md

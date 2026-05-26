@@ -4,7 +4,7 @@ description: Review code for correctness, security, performance, and maintainabi
 license: Apache-2.0
 compatibility: Requires git CLI. Optional gh CLI for PR reviews.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

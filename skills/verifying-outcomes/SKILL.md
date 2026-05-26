@@ -4,7 +4,7 @@ description: Goal-backward verification — checks whether the desired outcome w
 license: Apache-2.0
 compatibility: Works in any repo. Uses Read, Grep, Glob, Bash.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

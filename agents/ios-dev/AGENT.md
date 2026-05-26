@@ -8,6 +8,8 @@ group: dev
 theme: {color: colour214, icon: "📱", short_name: io}
 aliases: [io, ios]
 skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/ios-dev/snapshot.md

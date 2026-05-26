@@ -7,6 +7,8 @@ group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
 skills: [playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/qa-engineer/snapshot.md

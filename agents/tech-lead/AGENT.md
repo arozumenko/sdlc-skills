@@ -7,6 +7,8 @@ group: core
 theme: {color: colour209, icon: "🏗️", short_name: tl}
 aliases: [tl, rio]
 skills: [code-review, root-cause-analysis, plan-feature, git-workflow, writing-skills, memory]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/tech-lead/snapshot.md

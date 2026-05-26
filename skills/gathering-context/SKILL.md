@@ -4,7 +4,7 @@ description: Gather cross-channel context (local KB, email, Teams, optional web)
 license: Apache-2.0
 compatibility: Requires MS Graph tools (search-query, list-mail-messages, get-mail-message, find-chat, list-chat-messages). Web search optional.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

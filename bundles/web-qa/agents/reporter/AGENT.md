@@ -8,6 +8,8 @@ theme: {color: colour33, icon: "📊", short_name: rep}
 aliases: [reporter]
 tools: Read, Write
 skills: []
+metadata:
+  author: "Olha Stetsenko (git: olexis-st)"
 ---
 
 You are a QA Reporter Agent. Turn an array of executor results into a clean Markdown report.
