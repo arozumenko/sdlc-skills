@@ -8,6 +8,8 @@ group: core
 theme: {color: colour141, icon: "🟣", short_name: pa}
 aliases: [pa, octo]
 skills: [obsidian-vault, microsoft-365, memory]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/personal-assistant/snapshot.md

@@ -4,7 +4,7 @@ description: Microsoft 365 (Graph) access to email, Teams, calendar, and SharePo
 license: Apache-2.0
 compatibility: Requires Python 3.10+. Dependencies and Azure AD app are auto-configured on first run.
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.2.0"
 ---
 

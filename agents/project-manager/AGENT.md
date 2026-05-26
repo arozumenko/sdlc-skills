@@ -7,6 +7,8 @@ group: core
 theme: {color: colour213, icon: "📋", short_name: pm}
 aliases: [pm, max]
 skills: [issue-tracking, plan-feature, subagent-driven-development, dispatching-parallel-agents, memory]
+metadata:
+  author: "Artem Rozumenko (git: arozumenko)"
 ---
 
 @.agents/memory/project-manager/snapshot.md

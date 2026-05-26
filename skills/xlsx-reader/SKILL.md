@@ -4,7 +4,7 @@ description: Read .xlsx/.xls spreadsheets (test cases, checklists, requirement m
 license: Apache-2.0
 compatibility: Requires Node.js 18+ and the xlsx npm package (npm i xlsx).
 metadata:
-  author: octobots
+  author: "Olha Stetsenko (git: olexis-st)"
   version: "0.1.0"
 ---
 

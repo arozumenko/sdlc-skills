@@ -3,7 +3,7 @@ name: root-cause-analysis
 description: Trace a confirmed bug to its exact cause — execution-path tracing, root-cause classification, confidence, and impact/regression analysis, reported on the ticket. Use after a bug is reproduced, before proposing a fix. Investigation only — does not edit code.
 license: Apache-2.0
 metadata:
-  author: octobots
+  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 
