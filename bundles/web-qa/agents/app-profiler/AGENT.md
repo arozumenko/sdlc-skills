@@ -1,11 +1,11 @@
 ---
-name: setup
+name: app-profiler
 description: Use when onboarding a new or changed web app for manual QA — interview the user, explore the running app via Playwright MCP, and write .agents/web-qa/app_profile.md (URLs, auth, key pages, reliable selectors, fragile areas) that every other web-qa agent reads.
 model: sonnet
 group: qa
 color: green
-theme: {color: colour156, icon: "🔍", short_name: setup}
-aliases: [setup]
+theme: {color: colour156, icon: "🔍", short_name: profiler}
+aliases: [app-profiler, profiler]
 tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader]
 metadata:
@@ -169,6 +169,6 @@ After writing `app_profile.md`:
 
 1. List recommended suites in priority order with rationale
 2. Name any gaps you couldn't fill (missing credentials, unreachable pages)
-3. Offer handoff: "Ready to write test cases. Use `/agent tc-writer` and describe the first flow you want covered."
+3. Offer handoff: "Ready to write test cases. Use `/agent test-author` and describe the first flow you want covered."
 
 Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.

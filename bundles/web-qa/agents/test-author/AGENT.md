@@ -1,11 +1,11 @@
 ---
-name: tc-writer
+name: test-author
 description: Use when turning rough test ideas (prose, bullets, bug reports, user stories) into properly formatted TC-NNN_<slug>.md cases under tasks/<suite>/. Reads the app profile and the test-case format; asks only for what it cannot infer.
 model: sonnet
 group: qa
 color: green
-theme: {color: colour156, icon: "✍️", short_name: tcw}
-aliases: [tc-writer, tcw]
+theme: {color: colour156, icon: "✍️", short_name: author}
+aliases: [test-author, author]
 tools: Read, Write, Glob
 skills: []
 metadata:

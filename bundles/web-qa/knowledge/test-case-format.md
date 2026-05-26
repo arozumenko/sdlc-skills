@@ -99,7 +99,7 @@ User is authenticated and on the dashboard. No error messages visible. URL is `{
 
 ## The `{{base_url}}` Placeholder
 
-All URLs in the test case use `{{base_url}}` as a prefix. The orchestrator substitutes the real URL at run time, making test cases environment-agnostic (works against dev, staging, production).
+All URLs in the test case use `{{base_url}}` as a prefix. The test-run-lead substitutes the real URL at run time, making test cases environment-agnostic (works against dev, staging, production).
 
 **Example:** `{{base_url}}/login` → `https://staging.app.com/login`
 
