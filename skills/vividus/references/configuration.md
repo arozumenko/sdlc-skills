@@ -1,5 +1,17 @@
 # Vividus Configuration Reference
 
+## Contents
+
+- [Files at a glance](#files-at-a-glance)
+- [Precedence (highest → lowest)](#precedence-highest-lowest)
+- [Master `configuration.properties`](#master-configurationproperties)
+- [Suites — "what to run"](#suites-what-to-run)
+- [Profiles — "on what platform"](#profiles-on-what-platform)
+- [Environments — "against what host"](#environments-against-what-host)
+- [Configuration sets — preset bundles](#configuration-sets-preset-bundles)
+- [Common cross-cutting properties](#common-cross-cutting-properties)
+- [CLI overrides at runtime](#cli-overrides-at-runtime)
+
 Vividus configuration has three orthogonal axes — **suite**, **profile**, **environment** — plus an `overriding.properties` for local overrides and a master `configuration.properties`. CLI args (`-Pvividus.<key>=<v>`) sit on top.
 
 Doc: https://docs.vividus.dev/vividus/latest/configuration/tests-configuration.html

@@ -81,7 +81,7 @@ dev when Axel isn't installed). The file is authoritative for the
 project; the defaults above are the sdlc-skills baseline. See
 `seeding-a-project` § Step 6.9 for how scout writes the overrides.
 
-### The three-step flow
+### The four-step flow
 
 1. **Analyst slot.** Executes the case end-to-end against the live
    app, captures stable selectors, files defects via `bugfix-workflow`
@@ -361,7 +361,7 @@ Two reviewers in parallel:
   refactor survive? Is the sad path covered?
 - **[`code-review`](../code-review/)** skill — code quality, fixture
   discipline, selector stability, naming, dead code.
-NOTE: Reviewer must be explicitely informed that it reviews someone else's work, not its own. Otherwise it will be biased and less effective. See `code-review` skill for review prompt details.
+NOTE: Reviewer must be explicitly informed that it reviews someone else's work, not its own. Otherwise it will be biased and less effective. See `code-review` skill for review prompt details.
 Reviewer comments feed back to Axel. Re-run after changes.
 
 ### 8. Deliver & sync TMS

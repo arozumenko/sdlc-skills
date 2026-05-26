@@ -2,7 +2,7 @@
 name: obsidian-vault
 description: Headless, file-system Obsidian vault operations (no Obsidian app needed). Use when the user says "save to vault", "log this note", "find my notes about X", "what's in my inbox", "open loops", or when filing an incoming signal (email/chat/memo) or updating people/project/meeting notes.
 license: Apache-2.0
-compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH (or legacy $VAULT_PATH). ripgrep recommended (falls back to grep).
+compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH. ripgrep recommended (falls back to grep).
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
@@ -21,7 +21,7 @@ This skill is self-contained and stdlib-only. It pairs well with an agent-intern
 
 If unsure where something belongs: short-lived agent thought → memory; user might want to read it later → vault.
 
-The CLI is `scripts/vault.py`. Vault path comes from `$OBSIDIAN_VAULT_PATH` or `--vault`; the skill is a no-op if unset. Output is human-readable on stdout; errors → stderr; non-zero exit on failure.
+The CLI is `scripts/vault.py`. Vault path comes from `$OBSIDIAN_VAULT_PATH` or `--vault`; the CLI exits with an error if neither is set. Output is human-readable on stdout; errors → stderr; non-zero exit on failure.
 
 ## Vault layout
 

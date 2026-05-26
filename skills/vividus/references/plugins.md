@@ -1,5 +1,18 @@
 # Vividus Plugin Catalog
 
+## Contents
+
+- [Web / UI](#web-ui)
+- [Mobile / Desktop](#mobile-desktop)
+- [API & Protocols](#api-protocols)
+- [Data formats](#data-formats)
+- [Databases](#databases)
+- [Messaging](#messaging)
+- [AWS](#aws)
+- [Azure](#azure)
+- [Other](#other)
+- [Picking-by-task quick map](#picking-by-task-quick-map)
+
 The Vividus framework ships **47+ plugins** versioned together via the BOM (`org.vividus:vividus-bom:<version>`). Add the ones you need to `build.gradle`; the BOM picks the version automatically.
 
 ```gradle

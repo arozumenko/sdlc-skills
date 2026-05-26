@@ -1,5 +1,16 @@
 # Vividus Troubleshooting Guide
 
+## Contents
+
+- [Build / setup failures](#build-setup-failures)
+- [Story authoring failures](#story-authoring-failures)
+- [Configuration failures](#configuration-failures)
+- [Runtime failures](#runtime-failures)
+- [Reporting failures](#reporting-failures)
+- [Visual testing failures](#visual-testing-failures)
+- [AI / LLM-generated step pitfalls](#ai-llm-generated-step-pitfalls)
+- [When stuck](#when-stuck)
+
 The most-common pitfalls and the fastest path through each.
 
 ---

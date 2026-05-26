@@ -1,5 +1,14 @@
 # Playwright Testing Patterns
 
+## Contents
+
+- [Page Object Model](#page-object-model)
+- [Fixture Strategy](#fixture-strategy)
+- [Framework-Specific Selectors](#framework-specific-selectors)
+- [Hybrid API + UI Testing](#hybrid-api-ui-testing)
+- [Screenshot Convention](#screenshot-convention)
+- [Common Gotchas](#common-gotchas)
+
 ## Page Object Model
 
 Encapsulate page interactions in reusable classes:

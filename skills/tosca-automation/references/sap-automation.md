@@ -1,5 +1,21 @@
 # SAP GUI Automation (SapEngine) — Detailed Guide
 
+## Contents
+
+- [SAP engine vs Html engine](#sap-engine-vs-html-engine)
+- [Standard SAP framework modules (not in Inventory)](#standard-sap-framework-modules-not-in-inventory)
+- [Precondition reusable block (always the first testCaseItem)](#precondition-reusable-block-always-the-first-testcaseitem)
+- [Test case configuration (no Browser param)](#test-case-configuration-no-browser-param)
+- [4-folder structure](#4-folder-structure)
+- [SAP inventory module structure](#sap-inventory-module-structure)
+- [RelativeId patterns](#relativeid-patterns)
+- [ControlGroup attribute (toolbar / button group)](#controlgroup-attribute-toolbar-button-group)
+- [TabControl attribute](#tabcontrol-attribute)
+- [ControlFlowItemV2 — conditional popup](#controlflowitemv2-conditional-popup)
+- [Module naming convention](#module-naming-convention)
+- [Finding RelativeId values](#finding-relativeid-values)
+- [Creation workflow](#creation-workflow)
+
 ## SAP engine vs Html engine
 
 | Property | Html engine | SAP engine |

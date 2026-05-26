@@ -1,5 +1,13 @@
 # Jira ADF (Atlassian Document Format) — Cloud, API v3
 
+## Contents
+
+- [Document skeleton](#document-skeleton)
+- [Block nodes — the ones you'll actually use](#block-nodes--the-ones-youll-actually-use)
+- [Inline nodes](#inline-nodes)
+- [Worked example — a well-formatted bug report](#worked-example--a-well-formatted-bug-report)
+- [Common pitfalls](#common-pitfalls)
+
 > **Scope: Atlassian Cloud only.** Jira Server / Data Center
 > does NOT accept ADF — it uses wiki markup against API v2.
 > If you're hitting `https://<host>.atlassian.net/...`, you're

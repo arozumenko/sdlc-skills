@@ -31,4 +31,4 @@ node scripts/read_xlsx.js <input.xlsx> [output.md]
 ## Notes
 
 - After writing to a file, read the produced Markdown back with the `Read` tool to bring the content into the agent's context.
-- For large workbooks with many sheets, convert only the relevant sheet by trimming the output or adjusting the script's `SheetNames` filter — avoid overwhelming the context window.
+- For large workbooks with many sheets, convert only the relevant sheet by trimming the output (e.g. filtering on the `## <SheetName>` headings) — avoid overwhelming the context window.

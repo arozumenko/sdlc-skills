@@ -1,5 +1,14 @@
 # Vividus Variables, Expressions, and ExamplesTable
 
+## Contents
+
+- [Variable scopes](#variable-scopes)
+- [Reference syntax](#reference-syntax)
+- [Expressions `#{...}`](#expressions)
+- [ExamplesTable](#examplestable)
+- [Table transformers](#table-transformers)
+- [Saving runtime data into table-shaped variables](#saving-runtime-data-into-table-shaped-variables)
+
 The "data plumbing" of Vividus stories. Every non-trivial test uses these — variable scoping, `#{...}` expressions, and ExamplesTable transformers.
 
 Docs:

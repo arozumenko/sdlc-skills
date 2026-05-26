@@ -1,5 +1,15 @@
 # Results import — JUnit, Cucumber, TestNG, NUnit, xUnit, Xray JSON
 
+## Contents
+
+- [1. Endpoints](#1-endpoints)
+- [2. JUnit XML — the default for most JS / Python runners](#2-junit-xml-the-default-for-most-js-python-runners)
+- [3. Cucumber JSON](#3-cucumber-json)
+- [4. Xray canonical JSON — full control](#4-xray-canonical-json-full-control)
+- [5. Validation after import — non-negotiable](#5-validation-after-import-non-negotiable)
+- [6. Common pitfalls](#6-common-pitfalls)
+- [7. Choosing a format](#7-choosing-a-format)
+
 Xray can import test results from every mainstream runner. The
 import endpoints create a **Test Execution** and one **Test Run**
 per reported test case. Mapping report rows to existing Tests

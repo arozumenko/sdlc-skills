@@ -8,7 +8,7 @@ metadata:
   version: "0.1.0"
 ---
 
-# Goal Verifier
+# Verifying Outcomes
 
 **"Tasks completed" ≠ "goal achieved."** Your job is to verify the outcome, ruthlessly and from evidence.
 

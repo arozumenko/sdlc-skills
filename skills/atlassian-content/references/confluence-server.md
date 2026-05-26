@@ -1,5 +1,17 @@
 # Confluence Server / Data Center — what's different from Cloud
 
+## Contents
+
+- [Base URL — no `/wiki/` prefix](#base-url--no-wiki-prefix)
+- [REST endpoints (Server / DC v1)](#rest-endpoints-server--dc-v1)
+- [Authentication](#authentication)
+- [Mentions — `ri:userkey` or `ri:username`, never `ri:account-id`](#mentions--riuserkey-or-riusername-never-riaccount-id)
+- [`body.wiki` — Jira-style wiki markup as input (Server-only)](#bodywiki--jira-style-wiki-markup-as-input-server-only)
+- [Storage format vs wiki markup — which to use](#storage-format-vs-wiki-markup--which-to-use)
+- [Worked example — full page-create payload (storage format)](#worked-example--full-page-create-payload-storage-format)
+- [Server-specific pitfalls](#server-specific-pitfalls)
+- [References](#references)
+
 The **storage format** is the same XHTML-ish dialect on Server and
 on Cloud — Cloud inherited it from Server. Read
 `confluence-storage.md` for the body syntax (paragraphs, lists,

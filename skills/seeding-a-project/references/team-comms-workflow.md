@@ -1,5 +1,14 @@
 # Team Comms Generation Workflow (Step 6.5)
 
+## Contents
+
+- [6.5a — Detect the installed hosts](#65a--detect-the-installed-hosts)
+- [6.5b — Enumerate installed personas](#65b--enumerate-installed-personas)
+- [6.5c — Write `.agents/team-comms.md` from templates](#65c--write-agentsteam-commsmd-from-templates)
+- [6.5d — Declare Copilot subagent capability (Copilot only)](#65d--declare-copilot-subagent-capability-copilot-only)
+- [6.5e — Add the `team-comms.md` reference to agent "Project Context"](#65e--add-the-team-commsmd-reference-to-agent-project-context)
+- [6.5f — Idempotence](#65f--idempotence)
+
 The full procedure scout follows to generate `.agents/team-comms.md`.
 Every project gets a single scout-generated communication document at
 `.agents/team-comms.md`. It lives next to `architecture.md` and friends,

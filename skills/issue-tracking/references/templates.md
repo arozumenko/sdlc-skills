@@ -1,5 +1,12 @@
 # Issue Templates
 
+## Contents
+
+- [Bug Report](#bug-report)
+- [Task](#task)
+- [Epic](#epic)
+- [Workflow States](#workflow-states)
+
 ## Bug Report
 
 ```markdown

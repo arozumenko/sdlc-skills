@@ -1,5 +1,16 @@
 # Standard Modules — Discovery & Execute/Verify JavaScript
 
+## Contents
+
+- [Core rule: discover, don't hard-code](#core-rule-discover-dont-hard-code)
+- [Discovery workflow (generic)](#discovery-workflow-generic)
+- [When to use Standard modules (general rule)](#when-to-use-standard-modules-general-rule)
+- [Execute JavaScript & Verify JavaScript Result](#execute-javascript-verify-javascript-result)
+- [Caveats (platform-level, not project-specific)](#caveats-platform-level-not-project-specific)
+- [Platform-constant module GUIDs (validated but still re-check on your tenant)](#platform-constant-module-guids-validated-but-still-re-check-on-your-tenant)
+- [Generalizable diagnostic: "scanner blind" pattern](#generalizable-diagnostic-scanner-blind-pattern)
+- [Anti-patterns observed (do not repeat)](#anti-patterns-observed-do-not-repeat)
+
 > **TL;DR lessons learned** (read first)
 >
 > 1. **Standard modules are not in `inventory search`.** Use `GET /_mbt/api/v2/builder/packages` to list them and `GET /_mbt/api/v2/builder/packages/{packageId}/modules/{moduleId}` to get the full attribute tree. Do this **before** building a custom wrapper for anything the platform already ships (OpenUrl, CloseBrowser, Wait, JS execution, HTTP, DB, file, email, T-code, clipboard, timing…).

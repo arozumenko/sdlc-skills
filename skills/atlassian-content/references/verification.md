@@ -1,5 +1,15 @@
 # Post-creation verification — re-fetch, validate, repair
 
+## Contents
+
+- [Before you update: raw-fetch first](#before-you-update-raw-fetch-first)
+- [Why re-fetch](#why-re-fetch)
+- [Re-fetch endpoints](#re-fetch-endpoints)
+- [Validation checklist](#validation-checklist)
+- [Repair recipes](#repair-recipes)
+- [Visual spot-check — when API-only isn't enough](#visual-spot-check--when-api-only-isnt-enough)
+- [Logging what you did](#logging-what-you-did)
+
 The POST returned 201. That proves the server accepted your JSON.
 It does NOT prove the content renders correctly. This page is the
 checklist for turning "accepted" into "good".

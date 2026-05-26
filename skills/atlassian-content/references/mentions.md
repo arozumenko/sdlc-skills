@@ -1,5 +1,15 @@
 # Mentions — the correct way, on every deployment / surface
 
+## Contents
+
+- [1. Cloud — `accountId`](#1-cloud--accountid)
+- [2. Jira Server / Data Center — `[~username]`](#2-jira-server--data-center--username)
+- [3. Confluence Server / Data Center — `ri:userkey` / `ri:username`](#3-confluence-server--data-center--riuserkey--riusername)
+- [4. Mentioning multiple users](#4-mentioning-multiple-users)
+- [5. Failure modes](#5-failure-modes)
+- [6. Caching](#6-caching)
+- [7. Privacy note](#7-privacy-note)
+
 Mentions are the highest-leverage and most-failed piece of content
 to get right. A free-text `@username` string posts as literal
 text — no notification, no link, no profile card — on **every**

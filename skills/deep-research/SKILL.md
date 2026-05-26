@@ -82,7 +82,7 @@ Goal: extract every factual claim from a document and label each one with eviden
 
 ### Verification (batches of 8–10)
 For each batch:
-- `tavily_search` for current/breaking claims, `tavily_research` for synthesis-heavy claims, `tavily_extract` for primary-source verification.
+- `tavily_search` for current/breaking and synthesis-heavy claims, `tavily_extract` for primary-source verification.
 - Aim for ≥2 independent sources per claim. Note publication dates and source authority.
 - Watch for **context manipulation** (accurate quote, misleading framing) and **outdated facts presented as current**.
 - Write `checkpoint_NNN.md` with full findings for the batch, then **drop the details from memory** — keep only `claim# | verdict | confidence` lines.

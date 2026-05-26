@@ -1,5 +1,16 @@
 # Project Seeder Templates
 
+## Contents
+
+- [CLAUDE.md Template](#claudemd-template)
+- [AGENTS.md Template](#agentsmd-template)
+- [.agents/profile.md Template](#agentsprofilemd-template)
+- [.agents/workflow.md Template](#agentsworkflowmd-template)
+- [.agents/architecture.md Template](#agentsarchitecturemd-template)
+- [.agents/conventions.md Template](#agentsconventionsmd-template)
+- [.agents/testing.md Template](#agentstestingmd-template)
+- [`.agents/memory/<role-id>/project_briefing.md` Template](#agentsmemoryrole-idprojectbriefingmd-template)
+
 ## CLAUDE.md Template
 
 Auto-loaded by Claude Code at session start. **Keep under 80 lines.** Every agent reads this on every session — be ruthlessly concise.

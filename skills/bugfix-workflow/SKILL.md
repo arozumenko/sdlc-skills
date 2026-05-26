@@ -7,7 +7,7 @@ metadata:
   version: "0.1.0"
 ---
 
-## Bugfix Workflow: Reproduce → Test → Fix → Verify
+# Bugfix Workflow: Reproduce → Test → Fix → Verify
 
 **Core philosophy:** reproduce before you fix, verify after you fix, link
 everything to the ticket.

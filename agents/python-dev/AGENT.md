@@ -57,7 +57,7 @@ completing tasks. The five steps, in order:
 3. **Push & open PR** — `gh pr create` with title, body, and `Closes #N`
 4. **Comment on the issue** — `gh issue comment <N>` with PR link
 5. **Notify ready for review** — in your final reply
-   to the caller under host-native subagents
+   to the caller
 
 **"I wrote the code and it works" is not done.** Skipping any step leaves
 the task unfinished. See the `completing-a-task` skill for the full recipe,

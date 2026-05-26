@@ -1,5 +1,16 @@
 # TMS Adapters
 
+## Contents
+
+- [Transports](#transports)
+- [Configuration file](#configuration-file)
+- [Adapter contract](#adapter-contract)
+- [Supported adapters](#supported-adapters)
+- [MCP transport — tool mapping](#mcp-transport-tool-mapping)
+- [Choosing an adapter](#choosing-an-adapter)
+- [When the adapter fails](#when-the-adapter-fails)
+- [Writing a new adapter](#writing-a-new-adapter)
+
 The workflow is TMS-agnostic. All TMS interaction flows through an
 adapter — a thin layer with a fixed contract. Swap one config line, the
 workflow keeps running.
