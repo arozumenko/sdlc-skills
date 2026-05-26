@@ -11,15 +11,9 @@ tags: [daily]
 
 ## Morning digest -- 09:00
 
-
-
 ## Signals
 
-
-
 ## Open Loops Created
-
-
 
 ## Evening digest -- 18:00
 

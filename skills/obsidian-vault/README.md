@@ -11,7 +11,7 @@ Loads on _"save to vault"_, _"log this note"_, _"find my notes about X"_, _"what
 ## Requirements
 
 - **Python 3.10+** (stdlib only).
-- Vault path via `$OBSIDIAN_VAULT_PATH` (legacy `$OCTOBOTS_VAULT_PATH` also honored).
+- Vault path via `$OBSIDIAN_VAULT_PATH`.
 - **ripgrep** recommended (falls back to `grep`).
 
 ## Install

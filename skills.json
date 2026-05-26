@@ -1,5 +1,5 @@
 {
-  "_comment": "sdlc-skills skill registry — canonical source for which skills exist and how to fetch them. Skills in the sdlc-skills monorepo carry `monorepo: sdlc-skills` + `name: <subdir>`. Third-party skill repos carry `repo: owner/repo` (+ optional `ref`, + optional `subdir` for multi-skill repos) and are fetched by `bin/init.mjs` via git clone, then copied into the project's skills dir (or symlinked with `--symlink`). The Octobots supervisor's install.sh delegates all content resolution to this installer.",
+  "_comment": "sdlc-skills skill registry — canonical source for which skills exist and how to fetch them. Skills in the sdlc-skills monorepo carry `monorepo: sdlc-skills` + `name: <subdir>`. Third-party skill repos carry `repo: owner/repo` (+ optional `ref`, + optional `subdir` for multi-skill repos) and are fetched by `bin/init.mjs` via git clone, then copied into the project's skills dir (or symlinked with `--symlink`).",
 
   "monorepo": {
     "id": "sdlc-skills",

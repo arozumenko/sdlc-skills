@@ -66,7 +66,7 @@ not halt the seed**. It:
    their handoff target is missing.
 2. Emits the blocker in the Step 6.9 summary report under
    `Blockers: <list>` (see § Report below).
-3. Continues to the next slot and the next phase (6.95, 7, etc.).
+3. Continues to the next slot and the next phase (7, etc.).
    Project-seeder exits 0 even with blockers present — the whole
    point of lightweight substitution is to keep the pipeline flowing
    so the operator can install the missing dedicated agent when
@@ -175,7 +175,7 @@ Only agents whose bodies name other agents by default for handoff
 
 ## Why this design (principle recap)
 
-Scout's writes are **scoped to `.agents/` and `.octobots/`** —
+Scout's writes are **scoped to `.agents/`** —
 never to agent source files, host MCP config, or environment.
 That rule makes the whole toolchain re-installable:
 `npx init --update` can freely overwrite agent files from the

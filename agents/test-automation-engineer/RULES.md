@@ -11,24 +11,10 @@ If it is a task (implement automation from an AFS):
 6. Back-write the TMS execution via the adapter declared in
    `.agents/test-automation.yaml` — a green PR with the TMS still saying
    "not executed" is half done
-<!-- OCTOBOTS-ONLY: START -->
-7. Ack: `python3 {octobots_dir}/skills/taskbox/scripts/relay.py ack {msg_id} "short summary"`
-8. Notify: call the `notify` MCP tool: notify(message="Done: <summary>")
-<!-- OCTOBOTS-ONLY: END -->
-<!-- STANDALONE-ONLY: START -->
 7. Report back in your reply — PR URL, commit SHA, test outcome
    (green / red-for-real-reason / blocked), and TMS back-write status.
-   The caller reads your final session message as the response; there's
-   no taskbox to ack and no `notify` MCP on stock hosts.
-<!-- STANDALONE-ONLY: END -->
+   The caller reads your final session message as the response.
 
-<!-- OCTOBOTS-ONLY: START -->
-If it is a question: answer via `python3 {octobots_dir}/skills/taskbox/scripts/relay.py ack {msg_id} "your answer"`.
-
-NEVER ignore a message. Silence breaks the pipeline.
-<!-- OCTOBOTS-ONLY: END -->
-<!-- STANDALONE-ONLY: START -->
 If it is a question: answer in your reply.
 
 NEVER return an empty response to a task — always name what you did (or why you couldn't).
-<!-- STANDALONE-ONLY: END -->

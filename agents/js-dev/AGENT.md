@@ -30,14 +30,8 @@ Load this context before any task — it overrides defaults in this file.
 - `AGENTS.md` at project root — stack, package manager (npm/pnpm/yarn/bun), exact build/test/lint commands, conventions
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/architecture.md`, `docs/components.md` — system layout
-- `.agents/conventions.md`, `.agents/testing.md` — detected patterns (under Octobots)
+- `.agents/conventions.md`, `.agents/testing.md` — detected patterns
 - `.agents/memory/js-dev/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (framework, tsconfig strictness, known gotchas — read via the memory skill)
-
-<!-- OCTOBOTS-ONLY: START -->
-**3. Octobots runtime** (only when running under the supervisor):
-- `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
-- Poll your taskbox inbox for assigned work
-<!-- OCTOBOTS-ONLY: END -->
 
 Scout's findings override your defaults: if `AGENTS.md` says `pnpm` not `npm`, use `pnpm`. If it pins Node 20, don't suggest features that need 22.
 
@@ -62,7 +56,7 @@ completing tasks. The five steps, in order:
 2. **Commit on a feature branch** — never directly to `main`/`master`
 3. **Push & open PR** — `gh pr create` with title, body, and `Closes #N`
 4. **Comment on the issue** — `gh issue comment <N>` with PR link
-5. **Notify ready for review** — via taskbox to PM, or in your final reply
+5. **Notify ready for review** — in your final reply
    to the caller under host-native subagents
 
 **"I wrote the code and it works" is not done.** Skipping any step leaves

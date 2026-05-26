@@ -27,13 +27,10 @@ No npm install required. Uses Node 22 built-in `WebSocket`.
 ## Resolving Script Paths
 
 The scripts are in the `scripts/` subdirectory of this skill. Resolve the path
-from your `.claude/skills/browser-verify/` install location or the octobots
-symlink — both work the same way:
+from your `.claude/skills/browser-verify/` install location:
 
 ```bash
-# Works for both npx-installed and symlinked:
-SCRIPTS=".claude/skills/browser-verify/scripts"   # npx skills add
-SCRIPTS="octobots/skills/browser-verify/scripts"  # symlinked install
+SCRIPTS=".claude/skills/browser-verify/scripts"
 
 bash "$SCRIPTS/chrome-launcher.sh" start --headless
 node "$SCRIPTS/cdp.mjs" navigate "https://example.com"
