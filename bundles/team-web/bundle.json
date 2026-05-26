@@ -7,6 +7,7 @@
   "briefings": {
     "scout": "briefings/scout.md",
     "tech-lead": "briefings/tech-lead.md",
+    "python-dev": "briefings/python-dev.md",
     "qa-engineer": "briefings/qa-engineer.md",
     "test-automation-engineer": "briefings/test-automation-engineer.md"
   },

@@ -23,7 +23,7 @@ each agent's skills, seeds per-role stack briefings into
 | `ba` | alex | core | Turns requests into clear requirements and acceptance criteria |
 | `tech-lead` | rio | core | Owns architecture and the frontend↔backend API contract |
 | `project-manager` | max | core | Sequences work, tracks issues, coordinates the team |
-| `python-dev` | py | dev | **Backend** — Django / FastAPI / Flask, data, business logic, API |
+| `python-dev` | py | dev | **Backend** — FastAPI services + FastMCP servers (async Python, Pydantic), data, business logic, API |
 | `js-dev` | jay | dev | **Frontend** — JS/TS SPA/SSR, UI, client state, API client |
 | `qa-engineer` | sage | qa | Executes tests against the running app + API; writes Automation-Friendly Specs |
 | `test-automation-engineer` | axel | qa | Durable Playwright e2e through the real stack |

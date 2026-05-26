@@ -8,11 +8,14 @@ them per project in `AGENTS.md`, which always wins over this file.
 
 - **Frontend** (`js-dev`): JS/TS SPA or SSR app. Owns UI, client state,
   and calls to the backend API. Does not reach into the database.
-- **Backend** (`python-dev`): Python service (Django / FastAPI / Flask).
-  Owns data, business logic, and the API contract the frontend consumes.
+- **Backend** (`python-dev`): **FastAPI** HTTP service, plus **FastMCP**
+  for any MCP servers — modern async Python, Pydantic at the boundaries.
+  (Not Django, not Flask — if scout finds those on a project, it's a
+  deviation to flag.) Owns data, business logic, and the API contract the
+  frontend consumes.
 - **The contract is the seam.** Frontend and backend integrate through the
-  API schema (OpenAPI / typed client). Changes to the contract are a
-  tech-lead concern and need both devs aligned before merge.
+  API schema (FastAPI's OpenAPI / a typed client). Changes to the contract
+  are a tech-lead concern and need both devs aligned before merge.
 
 ## Cross-stack working agreements
 
