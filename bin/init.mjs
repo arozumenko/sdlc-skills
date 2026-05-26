@@ -137,6 +137,7 @@ function loadBundle(id) {
   b.localAgents = b.localAgents || [];
   b.briefings = b.briefings || {};
   b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
+  b.seed = b.seed || {}; // bundle-relative source → project-relative dest (reference files)
   return b;
 }
 
@@ -270,6 +271,34 @@ function installBriefings(bundle, update) {
     const dm = content.match(/^description:\s*(.+)$/m);
     ensureMemoryIndexLine(destDir, role, dm ? dm[1].trim() : "Project overview and this role's focus");
     console.log(`      ✓ briefing ${role}`);
+    installed++;
+  }
+  return { installed, skipped };
+}
+
+// Seed loose reference files/dirs a bundle ships into the project at a fixed
+// path. bundle.seed maps a bundle-relative source → a project-relative dest.
+// Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
+// left intact unless --update. Used for reference docs agents read at runtime:
+// a subagent's cwd is the project root, so a fixed project path is resolvable.
+function installSeed(bundle, update) {
+  let installed = 0;
+  let skipped = 0;
+  for (const [src, dest] of Object.entries(bundle.seed || {})) {
+    const srcPath = join(bundle.dir, src);
+    if (!existsSync(srcPath)) {
+      console.log(`      ! seed ${src} (missing in bundle)`);
+      continue;
+    }
+    const destPath = join(CWD, dest);
+    if (existsSync(destPath) && !update) {
+      console.log(`      — seed ${dest} (exists; use --update)`);
+      skipped++;
+      continue;
+    }
+    mkdirSync(dirname(destPath), { recursive: true });
+    cpSync(srcPath, destPath, { recursive: true, force: true });
+    console.log(`      ✓ seed ${dest}`);
     installed++;
   }
   return { installed, skipped };
@@ -1422,6 +1451,14 @@ async function main() {
   if (bundle && bundle.instructions) {
     console.log(`\n  → project root (team instructions)`);
     installInstructions(bundle);
+  }
+
+  // Seed reference files into the project (idempotent; IDE-neutral).
+  if (bundle && bundle.seed && Object.keys(bundle.seed).length) {
+    console.log(`\n  → project (seed reference files)`);
+    const s = installSeed(bundle, args.update);
+    installed += s.installed;
+    skipped += s.skipped;
   }
 
   // Hooks merge into each Claude target's settings.json (idempotent).
