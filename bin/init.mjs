@@ -204,8 +204,12 @@ function installBriefings(bundle, update) {
       continue;
     }
     mkdirSync(destDir, { recursive: true });
-    writeFileSync(dest, readFileSync(src, "utf8"));
-    ensureMemoryIndexLine(destDir, role);
+    const content = readFileSync(src, "utf8");
+    writeFileSync(dest, content);
+    // Per the memory skill spec, the index line carries the entry's own
+    // description. Pull it from the briefing's frontmatter.
+    const dm = content.match(/^description:\s*(.+)$/m);
+    ensureMemoryIndexLine(destDir, role, dm ? dm[1].trim() : "Project overview and this role's focus");
     console.log(`      ✓ briefing ${role}`);
     installed++;
   }
@@ -334,9 +338,9 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
 
 // Ensure .agents/memory/<role>/MEMORY.md carries an index line pointing at
 // project_briefing.md. Creates the index if absent; never duplicates.
-function ensureMemoryIndexLine(destDir, role) {
+function ensureMemoryIndexLine(destDir, role, description) {
   const indexPath = join(destDir, "MEMORY.md");
-  const line = "- [Project briefing](project_briefing.md) — Project overview and this role's focus";
+  const line = `- [Project briefing](project_briefing.md) — ${description || "Project overview and this role's focus"}`;
   if (!existsSync(indexPath)) {
     writeFileSync(indexPath, `# Memory index — ${role}\n\n${line}\n`);
     return;
