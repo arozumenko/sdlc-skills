@@ -6,6 +6,10 @@
   "bin": {
     "init": "./bin/init.mjs"
   },
+  "scripts": {
+    "validate:bundles": "node bin/validate-bundles.mjs",
+    "validate": "npm run validate:bundles"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/arozumenko/sdlc-skills.git"

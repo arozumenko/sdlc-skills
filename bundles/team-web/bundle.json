@@ -1,0 +1,16 @@
+{
+  "id": "team-web",
+  "title": "Web Team",
+  "description": "Fullstack web delivery team — JS/TS frontend, Python backend, QA, and core roles.",
+  "agents": ["scout", "ba", "tech-lead", "project-manager", "python-dev", "js-dev", "qa-engineer", "test-automation-engineer"],
+  "skills": [],
+  "briefings": {
+    "scout": "briefings/scout.md",
+    "tech-lead": "briefings/tech-lead.md",
+    "qa-engineer": "briefings/qa-engineer.md",
+    "test-automation-engineer": "briefings/test-automation-engineer.md"
+  },
+  "instructions": "instructions.md",
+  "localAgents": [],
+  "targets": ["claude"]
+}

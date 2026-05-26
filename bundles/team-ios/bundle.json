@@ -1,0 +1,15 @@
+{
+  "id": "team-ios",
+  "title": "iOS Team",
+  "description": "iOS delivery team — Swift/SwiftUI development, QA, and core roles.",
+  "agents": ["scout", "ba", "tech-lead", "project-manager", "ios-dev", "qa-engineer"],
+  "skills": [],
+  "briefings": {
+    "scout": "briefings/scout.md",
+    "tech-lead": "briefings/tech-lead.md",
+    "qa-engineer": "briefings/qa-engineer.md"
+  },
+  "instructions": "instructions.md",
+  "localAgents": [],
+  "targets": ["claude"]
+}

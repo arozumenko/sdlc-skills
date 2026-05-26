@@ -150,6 +150,11 @@ external skills together. Works for Claude Code, Cursor, Windsurf, and
 GitHub Copilot (all four IDE targets detected automatically).
 
 ```bash
+# A team bundle — the whole team in one shot (agents, their skills,
+# per-role stack briefings, and team conventions). See bundles/SPEC.md.
+npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
+npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
+
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
 
@@ -166,6 +171,13 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 # Update an existing install
 npx github:arozumenko/sdlc-skills init --all --update
 ```
+
+**Team bundles.** A bundle is a named team preset that installs a curated
+set of agents (with their skills), seeds per-role stack briefings into
+`.agents/memory/<role>/`, and splices team conventions into `AGENTS.md` /
+`CLAUDE.md` — one command instead of hand-listing roles. Two ship today:
+`team-web` (JS/TS frontend + Python backend) and `team-ios` (Swift /
+SwiftUI). See [`bundles/SPEC.md`](bundles/SPEC.md) to author your own.
 
 Install locations:
 
