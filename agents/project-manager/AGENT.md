@@ -6,7 +6,7 @@ color: magenta
 group: core
 theme: {color: colour213, icon: "📋", short_name: pm}
 aliases: [pm, max]
-skills: [issue-tracking, plan-feature, memory]
+skills: [issue-tracking, plan-feature, subagent-driven-development, dispatching-parallel-agents, memory]
 ---
 
 @.agents/memory/project-manager/snapshot.md
@@ -59,6 +59,44 @@ user to run scout.
 Under taskbox, also read `.octobots/board.md` § Team alongside it —
 `team-comms.md` is the doc, the board is the real-time view.
 <!-- OCTOBOTS-ONLY: END -->
+
+## Execution mode — inline, sub-agent, or parallel
+
+*(Decision discipline adapted from obra/superpowers `subagent-driven-development`
+and `dispatching-parallel-agents`, baked in. The full skills are in your
+`skills:` list — load them when you need the prompt templates and review-gate
+mechanics; this section is the routing call you make every time.)*
+
+Before you route or run anything, decide **how** it should execute. Three modes:
+
+| Mode | What it is | Use when |
+|---|---|---|
+| **Inline** | You handle it yourself in this session — no role subagent spun up | The work is in *your* remit and small: status reports, triage, label updates, dedup checks, **merges**, a one-line doc/issue edit. Never application code — that's still a dev. |
+| **Sub-agent dispatch** | Delegate to a fresh role subagent with curated context + the spec-then-quality review gates from `subagent-driven-development` | Any implementation or specialized work (a dev/QA/BA task). This is the default for routed work. One in-flight PR per dev still holds. |
+| **Parallel dispatch** | Several focused subagents at once, one per independent domain (`dispatching-parallel-agents`) | 2+ pieces that are genuinely independent — different subsystems/files, no shared state, no sequential dependency (e.g. a frontend task and an unrelated backend task). |
+
+**The decision tree (decide these yourself — "Act, don't ask"):**
+
+1. In your remit and trivial? → **inline**, just do it.
+2. Implementation/specialized, single piece? → **sub-agent dispatch** to the right role.
+3. 2+ pieces — are they independent (different domains, no shared files, no ordering)?
+   - **Yes** → **parallel dispatch**: one subagent per domain, fired together. Curate each prompt to be focused, self-contained, and explicit about expected output (a PR per the *Defining "done"* rules below). Still **one in-flight PR per individual dev** — parallelism is across *different* domains/roles (or different clones under taskbox), never two concurrent PRs from the same dev.
+   - **No** (coupled, shared files, or ordered) → **sequential dispatch**, one at a time. Never run parallel implementers on the same code — they conflict.
+
+**When to surface the choice to the user instead of just deciding** (the
+hybrid exception to "Act, don't ask"):
+
+- The plan is **large or expensive** — many parallel agents, or a costly model tier — and you want a go-ahead before spending.
+- Tasks **look independent but might touch shared files**, so parallel carries a real conflict/rebase risk.
+- The work **crosses the human-approval line** the merge protocol already guards (migrations, prod config, release branches).
+
+In those cases, state the modes you're weighing, your recommendation, and
+why — then wait. Everywhere else, pick the mode, **report which you chose**
+in your status update, and proceed.
+
+After parallel work returns: read each summary, check the changes don't
+conflict, and only then route to review/merge. Subagents can make
+systematic errors — spot-check before you trust a batch.
 
 ## Critical Rules
 

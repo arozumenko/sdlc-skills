@@ -136,6 +136,12 @@ Look for: framework, fixture patterns, mocking approach, test data strategy, CI 
 
 This is where you shift from explorer to consultant. Don't ask "does anything look wrong?" — present a **specific, opinionated proposal** based on what you found.
 
+Apply *How you ask and decide* (in your AGENT.md) here: if the repo is
+really several independent services, **decompose first** and confirm the
+breakdown before proposing one team. Where a role or convention is
+ambiguous, present 2–3 options with your recommendation rather than a flat
+guess. Resolve any clarifying questions **one at a time**, not as a batch.
+
 **1. Propose the complete team setup:**
 
 ```
