@@ -10,14 +10,12 @@ try {
 } catch {
   console.error(
     'Error: xlsx package not found.\n' +
-    'Install it with:  npm i xlsx\n' +
-    'Or install it with: npm i xlsx'
+    'Install it with: npm i xlsx'
   );
   process.exit(1);
 }
 
 const fs = require('fs');
-const path = require('path');
 
 const inputPath  = process.argv[2] || './input.xlsx';
 const outputPath = process.argv[3] || null;

@@ -42,8 +42,8 @@ date: 2026-05-18
 
 ## Results
 
-| ID      | Title                              | Status   | Steps | Duration |
-|---------|------------------------------------|----------|-------|----------|
+| ID      | Title                              | Status   | Steps | Wall Clock |
+|---------|------------------------------------|----------|-------|------------|
 | TC-001  | Login with valid credentials       | ✅ PASS  | 5/5   | 14s      |
 | TC-002  | Login with invalid password        | ❌ FAIL  | 3/5   | 8s       |
 | TC-003  | Forgot password — email flow       | ✅ PASS  | 7/7   | 21s      |
@@ -127,6 +127,12 @@ Each executor agent outputs one JSON block. The reporter consumes an array of th
   "failure_reason": null,
   "screenshot": "reports/screenshots/TC-001_2026-05-18.png",
   "duration_seconds": 14,
-  "notes": ""
+  "console_errors": [],
+  "notes": "",
+  "tokens": null,
+  "tool_uses": null,
+  "duration_ms": null
 }
 ```
+
+`tokens`, `tool_uses`, `duration_ms` are attached by the orchestrator from each run's usage; they may be null when usage is unavailable (the Performance Metrics section is then omitted).

@@ -32,8 +32,8 @@ reports/screenshots/               evidence screenshots from executor runs
 
 ## `{{base_url}}` rule
 
-All test-case URLs are written as `{{base_url}}/path`. The orchestrator or
-executor substitutes the real base URL at run time, keeping cases
+All test-case URLs are written as `{{base_url}}/path`. The executor substitutes
+`{{base_url}}` with the real base URL at run time, keeping cases
 environment-agnostic (dev / staging / prod).
 
 ## Evidence before PASS

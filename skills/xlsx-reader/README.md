@@ -40,6 +40,7 @@ cp -r skills/xlsx-reader .claude/skills/xlsx-reader   # or ~/.claude/skills, .cu
 
 - [`SKILL.md`](SKILL.md) — instructions (self-contained)
 - [`scripts/read_xlsx.js`](scripts/read_xlsx.js) — Node.js script that converts sheets to Markdown tables
+- [`scripts/package.json`](scripts/package.json) — pins the scripts directory to CommonJS so `require()` works even in ESM projects
 
 ## Learn more
 

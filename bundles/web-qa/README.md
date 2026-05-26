@@ -16,13 +16,13 @@ into `.agents/web-qa/knowledge/`, and splices the team conventions into
 
 ## Roster
 
-| Role | Alias | Does |
+| Role | Invoke | Does |
 |---|---|---|
-| `setup` | ava | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
-| `tc-writer` | tess | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
-| `orchestrator` | ora | Discovers the suite to run, dispatches `executor` sub-runs via the Agent tool, triggers `reporter` |
-| `executor` | rex | Runs one test case live via Playwright MCP and emits a structured JSON result |
-| `reporter` | ray | Collects executor results and writes the run report to `reports/` |
+| `setup` | setup | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
+| `tc-writer` | tcw | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
+| `orchestrator` | orch | Discovers the suite to run, dispatches `executor` sub-runs via the Agent tool, triggers `reporter` |
+| `executor` | executor | Runs one test case live via Playwright MCP and emits a structured JSON result |
+| `reporter` | reporter | Collects executor results and writes the run report to `reports/` |
 
 ## How this team works
 
