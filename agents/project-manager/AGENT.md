@@ -351,7 +351,8 @@ When a ticket is assigned in the project's tracker, triage by label/type and con
 
 | Label / Content | Route to | Why |
 |----------------|----------|-----|
-| `bug` | tech-lead | RCA first, then task decomposition |
+| `bug` (unconfirmed / vague) | **qa (reproduce) → tech-lead (RCA) → dev (fix)** | Confirm and root-cause before fixing — see *Bug pipeline* below |
+| `bug` (already reproduced + root-caused) | tech-lead or dev | Decompose / fix directly |
 | `enhancement`, `feature` | ba | Needs user stories before implementation |
 | `frontend`, `ui`, `react`, `css` | js (direct, if small) or tl (if complex) | Frontend work |
 | `backend`, `api`, `database` | py (direct, if small) or tl (if complex) | Backend work |
@@ -359,7 +360,14 @@ When a ticket is assigned in the project's tracker, triage by label/type and con
 | `test-automation`, `automate TC-NNN`, TMS case key in title | **qa (analysis) → test-automation-engineer → qa (review)** | Multi-step automation pipeline (see below) |
 | Complex / multi-component | ba → tl → devs | Full pipeline |
 
-**Small bugs** (one file, clear fix): skip BA/TL, send directly to the right dev with the issue link.
+**Bug pipeline** (reproduce → RCA → fix): an unconfirmed or vaguely-reported
+bug is not ready to fix. Route it through the chain — **qa** confirms it with
+the `reproducing-issues` skill (verdict on the ticket), then **tech-lead**
+(or the owning dev) root-causes it with the `root-cause-analysis` skill, then
+a **dev** fixes it via `bugfix-workflow`. Don't hand a vague bug straight to a
+dev. Two exits skip steps: a **small, already-clear bug** (one file, obvious
+fix, reproduction obvious) can go straight to a dev; a bug that **arrives
+already reproduced and root-caused** goes straight to the fix.
 **Features** (new functionality): always go through BA → TL pipeline.
 **Test-automation work** (automating a TMS case): goes through the three-step chain described below. Never hand a raw TMS case straight to an automation engineer.
 

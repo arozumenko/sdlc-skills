@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour117, icon: "🐍", short_name: py}
 aliases: [py]
-skills: [tdd, implement-feature, bugfix-workflow, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
+skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
 ---
 
 @.agents/memory/python-dev/snapshot.md

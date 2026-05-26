@@ -33,8 +33,10 @@ comment on the ticket so the reporter knows work has started.
 ### 2. Reproduce
 
 Confirm the bug exists and understand the exact conditions that trigger it.
-UI bugs → Playwright MCP snapshots. API bugs → `curl`. Logic bugs → minimal
-reproducer script.
+For the full method — UI / API / logic / intermittent attempts and the
+CONFIRMED / CANNOT-REPRODUCE confirmation gate — use the **`reproducing-issues`**
+skill. UI bugs → Playwright MCP snapshots. API bugs → `curl`. Logic bugs →
+minimal reproducer script.
 
 **If you cannot reproduce, stop and ask.** Do not proceed to fix a bug you
 cannot observe. Post what you tried and request more details.
@@ -50,9 +52,12 @@ test doesn't exercise the bug.
 
 ### 4. Root cause analysis
 
-Locate the code, trace execution from entry point to failure, classify the
-cause (logic / data / concurrency / config / integration), and assess blast
-radius — what else uses this code, could the fix break anything else?
+Trace the bug to its exact cause — for the full method (execution-path
+tracing, root-cause classification, confidence, impact/regression analysis)
+use the **`root-cause-analysis`** skill. Locate the code, trace execution from
+entry point to failure, classify the cause (logic / data / concurrency /
+config / integration / resource), and assess blast radius — what else uses
+this code, could the fix break anything else?
 
 Post a `🔍 **Root Cause**` comment with location (file:line), cause, impact,
 and fix approach.
