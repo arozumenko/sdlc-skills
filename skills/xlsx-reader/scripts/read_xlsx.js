@@ -11,7 +11,7 @@ try {
   console.error(
     'Error: xlsx package not found.\n' +
     'Install it with:  npm i xlsx\n' +
-    'Or run once with: npx --yes xlsx'
+    'Or install it with: npm i xlsx'
   );
   process.exit(1);
 }
@@ -39,15 +39,18 @@ workbook.SheetNames.forEach(sheetName => {
 
   lines.push(`## ${sheetName}\n`);
 
-  const header = rows[0].map(c => String(c).trim());
+  const header = rows[0].map(c => String(c).trim().replace(/\|/g, '\\|'));
   const sep    = header.map(() => '---');
 
   lines.push('| ' + header.join(' | ') + ' |');
   lines.push('| ' + sep.join(' | ')    + ' |');
 
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i].map(c => String(c).trim().replace(/\|/g, '\\|'));
-    lines.push('| ' + row.join(' | ') + ' |');
+    const rawRow = rows[i];
+    const padded = Array.from({ length: header.length }, (_, j) =>
+      String(rawRow[j] !== undefined ? rawRow[j] : '').trim().replace(/\|/g, '\\|')
+    );
+    lines.push('| ' + padded.join(' | ') + ' |');
   }
 
   lines.push('');

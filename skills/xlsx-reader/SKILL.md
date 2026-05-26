@@ -2,7 +2,7 @@
 name: xlsx-reader
 description: Read .xlsx/.xls spreadsheets (test cases, checklists, requirement matrices) into Markdown tables so an agent can ingest them. Use when the user provides an Excel file of test cases or requirements, or asks to import a spreadsheet.
 license: Apache-2.0
-compatibility: Requires Node.js 18+ and the `xlsx` npm package (install on demand via `npm i xlsx` or `npx`).
+compatibility: Requires Node.js 18+ and the xlsx npm package (npm i xlsx).
 metadata:
   author: octobots
   version: "0.1.0"
