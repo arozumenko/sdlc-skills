@@ -136,6 +136,7 @@ function loadBundle(id) {
   b.skills = b.skills || [];
   b.localAgents = b.localAgents || [];
   b.briefings = b.briefings || {};
+  b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
   return b;
 }
 
@@ -171,15 +172,73 @@ function applyBundle(bundle, args, catalog) {
   for (const la of bundle.localAgents) {
     for (const s of parseAgentSkillDeps(la, bundleAgentsRoot)) localDeclared.add(s);
   }
-  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared])];
+
+  // ----- Per-role skill overlays (the capability twin of briefings) -----
+  // A bundle tunes a shared agent's *skills* for its stack at setup:
+  //   skillOverlays: { qa-engineer: { add: ["xcuitest"], remove: ["playwright-testing"] } }
+  // The shared agent stays unforked — we rewrite only the installed copy's
+  // `skills:` frontmatter (done in main, per target). Here we compute the
+  // effective skill set so the install resolves the right union: removed
+  // skills no agent still needs are dropped; added skills that resolve are
+  // installed; added skills that don't exist yet are surfaced as "pending".
+  const overlays = bundle.skillOverlays;
+  for (const role of Object.keys(overlays)) {
+    if (!args.agents.includes(role)) {
+      console.error(`  ! Bundle ${bundle.id} skillOverlay targets "${role}", not in the team`);
+      process.exit(1);
+    }
+  }
+  const declaredOf = (a) =>
+    catalog.agents.includes(a)
+      ? parseAgentSkillDeps(a)
+      : parseAgentSkillDeps(a, bundleAgentsRoot);
+  const isResolvable = (id) => {
+    const e = registryEntry(catalog.registry, id);
+    return catalog.skills.includes(id) || !!(e && e.repo);
+  };
+  const effectiveByAgent = {};
+  const neededByAny = new Set();
+  const allDeclared = new Set();
+  const resolvableAdds = new Set();
+  const pendingAdds = new Set();
+  for (const a of args.agents) {
+    const declared = declaredOf(a);
+    declared.forEach((s) => allDeclared.add(s));
+    const ov = overlays[a] || {};
+    const removeSet = new Set(ov.remove || []);
+    const eff = declared.filter((s) => !removeSet.has(s));
+    for (const s of ov.add || []) {
+      if (isResolvable(s)) {
+        if (!eff.includes(s)) eff.push(s);
+        resolvableAdds.add(s);
+      } else {
+        pendingAdds.add(s);
+      }
+    }
+    effectiveByAgent[a] = eff;
+    eff.forEach((s) => neededByAny.add(s));
+  }
+  // Skills that were declared somewhere but, after overlays, no agent needs.
+  const droppable = new Set([...allDeclared].filter((s) => !neededByAny.has(s)));
+
+  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared, ...resolvableAdds])];
 
   console.log(
     `  Bundle: ${bundle.title || bundle.id} — ${bundle.agents.length} shared agent(s)` +
       (bundle.localAgents.length ? `, ${bundle.localAgents.length} local agent(s)` : "") +
+      (Object.keys(overlays).length ? `, ${Object.keys(overlays).length} skill overlay(s)` : "") +
       (extraSkillIds.length ? `, ${extraSkillIds.length} extra skill(s)` : "")
   );
 
-  return { localAgents: bundle.localAgents, bundleAgentsRoot, extraSkillIds };
+  return {
+    localAgents: bundle.localAgents,
+    bundleAgentsRoot,
+    extraSkillIds,
+    overlays,
+    effectiveByAgent,
+    droppable,
+    pendingAdds: [...pendingAdds],
+  };
 }
 
 // Seed per-role briefing overlays into .agents/memory/<role>/project_briefing.md
@@ -768,6 +827,27 @@ function injectSkillsIntoCopiedAgent(destDir, name, registry) {
   if (rewritten !== text) writeFileSync(agentFile, rewritten);
 }
 
+// Apply a bundle's per-role skill overlay to an already-installed agent:
+// rewrite its inline `skills: [...]` frontmatter to the effective set. On
+// Claude this is the preload list; on Cursor/Windsurf we also regenerate the
+// injected skills-inventory body so it matches. Returns true if rewritten.
+function applySkillOverlay(target, name, effectiveSkills, registry) {
+  const agentFile =
+    target.id === "copilot"
+      ? join(CWD, target.dir, "agents", `${name}.agent.md`)
+      : join(CWD, target.dir, "agents", name, "AGENT.md");
+  if (!existsSync(agentFile)) return false;
+  const text = readFileSync(agentFile, "utf8");
+  const re = /^skills:\s*\[[^\]]*\]/m;
+  if (!re.test(text)) return false; // no inline skills line — nothing to rewrite
+  writeFileSync(agentFile, text.replace(re, `skills: [${effectiveSkills.join(", ")}]`));
+  if (target.id !== "claude" && target.id !== "copilot") {
+    // dir-based non-Claude targets carry a body inventory — regenerate it.
+    injectSkillsIntoCopiedAgent(join(CWD, target.dir, "agents", name), name, registry);
+  }
+  return true;
+}
+
 // Core transform used by both install-time (--target copilot) and the
 // fix-copilot subcommand. Given AGENT.md (+ optional SOUL.md) content,
 // returns { agent, soul } — the text to write to <name>.agent.md and
@@ -1239,6 +1319,20 @@ async function main() {
     }
   }
 
+  // Per-role skill overlays: drop skills a `remove` orphaned (no agent needs
+  // them after overlays), and surface `add` skills that aren't authored yet.
+  if (bundlePlan && bundlePlan.droppable && bundlePlan.droppable.size) {
+    for (let i = skillsSelection.length - 1; i >= 0; i--)
+      if (bundlePlan.droppable.has(skillsSelection[i])) skillsSelection.splice(i, 1);
+    for (let i = externalSkills.length - 1; i >= 0; i--)
+      if (bundlePlan.droppable.has(externalSkills[i].id)) externalSkills.splice(i, 1);
+  }
+  if (bundlePlan && bundlePlan.pendingAdds && bundlePlan.pendingAdds.length) {
+    console.log(
+      `\n  ! Skill overlay adds not yet in the catalog (pending content — author + register to enable):\n    ${bundlePlan.pendingAdds.join(", ")}`
+    );
+  }
+
   console.log("");
   let installed = 0;
   let skipped = 0;
@@ -1275,6 +1369,18 @@ async function main() {
           skipped++;
         } else {
           console.log(`      ! agent  ${name} (missing in bundle)`);
+        }
+      }
+    }
+    // Apply per-role skill overlays to the installed agents (capability tuning).
+    if (bundlePlan && bundlePlan.overlays) {
+      for (const role of Object.keys(bundlePlan.overlays)) {
+        if (applySkillOverlay(t, role, bundlePlan.effectiveByAgent[role] || [], catalog.registry)) {
+          const ov = bundlePlan.overlays[role];
+          const bits = [];
+          if (ov.add && ov.add.length) bits.push(`+${ov.add.join(",")}`);
+          if (ov.remove && ov.remove.length) bits.push(`-${ov.remove.join(",")}`);
+          console.log(`      ↻ skills  ${role} (${bits.join(" ")})`);
         }
       }
     }

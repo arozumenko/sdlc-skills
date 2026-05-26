@@ -9,6 +9,12 @@
     "tech-lead": "briefings/tech-lead.md",
     "qa-engineer": "briefings/qa-engineer.md"
   },
+  "skillOverlays": {
+    "qa-engineer": {
+      "add": ["xcuitest"],
+      "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
+    }
+  },
   "instructions": "instructions.md",
   "localAgents": [],
   "targets": ["claude"]

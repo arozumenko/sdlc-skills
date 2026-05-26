@@ -26,13 +26,22 @@ read `.agents/` context. The stack-specific agent *is* the dev role
 (`python-dev` vs `js-dev` vs `ios-dev`) — there is no "scout for iOS"
 distinct from "scout for web", only one scout producing different output.
 
-So a bundle does **not** copy agents. Where a shared agent needs a stack
-flavor (e.g. `qa-engineer` should know XCTest for iOS but Playwright for
-web), the bundle ships a thin **briefing overlay** — a per-role file
-installed into `.agents/memory/<role>/project_briefing.md`, the exact slot
-scout fills at runtime. One source of truth per agent; no drift across
-bundles. A bundle-local agent that genuinely doesn't exist globally is
-still possible via `localAgents` (an escape hatch, rarely needed).
+So a bundle does **not** copy agents. A shared agent becomes
+stack-specific (e.g. "qa-engineer for iOS") through **two parallel overlays
+on top of its generic `AGENT.md` (which holds stack-agnostic practices):**
+
+1. **Briefing overlay** (behavior) — a per-role file installed into
+   `.agents/memory/<role>/project_briefing.md` (the exact slot scout fills
+   at runtime). Tunes *how* the role thinks about this stack.
+2. **Skill overlay** (capability) — `skillOverlays` rewrites the installed
+   agent's `skills:` frontmatter for this team: `add` stack-specific skills,
+   `remove` generic ones that don't fit. Tunes *what* the role can do.
+
+Both leave the global agent unforked — only the *installed copy* is tuned.
+Example: `team-ios` gives `qa-engineer` an iOS briefing **and** a skill
+overlay that drops the web `playwright-*`/`browser-verify` skills and adds a
+native iOS UI-testing skill. A bundle-local agent that genuinely doesn't
+exist globally is still possible via `localAgents` (an escape hatch).
 
 ## Directory layout
 
@@ -60,8 +69,11 @@ bundles/<id>/
   "description": "...",                      // one-line summary
   "agents": ["scout", "ba", "..."],          // shared agents to install (resolved against agents/)
   "skills": [],                              // team-wide extra skills beyond what agents pull
-  "briefings": {                             // role → briefing file (relative path)
+  "briefings": {                             // role → briefing file (behavior overlay)
     "qa-engineer": "briefings/qa-engineer.md"
+  },
+  "skillOverlays": {                         // role → capability overlay (optional)
+    "qa-engineer": { "add": ["xcuitest"], "remove": ["playwright-testing"] }
   },
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
@@ -80,6 +92,13 @@ bundles/<id>/
    `.agents/memory/<role>/project_briefing.md` and add a `MEMORY.md` index
    line. Skip if a `project_briefing.md` already exists (scout may have
    written one) unless `--update`.
+2b. **Skill overlays** — for each `skillOverlays[<role>]`, rewrite the
+   *installed* agent's `skills:` frontmatter to `(declared − remove) + add`.
+   The install union is recomputed from the effective sets: a `remove`d skill
+   no remaining agent needs isn't installed; `add`ed skills that resolve are
+   installed; `add`s not yet in the catalog are reported as **pending content**
+   (the role's frontmatter only lists skills that actually exist). The global
+   agent is never modified.
 3. **Instructions** — splice `instructions.md` into root context files
    inside `<!-- BUNDLE:<id> START -->` / `<!-- BUNDLE:<id> END -->` markers.
    Re-running replaces the marked block in place — idempotent, no `--update`

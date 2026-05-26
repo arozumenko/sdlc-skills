@@ -114,6 +114,14 @@ function main() {
       if (!existsSync(join(dir, "agents", la, "AGENT.md")))
         err(id, `localAgent "${la}" missing agents/${la}/AGENT.md`);
 
+    for (const [role, ov] of Object.entries(b.skillOverlays || {})) {
+      if (!Array.isArray(b.agents) || !b.agents.includes(role))
+        err(id, `skillOverlay role "${role}" not in agents[]`);
+      for (const s of (ov && ov.add) || [])
+        if (!skillIds.has(s))
+          console.warn(`  • ${id}: skillOverlay add "${s}" not in catalog yet (pending content)`);
+    }
+
     if (errorCount === before)
       console.log(`  ✓ ${id} (${(b.agents || []).length} agents)`);
   }
