@@ -1,18 +1,6 @@
 ---
 name: vividus
-description: >-
-  Bootstrap, configure, and author tests for the Vividus test automation
-  framework (https://vividus.dev) — a JBehave-based, all-in-one BDD framework
-  with 47+ plugins for web (Selenium/Playwright), REST API, mobile (Appium),
-  database, messaging (Kafka, RabbitMQ), AWS/Azure, visual diff, accessibility,
-  and more. Tests are config-first .story files; custom Java is rarely needed.
-  Use this skill when the user mentions Vividus, vividus-starter,
-  vividus-bom, .story files, JBehave-style BDD with backtick parameters,
-  Allure reports from `output/reports/allure`, `./gradlew runStories`,
-  composite .steps files, suites/profiles/environments configuration, or when
-  build.gradle contains `org.vividus:*` dependencies. Also use when the user
-  asks to "add a plugin", "scaffold a Vividus project", "write a Vividus
-  story", "fix a step that won't match", or "configure batches/profiles".
+description: Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based, config-first .story files spanning web/REST/mobile/DB via 47+ plugins. Use when the user mentions Vividus, .story files, vividus-bom/-starter, backtick-parameter BDD, or ./gradlew runStories.
 license: Apache-2.0
 metadata:
   author: octobots

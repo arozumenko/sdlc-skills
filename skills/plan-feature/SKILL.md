@@ -1,6 +1,6 @@
 ---
 name: plan-feature
-description: Structured feature planning workflow. Use when the user says "plan a feature", "design this", "how should we build", "feasibility check" — or before writing code for any non-trivial feature: plan first, build second. Covers requirements, investigation, feasibility, and implementation planning.
+description: Structured feature planning — requirements, feasibility, and an implementation plan. Use when the user says "plan a feature", "design this", "how should we build", or before writing code for any non-trivial feature — plan first, build second.
 license: Apache-2.0
 metadata:
   author: octobots

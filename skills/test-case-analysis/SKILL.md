@@ -1,6 +1,6 @@
 ---
 name: test-case-analysis
-description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case end-to-end and emit an AFS", or any TMS-case exploration before automation. Does not write automation code — pairs with test-automation-workflow downstream.
+description: Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Load for "analyse SCRUM-T101 for automation", "run this case and emit an AFS", or any TMS-case exploration before automation. Does not write test code.
 license: Apache-2.0
 metadata:
   author: octobots
