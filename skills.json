@@ -50,6 +50,7 @@
     {"id": "playwright-cli",              "repo": "microsoft/playwright-cli", "ref": "main", "subdir": "skills/playwright-cli",      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"},
 
     {"id": "fastapi",                     "repo": "fastapi/fastapi", "ref": "master", "subdir": "fastapi/.agents/skills/fastapi", "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)"},
+    {"id": "fastmcp-server",              "repo": "davila7/claude-code-templates", "ref": "main", "subdir": "cli-tool/components/skills/development/fastmcp-server", "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)"},
     {"id": "vercel-react-best-practices", "repo": "vercel-labs/agent-skills", "ref": "main", "subdir": "skills/react-best-practices", "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"}
   ]
 }

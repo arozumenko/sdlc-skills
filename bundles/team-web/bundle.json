@@ -12,8 +12,8 @@
     "test-automation-engineer": "briefings/test-automation-engineer.md"
   },
   "skillOverlays": {
-    "tech-lead": { "add": ["fastapi", "vercel-react-best-practices"] },
-    "python-dev": { "add": ["fastapi"] },
+    "tech-lead": { "add": ["fastapi", "fastmcp-server", "vercel-react-best-practices"] },
+    "python-dev": { "add": ["fastapi", "fastmcp-server"] },
     "js-dev": { "add": ["vercel-react-best-practices"] }
   },
   "instructions": "instructions.md",
