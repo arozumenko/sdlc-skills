@@ -40,6 +40,7 @@ tech-lead guards. SPM is the preferred dependency manager. See
 - **Agents + skills** — the 6 roles above and their declared skills.
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Briefings** — stack overlays in [`briefings/`](briefings/) → seeded into `.agents/memory/<role>/project_briefing.md` for `scout`, `tech-lead`, `qa-engineer` (scout refines them per project).
+- **Skill overlays** — per-role capability tuning (fetched from `skills.json`): `tech-lead` gains the SwiftUI / SwiftData / Swift Testing / Swift Concurrency skills; `qa-engineer` gains `swift-testing-pro` plus the Appium/XCUITest skills and drops the web `playwright-testing` / `playwright-cli` / `browser-verify`.
 - **Hooks** — _(none yet)_.
 
 See [`bundle.json`](bundle.json) for the exact manifest and the top-level

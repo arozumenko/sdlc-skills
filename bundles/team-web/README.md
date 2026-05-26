@@ -40,7 +40,8 @@ working agreements (installed into your project's `AGENTS.md`).
 
 - **Agents + skills** — the 8 roles above and their declared skills.
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
-- **Briefings** — stack overlays in [`briefings/`](briefings/) → seeded into `.agents/memory/<role>/project_briefing.md` for `scout`, `tech-lead`, `qa-engineer`, `test-automation-engineer` (scout refines them per project).
+- **Briefings** — stack overlays in [`briefings/`](briefings/) → seeded into `.agents/memory/<role>/project_briefing.md` for `scout`, `tech-lead`, `python-dev`, `qa-engineer`, `test-automation-engineer` (scout refines them per project).
+- **Skill overlays** — per-role capability tuning (fetched from `skills.json`): `fastapi` + `fastmcp-server` for `python-dev` and `tech-lead`; `vercel-react-best-practices` for `js-dev` and `tech-lead`.
 - **Hooks** — _(none yet)_.
 
 See [`bundle.json`](bundle.json) for the exact manifest and the top-level
