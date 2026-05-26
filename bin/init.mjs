@@ -279,8 +279,10 @@ function installBriefings(bundle, update) {
 // Seed loose reference files/dirs a bundle ships into the project at a fixed
 // path. bundle.seed maps a bundle-relative source → a project-relative dest.
 // Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
-// left intact unless --update. Used for reference docs agents read at runtime:
-// a subagent's cwd is the project root, so a fixed project path is resolvable.
+// left intact unless --update. On --update the dest is removed first (clean
+// replace), so files deleted from the bundle don't linger. Used for reference
+// docs agents read at runtime: a subagent's cwd is the project root, so a
+// fixed project path is resolvable.
 function installSeed(bundle, update) {
   let installed = 0;
   let skipped = 0;
@@ -297,6 +299,7 @@ function installSeed(bundle, update) {
       continue;
     }
     mkdirSync(dirname(destPath), { recursive: true });
+    if (update && existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
     cpSync(srcPath, destPath, { recursive: true, force: true });
     console.log(`      ✓ seed ${dest}`);
     installed++;

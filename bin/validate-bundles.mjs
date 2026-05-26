@@ -81,10 +81,13 @@ function main() {
     if (!existsSync(join(dir, "README.md"))) err(id, "missing README.md");
 
     const hasLocal = Array.isArray(b.localAgents) && b.localAgents.length > 0;
-    if (!Array.isArray(b.agents) || (b.agents.length === 0 && !hasLocal)) {
+    const declaredAgents = Array.isArray(b.agents) ? b.agents : [];
+    if (b.agents !== undefined && !Array.isArray(b.agents)) {
+      err(id, "`agents` must be an array");
+    } else if (declaredAgents.length === 0 && !hasLocal) {
       err(id, "`agents` must be a non-empty array (or provide localAgents)");
     } else {
-      for (const a of b.agents || []) if (!agents.has(a)) err(id, `unknown agent "${a}"`);
+      for (const a of declaredAgents) if (!agents.has(a)) err(id, `unknown agent "${a}"`);
     }
 
     for (const [role, rel] of Object.entries(b.briefings || {})) {
