@@ -10,6 +10,9 @@
     "qa-engineer": "briefings/qa-engineer.md"
   },
   "skillOverlays": {
+    "tech-lead": {
+      "add": ["swiftui-pro", "swiftdata-pro", "swift-testing-pro", "swift-concurrency-pro"]
+    },
     "qa-engineer": {
       "add": ["xcuitest"],
       "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
