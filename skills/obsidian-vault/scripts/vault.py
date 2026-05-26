@@ -456,7 +456,7 @@ def cmd_show(vault: Vault, args: argparse.Namespace) -> int:
         for k, v in fm.items():
             print(f"  {k}: {v}")
         print()
-    # First paragraph
+    # First paragraph, capped at 1500 chars so a `show` preview doesn't flood the agent's context
     first = body.strip().split("\n\n", 1)[0]
     print(first[:1500])
     return 0

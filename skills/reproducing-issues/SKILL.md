@@ -22,11 +22,6 @@ Issues, Jira via `atlassian-content`, GitLab, Azure Boards, Linear). The
 `.agents/workflow.md § Git host`. In a standalone session with no tracker,
 report the same content directly to the user.
 
-## When to use
-
-- A bug report is unclear, unconfirmed, or has no steps.
-- Before RCA or any fix — confirm the bug is real and repeatable first.
-
 ## Methodology — 5 phases
 
 ### 1. Intake

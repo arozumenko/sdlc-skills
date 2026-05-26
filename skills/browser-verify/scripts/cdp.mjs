@@ -1112,6 +1112,7 @@ async function injectAxe(opts = {}) {
   const injectResult = await evalJs(`new Promise((resolve, reject) => {
     if (window.axe) return resolve('already-loaded');
     const s = document.createElement('script');
+    // axe-core pinned to 4.9.1 for reproducible audits; bump when WCAG rules need a newer release
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.9.1/axe.min.js';
     s.onload = () => resolve('loaded');
     s.onerror = () => reject(new Error('Failed to load axe-core from CDN'));
