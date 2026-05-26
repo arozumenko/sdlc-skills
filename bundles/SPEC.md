@@ -75,6 +75,7 @@ bundles/<id>/
   "skillOverlays": {                         // role → capability overlay (optional)
     "qa-engineer": { "add": ["xcuitest"], "remove": ["playwright-testing"] }
   },
+  "seed": { "knowledge": ".agents/web-qa/knowledge" }, // optional, bundle-relative src → project-relative dest
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
   "localAgents": [],                         // optional bundle-local roles in agents/
@@ -92,6 +93,11 @@ bundles/<id>/
    `.agents/memory/<role>/project_briefing.md` and add a `MEMORY.md` index
    line. Skip if a `project_briefing.md` already exists (scout may have
    written one) unless `--update`.
+2a. **Seed files** — `seed` maps a bundle-relative source → a project-relative
+   dest; copied into the project once at install (idempotent; `--update` does a
+   clean replace). Use for reference docs agents read at runtime (a subagent's
+   cwd is the project root). Example:
+   `"seed": { "knowledge": ".agents/web-qa/knowledge" }`.
 2b. **Skill overlays** — for each `skillOverlays[<role>]`, rewrite the
    *installed* agent's `skills:` frontmatter to `(declared − remove) + add`.
    The install union is recomputed from the effective sets: a `remove`d skill
@@ -156,8 +162,10 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   `id`, a `README.md` exists, `agents[]` is non-empty and every entry exists
   under `agents/`, every `briefings` role is in `agents[]` and its file
   exists, every `skills[]` id resolves in `skills.json`/`skills/`,
-  `instructions` (if set) exists, `hooks` (if set) parses, and each
-  `localAgents` entry has an `AGENT.md`.
+  `instructions` (if set) exists, `hooks` (if set) parses, each
+  `localAgents` entry has an `AGENT.md`, and every `seed` source path exists.
+- A bundle may have an empty `agents` array if it provides `localAgents` —
+  a fully self-contained team (e.g. `web-qa`).
 
 ## Current bundles
 
@@ -165,3 +173,4 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 |---|---|---|
 | `team-web` | fullstack web | `python-dev` (backend) + `js-dev` (frontend) |
 | `team-ios` | iOS | `ios-dev` |
+| `web-qa` | manual QA for web | 5 local agents: `setup`, `tc-writer`, `orchestrator`, `executor`, `reporter` |
