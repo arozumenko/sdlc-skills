@@ -154,6 +154,7 @@ GitHub Copilot (all four IDE targets detected automatically).
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
 npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
 npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
+npx github:arozumenko/sdlc-skills init --bundle web-qa     # standalone manual-QA team (live browser testing via Playwright MCP)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -174,10 +175,19 @@ npx github:arozumenko/sdlc-skills init --all --update
 
 **Team bundles.** A bundle is a named team preset that installs a curated
 set of agents (with their skills), seeds per-role stack briefings into
-`.agents/memory/<role>/`, and splices team conventions into `AGENTS.md` /
-`CLAUDE.md` — one command instead of hand-listing roles. Two ship today:
-`team-web` (JS/TS frontend + Python backend) and `team-ios` (Swift /
-SwiftUI). See [`bundles/SPEC.md`](bundles/SPEC.md) to author your own.
+`.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
+`CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
+files** into the project — one command instead of hand-listing roles. Three
+ship today:
+
+| Bundle | Roster | What it's for |
+|---|---|---|
+| `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
+| `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
+| `web-qa` | 5 bundle-local agents (setup, tc-writer, orchestrator, executor, reporter) | Standalone manual-QA team — onboard an app, author test cases, run them live via Playwright MCP, and report. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
+
+See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
+author your own.
 
 Install locations:
 
@@ -316,19 +326,21 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ### Monorepo skills
 
-**SDLC-coupled (7):**
+**SDLC-coupled (9):**
 
 | Skill | What it does |
 |---|---|
 | `plan-feature` | Feature planning workflow used by BA / Tech Lead |
 | `implement-feature` | Feature implementation workflow used by devs |
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
+| `reproducing-issues` | Turn a vague bug report into repeatable steps with a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict (reproduction only) |
+| `root-cause-analysis` | Trace a confirmed bug to its exact cause — execution-path tracing, classification, impact/regression (investigation only) |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
 | `seeding-a-project` | Scout's project onboarding / configuration flow |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Generic dev skills (15):**
+**Generic dev skills (16):**
 
 | Skill | What it does |
 |---|---|
@@ -347,6 +359,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
+| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Used by `web-qa`'s setup agent |
 
 ### External skills (fetched by the installer)
 
@@ -366,11 +379,20 @@ catalog.
 | `requesting-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/requesting-code-review/` | devs |
 | `receiving-code-review` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/receiving-code-review/` | devs |
 | `writing-skills` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/writing-skills/` | `tech-lead` |
+| `subagent-driven-development` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/subagent-driven-development/` | `project-manager` |
+| `dispatching-parallel-agents` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/dispatching-parallel-agents/` | `project-manager` |
 | `swiftui-pro` | [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill) | `ios-dev` |
 | `swiftdata-pro` | [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill) | `ios-dev` |
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 | `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
+| `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) | `qa-engineer`, `test-automation-engineer`, `web-qa` agents |
+| `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `team-web` overlay (`python-dev`, `tech-lead`) |
+| `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `team-web` overlay |
+| `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `team-web` overlay (`js-dev`, `tech-lead`) |
+| `environment-setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/environment-setup-xcuitest` | `team-ios` overlay (`qa-engineer`) |
+| `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `team-ios` overlay (`qa-engineer`) |
+| `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `team-ios` overlay (`qa-engineer`) |
 
 ## Using outside Octobots
 
@@ -436,7 +458,17 @@ sdlc-skills/
 │       ├── references/         # optional supporting docs
 │       └── scripts/            # optional helper scripts
 ├── bin/
-│   └── init.mjs                # npx installer — resolves + fetches externals
+│   ├── init.mjs                # npx installer — resolves + fetches externals
+│   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
+├── bundles/                    # team presets — one command installs a whole team
+│   ├── SPEC.md                 # bundle manifest spec
+│   └── <bundle-id>/            # team-web, team-ios, web-qa
+│       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
+│       ├── README.md           # roster + install
+│       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
+│       ├── briefings/<role>.md # seeded into .agents/memory/<role>/ (team-web/ios)
+│       ├── knowledge/          # reference docs seeded into the project (web-qa)
+│       └── agents/<name>/      # bundle-local agents (web-qa)
 ├── skills.json                 # catalog: monorepo + external skill sources
 ├── AGENTS.md                   # generic / GitHub Copilot CLI fallback
 ├── GEMINI.md                   # Gemini CLI context file
@@ -477,6 +509,9 @@ re-distributes nothing, only catalogs and wires.
 - **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
 - **[`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli)** — Microsoft Playwright. `skills/playwright-cli/` (drive Playwright from the command line — browser launch, navigation, snapshot/locator interaction, tabs and storage, network mocking, tracing, test generation). Used by `qa-engineer` and `test-automation-engineer`. Apache-2.0.
+- **[`fastapi/fastapi`](https://github.com/fastapi/fastapi)** — Sebastián Ramírez. Official FastAPI agent skill. `team-web` backend overlay. MIT.
+- **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest environment setup, real-device config, and troubleshooting. `team-ios` QA overlay. Apache-2.0.
+- **Bundle-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
 
 Thanks to all maintainers.
 
