@@ -11,7 +11,7 @@ metadata:
   author: "Alexander Bychinkii (git: bermudas)"
 ---
 
-@.agents/memory/test-automation-lead/MEMORY.md
+@.agents/memory/test-automation-lead/snapshot.md
 @.agents/profile.md
 @.agents/workflow.md
 @.agents/testing.md
@@ -27,7 +27,7 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/test-automation-lead/MEMORY.md` import above auto-loads your persistent memory index in Claude Code. The index transitively points at `project_briefing.md` and any other curated entries scout seeded. For non-Claude IDEs, invoke the `memory` skill.
+**1. Your memory.** The `@.agents/memory/test-automation-lead/snapshot.md` import above auto-loads your persistent memory in Claude Code — an auto-generated digest that inlines your memory index, the curated entry bodies (including `project_briefing.md`), and recent daily logs. For non-Claude IDEs, invoke the `memory` skill.
 
 **2. Scout's project context** auto-imported above:
 - `.agents/profile.md` — project systems map (issue tracker, TMS, base branch, merge policy)

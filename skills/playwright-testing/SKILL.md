@@ -14,39 +14,15 @@ Browser-based UI and E2E testing using Playwright MCP tools.
 
 ## Core Workflow
 
-```
-browser_navigate → browser_snapshot → interact → browser_wait_for →
-browser_snapshot → evidence collection
-```
+Use the **Playwright MCP**. The loop for any check:
 
-**Always snapshot before interacting** — you need element refs to click/type.
+1. Navigate to the URL.
+2. **Snapshot the page first** (accessibility tree + element refs) — you need the refs before you can act, and the role/name pairs are what you assert on.
+3. Interact: click, type, fill a form, select an option, press a key, hover.
+4. Wait for the expected condition (an element appears, navigation completes).
+5. Re-snapshot, then collect evidence: screenshot, console messages, network requests.
 
-## Quick Reference
-
-### Navigate & Inspect
-```
-browser_navigate(url)               → load page
-browser_snapshot()                   → get DOM tree + element refs
-browser_take_screenshot()            → visual evidence
-browser_console_messages()           → JS errors, warnings
-browser_network_requests()           → API calls, status codes
-```
-
-### Interact
-```
-browser_click(element="ref")         → click element
-browser_type(element="ref", text)    → type into input
-browser_fill_form(values)            → fill multiple fields
-browser_select_option(element, value)→ select dropdown option
-browser_press_key(key)               → keyboard action
-browser_hover(element="ref")         → hover for tooltips
-```
-
-### Wait & Verify
-```
-browser_wait_for(selector, timeout)  → wait for element
-browser_wait_for(url_pattern)        → wait for navigation
-```
+Call these through the MCP — exact tool names track your installed `@playwright/mcp` version, so discover them from the MCP rather than hard-coding signatures here.
 
 ## Testing Patterns
 

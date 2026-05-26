@@ -70,7 +70,7 @@ what challenge you're solving. Full triage:
 In short:
 
 - **Default** — [`playwright-testing`](../playwright-testing/)
-  (Playwright MCP). Prefer `browser_snapshot` for accessible-name
+  (Playwright MCP). Prefer its accessibility-snapshot tool for accessible-name
   discovery — it yields both the ref you need to click and the
   role-name pair you'll assert on.
 - **MCP server not wired** — [`playwright-cli`](../playwright-cli/)

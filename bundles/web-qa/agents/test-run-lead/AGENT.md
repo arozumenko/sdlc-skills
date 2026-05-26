@@ -50,7 +50,7 @@ From each test-runner's final message, collect **two things**:
 { "tc_id": "...", "result": "PASS"|"FAIL"|"BLOCKED", ... }
 ```
 
-**2. Usage metrics** — extract from the `<usage>` block at the end of the message:
+**2. Usage metrics** — the host runtime appends a `<usage>` block to a sub-agent's result when it supports usage reporting (you do not ask the test-runner to produce it). When present, extract from it:
 ```
 <usage>
 total_tokens: NNN
