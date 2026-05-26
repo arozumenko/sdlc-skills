@@ -1,4 +1,4 @@
-# Rules — setup
+# Rules — app-profiler
 
 1. **MCP-only browser control.** Never write Python browser scripts. All browser interaction is via Playwright MCP tools.
 2. **Screenshot every major page.** Before leaving a page during exploration, take a screenshot.

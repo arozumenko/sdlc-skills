@@ -94,13 +94,13 @@ date: 2026-05-18
 |--------|------|---------|
 | `PASS` | ✅ | All steps executed, all expected results verified |
 | `FAIL` | ❌ | At least one step produced unexpected result |
-| `BLOCKED` | ⏸ | Could not execute — precondition unmet or executor crashed |
+| `BLOCKED` | ⏸ | Could not execute — precondition unmet or test-runner crashed |
 
 ---
 
 ## Defect Severity Assignment
 
-When a test fails, the reporter assigns severity based on test case priority:
+When a test fails, the test-reporter assigns severity based on test case priority:
 
 | Test priority | Defect severity |
 |---------------|----------------|
@@ -113,7 +113,7 @@ When a test fails, the reporter assigns severity based on test case priority:
 
 ## Executor Result JSON Schema
 
-Each executor agent outputs one JSON block. The reporter consumes an array of these.
+Each test-runner agent outputs one JSON block. The test-reporter consumes an array of these.
 
 ```json
 {
@@ -135,4 +135,4 @@ Each executor agent outputs one JSON block. The reporter consumes an array of th
 }
 ```
 
-`tokens`, `tool_uses`, `duration_ms` are attached by the orchestrator from each run's usage; they may be null when usage is unavailable (the Performance Metrics section is then omitted).
+`tokens`, `tool_uses`, `duration_ms` are attached by the test-run-lead from each run's usage; they may be null when usage is unavailable (the Performance Metrics section is then omitted).

@@ -1,4 +1,4 @@
-# Rules — tc-writer
+# Rules — test-author
 
 1. **Never ask for info already in `.agents/web-qa/app_profile.md`.** Read the profile before the first user interaction; never prompt for base_url, credentials, or anything documented there.
 2. **Never hardcode a domain.** All URLs in test cases use `{{base_url}}` — the literal placeholder, never an actual hostname.

@@ -1,18 +1,18 @@
 ---
-name: reporter
-description: Use when turning an array of executor JSON results into a Markdown test run report — Summary, Results, Performance Metrics, Failed/Blocked/Defects sections — saved to reports/{run_id}.md. Dispatched by the orchestrator at the end of a run.
+name: test-reporter
+description: Use when turning an array of test-runner JSON results into a Markdown test run report — Summary, Results, Performance Metrics, Failed/Blocked/Defects sections — saved to reports/{run_id}.md. Dispatched by the test-run-lead at the end of a run.
 model: haiku
 color: blue
 group: qa
-theme: {color: colour33, icon: "📊", short_name: rep}
-aliases: [reporter]
+theme: {color: colour33, icon: "📊", short_name: reporter}
+aliases: [test-reporter, reporter]
 tools: Read, Write
 skills: []
 metadata:
   author: "Olha Stetsenko (git: olexis-st)"
 ---
 
-You are a QA Reporter Agent. Turn an array of executor results into a clean Markdown report.
+You are a QA Test-reporter Agent. Turn an array of test-runner results into a clean Markdown report.
 
 ## Input
 
@@ -21,7 +21,7 @@ You receive a message with:
 - `suite` — suite name
 - `environment` — base URL
 - `date` — YYYY-MM-DD
-- `results` — JSON array of executor result objects
+- `results` — JSON array of test-runner result objects
 
 ## Result Object Fields
 

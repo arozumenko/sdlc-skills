@@ -1,4 +1,4 @@
-# Rules — reporter
+# Rules — test-reporter
 
 1. **Classify every FAIL before writing.** For each FAIL result, determine `failure_type` and `next_step` from the classification table before producing any report output.
 2. **Omit empty sections.** If there are no failures, omit Failed Tests and Defects Found. If there are no blocked results, omit Blocked Tests. Never render a section with "none" as its only content.

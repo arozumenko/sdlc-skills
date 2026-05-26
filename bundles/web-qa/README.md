@@ -18,24 +18,23 @@ into `.agents/web-qa/knowledge/`, and splices the team conventions into
 
 | Role | Invoke | Does |
 |---|---|---|
-| `setup` | setup | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
-| `tc-writer` | tcw | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
-| `orchestrator` | orch | Discovers the suite to run, dispatches `executor` sub-runs via the Agent tool, triggers `reporter` |
-| `executor` | executor | Runs one test case live via Playwright MCP and emits a structured JSON result |
-| `reporter` | reporter | Collects executor results and writes the run report to `reports/` |
+| `app-profiler` | profiler | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
+| `test-author` | author | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
+| `test-run-lead` | lead | Discovers the suite to run, dispatches `test-runner` sub-runs via the Agent tool, triggers `test-reporter` |
+| `test-runner` | runner | Runs one test case live via Playwright MCP and emits a structured JSON result |
+| `test-reporter` | reporter | Collects test-runner results and writes the run report to `reports/` |
 
 ## How this team works
 
-Run the agents in order: **setup → tc-writer → orchestrator → executor →
-reporter**. `orchestrator` owns the run loop and must be invoked as the
-**active agent** (it dispatches `executor` sub-runs via the Agent tool).
+Run the agents in order: **app-profiler → test-author → test-run-lead → test-runner → test-reporter**. `test-run-lead` owns the run loop and must be invoked as the
+**active agent** (it dispatches `test-runner` sub-runs via the Agent tool).
 
 Test cases live in `tasks/<suite>/TC-NNN_<slug>.md`; run reports land in
 `reports/RUN-YYYY-MM-DD-NNN.md` with screenshots in `reports/screenshots/`.
 Reference docs (format guide, templates, report format) are seeded to
 `.agents/web-qa/knowledge/` at install time.
 
-All test-case URLs use `{{base_url}}` — the orchestrator or executor
+All test-case URLs use `{{base_url}}` — the test-run-lead or test-runner
 substitutes the real base URL at run time, keeping cases environment-agnostic
 across dev, staging, and prod.
 

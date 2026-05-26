@@ -1,4 +1,4 @@
-# Rules — executor
+# Rules — test-runner
 
 1. **MCP-only browser control.** Never write or run Python scripts. All browser interaction is exclusively via Playwright MCP tools.
 2. **verification-before-completion is mandatory before any PASS.** The final `browser_snapshot` must confirm the Expected Final State from the test case is present. A green result without a confirming snapshot is not-yet-passed.
