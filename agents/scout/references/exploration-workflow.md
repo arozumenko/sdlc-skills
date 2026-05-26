@@ -142,6 +142,30 @@ breakdown before proposing one team. Where a role or convention is
 ambiguous, present 2–3 options with your recommendation rather than a flat
 guess. Resolve any clarifying questions **one at a time**, not as a batch.
 
+**Confirm the delivery systems with the user — don't just infer them.**
+The PM and developers route work, open changes, and merge against three
+systems you can't always detect reliably from files. Detect first, then
+**state what you found and ask the user to confirm or correct** (one
+question at a time) — especially when the tracker differs from the code
+host, or there's no PR history to sample:
+
+- **Where do tasks live?** Issue/task tracker — GitHub Issues, Jira,
+  GitLab Issues, Azure Boards, Linear, or none. → record in
+  `profile.md § Project systems`.
+- **Where does code live, and how do changes ship?** Code host (GitHub /
+  GitLab / Bitbucket / Azure DevOps / Gitea), its CLI (`gh` / `glab` /
+  `bb` / `az repos` / `tea`), and the unit of change (PR vs MR). → record
+  in `workflow.md § Git host`.
+- **How is CI gated?** Which checks must be green to merge, required
+  approvers, auto-merge / labels (detect from `.github/workflows`,
+  `.gitlab-ci.yml`, `Jenkinsfile`, `azure-pipelines.yml`). → record in
+  `workflow.md § CI gates`.
+
+These three feed every routing and merge decision the team makes — the PM
+and `completing-a-task` skill read them and adapt their commands to the
+host/tracker you record. A wrong guess here misroutes work silently, so
+confirm rather than assume GitHub.
+
 **1. Propose the complete team setup:**
 
 ```

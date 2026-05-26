@@ -10,10 +10,27 @@ metadata:
 # Task Completion Protocol
 
 When you are assigned a task — via taskbox, a host-native subagent call, a PM
-message, a GitHub issue, or any routed work — **a task is only complete when
+message, a tracker ticket, or any routed work — **a task is only complete when
 all five steps have happened, in order**. Writing the code is step 1, not
 step 5. If you stop at step 1 and hand a diff back to your caller, you have
 left the task unfinished.
+
+---
+
+## Platform & systems — translate before running
+
+The commands below are written in **GitHub `gh` form as the reference**.
+Read scout's discovery first and translate:
+
+- **`.agents/workflow.md` § Git host** — your code host and its CLI: GitHub
+  `gh`, GitLab `glab`, Bitbucket `bb`, Azure DevOps `az repos`, Gitea `tea`.
+  "PR" below means PR or MR (your host's unit of change).
+- **`.agents/profile.md` § Project systems** — where tickets live
+  (github-issues / jira / gitlab-issues / azure-boards / linear). Step 4
+  comments on the ticket *there*, which may differ from the code host.
+
+The five steps are identical on every platform — only the commands change.
+If scout hasn't recorded a host/tracker, ask before assuming GitHub.
 
 ---
 
@@ -47,10 +64,16 @@ commits are better than one giant blob.
 
 ---
 
-## 3. Pushed and PR opened
+## 3. Pushed and PR/MR opened
 
 ```bash
 git push -u origin HEAD
+```
+
+Open the change with your host's CLI (GitHub `gh` reference shown; GitLab:
+`glab mr create`, Azure: `az repos pr create` — see *Platform & systems*):
+
+```bash
 gh pr create --title "<type>: <description> (#<issue>)" --body "$(cat <<'EOF'
 ## Summary
 - <what was built>
@@ -66,12 +89,17 @@ EOF
 ```
 
 Title prefixes follow conventional commits (`feat`, `fix`, `refactor`, `test`,
-`docs`, `chore`). `Closes #N` wires the PR to the issue so it auto-closes on
-merge.
+`docs`, `chore`). Link the ticket so it auto-closes on merge — `Closes #N`
+on GitHub/GitLab, a work-item link on Azure (follow your host's convention
+in `workflow.md`).
 
 ---
 
-## 4. Issue comment posted
+## 4. Ticket comment posted
+
+Comment on the ticket in the project's tracker (GitHub `gh` reference shown;
+GitLab `glab issue note`, Jira via `atlassian-content`, Azure Boards
+`az boards work-item update --discussion`):
 
 ```bash
 gh issue comment <N> --body "PR #<X> ready: <one-line summary of what shipped>"
