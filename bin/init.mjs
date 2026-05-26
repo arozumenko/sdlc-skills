@@ -1391,7 +1391,7 @@ async function main() {
           t,
           args.update,
           catalog.registry,
-          bundlePlan.bundleAgentsRoot
+          bundle.dir
         );
         if (r.status === "installed") {
           console.log(`      ✓ agent  ${name} (bundle-local)`);
