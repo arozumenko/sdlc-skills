@@ -1,6 +1,6 @@
 ---
 name: bugfix-workflow
-description: End-to-end bugfix workflow. Test first, plan, fix, verify. Use when the user says "fix bug", "bugfix", "investigate issue", "fix #NNN", or any bug-related work. Covers reproduction, test creation, RCA, fix implementation, verification, and ticket documentation.
+description: End-to-end bugfix workflow. Test first, plan, fix, verify. Use when the user says "fix bug", "bugfix", "investigate issue", "fix #NNN" — or whenever you hit a failing test, a reported defect, or a reproducible error, before you start patching. Covers reproduction, test creation, RCA, fix implementation, verification, and ticket documentation.
 license: Apache-2.0
 metadata:
   author: octobots

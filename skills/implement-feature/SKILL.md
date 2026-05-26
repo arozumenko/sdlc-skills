@@ -1,6 +1,6 @@
 ---
 name: implement-feature
-description: End-to-end feature implementation workflow. Use when the user says "implement", "build feature", "work on task", "start implementation", or any feature development work. Covers plan review, test writing, implementation, verification, and delivery.
+description: End-to-end feature implementation workflow. Use when the user says "implement", "build feature", "work on task", "start implementation" — or once a plan or story is approved and you're about to start building. Covers plan review, test writing, implementation, verification, and delivery.
 license: Apache-2.0
 metadata:
   author: octobots
