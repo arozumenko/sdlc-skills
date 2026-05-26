@@ -1,7 +1,7 @@
 {
   "name": "sdlc-skills",
   "displayName": "SDLC Skills",
-  "description": "Role-based agents (BA, Tech Lead, PM, devs, QA, PA) and workflow skills (plan-feature, bugfix-workflow, code-review, tdd, task-completion, memory, …) for software delivery.",
+  "description": "Role-based agents (BA, Tech Lead, PM, devs, QA, PA) and workflow skills (plan-feature, bugfix-workflow, code-review, tdd, completing-a-task, memory, …) for software delivery.",
   "version": "0.2.0",
   "author": {
     "name": "Artem Rozumenko",

@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Per-role persistent memory — durable facts, preferences, decisions, and an episodic daily log stored as plain markdown under .agents/memory/<role>/. Use when the user says "remember this", asks "what did you learn yesterday", says "log this", or whenever you discover something worth keeping across sessions.
+description: Per-role persistent memory — durable facts, preferences, decisions, and a daily log, as plain markdown. Use when the user says "remember this" or "log this", asks "what did you learn yesterday", or whenever you discover something worth keeping across sessions.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -47,7 +47,7 @@ doesn't exist, migrate it before your first write:
 |---|---|
 | `.claude/memory/<role>/` (directory) | `.agents/memory/<role>/` — move the whole dir |
 | `.octobots/memory/<role>/` (directory, from Octobots supervisor) | `.agents/memory/<role>/` — move the whole dir |
-| `.claude/memory/<role>.md` (flat file, from old project-seeder) | `.agents/memory/<role>/project_briefing.md` — wrap the existing content with `type: project` frontmatter (see "Write" op below), add one index line to `MEMORY.md` |
+| `.claude/memory/<role>.md` (flat file, from the former `project-seeder` skill) | `.agents/memory/<role>/project_briefing.md` — wrap the existing content with `type: project` frontmatter (see "Write" op below), add one index line to `MEMORY.md` |
 
 Migrate with `Bash` (`mv` for directories) or `Read`/`Write` (for the flat
 file → curated entry conversion). Do this once; afterwards ignore the old

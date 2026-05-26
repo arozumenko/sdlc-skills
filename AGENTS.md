@@ -12,12 +12,12 @@ of native plugin formats and a shared npx installer.
   frontmatter declares the skills it depends on.
 - **`skills/<name>/SKILL.md`** — [agentskills.io](https://agentskills.io)
   spec-compliant workflow skills: `plan-feature`, `implement-feature`,
-  `bugfix-workflow`, `code-review`, `tdd`, `task-completion`,
+  `bugfix-workflow`, `code-review`, `tdd`, `completing-a-task`,
   `git-workflow`, `memory`, `playwright-testing`, `browser-verify`,
   `issue-tracking`, `xray-testing`, `atlassian-content`,
   `tosca-automation`, `vividus`, `test-case-analysis`,
-  `test-automation-workflow`, `goal-verifier`, `context-gatherer`,
-  `deep-research`, `obsidian-vault`, `msgraph`, `project-seeder`.
+  `test-automation-workflow`, `verifying-outcomes`, `gathering-context`,
+  `deep-research`, `obsidian-vault`, `microsoft-365`, `seeding-a-project`.
 - **`skills.json`** — catalog of all skills, monorepo and external.
   The installer uses it to resolve + fetch external skills (from
   `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`,
@@ -37,9 +37,9 @@ npx github:arozumenko/sdlc-skills init --all
 The installer reads each agent's `skills:` frontmatter, copies monorepo
 skills into `.claude/skills/` (and/or `.cursor/`, `.windsurf/`,
 `.github/`), and clones external skill repos into a shared cache
-(`~/.cache/sdlc-skills/registry/`) with symlinks back into the project's
-skill dir. Everything ends up in the directory the agent expects to find
-it in. See the README for full flag docs.
+(`~/.cache/sdlc-skills/registry/`), then copies them into the project's
+skill dir (or symlinks with `--symlink`). Everything ends up in the
+directory the agent expects to find it in. See the README for full flag docs.
 
 ## Install — native plugin fallbacks
 

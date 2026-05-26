@@ -1,6 +1,6 @@
 ---
 name: xray-testing
-description: CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Cloud (GraphQL) and Server/DC (REST). Load for "pull test PROJ-T42", "create Xray test from this AFS", "link test to story", "upload JUnit to test plan", or any Xray CRUD. Complements test-case-analysis and atlassian-content.
+description: CRUD + results import on Xray entities (Test, Precondition, Test Set/Plan/Execution/Run) across Cloud (GraphQL) and Server/DC (REST). Load for "pull test PROJ-T42", "create Xray test from this AFS", "upload JUnit to test plan", or any Xray CRUD.
 license: Apache-2.0
 metadata:
   author: octobots

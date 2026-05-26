@@ -1,6 +1,6 @@
 ---
 name: implement-feature
-description: End-to-end feature implementation workflow. Use when the user says "implement", "build feature", "work on task", "start implementation", or any feature development work. Covers plan review, test writing, implementation, verification, and delivery.
+description: End-to-end feature implementation — plan review, test-first, build, verify, deliver. Use when the user says "implement", "build feature", "work on task", or once a plan or story is approved and you're about to start building.
 license: Apache-2.0
 metadata:
   author: octobots
@@ -69,7 +69,7 @@ changes matches expectations. Don't ship if anything fails — fix it first.
 ### 7. Commit & PR
 
 Feature branch, focused commit, `gh pr create` with proper title and body.
-The `task-completion` skill has the full protocol.
+The `completing-a-task` skill has the full protocol.
 
 ### 8. Document on ticket
 

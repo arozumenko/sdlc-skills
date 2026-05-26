@@ -38,19 +38,19 @@ are capability definitions, not always-on context.
 | `test-case-analysis` | Executing a TMS case end-to-end and emitting an Automation-Friendly Spec (AFS) |
 | `test-automation-workflow` | Automating a TMS test case end-to-end — explore, specify, implement, review |
 | `code-review` | Reviewing a PR or diff |
-| `task-completion` | Finishing routed work — commit, push, PR, comment, notify |
+| `completing-a-task` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |
 | `memory` | Need to remember something across sessions |
 | `playwright-testing` | Writing or running E2E browser tests |
 | `playwright-cli` | Driving Playwright from the CLI — interactive browser sessions, snapshot/locator interaction, network mocking, tracing, test generation (external, by Microsoft) |
 | `browser-verify` | Quick visual / smoke check in a browser |
 | `issue-tracking` | Managing GitHub / Linear / GitLab issues |
-| `goal-verifier` | Checking whether a task actually achieved its outcome |
-| `context-gatherer` | Cross-channel context — email, Teams, local KB |
+| `verifying-outcomes` | Checking whether a task actually achieved its outcome |
+| `gathering-context` | Cross-channel context — email, Teams, local KB |
 | `deep-research` | Multi-source research, fact-checking |
 | `obsidian-vault` | Reading / writing an Obsidian vault |
-| `msgraph` | Microsoft 365 (email / calendar / Teams) |
-| `project-seeder` | Generating `AGENTS.md` / `.agents/` docs / per-role memory briefings for a new project |
+| `microsoft-365` | Microsoft 365 (email / calendar / Teams) |
+| `seeding-a-project` | Generating `AGENTS.md` / `.agents/` docs / per-role memory briefings for a new project |
 
 Each skill lives at `./skills/<name>/SKILL.md`.
 
@@ -62,8 +62,8 @@ This Gemini extension does **not** fetch them — only the monorepo skills
 listed above are available in this install.
 
 For the full experience (including external skills auto-fetched into
-`.claude/skills/` via git clone + symlink), run our installer once in the
-project:
+`.claude/skills/` via git clone + copy, or `--symlink`), run our installer
+once in the project:
 
 ```bash
 npx github:arozumenko/sdlc-skills init --target claude --agents <your-team>

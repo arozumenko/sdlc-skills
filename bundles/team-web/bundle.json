@@ -1,0 +1,22 @@
+{
+  "id": "team-web",
+  "title": "Web Team",
+  "description": "Fullstack web delivery team — JS/TS frontend, Python backend, QA, and core roles.",
+  "agents": ["scout", "ba", "tech-lead", "project-manager", "python-dev", "js-dev", "qa-engineer", "test-automation-engineer"],
+  "skills": [],
+  "briefings": {
+    "scout": "briefings/scout.md",
+    "tech-lead": "briefings/tech-lead.md",
+    "python-dev": "briefings/python-dev.md",
+    "qa-engineer": "briefings/qa-engineer.md",
+    "test-automation-engineer": "briefings/test-automation-engineer.md"
+  },
+  "skillOverlays": {
+    "tech-lead": { "add": ["fastapi", "fastmcp-server", "vercel-react-best-practices"] },
+    "python-dev": { "add": ["fastapi", "fastmcp-server"] },
+    "js-dev": { "add": ["vercel-react-best-practices"] }
+  },
+  "instructions": "instructions.md",
+  "localAgents": [],
+  "targets": ["claude"]
+}

@@ -36,7 +36,7 @@ cd /path/to/your-automation-repo
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,project-manager,tech-lead,qa-engineer,test-automation-engineer \
-  --skills project-seeder,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,task-completion,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
+  --skills seeding-a-project,test-case-analysis,test-automation-workflow,playwright-testing,browser-verify,bugfix-workflow,code-review,completing-a-task,issue-tracking,atlassian-content,xray-testing,memory,tdd,git-workflow,plan-feature \
   --update --yes
 ```
 
@@ -44,6 +44,31 @@ Keep the `--agents` and `--skills` lists identical to your original
 install so you don't accidentally drop a role or skill. Pin to a
 specific commit with `github:arozumenko/sdlc-skills#<sha>` when you
 want to control rollout timing.
+
+## Updating a bundle install
+
+If you installed a **team bundle** (`--bundle team-web` / `--bundle
+team-ios`), update it the same way — re-run with the same `--bundle` and
+add `--update`:
+
+```bash
+npx github:arozumenko/sdlc-skills init --bundle team-web --update --yes
+```
+
+What `--update` does for a bundle:
+
+- **Agents & skills** — overwritten in place (same as a plain install).
+- **Briefings** (`.agents/memory/<role>/project_briefing.md`) — overwritten
+  with the bundle's defaults. **Without `--update` they're preserved**, so
+  scout's project-specific refinements survive a normal re-run.
+- **Instructions** — the `<!-- BUNDLE:<id> -->` block in `AGENTS.md` /
+  `CLAUDE.md` is refreshed in place regardless of `--update` (idempotent).
+- **Hooks** — the bundle's `_bundle`-tagged entries in
+  `.claude/settings.json` are replaced; your own hooks are untouched.
+  `settings.json` is backed up to `settings.json.bak` first.
+
+Bundle authors: run `npm run validate:bundles` before publishing (CI runs
+it on every push/PR). See [`bundles/SPEC.md`](bundles/SPEC.md).
 
 ## What `--update` rewrites vs what it preserves
 
@@ -74,16 +99,16 @@ want to control rollout timing.
    npx github:<your-ref> init fix-copilot
    ```
 
-2. **Check whether scout's project-seeder has new steps.** If the
-   update pulled in new project-seeder steps (e.g. Step 6.8 tool
+2. **Check whether scout's seeding-a-project has new steps.** If the
+   update pulled in new seeding-a-project steps (e.g. Step 6.8 tool
    wiring, 6.9 role substitutions, 6.95 deployment-mode marker
    stripping) and your install predates them, re-run scout with a
    prompt that tells it to execute **only the new steps**:
 
    ```
    You are scout. Do NOT regenerate existing content docs.
-   Execute ONLY the project-seeder steps introduced since my last
-   install: read <SKILLS_ROOT>/project-seeder/SKILL.md and run
+   Execute ONLY the seeding-a-project steps introduced since my last
+   install: read <SKILLS_ROOT>/seeding-a-project/SKILL.md and run
    whichever of Step 6.8, Step 6.9, Step 6.95 are present and not
    already applied. Report what you changed.
    ```

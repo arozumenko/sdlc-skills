@@ -69,8 +69,8 @@ External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
 `systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
 upstream repos. The installer resolves each agent's declared skill list
 against `skills.json`, clones external repos on first install into
-`~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
-project's skills directory.
+`~/.cache/sdlc-skills/registry/`, and copies the subdir into your project's
+skills directory (or symlinks it with `--symlink`).
 
 ## What lands in your project
 
@@ -150,11 +150,16 @@ external skills together. Works for Claude Code, Cursor, Windsurf, and
 GitHub Copilot (all four IDE targets detected automatically).
 
 ```bash
+# A team bundle — the whole team in one shot (agents, their skills,
+# per-role stack briefings, and team conventions). See bundles/SPEC.md.
+npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
+npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
+
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically
-# (monorepo + external, via git clone + symlink for externals)
+# (monorepo + external; externals are git-cloned then copied in — add --symlink to link instead)
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
 
 # Specific skills (overrides the auto-resolve)
@@ -166,6 +171,13 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 # Update an existing install
 npx github:arozumenko/sdlc-skills init --all --update
 ```
+
+**Team bundles.** A bundle is a named team preset that installs a curated
+set of agents (with their skills), seeds per-role stack briefings into
+`.agents/memory/<role>/`, and splices team conventions into `AGENTS.md` /
+`CLAUDE.md` — one command instead of hand-listing roles. Two ship today:
+`team-web` (JS/TS frontend + Python backend) and `team-ios` (Swift /
+SwiftUI). See [`bundles/SPEC.md`](bundles/SPEC.md) to author your own.
 
 Install locations:
 
@@ -196,9 +208,14 @@ section listing declared skills with their descriptions from
 would duplicate the preload). The block is idempotent on `--update` —
 re-runs replace in place, never duplicate.
 
-External skills are symlinked into the skills dir from the shared cache
-at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
-location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
+External skills are cloned once into the shared cache at
+`~/.cache/sdlc-skills/registry/<owner>__<repo>/` (override with
+`SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`), then **copied** into the
+project's skills dir by default — so the install is self-contained and
+portable (git, zip, Docker, Windows, and sandboxed/jailed agent runtimes
+that don't follow symlinks all work). Pass **`--symlink`** to symlink from
+the cache instead (a live link, dedups across projects) when your runtime
+handles symlinks and you'd rather not duplicate the content.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
@@ -250,7 +267,7 @@ are not fetched. If you want those, go back to path 1 or 2.
 ```bash
 /plugin marketplace add arozumenko/sdlc-skills
 /plugin install sdlc-skills@sdlc-skills
-# Or individual entries: /plugin install sdlc-skills@ios-dev  etc.
+# Or individual entries: /plugin install ios-dev@sdlc-skills  etc.
 ```
 
 **Cursor native plugin** — `.cursor-plugin/plugin.json`
@@ -308,8 +325,8 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `bugfix-workflow` | Structured bug investigation: reproduce → root cause → fix → regression test |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
-| `project-seeder` | Scout's project onboarding / configuration flow |
-| `task-completion` | Five-step task completion protocol: verify → commit → PR → comment → notify |
+| `seeding-a-project` | Scout's project onboarding / configuration flow |
+| `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
 **Generic dev skills (15):**
 
@@ -324,18 +341,19 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `atlassian-content` | Jira issue/comment authoring (ADF, API v3) + Confluence pages (storage format) with accountId mentions and post-creation verification |
 | `tosca-automation` | Tricentis TOSCA Cloud full lifecycle — TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory/folders, TSU import/export. Bundled Typer CLI (`tosca_cli.py`) |
 | `vividus` | Vividus BDD framework — bootstrap, configure, author `.story` files. 47+ plugins (web, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment triple, MCP-server grounding. Templates in `assets/` |
-| `goal-verifier` | Verify a task actually achieved its stated goal |
-| `context-gatherer` | Targeted codebase exploration before changes |
+| `verifying-outcomes` | Verify a task actually achieved its stated goal |
+| `gathering-context` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
-| `msgraph` | Microsoft Graph (email / calendar / Teams) integration |
+| `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 
 ### External skills (fetched by the installer)
 
 Declared in `skills.json` with `repo:` + optional `subdir:`. The npx
 installer clones each into `~/.cache/sdlc-skills/registry/` on first
-install and symlinks the subdir into your project's skills dir. Native
+install and copies the subdir into your project's skills dir (or symlinks
+it with `--symlink`). Native
 IDE plugin paths do **not** fetch these — use the installer for the full
 catalog.
 
@@ -441,7 +459,7 @@ sdlc-skills/
    "name": "<name>"}`.
 3. **New external skill** → register in `skills.json` with
    `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
-   The installer will clone + symlink on first install.
+   The installer will clone + copy on first install (or symlink with `--symlink`).
 4. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 

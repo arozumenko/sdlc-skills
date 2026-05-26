@@ -39,6 +39,7 @@
  */
 
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -98,6 +99,349 @@ function loadCatalog() {
 }
 
 // ---------------------------------------------------------------------------
+// Bundles — bundles/<id>/bundle.json describes a curated team: which shared
+// agents to install, any team-wide extra skills, per-role briefing overlays,
+// team instructions, and hooks. See bundles/SPEC.md. A bundle expands into
+// the normal agent/skill install path: its `agents` populate the agent
+// selection (so each agent's declared skills auto-resolve as usual) and its
+// `skills` are appended as extras. `localAgents` live in bundles/<id>/agents/
+// and install like shared agents but from the bundle dir.
+// ---------------------------------------------------------------------------
+
+function listBundles() {
+  const root = join(PKG_ROOT, "bundles");
+  if (!existsSync(root)) return [];
+  return readdirSync(root)
+    .filter((d) => existsSync(join(root, d, "bundle.json")))
+    .sort();
+}
+
+function loadBundle(id) {
+  const dir = join(PKG_ROOT, "bundles", id);
+  const manifest = join(dir, "bundle.json");
+  if (!existsSync(manifest)) {
+    console.error(`  ! Unknown bundle: ${id}`);
+    console.error(`    Available bundles: ${listBundles().join(", ") || "(none)"}`);
+    process.exit(1);
+  }
+  let b;
+  try {
+    b = JSON.parse(readFileSync(manifest, "utf8"));
+  } catch (err) {
+    console.error(`  ! Failed to parse bundles/${id}/bundle.json: ${err.message}`);
+    process.exit(1);
+  }
+  b.dir = dir;
+  b.agents = b.agents || [];
+  b.skills = b.skills || [];
+  b.localAgents = b.localAgents || [];
+  b.briefings = b.briefings || {};
+  b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
+  b.seed = b.seed || {}; // bundle-relative source → project-relative dest (reference files)
+  return b;
+}
+
+// Validate a bundle against the catalog and resolve the skills its local
+// agents declare. Returns { localAgents, extraSkillIds } and mutates
+// args.agents to include the bundle's shared agents.
+function applyBundle(bundle, args, catalog) {
+  const unknownShared = bundle.agents.filter((a) => !catalog.agents.includes(a));
+  if (unknownShared.length) {
+    console.error(
+      `  ! Bundle ${bundle.id} references unknown agents: ${unknownShared.join(", ")}`
+    );
+    console.error(`    Available agents: ${catalog.agents.join(", ")}`);
+    process.exit(1);
+  }
+  const bundleAgentsRoot = join(bundle.dir, "agents");
+  for (const la of bundle.localAgents) {
+    if (!existsSync(join(bundleAgentsRoot, la, "AGENT.md"))) {
+      console.error(
+        `  ! Bundle ${bundle.id} declares localAgent "${la}" but bundles/${bundle.id}/agents/${la}/AGENT.md is missing`
+      );
+      process.exit(1);
+    }
+  }
+
+  // Shared agents from the bundle join any explicit --agents selection.
+  const explicit = args.agents || [];
+  args.agents = [...new Set([...explicit, ...bundle.agents])];
+
+  // Skills declared by local agents are resolved from the bundle dir (their
+  // AGENT.md lives there, not in the monorepo agents/).
+  const localDeclared = new Set();
+  for (const la of bundle.localAgents) {
+    for (const s of parseAgentSkillDeps(la, bundleAgentsRoot)) localDeclared.add(s);
+  }
+
+  // ----- Per-role skill overlays (the capability twin of briefings) -----
+  // A bundle tunes a shared agent's *skills* for its stack at setup:
+  //   skillOverlays: { qa-engineer: { add: ["xcuitest"], remove: ["playwright-testing"] } }
+  // The shared agent stays unforked — we rewrite only the installed copy's
+  // `skills:` frontmatter (done in main, per target). Here we compute the
+  // effective skill set so the install resolves the right union: removed
+  // skills no agent still needs are dropped; added skills that resolve are
+  // installed; added skills that don't exist yet are surfaced as "pending".
+  const overlays = bundle.skillOverlays;
+  for (const role of Object.keys(overlays)) {
+    if (!args.agents.includes(role)) {
+      console.error(`  ! Bundle ${bundle.id} skillOverlay targets "${role}", not in the team`);
+      process.exit(1);
+    }
+  }
+  const declaredOf = (a) =>
+    catalog.agents.includes(a)
+      ? parseAgentSkillDeps(a)
+      : parseAgentSkillDeps(a, bundleAgentsRoot);
+  const isResolvable = (id) => {
+    const e = registryEntry(catalog.registry, id);
+    return catalog.skills.includes(id) || !!(e && e.repo);
+  };
+  const effectiveByAgent = {};
+  const neededByAny = new Set();
+  const allDeclared = new Set();
+  const resolvableAdds = new Set();
+  const pendingAdds = new Set();
+  for (const a of args.agents) {
+    const declared = declaredOf(a);
+    declared.forEach((s) => allDeclared.add(s));
+    const ov = overlays[a] || {};
+    const removeSet = new Set(ov.remove || []);
+    const eff = declared.filter((s) => !removeSet.has(s));
+    for (const s of ov.add || []) {
+      if (isResolvable(s)) {
+        if (!eff.includes(s)) eff.push(s);
+        resolvableAdds.add(s);
+      } else {
+        pendingAdds.add(s);
+      }
+    }
+    effectiveByAgent[a] = eff;
+    eff.forEach((s) => neededByAny.add(s));
+  }
+  // Skills that were declared somewhere but, after overlays, no agent needs.
+  const droppable = new Set([...allDeclared].filter((s) => !neededByAny.has(s)));
+
+  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared, ...resolvableAdds])];
+
+  console.log(
+    `  Bundle: ${bundle.title || bundle.id} — ${bundle.agents.length} shared agent(s)` +
+      (bundle.localAgents.length ? `, ${bundle.localAgents.length} local agent(s)` : "") +
+      (Object.keys(overlays).length ? `, ${Object.keys(overlays).length} skill overlay(s)` : "") +
+      (extraSkillIds.length ? `, ${extraSkillIds.length} extra skill(s)` : "")
+  );
+
+  return {
+    localAgents: bundle.localAgents,
+    bundleAgentsRoot,
+    extraSkillIds,
+    overlays,
+    effectiveByAgent,
+    droppable,
+    pendingAdds: [...pendingAdds],
+  };
+}
+
+// Seed per-role briefing overlays into .agents/memory/<role>/project_briefing.md
+// (IDE-neutral — every agent reads .agents/, regardless of host). This is the
+// same slot scout fills at runtime, so an existing briefing is left in place
+// unless --update (scout's project-specific version wins over the bundle's
+// stack defaults). Each install also ensures a MEMORY.md index line.
+function installBriefings(bundle, update) {
+  let installed = 0;
+  let skipped = 0;
+  for (const [role, rel] of Object.entries(bundle.briefings)) {
+    const src = join(bundle.dir, rel);
+    if (!existsSync(src)) {
+      console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
+      continue;
+    }
+    const destDir = join(CWD, ".agents", "memory", role);
+    const dest = join(destDir, "project_briefing.md");
+    if (existsSync(dest) && !update) {
+      console.log(`      — briefing ${role} (exists; use --update)`);
+      skipped++;
+      continue;
+    }
+    mkdirSync(destDir, { recursive: true });
+    const content = readFileSync(src, "utf8");
+    writeFileSync(dest, content);
+    // Per the memory skill spec, the index line carries the entry's own
+    // description. Pull it from the briefing's frontmatter.
+    const dm = content.match(/^description:\s*(.+)$/m);
+    ensureMemoryIndexLine(destDir, role, dm ? dm[1].trim() : "Project overview and this role's focus");
+    console.log(`      ✓ briefing ${role}`);
+    installed++;
+  }
+  return { installed, skipped };
+}
+
+// Seed loose reference files/dirs a bundle ships into the project at a fixed
+// path. bundle.seed maps a bundle-relative source → a project-relative dest.
+// Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
+// left intact unless --update. On --update the dest is removed first (clean
+// replace), so files deleted from the bundle don't linger. Used for reference
+// docs agents read at runtime: a subagent's cwd is the project root, so a
+// fixed project path is resolvable.
+function installSeed(bundle, update) {
+  let installed = 0;
+  let skipped = 0;
+  for (const [src, dest] of Object.entries(bundle.seed || {})) {
+    const srcPath = join(bundle.dir, src);
+    if (!existsSync(srcPath)) {
+      console.log(`      ! seed ${src} (missing in bundle)`);
+      continue;
+    }
+    const destPath = join(CWD, dest);
+    if (existsSync(destPath) && !update) {
+      console.log(`      — seed ${dest} (exists; use --update)`);
+      skipped++;
+      continue;
+    }
+    mkdirSync(dirname(destPath), { recursive: true });
+    if (update && existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
+    cpSync(srcPath, destPath, { recursive: true, force: true });
+    console.log(`      ✓ seed ${dest}`);
+    installed++;
+  }
+  return { installed, skipped };
+}
+
+// Splice a bundle's instructions.md into the project's root context files
+// inside <!-- BUNDLE:<id> START/END --> markers. The block is replaced in
+// place on re-run (idempotent) — no --update needed. AGENTS.md (the full
+// team reference every agent reads) is created if missing; CLAUDE.md is
+// auto-loaded and scout-owned, so its block is only refreshed when the file
+// already exists — we never create or bloat a lean CLAUDE.md.
+function installInstructions(bundle) {
+  if (!bundle.instructions) return;
+  const src = join(bundle.dir, bundle.instructions);
+  if (!existsSync(src)) {
+    console.log(`      ! instructions (missing in bundle: ${bundle.instructions})`);
+    return;
+  }
+  const body = readFileSync(src, "utf8");
+  for (const [file, createIfMissing] of [["AGENTS.md", true], ["CLAUDE.md", false]]) {
+    const status = spliceBundleBlock(join(CWD, file), bundle.id, body, createIfMissing);
+    if (status === "absent") console.log(`      — instructions ${file} (not present; skipped)`);
+    else console.log(`      ✓ instructions ${file} (${status})`);
+  }
+}
+
+function spliceBundleBlock(filePath, id, body, createIfMissing) {
+  const start = `<!-- BUNDLE:${id} START -->`;
+  const end = `<!-- BUNDLE:${id} END -->`;
+  const block = `${start}\n${body.trim()}\n${end}`;
+  if (!existsSync(filePath)) {
+    if (!createIfMissing) return "absent";
+    const title = basename(filePath, ".md");
+    writeFileSync(filePath, `# ${title}\n\n${block}\n`);
+    return "created";
+  }
+  const text = readFileSync(filePath, "utf8");
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`${esc(start)}[\\s\\S]*?${esc(end)}`);
+  if (re.test(text)) {
+    const updated = text.replace(re, block);
+    if (updated !== text) writeFileSync(filePath, updated);
+    return "refreshed";
+  }
+  writeFileSync(filePath, text.replace(/\n*$/, "\n\n") + block + "\n");
+  return "appended";
+}
+
+// Merge a bundle's hooks into each Claude target's settings.json. v1 is
+// Claude-only — Cursor/Windsurf/Copilot hook formats differ, so they're
+// skipped with a notice. hooks.json is a Claude hooks object (event →
+// matcher-groups); the installer tags each injected group with `_bundle`
+// so a re-merge replaces exactly the bundle's groups (idempotent) while
+// leaving the user's and other bundles' hooks untouched. Scripts under
+// hooks/scripts/ are copied to <target>/hooks/<bundle-id>/ and chmod +x.
+function installHooks(bundle, targets) {
+  if (!bundle.hooks) return;
+  const hooksPath = join(bundle.dir, bundle.hooks);
+  if (!existsSync(hooksPath)) {
+    console.log(`      ! hooks (missing in bundle: ${bundle.hooks})`);
+    return;
+  }
+  let hookSpec;
+  try {
+    hookSpec = JSON.parse(readFileSync(hooksPath, "utf8"));
+  } catch (err) {
+    console.log(`      ! hooks (parse failed: ${err.message})`);
+    return;
+  }
+  const wanted = bundle.targets && bundle.targets.length ? bundle.targets : ["claude"];
+  const scriptsSrc = join(dirname(hooksPath), "scripts");
+  for (const t of targets) {
+    if (t.id !== "claude") {
+      console.log(`      — hooks ${t.label} (only Claude supported in v1; skipped)`);
+      continue;
+    }
+    if (!wanted.includes("claude")) continue;
+
+    if (existsSync(scriptsSrc)) {
+      const scriptsDest = join(CWD, t.dir, "hooks", bundle.id);
+      mkdirSync(scriptsDest, { recursive: true });
+      cpSync(scriptsSrc, scriptsDest, { recursive: true, force: true });
+      for (const f of readdirSync(scriptsDest)) {
+        try {
+          chmodSync(join(scriptsDest, f), 0o755);
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
+
+    const ok = mergeClaudeSettingsHooks(
+      join(CWD, t.dir, "settings.json"),
+      hookSpec,
+      bundle.id
+    );
+    if (ok) console.log(`      ✓ hooks ${t.label} (settings.json)`);
+  }
+}
+
+function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
+  let settings = {};
+  if (existsSync(settingsPath)) {
+    const raw = readFileSync(settingsPath, "utf8");
+    try {
+      settings = JSON.parse(raw);
+    } catch (err) {
+      console.log(`      ! ${basename(settingsPath)} parse failed; left untouched: ${err.message}`);
+      return false;
+    }
+    writeFileSync(settingsPath + ".bak", raw); // back up before we touch it
+  }
+  settings.hooks = settings.hooks && typeof settings.hooks === "object" ? settings.hooks : {};
+  for (const [event, groups] of Object.entries(hookSpec)) {
+    if (!Array.isArray(groups)) continue;
+    const existing = Array.isArray(settings.hooks[event]) ? settings.hooks[event] : [];
+    const kept = existing.filter((g) => !g || g._bundle !== bundleId); // drop our prior groups
+    const tagged = groups.map((g) => ({ ...g, _bundle: bundleId }));
+    settings.hooks[event] = [...kept, ...tagged];
+  }
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  return true;
+}
+
+// Ensure .agents/memory/<role>/MEMORY.md carries an index line pointing at
+// project_briefing.md. Creates the index if absent; never duplicates.
+function ensureMemoryIndexLine(destDir, role, description) {
+  const indexPath = join(destDir, "MEMORY.md");
+  const line = `- [Project briefing](project_briefing.md) — ${description || "Project overview and this role's focus"}`;
+  if (!existsSync(indexPath)) {
+    writeFileSync(indexPath, `# Memory index — ${role}\n\n${line}\n`);
+    return;
+  }
+  const text = readFileSync(indexPath, "utf8");
+  if (text.includes("project_briefing.md")) return; // already indexed
+  writeFileSync(indexPath, text.replace(/\n*$/, "\n") + line + "\n");
+}
+
+// ---------------------------------------------------------------------------
 // Skill registry — skills.json at the repo root describes every skill and
 // where to fetch it:
 //   monorepo entry: {id, monorepo: "sdlc-skills", name}  → copy from ./skills/<name>
@@ -154,7 +498,7 @@ function shallowClone(repo, ref) {
   }
 }
 
-function installExternalSkill(entry, targetDir) {
+function installExternalSkill(entry, targetDir, useSymlink, update) {
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
   if (!clone) return { status: "error" };
@@ -174,16 +518,24 @@ function installExternalSkill(entry, targetDir) {
   }
   const skillsDir = join(CWD, targetDir, "skills");
   mkdirSync(skillsDir, { recursive: true });
-  const link = join(skillsDir, skillName);
-  if (existsSync(link) || lstatSync(link, { throwIfNoEntry: false })) {
-    // Already present. Don't overwrite unless --update (handled upstream).
-    return { status: "exists", name: skillName };
-  }
+  const dest = join(skillsDir, skillName);
+  const present = existsSync(dest) || lstatSync(dest, { throwIfNoEntry: false });
+  if (present && !update) return { status: "exists", name: skillName };
+  if (present && update) rmSync(dest, { recursive: true, force: true }); // clear prior symlink or copy
   try {
-    symlinkSync(src, link);
+    if (useSymlink) {
+      // Live link into the shared cache — power-user opt-in. Not portable
+      // across runtimes that don't follow symlinks or that jail to the
+      // project root (the target lives under ~/.cache).
+      symlinkSync(src, dest);
+    } else {
+      // Default: a self-contained copy, so the skill is present in the
+      // project tree itself (git/zip/Docker/sandbox/Windows-safe).
+      cpSync(src, dest, { recursive: true, dereference: true });
+    }
     return { status: "installed", name: skillName };
   } catch (err) {
-    console.error(`  ! symlink ${src} → ${link} failed: ${err.message}`);
+    console.error(`  ! ${useSymlink ? "symlink" : "copy"} ${src} → ${dest} failed: ${err.message}`);
     return { status: "error" };
   }
 }
@@ -204,8 +556,8 @@ function installExternalSkill(entry, targetDir) {
 // skills.json `repo:` entries; stock Claude users follow the README.
 // ---------------------------------------------------------------------------
 
-function parseAgentSkillDeps(agentName) {
-  const agentMd = join(PKG_ROOT, "agents", agentName, "AGENT.md");
+function parseAgentSkillDeps(agentName, agentsRoot = join(PKG_ROOT, "agents")) {
+  const agentMd = join(agentsRoot, agentName, "AGENT.md");
   if (!existsSync(agentMd)) return [];
   let text;
   try {
@@ -261,12 +613,16 @@ function parseArgs(argv) {
     agents: null, // null = unspecified, [] = none, [..] = explicit
     skills: null,
     targets: null,
+    bundle: null,
+    symlink: false, // external skills: copy by default, symlink from cache if true
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--all") out.all = true;
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
+    else if (a === "--symlink") out.symlink = true;
+    else if (a === "--bundle") out.bundle = (argv[++i] || "").trim();
     else if (a === "--agents") out.agents = splitList(argv[++i]);
     else if (a === "--skills") out.skills = splitList(argv[++i]);
     else if (a === "--target") out.targets = splitList(argv[++i]);
@@ -294,15 +650,22 @@ function printHelp() {
     npx github:arozumenko/sdlc-skills init [options]
 
   Options:
+    --bundle <id>              Install a team bundle (a curated set of agents,
+                               skills, briefings, instructions, and hooks)
     --all                      Install every agent and every skill (no prompts)
     --agents <a,b,c|all>       Install only these agents (or all)
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
+    --symlink                  Symlink external skills from the shared cache
+                               instead of copying them (default: copy, which
+                               is self-contained and portable across runtimes)
     --yes                      Skip the interactive "detected IDE" prompt
     -h, --help                 Show this help
 
   Examples:
+    npx github:arozumenko/sdlc-skills init --bundle team-web
+    npx github:arozumenko/sdlc-skills init --bundle team-ios --target claude
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
@@ -326,9 +689,10 @@ function resolveSelection(requested, available, kind) {
   return requested;
 }
 
-function copyItem(kind, name, target, update, registry) {
+function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // kind: "agents" | "skills"; target: {id, dir, label}
-  const src = join(PKG_ROOT, kind, name);
+  // srcRoot defaults to the monorepo; bundle-local agents pass their own dir.
+  const src = join(srcRoot, kind, name);
   if (!existsSync(src)) return { status: "missing" };
 
   // GitHub Copilot CLI expects agents as flat `<name>.agent.md` files,
@@ -493,6 +857,27 @@ function injectSkillsIntoCopiedAgent(destDir, name, registry) {
   const text = readFileSync(agentFile, "utf8");
   const rewritten = injectSkillsSection(text, name, registry);
   if (rewritten !== text) writeFileSync(agentFile, rewritten);
+}
+
+// Apply a bundle's per-role skill overlay to an already-installed agent:
+// rewrite its inline `skills: [...]` frontmatter to the effective set. On
+// Claude this is the preload list; on Cursor/Windsurf we also regenerate the
+// injected skills-inventory body so it matches. Returns true if rewritten.
+function applySkillOverlay(target, name, effectiveSkills, registry) {
+  const agentFile =
+    target.id === "copilot"
+      ? join(CWD, target.dir, "agents", `${name}.agent.md`)
+      : join(CWD, target.dir, "agents", name, "AGENT.md");
+  if (!existsSync(agentFile)) return false;
+  const text = readFileSync(agentFile, "utf8");
+  const re = /^skills:\s*\[[^\]]*\]/m;
+  if (!re.test(text)) return false; // no inline skills line — nothing to rewrite
+  writeFileSync(agentFile, text.replace(re, `skills: [${effectiveSkills.join(", ")}]`));
+  if (target.id !== "claude" && target.id !== "copilot") {
+    // dir-based non-Claude targets carry a body inventory — regenerate it.
+    injectSkillsIntoCopiedAgent(join(CWD, target.dir, "agents", name), name, registry);
+  }
+  return true;
 }
 
 // Core transform used by both install-time (--target copilot) and the
@@ -937,8 +1322,48 @@ async function main() {
     return;
   }
 
+  // A --bundle expands into the agent/skill selection before resolution, so
+  // each bundle agent's declared skills auto-resolve through the normal path.
+  let bundle = null;
+  let bundlePlan = null;
+  if (args.bundle) {
+    bundle = loadBundle(args.bundle);
+    bundlePlan = applyBundle(bundle, args, catalog);
+  }
+
   const { targets, agentsSelection, skillsSelection, externalSkills } =
     await interactivePick(catalog, args);
+
+  // Fold in the bundle's extra skills (team-wide extras + skills declared by
+  // local agents), partitioned into monorepo copies vs external clones.
+  if (bundlePlan && bundlePlan.extraSkillIds.length) {
+    const { monorepo, external, unknown } = partitionSkillIds(
+      bundlePlan.extraSkillIds,
+      catalog.skills,
+      catalog.registry
+    );
+    for (const id of monorepo) if (!skillsSelection.includes(id)) skillsSelection.push(id);
+    for (const e of external) if (!externalSkills.some((x) => x.id === e.id)) externalSkills.push(e);
+    if (unknown.length) {
+      console.log(
+        `\n  ! Bundle skills not in skills.json (skipped):\n    ${unknown.join(", ")}`
+      );
+    }
+  }
+
+  // Per-role skill overlays: drop skills a `remove` orphaned (no agent needs
+  // them after overlays), and surface `add` skills that aren't authored yet.
+  if (bundlePlan && bundlePlan.droppable && bundlePlan.droppable.size) {
+    for (let i = skillsSelection.length - 1; i >= 0; i--)
+      if (bundlePlan.droppable.has(skillsSelection[i])) skillsSelection.splice(i, 1);
+    for (let i = externalSkills.length - 1; i >= 0; i--)
+      if (bundlePlan.droppable.has(externalSkills[i].id)) externalSkills.splice(i, 1);
+  }
+  if (bundlePlan && bundlePlan.pendingAdds && bundlePlan.pendingAdds.length) {
+    console.log(
+      `\n  ! Skill overlay adds not yet in the catalog (pending content — author + register to enable):\n    ${bundlePlan.pendingAdds.join(", ")}`
+    );
+  }
 
   console.log("");
   let installed = 0;
@@ -958,6 +1383,39 @@ async function main() {
         console.log(`      ! agent  ${name} (missing in repo)`);
       }
     }
+    if (bundlePlan) {
+      for (const name of bundlePlan.localAgents) {
+        const r = copyItem(
+          "agents",
+          name,
+          t,
+          args.update,
+          catalog.registry,
+          bundle.dir
+        );
+        if (r.status === "installed") {
+          console.log(`      ✓ agent  ${name} (bundle-local)`);
+          installed++;
+        } else if (r.status === "exists") {
+          console.log(`      — agent  ${name} (exists; use --update)`);
+          skipped++;
+        } else {
+          console.log(`      ! agent  ${name} (missing in bundle)`);
+        }
+      }
+    }
+    // Apply per-role skill overlays to the installed agents (capability tuning).
+    if (bundlePlan && bundlePlan.overlays) {
+      for (const role of Object.keys(bundlePlan.overlays)) {
+        if (applySkillOverlay(t, role, bundlePlan.effectiveByAgent[role] || [], catalog.registry)) {
+          const ov = bundlePlan.overlays[role];
+          const bits = [];
+          if (ov.add && ov.add.length) bits.push(`+${ov.add.join(",")}`);
+          if (ov.remove && ov.remove.length) bits.push(`-${ov.remove.join(",")}`);
+          console.log(`      ↻ skills  ${role} (${bits.join(" ")})`);
+        }
+      }
+    }
     for (const name of skillsSelection) {
       const r = copyItem("skills", name, t, args.update, catalog.registry);
       if (r.status === "installed") {
@@ -971,9 +1429,9 @@ async function main() {
       }
     }
     for (const entry of externalSkills) {
-      const r = installExternalSkill(entry, t.dir);
+      const r = installExternalSkill(entry, t.dir, args.symlink, args.update);
       if (r.status === "installed") {
-        console.log(`      ✓ skill  ${r.name} (external: ${entry.repo})`);
+        console.log(`      ✓ skill  ${r.name} (external: ${entry.repo}${args.symlink ? ", symlinked" : ""})`);
         installed++;
       } else if (r.status === "exists") {
         console.log(`      — skill  ${r.name} (exists; use --update)`);
@@ -982,6 +1440,34 @@ async function main() {
         console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
     }
+  }
+
+  // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
+  if (bundle && Object.keys(bundle.briefings).length) {
+    console.log(`\n  → .agents/memory/ (shared, all IDEs)`);
+    const b = installBriefings(bundle, args.update);
+    installed += b.installed;
+    skipped += b.skipped;
+  }
+
+  // Team instructions splice once into root context files (idempotent).
+  if (bundle && bundle.instructions) {
+    console.log(`\n  → project root (team instructions)`);
+    installInstructions(bundle);
+  }
+
+  // Seed reference files into the project (idempotent; IDE-neutral).
+  if (bundle && bundle.seed && Object.keys(bundle.seed).length) {
+    console.log(`\n  → project (seed reference files)`);
+    const s = installSeed(bundle, args.update);
+    installed += s.installed;
+    skipped += s.skipped;
+  }
+
+  // Hooks merge into each Claude target's settings.json (idempotent).
+  if (bundle && bundle.hooks) {
+    console.log(`\n  → hooks (settings.json)`);
+    installHooks(bundle, targets);
   }
 
   console.log(

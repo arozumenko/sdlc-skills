@@ -3,9 +3,7 @@ name: git-workflow
 description: Git operations, branching, commits, PRs, and release workflows. Use when the user asks to "commit", "create PR", "branch", "merge", "rebase", "cherry-pick", "tag", or manage git history.
 license: Apache-2.0
 compatibility: Requires git CLI and gh CLI for GitHub operations
-allowed-tools:
-  - Bash(git:*)
-  - Bash(gh:*)
+allowed-tools: Bash(git:*) Bash(gh:*)
 metadata:
   author: octobots
   version: "0.1.0"

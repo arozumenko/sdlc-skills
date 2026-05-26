@@ -1,6 +1,6 @@
 ---
 name: obsidian-vault
-description: Headless Obsidian vault operations for a personal-assistant agent. Use when the user says "save to vault", "log this note", "find my notes about X", "who is Y", "what's in my inbox", "open loops", "add a follow-up", or whenever you process an incoming signal (email, chat, voice memo) and need to file it. Also use to create or update people/project/meeting/decision notes. Pure file-system; does NOT require Obsidian to be running.
+description: Headless, file-system Obsidian vault operations (no Obsidian app needed). Use when the user says "save to vault", "log this note", "find my notes about X", "what's in my inbox", "open loops", or when filing an incoming signal (email/chat/memo) or updating people/project/meeting notes.
 license: Apache-2.0
 compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH (or legacy $OCTOBOTS_VAULT_PATH). ripgrep recommended (falls back to grep).
 metadata:

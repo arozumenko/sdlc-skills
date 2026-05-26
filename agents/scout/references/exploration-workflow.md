@@ -4,7 +4,7 @@ The full 10-phase procedure scout follows when onboarding a new codebase.
 This file is loaded by scout at session start; the main AGENT.md keeps only
 role identity, behavioral rules, and a pointer here.
 
-File generation (Phase 7 onward) uses the `project-seeder` skill — read that
+File generation (Phase 7 onward) uses the `seeding-a-project` skill — read that
 skill's SKILL.md and references for templates and composition guidance.
 
 ---
@@ -136,6 +136,36 @@ Look for: framework, fixture patterns, mocking approach, test data strategy, CI 
 
 This is where you shift from explorer to consultant. Don't ask "does anything look wrong?" — present a **specific, opinionated proposal** based on what you found.
 
+Apply *How you ask and decide* (in your AGENT.md) here: if the repo is
+really several independent services, **decompose first** and confirm the
+breakdown before proposing one team. Where a role or convention is
+ambiguous, present 2–3 options with your recommendation rather than a flat
+guess. Resolve any clarifying questions **one at a time**, not as a batch.
+
+**Confirm the delivery systems with the user — don't just infer them.**
+The PM and developers route work, open changes, and merge against three
+systems you can't always detect reliably from files. Detect first, then
+**state what you found and ask the user to confirm or correct** (one
+question at a time) — especially when the tracker differs from the code
+host, or there's no PR history to sample:
+
+- **Where do tasks live?** Issue/task tracker — GitHub Issues, Jira,
+  GitLab Issues, Azure Boards, Linear, or none. → record in
+  `profile.md § Project systems`.
+- **Where does code live, and how do changes ship?** Code host (GitHub /
+  GitLab / Bitbucket / Azure DevOps / Gitea), its CLI (`gh` / `glab` /
+  `bb` / `az repos` / `tea`), and the unit of change (PR vs MR). → record
+  in `workflow.md § Git host`.
+- **How is CI gated?** Which checks must be green to merge, required
+  approvers, auto-merge / labels (detect from `.github/workflows`,
+  `.gitlab-ci.yml`, `Jenkinsfile`, `azure-pipelines.yml`). → record in
+  `workflow.md § CI gates`.
+
+These three feed every routing and merge decision the team makes — the PM
+and `completing-a-task` skill read them and adapt their commands to the
+host/tracker you record. A wrong guess here misroutes work silently, so
+confirm rather than assume GitHub.
+
 **1. Propose the complete team setup:**
 
 ```
@@ -239,8 +269,8 @@ Proceed? [yes / no / adjust]
 
 Execute everything approved in Phase 6. Report each file as you generate it: `✓ SOUL.md — python-dev → Vad (Godot GDScript)`
 
-**File generation uses the `project-seeder` skill.** Read
-`sdlc-skills/skills/project-seeder/SKILL.md` for the generation flow, and
+**File generation uses the `seeding-a-project` skill.** Read
+`sdlc-skills/skills/seeding-a-project/SKILL.md` for the generation flow, and
 the skill's `references/` directory for templates:
 
 - `references/templates.md` — CLAUDE.md / AGENTS.md / `.agents/{profile, architecture, conventions, testing}.md` templates, plus `.octobots/roles-manifest.yaml` and per-role `project_briefing.md` memory-seeding templates
@@ -256,22 +286,22 @@ the skill's `references/` directory for templates:
 `CLAUDE.md` lives at the project root. It is symlinked into worker workspaces by the supervisor at launch.
 
 **7b — Generate `.octobots/roles-manifest.yaml`:**
-Use the template in `skills/project-seeder/references/templates.md`. Fill in all roles — customized and unchanged. This file is the input for the spawn readiness check.
+Use the template in `skills/seeding-a-project/references/templates.md`. Fill in all roles — customized and unchanged. This file is the input for the spawn readiness check.
 
 **7c — Tune SOUL.md and AGENT.md for repurposed roles:**
-See `skills/project-seeder/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
+See `skills/seeding-a-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
 
 **7d — Seed role memory files:**
 For **all roles** — not just customized ones — write a `project_briefing.md`
 curated entry at `.agents/memory/<role-id>/project_briefing.md` (with
 `type: project` frontmatter per the `memory` skill spec) and append/update
 the corresponding line in `.agents/memory/<role-id>/MEMORY.md`. Use the
-template in `skills/project-seeder/references/templates.md`. Write "My
+template in `skills/seeding-a-project/references/templates.md`. Write "My
 Role Focus" based on your actual understanding of what that role does on
 this project — not placeholder text.
 
 **7e — Generate `.agents/team-comms.md`:**
-Run the full procedure in `skills/project-seeder/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
+Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
 
 **Legacy marker cleanup.** Earlier iterations of this design used `<!-- SCOUT:TEAM-ROSTER:BEGIN -->` / `END` markers inside agent files. Those are gone. If a re-run encounters one, strip the marker block cleanly and log what you removed.
 

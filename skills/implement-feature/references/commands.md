@@ -176,4 +176,4 @@ python3 octobots/skills/taskbox/scripts/relay.py send \
 ```
 
 For the full five-step handoff protocol (commit → PR → issue comment →
-notify), see the `task-completion` skill.
+notify), see the `completing-a-task` skill.

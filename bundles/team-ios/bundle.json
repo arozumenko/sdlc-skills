@@ -1,0 +1,24 @@
+{
+  "id": "team-ios",
+  "title": "iOS Team",
+  "description": "iOS delivery team — Swift/SwiftUI development, QA, and core roles.",
+  "agents": ["scout", "ba", "tech-lead", "project-manager", "ios-dev", "qa-engineer"],
+  "skills": [],
+  "briefings": {
+    "scout": "briefings/scout.md",
+    "tech-lead": "briefings/tech-lead.md",
+    "qa-engineer": "briefings/qa-engineer.md"
+  },
+  "skillOverlays": {
+    "tech-lead": {
+      "add": ["swiftui-pro", "swiftdata-pro", "swift-testing-pro", "swift-concurrency-pro"]
+    },
+    "qa-engineer": {
+      "add": ["swift-testing-pro", "environment-setup-xcuitest", "xcuitest-real-device-config", "appium-troubleshooting"],
+      "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
+    }
+  },
+  "instructions": "instructions.md",
+  "localAgents": [],
+  "targets": ["claude"]
+}

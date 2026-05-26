@@ -50,7 +50,7 @@ The script never overrides a value that's already in `os.environ`,
 so a stray `.env` won't surprise a CI run that exports its own vars.
 
 **Project-wide config** (e.g. `.agents/test-automation.yaml` from the
-project-seeder skill) is read by the agent — not by this script. The
+seeding-a-project skill) is read by the agent — not by this script. The
 agent translates the YAML into env vars before invoking `xray`. The
 CLI itself only knows about env vars + `.env`.
 

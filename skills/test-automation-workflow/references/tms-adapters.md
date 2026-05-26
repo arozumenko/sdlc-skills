@@ -78,7 +78,7 @@ evidence:
 
 Only the `tms.adapter` plus the adapter's own fields are mandatory. The
 `framework:` block is filled from scout output — regenerate it via
-[`project-seeder`](../../project-seeder/) if absent.
+[`seeding-a-project`](../../seeding-a-project/) if absent.
 
 ## Adapter contract
 

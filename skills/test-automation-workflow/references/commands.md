@@ -12,8 +12,8 @@ cat .agents/testing.md 2>/dev/null
 cat .agents/architecture.md 2>/dev/null
 cat .agents/test-automation.yaml 2>/dev/null
 
-# If nothing — run project-seeder before proceeding
-# (invoke the project-seeder skill via the running host)
+# If nothing — run seeding-a-project before proceeding
+# (invoke the seeding-a-project skill via the running host)
 
 # Detect framework if testing.md didn't name it
 ls playwright.config.* cypress.config.* wdio.conf.* 2>/dev/null
@@ -205,7 +205,7 @@ Agent({
 ## Phase 8: Deliver + TMS sync
 
 ```bash
-# Commit, push, PR — via task-completion skill
+# Commit, push, PR — via completing-a-task skill
 git checkout -b automation/CASE-ID-short-slug
 git add tests/ test-specs/
 git commit -m "$(cat <<'EOF'
