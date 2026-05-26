@@ -15,3 +15,24 @@ jobs:
           node-version: "20"
       - name: Validate bundles
         run: node bin/validate-bundles.mjs
+
+  skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install skills-ref
+        run: pip install "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref"
+      - name: Validate skills against the Agent Skills spec
+        run: |
+          status=0
+          for dir in skills/*/; do
+            if [ -f "$dir/SKILL.md" ]; then
+              echo "::group::$dir"
+              skills-ref validate "$dir" || status=1
+              echo "::endgroup::"
+            fi
+          done
+          exit $status

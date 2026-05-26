@@ -6,15 +6,6 @@ compatibility: Requires Python 3.10+. Dependencies and Azure AD app are auto-con
 metadata:
   author: octobots
   version: "0.2.0"
-  dependencies:
-    pip:
-      - msgraph-sdk
-      - msgraph-beta-sdk
-      - msal
-      - azure-core
-  permissions:
-    network: true
-    filesystem: read-write
 ---
 
 # Microsoft Graph Skill
@@ -111,8 +102,9 @@ Sample YAML files in `samples/` describe pre-built queries that Claude can run b
 
 ## Authentication
 
-Scripts auto-install Python dependencies into `~/.msgraph-skill/.venv/` on first
-run — no manual `pip install` or venv creation needed. A built-in Azure AD app ID
+Scripts auto-install Python dependencies (from `requirements.txt`) into
+`~/.msgraph-skill/.venv/` on first run — no manual `pip install` or venv creation
+needed. A built-in Azure AD app ID
 is used by default, so no environment variables or Azure portal setup is required
 for most users.
 

@@ -3,10 +3,7 @@ name: issue-tracking
 description: Create, manage, and track issues in GitHub, Linear, or GitLab. Use when the user asks to "create an issue", "file a bug", "check issues", "update a ticket", "create an epic", or anything about issue/ticket management.
 license: Apache-2.0
 compatibility: Requires gh CLI for GitHub, or linear/glab CLI for other trackers
-allowed-tools:
-  - Bash(gh:*)
-  - Bash(linear:*)
-  - Bash(glab:*)
+allowed-tools: Bash(gh:*) Bash(linear:*) Bash(glab:*)
 metadata:
   author: octobots
   version: "0.1.0"
