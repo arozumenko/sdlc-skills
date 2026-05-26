@@ -90,9 +90,16 @@ function main() {
       for (const a of declaredAgents) if (!agents.has(a)) err(id, `unknown agent "${a}"`);
     }
 
+    // A briefing/overlay role may target any installed agent — shared (agents[])
+    // or bundle-local (localAgents[]). Build the combined roster once.
+    const roster = new Set([
+      ...declaredAgents,
+      ...(Array.isArray(b.localAgents) ? b.localAgents : []),
+    ]);
+
     for (const [role, rel] of Object.entries(b.briefings || {})) {
-      if (!Array.isArray(b.agents) || !b.agents.includes(role))
-        err(id, `briefing role "${role}" not in agents[]`);
+      if (!roster.has(role))
+        err(id, `briefing role "${role}" not in agents[] or localAgents[]`);
       if (!existsSync(join(dir, rel))) err(id, `briefing file missing: ${rel}`);
     }
 
@@ -122,8 +129,8 @@ function main() {
       if (!existsSync(join(dir, src))) err(id, `seed source missing: ${src}`);
 
     for (const [role, ov] of Object.entries(b.skillOverlays || {})) {
-      if (!Array.isArray(b.agents) || !b.agents.includes(role))
-        err(id, `skillOverlay role "${role}" not in agents[]`);
+      if (!roster.has(role))
+        err(id, `skillOverlay role "${role}" not in agents[] or localAgents[]`);
       for (const s of (ov && ov.add) || [])
         if (!skillIds.has(s))
           console.warn(`  • ${id}: skillOverlay add "${s}" not in catalog yet (pending content)`);
