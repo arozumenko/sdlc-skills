@@ -69,8 +69,8 @@ External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
 `systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
 upstream repos. The installer resolves each agent's declared skill list
 against `skills.json`, clones external repos on first install into
-`~/.cache/sdlc-skills/registry/`, and symlinks the subdir into your
-project's skills directory.
+`~/.cache/sdlc-skills/registry/`, and copies the subdir into your project's
+skills directory (or symlinks it with `--symlink`).
 
 ## What lands in your project
 
@@ -159,7 +159,7 @@ npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
 npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically
-# (monorepo + external, via git clone + symlink for externals)
+# (monorepo + external; externals are git-cloned then copied in — add --symlink to link instead)
 npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
 
 # Specific skills (overrides the auto-resolve)
@@ -208,9 +208,14 @@ section listing declared skills with their descriptions from
 would duplicate the preload). The block is idempotent on `--update` —
 re-runs replace in place, never duplicate.
 
-External skills are symlinked into the skills dir from the shared cache
-at `~/.cache/sdlc-skills/registry/<owner>__<repo>/`. Override the cache
-location with `SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`.
+External skills are cloned once into the shared cache at
+`~/.cache/sdlc-skills/registry/<owner>__<repo>/` (override with
+`SDLC_SKILLS_CACHE_DIR` or `XDG_CACHE_HOME`), then **copied** into the
+project's skills dir by default — so the install is self-contained and
+portable (git, zip, Docker, Windows, and sandboxed/jailed agent runtimes
+that don't follow symlinks all work). Pass **`--symlink`** to symlink from
+the cache instead (a live link, dedups across projects) when your runtime
+handles symlinks and you'd rather not duplicate the content.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
@@ -347,7 +352,8 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 Declared in `skills.json` with `repo:` + optional `subdir:`. The npx
 installer clones each into `~/.cache/sdlc-skills/registry/` on first
-install and symlinks the subdir into your project's skills dir. Native
+install and copies the subdir into your project's skills dir (or symlinks
+it with `--symlink`). Native
 IDE plugin paths do **not** fetch these — use the installer for the full
 catalog.
 
@@ -453,7 +459,7 @@ sdlc-skills/
    "name": "<name>"}`.
 3. **New external skill** → register in `skills.json` with
    `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
-   The installer will clone + symlink on first install.
+   The installer will clone + copy on first install (or symlink with `--symlink`).
 4. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 

@@ -62,8 +62,8 @@ This Gemini extension does **not** fetch them — only the monorepo skills
 listed above are available in this install.
 
 For the full experience (including external skills auto-fetched into
-`.claude/skills/` via git clone + symlink), run our installer once in the
-project:
+`.claude/skills/` via git clone + copy, or `--symlink`), run our installer
+once in the project:
 
 ```bash
 npx github:arozumenko/sdlc-skills init --target claude --agents <your-team>

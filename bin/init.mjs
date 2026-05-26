@@ -407,7 +407,7 @@ function shallowClone(repo, ref) {
   }
 }
 
-function installExternalSkill(entry, targetDir) {
+function installExternalSkill(entry, targetDir, useSymlink, update) {
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
   if (!clone) return { status: "error" };
@@ -427,16 +427,24 @@ function installExternalSkill(entry, targetDir) {
   }
   const skillsDir = join(CWD, targetDir, "skills");
   mkdirSync(skillsDir, { recursive: true });
-  const link = join(skillsDir, skillName);
-  if (existsSync(link) || lstatSync(link, { throwIfNoEntry: false })) {
-    // Already present. Don't overwrite unless --update (handled upstream).
-    return { status: "exists", name: skillName };
-  }
+  const dest = join(skillsDir, skillName);
+  const present = existsSync(dest) || lstatSync(dest, { throwIfNoEntry: false });
+  if (present && !update) return { status: "exists", name: skillName };
+  if (present && update) rmSync(dest, { recursive: true, force: true }); // clear prior symlink or copy
   try {
-    symlinkSync(src, link);
+    if (useSymlink) {
+      // Live link into the shared cache — power-user opt-in. Not portable
+      // across runtimes that don't follow symlinks or that jail to the
+      // project root (the target lives under ~/.cache).
+      symlinkSync(src, dest);
+    } else {
+      // Default: a self-contained copy, so the skill is present in the
+      // project tree itself (git/zip/Docker/sandbox/Windows-safe).
+      cpSync(src, dest, { recursive: true, dereference: true });
+    }
     return { status: "installed", name: skillName };
   } catch (err) {
-    console.error(`  ! symlink ${src} → ${link} failed: ${err.message}`);
+    console.error(`  ! ${useSymlink ? "symlink" : "copy"} ${src} → ${dest} failed: ${err.message}`);
     return { status: "error" };
   }
 }
@@ -515,12 +523,14 @@ function parseArgs(argv) {
     skills: null,
     targets: null,
     bundle: null,
+    symlink: false, // external skills: copy by default, symlink from cache if true
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--all") out.all = true;
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
+    else if (a === "--symlink") out.symlink = true;
     else if (a === "--bundle") out.bundle = (argv[++i] || "").trim();
     else if (a === "--agents") out.agents = splitList(argv[++i]);
     else if (a === "--skills") out.skills = splitList(argv[++i]);
@@ -556,6 +566,9 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
+    --symlink                  Symlink external skills from the shared cache
+                               instead of copying them (default: copy, which
+                               is self-contained and portable across runtimes)
     --yes                      Skip the interactive "detected IDE" prompt
     -h, --help                 Show this help
 
@@ -1278,9 +1291,9 @@ async function main() {
       }
     }
     for (const entry of externalSkills) {
-      const r = installExternalSkill(entry, t.dir);
+      const r = installExternalSkill(entry, t.dir, args.symlink, args.update);
       if (r.status === "installed") {
-        console.log(`      ✓ skill  ${r.name} (external: ${entry.repo})`);
+        console.log(`      ✓ skill  ${r.name} (external: ${entry.repo}${args.symlink ? ", symlinked" : ""})`);
         installed++;
       } else if (r.status === "exists") {
         console.log(`      — skill  ${r.name} (exists; use --update)`);
