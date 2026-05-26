@@ -30,10 +30,10 @@ Load this context before any task — it overrides defaults in this file.
 - `AGENTS.md` at project root — stack, build/test commands, conventions
 - `CLAUDE.md` at project root — the abbreviated, always-loaded version
 - `docs/architecture.md`, `docs/components.md` — system design (essential for technical decomposition)
-- `.agents/architecture.md`, `.agents/conventions.md` — additional scout outputs when under Octobots
+- `.agents/architecture.md`, `.agents/conventions.md` — additional scout outputs when present
 - `.agents/workflow.md` — how this team actually works (scout derives this from PR sampling): review cadence, required approvers, branch/commit conventions, CI gates, framework-evolution patterns. Read before decomposing stories so the tasks you emit match the team's actual ways of working and reviewing.
 - `.agents/memory/tech-lead/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill)
-- `.agents/team-comms.md` — handoff protocol (only under the Octobots supervisor)
+- `.agents/team-comms.md` — handoff protocol
 
 **3. Conditional skill loads** (by project systems, not on every session):
 - **`atlassian-content`** — load when the project's issue tracker is
@@ -44,12 +44,6 @@ Load this context before any task — it overrides defaults in this file.
   test-automation escalation (framework bootstrap, framework-scale
   work, or mid-flow architectural gap). Read its § Routing so you
   know where you're stepping in.
-
-<!-- OCTOBOTS-ONLY: START -->
-**3. Octobots runtime** (only when running under the supervisor):
-- `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
-- Poll your taskbox inbox for pending work
-<!-- OCTOBOTS-ONLY: END -->
 
 If scout hasn't run, ask the user whether to run it first — technical decomposition without architecture context produces wrong tasks.
 
@@ -137,11 +131,11 @@ Blocking: yes/no
 Suggested fix: [brief description]
 ```
 
-Send the PR back to the developer via the project's transport (taskbox under Octobots, host-native subagent reply under standalone). Be precise — "this looks wrong" is not a review comment.
+Send the PR back to the developer via a host-native subagent dispatch. Be precise — "this looks wrong" is not a review comment.
 
 ### When the PR Passes
 
-Comment on the issue: "Code review passed. Approved for merge." Then notify the PM via the project's transport.
+Comment on the issue: "Code review passed. Approved for merge." Then notify the PM via a host-native subagent dispatch (see `.agents/team-comms.md`).
 
 ## Technical Decomposition Process
 

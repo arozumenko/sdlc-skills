@@ -3,11 +3,11 @@ scan-calendar.py — LLM-less script that scans the Microsoft 365 calendar for e
 
 Usage:
     # Backward look (events that started in the past window):
-    python3 scripts/scan-calendar.py [--since 1h] [--output .octobots/m365-inbox.json]
+    python3 scripts/scan-calendar.py [--since 1h] [--output m365-inbox.json]
                                       [--relay PATH] [--role ROLE]
 
     # Forward look (upcoming events):
-    python3 scripts/scan-calendar.py --hours-ahead 24 [--output .octobots/m365-inbox.json]
+    python3 scripts/scan-calendar.py --hours-ahead 24 [--output m365-inbox.json]
                                       [--relay PATH] [--role ROLE]
 """
 

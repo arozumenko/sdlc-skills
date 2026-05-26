@@ -247,16 +247,12 @@ Files to CREATE:   AGENTS.md
                    .agents/{profile, architecture, conventions, testing, team-comms}.md
                    .agents/memory/<role>/project_briefing.md (per role)
                    .agents/onboarding.md
-                   .octobots/roles-manifest.yaml (Octobots-only)
 
 Roles to tune:     python-dev → [Persona] ([new focus])
                    js-dev → [Persona] ([new focus])
                    ...
 
 Memory to seed:    [N] role files — all roles get project context
-
-Infrastructure:    roles.py, supervisor.py, telegram-bridge.py will be updated
-                   to match the new team configuration.
 
 Proceed? [yes / no / adjust]
 ```
@@ -273,7 +269,7 @@ Execute everything approved in Phase 6. Report each file as you generate it: `�
 `sdlc-skills/skills/seeding-a-project/SKILL.md` for the generation flow, and
 the skill's `references/` directory for templates:
 
-- `references/templates.md` — CLAUDE.md / AGENTS.md / `.agents/{profile, architecture, conventions, testing}.md` templates, plus `.octobots/roles-manifest.yaml` and per-role `project_briefing.md` memory-seeding templates
+- `references/templates.md` — CLAUDE.md / AGENTS.md / `.agents/{profile, architecture, conventions, testing}.md` templates, plus per-role `project_briefing.md` memory-seeding templates
 - `references/team-comms-templates.md` — `.agents/team-comms.md` templates by host
 - `references/team-comms-workflow.md` — full Step 6.5 detection & generation procedure
 - `references/role-customization.md` — Step 7 persona/SOUL.md repurposing procedure
@@ -283,15 +279,12 @@ the skill's `references/` directory for templates:
 2. `AGENTS.md` — full reference, linked from CLAUDE.md. Update, don't overwrite.
 3. `.agents/` content files as needed (profile, architecture, conventions, testing, team-comms).
 
-`CLAUDE.md` lives at the project root. It is symlinked into worker workspaces by the supervisor at launch.
+`CLAUDE.md` lives at the project root.
 
-**7b — Generate `.octobots/roles-manifest.yaml`:**
-Use the template in `skills/seeding-a-project/references/templates.md`. Fill in all roles — customized and unchanged. This file is the input for the spawn readiness check.
+**7b — Tune SOUL.md and AGENT.md for repurposed roles:**
+See `skills/seeding-a-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, communication conventions, and restart protocol intact.
 
-**7c — Tune SOUL.md and AGENT.md for repurposed roles:**
-See `skills/seeding-a-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, taskbox commands, communication conventions, restart protocol intact.
-
-**7d — Seed role memory files:**
+**7c — Seed role memory files:**
 For **all roles** — not just customized ones — write a `project_briefing.md`
 curated entry at `.agents/memory/<role-id>/project_briefing.md` (with
 `type: project` frontmatter per the `memory` skill spec) and append/update
@@ -300,45 +293,14 @@ template in `skills/seeding-a-project/references/templates.md`. Write "My
 Role Focus" based on your actual understanding of what that role does on
 this project — not placeholder text.
 
-**7e — Generate `.agents/team-comms.md`:**
-Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`, taskbox and host-native alike; PM and PA point at it for all routing decisions.
+**7d — Generate `.agents/team-comms.md`:**
+Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`; PM and every routing-capable role point at it for all routing decisions.
 
 **Legacy marker cleanup.** Earlier iterations of this design used `<!-- SCOUT:TEAM-ROSTER:BEGIN -->` / `END` markers inside agent files. Those are gone. If a re-run encounters one, strip the marker block cleanly and log what you removed.
 
 ---
 
-## Phase 8: Infrastructure Consistency Check
-
-Run:
-```bash
-python3 octobots/scripts/check-spawn-ready.py --check infra-only
-```
-
-For each discrepancy in `roles.py`, `supervisor.py`, or `telegram-bridge.py`, fix it surgically and explain what changed:
-
-- **`roles.py` ROLE_ALIASES** — add persona aliases for new/renamed roles; remove stale persona aliases that no longer match any active role's persona.
-- **`roles.py` ROLE_DISPLAY** — update the shortname label for any role whose short alias changed.
-- **`supervisor.py` ROLE_THEME** — update the `name` field (short alias) for repurposed roles.
-- **`telegram-bridge.py` `cmd_team` tuples** — update the description string for repurposed roles.
-
-**Auto-fix** alias names and descriptions — these require no judgment. **Ask the engineer** before changing icons (subjective; changing them is optional).
-
-Re-run the check after fixes and report final pass/fail per item.
-
----
-
-## Phase 9: Spawn Readiness Check
-
-Run:
-```bash
-python3 octobots/scripts/check-spawn-ready.py
-```
-
-Print results as a numbered checklist. If any **critical** check fails, list what's blocking and what the engineer needs to do to resolve it. Do not declare "ready" until all critical checks pass.
-
----
-
-## Phase 10: Handoff
+## Phase 8: Handoff
 
 Three outputs, in order:
 
@@ -346,7 +308,6 @@ Three outputs, in order:
 - Date, what was found (stack, stage, issues count, GDD presence)
 - What was generated/modified (file list)
 - Which roles were tuned and why
-- Infrastructure changes made (roles.py, supervisor.py, telegram-bridge.py)
 - Open items (blocked issues, missing addons, decisions pending)
 - First recommended task with issue number
 
@@ -356,27 +317,12 @@ gh issue create --title "Onboarding [date]" --body "$(cat .agents/onboarding.md)
 ```
 If `gh` is unavailable, warn and skip — don't fail the session.
 
-**3. Notify team via taskbox** — one message per role, tailored to that role's work:
-
-```bash
-# Each message should use the role's persona name and describe their specific situation
-python octobots/skills/taskbox/scripts/relay.py send --from scout --to project-manager \
-  "You're Max, PM on [project]. [N] issues open, Phase [N] deadline [date]. \
-First unblocked task: #[N]. Your project briefing is the `project_briefing` entry in your memory — load it via the memory skill."
-
-python octobots/skills/taskbox/scripts/relay.py send --from scout --to python-dev \
-  "You're [Persona], [role description] on [project]. [Specific situation — e.g. 'No project files yet, issue #15 unblocks dev work.']. \
-Your project briefing is the `project_briefing` entry in your memory — load it via the memory skill."
-
-# ... one message per active role
-```
-
-Not "Read AGENTS.md" — give them the key facts right in the message.
+**3. Report to the operator** — summarize what was seeded and what each role should do first. Give the key facts directly in your terminal close-out message so the engineer can relay context to whichever agent they launch next. Routing for each role is recorded in `.agents/team-comms.md`.
 
 **4. Terminal close-out:**
 
 ```
-Seeding complete. Ready to spawn: ./supervisor.sh
+Seeding complete.
 
 ⭐ First step: Issue #[N] — [issue title]
    [One sentence on why nothing else can start until this is done.]

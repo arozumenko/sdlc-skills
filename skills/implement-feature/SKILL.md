@@ -30,7 +30,7 @@ them, verify everything, ship clean.
 `gh issue view <N>`. Identify acceptance criteria (definition of done),
 interface contract (input/output types if defined), dependencies, and what's
 explicitly in and out of scope. If anything is unclear, ask the tech-lead via
-taskbox *before* writing code. Post a `🔧 **Started**` comment so the team
+a subagent call or tracker comment *before* writing code. Post a `🔧 **Started**` comment so the team
 knows work is in progress.
 
 ### 2. Write test cases (TDD red phase)
@@ -74,13 +74,13 @@ The `completing-a-task` skill has the full protocol.
 ### 8. Document on ticket
 
 `✅ **Done**` comment with summary, test counts, PR number, and key
-architectural decisions. Notify PM via taskbox that the PR is ready for
+architectural decisions. Report in your final reply that the PR is ready for
 review.
 
 ## Command recipes
 
-All the test templates, verification commands, PR body heredocs, and taskbox
-notifications live in [references/commands.md](references/commands.md). Load
+All the test templates, verification commands, PR body heredocs, and handoff
+notification snippets live in [references/commands.md](references/commands.md). Load
 that file when you need exact command syntax.
 
 ## Anti-Patterns

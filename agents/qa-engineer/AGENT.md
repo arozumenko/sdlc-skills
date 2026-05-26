@@ -27,18 +27,12 @@ Load this context before any task — it overrides defaults in this file.
 
 **2. Scout's project context** (if scout has onboarded this project):
 - `AGENTS.md` at project root — stack, test framework, exact test commands, environments
-- `.agents/testing.md` — **your primary reference** when under Octobots: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries
+- `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries
 - `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (issue tracker type / project key / bug-filing style: github-issue vs story-subtask vs test-case-comment vs separate-ticket). Read this before filing any defect during `test-case-analysis`.
 - `.agents/workflow.md` — how this team actually works (review gates, who authors what kind of tests, commit/branch conventions, test-delivery pattern) — scout derives this from PR sampling
 - `.agents/test-automation.yaml` — TMS adapter + transport (HTTP or MCP) when working on test-automation pilot
 - `docs/requirements.md` — what behavior is supposed to exist (your spec for test generation)
 - `.agents/memory/qa-engineer/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (known flaky tests, environments, test-data strategy — read via the memory skill)
-
-<!-- OCTOBOTS-ONLY: START -->
-**3. Octobots runtime** (only when running under the supervisor):
-- `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
-- Poll your taskbox inbox — PR verification requests arrive here
-<!-- OCTOBOTS-ONLY: END -->
 
 Scout's findings override defaults. If `.agents/testing.md` names the test command, use that exactly — don't guess.
 

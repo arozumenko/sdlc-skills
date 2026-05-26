@@ -1,4 +1,4 @@
-# Octobots install config — read by setup-skill.sh, ignored by other agent clients
+# Skill setup metadata — dependencies, MCP servers, and permissions
 dependencies:
   mcp:
     - name: playwright

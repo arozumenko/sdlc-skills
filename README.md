@@ -6,15 +6,9 @@ bugfix, code review, task completion, memory, …), and a registry that
 pulls proven skills from Matt Pocock, Jesse Vincent (obra/superpowers),
 and Paul Hudson so you don't have to reinvent them.
 
-Two consumers:
-
-- **Any AI IDE** (Claude Code, Cursor, Gemini CLI, GitHub Copilot CLI,
-  Windsurf, Codex) — install via the npx one-shot or a native plugin
-  manifest. Use the agents + skills directly.
-- **[Octobots supervisor](https://github.com/arozumenko/octobots)** —
-  wraps this repo with orchestration (tmux TUI, taskbox, scheduler,
-  per-role git clones). `octobots/install.sh` delegates all content
-  resolution here.
+Install via the npx one-shot or a native plugin manifest and use the
+agents + skills directly in any AI IDE (Claude Code, Cursor, Gemini CLI,
+GitHub Copilot CLI, Windsurf, Codex).
 
 ## Architecture
 
@@ -33,8 +27,7 @@ flowchart TB
 
     subgraph consumers["consumers"]
         direction LR
-        ides["Stock AI IDEs<br/>Claude Code • Cursor<br/>Gemini CLI • Copilot CLI<br/>Windsurf"]
-        octobots["Octobots supervisor<br/>tmux TUI • taskbox<br/>scheduler • per-role clones"]
+        ides["AI IDEs<br/>Claude Code • Cursor<br/>Gemini CLI • Copilot CLI<br/>Windsurf"]
     end
 
     subgraph externals["upstream external skill sources"]
@@ -51,8 +44,6 @@ flowchart TB
     installer ==>|fetch at install time| ext_msft
 
     sdlc ==>|direct install via<br/>plugin manifest or npx| ides
-    sdlc ==>|install.sh delegates<br/>content to npx| octobots
-    octobots -.->|spawns agents in<br/>.claude/ runtime| ides
 ```
 
 (Node shapes convey grouping so colors aren't needed: `/ /` parallelograms
@@ -61,9 +52,8 @@ registry, `[[ ]]` subroutines for external sources. GitHub's Mermaid
 renderer uses theme-adaptive colors in both light and dark mode.)
 
 Agents are **self-describing** — each `agents/<name>/AGENT.md` carries
-its own metadata (role, group, theme, aliases, skills, model). Octobots
-reads it at runtime; IDE plugin systems read it at install time. Nothing
-duplicated.
+its own metadata (role, group, theme, aliases, skills, model). IDE plugin
+systems read it at install time. Nothing duplicated.
 
 External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
 `systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
@@ -94,24 +84,13 @@ your-project/
 │                             curated entries (incl. scout-seeded
 │                             project_briefing.md), daily/, snapshot.md
 │
-├── .octobots/                ← supervisor runtime state (only if Octobots is installed)
-│   ├── relay.db              taskbox SQLite
-│   ├── board.md              team whiteboard
-│   ├── workers/<role>/       isolated worker environments + git clones
-│   ├── roles/                project role overrides
-│   ├── registry/             cached third-party agent/skill clones
-│   ├── schedule.json         persistent cron jobs
-│   └── roles-manifest.yaml   check-spawn-ready.py input (scout-generated)
-│
 ├── AGENTS.md                 scout output: full team reference
 └── CLAUDE.md                 scout output: 80-line auto-loaded context
 ```
 
-**The rule.** `.agents/` holds content agents read. `.octobots/` holds
-supervisor runtime state. Nothing in `.agents/` needs the supervisor to
-function; nothing in `.octobots/` is meaningful without it. That split
-is why `.agents/memory/<role>/` works identically under Claude Code,
-Cursor, Gemini CLI, Copilot CLI, Windsurf, and Octobots.
+`.agents/` holds content every agent reads regardless of IDE. Nothing
+in `.agents/` is host-specific — it works identically under Claude Code,
+Cursor, Gemini CLI, Copilot CLI, and Windsurf.
 
 Scout (`scout` agent, run once when onboarding) populates everything
 under `.agents/` plus `AGENTS.md` / `CLAUDE.md` at the root. Re-run
@@ -119,14 +98,13 @@ scout whenever the stack evolves to refresh.
 
 ## Install — pick one path
 
-There are really two paths: the **full experience** (npx installer or
-Octobots) and the **monorepo-only fallbacks** (native IDE plugins for
-people who don't want to be happy).
+There are really two paths: the **full experience** (npx installer) and
+the **monorepo-only fallbacks** (native IDE plugins for people who don't
+want to be happy).
 
 | Path | Fetches external skills? | When to pick |
 |---|---|---|
 | **npx installer** ⭐ | ✅ Yes | Any IDE. Full catalog. One command. This is the happy path. |
-| **Octobots supervisor** ⭐ | ✅ Yes (delegates to npx) | You want multi-agent orchestration — tmux TUI, taskbox, scheduler, per-role git clones. |
 | Native IDE plugins | ❌ Monorepo only | You don't want Node installed. Trade-off: no external skills, manual team assembly. |
 
 > **Onboarding a test-automation pilot?** Existing framework, existing app,
@@ -138,10 +116,10 @@ people who don't want to be happy).
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
 > Gemini CLI, Copilot CLI) only see skills present in this repo's
 > `skills/` directory — they don't know how to fetch from upstream. The
-> npx installer and Octobots read `skills.json` and resolve external
-> dependencies automatically (Matt Pocock's TDD, Jesse Vincent's
-> debugging skills, Paul Hudson's Swift skills). If you want the full
-> catalog, use one of the ⭐ paths.
+> npx installer reads `skills.json` and resolves external dependencies
+> automatically (Matt Pocock's TDD, Jesse Vincent's debugging skills,
+> Paul Hudson's Swift skills). If you want the full catalog, use the
+> ⭐ path.
 
 ### 1. npx installer (recommended)
 
@@ -154,7 +132,7 @@ GitHub Copilot (all four IDE targets detected automatically).
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
 npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
 npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
-npx github:arozumenko/sdlc-skills init --bundle web-qa     # standalone manual-QA team (live browser testing via Playwright MCP)
+npx github:arozumenko/sdlc-skills init --bundle web-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 
 # Full catalog, all detected IDEs
@@ -185,7 +163,7 @@ ship today:
 |---|---|---|
 | `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
-| `web-qa` | 5 bundle-local agents (setup, tc-writer, orchestrator, executor, reporter) | Standalone manual-QA team — onboard an app, author test cases, run them live via Playwright MCP, and report. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
+| `web-qa` | 5 bundle-local agents (setup, tc-writer, orchestrator, executor, reporter) | Manual-QA team — onboard an app, author test cases, run them live via Playwright MCP, and report. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
@@ -255,24 +233,12 @@ compatibility. Four modes for handling the paired `SOUL.md`:
 Add `--dry-run` to preview, or `--no-normalize-model` to keep the
 original `model:` value. Full help: `init fix-copilot --help`.
 
-### 2. Octobots supervisor
-
-If you want multi-agent orchestration (tmux panes per role, SQLite
-taskbox for inter-role messaging, per-dev git clones, Rich TUI,
-scheduled jobs), install the [Octobots supervisor](https://github.com/arozumenko/octobots)
-into your project. Its `install.sh` runs the npx installer above as its
-content step, then layers `.octobots/` runtime on top.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/arozumenko/octobots/main/install.sh | bash
-```
-
-### 3. Monorepo-only fallbacks (for when you refuse to install Node)
+### 2. Monorepo-only fallbacks (for when you refuse to install Node)
 
 Each of these paths reads the native plugin manifest this repo ships and
 installs **only the skills present in `skills/`** — external skills
 (Matt Pocock's TDD, the superpowers skills, the twostraws Swift skills)
-are not fetched. If you want those, go back to path 1 or 2.
+are not fetched. If you want those, go back to path 1.
 
 **Claude Code plugin marketplace** — `.claude-plugin/marketplace.json`
 
@@ -302,7 +268,7 @@ loading.
 follows the AGENTS.md convention. Copilot CLI reads it when the repo is
 cloned into your project.
 
-### 4. agentskills.io / third-party consumption
+### 3. agentskills.io / third-party consumption
 
 Every skill under `skills/<name>/` follows the
 [agentskills.io](https://agentskills.io) spec — `SKILL.md` with
@@ -396,20 +362,12 @@ catalog.
 | `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `team-ios` overlay (`qa-engineer`) |
 | `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `team-ios` overlay (`qa-engineer`) |
 
-## Using outside Octobots
+## Using these agents and skills
 
-These agents and skills install cleanly into stock Claude Code / Cursor
-/ Windsurf / Copilot. A BA can draft stories, a tech-lead can review a
-PR, `plan-feature` and `bugfix-workflow` run end-to-end with just `git`
-and `gh`. A few pieces assume Octobots is running underneath — the
-shape of those assumptions is documented below.
-
-**Frontmatter extensions the supervisor owns:**
-
-| Key | Stock-Claude behavior |
-|---|---|
-| `workspace: clone` | Ignored. Without Octobots, devs share your working tree — coordinate merges manually. |
-| `skills: [taskbox, memory, ...]` | `taskbox` is bundled *inside* the Octobots supervisor — it's a no-op on stock Claude Code. `memory` is published here and works standalone. |
+These agents and skills install cleanly into Claude Code, Cursor,
+Windsurf, and Copilot CLI. A BA can draft stories, a tech-lead can
+review a PR, `plan-feature` and `bugfix-workflow` run end-to-end with
+just `git` and `gh`.
 
 **`@import` paths auto-loaded at session start:**
 
@@ -417,29 +375,14 @@ shape of those assumptions is documented below.
 @.agents/memory/<role>/snapshot.md
 ```
 
-Under Octobots the supervisor regenerates `snapshot.md` at every role
-launch (inlining the curated entries + recent daily logs). Under stock
-IDEs the import resolves to a missing file on first session and the
-agent falls back to reading `.agents/memory/<role>/MEMORY.md` +
-individual entries on demand — same memory, slightly more work per
-session. Nothing breaks either way.
+On first session the import resolves to a missing file and the agent
+falls back to reading `.agents/memory/<role>/MEMORY.md` + individual
+entries on demand. Once the memory skill has been used the snapshot
+file exists and is loaded automatically.
 
-**Shell commands that assume the supervisor:**
-
-```bash
-python octobots/skills/taskbox/scripts/relay.py send --from scout --to pm "…"
-```
-
-Hard-coded taskbox references. On stock Claude Code they fail with "No
-such file or directory." Treat them as verbal-handoff prompts when
-running standalone.
-
-**Runs unchanged on stock Claude Code:**
-
-- Every agent works as a subagent (no taskbox messages sent).
-- Every `skills/<name>/` skill — none of them depend on the supervisor.
-- Developer agents work on your single working tree; coordinate merges
-  manually.
+Every agent works as a subagent dispatched by the host IDE. Every
+`skills/<name>/` skill is self-contained. Developer agents work on your
+working tree; coordinate merges manually when multiple devs are active.
 
 ## Repository layout
 
@@ -484,8 +427,7 @@ sdlc-skills/
 
 1. **New agent** → create `agents/<name>/AGENT.md` (with YAML frontmatter:
    `name`, `description`, `model`, `color`, `group`, `theme`, `aliases`,
-   `skills`) and `agents/<name>/SOUL.md`. Octobots reads the frontmatter
-   at runtime for tmux panes / aliases; no separate registry needed.
+   `skills`) and `agents/<name>/SOUL.md`. No separate registry needed.
 2. **New monorepo skill** → create `skills/<name>/SKILL.md` with
    agentskills.io frontmatter (`name`, `description`). Supporting files
    go in `skills/<name>/references/` or `skills/<name>/scripts/`. Register

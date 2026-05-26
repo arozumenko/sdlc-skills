@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Octobots Obsidian vault CLI — headless second-brain operations.
+"""Obsidian vault CLI — headless second-brain operations.
 
 See ../SKILL.md for the full reference. All commands respect:
-    --vault <path>     overrides $OBSIDIAN_VAULT_PATH (falls back to $OCTOBOTS_VAULT_PATH)
+    --vault <path>     overrides $OBSIDIAN_VAULT_PATH
     --role <name>      namespace for agent-internal pending state (default: "default")
 
 Stdlib only. ripgrep used if available, else falls back to grep.
@@ -136,8 +136,7 @@ class Vault:
         return self.root / "open-loops-archive" / f"{date.strftime('%Y-%m')}.md"
 
     def people_pending_path(self) -> Path:
-        # Vault-local agent state. Hidden dir travels with the vault so the
-        # skill works identically in standalone installs and inside octobots.
+        # vault path is resolved from --vault or $OBSIDIAN_VAULT_PATH.
         base = self.root / ".obsidian-vault" / self.role
         base.mkdir(parents=True, exist_ok=True)
         return base / "people-pending.md"
@@ -147,7 +146,6 @@ def resolve_vault(arg_vault: str | None, arg_role: str | None) -> Vault:
     vault_str = (
         arg_vault
         or os.environ.get("OBSIDIAN_VAULT_PATH")
-        or os.environ.get("OCTOBOTS_VAULT_PATH")
         or ""
     )
     if not vault_str:
@@ -155,7 +153,7 @@ def resolve_vault(arg_vault: str | None, arg_role: str | None) -> Vault:
     root = Path(vault_str).expanduser().resolve()
     if not root.is_dir():
         die(f"vault path is not a directory: {root}")
-    role = arg_role or os.environ.get("OCTOBOTS_ID") or "default"
+    role = arg_role or "default"
     return Vault(root=root, role=role)
 
 
@@ -859,9 +857,9 @@ def cmd_validate(vault: Vault, args: argparse.Namespace) -> int:
 # ────────────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vault.py", description="Octobots Obsidian vault CLI")
-    p.add_argument("--vault", help="vault path (default: $OCTOBOTS_VAULT_PATH)")
-    p.add_argument("--role", help="role name (default: $OCTOBOTS_ID)")
+    p = argparse.ArgumentParser(prog="vault.py", description="Obsidian vault CLI")
+    p.add_argument("--vault", help="vault path (default: $OBSIDIAN_VAULT_PATH)")
+    p.add_argument("--role", help='role name (default: "default")')
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # new

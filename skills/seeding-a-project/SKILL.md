@@ -1,6 +1,6 @@
 ---
 name: seeding-a-project
-description: Generate AGENTS.md and .octobots/ configuration files for a new project. Use when the user asks to "seed the project", "onboard this repo", "generate project config", "create AGENTS.md", or after the scout has explored the codebase.
+description: Generate AGENTS.md and .agents/ configuration files for a new project. Use when the user asks to "seed the project", "onboard this repo", "generate project config", "create AGENTS.md", or after the scout has explored the codebase.
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Project Seeder
 
-Generate the configuration files that octobots roles need to work in a
+Generate the configuration files that agent roles need to work in a
 project.
 
 ## What Gets Generated
@@ -19,19 +19,17 @@ project.
 project-root/
 ├── CLAUDE.md                     ← Auto-loaded by Claude Code: brief project context
 ├── AGENTS.md                     ← Full team reference: stack, commands, conventions
-├── .agents/                      ← IDE-neutral agent content (every agent reads)
-│   ├── profile.md                ← Quick-reference project card
-│   ├── workflow.md               ← How the team actually works (PR sampling — Step 0.5)
-│   ├── team-comms.md             ← Who's on the team and how to route work (Step 6.5)
-│   ├── architecture.md           ← System design map (if complex enough)
-│   ├── conventions.md            ← Detected coding standards
-│   ├── testing.md                ← Test infrastructure details
-│   ├── onboarding.md             ← Scout's own audit trail
-│   └── memory/<role-id>/
-│       ├── MEMORY.md             ← Index (add a line for each entry)
-│       └── project_briefing.md   ← Per-role project briefing (Step 7c)
-└── .octobots/                    ← Octobots supervisor runtime state (only if Octobots is installed)
-    └── roles-manifest.yaml       ← Input for spawn readiness check (Step 7b)
+└── .agents/                      ← IDE-neutral agent content (every agent reads)
+    ├── profile.md                ← Quick-reference project card
+    ├── workflow.md               ← How the team actually works (PR sampling — Step 0.5)
+    ├── team-comms.md             ← Who's on the team and how to route work (Step 6.5)
+    ├── architecture.md           ← System design map (if complex enough)
+    ├── conventions.md            ← Detected coding standards
+    ├── testing.md                ← Test infrastructure details
+    ├── onboarding.md             ← Scout's own audit trail
+    └── memory/<role-id>/
+        ├── MEMORY.md             ← Index (add a line for each entry)
+        └── project_briefing.md   ← Per-role project briefing (Step 7c)
 ```
 
 Not every project needs all files. Skip what's not relevant.
@@ -45,8 +43,7 @@ Each major step has a focused reference file:
   procedure
 - **[references/templates.md](references/templates.md)** — templates
   for every generated file (CLAUDE.md / AGENTS.md / profile /
-  conventions / testing / architecture / roles-manifest.yaml /
-  role-memory seeding)
+  conventions / testing / architecture / role-memory seeding)
 - **[references/team-comms-templates.md](references/team-comms-templates.md)**
   — `.agents/team-comms.md` templates by host
 - **[references/team-comms-workflow.md](references/team-comms-workflow.md)**
@@ -55,8 +52,6 @@ Each major step has a focused reference file:
   — full Step 6.8 procedure (tool whitelists for restrictive hosts)
 - **[references/role-overrides.md](references/role-overrides.md)** —
   full Step 6.9 procedure (role substitutions when agents are missing)
-- **[references/deployment-modes.md](references/deployment-modes.md)**
-  — full Step 6.95 procedure (OCTOBOTS / STANDALONE marker stripping)
 - **[references/role-customization.md](references/role-customization.md)**
   — full Step 7 procedure (persona repurposing for non-default stacks)
 
@@ -183,14 +178,12 @@ strategy, CI test pipeline, coverage tools, known flaky areas.
 
 ## Step 6.5 — Generate .agents/team-comms.md
 
-Every project — taskbox *or* host-native — gets a scout-generated
-`.agents/team-comms.md` that names the transport, the installed
-personas, and the exact invocation syntax.
+Every project gets a scout-generated `.agents/team-comms.md` that
+names the host, the installed personas, and the exact invocation syntax.
 
 **Full procedure** — host detection, persona enumeration, template
-selection, taskbox-skill injection, Copilot capability declaration,
-idempotence rules — lives in
-**[references/team-comms-workflow.md](references/team-comms-workflow.md)**.
+selection, Copilot capability declaration, idempotence rules — lives
+in **[references/team-comms-workflow.md](references/team-comms-workflow.md)**.
 Templates live in
 **[references/team-comms-templates.md](references/team-comms-templates.md)**.
 
@@ -232,31 +225,14 @@ its dedicated agent installed.
 idempotence rules, per-agent injection locations, report format —
 lives in **[references/role-overrides.md](references/role-overrides.md)**.
 
-## Step 6.95 — Deployment-mode detection
-
-Source agent files carry marker-bracketed regions for Octobots-only
-and standalone-only guidance. Scout detects which mode the target
-project is in (Octobots / taskbox / standalone) and strips the
-inactive mode's bracketed regions from every installed agent file.
-It then records the detected mode in `.agents/profile.md` §
-Deployment mode.
-
-Idempotent and reversible: re-running the installer restores source
-content; re-running scout in a different mode re-strips accordingly.
-
-**Full procedure** — marker conventions (paired vs standalone),
-detection signals, strip procedure, idempotence rules, report
-format — lives in
-**[references/deployment-modes.md](references/deployment-modes.md)**.
-
 ## Step 7 — Role customization (non-default stacks)
 
 Only runs when the detected stack doesn't match the default role set
 (e.g. game engines, Rust CLIs, data science). Skip entirely if
 defaults fit.
 
-**Full procedure** — SOUL.md / AGENT.md rewrites, `roles-manifest.yaml`
-generation, role memory seeding — lives in
+**Full procedure** — SOUL.md / AGENT.md rewrites, role memory seeding —
+lives in
 **[references/role-customization.md](references/role-customization.md)**.
 
 ---
@@ -276,13 +252,10 @@ wc -l CLAUDE.md  # should be under 80 lines
 wc -l AGENTS.md  # should be under 200 lines
 
 # No secrets leaked anywhere scout wrote
-grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .agents/ .octobots/ 2>/dev/null || echo "clean"
+grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .agents/ 2>/dev/null || echo "clean"
 
 # Bundle blocks survived regeneration (paired START/END markers, if any)
 grep -c "<!-- BUNDLE:.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
-
-# roles-manifest.yaml generated under .octobots/ (if roles were customized and Octobots is in play)
-ls .octobots/roles-manifest.yaml 2>/dev/null
 
 # Agent tool whitelists wired (only expected under Copilot CLI / restrictive hosts)
 if ls .github/agents/*.agent.md >/dev/null 2>&1; then
@@ -292,10 +265,4 @@ fi
 # Memory files present and non-empty for all roles
 ls .agents/memory/
 find .agents/memory -name 'project_briefing.md' -exec wc -l {} +
-```
-
-Run the full readiness check (Octobots only):
-
-```bash
-python3 octobots/scripts/check-spawn-ready.py
 ```

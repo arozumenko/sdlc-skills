@@ -12,7 +12,7 @@ Usage from other scripts:
     client = get_client(beta=True) # beta GraphServiceClient
 
 Environment variables (can also be set in .env at project root or skill root):
-    MSGRAPH_CLIENT_ID  - Azure AD app client ID (default: octobots public client)
+    MSGRAPH_CLIENT_ID  - Azure AD app client ID (default: public client)
     MSGRAPH_TENANT_ID  - Azure AD tenant ID (default: "common" for multi-tenant)
 """
 

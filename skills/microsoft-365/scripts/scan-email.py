@@ -3,7 +3,7 @@ scan-email.py — LLM-less script that scans the Microsoft 365 inbox for new mes
 
 Usage:
     python3 scripts/scan-email.py [--since 1h] [--sender boss@company.com]
-                                   [--output .octobots/m365-inbox.json]
+                                   [--output m365-inbox.json]
                                    [--relay PATH] [--role ROLE]
 """
 

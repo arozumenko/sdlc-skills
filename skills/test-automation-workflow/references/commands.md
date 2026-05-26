@@ -123,13 +123,12 @@ Agent({
 # Fire N Agent calls in one message; collect paths; verify files exist.
 ```
 
-### Taskbox / Copilot / host-native
+### Copilot / other hosts
 
 Use the host's equivalent of `runSubagent` / `task` / `Agent`. Pass the
 same prompt. The `qa-engineer` persona lives in `.github/agents/`
-(Copilot), `.claude/agents/` (Claude), or `.octobots/agents/`
-(taskbox). The `test-case-analysis` skill it loads lives under the
-matching `.../skills/` path.
+(Copilot) or `.claude/agents/` (Claude Code). The `test-case-analysis`
+skill it loads lives under the matching `.../skills/` path.
 
 **Collecting results** (critical for background / parallel runs):
 

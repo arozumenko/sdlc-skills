@@ -38,7 +38,7 @@ cp -r skills/seeding-a-project .claude/skills/seeding-a-project   # or ~/.claude
 ## Contents
 
 - [`SKILL.md`](SKILL.md) — instructions
-- [`references/`](references/) — templates, role overrides, deployment modes, team-comms (loaded on demand)
+- [`references/`](references/) — templates, role overrides, team-comms (loaded on demand)
 
 ## Learn more
 

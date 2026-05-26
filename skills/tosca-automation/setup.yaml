@@ -1,4 +1,4 @@
-# Octobots install config — read by setup-skill.sh, ignored by other agent clients.
+# Skill setup metadata — dependencies, MCP servers, and permissions.
 #
 # No `mcp:` entries: the `ToscaCloudMcpServer` that this skill talks to is
 # tenant-specific (the server URL embeds the tenant hostname + space ID).

@@ -12,11 +12,7 @@ tags: []
 
 ## Profile
 
-
-
 ## Open items
-
-
 
 ## Recent signals
 ```dataview

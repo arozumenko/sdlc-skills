@@ -2,7 +2,7 @@
 name: obsidian-vault
 description: Headless, file-system Obsidian vault operations (no Obsidian app needed). Use when the user says "save to vault", "log this note", "find my notes about X", "what's in my inbox", "open loops", or when filing an incoming signal (email/chat/memo) or updating people/project/meeting notes.
 license: Apache-2.0
-compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH (or legacy $OCTOBOTS_VAULT_PATH). ripgrep recommended (falls back to grep).
+compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH (or legacy $VAULT_PATH). ripgrep recommended (falls back to grep).
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
@@ -12,7 +12,7 @@ metadata:
 
 Operate the user's Obsidian vault as a queryable second-brain — headlessly. The vault is plain markdown plus YAML frontmatter; the agent reads and writes files directly. Obsidian itself is for the *user* to browse the result later.
 
-This skill is self-contained and stdlib-only. It pairs well with an agent-internal memory skill (e.g. the `memory` skill in octobots), but doesn't require one:
+This skill is self-contained and stdlib-only. It pairs well with an agent-internal memory skill (e.g. the `memory` skill), but doesn't require one:
 
 | Where | What goes here | Who reads it |
 |---|---|---|
@@ -21,7 +21,7 @@ This skill is self-contained and stdlib-only. It pairs well with an agent-intern
 
 If unsure where something belongs: short-lived agent thought → memory; user might want to read it later → vault.
 
-The CLI is `scripts/vault.py`. Vault path comes from `$OBSIDIAN_VAULT_PATH` (fallback: `$OCTOBOTS_VAULT_PATH`) or `--vault`; the skill is a no-op if unset. Output is human-readable on stdout; errors → stderr; non-zero exit on failure.
+The CLI is `scripts/vault.py`. Vault path comes from `$OBSIDIAN_VAULT_PATH` or `--vault`; the skill is a no-op if unset. Output is human-readable on stdout; errors → stderr; non-zero exit on failure.
 
 ## Vault layout
 
@@ -102,7 +102,7 @@ The wikilink convention means a single signal can be filed in *one* place and re
 
 ## CLI commands
 
-All commands respect `--vault <path>` (overrides env) and `--role <name>` (defaults to `$OCTOBOTS_ID`).
+All commands respect `--vault <path>` (overrides env) and `--role <name>` (defaults to the agent's role name).
 
 ### Filing & creation
 
@@ -195,13 +195,13 @@ Bases require Obsidian. For headless queries the skill uses `ripgrep` over front
 
 ```bash
 # All notes tagged urgent
-rg -l '^tags:.*urgent' "$OCTOBOTS_VAULT_PATH"
+rg -l '^tags:.*urgent' "$OBSIDIAN_VAULT_PATH"
 
 # All notes with status: inbox
-rg -l '^status: inbox' "$OCTOBOTS_VAULT_PATH"
+rg -l '^status: inbox' "$OBSIDIAN_VAULT_PATH"
 
 # Backlinks to a person (substitute the wikilink target)
-rg -l '\[\[people/anna-petrenko\]\]' "$OCTOBOTS_VAULT_PATH"
+rg -l '\[\[people/anna-petrenko\]\]' "$OBSIDIAN_VAULT_PATH"
 ```
 
 `vault.py find` wraps these patterns. Don't roll your own grep — use the CLI so the schema stays consistent.

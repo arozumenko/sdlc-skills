@@ -33,16 +33,10 @@ Load this context before any task — it overrides defaults in this file.
 - `.agents/testing.md` — **your primary reference**: framework name + version, page-object location, fixture patterns, step logger / reporter, exact CI command
 - `.agents/test-automation.yaml` — TMS adapter + transport, plus the framework block (language, runner, paths, env file)
 - `.agents/workflow.md` — how this team actually works (review gates, branch/commit conventions, whether tests ship with features or separately, typical PR size) — scout derives this from PR sampling; look here when deciding how to structure your PR
-- `.agents/conventions.md` — detected coding patterns (when under Octobots)
+- `.agents/conventions.md` — detected coding patterns
 - `.agents/architecture.md` — system surfaces your tests will touch
 - `.agents/memory/test-automation-engineer/project_briefing.md` — project-specific briefing scout seeded (framework conventions, common pitfalls, CI quirks — read via the memory skill)
-- `.agents/team-comms.md` — handoff protocol (only under the Octobots supervisor)
-
-<!-- OCTOBOTS-ONLY: START -->
-**3. Octobots runtime** (only when running under the supervisor):
-- `OCTOBOTS.md` at your worker root — taskbox ID, relay commands
-- Poll your taskbox inbox — AFS handoffs arrive here
-<!-- OCTOBOTS-ONLY: END -->
+- `.agents/team-comms.md` — handoff protocol
 
 Scout's findings override defaults. Match `.agents/testing.md` exactly — framework version, naming, page-object style, run commands. Before writing a line, read three neighboring tests.
 
@@ -242,8 +236,7 @@ Follow [`completing-a-task`](../../skills/completing-a-task/):
 2. Push → `gh pr create` with title `test(CASE-ID): <one-line-summary>`
 3. Link the originating story / case in the PR body
 4. Comment on the story with the PR URL
-5. Notify — in taskbox to the PM, or in the reply to the caller if
-   running host-native
+5. Notify the PM in your reply to the caller
 
 Then update the TMS execution record through the configured adapter
 (see [`tms-adapters.md`](../../skills/test-automation-workflow/references/tms-adapters.md))
