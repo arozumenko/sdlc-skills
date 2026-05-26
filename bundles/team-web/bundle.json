@@ -12,7 +12,8 @@
     "test-automation-engineer": "briefings/test-automation-engineer.md"
   },
   "skillOverlays": {
-    "tech-lead": { "add": ["code-review-excellence"] },
+    "tech-lead": { "add": ["fastapi", "vercel-react-best-practices"] },
+    "python-dev": { "add": ["fastapi"] },
     "js-dev": { "add": ["vercel-react-best-practices"] }
   },
   "instructions": "instructions.md",
