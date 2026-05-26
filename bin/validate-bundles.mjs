@@ -80,10 +80,11 @@ function main() {
     if (b.id !== id) err(id, `manifest id "${b.id}" != directory name "${id}"`);
     if (!existsSync(join(dir, "README.md"))) err(id, "missing README.md");
 
-    if (!Array.isArray(b.agents) || b.agents.length === 0) {
-      err(id, "`agents` must be a non-empty array");
+    const hasLocal = Array.isArray(b.localAgents) && b.localAgents.length > 0;
+    if (!Array.isArray(b.agents) || (b.agents.length === 0 && !hasLocal)) {
+      err(id, "`agents` must be a non-empty array (or provide localAgents)");
     } else {
-      for (const a of b.agents) if (!agents.has(a)) err(id, `unknown agent "${a}"`);
+      for (const a of b.agents || []) if (!agents.has(a)) err(id, `unknown agent "${a}"`);
     }
 
     for (const [role, rel] of Object.entries(b.briefings || {})) {
@@ -114,6 +115,9 @@ function main() {
       if (!existsSync(join(dir, "agents", la, "AGENT.md")))
         err(id, `localAgent "${la}" missing agents/${la}/AGENT.md`);
 
+    for (const src of Object.keys(b.seed || {}))
+      if (!existsSync(join(dir, src))) err(id, `seed source missing: ${src}`);
+
     for (const [role, ov] of Object.entries(b.skillOverlays || {})) {
       if (!Array.isArray(b.agents) || !b.agents.includes(role))
         err(id, `skillOverlay role "${role}" not in agents[]`);
@@ -122,8 +126,10 @@ function main() {
           console.warn(`  • ${id}: skillOverlay add "${s}" not in catalog yet (pending content)`);
     }
 
-    if (errorCount === before)
-      console.log(`  ✓ ${id} (${(b.agents || []).length} agents)`);
+    if (errorCount === before) {
+      const n = (b.agents || []).length + (b.localAgents || []).length;
+      console.log(`  ✓ ${id} (${n} agents)`);
+    }
   }
 
   if (errorCount > 0) {
