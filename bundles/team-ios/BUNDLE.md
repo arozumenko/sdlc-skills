@@ -1,7 +1,7 @@
 ---
 name: iOS Team
 description: iOS delivery team — Swift/SwiftUI development, QA, and core roles.
-owner: AIRUN
+owner: Artem Rozumenko
 ---
 
 See [`README.md`](README.md) for the roster, install steps, and how the team works.
