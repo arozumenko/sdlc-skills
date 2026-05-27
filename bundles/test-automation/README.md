@@ -11,6 +11,91 @@ merge gate.
 npx github:arozumenko/sdlc-skills init --bundle test-automation
 ```
 
+The pipeline runs in **three phases**. You launch `scout` once, then drive
+**Tal** directly for every automation task; Tal dispatches the analyst →
+implementer → reviewer pipeline as subagents.
+
+**Install (once)** — `npx github:arozumenko/sdlc-skills init --bundle test-automation`.
+Drops the four agents into `.claude/`, pulls their skills (incl.
+`test-automation-workflow` + `test-case-analysis`), wires the memory/context
+hooks, and splices `instructions.md` into `AGENTS.md`.
+
+**Phase 1 — Inception (`scout`, once per repo).** Launch scout: _"Use the
+scout agent to onboard this repo."_ It asks you what it can't infer,
+explores the repo, then generates the project config — `AGENTS.md` plus the
+`.agents/` set, recording the test framework, TMS adapter, base branch,
+merge policy, and credential matrix into `profile.md` / `workflow.md`, and
+seeding a per-role briefing under `.agents/memory/<role>/`. **Why it's
+first:** if the project isn't seeded, Tal pauses and asks for a scout run
+before doing anything else — the whole pipeline reads this config.
+
+**Phase 2 — Usage (Tal runs the pipeline).** Drop a TMS case on Tal: _"Use
+the test-automation-lead agent to automate TC-1234."_ He routes it through
+the **analyst** (`qa-engineer` writes the AFS) → the
+**`ready-for-automation` gate** → the **implementer**
+(`test-automation-engineer` opens a PR + Run Report) → the **reviewer**
+(`qa-engineer`, fresh session), then merges, files follow-ups, back-writes
+the TMS, and reports to you. **The logic:** each subagent boots from a fresh
+context that the `agent-start` hook seeds with the shared `.agents/*` config
+and its own memory — so the analyst, implementer, and reviewer already know
+the framework, merge policy, and TMS adapter.
+
+**Phase 3 — Reinforcement (assisted; owned by `scout`, not Tal).** Two
+moving parts, and only one is automatic:
+- **Replay is automatic.** The hooks re-inject each role's memory snapshot
+  and the shared `.agents/*` config at every dispatch (survives `/clear`,
+  compaction, resume) — it only replays what's already written.
+- **Capture is assisted.** The pipeline agents jot durable facts (framework
+  quirks, recurring flake causes, review patterns) into
+  `.agents/memory/<role>/` when worth keeping, and you periodically **re-run
+  `scout`** to refresh the shared config + briefings — scout re-reads the
+  **code, PR history, and (via the `session-retrospective` skill) past agent
+  sessions**, proposes the delta, and **waits for your ack**.
+  Tal orchestrates the pipeline; scout owns the durable project lens, so the
+  refresh is a scout job.
+
+**Note:** there is no automatic mining of past chat or sub-agent transcripts
+— refinement comes from re-running scout against the codebase and from
+agent-curated memory, not from replaying conversation logs.
+
+### How it flows
+
+```mermaid
+flowchart TD
+    install(["npx … init --bundle test-automation"]) --> scout
+
+    subgraph p1["Phase 1 — Inception · you launch scout (once per repo)"]
+        scout["scout (kit) — interview + explore"]
+        seed[/"project config: AGENTS.md + .agents/<br/>(framework, TMS, base branch,<br/>merge policy, per-role briefings)"/]
+        scout --> seed
+    end
+
+    subgraph p2["Phase 2 — Usage · you launch Tal per case"]
+        tal["test-automation-lead (Tal)<br/>orchestrator — routes + merge gate"]
+        analyst["qa-engineer (analyst) — writes the AFS"]
+        gate{"AFS status =<br/>ready-for-automation?"}
+        impl["test-automation-engineer<br/>PR + Run Report"]
+        review["qa-engineer (reviewer, fresh)<br/>APPROVED / CHANGES_REQUESTED"]
+        merge(["Tal merges, back-writes TMS, reports"])
+        stop(["handled, never forwarded"])
+        tal --> analyst --> gate
+        gate -->|"yes"| impl --> review --> merge
+        gate -->|"blocked / defect / un-automatable"| stop
+    end
+
+    seed -->|"pipeline boots from this"| tal
+    case[/"a TMS case"/] --> tal
+
+    subgraph p3["Phase 3 — Reinforcement · assisted (you re-run scout)"]
+        mem[(".agents/memory/&lt;role&gt;/<br/>briefings · curated entries · daily log")]
+    end
+
+    tal -. "jot learnings (assisted)" .-> mem
+    review -. "jot learnings (assisted)" .-> mem
+    scout -. "re-run scout to refresh —<br/>proposes delta, waits for ack" .-> mem
+    mem == "auto-replayed at every dispatch<br/>(survives /clear · compact · resume)" ==> tal
+```
+
 ## Roster
 
 | Role | Agent | Source | Job |
