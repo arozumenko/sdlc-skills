@@ -17,7 +17,9 @@ const EDIT_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 function safeParse(line) { try { return JSON.parse(line); } catch { return null; } }
 
 export function encodeProjectPath(cwd) {
-  // Claude Code names the project dir by replacing path separators and dots.
+  // Claude Code names the project dir by replacing path separators and dots
+  // with dashes. Paths with spaces or other special characters may not match
+  // this fast path; resolveProjectDir falls back to a cwd-field scan.
   return cwd.replace(/[/.]/g, '-');
 }
 
@@ -62,18 +64,20 @@ function userTextOf(rec) {
 }
 
 export function detectRetries(toolCalls) {
+  // Count repeat events: for each call, whether the same tool+target recurs
+  // within the look-ahead window. counts[key] = number of repeats (0 = none).
   const counts = {};
   for (let i = 0; i < toolCalls.length; i++) {
     for (let j = i + 1; j < toolCalls.length && j <= i + RETRY_WINDOW; j++) {
       if (toolCalls[i].tool === toolCalls[j].tool &&
           toolCalls[i].target && toolCalls[i].target === toolCalls[j].target) {
         const key = `${toolCalls[i].tool} on ${toolCalls[i].target}`;
-        counts[key] = (counts[key] || 1) + 1;
+        counts[key] = (counts[key] || 0) + 1;
         break;
       }
     }
   }
-  return Object.entries(counts).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]);
+  return Object.entries(counts).filter(([, n]) => n >= 1).sort((a, b) => b[1] - a[1]);
 }
 
 export function extractSignals(records) {
@@ -82,16 +86,15 @@ export function extractSignals(records) {
   const fileChurn = {};       // path -> count
   const corrections = [];     // {turn, text}
   const idToName = {};        // tool_use_id -> tool name
-  let userTurns = 0, assistantTurns = 0, lastAssistantHadTool = false, turn = 0;
+  let userTurns = 0, assistantTurns = 0, sawAssistant = false, turn = 0;
 
   for (const rec of records) {
     if (rec.type === 'assistant') {
       assistantTurns++; turn++;
+      sawAssistant = true;
       const blocks = Array.isArray(rec.message?.content) ? rec.message.content : [];
-      let hadTool = false;
       for (const b of blocks) {
         if (b?.type !== 'tool_use') continue;
-        hadTool = true;
         if (b.id) idToName[b.id] = b.name;
         const target = b.input?.file_path || b.input?.path || b.input?.command || '';
         toolCalls.push({ turn, tool: b.name, target: String(target).slice(0, 80) });
@@ -99,7 +102,6 @@ export function extractSignals(records) {
           fileChurn[b.input.file_path] = (fileChurn[b.input.file_path] || 0) + 1;
         }
       }
-      lastAssistantHadTool = hadTool;
     } else if (rec.type === 'user') {
       userTurns++; turn++;
       const blocks = rec.message?.content;
@@ -112,7 +114,7 @@ export function extractSignals(records) {
         }
       }
       const text = userTextOf(rec);
-      if (text && lastAssistantHadTool && CORRECTION_RE.test(text) &&
+      if (text && sawAssistant && CORRECTION_RE.test(text) &&
           corrections.length < MAX_CORRECTIONS_PER_SESSION) {
         corrections.push({ turn, text: text.slice(0, MAX_QUOTE_LEN).replace(/\s+/g, ' ').trim() });
       }

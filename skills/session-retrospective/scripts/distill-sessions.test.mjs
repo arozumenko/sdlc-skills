@@ -43,6 +43,18 @@ test('detectRetries flags a repeated tool+target', () => {
   const r = detectRetries(calls);
   assert.equal(r.length, 1);
   assert.equal(r[0][0], 'Bash on npm test');
+  assert.equal(r[0][1], 1);
+});
+
+test('detectRetries counts multiple repeats of the same tool+target', () => {
+  const calls = [
+    { turn: 1, tool: 'Bash', target: 'npm test' },
+    { turn: 2, tool: 'Bash', target: 'npm test' },
+    { turn: 3, tool: 'Bash', target: 'npm test' },
+  ];
+  const r = detectRetries(calls);
+  assert.equal(r.length, 1);
+  assert.equal(r[0][1], 2);
 });
 
 test('renderDigest is bounded markdown with session + sub-agent sections', () => {
