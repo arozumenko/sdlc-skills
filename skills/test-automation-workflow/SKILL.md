@@ -17,6 +17,41 @@ If you arrived here looking for routing / slot defaults / "when to involve tech-
 
 **Why split the work across slots:** context. The analysis pass carries exploration state (DOM snapshots, test data, console noise). The automation pass carries framework state (page objects, fixtures, CI config). The review pass carries adversarial-eye state (assertion strength, masking suspicion). Cramming all of that into one session breaks the bot; the slot split keeps each workspace lean.
 
+## Orchestrator slot contract
+
+This skill section IS the orchestrator-slot contract for the test-automation pipeline. When any agent is filling the orchestrator role — `test-automation-lead` by default, or any other agent named in `.agents/team-comms.md` § Roster — role, behavior, dispatch mechanics, and decision rules are fixed here so the role is **portable**: load this skill + point the roster at any orchestrator-capable agent.
+
+**Role.** Route test-automation work through the analyst → implementer → reviewer pipeline, gate AFS quality, classify blockers and route them, own the automation merge, own test-framework architecture decisions.
+
+**Session context — read once at session start.** Typically auto-imported via your agent's `AGENT.md`; if your agent doesn't auto-import, read them now:
+
+- `.agents/profile.md` — project systems map (issue tracker, TMS, base branch, merge policy)
+- `.agents/workflow.md` — branch/PR conventions, EPIC pattern, sub-task filing rules
+- `.agents/testing.md` — framework, run commands, fixture/POM conventions, locator strategy, merge-gate N
+- `.agents/team-comms.md` — host, dispatch syntax, installed roster
+- `.agents/role-overrides.md` (if present) — slot substitutions when the default agent isn't installed
+
+Missing files are tolerated except when ALL are absent — in that case the project isn't seeded; pause and ask the operator to run scout.
+
+**Per-batch parameters** (caller / user provides):
+
+- One or more TMS case IDs (or "all of SPRINT-42's regression suite", etc.)
+- Implicit: `.agents/profile.md` § Automation PR policy (base branch, merge policy, merge strategy)
+
+**Return contract:**
+
+- After each meaningful turn: a status update (see playbook § Status reporting cadence)
+- After each merge: tracker close + TMS back-write + user notification
+- Escalations classified and routed (see playbook § Handling blockers)
+
+**Full playbook** — dispatch mechanics, pre-flight checklists, canonical dispatch templates, AFS quality gate, status discipline, tracker discipline, status reporting, handling blockers, R2 cap rule, framework architecture (greenfield / framework-scale / mid-flow), merge protocol, anti-patterns — lives in [`references/orchestration-playbook.md`](references/orchestration-playbook.md). Load it once at session start.
+
+**Wiring this role on a project.** To swap the default orchestrator for another agent (e.g. PM):
+
+1. Add `test-automation-workflow` to the substitute agent's `skills:` frontmatter.
+2. Update `.agents/team-comms.md` § Roster so the orchestrator slot points at the substitute.
+3. The substitute now has the orchestrator slot contract + playbook access — the test-automation lead role is filled without `test-automation-lead` agent being installed.
+
 ## Implementer slot contract
 
 This skill IS the implementer slot in the test-automation pipeline. When dispatched — by an orchestrator like `test-automation-lead`, or standalone for "implement the AFS at `<path>`" — role, context, parameters, and return shape are fixed here so dispatch prompts don't have to inline them.
