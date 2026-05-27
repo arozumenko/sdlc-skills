@@ -1,0 +1,225 @@
+{
+  "name": "sdlc-skills",
+  "owner": {
+    "name": "Artem Rozumenko",
+    "url": "https://github.com/arozumenko"
+  },
+  "plugins": [
+    {
+      "name": "sdlc-skills",
+      "source": "./",
+      "description": "Full SDLC toolkit — role-based agents, workflow skills, and session/subagent hooks (per-role memory + lean .agents/*.md project-context injection).",
+      "version": "0.2.0"
+    },
+    {
+      "name": "ba",
+      "source": "./agents/ba",
+      "description": "Use when user requirements need to be translated into user stories, acceptance criteria, or epics — or when a vague idea needs structuring before developers can act on it. Alex — sharp BA who turns vague ideas into clear requirements and bridges users to developers.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "ios-dev",
+      "source": "./agents/ios-dev",
+      "description": "Use when iOS work needs to be implemented — Swift, SwiftUI features, SwiftData models, or any Apple-platform task requiring TDD and verification before handoff. Io — energetic developer, opinionated about modern Apple APIs, pragmatic about delivery.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "js-dev",
+      "source": "./agents/js-dev",
+      "description": "Use when JavaScript or TypeScript work needs to be implemented — React components, Next.js pages, Node backend services, or any JS/TS task requiring TDD and verification before handoff. Jay — energetic TypeScript developer opinionated about DX, pragmatic about delivery.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "personal-assistant",
+      "source": "./agents/personal-assistant",
+      "description": "Use when the user wants a conversational assistant to answer questions, run errands across their tools (email, calendar, Teams, notes), or quietly maintain a second-brain knowledge base in the background. Octo — the user's personal assistant, engaged and resourceful.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "project-manager",
+      "source": "./agents/project-manager",
+      "description": "Use when tasks need to be routed to developers, when an approved PR needs to be merged, or when team progress needs coordination and status reporting. Max — sharp PM who turns chaos into actionable plans and owns the merge gate.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "python-dev",
+      "source": "./agents/python-dev",
+      "description": "Use when Python work needs to be implemented — FastAPI services, FastMCP servers, scripts, or any Python task requiring TDD and verification before handoff. Py — methodical Python developer who treats readable code as kindness to your future self.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "qa-engineer",
+      "source": "./agents/qa-engineer",
+      "description": "Use when a feature needs verification, a bug needs reproduction with evidence, E2E tests need writing or running via Playwright, or a TMS case needs turning into an automation-ready spec (AFS). Sage — meticulous QA who treats every passing test with suspicion and every failure as a gift.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "scout",
+      "source": "./agents/scout",
+      "description": "Use when an unfamiliar codebase needs to be onboarded — generating CLAUDE.md, AGENTS.md, `.agents/` content docs, and per-role memory briefings from exploration so the rest of the team can hit the ground running. Kit — maps repositories, surfaces patterns, flags risks.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "tech-lead",
+      "source": "./agents/tech-lead",
+      "description": "Use when a user story needs technical decomposition into dependency-ordered tasks with interface contracts, a confirmed bug needs root-cause analysis, or a PR needs a blocking code review before merge. Rio — senior tech lead who turns stories into executable plans and owns architecture decisions.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-automation-engineer",
+      "source": "./agents/test-automation-engineer",
+      "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Axel — senior automation engineer who matches the project's existing framework (Playwright/Cypress/pytest/JUnit/…), never masks product defects, and stops at the AFS boundary.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "atlassian-content",
+      "source": "./skills/atlassian-content",
+      "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair",
+      "version": "0.2.0"
+    },
+    {
+      "name": "browser-verify",
+      "source": "./skills/browser-verify",
+      "description": "Browser verification via CDP — visual checks, screenshots, accessibility",
+      "version": "0.2.0"
+    },
+    {
+      "name": "bugfix-workflow",
+      "source": "./skills/bugfix-workflow",
+      "description": "End-to-end bugfix workflow — reproduce, test, fix, verify, document",
+      "version": "0.2.0"
+    },
+    {
+      "name": "code-review",
+      "source": "./skills/code-review",
+      "description": "Structured code review — security, quality, conventions",
+      "version": "0.2.0"
+    },
+    {
+      "name": "completing-a-task",
+      "source": "./skills/completing-a-task",
+      "description": "Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "deep-research",
+      "source": "./skills/deep-research",
+      "description": "Deep research workflow — trends, topic analysis, fact-checking",
+      "version": "0.2.0"
+    },
+    {
+      "name": "gathering-context",
+      "source": "./skills/gathering-context",
+      "description": "Cross-channel context gathering — email, Teams, local KB",
+      "version": "0.2.0"
+    },
+    {
+      "name": "git-workflow",
+      "source": "./skills/git-workflow",
+      "description": "Git branching, PR creation, and merge workflow",
+      "version": "0.2.0"
+    },
+    {
+      "name": "implement-feature",
+      "source": "./skills/implement-feature",
+      "description": "End-to-end feature implementation workflow — plan, test, build, ship",
+      "version": "0.2.0"
+    },
+    {
+      "name": "issue-tracking",
+      "source": "./skills/issue-tracking",
+      "description": "GitHub issue lifecycle — labelling, commenting, closing",
+      "version": "0.2.0"
+    },
+    {
+      "name": "memory",
+      "source": "./skills/memory",
+      "description": "Persistent file-based memory across conversations",
+      "version": "0.2.0"
+    },
+    {
+      "name": "microsoft-365",
+      "source": "./skills/microsoft-365",
+      "description": "Microsoft Graph (email/calendar/Teams) integration",
+      "version": "0.2.0"
+    },
+    {
+      "name": "obsidian-vault",
+      "source": "./skills/obsidian-vault",
+      "description": "Read/write the user's Obsidian second brain",
+      "version": "0.2.0"
+    },
+    {
+      "name": "plan-feature",
+      "source": "./skills/plan-feature",
+      "description": "Structured feature planning — requirements, feasibility, acceptance criteria",
+      "version": "0.2.0"
+    },
+    {
+      "name": "playwright-testing",
+      "source": "./skills/playwright-testing",
+      "description": "End-to-end browser testing with Playwright",
+      "version": "0.2.0"
+    },
+    {
+      "name": "reproducing-issues",
+      "source": "./skills/reproducing-issues",
+      "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "root-cause-analysis",
+      "source": "./skills/root-cause-analysis",
+      "description": "Trace a confirmed bug to its exact cause — execution path, classification, confidence, impact analysis (investigation only)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "seeding-a-project",
+      "source": "./skills/seeding-a-project",
+      "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-automation-workflow",
+      "source": "./skills/test-automation-workflow",
+      "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-case-analysis",
+      "source": "./skills/test-case-analysis",
+      "description": "Execute a TMS test case against the live app, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer",
+      "version": "0.2.0"
+    },
+    {
+      "name": "tosca-automation",
+      "source": "./skills/tosca-automation",
+      "description": "Tricentis TOSCA Cloud full lifecycle — create/update/run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders, TSU import/export. Bundled `tosca_cli.py` (httpx + typer + rich)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "verifying-outcomes",
+      "source": "./skills/verifying-outcomes",
+      "description": "Goal-backward verification — check outcomes, not task completion",
+      "version": "0.2.0"
+    },
+    {
+      "name": "vividus",
+      "source": "./skills/vividus",
+      "description": "Bootstrap, configure, and author tests for the Vividus BDD framework (JBehave-based, 47+ plugins covering web/Selenium+Playwright, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility). Config-first `.story` files, suite/profile/environment triple, BOM-pinned versions, MCP-server grounding. Templates in `assets/` for scaffolding",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xlsx-reader",
+      "source": "./skills/xlsx-reader",
+      "description": "Read .xlsx spreadsheets (test cases, checklists) into Markdown for agent ingestion.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xray-testing",
+      "source": "./skills/xray-testing",
+      "description": "CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Xray Cloud (GraphQL) and Server/DC (REST). JUnit / Cucumber / Xray JSON import formats",
+      "version": "0.2.0"
+    }
+  ]
+}

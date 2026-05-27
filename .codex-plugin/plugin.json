@@ -1,0 +1,20 @@
+{
+  "name": "sdlc-skills",
+  "version": "0.2.0",
+  "description": "Role-based SDLC skills with session/subagent hooks that inject per-role memory and lean .agents/*.md project context.",
+  "author": {
+    "name": "Artem Rozumenko",
+    "url": "https://github.com/arozumenko"
+  },
+  "homepage": "https://github.com/arozumenko/sdlc-skills",
+  "repository": "https://github.com/arozumenko/sdlc-skills",
+  "license": "MIT",
+  "keywords": ["sdlc", "skills", "hooks", "memory"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-codex.json",
+  "interface": {
+    "displayName": "SDLC Skills",
+    "shortDescription": "SDLC skills + per-role memory/context hooks",
+    "category": "Productivity"
+  }
+}

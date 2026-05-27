@@ -1,0 +1,15 @@
+{
+  "name": "sdlc-skills",
+  "version": "0.2.0",
+  "description": "Workflow skills and session/subagent hooks (per-role memory + lean .agents/*.md project-context injection) for software delivery. Agents install via the npx CLI (Copilot needs flat .agent.md files).",
+  "author": {
+    "name": "Artem Rozumenko",
+    "email": "artyom.rozumenko@gmail.com"
+  },
+  "homepage": "https://github.com/arozumenko/sdlc-skills",
+  "repository": "https://github.com/arozumenko/sdlc-skills",
+  "license": "MIT",
+  "keywords": ["sdlc", "skills", "hooks", "memory"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-copilot.json"
+}

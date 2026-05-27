@@ -1,0 +1,15 @@
+{
+  "_comment": "Kiro defines hooks inside each custom-agent config file (see kiro.dev/docs/cli/custom-agents/configuration-reference#hooks-field), not a standalone hooks.json. This file is an illustrative snippet to paste into a Kiro agent config's `hooks` field. Kiro's agentSpawn event carries NO agent name, so each agent passes its own role explicitly and consumes raw stdout (SDLC_HOOK_RAW=1).",
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "\"$SDLC_SKILLS_ROOT/hooks/run-hook.cmd\" agent-start project-manager",
+        "env": { "SDLC_HOOK_RAW": "1" }
+      },
+      {
+        "command": "\"$SDLC_SKILLS_ROOT/hooks/run-hook.cmd\" session-start",
+        "env": { "SDLC_HOOK_RAW": "1" }
+      }
+    ]
+  }
+}

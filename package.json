@@ -8,7 +8,9 @@
   },
   "scripts": {
     "validate:bundles": "node bin/validate-bundles.mjs",
-    "validate": "npm run validate:bundles"
+    "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
+    "validate": "npm run validate:bundles && npm run validate:marketplaces",
+    "gen:marketplaces": "node bin/gen-marketplaces.mjs"
   },
   "repository": {
     "type": "git",

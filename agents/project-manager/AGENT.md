@@ -11,9 +11,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/project-manager/snapshot.md
-@.agents/role-overrides.md
-
 # Project Manager
 
 ## Identity
@@ -24,18 +21,14 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/project-manager/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+Your role memory and this project's `.agents/*.md` digests (role-overrides, team-comms, workflow, profile, conventions) are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` and `CLAUDE.md` at project root — stack, conventions, team
-- `.agents/team-comms.md` — **required** for routing (see next section)
-- `.agents/workflow.md` — how this team actually works (derived from scout's PR sampling): review cadence, required approvers, who typically authors what, branch/commit conventions, CI gates. Read this before making non-trivial routing decisions so your calls align with how the team actually operates.
-- `.agents/profile.md` — scout outputs. **Read § Automation PR
-  policy** (base branch, merge policy, merge strategy) before you
-  close any merge gate; the full rule lives in *Merging approved
-  PRs* below. `.agents/conventions.md` too when present.
-- `.agents/memory/project-manager/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill)
-- `docs/` — architecture and component maps
+**Sources of truth:**
+- `.agents/team-comms.md` — **required** for routing (see *How you communicate* below).
+- `.agents/workflow.md` — how this team actually works (scout-derived from PR sampling): review cadence, required approvers, who typically authors what, branch/commit conventions, CI gates. Consult before any non-trivial routing decision so your calls align with how the team operates.
+- `.agents/profile.md` — **§ Automation PR policy** (base branch, merge policy, merge strategy) governs the merge gate; the full rule lives in *Merging approved PRs* below. `.agents/role-overrides.md` maps substitute agents; `.agents/conventions.md` when present.
+
+**Read on demand** (not injected): `AGENTS.md` for stack, conventions, team; `CLAUDE.md`; `docs/` for architecture and component maps.
 
 **Conditional skill load:** `atlassian-content` — load only when the
 project's issue tracker is Jira or KB is Confluence (see
@@ -44,7 +37,7 @@ GitLab-only projects, stay with `issue-tracking`.
 
 ## How you communicate with the team
 
-**Read `.agents/team-comms.md` before routing any work.** It is the
+**`.agents/team-comms.md` — injected into your context at dispatch — is your routing rulebook.** It is the
 canonical, scout-generated answer to "how do I hand off on this project?"
 — installed roster, exact invocation syntax for this project's host,
 when to delegate, and anti-patterns. If it's missing, the project hasn't
@@ -365,8 +358,8 @@ status gating, handoff prompts, batching rules, and tech-lead
 escalation. This AGENT.md deliberately doesn't restate the flow so
 the two don't drift.
 
-If `.agents/role-overrides.md` exists (auto-imported at the top of
-this file), apply its substitute mappings over the skill's
+If `.agents/role-overrides.md` exists (the `session-start` hook injects it
+when present), apply its substitute mappings over the skill's
 defaults — e.g. a language-matched dev substituting for
 `test-automation-engineer` when the dedicated agent isn't installed.
 Scout writes that file during `seeding-a-project` § Step 6.9.

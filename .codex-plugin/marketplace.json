@@ -1,0 +1,165 @@
+{
+  "name": "sdlc-skills",
+  "owner": {
+    "name": "Artem Rozumenko",
+    "url": "https://github.com/arozumenko"
+  },
+  "plugins": [
+    {
+      "name": "sdlc-skills",
+      "source": "./",
+      "description": "Full SDLC toolkit — role-based agents, workflow skills, and session/subagent hooks (per-role memory + lean .agents/*.md project-context injection).",
+      "version": "0.2.0"
+    },
+    {
+      "name": "atlassian-content",
+      "source": "./skills/atlassian-content",
+      "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair",
+      "version": "0.2.0"
+    },
+    {
+      "name": "browser-verify",
+      "source": "./skills/browser-verify",
+      "description": "Browser verification via CDP — visual checks, screenshots, accessibility",
+      "version": "0.2.0"
+    },
+    {
+      "name": "bugfix-workflow",
+      "source": "./skills/bugfix-workflow",
+      "description": "End-to-end bugfix workflow — reproduce, test, fix, verify, document",
+      "version": "0.2.0"
+    },
+    {
+      "name": "code-review",
+      "source": "./skills/code-review",
+      "description": "Structured code review — security, quality, conventions",
+      "version": "0.2.0"
+    },
+    {
+      "name": "completing-a-task",
+      "source": "./skills/completing-a-task",
+      "description": "Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "deep-research",
+      "source": "./skills/deep-research",
+      "description": "Deep research workflow — trends, topic analysis, fact-checking",
+      "version": "0.2.0"
+    },
+    {
+      "name": "gathering-context",
+      "source": "./skills/gathering-context",
+      "description": "Cross-channel context gathering — email, Teams, local KB",
+      "version": "0.2.0"
+    },
+    {
+      "name": "git-workflow",
+      "source": "./skills/git-workflow",
+      "description": "Git branching, PR creation, and merge workflow",
+      "version": "0.2.0"
+    },
+    {
+      "name": "implement-feature",
+      "source": "./skills/implement-feature",
+      "description": "End-to-end feature implementation workflow — plan, test, build, ship",
+      "version": "0.2.0"
+    },
+    {
+      "name": "issue-tracking",
+      "source": "./skills/issue-tracking",
+      "description": "GitHub issue lifecycle — labelling, commenting, closing",
+      "version": "0.2.0"
+    },
+    {
+      "name": "memory",
+      "source": "./skills/memory",
+      "description": "Persistent file-based memory across conversations",
+      "version": "0.2.0"
+    },
+    {
+      "name": "microsoft-365",
+      "source": "./skills/microsoft-365",
+      "description": "Microsoft Graph (email/calendar/Teams) integration",
+      "version": "0.2.0"
+    },
+    {
+      "name": "obsidian-vault",
+      "source": "./skills/obsidian-vault",
+      "description": "Read/write the user's Obsidian second brain",
+      "version": "0.2.0"
+    },
+    {
+      "name": "plan-feature",
+      "source": "./skills/plan-feature",
+      "description": "Structured feature planning — requirements, feasibility, acceptance criteria",
+      "version": "0.2.0"
+    },
+    {
+      "name": "playwright-testing",
+      "source": "./skills/playwright-testing",
+      "description": "End-to-end browser testing with Playwright",
+      "version": "0.2.0"
+    },
+    {
+      "name": "reproducing-issues",
+      "source": "./skills/reproducing-issues",
+      "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "root-cause-analysis",
+      "source": "./skills/root-cause-analysis",
+      "description": "Trace a confirmed bug to its exact cause — execution path, classification, confidence, impact analysis (investigation only)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "seeding-a-project",
+      "source": "./skills/seeding-a-project",
+      "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-automation-workflow",
+      "source": "./skills/test-automation-workflow",
+      "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-case-analysis",
+      "source": "./skills/test-case-analysis",
+      "description": "Execute a TMS test case against the live app, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer",
+      "version": "0.2.0"
+    },
+    {
+      "name": "tosca-automation",
+      "source": "./skills/tosca-automation",
+      "description": "Tricentis TOSCA Cloud full lifecycle — create/update/run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders, TSU import/export. Bundled `tosca_cli.py` (httpx + typer + rich)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "verifying-outcomes",
+      "source": "./skills/verifying-outcomes",
+      "description": "Goal-backward verification — check outcomes, not task completion",
+      "version": "0.2.0"
+    },
+    {
+      "name": "vividus",
+      "source": "./skills/vividus",
+      "description": "Bootstrap, configure, and author tests for the Vividus BDD framework (JBehave-based, 47+ plugins covering web/Selenium+Playwright, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility). Config-first `.story` files, suite/profile/environment triple, BOM-pinned versions, MCP-server grounding. Templates in `assets/` for scaffolding",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xlsx-reader",
+      "source": "./skills/xlsx-reader",
+      "description": "Read .xlsx spreadsheets (test cases, checklists) into Markdown for agent ingestion.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xray-testing",
+      "source": "./skills/xray-testing",
+      "description": "CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Xray Cloud (GraphQL) and Server/DC (REST). JUnit / Cucumber / Xray JSON import formats",
+      "version": "0.2.0"
+    }
+  ]
+}

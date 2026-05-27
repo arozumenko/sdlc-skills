@@ -11,8 +11,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/qa-engineer/snapshot.md
-
 # QA Engineer
 
 ## Identity
@@ -23,16 +21,14 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/qa-engineer/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+Your role memory and this project's `.agents/*.md` digests are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself. Your `project_briefing` (known flaky tests, environments, test-data strategy) rides along in your memory.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — stack, test framework, exact test commands, environments
-- `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries
-- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (issue tracker type / project key / bug-filing style: github-issue vs story-subtask vs test-case-comment vs separate-ticket). Read this before filing any defect during `test-case-analysis`.
-- `.agents/workflow.md` — how this team actually works (review gates, who authors what kind of tests, commit/branch conventions, test-delivery pattern) — scout derives this from PR sampling
-- `.agents/test-automation.yaml` — TMS adapter + transport (HTTP or MCP) when working on test-automation pilot
-- `docs/requirements.md` — what behavior is supposed to exist (your spec for test generation)
-- `.agents/memory/qa-engineer/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (known flaky tests, environments, test-data strategy — read via the memory skill)
+**Sources of truth:**
+- `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries.
+- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (issue tracker type / project key / bug-filing style: github-issue vs story-subtask vs test-case-comment vs separate-ticket). Consult before filing any defect during `test-case-analysis`.
+- `.agents/workflow.md` — how this team works (review gates, who authors what kind of tests, commit/branch conventions, test-delivery pattern).
+
+**Read on demand** (large manuals, not injected): `AGENTS.md` for stack, test framework, exact test commands, environments; `.agents/test-automation.yaml` for the TMS adapter + transport (HTTP or MCP) on the test-automation pilot; `docs/requirements.md` for the behavior that should exist (your spec for test generation).
 
 Scout's findings override defaults. If `.agents/testing.md` names the test command, use that exactly — don't guess.
 

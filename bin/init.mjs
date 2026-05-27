@@ -36,6 +36,11 @@
  *
  * This installer only covers modes 1 and 2. The plugin marketplace path
  * is handled natively by Claude Code and does not invoke this script.
+ *
+ * Every CLI install also wires the core hooks/ scripts (per-role memory +
+ * lean .agents/*.md project-context injection) into each target's native hook
+ * config — Claude .claude/settings.json, Cursor .cursor/hooks.json, Copilot
+ * .github/hooks/sdlc-skills.json. See installCoreHooks() and hooks/README.md.
  */
 
 import {
@@ -425,6 +430,145 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Core hooks — the repo-root hooks/ scripts that inject per-role memory and the
+// lean .agents/*.md project context at session/subagent start (these replaced
+// the old @-imports; see hooks/README.md). Installed on every CLI install, per
+// target, in each runtime's native hook format:
+//   Claude Code -> .claude/settings.json          (SessionStart + SubagentStart)
+//   Cursor      -> .cursor/hooks.json             (sessionStart only — its
+//                  subagentStart is permission-only and can't inject context)
+//   Copilot CLI -> .github/hooks/sdlc-skills.json (sessionStart + subagentStart)
+//   Windsurf    -> skipped (no documented hook API)
+// The Claude *plugin* path needs none of this — it auto-discovers
+// hooks/hooks.json at the plugin root. Codex/Kiro aren't CLI targets; we point
+// at the shipped hooks/hooks-codex.json / hooks-kiro.json templates instead.
+// ---------------------------------------------------------------------------
+
+const CORE_HOOK_FILES = ["run-hook.cmd", "session-start", "agent-start", "lib.sh"];
+const CORE_HOOK_EXE = ["run-hook.cmd", "session-start", "agent-start"];
+
+// Copy the four hook files into destDir together (they reference each other by
+// SCRIPT_DIR-relative path, so they must live side by side) and mark the
+// executables +x.
+function copyHookScripts(destDir) {
+  const srcDir = join(PKG_ROOT, "hooks");
+  if (!existsSync(srcDir)) return false;
+  mkdirSync(destDir, { recursive: true });
+  for (const f of CORE_HOOK_FILES) {
+    const s = join(srcDir, f);
+    if (existsSync(s)) cpSync(s, join(destDir, f), { force: true });
+  }
+  for (const f of CORE_HOOK_EXE) {
+    try {
+      chmodSync(join(destDir, f), 0o755);
+    } catch {
+      /* best-effort (Windows) */
+    }
+  }
+  return true;
+}
+
+// Merge our entries into a version-1 hooks.json (Cursor / SDK shape),
+// replacing only the entries that reference our scripts dir (idempotent) and
+// leaving the user's other hooks intact. Backs up before writing.
+function mergeVersionedHooks(path, spec, markerSubstr) {
+  let cfg = { version: 1, hooks: {} };
+  if (existsSync(path)) {
+    const raw = readFileSync(path, "utf8");
+    try {
+      cfg = JSON.parse(raw);
+    } catch (err) {
+      console.log(`      ! ${basename(path)} parse failed; left untouched: ${err.message}`);
+      return false;
+    }
+    writeFileSync(path + ".bak", raw);
+    if (!cfg.hooks || typeof cfg.hooks !== "object") cfg.hooks = {};
+    if (!cfg.version) cfg.version = 1;
+  }
+  for (const [event, entries] of Object.entries(spec)) {
+    const existing = Array.isArray(cfg.hooks[event]) ? cfg.hooks[event] : [];
+    const kept = existing.filter(
+      (e) => !(e && typeof e.command === "string" && e.command.includes(markerSubstr))
+    );
+    cfg.hooks[event] = [...kept, ...entries];
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(cfg, null, 2) + "\n");
+  return true;
+}
+
+function installCoreHooks(targets) {
+  const srcDir = join(PKG_ROOT, "hooks");
+  if (!existsSync(srcDir)) return;
+
+  for (const t of targets) {
+    if (t.id === "claude") {
+      const rel = ".claude/hooks/sdlc-skills";
+      copyHookScripts(join(CWD, rel));
+      const cmd = `"\${CLAUDE_PROJECT_DIR}/${rel}/run-hook.cmd"`;
+      const spec = {
+        SessionStart: [
+          {
+            matcher: "startup|clear|compact|resume",
+            hooks: [{ type: "command", command: `${cmd} session-start`, async: false }],
+          },
+        ],
+        SubagentStart: [
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: `${cmd} agent-start`, async: false }],
+          },
+        ],
+      };
+      if (mergeClaudeSettingsHooks(join(CWD, ".claude", "settings.json"), spec, "sdlc-core"))
+        console.log(`      ✓ hooks Claude Code (.claude/settings.json)`);
+    } else if (t.id === "cursor") {
+      const rel = ".cursor/hooks/sdlc-skills";
+      copyHookScripts(join(CWD, rel));
+      // Cursor's subagentStart is permission-only (no context injection) — wire
+      // sessionStart only; per-role memory falls back to the `memory` skill.
+      const spec = { sessionStart: [{ command: `./${rel}/run-hook.cmd session-start` }] };
+      if (mergeVersionedHooks(join(CWD, ".cursor", "hooks.json"), spec, rel))
+        console.log(`      ✓ hooks Cursor (.cursor/hooks.json)`);
+    } else if (t.id === "copilot") {
+      const rel = ".github/hooks/sdlc-skills";
+      copyHookScripts(join(CWD, rel));
+      const entry = (verb) => ({
+        type: "command",
+        bash: `"./${rel}/run-hook.cmd" ${verb}`,
+        powershell: `& "./${rel}/run-hook.cmd" ${verb}`,
+        env: { COPILOT_CLI: "1" },
+        timeoutSec: 10,
+      });
+      // .github/hooks/<name>.json is an sdlc-owned file — write it wholesale.
+      const spec = {
+        version: 1,
+        hooks: {
+          sessionStart: [entry("session-start")],
+          subagentStart: [entry("agent-start")],
+        },
+      };
+      mkdirSync(join(CWD, ".github", "hooks"), { recursive: true });
+      writeFileSync(
+        join(CWD, ".github", "hooks", "sdlc-skills.json"),
+        JSON.stringify(spec, null, 2) + "\n"
+      );
+      console.log(`      ✓ hooks GitHub Copilot (.github/hooks/sdlc-skills.json)`);
+    } else if (t.id === "windsurf") {
+      console.log(`      — hooks Windsurf (no documented hook API; skipped)`);
+    }
+  }
+
+  // Codex / Kiro aren't CLI install targets, but flag them when their config
+  // dir is present so the user knows how to finish wiring.
+  if (existsSync(join(CWD, ".codex"))) {
+    console.log(
+      `      → Codex: copy hooks/hooks-codex.json → .codex/hooks.json and the hooks/ scripts beside it (see hooks/README.md)`
+    );
+  }
 }
 
 // Ensure .agents/memory/<role>/MEMORY.md carries an index line pointing at
@@ -1440,6 +1584,13 @@ async function main() {
         console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
     }
+  }
+
+  // Core hooks (per-role memory + lean .agents/*.md context injection) land in
+  // each selected runtime's native hook format. Every install, not just bundles.
+  if (existsSync(join(PKG_ROOT, "hooks"))) {
+    console.log(`\n  → hooks (memory + project-context injection)`);
+    installCoreHooks(targets);
   }
 
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.

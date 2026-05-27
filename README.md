@@ -369,16 +369,24 @@ Windsurf, and Copilot CLI. A BA can draft stories, a tech-lead can
 review a PR, `plan-feature` and `bugfix-workflow` run end-to-end with
 just `git` and `gh`.
 
-**`@import` paths auto-loaded at session start:**
+**Context auto-injected at session start (via the `hooks/` scripts):**
 
-```markdown
-@.agents/memory/<role>/snapshot.md
-```
+- `.agents/memory/<role>/snapshot.md` — each role's persistent memory,
+  injected per dispatch by the `agent-start` hook on Claude Code, Codex,
+  and Copilot CLI (their per-agent start hooks); re-fires on every
+  dispatch, so it survives `/clear` and compaction.
+- `.agents/role-overrides.md`, `profile.md`, `workflow.md`, `testing.md`,
+  `conventions.md`, `team-comms.md` — lean shared project context, injected
+  by the `session-start` hook (parent session) and by `agent-start` (each
+  dispatched subagent, which gets a fresh context), re-injected after
+  `/clear` or compaction. Big manuals (`AGENTS.md`, `docs/`) are not
+  injected — agents read those on demand.
 
-On first session the import resolves to a missing file and the agent
-falls back to reading `.agents/memory/<role>/MEMORY.md` + individual
-entries on demand. Once the memory skill has been used the snapshot
-file exists and is loaded automatically.
+A missing file is skipped (safe on first run). On Cursor (whose
+`subagentStart` is permission-only) and Kiro (whose `agentSpawn` carries
+no agent name), the `session-start` hook adds a roster reminder pointing
+each role at the `memory` skill instead. See
+[`hooks/README.md`](hooks/README.md) for wiring and the portability matrix.
 
 Every agent works as a subagent dispatched by the host IDE. Every
 `skills/<name>/` skill is self-contained. Developer agents work on your
