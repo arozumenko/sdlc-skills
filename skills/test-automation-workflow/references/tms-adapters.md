@@ -2,6 +2,7 @@
 
 ## Contents
 
+- [At a glance](#at-a-glance)
 - [Transports](#transports)
 - [Configuration file](#configuration-file)
 - [Adapter contract](#adapter-contract)
@@ -14,6 +15,30 @@
 The workflow is TMS-agnostic. All TMS interaction flows through an
 adapter — a thin layer with a fixed contract. Swap one config line, the
 workflow keeps running.
+
+## At a glance
+
+| Concern | Where it lives |
+|---|---|
+| **Which TMS, which transport, which project key** | `.agents/test-automation.yaml` § `tms` |
+| **TMS adapter contract** (fetch / list / update / create / link) | this file — *Contract* section below |
+| **Per-TMS auth + URL shape** | this file — adapter blocks (Zephyr / TestRail / Xray / Azure / markdown) |
+| **Which MCP toolset each adapter uses** | this file — *Toolset mapping* table |
+| **Concrete invocation examples** (analyst fetch, back-write) | `commands.md` (Phase 2 + Phase 8) |
+| **TMS status verbs** (passed / failed / blocked / not-executed / skipped) | this file — adapter contract |
+| **When the TMS is unreachable** | this file — *Failure modes* |
+
+If you're onboarding a new project:
+
+1. Pick the adapter row matching your TMS.
+2. Pick the transport (MCP if already wired in the host; HTTP
+   otherwise).
+3. Copy the config block into `.agents/test-automation.yaml`.
+4. Wire any required env vars (`auth_env` line names them).
+5. Done — the workflow doesn't care which adapter you picked.
+
+No TMS at all? `adapter: markdown` is a one-liner; AFS files in
+`test-specs/` become the source of truth.
 
 ## Transports
 

@@ -95,11 +95,27 @@ test-specs/user-profile/l3_avatar_upload_ad-hoc.md
 2. Expire the generated promo
 
 ## Stable Selectors (discovered during exploration)
+
+Capture selectors using this ladder, in order of preference:
+
+1. `getByRole(role, { name })` — preferred when the accessible name is
+   stable and unique
+2. `getByTestId(...)` / `data-testid`
+3. `getByLabel(...)` / `getByPlaceholder(...)`
+4. `getByText(...)`
+5. CSS / XPath — last resort, with a comment about why a higher tier
+   couldn't disambiguate
+
+If a target element has no test ID **and** roles / labels can't
+disambiguate it, **stop and flag the gap** in the AFS § Blocked Steps
+or § Automation Hints instead of falling back to brittle CSS. Axel
+will route the gap to PM rather than ship a fragile selector.
+
 | Element | Recommended Locator | Fallback |
 |---|---|---|
-| Promo code input | `getByTestId('promo-input')` | `getByLabel('Promo code')` |
-| Apply button | `getByRole('button', { name: 'Apply' })` | `.promo-apply` |
-| Summary total | `getByTestId('summary-total')` | `[data-summary="total"]` |
+| Promo code input | `getByLabel('Promo code')` | `getByTestId('promo-input')` |
+| Apply button | `getByRole('button', { name: 'Apply' })` | `getByTestId('promo-apply')` |
+| Summary total | `getByRole('status', { name: /total/i })` | `getByTestId('summary-total')` |
 
 ## Network Behavior
 - `POST /api/checkout/promos` — fires on Apply click, 200 on success

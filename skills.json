@@ -30,6 +30,7 @@
     {"id": "deep-research",      "monorepo": "sdlc-skills", "name": "deep-research",      "description": "Deep research workflow — trends, topic analysis, fact-checking"},
     {"id": "gathering-context",   "monorepo": "sdlc-skills", "name": "gathering-context",   "description": "Cross-channel context gathering — email, Teams, local KB"},
     {"id": "verifying-outcomes",      "monorepo": "sdlc-skills", "name": "verifying-outcomes",      "description": "Goal-backward verification — check outcomes, not task completion"},
+    {"id": "completing-a-task",       "monorepo": "sdlc-skills", "name": "completing-a-task",       "description": "Five-step task completion protocol: verify locally → commit on feature branch → push & open PR → comment on tracker issue → notify the orchestrator. Used by devs at handoff"},
     {"id": "memory",             "monorepo": "sdlc-skills", "name": "memory",             "description": "Persistent file-based memory across conversations"},
     {"id": "obsidian-vault",     "monorepo": "sdlc-skills", "name": "obsidian-vault",     "description": "Read/write the user's Obsidian second brain"},
     {"id": "microsoft-365",            "monorepo": "sdlc-skills", "name": "microsoft-365",            "description": "Microsoft Graph (email/calendar/Teams) integration"},

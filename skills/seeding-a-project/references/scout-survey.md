@@ -4,6 +4,7 @@
 
 - [Step 0.5 — PR-sampling survey](#step-05--pr-sampling-survey)
 - [Step 0.7 — Project-systems capture](#step-07--project-systems-capture)
+  - [Coherence checks (before writing profile.md)](#coherence-checks-before-writing-profilemd)
 
 Full procedure for the two pre-write phases scout runs before it
 emits any content files: sampling the team's PR history to understand
@@ -198,6 +199,35 @@ value or `ASK`:
 11. **Squash / rebase / merge-commit** — optional; defaults to
     `squash`. Override if branch-protection demands a different
     strategy.
+
+### Coherence checks (before writing profile.md)
+
+Some field combinations are incoherent — record + flag, don't fix
+silently:
+
+- **`Bug filing style: story-subtask` requires `Issue tracker: jira`
+  or `azure-boards`.** Sub-task is a Jira/ADO primitive; GitHub
+  Issues / GitLab Issues / Linear have no equivalent. If the operator
+  pre-filled `story-subtask` with a flat tracker, ask interactively
+  rather than silently degrading to `github-issue`. Note the answer
+  in the Step 0.7 report.
+- **`Bug filing target` is meaningful only when `Bug filing style:
+  separate-ticket`.** Empty otherwise. If the operator set both
+  `style: github-issue` and a non-empty `target`, ask whether they
+  meant `separate-ticket`.
+- **`Test case storage: tms` or `both-synced` requires
+  `TMS != none`.** A TMS-storage policy without a TMS adapter is
+  unwriteable. Ask the operator, or downgrade to `markdown` and flag.
+- **`Automation PR base` should match `Merge policy` reality.** If
+  the base is the project's default branch *and* `Merge policy:
+  manual`, that's a contradiction worth surfacing — the team
+  presumably wants PM to merge somewhere protected; confirm the base
+  is what they meant.
+
+The check happens after the operator pre-fill and any interactive
+asks, before scout writes `profile.md`. Surface incoherent
+combinations in the Step 0.7 report alongside the resolved values so
+the operator sees what was changed and why.
 
 ### Destination
 

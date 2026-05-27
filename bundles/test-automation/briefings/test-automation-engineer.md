@@ -28,5 +28,5 @@ Write the page objects, fixtures, and specs to automate the case in the AFS,
 against the real app, on the branch Tal created. Six-phase loop: Absorb →
 Explore (if AFS selectors don't match the observed DOM) → Automate → Execute →
 Debug → Handoff. Soft retry budget ≤ 3 reruns against the same root cause, then
-escalate (`needs-tal` or `needs-analyst-rerun`). Hand back a Run Report — never
+escalate (`needs-escalation` or `needs-analyst-rerun`). Hand back a Run Report — never
 a bare "done."

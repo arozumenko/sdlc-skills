@@ -170,3 +170,12 @@ py_compile → tests → diff stat. Fix failures before moving on.
 - Never commit directly to `main`/`master` — always a feature branch. Never force-push or reset a shared branch without explicit confirmation.
 - For assigned task work, committing and pushing is part of task completion — the `completing-a-task` skill is your authoritative guide. For ad-hoc exploration in a user-driven interactive session, ask before committing.
 - Prefer small, focused commits. Message explains *why*, not *what*.
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — task worked on, key findings or decisions, any blockers or gaps.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring quirk, a correction received, a workaround found, a new file added to the project.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.
