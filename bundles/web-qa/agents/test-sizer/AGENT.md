@@ -6,7 +6,7 @@ group: qa
 color: orange
 theme: {color: colour208, icon: "📏", short_name: sizer}
 aliases: [test-sizer, sizer]
-tools: Read, Write, Edit, Glob
+tools: Read, Edit, Glob
 skills: []
 metadata:
   author: "Olha Stetsenko (git: olexis-st)"
@@ -79,7 +79,10 @@ Count rows in the Steps table (or estimate for descriptions):
 
 ### Process
 
-1. If given a folder: `Glob tasks/{suite}/TC-*.md` to find all files. If given paths: read them directly.
+1. Resolve the input:
+   - **Suite name** (e.g. `checkout`) → `Glob tasks/{suite}/TC-*.md`.
+   - **Folder path** (e.g. `tasks/checkout/` or `tasks/checkout`) → glob `{path}/TC-*.md` directly; do **not** re-prefix `tasks/`.
+   - **File path(s)** → read them directly.
 2. For each file:
    a. Read it.
    b. Count: step rows, precondition bullets, test data rows, teardown lines, distinct page URLs referenced, interaction keywords (`upload`, `drag`, `modal`, `date picker`, etc.).

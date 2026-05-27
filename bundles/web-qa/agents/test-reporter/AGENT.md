@@ -75,11 +75,16 @@ date: {date}
 | ✅ Passed    | N     | XX.X%  |
 | ❌ Failed    | N     | XX.X%  |
 | ⏸ Blocked   | N     | XX.X%  |
-| 🔹 Size S    | N     | XX.X%  |
-| 🔸 Size M    | N     | XX.X%  |
-| 🔴 Size L    | N     | XX.X%  |
 
-_(Omit the Size rows if all `size` values are null.)_
+### Size Distribution
+
+_(Omit this section entirely if all `size` values are null.)_
+
+| Size | Count | %     |
+|------|-------|-------|
+| 🔹 S | N     | XX.X% |
+| 🔸 M | N     | XX.X% |
+| 🔴 L | N     | XX.X% |
 
 ## Results
 

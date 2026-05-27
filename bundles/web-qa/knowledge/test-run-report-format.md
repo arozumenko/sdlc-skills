@@ -40,14 +40,22 @@ date: 2026-05-18
 | ❌ Failed    | 2     | 20.0%  |
 | ⏸ Blocked   | 0     | 0.0%   |
 
+### Size Distribution
+
+| Size | Count | %     |
+|------|-------|-------|
+| 🔹 S | 6     | 60.0% |
+| 🔸 M | 3     | 30.0% |
+| 🔴 L | 1     | 10.0% |
+
 ## Results
 
-| ID      | Title                              | Status   | Steps | Wall Clock |
-|---------|------------------------------------|----------|-------|------------|
-| TC-001  | Login with valid credentials       | ✅ PASS  | 5/5   | 14s      |
-| TC-002  | Login with invalid password        | ❌ FAIL  | 3/5   | 8s       |
-| TC-003  | Forgot password — email flow       | ✅ PASS  | 7/7   | 21s      |
-| TC-004  | Session expires after 30min idle   | ⏸ BLOCKED | 0/4 | —       |
+| ID      | Title                              | Size | Status   | Steps | Wall Clock |
+|---------|------------------------------------|------|----------|-------|------------|
+| TC-001  | Login with valid credentials       | S    | ✅ PASS  | 5/5   | 14s      |
+| TC-002  | Login with invalid password        | S    | ❌ FAIL  | 3/5   | 8s       |
+| TC-003  | Forgot password — email flow       | M    | ✅ PASS  | 7/7   | 21s      |
+| TC-004  | Session expires after 30min idle   | L    | ⏸ BLOCKED | 0/4 | —       |
 
 ## Failed Tests
 
@@ -80,6 +88,7 @@ date: 2026-05-18
 |---------|----------|-------------|
 | YAML frontmatter | Yes | Machine-readable metadata for future indexing |
 | Summary table | Yes | Aggregate metrics — the first thing a stakeholder reads |
+| Size Distribution | If sizes present | S/M/L breakdown; omitted when all `size` values are null |
 | Results table | Yes | One row per test case, sorted by TC ID |
 | Failed Tests | If failures exist | Detailed breakdown per failure with screenshot path |
 | Blocked Tests | If blocked exist | Short explanation per blocked test |
@@ -120,6 +129,7 @@ Each test-runner agent outputs one JSON block. The test-reporter consumes an arr
   "tc_id": "TC-001",
   "title": "Login with valid credentials",
   "priority": "high",
+  "size": "M",
   "result": "PASS",
   "steps_total": 5,
   "steps_completed": 5,
@@ -136,3 +146,5 @@ Each test-runner agent outputs one JSON block. The test-reporter consumes an arr
 ```
 
 `tokens`, `tool_uses`, `duration_ms` are attached by the test-run-lead from each run's usage; they may be null when usage is unavailable (the Performance Metrics section is then omitted).
+
+`size` is the test-runner's read of the TC's `size:` frontmatter (`S`/`M`/`L`, or `null` if absent); the Size Distribution block and the by-size token analytics are omitted when every `size` is null.

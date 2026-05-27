@@ -88,6 +88,7 @@ User is authenticated and on the dashboard. No error messages visible. URL is `{
 | `priority` | Yes | `critical` = blocks release if fails; `high` = major feature; `medium` = secondary; `low` = cosmetic |
 | `type` | Yes | `smoke` = quick sanity; `functional` = feature logic; `regression` = verifying no breakage; `integration` = cross-system; `exploratory` = freeform |
 | `module` | Yes | The feature/component under test |
+| `size` | No | Execution-size rating `S` / `M` / `L`, assigned by `test-sizer` (optional) |
 | `requirements` | No | Link to requirement IDs for traceability |
 | `tags` | No | Arbitrary labels for filtering runs (e.g. `smoke`, `slow`, `needs-2fa`) |
 | Preconditions | Yes | Exact system state before test starts. Each bullet is a verifiable fact. |
