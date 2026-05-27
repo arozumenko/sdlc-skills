@@ -98,7 +98,7 @@
     {
       "name": "completing-a-task",
       "source": "./skills/completing-a-task",
-      "description": "Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
+      "description": "Five-step task completion protocol: verify locally → commit on feature branch → push & open PR → comment on tracker issue → notify the orchestrator. Used by devs at handoff",
       "version": "0.2.0"
     },
     {
