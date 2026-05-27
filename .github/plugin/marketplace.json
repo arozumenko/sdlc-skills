@@ -120,6 +120,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "session-retrospective",
+      "source": "./skills/session-retrospective",
+      "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout)",
+      "version": "0.2.0"
+    },
+    {
       "name": "test-automation-workflow",
       "source": "./skills/test-automation-workflow",
       "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP",

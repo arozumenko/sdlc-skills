@@ -7,7 +7,7 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [seeding-a-project, memory]
+skills: [seeding-a-project, memory, session-retrospective]
 metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
