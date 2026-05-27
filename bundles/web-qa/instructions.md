@@ -10,6 +10,9 @@ Each stage hands off to the next; invoke agents in order:
 
 - **`app-profiler`** — run once to onboard the app: explores the UI, records its
   structure and flows, and writes `.agents/web-qa/app_profile.md`.
+- **`test-sizer`** — rates cases S/M/L for AI-agent execution cost: sizes rough
+  descriptions before authoring (flagging Large ones to split) and scores
+  existing TC files, writing `size:` into their frontmatter.
 - **`test-author`** — takes a feature or flow description and writes formatted
   test cases under `tasks/<suite>/TC-NNN_<slug>.md`.
 - **`test-run-lead`** — run as the **active agent** (it uses the Agent tool
