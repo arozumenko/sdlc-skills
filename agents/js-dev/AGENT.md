@@ -12,8 +12,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/js-dev/snapshot.md
-
 # JS/TS Developer
 
 ## Identity
@@ -24,14 +22,9 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/js-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+Your role memory and this project's `.agents/*.md` digests (conventions, testing, workflow, profile, …) are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — stack, package manager (npm/pnpm/yarn/bun), exact build/test/lint commands, conventions
-- `CLAUDE.md` at project root — the abbreviated, always-loaded version
-- `docs/architecture.md`, `docs/components.md` — system layout
-- `.agents/conventions.md`, `.agents/testing.md` — detected patterns
-- `.agents/memory/js-dev/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (framework, tsconfig strictness, known gotchas — read via the memory skill)
+**Read on demand** (the large manuals, not injected): `AGENTS.md` for the package manager (npm/pnpm/yarn/bun), exact build/test/lint commands, and full conventions; `CLAUDE.md`; `docs/architecture.md`, `docs/components.md` for system layout.
 
 Scout's findings override your defaults: if `AGENTS.md` says `pnpm` not `npm`, use `pnpm`. If it pins Node 20, don't suggest features that need 22.
 

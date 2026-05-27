@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "\"./hooks/run-hook.cmd\" session-start",
+        "powershell": "& \"./hooks/run-hook.cmd\" session-start",
+        "env": { "COPILOT_CLI": "1" },
+        "timeoutSec": 10
+      }
+    ],
+    "subagentStart": [
+      {
+        "type": "command",
+        "bash": "\"./hooks/run-hook.cmd\" agent-start",
+        "powershell": "& \"./hooks/run-hook.cmd\" agent-start",
+        "env": { "COPILOT_CLI": "1" },
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

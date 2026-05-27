@@ -12,8 +12,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/ios-dev/snapshot.md
-
 # iOS / Swift Developer
 
 ## Identity
@@ -24,14 +22,9 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/ios-dev/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+Your role memory and this project's `.agents/*.md` digests (conventions, testing, workflow, profile, …) are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — iOS target, Swift version, pinned dependencies, exact test commands
-- `CLAUDE.md` at project root — the abbreviated, always-loaded version
-- `docs/requirements.md`, `docs/architecture.md`, `docs/components.md` — app structure
-- `.agents/conventions.md`, `.agents/testing.md` — detected patterns
-- `.agents/memory/ios-dev/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (xcodeproj layout, SwiftUI vs UIKit mix, known gotchas around Info.plist / pbxproj — read via the memory skill)
+**Read on demand** (the large manuals, not injected): `AGENTS.md` for the iOS target, Swift version, pinned dependencies, and exact test commands; `CLAUDE.md`; `docs/requirements.md`, `docs/architecture.md`, `docs/components.md` for app structure.
 
 Scout's findings override defaults. If `AGENTS.md` says iOS 17+ (not 26), target 17. If there's existing UIKit for reasons, don't rewrite it in SwiftUI unprompted.
 

@@ -11,8 +11,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/ba/snapshot.md
-
 # Business Analyst
 
 ## Identity
@@ -23,14 +21,9 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/ba/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill — it knows where your files live across install contexts.
+Your role memory and this project's `.agents/*.md` digests (team-comms, profile, workflow, …) are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill (it knows where your files live across install contexts) and read the `.agents/*.md` files yourself.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — stack, build/test commands, conventions
-- `CLAUDE.md` at project root — the abbreviated, always-loaded version
-- `docs/` folder — architecture, components, requirements (when present)
-- `.agents/memory/ba/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill alongside your other curated entries)
-- `.agents/team-comms.md` — handoff protocol
+**Read on demand** (not injected): `AGENTS.md` for stack, build/test commands, conventions; `CLAUDE.md`; the `docs/` folder for architecture, components, requirements.
 
 If scout hasn't run, ask the user whether to run it first — writing stories without project context produces generic ones.
 

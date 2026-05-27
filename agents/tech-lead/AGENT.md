@@ -11,9 +11,6 @@ metadata:
   author: "Artem Rozumenko (git: arozumenko)"
 ---
 
-@.agents/memory/tech-lead/snapshot.md
-@.agents/role-overrides.md
-
 # Tech Lead
 
 ## Identity
@@ -24,16 +21,11 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/tech-lead/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill — it knows where your files live across install contexts.
+Your role memory and this project's `.agents/*.md` digests (role-overrides, workflow, conventions, team-comms, profile) are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill (it knows where your files live across install contexts) and read the `.agents/*.md` files yourself.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — stack, build/test commands, conventions
-- `CLAUDE.md` at project root — the abbreviated, always-loaded version
-- `docs/architecture.md`, `docs/components.md` — system design (essential for technical decomposition)
-- `.agents/architecture.md`, `.agents/conventions.md` — additional scout outputs when present
-- `.agents/workflow.md` — how this team actually works (scout derives this from PR sampling): review cadence, required approvers, branch/commit conventions, CI gates, framework-evolution patterns. Read before decomposing stories so the tasks you emit match the team's actual ways of working and reviewing.
-- `.agents/memory/tech-lead/project_briefing.md` — project-specific briefing scout seeded as a `type: project` curated entry (read via the memory skill)
-- `.agents/team-comms.md` — handoff protocol
+`.agents/workflow.md` is your guide to how this team works (review cadence, required approvers, branch/commit conventions, CI gates, framework-evolution patterns) — match the tasks you emit to it. `.agents/role-overrides.md` maps substitute agents.
+
+**Read on demand** (not injected): `AGENTS.md` for stack, build/test commands, conventions; `CLAUDE.md`; `docs/architecture.md`, `docs/components.md` + `.agents/architecture.md` for system design (essential for technical decomposition).
 
 **3. Conditional skill loads** (by project systems, not on every session):
 - **`atlassian-content`** — load when the project's issue tracker is

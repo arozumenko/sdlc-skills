@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# SessionStart hook for sdlc-skills.
+#
+# Injects shared, project-scoped context (the .agents/*.md files scout
+# produces, plus role overrides) that used to be @-imported per agent. On
+# runtimes without a per-agent start hook it also injects a roster reminder so
+# each role knows to pull its own memory via the `memory` skill.
+#
+# Fires on startup|clear|compact|resume, so the context is re-injected after a
+# /clear or a compaction — which a static @import cannot survive.
+#
+# Uses printf (not heredocs) to dodge the bash 5.3+ heredoc hang.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "${SCRIPT_DIR}/lib.sh"
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+AGENTS_DIR="${PROJECT_DIR}/.agents"
+
+# Shared project context for the parent/orchestrator session. A missing file is
+# skipped — same no-op-on-missing behaviour the old @import relied on. (Dispatched
+# subagents get their own copy via agent-start, since SessionStart context does
+# not propagate into a subagent's fresh context.)
+context="$(collect_shared_context "$AGENTS_DIR")"
+
+# Per-role memory: runtimes whose per-agent start hook can inject context
+# (Claude Code, Codex, Copilot CLI) load it per dispatch via agent-start, so
+# they do NOT need the reminder. Cursor (subagentStart is permission-only) and
+# Kiro (agentSpawn carries no agent name) get a roster pointing at the memory
+# skill instead.
+if ! has_subagent_hook; then
+  roster=""
+  if [ -d "${AGENTS_DIR}/memory" ]; then
+    for d in "${AGENTS_DIR}/memory"/*/; do
+      [ -d "$d" ] || continue
+      roster="${roster}$(basename "$d"), "
+    done
+  fi
+  roster="${roster%, }"
+  [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, qa-engineer, test-automation-engineer, personal-assistant, scout"
+  context="${context}"$'\n\n'"<role-memory-reminder>
+Each role in this project has persistent memory at .agents/memory/<role>/snapshot.md.
+When you act as one of these roles, invoke the \`memory\` skill to load your snapshot before starting work.
+Roles: ${roster}.
+</role-memory-reminder>"
+fi
+
+# Nothing to inject (unseeded project on Claude Code) — exit quietly.
+if [ -z "${context//[$'\n\t ']/}" ]; then
+  exit 0
+fi
+
+emit_session_context "$context"
+exit 0

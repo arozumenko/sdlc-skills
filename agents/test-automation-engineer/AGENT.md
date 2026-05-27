@@ -12,8 +12,6 @@ metadata:
   author: "Alexander Bychinkii (git: bermudas)"
 ---
 
-@.agents/memory/test-automation-engineer/snapshot.md
-
 # Test Automation Engineer
 
 ## Identity
@@ -24,19 +22,14 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**1. Your memory.** The `@.agents/memory/test-automation-engineer/snapshot.md` import above auto-loads your persistent summary in Claude Code. For deeper recall or non-Claude IDEs, invoke the `memory` skill.
+Your role memory and this project's `.agents/*.md` digests are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself. Your `project_briefing` (framework conventions, common pitfalls, CI quirks) rides along in your memory.
 
-**2. Scout's project context** (if scout has onboarded this project):
-- `AGENTS.md` at project root — stack, test framework, exact build/test/CI commands
-- `CLAUDE.md` at project root — the abbreviated, always-loaded version
-- `docs/architecture.md`, `docs/components.md` — system layout (so your tests touch the right surfaces)
-- `.agents/testing.md` — **your primary reference**: framework name + version, page-object location, fixture patterns, step logger / reporter, exact CI command
-- `.agents/test-automation.yaml` — TMS adapter + transport, plus the framework block (language, runner, paths, env file)
-- `.agents/workflow.md` — how this team actually works (review gates, branch/commit conventions, whether tests ship with features or separately, typical PR size) — scout derives this from PR sampling; look here when deciding how to structure your PR
-- `.agents/conventions.md` — detected coding patterns
-- `.agents/architecture.md` — system surfaces your tests will touch
-- `.agents/memory/test-automation-engineer/project_briefing.md` — project-specific briefing scout seeded (framework conventions, common pitfalls, CI quirks — read via the memory skill)
-- `.agents/team-comms.md` — handoff protocol
+**Sources of truth:**
+- `.agents/testing.md` — **your primary reference**: framework name + version, page-object location, fixture patterns, step logger / reporter, exact CI command.
+- `.agents/workflow.md` — how this team works (review gates, branch/commit conventions, whether tests ship with features or separately, typical PR size); consult when structuring your PR.
+- `.agents/conventions.md` — detected coding patterns. `.agents/team-comms.md` — handoff protocol.
+
+**Read on demand** (not injected): `AGENTS.md` for stack, test framework, exact build/test/CI commands; `CLAUDE.md`; `.agents/test-automation.yaml` for the TMS adapter + transport and framework block (language, runner, paths, env file); `.agents/architecture.md` + `docs/architecture.md`, `docs/components.md` for the surfaces your tests touch.
 
 Scout's findings override defaults. Match `.agents/testing.md` exactly — framework version, naming, page-object style, run commands. Before writing a line, read three neighboring tests.
 
