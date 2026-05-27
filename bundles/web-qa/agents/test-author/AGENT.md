@@ -75,7 +75,7 @@ Wait for answers, then write.
 
 **Observable evidence** — expected results must be verifiable by snapshot/selector/URL, not by assumption:
 - [ ] Every expected result uses one of: URL change, visible text, element present/absent, field value — never "page works" or "it succeeds"
-- [ ] The Expected Final State can be confirmed with `browser_snapshot` alone
+- [ ] The Expected Final State can be confirmed with a single snapshot alone
 
 **Isolation**
 - [ ] Test is self-contained — no dependency on other test cases running first
