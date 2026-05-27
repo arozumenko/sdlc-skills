@@ -11,7 +11,7 @@ metadata:
 
 This skill describes how individual contributors (analyst, implementer, reviewer) do their craft inside the analyst → implementer → reviewer pipeline. **Orchestration of that pipeline is the `test-automation-lead` agent's job.** That role owns slot routing, dispatch templates, AFS quality gating, status discipline, automation merge gate, and framework architecture decisions. This skill describes what each IC slot does once dispatched.
 
-If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
+If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
 
 **Core philosophy:** do not automate what you have not executed. Every case is run manually first (pick whichever browser tool is wired and fits the challenge — `playwright-testing` over MCP, `playwright-cli` from the shell, `browser-verify` over CDP; full triage in [`references/browser-tools.md`](references/browser-tools.md)) so defects, missing data, and environmental gaps surface *before* a line of automation code is written. Then a separate engineer implements the automation inside the project's existing framework. Then a reviewer re-runs it.
 
@@ -102,7 +102,7 @@ Missing context → flag the gap; don't fabricate defaults.
 8. Deliver & sync TMS           (completing-a-task + TMS adapter back-write)
 ```
 
-Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](../test-case-analysis/SKILL.md)). Steps 5–6 belong to the implementer slot (driven by this skill — see § Implementer six-phase loop below). Step 7 is the reviewer slot (driven by [`code-review`](../code-review/SKILL.md)). Step 8 is the handoff.
+Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](skills/test-case-analysis/SKILL.md)). Steps 5–6 belong to the implementer slot (driven by this skill — see § Implementer six-phase loop below). Step 7 is the reviewer slot (driven by [`code-review`](skills/code-review/SKILL.md)). Step 8 is the handoff.
 
 `test-automation-lead` resolves each slot to a concrete agent at dispatch time. ICs don't need to know the routing rules — they need to know how to execute their phase once dispatched.
 
@@ -128,7 +128,7 @@ grep -r "pytest-playwright\|playwright.sync_api" --include="*.txt" --include="*.
 test -f wdio.conf.ts -o -f wdio.conf.js && echo "wdio"
 ```
 
-**No framework yet?** Return `needs-escalation` (mid-flow escalation). The orchestrator owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) § Framework Architecture. Once an approved plan is handed back, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
+**No framework yet?** Return `needs-escalation` (mid-flow escalation). The orchestrator owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md) § Framework Architecture. Once an approved plan is handed back, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
 
 ### 2. Ingest case from TMS
 
@@ -154,10 +154,10 @@ If no adapter is configured, default to `markdown`: cases live in `test-specs/{f
 
 ### 3. Execute manually (analyst slot)
 
-The analyst — typically `qa-engineer`, occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](../test-case-analysis/) skill:
+The analyst — typically `qa-engineer`, occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](skills/test-case-analysis/) skill:
 
-- UI cases → [`playwright-testing`](../playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
-- Fallback / deep inspection → [`browser-verify`](../browser-verify/) (CDP — real input events, computed styles, storage).
+- UI cases → [`playwright-testing`](skills/playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
+- Fallback / deep inspection → [`browser-verify`](skills/browser-verify/) (CDP — real input events, computed styles, storage).
 - API cases → `curl` / project's HTTP client.
 
 For every step: screenshot, console, network. For every assertion: proof.
@@ -166,7 +166,7 @@ For every step: screenshot, console, network. For every assertion: proof.
 
 ### 4. Produce automation-ready spec (AFS)
 
-The analyst writes an **Automation-Friendly Spec** (AFS) — a markdown file in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and required sections live in [`../test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md).
+The analyst writes an **Automation-Friendly Spec** (AFS) — a markdown file in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and required sections live in [`skills/test-case-analysis/references/spec-format.md`](skills/test-case-analysis/references/spec-format.md).
 
 **AFS quality bar — implementer-readable contract.** Every AFS must satisfy:
 
@@ -281,7 +281,7 @@ The existing reporter's output file (`junit.xml` above) is unchanged, so anythin
 
 ### Phase 6 — Handoff
 
-Five-step task-completion protocol (see [`completing-a-task`](../completing-a-task/) skill):
+Five-step task-completion protocol (see [`completing-a-task`](skills/completing-a-task/) skill):
 
 1. **Verify locally** — single test green, lint clean, diff reviewed.
 2. **Commit on a feature branch** — match the convention from `.agents/workflow.md` (typically `tests/<TMS-ID>-<slug>` or `automation/<case-id>-<slug>`).
@@ -532,9 +532,9 @@ All dispatches share the parent's working tree; the same-surface-serial rule is 
 
 ## References
 
-- [`../test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md) — AFS structure, required sections, examples.
+- [`skills/test-case-analysis/references/spec-format.md`](skills/test-case-analysis/references/spec-format.md) — AFS structure, required sections, examples.
 - [`references/tms-adapters.md`](references/tms-adapters.md) — adapter contract, supported TMSes, `.agents/test-automation.yaml` schema.
 - [`references/commands.md`](references/commands.md) — framework detection, sub-agent spawning per host, TMS CLI examples, AFS template.
 - [`references/framework-scaffold.md`](references/framework-scaffold.md) — minimal scaffolds for projects without a framework, per language.
 - [`references/browser-tools.md`](references/browser-tools.md) — browser-tool triage for analyst execution.
-- [`../../agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.
+- [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.

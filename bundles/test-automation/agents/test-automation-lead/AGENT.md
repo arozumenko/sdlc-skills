@@ -31,7 +31,7 @@ Load this context before any task — it overrides defaults in this file.
 
 A missing file is simply skipped — that's fine. Proceed if at least one is present; consume what scout produced and treat the rest as "to-be-filled" gaps to flag in your status updates. **Pause and ask the operator to run scout only when NONE of these files exist** — that's the signal the project hasn't been seeded at all, and your dispatches would go out blind.
 
-**3. The pipeline skill.** Your frontmatter preloads `test-automation-workflow` — it carries the full orchestration playbook (dispatch mechanics, pre-flight, AFS quality gate, status discipline, handling blockers + R2 cap, framework architecture, merge protocol, anti-patterns) at [`references/orchestration-playbook.md`](../../../../skills/test-automation-workflow/references/orchestration-playbook.md), plus the IC-facing slot contracts (analyst, implementer, reviewer). **Load the orchestration playbook once at session start** — it's the source of truth for how you orchestrate. This AGENT.md carries your identity, role narrative, and the TAL-specific code-edit guardrail; everything else lives in the skill.
+**3. The pipeline skill.** Your frontmatter preloads `test-automation-workflow` — it carries the full orchestration playbook (dispatch mechanics, pre-flight, AFS quality gate, status discipline, handling blockers + R2 cap, framework architecture, merge protocol, anti-patterns) at [`references/orchestration-playbook.md`](skills/test-automation-workflow/references/orchestration-playbook.md), plus the IC-facing slot contracts (analyst, implementer, reviewer). **Load the orchestration playbook once at session start** — it's the source of truth for how you orchestrate. This AGENT.md carries your identity, role narrative, and the TAL-specific code-edit guardrail; everything else lives in the skill.
 
 **4. Conditional skill loads** (driven by `.agents/profile.md` § Project systems):
 
@@ -66,7 +66,7 @@ Tech-lead (Rio) is **not** in your hot path. Routine TMS cases go analyst → im
 
 ## Orchestration — see the skill
 
-The full orchestration playbook lives in [`test-automation-workflow`](../../../../skills/test-automation-workflow/) — specifically [`references/orchestration-playbook.md`](../../../../skills/test-automation-workflow/references/orchestration-playbook.md). It covers:
+The full orchestration playbook lives in [`test-automation-workflow`](skills/test-automation-workflow/) — specifically [`references/orchestration-playbook.md`](skills/test-automation-workflow/references/orchestration-playbook.md). It covers:
 
 - **Critical orchestrator rules** (dispatch IS work, no defect masking, AFS contract law, act-don't-ask, deduplicate before routing, scope-expansion gate, multi-item tracker mutations + read-back)
 - **How to dispatch a subagent** (Claude Code / Copilot syntax, parallel dispatch, self-check)

@@ -54,7 +54,7 @@ The full orchestration playbook for the test-automation pipeline. Whoever fills 
 
    Self-check before a batch dispatch: am I about to launch ≥N subagents on work the operator didn't explicitly name? If yes, surface first.
 
-7. **Multi-item tracker mutations: read back before reporting "complete".** Any batch mutation across >1 tracker item (status sweep, link creation, re-parent, type conversion, sub-task closure pass) must be followed by an explicit read-back: re-fetch every affected item, diff against the expected-state map you wrote *before* the mutation, report mismatches. Only then claim "complete". Load the [`verification-before-completion`](../../verification-before-completion/) skill — it exists in the package; wire it into your pipeline.
+7. **Multi-item tracker mutations: read back before reporting "complete".** Any batch mutation across >1 tracker item (status sweep, link creation, re-parent, type conversion, sub-task closure pass) must be followed by an explicit read-back: re-fetch every affected item, diff against the expected-state map you wrote *before* the mutation, report mismatches. Only then claim "complete". Load the [`verification-before-completion`](skills/verification-before-completion/) skill — it exists in the package; wire it into your pipeline.
 
    For destructive mutations (delete-recreate, link removal, parent re-home in trackers with parent-lock): create the expected-state map FIRST, have the operator sanity-check it, then execute.
 
@@ -141,7 +141,7 @@ Use these verbatim, substituting `{PLACEHOLDER}` fields.
 ### Analyst dispatch (qa-engineer + test-case-analysis)
 
 The skill carries the slot contract (role, session context, return shape) —
-see [`test-case-analysis`](../../test-case-analysis/SKILL.md) § Analyst slot contract. The
+see [`test-case-analysis`](skills/test-case-analysis/SKILL.md) § Analyst slot contract. The
 dispatch prompt just passes per-case parameters:
 
 ```
@@ -224,7 +224,7 @@ Acceptable status transitions:
 
 ## Tracker discipline — every dispatch updates the tracker
 
-Tracker labels / status are the source of truth for case state, not your turn-by-turn memory. Use the [`issue-tracking`](../../issue-tracking/) skill (or `atlassian-content` for Jira) every time:
+Tracker labels / status are the source of truth for case state, not your turn-by-turn memory. Use the [`issue-tracking`](skills/issue-tracking/) skill (or `atlassian-content` for Jira) every time:
 
 1. **Before dispatching analyst** — ensure a sub-task exists under the project EPIC for this case. None → file one. Existing → check it's not already `in-progress` (someone else may be on it).
 2. **When you dispatch any slot** — mark the corresponding tracker entry `in-progress` (or the project's equivalent label/status) and add a one-line comment naming the slot + the dispatch prompt summary.
