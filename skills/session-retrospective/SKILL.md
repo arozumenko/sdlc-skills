@@ -38,7 +38,9 @@ config from code/PR changes (that's scout's normal update flow).
    `subagents/`, and prints a bounded markdown digest. Add `--all` to ignore
    the watermark, `--exclude-session <id>` to skip the active session, or
    `--out <path>` to save the digest. Exit code 3 = no transcripts found →
-   use the Fallback below.
+   use the Fallback below. The newest session is usually the one you're
+   running in — pass `--exclude-session <its id>` so the retrospective
+   doesn't analyze itself.
 
 2. **Read the digest** (it fits in context — never read raw `.jsonl`).
 
@@ -52,7 +54,9 @@ config from code/PR changes (that's scout's normal update flow).
 4. **Map findings to targets** — see `references/finding-to-target.md`:
    role-specific → that role's `.agents/memory/<role>/`; team-wide process →
    `.agents/workflow.md` / `.agents/conventions.md`; durable fact → a curated
-   entry (via the `memory` skill).
+   entry (via the `memory` skill). If `.agents/` doesn't exist, the project
+   isn't seeded — a retrospective refines an existing lens, it doesn't create
+   one; run `seeding-a-project` first.
 
 5. **Propose, then wait.** Present each proposed change as a diff plus a
    one-line rationale with its session-id evidence. **Stop and wait for the

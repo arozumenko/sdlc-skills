@@ -5,6 +5,7 @@
 | Lesson specific to one role | `.agents/memory/<role>/project_briefing.md` or a new curated entry | `memory` skill (curated-entry write) |
 | Team-wide process improvement | `.agents/workflow.md` | surgical edit |
 | Coding-standard correction | `.agents/conventions.md` | surgical edit |
+| Project tooling / build-script knowledge (no single role owns it) | `.agents/conventions.md` or `AGENTS.md` | surgical edit |
 | Durable project fact / gotcha | curated entry in the most relevant role's memory | `memory` skill |
 | Every run | `.agents/retrospectives/YYYY-MM-DD.md` | new report: analyzed / applied / deferred |
 
