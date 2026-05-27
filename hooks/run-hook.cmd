@@ -16,21 +16,34 @@ if "%~1"=="" (
 )
 
 set "HOOK_DIR=%~dp0"
+set "SCRIPT=%~1"
+
+REM Collect every remaining arg (no 8-arg %2..%9 cap), each re-quoted so
+REM values with spaces survive. %* ignores shift in cmd, so build the list
+REM by hand. (Note: SHIFT must come after capturing %~1 above.)
+shift
+set "ARGS="
+:collect_args
+if "%~1"=="" goto args_done
+set "ARGS=%ARGS% "%~1""
+shift
+goto collect_args
+:args_done
 
 REM Try Git for Windows bash in standard locations
 if exist "C:\Program Files\Git\bin\bash.exe" (
-    "C:\Program Files\Git\bin\bash.exe" "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
+    "C:\Program Files\Git\bin\bash.exe" "%HOOK_DIR%%SCRIPT%" %ARGS%
     exit /b %ERRORLEVEL%
 )
 if exist "C:\Program Files (x86)\Git\bin\bash.exe" (
-    "C:\Program Files (x86)\Git\bin\bash.exe" "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
+    "C:\Program Files (x86)\Git\bin\bash.exe" "%HOOK_DIR%%SCRIPT%" %ARGS%
     exit /b %ERRORLEVEL%
 )
 
 REM Try bash on PATH (e.g. user-installed Git Bash, MSYS2, Cygwin)
 where bash >nul 2>nul
 if %ERRORLEVEL% equ 0 (
-    bash "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
+    bash "%HOOK_DIR%%SCRIPT%" %ARGS%
     exit /b %ERRORLEVEL%
 )
 
