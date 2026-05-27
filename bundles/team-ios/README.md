@@ -15,6 +15,8 @@ Testing / Swift Concurrency skills via `ios-dev`), seeds per-role stack
 briefings into `.agents/memory/<role>/`, and splices the team conventions
 into `AGENTS.md` / `CLAUDE.md`.
 
+## Quick start
+
 The team runs in **three phases**. You launch only two agents yourself —
 `scout`, then `project-manager`; the hooks and the orchestrator handle the
 rest.

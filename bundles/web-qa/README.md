@@ -14,6 +14,8 @@ Installs the 6 agents below into `.claude/agents/`, seeds QA reference docs
 into `.agents/web-qa/knowledge/`, and splices the team conventions into
 `AGENTS.md` / `CLAUDE.md`.
 
+## Quick start
+
 The team runs in **three phases**. Unlike the other bundles there is no
 `scout` and no single orchestrator: `app-profiler` onboards, then you run
 the authoring/running agents **in order**.
