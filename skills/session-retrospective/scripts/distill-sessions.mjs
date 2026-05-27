@@ -227,6 +227,10 @@ function main() {
       'Fallback: paste a session transcript or summary and scout will analyze it directly.\n');
     process.exit(3);
   }
+  if (!existsSync(projectDir)) {
+    process.stderr.write(`project-dir not found: ${projectDir}\n`);
+    process.exit(1);
+  }
   const wmPath = args.watermark || join('.agents', 'memory', 'scout', '.last-retrospective');
   const analyzed = args.all ? new Set() : new Set(readWatermark(wmPath).analyzed);
   const exclude = args['exclude-session'];

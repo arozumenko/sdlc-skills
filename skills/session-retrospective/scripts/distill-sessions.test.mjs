@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   encodeProjectPath, extractSignals, detectRetries,
-  renderDigest, parseSession, resolveProjectDir, readSubagents,
+  renderDigest, parseSession, resolveProjectDir, readSubagents, readWatermark,
 } from './distill-sessions.mjs';
 
 test('encodeProjectPath replaces slashes and dots with dashes', () => {
@@ -102,4 +102,18 @@ test('parseSession + readSubagents on a written fixture', () => {
   const subs = readSubagents(sessDir);
   assert.equal(subs.length, 1);
   assert.equal(subs[0].agentType, 'python-dev');
+});
+
+test('readWatermark: missing file, valid file, malformed JSON', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sr-'));
+  // missing file → empty analyzed list
+  assert.deepEqual(readWatermark(join(dir, 'none')), { analyzed: [] });
+  // valid file → parsed object
+  const ok = join(dir, 'wm.json');
+  writeFileSync(ok, JSON.stringify({ lastRun: '2026-05-27T00:00:00Z', analyzed: ['a', 'b'] }));
+  assert.deepEqual(readWatermark(ok).analyzed, ['a', 'b']);
+  // malformed JSON → falls back to empty analyzed list
+  const bad = join(dir, 'bad.json');
+  writeFileSync(bad, '{ not json');
+  assert.deepEqual(readWatermark(bad), { analyzed: [] });
 });

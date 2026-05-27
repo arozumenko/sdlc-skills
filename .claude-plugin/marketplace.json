@@ -162,6 +162,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "session-retrospective",
+      "source": "./skills/session-retrospective",
+      "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout).",
+      "version": "0.2.0"
+    },
+    {
       "name": "completing-a-task",
       "source": "./skills/completing-a-task",
       "description": "Five-step task handoff protocol: commit → push → PR → comment → notify.",

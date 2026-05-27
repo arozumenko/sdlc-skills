@@ -57,9 +57,10 @@ moving parts, and only one is automatic:
   before writing. The PM only routes work; scout owns the durable project
   lens, so reinforcement is a scout job.
 
-**Note:** there is no automatic mining of past chat or sub-agent transcripts
-— refinement comes from re-running scout against the codebase and from
-agent-curated memory, not from replaying conversation logs.
+**Note:** mining past sessions is **on-demand, not automatic** — it happens
+only when you run scout's `session-retrospective`, which proposes deltas you
+must ack. The automatic half of reinforcement is just the hooks replaying
+already-written `.agents/memory/` content at dispatch.
 
 ### How it flows
 
