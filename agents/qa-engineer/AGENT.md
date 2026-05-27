@@ -42,12 +42,7 @@ systems, not loaded on every session):
 - **`xray-testing`** — load only when the TMS is Xray (`.agents/test-automation.yaml` § `tms.adapter: xray`). Other
   adapters (Zephyr / TestRail / Azure / markdown) don't need it.
 
-**Escalate to `test-automation-lead` (TAL)** when `test-case-analysis` surfaces
-an architectural gap — a shared auth-state problem, a missing fixture
-primitive, a cross-cutting page-object refactor that can't stay local.
-Return status `needs-tal` with the gap described. TAL owns test-framework
-architecture decisions; tech-lead is no longer routed for test-automation
-escalations.
+**Escalate per the roster in `.agents/team-comms.md`** when `test-case-analysis` surfaces an architectural gap — a shared auth-state problem, a missing fixture primitive, a cross-cutting page-object refactor that can't stay local. Return the escalation status documented in the [`test-automation-workflow`](../../skills/test-automation-workflow/) skill with the gap described. The roster decides who picks it up; you don't hardcode a role here.
 
 ## Verify Your Test Scripts (MANDATORY)
 
@@ -137,40 +132,7 @@ npx playwright test auth.spec.ts
 
 ## Filing a defect
 
-`bugfix-workflow` is a **dev** skill — its middle steps (write failing
-test → RCA → implement fix → verify) are the developer's job, not
-yours. It's in your skill set because dev-style verification work
-(reproducing a bug end-to-end, writing a regression test in
-isolation) sometimes legitimately needs it. But during
-`test-case-analysis`, **never invoke `bugfix-workflow` to file the
-initial defect** — you file the ticket and walk away; the dev picks
-it up later. Use the [`issue-tracking`](../../skills/issue-tracking/)
-skill — it's tracker-aware (reads `.agents/profile.md` § Project
-systems § Issue tracker, dispatches to the matching CLI or MCP) and
-owns the Bug Report template.
-
-Your procedure:
-
-1. Read `.agents/profile.md` § Project systems § Bug filing — both
-   **Issue tracker** (`github-issues` / `gitlab-issues` / `jira` /
-   `azure-devops` / `linear` / …) and **Bug filing style**
-   (`github-issue` — standalone; `story-subtask` — sub-task under
-   the originating story for Jira / ADO; `separate-ticket` — filed
-   into a dedicated QA/bugs project named in § Bug filing target).
-2. Invoke [`issue-tracking`](../../skills/issue-tracking/) § *File a
-   defect* — it handles the create command per tracker. For
-   `story-subtask`, fetch the parent story ID via the TMS adapter's
-   `get_test_case_links` first, then pass it as the parent.
-3. Note the ticket ID in the AFS § Known Defects Found with the
-   filing style and recommended handling (soft-expect for isolated,
-   natural-fail for blocking). See
-   [`test-case-analysis` § Step 5](../../skills/test-case-analysis/SKILL.md)
-   for the bundling / classification logic.
-
-If profile.md § Bug filing is `Unconfirmed`, or the named tracker
-has no wired MCP/CLI on this host, stop and ask the operator — don't
-pick a default silently. Flag the gap in the AFS so scout can fix it
-on the next onboarding pass.
+Use the [`issue-tracking`](../../skills/issue-tracking/) skill — tracker-aware (reads `.agents/profile.md` § Project systems § Issue tracker) and owns the Bug Report template. **Not `bugfix-workflow`** — that's a dev skill (its middle steps are the developer's job, not yours). You file and walk away. Full filing procedure (routing rules, sub-task parents, bundling per `profile.md`) lives in [`test-case-analysis`](../../skills/test-case-analysis/) § Step 5.
 
 ## Playwright MCP Testing
 

@@ -213,16 +213,6 @@ When a task has significant technical unknowns:
 **Output:** Yes/No + sample code + blockers found
 ```
 
-## Test-automation interplay
-
-Test-automation work — both routine cases AND framework architecture — is owned by `test-automation-lead` (Tal). You are not in that escalation path. TAL may dispatch you when a test-framework change has cross-cutting application-code implications (e.g. adding a `data-testid` strategy that requires frontend changes, or wiring an auth-state setup that needs an application-side API). In those cases:
-
-1. TAL hands you the application-side contract.
-2. You handle the application-side change (decomposition, review).
-3. TAL handles the test-framework side and the merge.
-
-Otherwise, stay clear of test-automation routing. PM forwards TMS-case work directly to TAL.
-
 ## Architecture Guardrails
 
 Watch for:

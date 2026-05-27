@@ -1,6 +1,6 @@
 ---
 name: test-automation-workflow
-description: IC-facing test automation process — implementer six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), AFS-driven workflow, no-defect-masking rules, run-report template. Pluggable TMS adapters (Zephyr Scale / TestRail / Xray / Azure Test Plans / markdown). Load when implementing tests from an AFS, or when you need the canonical IC process for analyst → implementer → reviewer slots. Orchestration (slot routing, dispatch templates, AFS gating, automation merge gate) is owned by the `test-automation-lead` agent, not this skill.
+description: Use when a TMS test case needs to become an automated test, or when automating a regression batch — "automate TC-NNN", "convert this case to Playwright", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
 license: Apache-2.0
 metadata:
   author: "Alexander Bychinkii (git: bermudas)"

@@ -1,6 +1,6 @@
 ---
 name: issue-tracking
-description: Create, query, and update issues on whatever tracker the project uses — GitHub Issues, GitLab, Jira, Azure DevOps, or Linear. Tracker-aware — reads `.agents/profile.md` § Project systems § Issue tracker and dispatches to the matching CLI or MCP. Use when the user asks to "create an issue", "file a bug", "file a defect", "check issues", "update a ticket", "create an epic", or anything about issue / ticket / work-item management.
+description: Create, manage, and track issues in GitHub, Linear, or GitLab. Use when the user asks to "create an issue", "file a bug", "check issues", "update a ticket", "create an epic", or anything about issue/ticket management.
 license: Apache-2.0
 compatibility: Requires the tracker's CLI or MCP wired in — gh / glab / Atlassian MCP / Azure DevOps MCP / Linear CLI/MCP. Scout's Step 6.8 wires these per-agent on restrictive hosts.
 allowed-tools: Bash(gh:*) Bash(linear:*) Bash(glab:*)

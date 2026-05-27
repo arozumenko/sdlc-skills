@@ -71,7 +71,21 @@ and ideally TMS MCP tools. If any of these are missing, see the
 cd /path/to/your-automation-repo
 ```
 
-**Simplest form — let agent frontmatter resolve the skills automatically.** The installer reads each agent's `skills:` frontmatter, partitions into monorepo + external, fetches the externals, and reports both lists before installing:
+**Easiest path — bundle install** (Claude Code today; other hosts pending bundle target support). One command installs Tal + Sage + Axel + scout, their declared skills, per-role briefing overlays, and the pipeline's onboarding instructions:
+
+```bash
+npx github:arozumenko/sdlc-skills init --bundle test-automation --yes
+```
+
+This expands to the same content as the manual `--agents` form below, plus:
+- briefing overlays (`bundles/test-automation/briefings/*.md`) seeded into each role's `.agents/memory/<role>/project_briefing.md`
+- team instructions spliced into `AGENTS.md` / `CLAUDE.md` under `<!-- BUNDLE:test-automation -->` markers
+
+See `bundles/test-automation/README.md` for what's included.
+
+For other IDEs (Copilot, Cursor, Windsurf), use the manual `--agents` form below until the bundle's `targets:` list expands.
+
+**Simplest manual form — let agent frontmatter resolve the skills automatically.** The installer reads each agent's `skills:` frontmatter, partitions into monorepo + external, fetches the externals, and reports both lists before installing:
 
 ```bash
 # Quick-start — test-automation roster (Tal-led pipeline)
@@ -98,12 +112,6 @@ npx github:arozumenko/sdlc-skills init \
 ```
 
 > **Pitfalls the installer now catches:** a space inside the comma list (`--skills a,b, c,d`) gets split by the shell — only the first chunk reaches `--skills`. The hardened parser errors loudly on the orphan fragments now and tells you how to fix it.
-
-**After install, strip deployment-mode markers** (every install needs this once; updates need it again — see [Maintenance](#maintenance)):
-
-```bash
-npx github:arozumenko/sdlc-skills init strip
-```
 
 Swap `--target` per host (`claude` / `cursor` / `windsurf` /
 `copilot`). Omit `--target` to install into every detected IDE

@@ -1,6 +1,6 @@
 ---
 name: test-automation-engineer
-description: Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test, or when `test-automation-lead` dispatches a framework-scale plan that needs hands on the keyboard. Axel — senior automation engineer who writes Playwright / Cypress / pytest / JUnit / NUnit / WDIO tests matching the project's existing framework, never masks product defects, and stops at the AFS boundary (does not re-explore, does not re-specify, does not make architecture decisions).
+description: Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Axel — senior automation engineer who matches the project's existing framework (Playwright/Cypress/pytest/JUnit/…), never masks product defects, and stops at the AFS boundary.
 model: sonnet
 color: orange
 workspace: clone
