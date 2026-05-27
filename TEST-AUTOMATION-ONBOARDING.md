@@ -15,27 +15,28 @@ follow the links as you go.
 ## The pipeline, one picture
 
 ```
-User → test-automation-lead (Tal) → analyst slot → AFS → implementer slot → reviewer slot → TAL merges
+User → test-automation-lead → analyst slot → AFS → implementer slot → reviewer slot → test-automation-lead merges
 ```
 
-Role defaults:
+Role defaults (personas are assigned per `.agents/team-comms.md`):
 
 | Slot | Agent | Skill |
 |---|---|---|
-| Orchestrator | `test-automation-lead` (Tal) | `test-automation-workflow` (routing lives in TAL's AGENT.md) |
-| Analyst | `qa-engineer` (Sage) | `test-case-analysis` |
-| Implementer | `test-automation-engineer` (Axel) | `test-automation-workflow` (IC-facing six-phase loop) |
+| Orchestrator | `test-automation-lead` | `test-automation-workflow` (routing lives in the agent's AGENT.md) |
+| Analyst | `qa-engineer` | `test-case-analysis` |
+| Implementer | `test-automation-engineer` | `test-automation-workflow` (IC-facing six-phase loop) |
 | Reviewer | `qa-engineer` (fresh session) | `code-review` |
 
-`test-automation-lead` (Tal) is a **top-level orchestrator launched directly
-by the user** — not a subagent of `project-manager`. Tal owns slot routing,
-AFS gating, automation merge, and test-framework architecture
+`test-automation-lead` is a **top-level orchestrator launched directly
+by the user** — not a subagent of `project-manager`. The role owns slot
+routing, AFS gating, automation merge, and test-framework architecture
 (greenfield bootstrap, framework-scale work, mid-flow escalations).
-Tech-lead (Rio) is no longer in the test-automation path. PM (Max)
+Tech-lead is no longer in the test-automation path. `project-manager`
 remains the orchestrator for feature-development work; on hybrid
-projects, PM and TAL coexist as peers, and PM points TA traffic at Tal
-via a user-readable prompt (not a subagent dispatch). Full routing
-rules: [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md).
+projects, PM and `test-automation-lead` coexist as peers, and PM points
+TA traffic at `test-automation-lead` via a user-readable prompt (not a
+subagent dispatch). Full routing rules:
+[`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -71,7 +72,7 @@ and ideally TMS MCP tools. If any of these are missing, see the
 cd /path/to/your-automation-repo
 ```
 
-**Easiest path — bundle install** (Claude Code today; other hosts pending bundle target support). One command installs Tal + Sage + Axel + scout, their declared skills, per-role briefing overlays, and the pipeline's onboarding instructions:
+**Easiest path — bundle install** (Claude Code today; other hosts pending bundle target support). One command installs the test-automation pipeline (`test-automation-lead` + `qa-engineer` + `test-automation-engineer` + scout), their declared skills, per-role briefing overlays, and the pipeline's onboarding instructions:
 
 ```bash
 npx github:arozumenko/sdlc-skills init --bundle test-automation --yes
@@ -88,7 +89,7 @@ For other IDEs (Copilot, Cursor, Windsurf), use the manual `--agents` form below
 **Simplest manual form — let agent frontmatter resolve the skills automatically.** The installer reads each agent's `skills:` frontmatter, partitions into monorepo + external, fetches the externals, and reports both lists before installing:
 
 ```bash
-# Quick-start — test-automation roster (Tal-led pipeline)
+# Quick-start — test-automation roster
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
   --agents scout,test-automation-lead,qa-engineer,test-automation-engineer \
@@ -132,7 +133,7 @@ a workflow slot (e.g. you don't install `test-automation-engineer`),
 scout's Step 6.9 substitutes the closest installed agent and writes
 the override into `.agents/role-overrides.md` with a fallback-tier
 warning. The pipeline runs, but a tech-lead or generic dev filling
-Axel's slot ships less framework-faithful tests than Axel would —
+test-automation-engineer's slot ships less framework-faithful tests than test-automation-engineer would —
 prefer installing the dedicated agent when you can. See
 [`skills/seeding-a-project/references/role-overrides.md`](skills/seeding-a-project/references/role-overrides.md)
 for the substitution table.
@@ -174,12 +175,12 @@ procedure: [`skills/seeding-a-project/SKILL.md`](skills/seeding-a-project/SKILL.
 
 **After scout completes, review `.agents/testing.md`.** If the
 framework name, version, run command, or CI command is wrong, fix
-by hand. Axel's output quality is entirely downstream of this file
+by hand. test-automation-engineer's output quality is entirely downstream of this file
 — two minutes here saves a rolled-back staging environment later.
 
 Fill in every `Unconfirmed` field scout couldn't infer (test
 environments, test user accounts, test data strategy, scope
-boundaries). Sage and Axel refuse to proceed without these.
+boundaries). qa-engineer and test-automation-engineer refuse to proceed without these.
 
 ### 3. Verify `.agents/test-automation.yaml`
 
@@ -199,7 +200,7 @@ tms:
   cases_dir: test-specs
 ```
 
-### 4. Smoke-test TAL dispatch (30 seconds)
+### 4. Smoke-test test-automation-lead dispatch (30 seconds)
 
 Before running a real case, prove that `test-automation-lead` actually
 **dispatches** a subagent on this host — not just narrates what it would
@@ -217,7 +218,7 @@ Launch `test-automation-lead` and hand it this no-op routing prompt:
 
 **Pass criteria:**
 
-- TAL's reply contains an actual subagent **tool call** matching the
+- test-automation-lead's reply contains an actual subagent **tool call** matching the
   host declared in `.agents/team-comms.md` — a Claude `Agent(...)`
   tool call or a Copilot `runSubagent(...)` tool call.
 - qa-engineer's reply contains the **actual** two lines from
@@ -225,13 +226,13 @@ Launch `test-automation-lead` and hand it this no-op routing prompt:
 
 **Fail signals:**
 
-- TAL says "I've routed this to qa-engineer" but no tool call appears
+- test-automation-lead says "I've routed this to qa-engineer" but no tool call appears
   in the same reply — the subagent never spawned (narration without
   dispatch).
-- TAL emits the wrong host syntax — Claude `Agent(...)` under Copilot,
+- test-automation-lead emits the wrong host syntax — Claude `Agent(...)` under Copilot,
   or `runSubagent(...)` under Claude. The call lands in the wrong
   dispatcher and nothing runs.
-- TAL emits prose like "Use the `qa-engineer` agent to …" under
+- test-automation-lead emits prose like "Use the `qa-engineer` agent to …" under
   *any* host. That's text, not a dispatch call — both Claude and
   Copilot require an actual tool call.
 
@@ -247,7 +248,7 @@ Pick a case you already know passes manually. Keep it small — login,
 a navigation, a simple form. The point is to prove the pipeline, not
 the app.
 
-The full slot-by-slot routing flow lives in TAL —
+The full slot-by-slot routing flow lives in test-automation-lead —
 [`agents/test-automation-lead/AGENT.md` § The pipeline](agents/test-automation-lead/AGENT.md).
 The IC-facing process for each slot (analyst six-phase loop, implementer
 six-phase loop, AFS rules, no-defect-masking, run-report template) is in
@@ -265,7 +266,7 @@ Shape:
 4. **Reviewer (qa-engineer, fresh session, + `code-review` skill)**
    checks assertions, selectors, defect-masking, cleanup. Reports
    with file:line refs.
-5. **TAL merges** per `.agents/profile.md` § Automation PR policy
+5. **test-automation-lead merges** per `.agents/profile.md` § Automation PR policy
    (`auto-merge` / `human-approved` / `manual`).
 
 ### 6. Scale up
@@ -282,7 +283,7 @@ for host-specific sub-agent spawning recipes.
 
 You have no existing test framework. sdlc-skills doesn't bootstrap
 one unilaterally — that's an architectural decision. **`test-automation-lead`
-(Tal) owns it.**
+(test-automation-lead) owns it.**
 
 1. **Install** with the test-automation roster — make sure
    `test-automation-lead` is included.
@@ -291,7 +292,7 @@ one unilaterally — that's an architectural decision. **`test-automation-lead`
    a stub `.agents/testing.md` with a note that the framework isn't
    picked yet.
 3. **Launch `test-automation-lead`** with the `test-automation-workflow`
-   skill (it's already in TAL's frontmatter — preloaded). Hand it:
+   skill (it's already in test-automation-lead's frontmatter — preloaded). Hand it:
 
    > Bootstrap a test-automation scaffold for this empty repo. Pick
    > the framework per the project's primary language per
@@ -302,20 +303,20 @@ one unilaterally — that's an architectural decision. **`test-automation-lead`
    > create the initial config files + one smoke test proving the
    > scaffold works.
 
-4. **TAL dispatches `test-automation-engineer`** (Axel) with the scaffold
-   plan. Axel creates the initial config files + one smoke test.
+4. **test-automation-lead dispatches `test-automation-engineer`** (test-automation-engineer) with the scaffold
+   plan. test-automation-engineer creates the initial config files + one smoke test.
 5. **From here, follow the existing-project flow** — Step 4 (smoke-test
-   TAL dispatch) and then Step 5 (pilot one case) above — with the
+   test-automation-lead dispatch) and then Step 5 (pilot one case) above — with the
    first real case (or markdown case).
 
-**Expect the first 2–3 cases to look thin on Phase 3 (Automate).** Axel's
+**Expect the first 2–3 cases to look thin on Phase 3 (Automate).** test-automation-engineer's
 "conventions sweep" normally reads neighbouring tests for existing
 patterns — on a fresh scaffold there are none yet, so the sweep will
-produce a short note ("no neighbours; following the scaffold TAL just
+produce a short note ("no neighbours; following the scaffold test-automation-lead just
 laid down"). That's fine. The sweep gets real once 3–4 cases have
 shipped and a body of convention exists to mirror.
 
-TAL's full framework-architecture contract lives in
+test-automation-lead's full framework-architecture contract lives in
 [`agents/test-automation-lead/AGENT.md` § Framework Architecture](agents/test-automation-lead/AGENT.md).
 
 ---
@@ -326,22 +327,22 @@ TAL's full framework-architecture contract lives in
   directories instead of flat `.agent.md` files. Run
   `npx github:arozumenko/sdlc-skills init fix-copilot`. See
   [README.md](README.md) for `--soul` modes.
-- **Sage returns `ready-for-automation` with a sparse selector
+- **qa-engineer returns `ready-for-automation` with a sparse selector
   table** → she skipped exploration. Re-run with: *"Execute every
   step via playwright-testing or browser-verify MCP tools before
   writing the AFS — do not author from the TMS case description
   alone."*
-- **Axel generates off-style tests** → `.agents/testing.md` is
+- **test-automation-engineer generates off-style tests** → `.agents/testing.md` is
   misleading him. Fix it by hand (framework version, page-object
-  convention, run command); ask Axel to `--update` the spec file.
+  convention, run command); ask test-automation-engineer to `--update` the spec file.
 - **TMS back-write silently fails** → look in `test-results/unsynced/`
   for the queued payload. Retry manually or re-run the back-write
-  step through Axel.
+  step through test-automation-engineer.
 - **MCP auth errors** → token rotated / scope missing. Fix the MCP
   server config in the host (`~/.claude.json`, `.mcp.json`, Copilot
   settings). Never in the project repo. Restart the agent session.
 - **Flaky test at CI but not local** → head vs headless, viewport,
-  timing. Axel owns root-cause. Never accept "retry three times" as
+  timing. test-automation-engineer owns root-cause. Never accept "retry three times" as
   a fix.
 
 ---
@@ -354,8 +355,8 @@ inline:
 
 ### Adding `test-automation-lead` to an existing install
 
-If you onboarded before TAL existed (or you originally installed only PM
-and now want the TA pipeline), pull just TAL and its skills:
+If you onboarded before test-automation-lead existed (or you originally installed only PM
+and now want the TA pipeline), pull just test-automation-lead and its skills:
 
 ```bash
 npx github:arozumenko/sdlc-skills init --update \

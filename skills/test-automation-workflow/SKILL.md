@@ -9,7 +9,7 @@ metadata:
 
 ## Test Automation Workflow — the IC process
 
-This skill describes how individual contributors (analyst, implementer, reviewer) do their craft inside the analyst → implementer → reviewer pipeline. **Orchestration of that pipeline is the `test-automation-lead` agent's job.** TAL owns slot routing, dispatch templates, AFS quality gating, status discipline, automation merge gate, and framework architecture decisions. This skill describes what each IC slot does once dispatched.
+This skill describes how individual contributors (analyst, implementer, reviewer) do their craft inside the analyst → implementer → reviewer pipeline. **Orchestration of that pipeline is the `test-automation-lead` agent's job.** That role owns slot routing, dispatch templates, AFS quality gating, status discipline, automation merge gate, and framework architecture decisions. This skill describes what each IC slot does once dispatched.
 
 If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
 
@@ -46,13 +46,13 @@ Missing context → flag the gap; don't fabricate defaults.
 - User set — a key into `.agents/profile.md` § Roles & sample users (e.g. `${TEST_USER}`)
 - Branch name — if the caller created the branch. **Don't `switch`, `commit`, `push`, or otherwise touch git unless `.agents/workflow.md` grants commit authority to this slot.**
 
-**Retry budget.** Soft limit: **≤ 2 reruns** against the same root cause before escalating. The TAL's R2 cap rule will refuse R3 on the same cause regardless — see `agents/test-automation-lead/AGENT.md` § R2 cap rule.
+**Retry budget.** Soft limit: **≤ 2 reruns** against the same root cause before escalating. The orchestrator's R2 cap rule will refuse R3 on the same cause regardless — see `agents/test-automation-lead/AGENT.md` § R2 cap rule.
 
 **Return contract:**
 
 - PR-ready diff (spec + page objects + fixtures in one commit set)
 - Run Report per § Run Report — mandatory template (classification + evidence)
-- If escalating after R2: name the class (architectural / AFS-drift / product-change) so the TAL routes correctly
+- If escalating after R2: name the class (architectural / AFS-drift / product-change) so the orchestrator routes correctly
 
 ## The eight steps (IC view)
 
@@ -93,7 +93,7 @@ grep -r "pytest-playwright\|playwright.sync_api" --include="*.txt" --include="*.
 test -f wdio.conf.ts -o -f wdio.conf.js && echo "wdio"
 ```
 
-**No framework yet?** Return `needs-tal` (mid-flow escalation). TAL owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) § Framework Architecture. Once TAL hands back an approved plan, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
+**No framework yet?** Return `needs-escalation` (mid-flow escalation). The orchestrator owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) § Framework Architecture. Once an approved plan is handed back, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
 
 ### 2. Ingest case from TMS
 
@@ -119,7 +119,7 @@ If no adapter is configured, default to `markdown`: cases live in `test-specs/{f
 
 ### 3. Execute manually (analyst slot)
 
-The analyst — typically `qa-engineer` (Sage), occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](../test-case-analysis/) skill:
+The analyst — typically `qa-engineer`, occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](../test-case-analysis/) skill:
 
 - UI cases → [`playwright-testing`](../playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
 - Fallback / deep inspection → [`browser-verify`](../browser-verify/) (CDP — real input events, computed styles, storage).
@@ -157,10 +157,10 @@ Read the AFS end-to-end. Re-read `.agents/testing.md`. Open three neighbouring t
 |---|---|
 | `ready-for-automation` | **Accept.** Standard six-phase loop — write a fresh spec. |
 | `extend-existing` | **Accept.** Read the covering spec named in AFS § Extension target end-to-end AND read its own AFS (typically in the same `test-specs/<feature>/` directory) so you know what's already proven. Then proceed through Phase 2–6 against AFS § Gap assertions only. The artefact you ship is an *edit to the covering spec*, not a fresh `.spec.ts`. |
-| `already-covered` | **Refuse.** No-implementation status — the `lcovered_<…>.md` AFS is a traceability artefact only. Return to TAL noting the misrouting. |
-| `out-of-scope-by-author` | **Refuse.** Analyst rejected at Phase 0 case-gate; should not reach implementer. Return to TAL. |
-| `blocked` | **Refuse.** Report to TAL with the unblock requirement. |
-| `defect-found` | **Conditional.** Confirm the defect ticket exists AND the AFS specifies handling (`expect.soft()` for isolated, let-it-fail-naturally for blocking). If unclear, refuse to TAL. |
+| `already-covered` | **Refuse.** No-implementation status — the `lcovered_<…>.md` AFS is a traceability artefact only. Return to the orchestrator noting the misrouting. |
+| `out-of-scope-by-author` | **Refuse.** Analyst rejected at Phase 0 case-gate; should not reach implementer. Return to the orchestrator. |
+| `blocked` | **Refuse.** Report to the orchestrator with the unblock requirement. |
+| `defect-found` | **Conditional.** Confirm the defect ticket exists AND the AFS specifies handling (`expect.soft()` for isolated, let-it-fail-naturally for blocking). If unclear, refuse to the orchestrator. |
 | `un-automatable` | **Refuse.** Analyst should not have routed this. |
 
 **This table is the single source of truth.** Orchestrator briefs, dispatch prompts, and project workflows defer to it. New statuses get added here first.
@@ -172,11 +172,11 @@ If your Absorb pass surfaces a discrepancy between AFS selectors and the live DO
 1. Use the project's browser-driving capability (`playwright-cli` codegen, `playwright-testing` MCP, or `browser-verify` for computed styles).
 2. Diff observed selectors vs AFS-stated selectors.
 3. **Amend the AFS in-place** with a `docs(afs): amend selectors per implementer exploration` commit — do NOT silently drift from the AFS.
-4. If the gap is too wide (multiple steps obsolete, app flow changed), **return `needs-analyst-rerun` to TAL** — re-exploration is the analyst's job, not yours.
+4. If the gap is too wide (multiple steps obsolete, app flow changed), **return `needs-analyst-rerun` to the orchestrator** — re-exploration is the analyst's job, not yours.
 
-Phase 2 has a budget: **30 minutes of exploration** before escalating to TAL.
+Phase 2 has a budget: **30 minutes of exploration** before escalating to the orchestrator.
 
-**For `extend-existing` AFS:** Phase 2 has an additional pre-step — read the covering spec end-to-end AND its own AFS (the one that authored it) before driving the live surface. The goal is to enter Phase 3 knowing *exactly* what's already proven, so the gap-fill is purely additive. If the covering AFS has been amended since the spec merged (selectors drifted, observable changed), surface that to TAL via `needs-analyst-rerun` *on the covering spec's case*, not on yours — the covering spec is unstable upstream and your extension would land on shifting ground.
+**For `extend-existing` AFS:** Phase 2 has an additional pre-step — read the covering spec end-to-end AND its own AFS (the one that authored it) before driving the live surface. The goal is to enter Phase 3 knowing *exactly* what's already proven, so the gap-fill is purely additive. If the covering AFS has been amended since the spec merged (selectors drifted, observable changed), surface that to the orchestrator via `needs-analyst-rerun` *on the covering spec's case*, not on yours — the covering spec is unstable upstream and your extension would land on shifting ground.
 
 ### Phase 3 — Automate
 
@@ -215,9 +215,9 @@ Classify the failure honestly:
 |---|---|
 | **Infrastructure** (selector mismatch, timing, env var, framework upgrade) | Fix the test or POM. Re-run. |
 | **Product-isolated** (one assertion fails for product reason, rest of flow works) | `expect.soft()` with `// Known defect: <TICKET>` comment. File the defect via `atlassian-content` / `issue-tracking` if not already filed. |
-| **Product-blocking** (downstream steps can't run) | **Let it fail naturally.** File the defect. Return task status `blocked` to TAL. Forbidden: `test.fail()`. |
+| **Product-blocking** (downstream steps can't run) | **Let it fail naturally.** File the defect. Return task status `blocked` to the orchestrator. Forbidden: `test.fail()`. |
 
-**Soft retry budget:** ≤ 2 reruns against the same root cause. After R2, **stop and return `needs-tal`** with the rerun count + root-cause notes per rerun. TAL applies the R2 cap rule (escalate to architectural / re-route to analyst / park — never R3). Fishing your way to green by R3+ is a smell, not a strategy: empirically R1→R2 fixes most things, R3 either parks anyway or is wasted effort.
+**Soft retry budget:** ≤ 2 reruns against the same root cause. After R2, **stop and return `needs-escalation`** with the rerun count + root-cause notes per rerun. the orchestrator applies the R2 cap rule (escalate to architectural / re-route to analyst / park — never R3). Fishing your way to green by R3+ is a smell, not a strategy: empirically R1→R2 fixes most things, R3 either parks anyway or is wasted effort.
 
 Read failure artifacts: `test-results/`, `playwright-report/`, `allure-results/`, `error-context.md`. The framework usually pinpoints the exact mismatch.
 
@@ -226,10 +226,10 @@ Read failure artifacts: `test-results/`, `playwright-report/`, `allure-results/`
 | Tier | What to do | Authority |
 |---|---|---|
 | **In-test logging** — `test.step()` annotations, `console.log` for one-off noise, richer POM error messages | Add freely — local to the spec/POM, no config touched | Implementer's call |
-| **Additive reporter** — wire a SECONDARY reporter alongside the existing one (Playwright `reporter: [['html'], ['junit'], ['list']]`, pytest `-v` plugin, Cypress `mocha-multi-reporters`, custom log file utility) | Implementer adds in the PR; **PR description flags the addition explicitly** so TAL reviews specifically for: existing reporter output unchanged, CI/TMS consumers still work, no significant runtime/disk cost | Implementer adds, TAL reviews — never silent |
-| **Reporter replacement / removal** — swap `['junit']` for `['allure']`, change output schema, drop an existing reporter | Return `needs-tal` to TAL. Framework-scale decision; the existing reporter is almost certainly feeding TMS back-write or CI dashboards | TAL only |
+| **Additive reporter** — wire a SECONDARY reporter alongside the existing one (Playwright `reporter: [['html'], ['junit'], ['list']]`, pytest `-v` plugin, Cypress `mocha-multi-reporters`, custom log file utility) | Implementer adds in the PR; **PR description flags the addition explicitly** so the orchestrator reviews specifically for: existing reporter output unchanged, CI/TMS consumers still work, no significant runtime/disk cost | Implementer adds, the orchestrator reviews — never silent |
+| **Reporter replacement / removal** — swap `['junit']` for `['allure']`, change output schema, drop an existing reporter | Return `needs-escalation` to the orchestrator. Framework-scale decision; the existing reporter is almost certainly feeding TMS back-write or CI dashboards | the orchestrator only |
 
-**Hard rule: never remove or replace an existing reporter mid-PR.** The reporter contract is downstream-facing. Additive is reversible (one line removed and you're back to baseline); replacement breaks integrations silently. If the existing reporter is "wrong format" or "noisy," that's a `needs-tal` escalation.
+**Hard rule: never remove or replace an existing reporter mid-PR.** The reporter contract is downstream-facing. Additive is reversible (one line removed and you're back to baseline); replacement breaks integrations silently. If the existing reporter is "wrong format" or "noisy," that's a `needs-escalation` escalation.
 
 **Recommended pattern: parallel verbose reporter.** Add a stdout-only reporter alongside the existing file reporter:
 
@@ -254,18 +254,18 @@ Five-step task-completion protocol (see [`completing-a-task`](../completing-a-ta
 4. **Comment on the originating story/issue** with the PR link via `issue-tracking` (tracker-aware; reads `.agents/profile.md` § Issue tracker).
 5. **Back-write the TMS execution** via the configured adapter.
 
-Return the **Run Report** to TAL as your final message.
+Return the **Run Report** to the orchestrator as your final message.
 
 ---
 
 ## Run Report — mandatory template
 
-End every implementer / runner session with this exact structure (no prose summary — TAL scans the structured block):
+End every implementer / runner session with this exact structure (no prose summary — the orchestrator scans the structured block):
 
 ```markdown
 ## Run Report — {TEST_TAG}
 - **Implementer-local verdict:** GREEN N/M | RED N/M | BLOCKED  (you fill this in)
-- **Independent-gate verdict:** (TAL fills this after the independent live-run gate; implementer leaves blank)
+- **Independent-gate verdict:** (the orchestrator fills this after the independent live-run gate; implementer leaves blank)
 - **Duration:** {n}s
 - **Steps passed:** (list each AFS step that ran clean, by name)
 - **Failed step:** {step name} — POM method {Page.method()} — {file:line}
@@ -275,15 +275,15 @@ End every implementer / runner session with this exact structure (no prose summa
 - **Network failures:** (4xx/5xx requests, or "none")
 - **Artifacts:** `test-results/...`, `playwright-report/...`
 - **Reruns:** {n} (root cause of each — infrastructure / product / flake)
-- **Final run duration baseline:** {n}s (TAL uses this for future regression checks)
-- **Recommendation:** route to (analyst rerun / implementer fix / TAL merge / file bug {PROJECT-NNNN})
+- **Final run duration baseline:** {n}s (the orchestrator uses this for future regression checks)
+- **Recommendation:** route to (analyst rerun / implementer fix / the orchestrator merge / file bug {PROJECT-NNNN})
 ```
 
 Missing fields are unacceptable — every field has a defensible "none" or "n/a" value if not applicable.
 
-**Two-verdict split.** Your implementer-local verdict (your `N/M`) is what *you* observed running the spec in your workspace. The **Independent-gate verdict** is what *TAL* observes running the merged spec independently against the live environment — and that's the merge signal, not yours. Leave the independent-gate row blank; TAL fills it. Don't conflate the two: a GREEN N/N implementer-local + RED 1/3 independent-gate is a real outcome class (environment drift / parallel interaction / fresh-credential interaction), and the format must distinguish them.
+**Two-verdict split.** Your implementer-local verdict (your `N/M`) is what *you* observed running the spec in your workspace. The **Independent-gate verdict** is what *the orchestrator* observes running the merged spec independently against the live environment — and that's the merge signal, not yours. Leave the independent-gate row blank; the orchestrator fills it. Don't conflate the two: a GREEN N/N implementer-local + RED 1/3 independent-gate is a real outcome class (environment drift / parallel interaction / fresh-credential interaction), and the format must distinguish them.
 
-**For `extend-existing` AFS, the verdict scopes the entire extended spec.** Run the covering spec end-to-end (original `test()` blocks + your appended ones); your `N/M` covers all of them. A GREEN delta + RED original is a regression — the additive-only contract broke. Same merge gate as any other regression: block until additive-only is restored OR follow the shared-file regression protocol (enumerate affected callers, name re-run results in the PR description). TAL's independent-gate verdict applies to the full extended spec too — same scope, different runner.
+**For `extend-existing` AFS, the verdict scopes the entire extended spec.** Run the covering spec end-to-end (original `test()` blocks + your appended ones); your `N/M` covers all of them. A GREEN delta + RED original is a regression — the additive-only contract broke. Same merge gate as any other regression: block until additive-only is restored OR follow the shared-file regression protocol (enumerate affected callers, name re-run results in the PR description). the orchestrator's independent-gate verdict applies to the full extended spec too — same scope, different runner.
 
 ---
 
@@ -293,7 +293,7 @@ Missing fields are unacceptable — every field has a defensible "none" or "n/a"
 
 - Read `.agents/testing.md` first. Whatever framework it names, that's your framework.
 - If nothing is documented, detect it (see § Discover framework above). First hit wins.
-- No framework at all? Return `needs-tal` — framework bootstrap is TAL's call.
+- No framework at all? Return `needs-escalation` — framework bootstrap is the orchestrator's call.
 
 ### 2. No Defect Masking
 
@@ -327,7 +327,7 @@ Masking is bi-directional. The case text is a *hypothesis*; the live product is 
 
 Why this matters empirically: the test will pass-by-luck on the next product change that happens to land on the asserted value, then fail unpredictably when the product moves again. The live-contract assertion is durable.
 
-> **TAL-side gate.** TAL also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on TAL, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to TAL with the violation noted.
+> **the orchestrator-side gate.** the orchestrator also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on the orchestrator, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to the orchestrator with the violation noted.
 
 **A red test exposing a real product bug is a correct test.** Your job is to keep it honest, not to keep it green.
 
@@ -368,7 +368,7 @@ URLs, credentials, IDs, feature flags — all through the project's existing env
 
 Use framework-native waits — `waitForResponse`, `waitForURL`, `wait_for_selector`, auto-waiting assertions. A raw `sleep(2000)` is almost always wrong. The one exception: a proven animation window that a condition wait can't catch. Comment it with the reason.
 
-If you think you need a sleep to make a test stable, **escalate to TAL** with the reasoning before adding it.
+If you think you need a sleep to make a test stable, **escalate to the orchestrator** with the reasoning before adding it.
 
 ### 6. Locator ladder
 
@@ -380,7 +380,7 @@ Pick selectors in this order, walking down only when the previous tier genuinely
 4. `getByText(...)`
 5. CSS / XPath — last resort, with a one-line comment explaining why the higher tiers didn't fit
 
-**Stop+flag** if the target element has no test ID **and** roles / labels can't disambiguate it. Surface the gap to TAL, who routes it to the dev to add a test ID or accessibility attribute.
+**Stop+flag** if the target element has no test ID **and** roles / labels can't disambiguate it. Surface the gap to the orchestrator, who routes it to the dev to add a test ID or accessibility attribute.
 
 ### 7. Reuse before create
 
@@ -418,7 +418,7 @@ This section IS the reviewer-slot contract for test-automation PRs. When dispatc
 
 **Role.** Adversarial review of a test-automation PR. **You did NOT write this code** — that framing is mandatory; without it the review collapses into rubber-stamp. Two reviewers in parallel:
 
-- **`qa-engineer` (Sage) — fresh session** with the `code-review` skill loaded for generic review mechanics. This section adds the test-automation-specific expectations (triangulation, standing checks).
+- **`qa-engineer` — fresh session** with the `code-review` skill loaded for generic review mechanics. This section adds the test-automation-specific expectations (triangulation, standing checks).
 - **Optional `tech-lead` (Rio)** for framework-scale changes only — not for routine test PRs.
 
 **Session context — read once at session start.** Typically auto-imported via `@-blocks` in your agent's `AGENT.md`; if not, read now:
@@ -440,7 +440,7 @@ Missing context → flag the gap; don't fabricate defaults.
 
 - Verdict: `APPROVED` | `CHANGES_REQUESTED`
 - Findings list with `file:line` refs (Critical / Important / Nit per the `code-review` skill's Output Format)
-- Recommendation: ship vs amend. The TAL decides final disposition; reviewer recommends.
+- Recommendation: ship vs amend. The the orchestrator decides final disposition; reviewer recommends.
 
 ### Triangulate three artifacts — never two
 
@@ -470,16 +470,16 @@ Empirically: AFS-drift bugs slip through file:line review because the file and t
 - AFS amendments — any selector / observable drift between AFS and implementation must be reflected in an AFS docs commit in the same PR
 - Read-only-by-default check — if seed/cleanup logic shipped where the observable could have been asserted read-only on stable data, flag for refactor (§ Hard Rules → 10)
 
-Verdict: `APPROVED` | `CHANGES_REQUESTED` with file:line findings. Findings go back to implementer; TAL decides ship-vs-amend.
+Verdict: `APPROVED` | `CHANGES_REQUESTED` with file:line findings. Findings go back to implementer; the orchestrator decides ship-vs-amend.
 
 ---
 
 ## Batching multiple cases
 
-When TAL hands you N AFS files (rare — usually one at a time):
+When the orchestrator hands you N AFS files (rare — usually one at a time):
 
 - Cases touching the same page object → **serial**. Two agents editing `checkout.page.ts` will collide.
-- Cases on independent surfaces → can be parallelized by TAL via host subagent dispatch.
+- Cases on independent surfaces → can be parallelized by the orchestrator via host subagent dispatch.
 
 All dispatches share the parent's working tree; the same-surface-serial rule is the only collision guard. See [`references/commands.md`](references/commands.md) for concrete recipes.
 
@@ -492,7 +492,7 @@ All dispatches share the parent's working tree; the same-surface-serial rule is 
 - **Hardcoding the TMS.** Everything goes through the adapter.
 - **Masking a product defect with `test.fail()`, `xit`, `@Ignore`, or weakened assertions.** A red test is the correct signal. File the bug, don't hide it.
 - **One-shot mega-agent.** Context fragmentation is a feature, not a bug. Respect the slot split.
-- **Bypassing TAL on routing decisions.** TAL is the orchestrator; ICs execute their phase and return status. Don't decide who runs next yourself.
+- **Bypassing the orchestrator on routing decisions.** the orchestrator is the orchestrator; ICs execute their phase and return status. Don't decide who runs next yourself.
 - **"I wrote the code and it compiles."** Not done. Not until the test ran green (or red for a real product reason), evidence captured, PR open, TMS updated.
 
 ## References

@@ -284,7 +284,7 @@ Tracker labels / status are the source of truth for case state, not your turn-by
 
 1. **Before dispatching analyst** — ensure a sub-task exists under the project EPIC for this case. None → file one. Existing → check it's not already `in-progress` (someone else may be on it).
 2. **When you dispatch any slot** — mark the corresponding tracker entry `in-progress` (or the project's equivalent label/status) and add a one-line comment naming the slot + the dispatch prompt summary.
-3. **When the slot returns** — update the tracker entry per the result: `ready-for-review` after implementer green, `blocked` (link the blocker) after a `blocked`/`needs-tal`/`needs-analyst-rerun` return, `defect-filed` after a defect-found.
+3. **When the slot returns** — update the tracker entry per the result: `ready-for-review` after implementer green, `blocked` (link the blocker) after a `blocked`/`needs-escalation`/`needs-analyst-rerun` return, `defect-filed` after a defect-found.
 4. **When the automation PR merges** — verify the tracker entry auto-closed via `Closes #N` (or equivalent); close it manually if not, and back-write the TMS execution.
 
 If `.agents/profile.md` § Issue tracker is `Unconfirmed`, `issue-tracking` defaults to `gh` and flags the gap — surface it to the operator so scout can fix the field.
@@ -352,7 +352,7 @@ When a slot returns a non-`ready` status, classify:
 | `defect-found` | Product bug | Route through the bug pipeline (per `.agents/profile.md` § Bug filing); park the automation case until the bug is fixed. |
 | `un-automatable` | Case itself | Close the request with a note; do NOT re-dispatch. |
 | `needs-analyst-rerun` (from implementer) | AFS drift | Re-dispatch analyst slot with the discrepancy notes; do NOT push the implementer to "make it work." |
-| `needs-tal` (from analyst or implementer) | Framework gap | Pause the case. Read the gap. Apply § Framework Architecture (greenfield bootstrap / framework-scale / mid-flow). Resume from where it stopped. |
+| `needs-escalation` (from analyst or implementer) | Framework gap | Pause the case. Read the gap. Apply § Framework Architecture (greenfield bootstrap / framework-scale / mid-flow). Resume from where it stopped. |
 
 For all of the above: write the classification + action into the tracker entry as a comment, then send a status update to the user.
 
@@ -421,7 +421,7 @@ New fixture infrastructure, new page-object base class, CI pipeline changes, fra
 
 ### 3. Mid-flow architectural escalation
 
-Analyst or implementer returns `needs-tal` (formerly `needs-tech-lead`) — an AFS or partial implementation surfaced a gap the existing conventions don't cover. Examples: a new shared auth-state pattern, a cross-cutting page-object refactor that can't stay local, a new test type that needs a new fixture primitive.
+Analyst or implementer returns `needs-escalation` (formerly `needs-tech-lead`) — an AFS or partial implementation surfaced a gap the existing conventions don't cover. Examples: a new shared auth-state pattern, a cross-cutting page-object refactor that can't stay local, a new test type that needs a new fixture primitive.
 
 Pause the case. **Plan the resolution; update `.agents/testing.md` with the new convention; dispatch the implementer to execute.** Do not write the fixture / page-object / config change yourself — that's still the implementer's hands on the keyboard. Once the implementer ships and the change is merged, resume the paused case from where it stopped so the next case doesn't re-escalate for the same reason.
 
@@ -433,7 +433,7 @@ The implementer (Axel) may add a **secondary, additive** reporter to the framewo
 2. **No significant runtime / disk cost.** Verbose stdout reporter is fine; a reporter that writes a 500MB trace per run is not. Eyeball the reporter's known behavior; ask the implementer for a one-run-cost estimate if uncertain.
 3. **PR description flags the addition explicitly.** "Adds `['list']` reporter alongside existing `['junit']`" — if the description doesn't call it out, send the PR back for a clearer write-up rather than approving an invisible config change.
 
-**Reporter replacement or removal is yours alone**, not the implementer's. Swapping `['junit']` for `['allure']`, changing an output schema, dropping a reporter — these are framework-scale decisions. Implementer returns `needs-tal`; you plan the change, coordinate downstream consumers (TMS adapter, CI config, dashboards), then dispatch the implementer to execute. Add it to `.agents/testing.md` § Reporters so the next implementer inherits the rationale.
+**Reporter replacement or removal is yours alone**, not the implementer's. Swapping `['junit']` for `['allure']`, changing an output schema, dropping a reporter — these are framework-scale decisions. Implementer returns `needs-escalation`; you plan the change, coordinate downstream consumers (TMS adapter, CI config, dashboards), then dispatch the implementer to execute. Add it to `.agents/testing.md` § Reporters so the next implementer inherits the rationale.
 
 ### When to involve tech-lead anyway
 

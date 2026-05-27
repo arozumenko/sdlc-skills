@@ -82,7 +82,7 @@ Missing context → flag the gap; don't fabricate defaults.
 
 ## Phase 0 — Case-gate (preflight, runs BEFORE Phase 1)
 
-Before fetching the case body, probe its TMS author metadata. Skip cases the author has marked as not actionable — there's no analyst value in executing them, and downstream the implementer / TAL will reject them.
+Before fetching the case body, probe its TMS author metadata. Skip cases the author has marked as not actionable — there's no analyst value in executing them, and downstream the implementer / orchestrator will reject them.
 
 **What to probe** (project-defined in `.agents/testing.md` § TMS case-gate; if absent, default to fetching all and flag the gap):
 
@@ -98,7 +98,7 @@ Before fetching the case body, probe its TMS author metadata. Skip cases the aut
 
 - All probes clear → continue to Phase 1.
 - Status excluded → don't fetch the body; return `out-of-scope-by-author` with the field value as evidence; close the case in the tracker (or mark per project convention).
-- Folder/membership mismatch → don't dispatch; return to TAL with the discrepancy. Iteration drift is a TAL-side routing issue, not an analyst-side execution issue.
+- Folder/membership mismatch → don't dispatch; return to the orchestrator with the discrepancy. Iteration drift is an orchestrator-side routing issue, not an analyst-side execution issue.
 - TMS unreachable for the probe → fall back to fetching the body (Phase 1 will surface it); flag the gap for scout to fill in `.agents/testing.md`.
 
 ## The six-phase loop (one case at a time, runs AFTER Phase 0)
@@ -292,8 +292,8 @@ When you find a defect during execution:
     `bundle-per-case` **and** the project already has:
     - A title convention for umbrella tickets (so the
       find-or-create search has something stable to match on).
-    - A documented comment-anchor format that Sage can reference
-      from the AFS (e.g. "comment-3" or a permalink fragment).
+    - A documented comment-anchor format that the analyst can
+      reference from the AFS (e.g. "comment-3" or a permalink fragment).
     Without both, `strict-per-bug` is the safe default; one more
     ticket is cheaper than a missed clarification.
 - Hand the body, tracker, style, and (for `story-subtask`) parent
@@ -310,8 +310,8 @@ When you find a defect during execution:
   ticket ID, filing style, and a recommendation — soft-expect
   (isolated) or natural-fail (blocking). Under `bundle-per-case`,
   reference both the umbrella ticket ID and the comment anchor so
-  Axel can find the specific note (e.g. "Known defect: JIRA
-  SCRUM-BUG-42 comment-3 — soft-expect", or
+  the downstream implementer can find the specific note (e.g.
+  "Known defect: JIRA SCRUM-BUG-42 comment-3 — soft-expect", or
   "Known defect: GH#234 — natural-fail").
 
 ### 6. Emit AFS
