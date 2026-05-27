@@ -10,7 +10,7 @@ generated, making this distinct from a Playwright automation engineer.
 npx github:arozumenko/sdlc-skills init --bundle web-qa
 ```
 
-Installs the 5 agents below into `.claude/agents/`, seeds QA reference docs
+Installs the 6 agents below into `.claude/agents/`, seeds QA reference docs
 into `.agents/web-qa/knowledge/`, and splices the team conventions into
 `AGENTS.md` / `CLAUDE.md`.
 
@@ -19,6 +19,7 @@ into `.agents/web-qa/knowledge/`, and splices the team conventions into
 | Role | Invoke | Does |
 |---|---|---|
 | `app-profiler` | profiler | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
+| `test-sizer` | sizer | Rates cases S/M/L for AI-agent execution cost; sizes descriptions before authoring and scores existing TC files into their `size:` frontmatter |
 | `test-author` | author | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
 | `test-run-lead` | lead | Discovers the suite to run, dispatches `test-runner` sub-runs via the Agent tool, triggers `test-reporter` |
 | `test-runner` | runner | Runs one test case live via Playwright MCP and emits a structured JSON result |
@@ -26,7 +27,7 @@ into `.agents/web-qa/knowledge/`, and splices the team conventions into
 
 ## How this team works
 
-Run the agents in order: **app-profiler → test-author → test-run-lead → test-runner → test-reporter**. `test-run-lead` owns the run loop and must be invoked as the
+Run the agents in order: **app-profiler → test-sizer → test-author → test-run-lead → test-runner → test-reporter**. `test-run-lead` owns the run loop and must be invoked as the
 **active agent** (it dispatches `test-runner` sub-runs via the Agent tool).
 
 Test cases live in `tasks/<suite>/TC-NNN_<slug>.md`; run reports land in
@@ -40,7 +41,7 @@ across dev, staging, and prod.
 
 ## What this bundle adds
 
-- **Agents** — the 5 local roles above (installed into `.claude/agents/`).
+- **Agents** — the 6 local roles above (installed into `.claude/agents/`).
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/web-qa/knowledge/` (test-case format guide, template, report format).
 - **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging`, `xlsx-reader` (declared in the relevant agent frontmatter).

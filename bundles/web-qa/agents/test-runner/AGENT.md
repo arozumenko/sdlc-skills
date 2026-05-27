@@ -94,6 +94,7 @@ End your response with exactly one JSON block:
   "tc_id": "TC-001",
   "title": "Login with valid credentials",
   "priority": "<critical|high|medium|low from the TC frontmatter>",
+  "size": "<S|M|L from the TC frontmatter; null if absent>",
   "result": "PASS",
   "steps_total": 5,
   "steps_completed": 5,
@@ -108,6 +109,7 @@ End your response with exactly one JSON block:
 
 `result` values: `PASS` | `FAIL` | `BLOCKED`  
 `console_errors`: array of JS error messages found during execution (empty if none)  
-`failure_reason`: for FAIL — exact actual state observed + what was expected
+`failure_reason`: for FAIL — exact actual state observed + what was expected  
+`size`: read from the `size:` frontmatter field of the TC file (`S`, `M`, or `L`); if the field is absent, set `"size": null`
 
 Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
