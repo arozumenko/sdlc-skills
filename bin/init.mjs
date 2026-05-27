@@ -8,8 +8,10 @@
  *        /plugin marketplace add arozumenko/sdlc-skills
  *        /plugin install sdlc-skills@sdlc-skills
  *
- *   2. This CLI (works for Claude Code, Cursor, Windsurf, GitHub Copilot —
- *      copies agents and skills directly into the IDE dirs):
+ *   2. This CLI (works for Claude Code, Cursor, Windsurf, GitHub Copilot,
+ *      Codex — installs agents and skills in each host's native form:
+ *      directories (Claude/Cursor/Windsurf), flat .agent.md (Copilot), or
+ *      .codex/agents/<name>.toml (Codex)):
  *        npx github:arozumenko/sdlc-skills init
  *        npx github:arozumenko/sdlc-skills init --all
  *        npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,pm
@@ -72,7 +74,17 @@ const TARGETS = [
   { id: "cursor", dir: ".cursor", label: "Cursor" },
   { id: "windsurf", dir: ".windsurf", label: "Windsurf" },
   { id: "copilot", dir: ".github", label: "GitHub Copilot" },
+  { id: "codex", dir: ".codex", label: "Codex" },
 ];
+
+// Claude Code / agentskills.io short-form model aliases → Anthropic's canonical
+// dashed model IDs. Hosts that need a concrete provider id (Copilot CLI, Codex)
+// can't resolve a bare `sonnet`. Keep in lockstep with the current model family.
+const MODEL_ALIASES = {
+  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-4-7",
+  haiku: "claude-haiku-4-5",
+};
 
 // ---------------------------------------------------------------------------
 // Catalog discovery — read the agents/ and skills/ dirs at the repo root so
@@ -557,17 +569,30 @@ function installCoreHooks(targets) {
         JSON.stringify(spec, null, 2) + "\n"
       );
       console.log(`      ✓ hooks GitHub Copilot (.github/hooks/sdlc-skills.json)`);
+    } else if (t.id === "codex") {
+      const rel = ".codex/hooks/sdlc-skills";
+      copyHookScripts(join(CWD, rel));
+      // Codex uses Claude's nested SessionStart/SubagentStart shape. For a CLI
+      // (non-plugin) project install PLUGIN_ROOT isn't set, so the command sets
+      // CODEX_HOOK=1 to select the hookSpecificOutput emit shape. (Unix sh form;
+      // Codex hooks run via shell.)
+      const cmd = `CODEX_HOOK=1 "./${rel}/run-hook.cmd"`;
+      const spec = {
+        SessionStart: [
+          {
+            matcher: "startup|clear|compact|resume",
+            hooks: [{ type: "command", command: `${cmd} session-start` }],
+          },
+        ],
+        SubagentStart: [
+          { matcher: "*", hooks: [{ type: "command", command: `${cmd} agent-start` }] },
+        ],
+      };
+      if (mergeClaudeSettingsHooks(join(CWD, ".codex", "hooks.json"), spec, "sdlc-core"))
+        console.log(`      ✓ hooks Codex (.codex/hooks.json)`);
     } else if (t.id === "windsurf") {
       console.log(`      — hooks Windsurf (no documented hook API; skipped)`);
     }
-  }
-
-  // Codex / Kiro aren't CLI install targets, but flag them when their config
-  // dir is present so the user knows how to finish wiring.
-  if (existsSync(join(CWD, ".codex"))) {
-    console.log(
-      `      → Codex: copy hooks/hooks-codex.json → .codex/hooks.json and the hooks/ scripts beside it (see hooks/README.md)`
-    );
   }
 }
 
@@ -845,6 +870,11 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
     return flattenAgentForCopilot(src, name, target.dir, update, registry);
   }
 
+  // Codex custom agents are TOML files under .codex/agents/, not directories.
+  if (kind === "agents" && target.id === "codex") {
+    return writeCodexAgent(src, name, target.dir, update);
+  }
+
   const dest = join(CWD, target.dir, kind, name);
   if (existsSync(dest) && !update) return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
@@ -1074,20 +1104,11 @@ function transformAgentForCopilot(
   }
 
   if (normalizeModel) {
-    // Map agentskills.io / Claude Code's short-form model aliases to
-    // Anthropic's canonical model IDs (dashed form, matching the SDK).
-    // Copilot CLI requires a concrete ID — shipping `model: sonnet`
-    // leaves Copilot unable to resolve a provider. Keep this map in
-    // lockstep with the current Claude model family; one-line edit on
-    // a family bump.
-    const COPILOT_MODEL_MAP = {
-      sonnet: "claude-sonnet-4-6",
-      opus: "claude-opus-4-7",
-      haiku: "claude-haiku-4-5",
-    };
+    // Copilot CLI requires a concrete provider id — shipping `model: sonnet`
+    // leaves it unable to resolve. Map to the canonical dashed id (MODEL_ALIASES).
     agent = agent.replace(
       /^model:\s*(sonnet|opus|haiku)\s*$/m,
-      (_, alias) => `model: ${COPILOT_MODEL_MAP[alias]}`,
+      (_, alias) => `model: ${MODEL_ALIASES[alias]}`,
     );
   }
 
@@ -1132,6 +1153,89 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
   return { status: "installed", dest };
 }
 
+// ---------------------------------------------------------------------------
+// Codex agent transform — Codex custom agents are TOML files under
+// .codex/agents/<name>.toml, NOT markdown (see
+// https://developers.openai.com/codex/subagents). Mirror the Copilot path: a
+// pure text→TOML function (reusable/testable) plus a writer. The AGENT.md body
+// (+ SOUL.md inlined as a persona) becomes `developer_instructions`; declared
+// monorepo skills become [[skills.config]] entries pointing at the SKILL.md
+// files installed under .codex/skills/.
+// ---------------------------------------------------------------------------
+
+function tomlBasicString(s) {
+  return (
+    '"' +
+    String(s)
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\t/g, "\\t") +
+    '"'
+  );
+}
+
+function tomlMultiline(s) {
+  // Literal triple-quote keeps markdown intact (no escaping). Fall back to a
+  // basic triple-quote with escaping only if the body itself contains '''.
+  const body = s.replace(/\r/g, "");
+  if (!body.includes("'''")) return "'''\n" + body + "\n'''";
+  return '"""\n' + body.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"') + '\n"""';
+}
+
+function transformAgentForCodex(agentText, soulText, name, { normalizeModel = true } = {}) {
+  const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
+  const frontmatter = fm ? fm[1] : "";
+  let body = fm ? agentText.slice(fm.index + fm[0].length) : agentText;
+
+  const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
+  const description = descMatch ? descMatch[1].trim().replace(/^["']|["']$/g, "") : `${name} agent`;
+  const modelMatch = frontmatter.match(/^model:\s*(.+)$/m);
+  let model = modelMatch ? modelMatch[1].trim() : null;
+  if (model && normalizeModel && MODEL_ALIASES[model]) model = MODEL_ALIASES[model];
+
+  // Inline SOUL.md as a persona section (Codex has no sibling-file mechanism),
+  // mirroring Copilot's inline soul mode; drop the now-stale "Read SOUL.md in
+  // this directory" pointer since there's no sibling file in a TOML agent.
+  if (soulText) {
+    const soulBody = soulText.replace(/^#\s+[^\n]*\n+/, "").trimStart();
+    body = body.replace(
+      /Read `SOUL\.md` in this directory for your personality, voice, and values\. That's who you are\.\s*/,
+      ""
+    );
+    body = body.replace(/\s+$/, "") + "\n\n---\n\n## Persona\n\n" + soulBody;
+  }
+
+  const lines = [`name = ${tomlBasicString(name)}`, `description = ${tomlBasicString(description)}`];
+  if (model) lines.push(`model = ${tomlBasicString(model)}`);
+  lines.push("", `developer_instructions = ${tomlMultiline(body.trim())}`);
+
+  const skills = parseSkillsFromFrontmatter(agentText).filter((id) =>
+    existsSync(join(PKG_ROOT, "skills", id))
+  );
+  for (const id of skills) {
+    lines.push("", "[[skills.config]]", `path = ${tomlBasicString(`.codex/skills/${id}/SKILL.md`)}`, "enabled = true");
+  }
+  return lines.join("\n") + "\n";
+}
+
+function writeCodexAgent(src, name, targetDir, update) {
+  const agentFile = join(src, "AGENT.md");
+  if (!existsSync(agentFile)) return { status: "missing" };
+  const dest = join(CWD, targetDir, "agents", `${name}.toml`);
+  if (existsSync(dest) && !update) return { status: "exists", dest };
+  const soulFile = join(src, "SOUL.md");
+  const toml = transformAgentForCodex(
+    readFileSync(agentFile, "utf8"),
+    existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
+    name,
+    { normalizeModel: true }
+  );
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, toml);
+  return { status: "installed", dest };
+}
+
 function ask(rl, q) {
   return new Promise((resolve) => rl.question(q, resolve));
 }
@@ -1141,6 +1245,11 @@ async function interactivePick(catalog, args) {
   let targets;
   if (args.targets) {
     targets = TARGETS.filter((t) => args.targets.includes(t.id));
+    if (args.targets.includes("kiro")) {
+      console.log(
+        "  Note: Kiro isn't a CLI target — its hooks attach per custom-agent config;\n  see hooks/hooks-kiro.json and hooks/README.md to wire them."
+      );
+    }
     if (targets.length === 0) {
       console.error(`  ! No valid --target values: ${args.targets.join(", ")}`);
       process.exit(1);

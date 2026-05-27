@@ -112,13 +112,16 @@ Two install paths:
     user's other hooks (`subagentStart` is permission-only, so it's not wired).
   - **Copilot CLI** → writes `.github/hooks/sdlc-skills.json` (`sessionStart` +
     `subagentStart`, `COPILOT_CLI=1`).
+  - **Codex** → writes `.codex/hooks.json` (Claude-shaped SessionStart +
+    SubagentStart; the command sets `CODEX_HOOK=1` so the script emits the
+    `hookSpecificOutput` shape for a non-plugin project install). Codex agents
+    install as `.codex/agents/<name>.toml`; skills to `.codex/skills/`.
   - **Windsurf** → skipped (no documented hook API).
 
-**Codex / Kiro** aren't CLI install targets, so wire them manually: copy
-`hooks-codex.json` → `~/.codex/hooks.json` or `<repo>/.codex/hooks.json` with the
-scripts beside it (Codex exports `PLUGIN_ROOT`, which the script keys off — no env
-injection needed); paste the `hooks-kiro.json` snippet into each Kiro custom-agent
-config's `hooks` field.
+**Kiro** isn't a CLI install target — paste the `hooks-kiro.json` snippet into
+each Kiro custom-agent config's `hooks` field (its `agentSpawn` carries no agent
+name, so each agent passes its role explicitly). The plugin path for Codex uses
+`${PLUGIN_ROOT}` instead of `CODEX_HOOK`; see `hooks-codex.json`.
 
 ## Testing locally
 

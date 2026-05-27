@@ -124,8 +124,10 @@ want to be happy).
 ### 1. npx installer (recommended)
 
 One command installs agents, their declared monorepo skills, and their
-external skills together. Works for Claude Code, Cursor, Windsurf, and
-GitHub Copilot (all four IDE targets detected automatically).
+external skills together. Works for Claude Code, Cursor, Windsurf, GitHub
+Copilot, and Codex (IDE targets detected automatically). Agents install in
+each host's native form — directories for Claude/Cursor/Windsurf, flat
+`.agent.md` for Copilot, TOML for Codex.
 
 ```bash
 # A team bundle — the whole team in one shot (agents, their skills,
@@ -365,7 +367,7 @@ catalog.
 ## Using these agents and skills
 
 These agents and skills install cleanly into Claude Code, Cursor,
-Windsurf, and Copilot CLI. A BA can draft stories, a tech-lead can
+Windsurf, Copilot CLI, and Codex. A BA can draft stories, a tech-lead can
 review a PR, `plan-feature` and `bugfix-workflow` run end-to-end with
 just `git` and `gh`.
 
