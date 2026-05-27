@@ -165,7 +165,7 @@ ship today:
 |---|---|---|
 | `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
-| `web-qa` | 5 bundle-local agents (setup, tc-writer, orchestrator, executor, reporter) | Manual-QA team — onboard an app, author test cases, run them live via Playwright MCP, and report. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
+| `web-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to

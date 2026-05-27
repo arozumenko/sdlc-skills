@@ -47,8 +47,9 @@ exist globally is still possible via `localAgents` (an escape hatch).
 
 ```
 bundles/<id>/
-├── bundle.json              required — the manifest
+├── BUNDLE.md                required — structured catalog descriptor (name/description/owner frontmatter)
 ├── README.md                required — the team's front-door doc (roster, install, how it works)
+├── bundle.json              required — the manifest
 ├── instructions.md          optional — team-level guidance
 ├── briefings/
 │   └── <role>.md            optional — per-role stack overlay
@@ -59,6 +60,34 @@ bundles/<id>/
 └── agents/                  optional — bundle-local roles (escape hatch)
     └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
 ```
+
+## `BUNDLE.md` — structured catalog descriptor
+
+The catalog identifies a bundle by the presence of a `BUNDLE.md` file in the
+bundle folder. It's the bundle's **structured** identity — essentially a
+`.md.yaml`: YAML frontmatter with three fields and little or no prose. All
+skills and agents nearby are treated as artifacts of that bundle and displayed
+together in the catalog.
+
+```markdown
+---
+name: Web Team                # human label
+description: Fullstack web…    # short, concise summary
+owner: AIRUN                   # practice, project, team, or group of people
+---
+
+See [`README.md`](README.md) for the roster, install steps, and how the team works.
+```
+
+`BUNDLE.md` and `README.md` sit side by side, with distinct jobs:
+
+- **`BUNDLE.md`** — structured info the catalog parses directly (name,
+  description, owner).
+- **`README.md`** — the human/LLM-readable front-door doc (roster, install,
+  how it works); the catalog can generate a richer summary from it.
+- **`bundle.json`** — the install manifest that drives `init.mjs`.
+
+The descriptor carries no install config.
 
 ## `bundle.json` schema
 
@@ -159,7 +188,8 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   no-op (or a clean refresh with `--update`) and allow clean removal.
 - **`npm run validate:bundles`** (`bin/validate-bundles.mjs`, run in CI via
   `.github/workflows/validate.yml`) checks each bundle: dir name matches
-  `id`, a `README.md` exists, `agents[]` is non-empty and every entry exists
+  `id`, a `README.md` exists, a `BUNDLE.md` exists with non-empty
+  `name`/`description`/`owner` frontmatter, `agents[]` is non-empty and every entry exists
   under `agents/`, every `briefings` role is in `agents[]` and its file
   exists, every `skills[]` id resolves in `skills.json`/`skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each

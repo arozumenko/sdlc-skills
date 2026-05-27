@@ -2,7 +2,9 @@
 // Validate every bundles/<id>/bundle.json against the repo. Run in CI and
 // before publishing. Checks, per bundle:
 //   - directory name matches manifest `id`
-//   - a README.md exists (the team's front-door doc)
+//   - a README.md exists (the team's front-door doc, human/LLM-readable)
+//   - a BUNDLE.md exists with non-empty name/description/owner frontmatter
+//     (the structured catalog descriptor)
 //   - `agents` is a non-empty array and every entry exists under agents/
 //   - every `briefings` role is in `agents` and its file exists
 //   - every `skills` id resolves in skills.json (or a monorepo skills/ dir)
@@ -16,6 +18,19 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Parse the YAML frontmatter of a BUNDLE.md into a flat key→value map.
+// Only the simple `key: value` lines we care about — no full YAML needed.
+function parseFrontmatter(text) {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return null;
+  const out = {};
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (kv) out[kv[1]] = kv[2].trim();
+  }
+  return out;
+}
 
 function dirsWith(parent, marker) {
   const root = join(PKG_ROOT, parent);
@@ -79,6 +94,17 @@ function main() {
 
     if (b.id !== id) err(id, `manifest id "${b.id}" != directory name "${id}"`);
     if (!existsSync(join(dir, "README.md"))) err(id, "missing README.md");
+
+    const bundleMd = join(dir, "BUNDLE.md");
+    if (!existsSync(bundleMd)) {
+      err(id, "missing BUNDLE.md (catalog descriptor)");
+    } else {
+      const fm = parseFrontmatter(readFileSync(bundleMd, "utf8"));
+      if (!fm) err(id, "BUNDLE.md has no YAML frontmatter");
+      else
+        for (const k of ["name", "description", "owner"])
+          if (!fm[k]) err(id, `BUNDLE.md frontmatter missing "${k}"`);
+    }
 
     const hasLocal = Array.isArray(b.localAgents) && b.localAgents.length > 0;
     const declaredAgents = Array.isArray(b.agents) ? b.agents : [];
