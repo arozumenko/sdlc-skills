@@ -11,6 +11,8 @@ merge gate.
 npx github:arozumenko/sdlc-skills init --bundle test-automation
 ```
 
+## Quick start
+
 The pipeline runs in **three phases**. You launch `scout` once, then drive
 **Tal** directly for every automation task; Tal dispatches the analyst →
 implementer → reviewer pipeline as subagents.
