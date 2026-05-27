@@ -26,6 +26,7 @@
     {"id": "implement-feature",  "monorepo": "sdlc-skills", "name": "implement-feature",  "description": "End-to-end feature implementation workflow — plan, test, build, ship"},
     {"id": "plan-feature",       "monorepo": "sdlc-skills", "name": "plan-feature",       "description": "Structured feature planning — requirements, feasibility, acceptance criteria"},
     {"id": "seeding-a-project",     "monorepo": "sdlc-skills", "name": "seeding-a-project",     "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)"},
+    {"id": "session-retrospective", "monorepo": "sdlc-skills", "name": "session-retrospective", "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout)"},
     {"id": "deep-research",      "monorepo": "sdlc-skills", "name": "deep-research",      "description": "Deep research workflow — trends, topic analysis, fact-checking"},
     {"id": "gathering-context",   "monorepo": "sdlc-skills", "name": "gathering-context",   "description": "Cross-channel context gathering — email, Teams, local KB"},
     {"id": "verifying-outcomes",      "monorepo": "sdlc-skills", "name": "verifying-outcomes",      "description": "Goal-backward verification — check outcomes, not task completion"},
