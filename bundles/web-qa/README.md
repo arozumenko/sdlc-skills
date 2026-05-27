@@ -17,8 +17,8 @@ into `.agents/web-qa/knowledge/`, and splices the team conventions into
 ## Quick start
 
 The team runs in **three phases**. Unlike the other bundles there is no
-`scout` and no single orchestrator: `app-profiler` onboards, then you run
-the authoring/running agents **in order**.
+`scout`: `app-profiler` onboards the app, then `test-run-lead` orchestrates
+the rest — it authors and sizes cases when needed, runs them, and reports.
 
 **Install (once)** — `npx github:arozumenko/sdlc-skills init --bundle web-qa`.
 Installs the 6 agents into `.claude/agents/`, seeds reference docs into
@@ -34,17 +34,24 @@ reliable selectors, fragile areas). **Why it's first:** there's no scout
 here — `app-profiler` is the onboarding agent, and every other web-qa agent
 reads this profile before acting.
 
-**Phase 2 — Usage (size → author → run).**
-- **`test-sizer`** (optional) rates cases S/M/L for agent-execution cost.
-- **`test-author`** turns a feature/flow description into
-  `tasks/<suite>/TC-NNN_<slug>.md` (URLs as `{{base_url}}/path`).
-- **`test-run-lead`** — launch as the **active agent** with a `base_url`. It
-  discovers the suite, dispatches one `test-runner` per case (each runs live
-  via Playwright MCP and must capture a confirming snapshot to record PASS),
-  then triggers `test-reporter` to write `reports/RUN-YYYY-MM-DD-NNN.md`.
-  Don't invoke `test-runner` / `test-reporter` by hand during a led run.
-  **The logic:** every agent reads `app_profile.md` for selectors and auth,
-  so cases and runs stay grounded in the real app.
+**Phase 2 — Usage (`test-run-lead` orchestrates).** Launch `test-run-lead` as
+the **active agent** with a suite path and `base_url` — it's the single
+orchestrator for a run. It assembles the suite first, dispatching sub-agents
+*when needed*:
+- **`test-author`** — when the suite has no cases yet and you've given
+  descriptions/flows to work from, it writes `tasks/<suite>/TC-NNN_<slug>.md`
+  (URLs as `{{base_url}}/path`).
+- **`test-sizer`** — when cases lack a `size:`, it scores them S/M/L for
+  agent-execution cost and writes it into their frontmatter.
+
+Then it runs the suite: one `test-runner` per case (each runs live via
+Playwright MCP and must capture a confirming snapshot to record PASS),
+followed by `test-reporter` writing `reports/RUN-YYYY-MM-DD-NNN.md`. You talk
+only to the lead — don't invoke `test-sizer` / `test-author` / `test-runner` /
+`test-reporter` by hand during a led run (you can still run sizer/author
+standalone for authoring outside a run). **The logic:** every agent reads
+`app_profile.md` for selectors and auth, so cases and runs stay grounded in
+the real app.
 
 **Phase 3 — Reinforcement (assisted; you curate — there's no scout here).**
 The project's knowledge lives in durable, growing artifacts that every agent
@@ -69,17 +76,19 @@ flowchart TD
         profiler --> profile
     end
 
-    subgraph p2["Phase 2 — Usage · you launch these in order"]
-        sizer["test-sizer — rate S/M/L (optional)"]
-        author["test-author — write TC-NNN files"]
-        lead["test-run-lead — active agent,<br/>owns the run loop"]
+    subgraph p2["Phase 2 — Usage · you launch test-run-lead (orchestrator)"]
+        lead["test-run-lead — active agent,<br/>orchestrates the run"]
+        author["test-author — write TC-NNN files<br/>(when cases missing)"]
+        sizer["test-sizer — rate S/M/L<br/>(when cases unsized)"]
         runner["test-runner — run one case<br/>live via Playwright MCP"]
         reporter["test-reporter — write run report"]
-        sizer --> author --> lead
-        lead -->|dispatches| runner --> reporter
+        lead -->|"when needed"| author
+        lead -->|"when needed"| sizer
+        lead -->|"per case"| runner
+        lead -->|"at end"| reporter
     end
 
-    profile -->|"every agent reads it"| sizer
+    profile -->|"every agent reads it"| lead
 
     subgraph p3["Phase 3 — Reinforcement · assisted (you curate)"]
         artifacts[(".agents/web-qa/app_profile.md<br/>tasks/ suite · reports/ history")]
@@ -96,14 +105,18 @@ flowchart TD
 | `app-profiler` | profiler | Onboards the app — explores the UI, maps flows, writes `.agents/web-qa/app_profile.md` |
 | `test-sizer` | sizer | Rates cases S/M/L for AI-agent execution cost; sizes descriptions before authoring and scores existing TC files into their `size:` frontmatter |
 | `test-author` | author | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
-| `test-run-lead` | lead | Discovers the suite to run, dispatches `test-runner` sub-runs via the Agent tool, triggers `test-reporter` |
+| `test-run-lead` | lead | **Run orchestrator** — assembles the suite (dispatches `test-author` / `test-sizer` when needed), runs one `test-runner` per case, triggers `test-reporter` |
 | `test-runner` | runner | Runs one test case live via Playwright MCP and emits a structured JSON result |
 | `test-reporter` | reporter | Collects test-runner results and writes the run report to `reports/` |
 
 ## How this team works
 
-Run the agents in order: **app-profiler → test-sizer → test-author → test-run-lead → test-runner → test-reporter**. `test-run-lead` owns the run loop and must be invoked as the
-**active agent** (it dispatches `test-runner` sub-runs via the Agent tool).
+Onboard once with **app-profiler**, then drive **test-run-lead** — the single
+run orchestrator. It must be invoked as the **active agent**; it dispatches
+`test-author` and `test-sizer` to assemble the suite when needed, then a
+`test-runner` per case and `test-reporter` at the end (all via the Agent
+tool). You can also run `test-sizer` / `test-author` standalone for authoring
+outside a run.
 
 Test cases live in `tasks/<suite>/TC-NNN_<slug>.md`; run reports land in
 `reports/RUN-YYYY-MM-DD-NNN.md` with screenshots in `reports/screenshots/`.

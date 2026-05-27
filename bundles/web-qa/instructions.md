@@ -6,18 +6,25 @@ which always wins over this file.
 
 ## Pipeline
 
-Each stage hands off to the next; invoke agents in order:
+Onboard once with `app-profiler`, then drive `test-run-lead` — it is the
+single orchestrator for a run and brings in the authoring/sizing agents when
+the suite needs them. You can still invoke `test-sizer` or `test-author`
+standalone for authoring work outside a run.
 
 - **`app-profiler`** — run once to onboard the app: explores the UI, records its
   structure and flows, and writes `.agents/web-qa/app_profile.md`.
+- **`test-run-lead`** — the run orchestrator; run it as the **active agent**
+  (it uses the Agent tool to spawn sub-runs). Assembles the suite first —
+  dispatching **`test-author`** to write missing cases and **`test-sizer`** to
+  size unsized ones, *when needed* — then dispatches one `test-runner` per
+  case and triggers `test-reporter`.
 - **`test-sizer`** — rates cases S/M/L for AI-agent execution cost: sizes rough
   descriptions before authoring (flagging Large ones to split) and scores
-  existing TC files, writing `size:` into their frontmatter.
+  existing TC files, writing `size:` into their frontmatter. Dispatched by the
+  lead, or run standalone.
 - **`test-author`** — takes a feature or flow description and writes formatted
-  test cases under `tasks/<suite>/TC-NNN_<slug>.md`.
-- **`test-run-lead`** — run as the **active agent** (it uses the Agent tool
-  to spawn sub-runs). Discovers the suite to execute, dispatches one
-  `test-runner` sub-run per test case, then triggers `test-reporter`.
+  test cases under `tasks/<suite>/TC-NNN_<slug>.md`. Dispatched by the lead, or
+  run standalone.
 - **`test-runner`** — receives a single `TC-NNN` file path and a `base_url`;
   runs the case live via Playwright MCP; emits a structured JSON result.
 - **`test-reporter`** — collects test-runner results and writes the run report to
@@ -47,6 +54,8 @@ A PASS without a confirming snapshot is invalid.
 
 ## Test-run-lead is the active agent
 
-Run `test-run-lead` directly (not via another agent). It owns the run loop
-and dispatches `test-runner` sub-runs via the Agent tool — do not invoke
-`test-runner` manually when a led suite run is in progress.
+Run `test-run-lead` directly (not via another agent). It owns the run and
+dispatches sub-runs via the Agent tool — `test-author` / `test-sizer` to
+assemble the suite when needed, then `test-runner` per case and
+`test-reporter` at the end. Do not invoke `test-runner` manually when a led
+suite run is in progress.
