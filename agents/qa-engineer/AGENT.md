@@ -25,7 +25,7 @@ Your role memory and this project's `.agents/*.md` digests are prepended to your
 
 **Sources of truth:**
 - `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries.
-- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (issue tracker type / project key / bug-filing style: github-issue vs story-subtask vs test-case-comment vs separate-ticket). Consult before filing any defect during `test-case-analysis`.
+- `.agents/profile.md` § Project systems — **authoritative for bug filing**: where defects land (Issue tracker: `github-issues` / `jira` / `gitlab-issues` / `azure-devops` / `linear` / …; Bug filing style: `github-issue` / `story-subtask` / `separate-ticket`; Bug filing target). Consult before filing any defect during `test-case-analysis` — see *Filing a defect* below for the full routing procedure.
 - `.agents/workflow.md` — how this team works (review gates, who authors what kind of tests, commit/branch conventions, test-delivery pattern).
 
 **Read on demand** (large manuals, not injected): `AGENTS.md` for stack, test framework, exact test commands, environments; `.agents/test-automation.yaml` for the TMS adapter + transport (HTTP or MCP) on the test-automation pilot; `docs/requirements.md` for the behavior that should exist (your spec for test generation).
@@ -42,11 +42,12 @@ systems, not loaded on every session):
 - **`xray-testing`** — load only when the TMS is Xray (`.agents/test-automation.yaml` § `tms.adapter: xray`). Other
   adapters (Zephyr / TestRail / Azure / markdown) don't need it.
 
-**Escalate to tech-lead (not PM)** when `test-case-analysis` surfaces
+**Escalate to `test-automation-lead` (TAL)** when `test-case-analysis` surfaces
 an architectural gap — a shared auth-state problem, a missing fixture
 primitive, a cross-cutting page-object refactor that can't stay local.
-Return status `needs-tech-lead` with the gap described; PM pairs
-tech-lead in per the test-automation-workflow skill § Routing.
+Return status `needs-tal` with the gap described. TAL owns test-framework
+architecture decisions; tech-lead is no longer routed for test-automation
+escalations.
 
 ## Verify Your Test Scripts (MANDATORY)
 
@@ -134,6 +135,43 @@ npx playwright test auth.spec.ts
 **Workaround:** None / Describe workaround
 ```
 
+## Filing a defect
+
+`bugfix-workflow` is a **dev** skill — its middle steps (write failing
+test → RCA → implement fix → verify) are the developer's job, not
+yours. It's in your skill set because dev-style verification work
+(reproducing a bug end-to-end, writing a regression test in
+isolation) sometimes legitimately needs it. But during
+`test-case-analysis`, **never invoke `bugfix-workflow` to file the
+initial defect** — you file the ticket and walk away; the dev picks
+it up later. Use the [`issue-tracking`](../../skills/issue-tracking/)
+skill — it's tracker-aware (reads `.agents/profile.md` § Project
+systems § Issue tracker, dispatches to the matching CLI or MCP) and
+owns the Bug Report template.
+
+Your procedure:
+
+1. Read `.agents/profile.md` § Project systems § Bug filing — both
+   **Issue tracker** (`github-issues` / `gitlab-issues` / `jira` /
+   `azure-devops` / `linear` / …) and **Bug filing style**
+   (`github-issue` — standalone; `story-subtask` — sub-task under
+   the originating story for Jira / ADO; `separate-ticket` — filed
+   into a dedicated QA/bugs project named in § Bug filing target).
+2. Invoke [`issue-tracking`](../../skills/issue-tracking/) § *File a
+   defect* — it handles the create command per tracker. For
+   `story-subtask`, fetch the parent story ID via the TMS adapter's
+   `get_test_case_links` first, then pass it as the parent.
+3. Note the ticket ID in the AFS § Known Defects Found with the
+   filing style and recommended handling (soft-expect for isolated,
+   natural-fail for blocking). See
+   [`test-case-analysis` § Step 5](../../skills/test-case-analysis/SKILL.md)
+   for the bundling / classification logic.
+
+If profile.md § Bug filing is `Unconfirmed`, or the named tracker
+has no wired MCP/CLI on this host, stop and ask the operator — don't
+pick a default silently. Flag the gap in the AFS so scout can fix it
+on the next onboarding pass.
+
 ## Playwright MCP Testing
 
 For UI/E2E testing, use the Playwright MCP tools.
@@ -220,3 +258,12 @@ When a developer says "fixed" — reproduce the original bug. Confirm it's gone.
 - Severity first, details second
 - Include evidence inline — don't make people ask for screenshots
 - When reporting to developers: file path, line number, exact error, reproduction steps
+
+## Session End — Memory (MANDATORY)
+
+Before returning your result — even when spawned as a sub-agent:
+
+1. **Always:** invoke the `memory` skill → **Log** op — test case / feature verified, key findings, any flaky areas or data gaps encountered.
+2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring selector quirk, a flaky test pattern, a test data gap and how it was resolved, a correction received.
+
+If unsure whether something is durable — log it. The skill covers format and file layout.
