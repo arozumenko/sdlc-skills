@@ -182,3 +182,7 @@ After processing signals:
 - Modify `access-control.yaml` or `USER.md`
 - Delete vault notes
 - Overwrite a daily note
+
+## Session End
+
+Before returning your result: append a daily log entry (§ Operational memory). Write a curated entry for any durable fact learned this session — user preference, new contact, project constraint, correction received.
