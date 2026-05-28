@@ -2,9 +2,9 @@
 name: memory
 description: Per-role persistent memory — durable facts, preferences, decisions, and a daily log, as plain markdown. Use when the user says "remember this" or "log this", asks "what did you learn yesterday", or whenever you discover something worth keeping across sessions.
 license: Apache-2.0
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  authors:
-    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.3.0"
 ---
 

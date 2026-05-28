@@ -2,9 +2,9 @@
 name: root-cause-analysis
 description: Use after a bug is reproduced/confirmed and before proposing a fix, or when the user says "investigate issue", to trace a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.
 license: Apache-2.0
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  authors:
-    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

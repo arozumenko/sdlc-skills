@@ -3,9 +3,9 @@ name: browser-verify
 description: Use when you need to run arbitrary JS in a page, inspect cookies/localStorage, check computed styles, emulate devices, or drive real mouse/keyboard events. Chrome DevTools Protocol browser automation with zero external dependencies.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium and Node 22+. No npm install needed.
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  authors:
-    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

@@ -7,10 +7,9 @@ group: core
 theme: {color: colour209, icon: "🏗️", short_name: tl}
 aliases: [tl, rio]
 skills: [code-review, root-cause-analysis, plan-feature, git-workflow, writing-skills, memory]
-metadata:
-  authors:
-    - Artem Rozumenko <artem_rozumenko@epam.com>
-    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
+  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # Tech Lead

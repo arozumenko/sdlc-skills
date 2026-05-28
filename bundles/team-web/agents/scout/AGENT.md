@@ -8,10 +8,9 @@ required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
 skills: [seeding-a-project, memory, session-retrospective]
-metadata:
-  authors:
-    - Artem Rozumenko <artem_rozumenko@epam.com>
-    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
+  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # Scout

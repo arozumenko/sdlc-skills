@@ -1,5 +1,5 @@
 ---
-name: iOS Team
+name: iOS Development Team
 description: iOS delivery team — Swift/SwiftUI development, QA, and core roles.
 owner: Artem Rozumenko <Artem_Rozumenko@epam.com>
 ---
