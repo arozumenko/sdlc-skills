@@ -3,9 +3,9 @@ name: verifying-outcomes
 description: Goal-backward verification — checks whether the desired outcome was achieved, not whether tasks were marked done. Use when the user asks to "verify", "did this actually work", "is X really done" — or before you claim a task is complete and before closing an issue / merging a PR.
 license: Apache-2.0
 compatibility: Works in any repo. Uses Read, Grep, Glob, Bash.
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

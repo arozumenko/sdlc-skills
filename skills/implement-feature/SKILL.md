@@ -2,9 +2,9 @@
 name: implement-feature
 description: Use when the user says "implement", "build feature", "work on task", or once a plan or story is approved and you're about to start building. The end-to-end feature-implementation workflow; delegates the final handoff to completing-a-task.
 license: Apache-2.0
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

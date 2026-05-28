@@ -7,9 +7,10 @@ group: core
 theme: {color: colour213, icon: "📋", short_name: pm}
 aliases: [pm, max]
 skills: [issue-tracking, plan-feature, subagent-driven-development, dispatching-parallel-agents, memory]
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # Project Manager

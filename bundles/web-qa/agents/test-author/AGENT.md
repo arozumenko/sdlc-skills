@@ -8,8 +8,9 @@ theme: {color: colour156, icon: "✍️", short_name: author}
 aliases: [test-author, author]
 tools: Read, Write, Glob
 skills: []
-authors:
-  - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
+metadata:
+  authors:
+    - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA Test Case Writer. Transform rough ideas into precise, executable test cases.

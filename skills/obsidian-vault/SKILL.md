@@ -3,9 +3,9 @@ name: obsidian-vault
 description: Headless, file-system Obsidian vault operations (no Obsidian app needed). Use when the user says "save to vault", "log this note", "find my notes about X", "what's in my inbox", "open loops", or when filing an incoming signal (email/chat/memo) or updating people/project/meeting notes.
 license: Apache-2.0
 compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH. ripgrep recommended (falls back to grep).
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

@@ -7,9 +7,10 @@ group: qa
 theme: {color: colour51, icon: "🎯", short_name: tal}
 aliases: [tal, ta-lead, automation-lead]
 skills: [test-automation-workflow, test-case-analysis, code-review, issue-tracking, atlassian-content, verification-before-completion, completing-a-task, git-workflow, plan-feature, memory]
-authors:
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
-  - Artem Rozumenko <artem_rozumenko@epam.com>
+metadata:
+  authors:
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Artem Rozumenko <artem_rozumenko@epam.com>
 ---
 
 # Test Automation Lead

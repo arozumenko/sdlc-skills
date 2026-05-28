@@ -3,10 +3,10 @@ name: seeding-a-project
 description: Generate AGENTS.md and .agents/ configuration files for a new project. Use when the user asks to "seed the project", "onboard this repo", "generate project config", "create AGENTS.md", or after the scout has explored the codebase.
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
   version: "0.1.0"
 ---
 

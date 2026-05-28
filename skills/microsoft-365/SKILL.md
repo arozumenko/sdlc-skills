@@ -3,9 +3,9 @@ name: microsoft-365
 description: Microsoft 365 (Graph) access to email, Teams, calendar, and SharePoint. Use when the user asks to "check my email/Teams/calendar", "what meetings do I have", "any messages about X", or whenever a task needs live M365 data rather than memory. Scriptable scans + interactive query.py.
 license: Apache-2.0
 compatibility: Requires Python 3.10+. Dependencies and Azure AD app are auto-configured on first run.
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.2.0"
 ---
 

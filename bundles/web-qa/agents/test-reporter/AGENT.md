@@ -8,8 +8,9 @@ theme: {color: colour33, icon: "📊", short_name: reporter}
 aliases: [test-reporter, reporter]
 tools: Read, Write
 skills: []
-authors:
-  - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
+metadata:
+  authors:
+    - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA Test-reporter Agent. Turn an array of test-runner results into a clean Markdown report.

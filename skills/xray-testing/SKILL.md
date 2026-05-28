@@ -2,10 +2,10 @@
 name: xray-testing
 description: CRUD + results import on Xray entities (Test, Precondition, Test Set/Plan/Execution/Run) across Cloud (GraphQL) and Server/DC (REST). Load for "pull test PROJ-T42", "create Xray test from this AFS", "upload JUnit to test plan", or any Xray CRUD.
 license: Apache-2.0
-authors:
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

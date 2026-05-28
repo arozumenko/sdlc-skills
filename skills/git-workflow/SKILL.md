@@ -4,9 +4,9 @@ description: Use when the user asks to "commit", "create PR", "branch", "merge",
 license: Apache-2.0
 compatibility: Requires git CLI; gh/glab/az/bb/tea for your host's PR/MR operations
 allowed-tools: Bash(git:*) Bash(gh:*)
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 
