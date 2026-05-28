@@ -59,9 +59,9 @@ roster**. Two ways to populate them:
    `ln -s ../../../agents/<name> bundles/<id>/agents/<name>` (or `…/skills/…`
    for skills). The bundle "owns" the item via the symlink + a `localAgents`
    / `localSkills` entry, while the canonical file stays in `agents/` /
-   `skills/`. The installer dereferences when copying (`cpSync(..., { dereference: true })`),
-   so the user's project gets a real directory, not a dangling link into
-   sdlc-skills.
+   `skills/`. The installer deeply dereferences symlinked content when
+   copying (including nested symlinks), so the user's project gets a real
+   directory tree, not a dangling link into sdlc-skills.
 
 In both cases the manifest declares the item via `localAgents` / `localSkills`
 (not `agents` / `skills`). The bundle's own dir becomes self-documenting —
