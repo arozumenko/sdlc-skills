@@ -1,0 +1,11 @@
+# Skill setup metadata — dependencies, MCP servers, and permissions
+dependencies:
+  mcp:
+    - name: playwright
+      command: npx
+      args: ["@playwright/mcp@latest"]
+      env: {}
+permissions:
+  filesystem: read
+  network: true
+  shell: false

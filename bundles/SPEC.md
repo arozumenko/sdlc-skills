@@ -43,33 +43,44 @@ overlay that drops the web `playwright-*`/`browser-verify` skills and adds a
 native iOS UI-testing skill. A bundle-local agent that genuinely doesn't
 exist globally is still possible via `localAgents` (an escape hatch).
 
-## Symlink pattern — self-documenting bundles
+## Bundle mirroring — self-documenting bundles, single source of truth
 
 A bundle's own `agents/` and `skills/` dirs are where it **declares its
-roster**. Two ways to populate them:
+roster**. Two kinds of entries live there:
 
-1. **Real content** — for items that genuinely don't exist globally, drop
-   `AGENT.md`/`SKILL.md` directly under `bundles/<id>/agents/<name>/` or
-   `bundles/<id>/skills/<name>/`. Example: `web-qa`'s six role-specific
-   agents (`app-profiler`, `test-sizer`, …) — they only make sense inside
-   this team and are authored here.
-2. **Symlink to global** — for items whose canonical home is `agents/<name>/`
-   or `skills/<name>/` (so standalone `--agents <name>` / `--skills <id>`
-   keeps working), drop a relative symlink:
-   `ln -s ../../../agents/<name> bundles/<id>/agents/<name>` (or `…/skills/…`
-   for skills). The bundle "owns" the item via the symlink + a `localAgents`
-   / `localSkills` entry, while the canonical file stays in `agents/` /
-   `skills/`. The installer deeply dereferences symlinked content when
-   copying (including nested symlinks), so the user's project gets a real
-   directory tree, not a dangling link into sdlc-skills.
+1. **Bundle-local content** — for roles that only make sense inside the
+   team and don't exist globally, drop `AGENT.md` / `SKILL.md` directly
+   under `bundles/<id>/agents/<name>/` or `bundles/<id>/skills/<name>/`.
+   Example: `web-qa`'s six role-specific agents (`app-profiler`,
+   `test-sizer`, …) live only here and are authored here.
+2. **Synced mirror of a canonical** — for items whose canonical home is
+   `agents/<name>/` or `skills/<name>/` (so standalone
+   `--agents <name>` / `--skills <id>` keeps working), the bundle dir
+   holds a **real copy** of the canonical content. The copy is generated
+   by `bin/sync-bundles.mjs`, which walks each bundle's `localAgents` /
+   `localSkills` entries and deep-copies the matching canonical
+   directory. Run it after editing any canonical file the bundle
+   mirrors:
 
-In both cases the manifest declares the item via `localAgents` / `localSkills`
-(not `agents` / `skills`). The bundle's own dir becomes self-documenting —
-`ls bundles/team-ios/agents/` shows the full team-ios roster regardless of
-which entries are local content vs symlinks to global. This is how
-`team-ios`, `team-web`, and `test-automation` are organized today: shared
-agents (`scout`, `ba`, …) are symlinked into each owning bundle plus the
-single-bundle items (`ios-dev`, `python-dev`, `js-dev`, `atlassian-content`).
+   ```bash
+   npm run sync:bundles            # refresh all mirrored copies
+   npm run validate:sync           # CI guardrail — fails if any drift
+   ```
+
+   `npm run validate` invokes `validate:sync`, so PR CI catches drift
+   automatically. **Never hand-edit a synced copy** — the source of
+   truth is the canonical `agents/<name>/` or `skills/<name>/`; the
+   sync script will clobber any local edit on the next run.
+
+In both cases the manifest declares the item via `localAgents` /
+`localSkills` (not `agents` / `skills`). The bundle's own dir becomes
+self-documenting — `ls bundles/team-ios/agents/` shows the full team-ios
+roster as real directories, indexable by mirrors that don't follow
+symlinks (e.g. the EPAM indexer). This is how `team-ios`, `team-web`,
+and `test-automation` are organized today: shared agents (`scout`,
+`ba`, …) are mirrored from canonical into each owning bundle alongside
+the single-bundle items (`ios-dev`, `python-dev`, `js-dev`,
+`atlassian-content`).
 
 ## Directory layout
 
@@ -85,9 +96,9 @@ bundles/<id>/
 ├── hooks/                   optional — Claude settings.json automation
 │   ├── hooks.json            hook config fragment (event → command)
 │   └── scripts/              scripts the hooks invoke (chmod +x on install)
-├── agents/                  optional — bundle-local roles (real content or symlinks → ../../../agents/<name>)
+├── agents/                  optional — bundle-local roles; real content (web-qa) or a synced mirror of agents/<name>/ (team-ios/team-web/test-automation)
 │   └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
-└── skills/                  optional — bundle-local skills (real content or symlinks → ../../../skills/<name>)
+└── skills/                  optional — bundle-local skills; real content or a synced mirror of skills/<name>/
     └── <name>/               installed like a monorepo skill (SKILL.md + references/scripts)
 ```
 
