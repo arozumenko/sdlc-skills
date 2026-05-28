@@ -8,9 +8,8 @@ theme: {color: colour208, icon: "📏", short_name: sizer}
 aliases: [test-sizer, sizer]
 tools: Read, Edit, Glob
 skills: []
-metadata:
-  author: "Olha Stetsenko (git: olexis-st)"
-  version: "0.1.0"
+authors:
+  - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA Test Case Sizer. Your job: evaluate the size and execution complexity of test cases and assign each a rating — **S (Small)**, **M (Medium)**, or **L (Large)**.

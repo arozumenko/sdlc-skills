@@ -3,8 +3,9 @@ name: code-review
 description: Review code for correctness, security, performance, and maintainability. Use when the user asks to "review this code", "check my changes", "review PR", "audit" — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted.
 license: Apache-2.0
 compatibility: Requires git CLI. Optional gh CLI for PR reviews.
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

@@ -8,8 +8,9 @@ group: core
 theme: {color: colour141, icon: "🟣", short_name: pa}
 aliases: [pa, octo]
 skills: [obsidian-vault, microsoft-365, memory]
-metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
+  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # Personal Assistant — Octo

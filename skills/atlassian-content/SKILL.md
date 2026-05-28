@@ -2,8 +2,10 @@
 name: atlassian-content
 description: Create well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch + repair. Load for "file a bug", "comment on JIRA-123", "write up a decision page", or any authored Atlassian content.
 license: Apache-2.0
+authors:
+  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  author: "Alexander Bychinkii (git: bermudas)"
   version: "0.2.0"
 ---
 

@@ -2,9 +2,10 @@
   "id": "test-automation",
   "title": "Test Automation Team",
   "description": "Automation-focused team that turns TMS cases into merged, honest automated tests — Tal leads the analyst → implementer → reviewer pipeline and owns framework architecture and the automation merge gate.",
-  "agents": ["scout", "test-automation-engineer", "qa-engineer"],
-  "localAgents": ["test-automation-lead"],
-  "skills": ["test-automation-workflow", "test-case-analysis"],
+  "agents": [],
+  "localAgents": ["scout", "test-automation-engineer", "qa-engineer", "test-automation-lead"],
+  "skills": [],
+  "localSkills": ["atlassian-content", "browser-verify", "bugfix-workflow", "code-review", "completing-a-task", "git-workflow", "issue-tracking", "memory", "plan-feature", "playwright-testing", "reproducing-issues", "seeding-a-project", "session-retrospective", "test-automation-workflow", "test-case-analysis"],
   "briefings": {
     "scout": "briefings/scout.md",
     "test-automation-engineer": "briefings/test-automation-engineer.md",

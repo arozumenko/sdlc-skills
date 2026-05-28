@@ -3,8 +3,9 @@ name: deep-research
 description: Disk-first, checkpointed research workflow with three modes — trend research, topic analysis, and fact-checking. Use when the user asks to "research trends", "analyze a topic", "fact-check this", "verify claims", "what's the state of X", or hands you a document to vet.
 license: Apache-2.0
 compatibility: Requires tavily_search/extract tools; Context7 (resolve-library-id, query-docs) optional for technical topics
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

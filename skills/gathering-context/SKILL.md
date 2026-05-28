@@ -3,8 +3,9 @@ name: gathering-context
 description: Gather cross-channel context (local KB, email, Teams, optional web) about a person or topic before responding. Use when the user says "what do we know about X", "find prior discussions with Y", or before drafting any reply where prior history matters.
 license: Apache-2.0
 compatibility: Requires MS Graph tools (search-query, list-mail-messages, get-mail-message, find-chat, list-chat-messages). Web search optional.
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 

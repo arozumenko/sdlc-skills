@@ -72,6 +72,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "test-automation-lead",
+      "source": "./agents/test-automation-lead",
+      "description": "Use when a TMS case or batch of cases needs to be automated, when an automation PR needs the merge gate, or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the analyst → implementer → reviewer pipeline, owns the automation merge, owns test-framework architecture.",
+      "version": "0.2.0"
+    },
+    {
       "name": "atlassian-content",
       "source": "./skills/atlassian-content",
       "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair",

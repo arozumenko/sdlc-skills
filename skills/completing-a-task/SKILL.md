@@ -2,8 +2,9 @@
 name: completing-a-task
 description: Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.
 license: Apache-2.0
+authors:
+  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
   version: "0.1.0"
 ---
 
