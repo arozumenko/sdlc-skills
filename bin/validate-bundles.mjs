@@ -11,6 +11,7 @@
 //   - `instructions` (if set) points at an existing file
 //   - `hooks` (if set) points at a file that parses as JSON
 //   - every `localAgents` entry has agents/<name>/AGENT.md in the bundle dir
+//   - every `localSkills` entry has skills/<name>/SKILL.md in the bundle dir
 // Exits non-zero with a per-error report when anything fails.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
@@ -129,6 +130,17 @@ function main() {
       if (!existsSync(join(dir, rel))) err(id, `briefing file missing: ${rel}`);
     }
 
+    // Per-bundle skill universe = global catalog + this bundle's localSkills.
+    // `b.skills` (team-wide extras) is global-only by spec; overlay adds may
+    // reference a localSkill.
+    const localSkills = Array.isArray(b.localSkills) ? b.localSkills : [];
+    if (b.localSkills !== undefined && !Array.isArray(b.localSkills))
+      err(id, "`localSkills` must be an array");
+    for (const ls of localSkills)
+      if (!existsSync(join(dir, "skills", ls, "SKILL.md")))
+        err(id, `localSkill "${ls}" missing skills/${ls}/SKILL.md`);
+    const effectiveSkillIds = new Set([...skillIds, ...localSkills]);
+
     for (const s of b.skills || [])
       if (!skillIds.has(s)) err(id, `skill "${s}" not in skills.json or skills/`);
 
@@ -158,7 +170,7 @@ function main() {
       if (!roster.has(role))
         err(id, `skillOverlay role "${role}" not in agents[] or localAgents[]`);
       for (const s of (ov && ov.add) || [])
-        if (!skillIds.has(s))
+        if (!effectiveSkillIds.has(s))
           console.warn(`  • ${id}: skillOverlay add "${s}" not in catalog yet (pending content)`);
     }
 

@@ -4,6 +4,7 @@
   "description": "Standalone agentic manual-QA team for web apps — onboard the app, author test cases, run them live via Playwright MCP, and report.",
   "agents": [],
   "localAgents": ["app-profiler", "test-sizer", "test-author", "test-run-lead", "test-runner", "test-reporter"],
+  "localSkills": ["playwright-testing", "xlsx-reader"],
   "skills": [],
   "seed": { "knowledge": ".agents/web-qa/knowledge" },
   "instructions": "instructions.md",

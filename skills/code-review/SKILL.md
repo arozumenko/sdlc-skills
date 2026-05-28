@@ -4,7 +4,8 @@ description: Review code for correctness, security, performance, and maintainabi
 license: Apache-2.0
 compatibility: Requires git CLI. Optional gh CLI for PR reviews.
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

@@ -9,7 +9,8 @@ aliases: [test-reporter, reporter]
 tools: Read, Write
 skills: []
 metadata:
-  author: "Olha Stetsenko (git: olexis-st)"
+  authors:
+    - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA Test-reporter Agent. Turn an array of test-runner results into a clean Markdown report.

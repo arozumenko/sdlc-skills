@@ -47,12 +47,14 @@
 
 import {
   chmodSync,
+  copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -107,6 +109,36 @@ function listDirs(parent) {
     .sort();
 }
 
+// Recursively copy a tree into the user's project, dereferencing every
+// symlink (top-level AND nested). Node's `cpSync({ dereference: true })`
+// only follows the source root if it's a symlink — internal symlinks get
+// converted to absolute-path links into the source location, which is fatal
+// for our installer because the source lives in the npx cache or this
+// repo (neither exists on the user's machine after install). Upstream
+// content sometimes ships intra-skill symlinks (e.g. twostraws' Swift skills
+// have a `skills/<name>/references → ../../references` symlink to satisfy
+// multiple plugin layouts) — those need to be materialized.
+function copyTreeDereferenced(src, dest, { force = false } = {}) {
+  // Resolve any top-level symlink to its real target.
+  let stat;
+  try { stat = lstatSync(src); } catch { return; }
+  if (stat.isSymbolicLink()) {
+    return copyTreeDereferenced(realpathSync(src), dest, { force });
+  }
+  if (stat.isDirectory()) {
+    mkdirSync(dest, { recursive: true });
+    for (const entry of readdirSync(src)) {
+      copyTreeDereferenced(join(src, entry), join(dest, entry), { force });
+    }
+    return;
+  }
+  if (stat.isFile()) {
+    if (force || !existsSync(dest)) copyFileSync(src, dest);
+    return;
+  }
+  // Sockets, fifos, etc. — skip silently (none expected in skill/agent content).
+}
+
 function loadCatalog() {
   return {
     agents: listDirs("agents"),
@@ -122,7 +154,11 @@ function loadCatalog() {
 // the normal agent/skill install path: its `agents` populate the agent
 // selection (so each agent's declared skills auto-resolve as usual) and its
 // `skills` are appended as extras. `localAgents` live in bundles/<id>/agents/
-// and install like shared agents but from the bundle dir.
+// and install like shared agents but from the bundle dir. `localSkills` live
+// in bundles/<id>/skills/ and install like monorepo skills but from the
+// bundle dir — they don't need a skills.json entry and are scoped to the
+// bundle (an agent in another team that declares the same id would resolve
+// it against the global catalog, not this bundle's copy).
 // ---------------------------------------------------------------------------
 
 function listBundles() {
@@ -152,10 +188,28 @@ function loadBundle(id) {
   b.agents = b.agents || [];
   b.skills = b.skills || [];
   b.localAgents = b.localAgents || [];
+  b.localSkills = b.localSkills || [];
   b.briefings = b.briefings || {};
   b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
   b.seed = b.seed || {}; // bundle-relative source → project-relative dest (reference files)
   return b;
+}
+
+// Parse the `description` field out of a SKILL.md's YAML frontmatter. Used to
+// register bundle-local skills into the in-memory catalog so non-Claude
+// targets get a proper description in their injected SKILLS section.
+function parseSkillDescription(skillMdPath) {
+  if (!existsSync(skillMdPath)) return null;
+  let text;
+  try {
+    text = readFileSync(skillMdPath, "utf8");
+  } catch {
+    return null;
+  }
+  const fm = text.match(/^---\s*\n([\s\S]*?)\n---/m);
+  if (!fm) return null;
+  const m = fm[1].match(/^description:\s*(.+?)\s*$/m);
+  return m ? m[1].replace(/^["']|["']$/g, "") : null;
 }
 
 // Validate a bundle against the catalog and resolve the skills its local
@@ -180,6 +234,31 @@ function applyBundle(bundle, args, catalog) {
     }
   }
 
+  // localSkills are the capability twin of localAgents: skill content shipped
+  // inside the bundle dir, not the global catalog. They install like monorepo
+  // skills but from bundles/<id>/skills/. Register each into the in-memory
+  // catalog so (a) the unknown-id partition doesn't reject them and (b)
+  // injected SKILLS sections pick up a real description.
+  const bundleSkillsRoot = join(bundle.dir, "skills");
+  for (const ls of bundle.localSkills) {
+    const skillMd = join(bundleSkillsRoot, ls, "SKILL.md");
+    if (!existsSync(skillMd)) {
+      console.error(
+        `  ! Bundle ${bundle.id} declares localSkill "${ls}" but bundles/${bundle.id}/skills/${ls}/SKILL.md is missing`
+      );
+      process.exit(1);
+    }
+    if (!registryEntry(catalog.registry, ls)) {
+      catalog.registry.skills.push({
+        id: ls,
+        bundle: bundle.id,
+        name: ls,
+        description: parseSkillDescription(skillMd) || `Bundle-local skill (${bundle.id})`,
+      });
+    }
+  }
+  const localSkillSet = new Set(bundle.localSkills);
+
   // Shared agents from the bundle join any explicit --agents selection.
   const explicit = args.agents || [];
   args.agents = [...new Set([...explicit, ...bundle.agents])];
@@ -200,8 +279,12 @@ function applyBundle(bundle, args, catalog) {
   // skills no agent still needs are dropped; added skills that resolve are
   // installed; added skills that don't exist yet are surfaced as "pending".
   const overlays = bundle.skillOverlays;
+  // Overlays may target a shared agent (in args.agents) OR a bundle-local one
+  // (via the symlink pattern, the same role can be in localAgents). Build the
+  // combined roster once and validate/iterate against it.
+  const combinedRoster = [...new Set([...args.agents, ...bundle.localAgents])];
   for (const role of Object.keys(overlays)) {
-    if (!args.agents.includes(role)) {
+    if (!combinedRoster.includes(role)) {
       console.error(`  ! Bundle ${bundle.id} skillOverlay targets "${role}", not in the team`);
       process.exit(1);
     }
@@ -219,7 +302,7 @@ function applyBundle(bundle, args, catalog) {
   const allDeclared = new Set();
   const resolvableAdds = new Set();
   const pendingAdds = new Set();
-  for (const a of args.agents) {
+  for (const a of combinedRoster) {
     const declared = declaredOf(a);
     declared.forEach((s) => allDeclared.add(s));
     const ov = overlays[a] || {};
@@ -239,11 +322,16 @@ function applyBundle(bundle, args, catalog) {
   // Skills that were declared somewhere but, after overlays, no agent needs.
   const droppable = new Set([...allDeclared].filter((s) => !neededByAny.has(s)));
 
-  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared, ...resolvableAdds])];
+  // Skills satisfied by localSkills install from the bundle dir, not from the
+  // global catalog — strip them before partitioning so they aren't flagged as
+  // unknown. The dedicated localSkills install loop in main() handles copying.
+  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared, ...resolvableAdds])]
+    .filter((id) => !localSkillSet.has(id));
 
   console.log(
     `  Bundle: ${bundle.title || bundle.id} — ${bundle.agents.length} shared agent(s)` +
       (bundle.localAgents.length ? `, ${bundle.localAgents.length} local agent(s)` : "") +
+      (bundle.localSkills.length ? `, ${bundle.localSkills.length} local skill(s)` : "") +
       (Object.keys(overlays).length ? `, ${Object.keys(overlays).length} skill overlay(s)` : "") +
       (extraSkillIds.length ? `, ${extraSkillIds.length} extra skill(s)` : "")
   );
@@ -251,6 +339,8 @@ function applyBundle(bundle, args, catalog) {
   return {
     localAgents: bundle.localAgents,
     bundleAgentsRoot,
+    localSkills: bundle.localSkills,
+    bundleSkillsRoot,
     extraSkillIds,
     overlays,
     effectiveByAgent,
@@ -317,7 +407,7 @@ function installSeed(bundle, update) {
     }
     mkdirSync(dirname(destPath), { recursive: true });
     if (update && existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
-    cpSync(srcPath, destPath, { recursive: true, force: true });
+    copyTreeDereferenced(srcPath, destPath, { force: true });
     console.log(`      ✓ seed ${dest}`);
     installed++;
   }
@@ -400,7 +490,7 @@ function installHooks(bundle, targets) {
     if (existsSync(scriptsSrc)) {
       const scriptsDest = join(CWD, t.dir, "hooks", bundle.id);
       mkdirSync(scriptsDest, { recursive: true });
-      cpSync(scriptsSrc, scriptsDest, { recursive: true, force: true });
+      copyTreeDereferenced(scriptsSrc, scriptsDest, { force: true });
       for (const f of readdirSync(scriptsDest)) {
         try {
           chmodSync(join(scriptsDest, f), 0o755);
@@ -699,8 +789,11 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
       symlinkSync(src, dest);
     } else {
       // Default: a self-contained copy, so the skill is present in the
-      // project tree itself (git/zip/Docker/sandbox/Windows-safe).
-      cpSync(src, dest, { recursive: true, dereference: true });
+      // project tree itself (git/zip/Docker/sandbox/Windows-safe). Some
+      // upstream skills (e.g. twostraws/Swift-*-Agent-Skill) ship nested
+      // relative symlinks — copyTreeDereferenced materializes those into
+      // real content so the install survives transport off this machine.
+      copyTreeDereferenced(src, dest, { force: true });
     }
     return { status: "installed", name: skillName };
   } catch (err) {
@@ -878,7 +971,12 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   const dest = join(CWD, target.dir, kind, name);
   if (existsSync(dest) && !update) return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  cpSync(src, dest, { recursive: true, force: update });
+  if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+  // Deep-dereferenced copy — bundle-local agents/skills may be symlinks back
+  // into this repo's agents/ or skills/ (the symlink pattern lets a bundle
+  // "own" a shared item without forking it), and the source tree may contain
+  // nested symlinks too (Node's cpSync({dereference:true}) doesn't recurse).
+  copyTreeDereferenced(src, dest, { force: true });
 
   // Inject a skills-inventory section into the installed agent body —
   // but only for hosts that don't preload the `skills:` frontmatter
@@ -1654,6 +1752,25 @@ async function main() {
           skipped++;
         } else {
           console.log(`      ! agent  ${name} (missing in bundle)`);
+        }
+      }
+      for (const name of bundlePlan.localSkills) {
+        const r = copyItem(
+          "skills",
+          name,
+          t,
+          args.update,
+          catalog.registry,
+          bundle.dir
+        );
+        if (r.status === "installed") {
+          console.log(`      ✓ skill  ${name} (bundle-local)`);
+          installed++;
+        } else if (r.status === "exists") {
+          console.log(`      — skill  ${name} (exists; use --update)`);
+          skipped++;
+        } else {
+          console.log(`      ! skill  ${name} (missing in bundle)`);
         }
       }
     }

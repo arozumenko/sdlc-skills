@@ -8,7 +8,9 @@ theme: {color: colour183, icon: "📝", short_name: ba}
 aliases: [alex]
 skills: [issue-tracking, plan-feature, brainstorming, memory]
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # Business Analyst

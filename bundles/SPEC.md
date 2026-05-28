@@ -43,6 +43,34 @@ overlay that drops the web `playwright-*`/`browser-verify` skills and adds a
 native iOS UI-testing skill. A bundle-local agent that genuinely doesn't
 exist globally is still possible via `localAgents` (an escape hatch).
 
+## Symlink pattern — self-documenting bundles
+
+A bundle's own `agents/` and `skills/` dirs are where it **declares its
+roster**. Two ways to populate them:
+
+1. **Real content** — for items that genuinely don't exist globally, drop
+   `AGENT.md`/`SKILL.md` directly under `bundles/<id>/agents/<name>/` or
+   `bundles/<id>/skills/<name>/`. Example: `web-qa`'s six role-specific
+   agents (`app-profiler`, `test-sizer`, …) — they only make sense inside
+   this team and are authored here.
+2. **Symlink to global** — for items whose canonical home is `agents/<name>/`
+   or `skills/<name>/` (so standalone `--agents <name>` / `--skills <id>`
+   keeps working), drop a relative symlink:
+   `ln -s ../../../agents/<name> bundles/<id>/agents/<name>` (or `…/skills/…`
+   for skills). The bundle "owns" the item via the symlink + a `localAgents`
+   / `localSkills` entry, while the canonical file stays in `agents/` /
+   `skills/`. The installer deeply dereferences symlinked content when
+   copying (including nested symlinks), so the user's project gets a real
+   directory tree, not a dangling link into sdlc-skills.
+
+In both cases the manifest declares the item via `localAgents` / `localSkills`
+(not `agents` / `skills`). The bundle's own dir becomes self-documenting —
+`ls bundles/team-ios/agents/` shows the full team-ios roster regardless of
+which entries are local content vs symlinks to global. This is how
+`team-ios`, `team-web`, and `test-automation` are organized today: shared
+agents (`scout`, `ba`, …) are symlinked into each owning bundle plus the
+single-bundle items (`ios-dev`, `python-dev`, `js-dev`, `atlassian-content`).
+
 ## Directory layout
 
 ```
@@ -57,8 +85,10 @@ bundles/<id>/
 ├── hooks/                   optional — Claude settings.json automation
 │   ├── hooks.json            hook config fragment (event → command)
 │   └── scripts/              scripts the hooks invoke (chmod +x on install)
-└── agents/                  optional — bundle-local roles (escape hatch)
-    └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
+├── agents/                  optional — bundle-local roles (real content or symlinks → ../../../agents/<name>)
+│   └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
+└── skills/                  optional — bundle-local skills (real content or symlinks → ../../../skills/<name>)
+    └── <name>/               installed like a monorepo skill (SKILL.md + references/scripts)
 ```
 
 ## `BUNDLE.md` — structured catalog descriptor
@@ -108,6 +138,7 @@ The descriptor carries no install config.
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
   "localAgents": [],                         // optional bundle-local roles in agents/
+  "localSkills": [],                         // optional bundle-local skills in skills/ (no skills.json entry needed)
   "targets": ["claude"]                      // IDE targets that get HOOKS (agents/skills/briefings install everywhere)
 }
 ```
@@ -117,7 +148,11 @@ The descriptor carries no install config.
 1. **Resolve** — read `bundles/<id>/bundle.json`; merge `agents[]` into the
    agent install list (existing logic auto-pulls each agent's declared
    skills); append `skills[]`; install `localAgents` from
-   `bundles/<id>/agents/` like global agents.
+   `bundles/<id>/agents/` like global agents; install `localSkills` from
+   `bundles/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
+   any agent in the bundle that declares it in `skills:` frontmatter, with no
+   `skills.json` entry needed — the description is read from each
+   `SKILL.md` so non-Claude targets still get a populated SKILLS section.
 2. **Briefings** — write each `briefings/<role>.md` to
    `.agents/memory/<role>/project_briefing.md` and add a `MEMORY.md` index
    line. Skip if a `project_briefing.md` already exists (scout may have
@@ -193,7 +228,8 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   under `agents/`, every `briefings` role is in `agents[]` and its file
   exists, every `skills[]` id resolves in `skills.json`/`skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each
-  `localAgents` entry has an `AGENT.md`, and every `seed` source path exists.
+  `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
+  `SKILL.md`, and every `seed` source path exists.
 - A bundle may have an empty `agents` array if it provides `localAgents` —
   a fully self-contained team (e.g. `web-qa`).
 

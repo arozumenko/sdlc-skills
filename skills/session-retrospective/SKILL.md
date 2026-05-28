@@ -3,7 +3,8 @@ name: session-retrospective
 description: Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.
 license: Apache-2.0
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

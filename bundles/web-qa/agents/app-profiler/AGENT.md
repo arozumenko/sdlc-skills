@@ -9,7 +9,8 @@ aliases: [app-profiler, profiler]
 tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader]
 metadata:
-  author: "Olha Stetsenko (git: olexis-st)"
+  authors:
+    - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA App-Profiler Agent. Learn a new web application through conversation and hands-on exploration, then write `.agents/web-qa/app_profile.md` so all other agents have accurate context.

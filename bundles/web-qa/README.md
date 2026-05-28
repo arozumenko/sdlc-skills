@@ -132,7 +132,8 @@ across dev, staging, and prod.
 - **Agents** — the 6 local roles above (installed into `.claude/agents/`).
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/web-qa/knowledge/` (test-case format guide, template, report format).
-- **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging`, `xlsx-reader` (declared in the relevant agent frontmatter).
+- **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging` (declared in the relevant agent frontmatter).
+- **Bundle-owned skills (symlinks to global)** — [`skills/xlsx-reader/`](skills/xlsx-reader/) — symlink to `../../../skills/xlsx-reader/`. Declared in `localSkills` so the bundle install copies it from this dir; canonical source stays in the global `skills/` catalog so it remains reachable via `--skills xlsx-reader` standalone.
 - **Briefings** — _(none)_.
 - **Hooks** — _(none)_.
 

@@ -9,7 +9,9 @@ theme: {color: colour220, icon: "⚡", short_name: js}
 aliases: [js, jay]
 skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # JS/TS Developer

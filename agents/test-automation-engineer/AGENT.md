@@ -9,7 +9,9 @@ theme: {color: colour208, icon: "🤖", short_name: tae}
 aliases: [test-automation-engineer, axel, automation]
 skills: [test-automation-workflow, playwright-testing, playwright-cli, browser-verify, tdd, code-review, bugfix-workflow, issue-tracking, systematic-debugging, verification-before-completion, requesting-code-review, receiving-code-review, git-workflow, completing-a-task, memory]
 metadata:
-  author: "Alexander Bychinkii (git: bermudas)"
+  authors:
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Artem Rozumenko <artem_rozumenko@epam.com>
 ---
 
 # Test Automation Engineer

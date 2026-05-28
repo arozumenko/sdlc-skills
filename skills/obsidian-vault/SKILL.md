@@ -4,7 +4,8 @@ description: Headless, file-system Obsidian vault operations (no Obsidian app ne
 license: Apache-2.0
 compatibility: Requires Python 3.10+ (stdlib only). Vault path via $OBSIDIAN_VAULT_PATH. ripgrep recommended (falls back to grep).
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

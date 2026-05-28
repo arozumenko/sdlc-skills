@@ -4,7 +4,9 @@ description: Generate AGENTS.md and .agents/ configuration files for a new proje
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
   version: "0.1.0"
 ---
 

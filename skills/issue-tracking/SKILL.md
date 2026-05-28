@@ -5,7 +5,9 @@ license: Apache-2.0
 compatibility: Requires the tracker's CLI or MCP wired in — gh / glab / Atlassian MCP / Azure DevOps MCP / Linear CLI/MCP. Scout's Step 6.8 wires these per-agent on restrictive hosts.
 allowed-tools: Bash(gh:*) Bash(linear:*) Bash(glab:*)
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
   version: "0.2.0"
 ---
 

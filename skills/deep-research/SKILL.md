@@ -4,7 +4,8 @@ description: Disk-first, checkpointed research workflow with three modes — tre
 license: Apache-2.0
 compatibility: Requires tavily_search/extract tools; Context7 (resolve-library-id, query-docs) optional for technical topics
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

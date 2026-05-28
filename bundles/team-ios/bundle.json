@@ -2,8 +2,9 @@
   "id": "team-ios",
   "title": "iOS Team",
   "description": "iOS delivery team — Swift/SwiftUI development, QA, and core roles.",
-  "agents": ["scout", "ba", "tech-lead", "project-manager", "ios-dev", "qa-engineer"],
+  "agents": [],
   "skills": [],
+  "localSkills": ["bugfix-workflow", "code-review", "completing-a-task", "git-workflow", "implement-feature", "issue-tracking", "memory", "plan-feature", "reproducing-issues", "root-cause-analysis", "seeding-a-project", "session-retrospective", "test-case-analysis"],
   "briefings": {
     "scout": "briefings/scout.md",
     "tech-lead": "briefings/tech-lead.md",
@@ -19,6 +20,6 @@
     }
   },
   "instructions": "instructions.md",
-  "localAgents": [],
+  "localAgents": ["scout", "ba", "tech-lead", "project-manager", "qa-engineer", "ios-dev"],
   "targets": ["claude"]
 }

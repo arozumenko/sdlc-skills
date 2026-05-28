@@ -3,7 +3,8 @@ name: plan-feature
 description: Use when the user says "plan a feature", "design this", "how should we build", or before writing code for any non-trivial feature. Produces an approved task breakdown before implementation begins — plan first, build second.
 license: Apache-2.0
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

@@ -5,7 +5,8 @@ license: Apache-2.0
 compatibility: Requires git CLI; gh/glab/az/bb/tea for your host's PR/MR operations
 allowed-tools: Bash(git:*) Bash(gh:*)
 metadata:
-  author: "Artem Rozumenko (git: arozumenko)"
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 
