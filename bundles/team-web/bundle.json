@@ -16,7 +16,8 @@
   "skillOverlays": {
     "tech-lead": { "add": ["fastapi", "fastmcp-server", "vercel-react-best-practices"] },
     "python-dev": { "add": ["fastapi", "fastmcp-server"] },
-    "js-dev": { "add": ["vercel-react-best-practices"] }
+    "js-dev": { "add": ["vercel-react-best-practices"] },
+    "quality-architect": { "remove": ["quality-onboarding", "requirement-traceability"] }
   },
   "instructions": "instructions.md",
   "localAgents": ["scout", "ba", "tech-lead", "project-manager", "qa-engineer", "test-automation-engineer", "quality-architect", "python-dev", "js-dev"],

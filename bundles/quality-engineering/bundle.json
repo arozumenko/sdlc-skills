@@ -15,7 +15,7 @@
   },
   "skillOverlays": {
     "qa-engineer": { "remove": ["playwright-testing"] },
-    "quality-architect": { "add": ["requirement-traceability"] }
+    "quality-architect": { "remove": ["quality-onboarding"] }
   },
   "seed": { "knowledge": ".agents/quality-engineering/knowledge" },
   "instructions": "instructions.md",

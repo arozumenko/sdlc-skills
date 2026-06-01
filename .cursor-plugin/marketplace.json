@@ -204,6 +204,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "quality-onboarding",
+      "source": "./skills/quality-onboarding",
+      "description": "Standalone quality-architect self-onboarding (no scout) — interview, ingest codebase/docs/specs, synthesize a product quality profile into .agents/quality.md",
+      "version": "0.2.0"
+    },
+    {
       "name": "reproducing-issues",
       "source": "./skills/reproducing-issues",
       "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)",

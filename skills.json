@@ -309,6 +309,12 @@
       "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)"
     },
     {
+      "id": "quality-onboarding",
+      "monorepo": "sdlc-skills",
+      "name": "quality-onboarding",
+      "description": "Standalone quality-architect self-onboarding (no scout) — interview, ingest codebase/docs/specs, synthesize a product quality profile into .agents/quality.md"
+    },
+    {
       "id": "quality-audit-workflow",
       "monorepo": "sdlc-skills",
       "name": "quality-audit-workflow",
