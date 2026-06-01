@@ -1,6 +1,6 @@
 ---
 name: atlassian-content
-description: Create well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch + repair. Load for "file a bug", "comment on JIRA-123", "write up a decision page", or any authored Atlassian content.
+description: "Use when authoring content in Jira or Confluence (Cloud or Server/Data Center): filing a Jira issue, leaving a Jira comment, updating a rich-text Jira field, creating or editing a Confluence page, or mentioning a person in either — e.g. \"file a bug\", \"comment on JIRA-123\", \"write up a decision page\". Not for read-only search/lookups."
 license: Apache-2.0
 metadata:
   authors:

@@ -88,6 +88,16 @@ const MODEL_ALIASES = {
   haiku: "claude-haiku-4-5",
 };
 
+// GitHub Copilot's model picker lists Claude models by display name
+// ("Claude Sonnet 4.6"), not by the dashed provider id Codex/Claude use.
+// Copilot agent frontmatter must match that name, so the Copilot flatten
+// path maps aliases through this table instead of MODEL_ALIASES.
+const COPILOT_MODEL_NAMES = {
+  sonnet: "Claude Sonnet 4.6",
+  opus: "Claude Opus 4.7",
+  haiku: "Claude Haiku 4.5",
+};
+
 // ---------------------------------------------------------------------------
 // Catalog discovery — read the agents/ and skills/ dirs at the repo root so
 // the installer stays correct as content is added or removed. No hardcoded
@@ -554,7 +564,10 @@ const CORE_HOOK_EXE = ["run-hook.cmd", "session-start", "agent-start"];
 
 // Copy the four hook files into destDir together (they reference each other by
 // SCRIPT_DIR-relative path, so they must live side by side) and mark the
-// executables +x.
+// executables +x. Also seed config.sh from config.sh.example — but ONCE: the
+// scripts are always refreshed (force), whereas config.sh holds the project's
+// tunables (SDLC_SHARED_DOCS etc.) and must survive re-installs, so we copy it
+// only when it doesn't already exist. lib.sh sources it if present.
 function copyHookScripts(destDir) {
   const srcDir = join(PKG_ROOT, "hooks");
   if (!existsSync(srcDir)) return false;
@@ -570,6 +583,9 @@ function copyHookScripts(destDir) {
       /* best-effort (Windows) */
     }
   }
+  const cfgExample = join(srcDir, "config.sh.example");
+  const cfgDest = join(destDir, "config.sh");
+  if (existsSync(cfgExample) && !existsSync(cfgDest)) cpSync(cfgExample, cfgDest);
   return true;
 }
 
@@ -638,19 +654,35 @@ function installCoreHooks(targets) {
     } else if (t.id === "copilot") {
       const rel = ".github/hooks/sdlc-skills";
       copyHookScripts(join(CWD, rel));
-      const entry = (verb) => ({
+      // Workspace event casing is event-specific in VS Code (verified live):
+      //   - sessionStart fires as camelCase (both CLI and VS Code) → camelCase entry.
+      //   - SubagentStart fires as PascalCase in VS Code, but camelCase in the CLI →
+      //     ship BOTH. The CLI fires both but consumes only top-level additionalContext
+      //     (camelCase/COPILOT_CLI) and ignores the PascalCase entry's hookSpecificOutput,
+      //     so no double-injection; VS Code fires only the PascalCase one. Without the
+      //     PascalCase SubagentStart, dispatched workers get NO memory in VS Code.
+      // Each entry's env flag selects the emit shape in lib.sh (COPILOT_CLI → top-level
+      // additionalContext; SDLC_VSCODE → hookSpecificOutput).
+      const cli = (verb) => ({
         type: "command",
         bash: `"./${rel}/run-hook.cmd" ${verb}`,
         powershell: `& "./${rel}/run-hook.cmd" ${verb}`,
         env: { COPILOT_CLI: "1" },
         timeoutSec: 10,
       });
+      const vscode = (verb) => ({
+        type: "command",
+        command: `"./${rel}/run-hook.cmd" ${verb}`,
+        env: { SDLC_VSCODE: "1" },
+        timeout: 10,
+      });
       // .github/hooks/<name>.json is an sdlc-owned file — write it wholesale.
       const spec = {
         version: 1,
         hooks: {
-          sessionStart: [entry("session-start")],
-          subagentStart: [entry("agent-start")],
+          sessionStart: [cli("session-start")],
+          subagentStart: [cli("agent-start")],
+          SubagentStart: [vscode("agent-start")],
         },
       };
       mkdirSync(join(CWD, ".github", "hooks"), { recursive: true });
@@ -659,6 +691,10 @@ function installCoreHooks(targets) {
         JSON.stringify(spec, null, 2) + "\n"
       );
       console.log(`      ✓ hooks GitHub Copilot (.github/hooks/sdlc-skills.json)`);
+      // .github/instructions/*.instructions.md is generated/refreshed per machine by
+      // the session-start hook. We deliberately do NOT modify the project's .gitignore
+      // — whether to track or ignore those files is the user's call. Just inform.
+      console.log(`      ℹ .github/instructions/*.instructions.md is generated per session — add to .gitignore yourself if you don't want it tracked`);
     } else if (t.id === "codex") {
       const rel = ".codex/hooks/sdlc-skills";
       copyHookScripts(join(CWD, rel));
@@ -1156,6 +1192,47 @@ function applySkillOverlay(target, name, effectiveSkills, registry) {
 // fix-copilot subcommand. Given AGENT.md (+ optional SOUL.md) content,
 // returns { agent, soul } — the text to write to <name>.agent.md and
 // (when soulMode requires it) to a separate soul destination.
+// Orchestrator agents run as the *primary* (user-invoked) agent. In that mode
+// Copilot fires only a session-start event — which carries NO agent identity —
+// so a workspace-level hook can't know to load THIS role's memory. The fix is an
+// agent-scoped session-start hook baked into the flat frontmatter: it knows its
+// own role (the file IS that role) and fires when the agent is the active primary
+// agent. Worker agents stay hookless on purpose — they arrive as subagents and
+// are served by the workspace SubagentStart hook, so the two paths stay disjoint
+// (orchestrators = frontmatter session-start; workers = workspace SubagentStart).
+//
+// VS-Code-only on purpose. Live testing showed the standalone Copilot CLI does
+// NOT execute agent-frontmatter hooks at all (and exposes no main-agent identity
+// to hooks), so a CLI orchestrator can't get role memory this way — it falls back
+// to the agent body's `memory`-skill instruction. VS Code Copilot Chat fires the
+// PascalCase `SessionStart` frontmatter hook (command / hookSpecificOutput), so
+// that's the only dialect we emit. SDLC_HOOK_EVENT=SessionStart makes agent-start
+// skip the shared docs (the workspace session-start hook already injected those)
+// and label the emitted event as SessionStart.
+//
+// Opt-in via `orchestrator: true` in the source AGENT.md frontmatter (an
+// sdlc-only key; Copilot ignores unknown frontmatter fields).
+function injectCopilotOrchestratorHook(agentText, name) {
+  const m = agentText.match(/^---\s*\n([\s\S]*?)\n---[ \t]*\n?/);
+  if (!m) return agentText;
+  const fmBody = m[1];
+  if (!/^orchestrator:[ \t]*true[ \t]*$/m.test(fmBody)) return agentText; // not flagged
+  if (/^hooks:/m.test(fmBody)) return agentText; // author already defined hooks — leave it
+  const rel = ".github/hooks/sdlc-skills";
+  const cmd = `"./${rel}/run-hook.cmd" agent-start ${name}`;
+  const hooksYaml =
+    `hooks:\n` +
+    `  SessionStart:\n` +
+    `    - type: command\n` +
+    `      command: '${cmd}'\n` +
+    `      env:\n` +
+    `        SDLC_VSCODE: "1"\n` +
+    `        SDLC_HOOK_EVENT: "SessionStart"\n` +
+    `      timeout: 10`;
+  const after = agentText.slice(m[0].length);
+  return `---\n${fmBody}\n${hooksYaml}\n---\n${after}`;
+}
+
 function transformAgentForCopilot(
   agentText,
   soulText,
@@ -1188,27 +1265,41 @@ function transformAgentForCopilot(
       // predictable path across hosts. Caller writes the file to
       // `<project>/.agents/memory/<name>/SOUL.md`.
       //
-      // The in-file reference is rewritten as an `@`-prefixed auto-import
-      // directive (same convention as the existing
-      // `@.agents/memory/<name>/snapshot.md` line): Claude Code loads
-      // the file into context automatically, and on hosts that don't
-      // honor `@`-imports the agent still sees the path and can read it.
+      // GitHub Copilot does NOT honor Claude's `@`-import directive, so the
+      // reference is rewritten as a plain "Read `<path>`" instruction with a
+      // project-root-relative path the agent can open directly.
       soul = soulText;
       agent = agent.replace(
         SOUL_REF,
-        `@.agents/memory/${name}/SOUL.md`,
+        `Read \`.agents/memory/${name}/SOUL.md\` for your personality, voice, and values. That's who you are.`,
       );
     }
   }
 
+  // Copilot can't expand `@`-imports. Any remaining `@.agents/...` import line
+  // authored in the body (e.g. snapshot.md / memory.md) becomes a relative
+  // "Read `<path>`" instruction so the path stays openable rather than dead.
+  agent = agent.replace(
+    /^[ \t]*@(\.agents\/\S+)[ \t]*$/gm,
+    (_, path) => `Read \`${path}\` for context.`,
+  );
+
   if (normalizeModel) {
-    // Copilot CLI requires a concrete provider id — shipping `model: sonnet`
-    // leaves it unable to resolve. Map to the canonical dashed id (MODEL_ALIASES).
+    // Copilot's model picker keys off display names ("Claude Sonnet 4.6"),
+    // not the dashed provider id — shipping `model: sonnet` leaves it unable
+    // to resolve. Map the alias to Copilot's display name (COPILOT_MODEL_NAMES).
     agent = agent.replace(
       /^model:\s*(sonnet|opus|haiku)\s*$/m,
-      (_, alias) => `model: ${MODEL_ALIASES[alias]}`,
+      (_, alias) => `model: ${COPILOT_MODEL_NAMES[alias]}`,
     );
   }
+
+  // Body skill links are authored relative to the source `agents/<name>/`
+  // dir (`../../skills/...`). The flat Copilot file lives at
+  // `.github/agents/<name>.agent.md`, one level shallower than the directory
+  // hosts, so the installed skills at `.github/skills/<name>/` are reached
+  // via `../skills/...`. Rewrite so the links resolve on disk.
+  agent = agent.replace(/\.\.\/\.\.\/skills\//g, "../skills/");
 
   // Inject the skills-inventory section as the final transform step so
   // it lands in Copilot's flat `.agent.md` file too (Copilot ignores
@@ -1217,6 +1308,11 @@ function transformAgentForCopilot(
   if (registry) {
     agent = injectSkillsSection(agent, name, registry);
   }
+
+  // Orchestrator agents get an agent-scoped SessionStart hook so their role
+  // memory loads when they run as the primary (user-invoked) agent — see
+  // injectCopilotOrchestratorHook. No-op for non-orchestrator agents.
+  agent = injectCopilotOrchestratorHook(agent, name);
 
   return { agent, soul };
 }
@@ -1543,7 +1639,8 @@ function printFixCopilotHelp() {
                   reference to \`<name>.soul.md\`
 
     --no-normalize-model    Keep 'model: sonnet' as-is (default: rewrite
-                            to 'model: claude-sonnet-4.6' for Copilot CLI)
+                            to 'model: Claude Sonnet 4.6' — Copilot's
+                            model-picker display name)
     -h, --help              Show this help
 `);
 }

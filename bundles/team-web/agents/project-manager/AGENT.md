@@ -4,6 +4,7 @@ description: Use when tasks need to be routed to developers, when an approved PR
 model: sonnet
 color: magenta
 group: core
+orchestrator: true
 theme: {color: colour213, icon: "📋", short_name: pm}
 aliases: [pm, max]
 skills: [issue-tracking, plan-feature, subagent-driven-development, dispatching-parallel-agents, memory]

@@ -1,6 +1,6 @@
 ---
 name: xray-testing
-description: CRUD + results import on Xray entities (Test, Precondition, Test Set/Plan/Execution/Run) across Cloud (GraphQL) and Server/DC (REST). Load for "pull test PROJ-T42", "create Xray test from this AFS", "upload JUnit to test plan", or any Xray CRUD.
+description: "Use when a task involves Xray test-management entities in Jira (Test, Precondition, Test Set, Test Plan, Test Execution, Test Run), their steps, run statuses/results, or coverage links to a story/requirement/bug — distinct from plain Jira field/comment work. Triggers: \"pull test PROJ-T42\", \"create Xray test from this AFS\", \"upload JUnit to test plan\", \"which tests cover PROJ-42\"."
 license: Apache-2.0
 metadata:
   authors:

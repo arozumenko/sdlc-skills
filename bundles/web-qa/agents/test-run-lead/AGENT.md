@@ -4,6 +4,7 @@ description: Use when running a manual-QA suite — assembles the suite first (a
 model: sonnet
 group: qa
 color: green
+orchestrator: true
 theme: {color: colour156, icon: "🎯", short_name: lead}
 aliases: [test-run-lead, lead]
 tools: Glob, Read, Write, Agent
