@@ -279,7 +279,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 
 ## Catalog
 
-### Agents (10)
+### Agents (11)
 
 | Agent | Persona | Role |
 |---|---|---|
@@ -291,6 +291,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
 | `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
+| `quality-architect` | Quinn | Audits a running product across dimensions (a11y / security / privacy / performance / responsive / content-SEO / UX), runs persona review, and owns the quality bar; PM-dispatched shift-left gate |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
@@ -330,6 +331,20 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 | `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Mirrored into the `web-qa` bundle as its primary consumer |
+
+**Quality-audit (9):** — the `quality-architect` (Quinn) toolkit; the dimensional leaves are agent-orchestrated, loaded on demand by `quality-audit-workflow`
+
+| Skill | What it does |
+|---|---|
+| `quality-audit-workflow` | Multi-dimension quality-audit orchestration — modes, p0–p3 finding schema, specialist routing, persona review, reporting. Preloaded by `quality-architect` |
+| `accessibility-audit` | Accessibility & WCAG 2.1 AA/AAA — axe-core + visual review (contrast, ARIA, keyboard, focus) |
+| `security-audit` | Web security — XSS, CSRF, headers (CSP / HSTS), mixed content, exposed secrets, OWASP Top 10 |
+| `privacy-audit` | Privacy & GDPR — cookies, trackers, storage, consent banners |
+| `performance-audit` | Performance — Core Web Vitals, network waterfall, console errors, JS issues |
+| `responsive-audit` | Responsive / mobile-web — touch targets, viewport, overflow, breakpoints (CDP emulation) |
+| `content-seo-audit` | Content & SEO — copy quality, meta tags, structured data, headings, links |
+| `ux-audit` | UI/UX & page types — forms, error messaging, 20+ page-type patterns |
+| `test-generation` | Coverage-gap proposal — candidate scenarios from a live page / findings (hands off to AFS, never framework tests) |
 
 ### External skills (fetched by the installer)
 

@@ -190,6 +190,18 @@
       "source": "./skills/vividus",
       "description": "Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based .story files with 47+ plugins (web, REST, mobile, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment configuration.",
       "version": "0.2.0"
+    },
+    {
+      "name": "quality-architect",
+      "source": "./agents/quality-architect",
+      "description": "Quality architect (Quinn) — dimensional product audits (a11y / security / privacy / performance / responsive / content-SEO / UX) and the quality bar.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "quality-audit-workflow",
+      "source": "./skills/quality-audit-workflow",
+      "description": "Multi-dimension quality-audit orchestration — modes, p0-p3 finding schema, specialist routing, persona review.",
+      "version": "0.2.0"
     }
   ]
 }

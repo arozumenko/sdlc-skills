@@ -1,64 +1,366 @@
 {
   "_comment": "sdlc-skills skill registry — canonical source for which skills exist and how to fetch them. Skills in the sdlc-skills monorepo carry `monorepo: sdlc-skills` + `name: <subdir>`. Third-party skill repos carry `repo: owner/repo` (+ optional `ref`, + optional `subdir` for multi-skill repos) and are fetched by `bin/init.mjs` via git clone, then copied into the project's skills dir (or symlinked with `--symlink`).",
-
   "monorepo": {
     "id": "sdlc-skills",
     "repo": "arozumenko/sdlc-skills",
     "ref": "main"
   },
-
   "skills": [
-    {"id": "browser-verify",     "monorepo": "sdlc-skills", "name": "browser-verify",     "description": "Browser verification via CDP — visual checks, screenshots, accessibility"},
-    {"id": "code-review",        "monorepo": "sdlc-skills", "name": "code-review",        "description": "Structured code review — security, quality, conventions"},
-    {"id": "git-workflow",       "monorepo": "sdlc-skills", "name": "git-workflow",       "description": "Git branching, PR creation, and merge workflow"},
-    {"id": "issue-tracking",     "monorepo": "sdlc-skills", "name": "issue-tracking",     "description": "GitHub issue lifecycle — labelling, commenting, closing"},
-    {"id": "playwright-testing", "monorepo": "sdlc-skills", "name": "playwright-testing", "description": "End-to-end browser testing with Playwright"},
-    {"id": "bugfix-workflow",    "monorepo": "sdlc-skills", "name": "bugfix-workflow",    "description": "End-to-end bugfix workflow — reproduce, test, fix, verify, document"},
-    {"id": "reproducing-issues", "monorepo": "sdlc-skills", "name": "reproducing-issues", "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)"},
-    {"id": "root-cause-analysis","monorepo": "sdlc-skills", "name": "root-cause-analysis","description": "Trace a confirmed bug to its exact cause — execution path, classification, confidence, impact analysis (investigation only)"},
-    {"id": "xray-testing",             "monorepo": "sdlc-skills", "name": "xray-testing",             "description": "CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Xray Cloud (GraphQL) and Server/DC (REST). JUnit / Cucumber / Xray JSON import formats"},
-    {"id": "xlsx-reader",              "monorepo": "sdlc-skills", "name": "xlsx-reader",              "description": "Read .xlsx spreadsheets (test cases, checklists) into Markdown for agent ingestion."},
-    {"id": "atlassian-content",        "monorepo": "sdlc-skills", "name": "atlassian-content",        "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair"},
-    {"id": "tosca-automation",         "monorepo": "sdlc-skills", "name": "tosca-automation",         "description": "Tricentis TOSCA Cloud full lifecycle — create/update/run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders, TSU import/export. Bundled `tosca_cli.py` (httpx + typer + rich)"},
-    {"id": "vividus",                  "monorepo": "sdlc-skills", "name": "vividus",                  "description": "Bootstrap, configure, and author tests for the Vividus BDD framework (JBehave-based, 47+ plugins covering web/Selenium+Playwright, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility). Config-first `.story` files, suite/profile/environment triple, BOM-pinned versions, MCP-server grounding. Templates in `assets/` for scaffolding"},
-    {"id": "test-case-analysis",       "monorepo": "sdlc-skills", "name": "test-case-analysis",       "description": "Execute a TMS test case against the live app, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer"},
-    {"id": "test-automation-workflow", "monorepo": "sdlc-skills", "name": "test-automation-workflow", "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP"},
-    {"id": "implement-feature",  "monorepo": "sdlc-skills", "name": "implement-feature",  "description": "End-to-end feature implementation workflow — plan, test, build, ship"},
-    {"id": "plan-feature",       "monorepo": "sdlc-skills", "name": "plan-feature",       "description": "Structured feature planning — requirements, feasibility, acceptance criteria"},
-    {"id": "seeding-a-project",     "monorepo": "sdlc-skills", "name": "seeding-a-project",     "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)"},
-    {"id": "session-retrospective", "monorepo": "sdlc-skills", "name": "session-retrospective", "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout)"},
-    {"id": "deep-research",      "monorepo": "sdlc-skills", "name": "deep-research",      "description": "Deep research workflow — trends, topic analysis, fact-checking"},
-    {"id": "gathering-context",   "monorepo": "sdlc-skills", "name": "gathering-context",   "description": "Cross-channel context gathering — email, Teams, local KB"},
-    {"id": "verifying-outcomes",      "monorepo": "sdlc-skills", "name": "verifying-outcomes",      "description": "Goal-backward verification — check outcomes, not task completion"},
-    {"id": "completing-a-task",       "monorepo": "sdlc-skills", "name": "completing-a-task",       "description": "Five-step task completion protocol: verify locally → commit on feature branch → push & open PR → comment on tracker issue → notify the orchestrator. Used by devs at handoff"},
-    {"id": "memory",             "monorepo": "sdlc-skills", "name": "memory",             "description": "Persistent file-based memory across conversations"},
-    {"id": "obsidian-vault",     "monorepo": "sdlc-skills", "name": "obsidian-vault",     "description": "Read/write the user's Obsidian second brain"},
-    {"id": "microsoft-365",            "monorepo": "sdlc-skills", "name": "microsoft-365",            "description": "Microsoft Graph (email/calendar/Teams) integration"},
-
-    {"id": "swiftui-pro",           "repo": "twostraws/SwiftUI-Agent-Skill",           "ref": "main", "subdir": "swiftui-pro",           "description": "SwiftUI code review and authoring — modern APIs, performance, accessibility (by Paul Hudson)"},
-    {"id": "swiftdata-pro",         "repo": "twostraws/SwiftData-Agent-Skill",         "ref": "main", "subdir": "swiftdata-pro",         "description": "SwiftData code review and authoring — modern APIs, CloudKit compatibility (by Paul Hudson)"},
-    {"id": "swift-testing-pro",     "repo": "twostraws/Swift-Testing-Agent-Skill",     "ref": "main", "subdir": "swift-testing-pro",     "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)"},
-    {"id": "swift-concurrency-pro", "repo": "twostraws/Swift-Concurrency-Agent-Skill", "ref": "main", "subdir": "swift-concurrency-pro", "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)"},
-
-    {"id": "tdd",                         "repo": "mattpocock/skills",   "ref": "main", "subdir": "skills/engineering/tdd",         "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)"},
-    {"id": "brainstorming",               "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/brainstorming",           "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)"},
-    {"id": "systematic-debugging",        "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/systematic-debugging",    "description": "Root-cause tracing, condition-based waiting, defense-in-depth for reproducing and fixing bugs (from obra/superpowers)"},
-    {"id": "verification-before-completion", "repo": "obra/superpowers", "ref": "main", "subdir": "skills/verification-before-completion", "description": "Pre-handoff check — verify the work against the spec before calling it done (from obra/superpowers)"},
-    {"id": "writing-skills",              "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/writing-skills",          "description": "Meta-skill for authoring SKILL.md files — structure, triggers, and verification (from obra/superpowers)"},
-    {"id": "requesting-code-review",      "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/requesting-code-review",  "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)"},
-    {"id": "receiving-code-review",       "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/receiving-code-review",   "description": "How to process review feedback — verify technically, don't perform agreement (from obra/superpowers)"},
-    {"id": "subagent-driven-development", "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/subagent-driven-development", "description": "Execute an implementation plan by dispatching a fresh subagent per task with two-stage review (spec compliance, then code quality), in the current session (from obra/superpowers)"},
-    {"id": "dispatching-parallel-agents", "repo": "obra/superpowers",    "ref": "main", "subdir": "skills/dispatching-parallel-agents", "description": "Dispatch one focused agent per independent problem domain and run them concurrently — for 2+ tasks with no shared state or sequential dependencies (from obra/superpowers)"},
-
-    {"id": "playwright-cli",              "repo": "microsoft/playwright-cli", "ref": "main", "subdir": "skills/playwright-cli",      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"},
-    {"id": "playwright-best-practices",   "repo": "currents-dev/playwright-best-practices-skill", "ref": "main", "description": "Playwright selector strategy, wait patterns, and auth/flaky-test guidance."},
-
-    {"id": "fastapi",                     "repo": "fastapi/fastapi", "ref": "master", "subdir": "fastapi/.agents/skills/fastapi", "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)"},
-    {"id": "fastmcp-server",              "repo": "davila7/claude-code-templates", "ref": "main", "subdir": "cli-tool/components/skills/development/fastmcp-server", "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)"},
-    {"id": "vercel-react-best-practices", "repo": "vercel-labs/agent-skills", "ref": "main", "subdir": "skills/react-best-practices", "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"},
-
-    {"id": "environment-setup-xcuitest",  "repo": "appium/skills", "ref": "main", "subdir": "skills/environment-setup-xcuitest",  "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)"},
-    {"id": "xcuitest-real-device-config", "repo": "appium/skills", "ref": "main", "subdir": "skills/xcuitest-real-device-config", "description": "Prepare a real iOS/tvOS device for Appium XCUITest automation — device trust, Developer Mode, provisioning, WebDriverAgent code-signing (official Appium)"},
-    {"id": "appium-troubleshooting",      "repo": "appium/skills", "ref": "main", "subdir": "skills/appium-troubleshooting",      "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)"}
+    {
+      "id": "browser-verify",
+      "monorepo": "sdlc-skills",
+      "name": "browser-verify",
+      "description": "Browser verification via CDP — visual checks, screenshots, accessibility"
+    },
+    {
+      "id": "code-review",
+      "monorepo": "sdlc-skills",
+      "name": "code-review",
+      "description": "Structured code review — security, quality, conventions"
+    },
+    {
+      "id": "git-workflow",
+      "monorepo": "sdlc-skills",
+      "name": "git-workflow",
+      "description": "Git branching, PR creation, and merge workflow"
+    },
+    {
+      "id": "issue-tracking",
+      "monorepo": "sdlc-skills",
+      "name": "issue-tracking",
+      "description": "GitHub issue lifecycle — labelling, commenting, closing"
+    },
+    {
+      "id": "playwright-testing",
+      "monorepo": "sdlc-skills",
+      "name": "playwright-testing",
+      "description": "End-to-end browser testing with Playwright"
+    },
+    {
+      "id": "bugfix-workflow",
+      "monorepo": "sdlc-skills",
+      "name": "bugfix-workflow",
+      "description": "End-to-end bugfix workflow — reproduce, test, fix, verify, document"
+    },
+    {
+      "id": "reproducing-issues",
+      "monorepo": "sdlc-skills",
+      "name": "reproducing-issues",
+      "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)"
+    },
+    {
+      "id": "root-cause-analysis",
+      "monorepo": "sdlc-skills",
+      "name": "root-cause-analysis",
+      "description": "Trace a confirmed bug to its exact cause — execution path, classification, confidence, impact analysis (investigation only)"
+    },
+    {
+      "id": "xray-testing",
+      "monorepo": "sdlc-skills",
+      "name": "xray-testing",
+      "description": "CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Xray Cloud (GraphQL) and Server/DC (REST). JUnit / Cucumber / Xray JSON import formats"
+    },
+    {
+      "id": "xlsx-reader",
+      "monorepo": "sdlc-skills",
+      "name": "xlsx-reader",
+      "description": "Read .xlsx spreadsheets (test cases, checklists) into Markdown for agent ingestion."
+    },
+    {
+      "id": "atlassian-content",
+      "monorepo": "sdlc-skills",
+      "name": "atlassian-content",
+      "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair"
+    },
+    {
+      "id": "tosca-automation",
+      "monorepo": "sdlc-skills",
+      "name": "tosca-automation",
+      "description": "Tricentis TOSCA Cloud full lifecycle — create/update/run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders, TSU import/export. Bundled `tosca_cli.py` (httpx + typer + rich)"
+    },
+    {
+      "id": "vividus",
+      "monorepo": "sdlc-skills",
+      "name": "vividus",
+      "description": "Bootstrap, configure, and author tests for the Vividus BDD framework (JBehave-based, 47+ plugins covering web/Selenium+Playwright, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility). Config-first `.story` files, suite/profile/environment triple, BOM-pinned versions, MCP-server grounding. Templates in `assets/` for scaffolding"
+    },
+    {
+      "id": "test-case-analysis",
+      "monorepo": "sdlc-skills",
+      "name": "test-case-analysis",
+      "description": "Execute a TMS test case against the live app, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer"
+    },
+    {
+      "id": "test-automation-workflow",
+      "monorepo": "sdlc-skills",
+      "name": "test-automation-workflow",
+      "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP"
+    },
+    {
+      "id": "implement-feature",
+      "monorepo": "sdlc-skills",
+      "name": "implement-feature",
+      "description": "End-to-end feature implementation workflow — plan, test, build, ship"
+    },
+    {
+      "id": "plan-feature",
+      "monorepo": "sdlc-skills",
+      "name": "plan-feature",
+      "description": "Structured feature planning — requirements, feasibility, acceptance criteria"
+    },
+    {
+      "id": "seeding-a-project",
+      "monorepo": "sdlc-skills",
+      "name": "seeding-a-project",
+      "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)"
+    },
+    {
+      "id": "session-retrospective",
+      "monorepo": "sdlc-skills",
+      "name": "session-retrospective",
+      "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout)"
+    },
+    {
+      "id": "deep-research",
+      "monorepo": "sdlc-skills",
+      "name": "deep-research",
+      "description": "Deep research workflow — trends, topic analysis, fact-checking"
+    },
+    {
+      "id": "gathering-context",
+      "monorepo": "sdlc-skills",
+      "name": "gathering-context",
+      "description": "Cross-channel context gathering — email, Teams, local KB"
+    },
+    {
+      "id": "verifying-outcomes",
+      "monorepo": "sdlc-skills",
+      "name": "verifying-outcomes",
+      "description": "Goal-backward verification — check outcomes, not task completion"
+    },
+    {
+      "id": "completing-a-task",
+      "monorepo": "sdlc-skills",
+      "name": "completing-a-task",
+      "description": "Five-step task completion protocol: verify locally → commit on feature branch → push & open PR → comment on tracker issue → notify the orchestrator. Used by devs at handoff"
+    },
+    {
+      "id": "memory",
+      "monorepo": "sdlc-skills",
+      "name": "memory",
+      "description": "Persistent file-based memory across conversations"
+    },
+    {
+      "id": "obsidian-vault",
+      "monorepo": "sdlc-skills",
+      "name": "obsidian-vault",
+      "description": "Read/write the user's Obsidian second brain"
+    },
+    {
+      "id": "microsoft-365",
+      "monorepo": "sdlc-skills",
+      "name": "microsoft-365",
+      "description": "Microsoft Graph (email/calendar/Teams) integration"
+    },
+    {
+      "id": "swiftui-pro",
+      "repo": "twostraws/SwiftUI-Agent-Skill",
+      "ref": "main",
+      "subdir": "swiftui-pro",
+      "description": "SwiftUI code review and authoring — modern APIs, performance, accessibility (by Paul Hudson)"
+    },
+    {
+      "id": "swiftdata-pro",
+      "repo": "twostraws/SwiftData-Agent-Skill",
+      "ref": "main",
+      "subdir": "swiftdata-pro",
+      "description": "SwiftData code review and authoring — modern APIs, CloudKit compatibility (by Paul Hudson)"
+    },
+    {
+      "id": "swift-testing-pro",
+      "repo": "twostraws/Swift-Testing-Agent-Skill",
+      "ref": "main",
+      "subdir": "swift-testing-pro",
+      "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)"
+    },
+    {
+      "id": "swift-concurrency-pro",
+      "repo": "twostraws/Swift-Concurrency-Agent-Skill",
+      "ref": "main",
+      "subdir": "swift-concurrency-pro",
+      "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)"
+    },
+    {
+      "id": "tdd",
+      "repo": "mattpocock/skills",
+      "ref": "main",
+      "subdir": "skills/engineering/tdd",
+      "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)"
+    },
+    {
+      "id": "brainstorming",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/brainstorming",
+      "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)"
+    },
+    {
+      "id": "systematic-debugging",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/systematic-debugging",
+      "description": "Root-cause tracing, condition-based waiting, defense-in-depth for reproducing and fixing bugs (from obra/superpowers)"
+    },
+    {
+      "id": "verification-before-completion",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/verification-before-completion",
+      "description": "Pre-handoff check — verify the work against the spec before calling it done (from obra/superpowers)"
+    },
+    {
+      "id": "writing-skills",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/writing-skills",
+      "description": "Meta-skill for authoring SKILL.md files — structure, triggers, and verification (from obra/superpowers)"
+    },
+    {
+      "id": "requesting-code-review",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/requesting-code-review",
+      "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)"
+    },
+    {
+      "id": "receiving-code-review",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/receiving-code-review",
+      "description": "How to process review feedback — verify technically, don't perform agreement (from obra/superpowers)"
+    },
+    {
+      "id": "subagent-driven-development",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/subagent-driven-development",
+      "description": "Execute an implementation plan by dispatching a fresh subagent per task with two-stage review (spec compliance, then code quality), in the current session (from obra/superpowers)"
+    },
+    {
+      "id": "dispatching-parallel-agents",
+      "repo": "obra/superpowers",
+      "ref": "main",
+      "subdir": "skills/dispatching-parallel-agents",
+      "description": "Dispatch one focused agent per independent problem domain and run them concurrently — for 2+ tasks with no shared state or sequential dependencies (from obra/superpowers)"
+    },
+    {
+      "id": "playwright-cli",
+      "repo": "microsoft/playwright-cli",
+      "ref": "main",
+      "subdir": "skills/playwright-cli",
+      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)"
+    },
+    {
+      "id": "playwright-best-practices",
+      "repo": "currents-dev/playwright-best-practices-skill",
+      "ref": "main",
+      "description": "Playwright selector strategy, wait patterns, and auth/flaky-test guidance."
+    },
+    {
+      "id": "fastapi",
+      "repo": "fastapi/fastapi",
+      "ref": "master",
+      "subdir": "fastapi/.agents/skills/fastapi",
+      "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)"
+    },
+    {
+      "id": "fastmcp-server",
+      "repo": "davila7/claude-code-templates",
+      "ref": "main",
+      "subdir": "cli-tool/components/skills/development/fastmcp-server",
+      "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)"
+    },
+    {
+      "id": "vercel-react-best-practices",
+      "repo": "vercel-labs/agent-skills",
+      "ref": "main",
+      "subdir": "skills/react-best-practices",
+      "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"
+    },
+    {
+      "id": "environment-setup-xcuitest",
+      "repo": "appium/skills",
+      "ref": "main",
+      "subdir": "skills/environment-setup-xcuitest",
+      "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)"
+    },
+    {
+      "id": "xcuitest-real-device-config",
+      "repo": "appium/skills",
+      "ref": "main",
+      "subdir": "skills/xcuitest-real-device-config",
+      "description": "Prepare a real iOS/tvOS device for Appium XCUITest automation — device trust, Developer Mode, provisioning, WebDriverAgent code-signing (official Appium)"
+    },
+    {
+      "id": "appium-troubleshooting",
+      "repo": "appium/skills",
+      "ref": "main",
+      "subdir": "skills/appium-troubleshooting",
+      "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)"
+    },
+    {
+      "id": "quality-audit-workflow",
+      "monorepo": "sdlc-skills",
+      "name": "quality-audit-workflow",
+      "description": "Multi-dimension quality-audit orchestration — modes, p0-p3 finding schema, specialist routing, persona review, reporting"
+    },
+    {
+      "id": "accessibility-audit",
+      "monorepo": "sdlc-skills",
+      "name": "accessibility-audit",
+      "description": "Accessibility & WCAG 2.1 AA/AAA audit — axe-core + visual review (contrast, ARIA, keyboard, focus)"
+    },
+    {
+      "id": "security-audit",
+      "monorepo": "sdlc-skills",
+      "name": "security-audit",
+      "description": "Web security audit — XSS, CSRF, headers (CSP/HSTS), mixed content, exposed secrets, OWASP Top 10"
+    },
+    {
+      "id": "privacy-audit",
+      "monorepo": "sdlc-skills",
+      "name": "privacy-audit",
+      "description": "Privacy & GDPR audit — cookies, trackers, storage, consent banners"
+    },
+    {
+      "id": "performance-audit",
+      "monorepo": "sdlc-skills",
+      "name": "performance-audit",
+      "description": "Performance audit — Core Web Vitals, network waterfall, console errors, JS issues"
+    },
+    {
+      "id": "responsive-audit",
+      "monorepo": "sdlc-skills",
+      "name": "responsive-audit",
+      "description": "Responsive / mobile-web audit — touch targets, viewport, overflow, breakpoints (CDP emulation)"
+    },
+    {
+      "id": "content-seo-audit",
+      "monorepo": "sdlc-skills",
+      "name": "content-seo-audit",
+      "description": "Content & SEO audit — copy quality, meta tags, structured data, headings, links"
+    },
+    {
+      "id": "ux-audit",
+      "monorepo": "sdlc-skills",
+      "name": "ux-audit",
+      "description": "UI/UX & page-type audit — forms, error messaging, 20+ page-type patterns"
+    },
+    {
+      "id": "test-generation",
+      "monorepo": "sdlc-skills",
+      "name": "test-generation",
+      "description": "Coverage-gap proposal — candidate test scenarios from a live page / audit findings (hands off to AFS)"
+    }
   ]
 }

@@ -16,6 +16,7 @@ When the task fits one of these roles, read the matching `AGENT.md` +
 - `ios-dev` — Swift / SwiftUI / SwiftData implementation (no simulator)
 - `qa-engineer` — Test verification, bug reproduction, E2E tests, TMS case execution + AFS emission (via `test-case-analysis` skill)
 - `test-automation-engineer` — Implements automation from specs in the project's existing framework
+- `quality-architect` — Dimensional product audits (a11y / security / privacy / performance / responsive / content-SEO / UX), persona review, owns the quality bar; PM-dispatched shift-left gate (preloads `quality-audit-workflow`)
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring
 - `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
 
@@ -37,6 +38,15 @@ are capability definitions, not always-on context.
 | `vividus` | Vividus BDD framework — bootstrap a project, add plugins, author `.story` files, configure suites/profiles/environments, run via Gradle |
 | `test-case-analysis` | Executing a TMS case end-to-end and emitting an Automation-Friendly Spec (AFS) |
 | `test-automation-workflow` | Automating a TMS test case end-to-end — explore, specify, implement, review |
+| `quality-audit-workflow` | Orchestrating a multi-dimension product quality audit — modes, p0–p3 finding schema, specialist routing, persona review, reporting |
+| `accessibility-audit` | Auditing a page for accessibility / WCAG 2.1 AA/AAA (axe-core + visual) |
+| `security-audit` | Auditing a page for security exposure — XSS, CSRF, headers, mixed content, secrets, OWASP Top 10 |
+| `privacy-audit` | Auditing cookies, trackers, storage, consent banners, GDPR |
+| `performance-audit` | Auditing performance — Core Web Vitals, network, console errors, JS |
+| `responsive-audit` | Auditing responsive / mobile-web behavior via device emulation |
+| `content-seo-audit` | Auditing content quality and SEO — copy, meta tags, structured data, links |
+| `ux-audit` | Auditing UI/UX, forms, error messaging, 20+ page-type patterns |
+| `test-generation` | Proposing a coverage-gap report from a live page / findings (hands off to AFS) |
 | `code-review` | Reviewing a PR or diff |
 | `completing-a-task` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |
