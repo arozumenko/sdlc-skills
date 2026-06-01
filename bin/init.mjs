@@ -1192,31 +1192,36 @@ function applySkillOverlay(target, name, effectiveSkills, registry) {
 // fix-copilot subcommand. Given AGENT.md (+ optional SOUL.md) content,
 // returns { agent, soul } — the text to write to <name>.agent.md and
 // (when soulMode requires it) to a separate soul destination.
-// Orchestrator agents run as the *primary* (user-invoked) agent. In that mode
-// Copilot fires only a session-start event — which carries NO agent identity —
-// so a workspace-level hook can't know to load THIS role's memory. The fix is an
-// agent-scoped session-start hook baked into the flat frontmatter: it knows its
-// own role (the file IS that role) and fires when the agent is the active primary
-// agent. Worker agents stay hookless on purpose — they arrive as subagents and
-// are served by the workspace SubagentStart hook, so the two paths stay disjoint
-// (orchestrators = frontmatter session-start; workers = workspace SubagentStart).
+// ANY agent can run as the *primary* (user-invoked) agent in VS Code Copilot
+// Chat. In that mode Copilot fires only a session-start event — which carries NO
+// agent identity — so the workspace-level session-start hook can't know to load
+// THIS role's memory. The fix is an agent-scoped session-start hook baked into
+// the flat frontmatter: it knows its own role (the file IS that role) and fires
+// when the agent is the active primary. We bake it into EVERY installed agent so
+// each one's memory loads when it's primary — the orchestrator, the interactive
+// scout, and any worker a user selects directly all get parity.
 //
-// VS-Code-only on purpose. Live testing showed the standalone Copilot CLI does
-// NOT execute agent-frontmatter hooks at all (and exposes no main-agent identity
-// to hooks), so a CLI orchestrator can't get role memory this way — it falls back
-// to the agent body's `memory`-skill instruction. VS Code Copilot Chat fires the
-// PascalCase `SessionStart` frontmatter hook (command / hookSpecificOutput), so
-// that's the only dialect we emit. SDLC_HOOK_EVENT=SessionStart makes agent-start
-// skip the shared docs (the workspace session-start hook already injected those)
-// and label the emitted event as SessionStart.
+// No double-injection: a worker dispatched as a subagent fires SubagentStart
+// (served by the workspace hook) — a DIFFERENT event — so this frontmatter
+// SessionStart only fires when the agent is the primary. The two paths stay
+// disjoint (frontmatter session-start = primary; workspace SubagentStart = sub).
 //
-// Opt-in via `orchestrator: true` in the source AGENT.md frontmatter (an
-// sdlc-only key; Copilot ignores unknown frontmatter fields).
-function injectCopilotOrchestratorHook(agentText, name) {
+// VS-Code-only on purpose, and that's fine. Live testing showed the standalone
+// Copilot CLI does NOT execute agent-frontmatter hooks at all — but it doesn't
+// need them: the CLI primary agent IS identified to the workspace session-start
+// hook (via `--agent`), so CLI primaries get their memory that way. VS Code
+// Copilot Chat fires the PascalCase `SessionStart` frontmatter hook (command /
+// hookSpecificOutput), so that's the only dialect we emit. SDLC_HOOK_EVENT=
+// SessionStart makes agent-start skip the shared docs (the workspace session-start
+// hook already injected those) and label the emitted event as SessionStart.
+//
+// Applied to every agent on Copilot install; the `hooks:` guard leaves any
+// author-defined hooks untouched. (`orchestrator: true` is no longer required —
+// it remains a harmless sdlc-only semantic key that Copilot ignores.)
+function injectCopilotSessionStartHook(agentText, name) {
   const m = agentText.match(/^---\s*\n([\s\S]*?)\n---[ \t]*\n?/);
   if (!m) return agentText;
   const fmBody = m[1];
-  if (!/^orchestrator:[ \t]*true[ \t]*$/m.test(fmBody)) return agentText; // not flagged
   if (/^hooks:/m.test(fmBody)) return agentText; // author already defined hooks — leave it
   const rel = ".github/hooks/sdlc-skills";
   const cmd = `"./${rel}/run-hook.cmd" agent-start ${name}`;
@@ -1309,10 +1314,10 @@ function transformAgentForCopilot(
     agent = injectSkillsSection(agent, name, registry);
   }
 
-  // Orchestrator agents get an agent-scoped SessionStart hook so their role
-  // memory loads when they run as the primary (user-invoked) agent — see
-  // injectCopilotOrchestratorHook. No-op for non-orchestrator agents.
-  agent = injectCopilotOrchestratorHook(agent, name);
+  // Every agent gets an agent-scoped SessionStart hook so its role memory loads
+  // when it runs as the primary (user-invoked) agent in VS Code Copilot Chat —
+  // see injectCopilotSessionStartHook. The `hooks:` guard skips author-defined hooks.
+  agent = injectCopilotSessionStartHook(agent, name);
 
   return { agent, soul };
 }

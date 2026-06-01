@@ -202,6 +202,12 @@
       "source": "./skills/quality-audit-workflow",
       "description": "Multi-dimension quality-audit orchestration — modes, p0-p3 finding schema, specialist routing, persona review.",
       "version": "0.2.0"
+    },
+    {
+      "name": "requirement-traceability",
+      "source": "./skills/requirement-traceability",
+      "description": "Requirement↔case↔result traceability + story triage — coverage matrix and gap findings.",
+      "version": "0.2.0"
     }
   ]
 }

@@ -136,6 +136,7 @@ npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Py
 npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
 npx github:arozumenko/sdlc-skills init --bundle web-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
+npx github:arozumenko/sdlc-skills init --bundle quality-engineering  # manual QE discipline — triage → cases → execute → report → triangulate (no automation)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -158,7 +159,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Four
+files** into the project — one command instead of hand-listing roles. Five
 ship today:
 
 | Bundle | Roster | What it's for |
@@ -167,6 +168,7 @@ ship today:
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
 | `web-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
+| `quality-engineering` | scout + ba + project-manager + qa-engineer + `quality-architect` (Quinn) | **Manual** QE discipline (no automation) — PM orchestrates story triage → requirement-traced case authoring → manual execution → reporting → **requirement↔case↔result triangulation**; Quinn owns the quality bar + the `requirement-traceability` matrix. Distinct from `web-qa` (governance/coverage vs run-execution). |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
 author your own.
@@ -332,7 +334,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 | `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Mirrored into the `web-qa` bundle as its primary consumer |
 
-**Quality-audit (9):** — the `quality-architect` (Quinn) toolkit; the dimensional leaves are agent-orchestrated, loaded on demand by `quality-audit-workflow`
+**Quality-audit (10):** — the `quality-architect` (Quinn) toolkit; the dimensional leaves are agent-orchestrated, loaded on demand by `quality-audit-workflow`
 
 | Skill | What it does |
 |---|---|
@@ -345,6 +347,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `content-seo-audit` | Content & SEO — copy quality, meta tags, structured data, headings, links |
 | `ux-audit` | UI/UX & page types — forms, error messaging, 20+ page-type patterns |
 | `test-generation` | Coverage-gap proposal — candidate scenarios from a live page / findings (hands off to AFS, never framework tests) |
+| `requirement-traceability` | Story triage (testability → gaps & questions) + requirement↔case↔result coverage matrix (uncovered / orphan / stale / weak-evidence). Anchors the `quality-engineering` bundle |
 
 ### External skills (fetched by the installer)
 

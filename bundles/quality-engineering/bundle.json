@@ -1,0 +1,23 @@
+{
+  "id": "quality-engineering",
+  "title": "Quality Engineering",
+  "description": "Manual quality-engineering discipline team — story triage, requirement-traced case authoring, manual execution, reporting, and requirement↔case↔result triangulation. No test automation.",
+  "agents": [],
+  "skills": [],
+  "localAgents": ["scout", "ba", "project-manager", "qa-engineer", "quality-architect"],
+  "localSkills": ["accessibility-audit", "browser-verify", "bugfix-workflow", "completing-a-task", "content-seo-audit", "deep-research", "issue-tracking", "memory", "performance-audit", "plan-feature", "privacy-audit", "quality-audit-workflow", "reproducing-issues", "requirement-traceability", "responsive-audit", "security-audit", "seeding-a-project", "session-retrospective", "test-case-analysis", "test-generation", "ux-audit", "xlsx-reader"],
+  "briefings": {
+    "scout": "briefings/scout.md",
+    "ba": "briefings/ba.md",
+    "project-manager": "briefings/project-manager.md",
+    "qa-engineer": "briefings/qa-engineer.md",
+    "quality-architect": "briefings/quality-architect.md"
+  },
+  "skillOverlays": {
+    "qa-engineer": { "remove": ["playwright-testing"] },
+    "quality-architect": { "add": ["requirement-traceability"] }
+  },
+  "seed": { "knowledge": ".agents/quality-engineering/knowledge" },
+  "instructions": "instructions.md",
+  "targets": ["claude"]
+}

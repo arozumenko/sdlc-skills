@@ -138,6 +138,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "requirement-traceability",
+      "source": "./skills/requirement-traceability",
+      "description": "Requirement↔case↔result triangulation + story triage — coverage matrix, gaps-and-questions report, uncovered/orphan/stale/weak-evidence findings",
+      "version": "0.2.0"
+    },
+    {
       "name": "responsive-audit",
       "source": "./skills/responsive-audit",
       "description": "Responsive / mobile-web audit — touch targets, viewport, overflow, breakpoints (CDP emulation)",

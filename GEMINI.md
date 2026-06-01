@@ -47,6 +47,7 @@ are capability definitions, not always-on context.
 | `content-seo-audit` | Auditing content quality and SEO — copy, meta tags, structured data, links |
 | `ux-audit` | Auditing UI/UX, forms, error messaging, 20+ page-type patterns |
 | `test-generation` | Proposing a coverage-gap report from a live page / findings (hands off to AFS) |
+| `requirement-traceability` | Story triage (testability → gaps & questions) + requirement↔case↔result coverage matrix |
 | `code-review` | Reviewing a PR or diff |
 | `completing-a-task` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |

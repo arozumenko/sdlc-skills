@@ -361,6 +361,12 @@
       "monorepo": "sdlc-skills",
       "name": "test-generation",
       "description": "Coverage-gap proposal — candidate test scenarios from a live page / audit findings (hands off to AFS)"
+    },
+    {
+      "id": "requirement-traceability",
+      "monorepo": "sdlc-skills",
+      "name": "requirement-traceability",
+      "description": "Requirement↔case↔result triangulation + story triage — coverage matrix, gaps-and-questions report, uncovered/orphan/stale/weak-evidence findings"
     }
   ]
 }
