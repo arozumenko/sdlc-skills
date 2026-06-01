@@ -22,7 +22,7 @@ workflow keeps running.
 |---|---|
 | **Which TMS, which transport, which project key** | `.agents/test-automation.yaml` § `tms` |
 | **TMS adapter contract** (fetch / list / update / create / link) | this file — *Contract* section below |
-| **Per-TMS auth + URL shape** | this file — adapter blocks (Zephyr / TestRail / Xray / Azure / markdown) |
+| **Per-TMS auth + URL shape** | this file — adapter blocks (Zephyr / TestRail / Xray / Azure / OneTest / markdown) |
 | **Which MCP toolset each adapter uses** | this file — *Toolset mapping* table |
 | **Concrete invocation examples** (analyst fetch, back-write) | `commands.md` (Phase 2 + Phase 8) |
 | **TMS status verbs** (passed / failed / blocked / not-executed / skipped) | this file — adapter contract |
@@ -63,7 +63,7 @@ when no MCP server exists.
 
 ```yaml
 tms:
-  adapter: zephyr-scale   # zephyr-scale | testrail | xray | azure-test-plans | markdown
+  adapter: zephyr-scale   # zephyr-scale | testrail | xray | azure-test-plans | onetest | markdown
   transport: http         # http | mcp
   project_key: SCRUM      # TMS project / workspace key
   # adapter-specific fields follow:
@@ -92,6 +92,12 @@ tms:
   # organization: your-org
   # project: your-project
   # auth_env: AZURE_DEVOPS_PAT
+
+  # --- onetest (MCP-only test-management service) ---
+  # transport: http
+  # base_url: https://tms.onetest.ai/mcp/test-management   # MCP service `test-management`
+  # auth_env: OCTO_API_KEY     # sent as Authorization: Bearer <OCTO_API_KEY>
+  # project_id: <project_id>   # sent as X-Project-Id header
 
   # --- markdown (default fallback) ---
   # cases_dir: test-specs
@@ -188,6 +194,40 @@ Each adapter maps these to its native statuses.
 - **Update execution**: append to `test-specs/{feature}/{id}.md` under
   a `## Executions` section, plus write JSON to `evidence.json_dir`
 - No auth. No network. Zero dependency. Always works.
+
+### onetest
+
+OneTest's MCP-only `test-management` service. This adapter covers the
+**case-management subset** — fetch / list / create / link / record. The
+richer run, exploratory, and analytics surface is *not* an adapter
+concern (see note at the end of this section).
+
+- **Transport**: `http` (MCP service `test-management` at
+  `https://tms.onetest.ai/mcp/test-management`)
+- **Headers**: `Authorization: Bearer <OCTO_API_KEY>`, `X-Project-Id: <project_id>`
+- **Contract mapping** (5 verbs → OneTest MCP tools):
+
+  | Contract verb | OneTest MCP tool |
+  |---|---|
+  | `fetch_case(id)` | `get_test_case` |
+  | `list_cases(filter)` | `list_test_cases` / `search_test_cases` |
+  | `create_case()` | `create_test_case` |
+  | `link_case_to_story()` | `add_tests_to_suite` — **FLAG**: no direct story-link tool exists; OneTest only links cases to suites, not to a tracker story |
+  | `update_execution()` | `record_test_result` |
+
+- **Status mapping**: OneTest execution statuses
+  `passed` \| `failed` \| `blocked` \| `skipped` \| `not_run` map to the
+  normalized vocab `passed` \| `failed` \| `blocked` \| `skipped` \|
+  `not-executed` (`not_run` → `not-executed`). **FLAG**: OneTest's
+  `in_progress` has no normalized equivalent — drop it (the normalized
+  vocab has no "running" state).
+- **Auth source**: API key from **tms.onetest.ai → Settings → API Keys**;
+  lives in the host's MCP config (`.mcp.json`), never in the repo.
+
+> The OneTest run / exploratory / analytics tools (`create_run`,
+> `record_exploratory_result`, `get_run_analytics`, etc.) are *not* part
+> of the TMS adapter contract — they live in `quality-audit-workflow`'s
+> OneTest run-sync, which owns full run lifecycle and reporting.
 
 ## MCP transport — tool mapping
 

@@ -145,7 +145,7 @@ Fix: {suggested_fix}
 Offer relevant follow-up:
 
 - **Generate test cases** — "Want me to generate test cases covering these findings?" ([`test-generation`](skills/test-generation/SKILL.md)).
-- **File issues** — "Want me to push p0/p1 findings as tracker issues?" (via [`issue-tracking`](skills/issue-tracking/SKILL.md) / [`atlassian-content`](skills/atlassian-content/SKILL.md) — tracker-aware, reads `.agents/profile.md` § Issue tracker).
+- **File issues** — "Want me to push p0/p1 findings as tracker issues?" (via [`issue-tracking`](skills/issue-tracking/SKILL.md) / [`atlassian-content`](skills/atlassian-content/SKILL.md) — tracker-aware, reads `.agents/profile.md` § Issue tracker). For the finding → ticket mapping (which fields land where, p0–p3 → tracker severity, evidence as attachments), read [`issue-tracking/references/findings-to-issues.md`](skills/issue-tracking/references/findings-to-issues.md).
 - **Sync to OneTest** — "Want me to create/sync test executions in OneTest?" (requires the test-management MCP — see § OneTest run sync below).
 - **Explore deeper** — "Want me to explore [highest-risk area] in more detail?"
 
@@ -218,9 +218,31 @@ If a page surfaces multiple potential issues, trigger a full specialist audit on
 
 Re-run the original reproduction steps against the fixed build and confirm resolution. Drive this through the [`reproducing-issues`](skills/reproducing-issues/SKILL.md) skill — it owns the intake → setup → attempt → evidence → confirm loop. Capture fresh evidence to `/tmp`; a fix is "verified" only when the previously-failing observable now passes *and you can show it*. If the original repro no longer applies (flow changed), say so and re-scope rather than declaring a pass on a stale path.
 
+## Research
+
+When the request is to learn a product's domain before auditing it ("research X mechanics", "what are the mechanics of", "learn about Y"), the audit doesn't gather page evidence — it gathers **domain knowledge** that sharpens later audits. The research engine is the [`deep-research`](skills/deep-research/SKILL.md) skill: it owns the plan → search → fetch → adversarially-verify → synthesize loop and the source-quality discipline. This section owns only the **QA-shaped output** that engine must produce.
+
+Drive the research through `deep-research`, then shape its synthesis into a domain-knowledge file the audit's Step 0 can pick up. Save it where Step-0 context loading already looks — alongside the project's `.agents/` knowledge (e.g. `.agents/knowledge/research/<topic-slug>.md`) so the next audit reads it as product context. Adapt sections to the topic — a game needs **Core Mechanics** but not regulatory notes; a healthcare app needs the reverse.
+
+**QA domain-knowledge output schema** (the QA-relevant slice — testable facts, not encyclopedia entries):
+
+| Section | What it captures (and why QA cares) |
+|---|---|
+| **Core Mechanics** | The key things that must work correctly — each with what it does and why it matters. A broken core mechanic is a p0; a cosmetic one is p3. |
+| **Key User Flows** | The critical paths users take, as ordered steps (e.g. lobby → matchmaking → game → results). These become charters for exploratory testing and routing signals for page-type checks. |
+| **Platform / Environment Matrix** | The platform × input × environment combinations that must be tested, as a table (`Platform \| Input \| Notes`). Feeds responsive-audit device emulation and conditional activation. |
+| **Performance Expectations (with thresholds)** | Concrete numeric thresholds users expect (FPS, latency, LCP/CLS, load time) — *not* vague "should be fast". These set the pass/fail line for `get-performance` findings. |
+| **Accessibility Considerations** | Accessibility features that exist or are expected in this domain — informs how deep accessibility-audit goes and which WCAG criteria are load-bearing here. |
+
+Optionally add **Common Issues / Pain Points** (known failure patterns from user reports — seeds error-guessing in exploratory testing) and **Regulatory / Compliance** (COPPA / GDPR / HIPAA / PCI-DSS — drives privacy-audit and security-audit weighting) when the domain warrants them.
+
+This output is **read by Step 0** on subsequent audits: the mechanics set finding priorities, the flows seed exploratory charters, the thresholds set the performance pass/fail line, and the matrix scopes device coverage. Research without this QA shaping is just reading — the schema is what makes it feed the audit.
+
 ## OneTest run sync (optional)
 
 Gated on the **test-management MCP** being present in the host config (see [`references/mcp-servers.md`](references/mcp-servers.md) — the `test-management` server). If it isn't configured, skip this section silently; the audit is complete without it.
+
+**Division of labour with the TMS adapter.** Plain case-management against OneTest — fetch / list / create / link / record a case — is *not* this section's job: it's the `onetest` adapter's, documented in [`test-automation-workflow/references/tms-adapters.md`](skills/test-automation-workflow/references/tms-adapters.md) § `onetest` (5 contract verbs → OneTest MCP tools). This section owns the **run / exploratory / analytics surface** — full run lifecycle (`create_run`, status roll-up) and reporting — that sits *above* the case-management contract. When you only need to fetch or create a case, route through the adapter; when you need to drive and report a run from audit findings, stay here.
 
 When present, audit findings and generated executions can be synced to OneTest. Map verdicts to OneTest execution status as follows:
 

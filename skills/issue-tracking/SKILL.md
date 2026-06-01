@@ -84,6 +84,20 @@ to whatever dev-fix-lifecycle skill the project uses. Callers who
 need both file the initial defect through this skill, then drive the
 fix lifecycle separately.
 
+## Filing audit findings
+
+When the caller is filing `quality-architect` (Quinn) dimensional-audit
+findings — each a defect-with-fix carrying a `p0–p3` priority, a dimension,
+a confidence score, a suggested fix, and a fix prompt — use
+[`references/findings-to-issues.md`](references/findings-to-issues.md). It maps
+the audit finding schema onto a tracker issue **tracker-agnostically** (reading
+`.agents/profile.md` the same way as Step 0): priority `p0–p3` → label/field
+per tracker, dimension → category label, the issue body shape, and the batch
+rule (one issue per finding; default to filing `p0`/`p1`, list `p2`/`p3` in the
+report). It also cross-walks `p0–p3` to qa-engineer's Critical/Major/Minor/Info
+so both severity schemes agree. The create/comment commands themselves are the
+same tracker dispatch documented below.
+
 ## Create issue
 
 ### GitHub (`github-issues`)

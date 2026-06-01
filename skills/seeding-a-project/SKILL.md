@@ -28,6 +28,7 @@ project-root/
     ├── architecture.md           ← System design map (if complex enough)
     ├── conventions.md            ← Detected coding standards
     ├── testing.md                ← Test infrastructure details
+    ├── quality.md                ← Per-product QA profile (OPTIONAL — Step 6.6, QA-heavy projects)
     ├── onboarding.md             ← Scout's own audit trail
     └── memory/<role-id>/
         ├── MEMORY.md             ← Index (add a line for each entry)
@@ -177,6 +178,48 @@ infrastructure diagram (text-based).
 QA engineer reads this. Include test framework and config, how to
 run tests (exact commands), fixture/setup patterns, test data
 strategy, CI test pipeline, coverage tools, known flaky areas.
+
+## Step 6.6 — Generate .agents/quality.md (OPTIONAL — QA-heavy projects)
+
+**Optional, additive, and autonomous.** Skip entirely unless the
+project warrants a per-product quality profile — web apps with real
+end users, products with accessibility / privacy / security exposure,
+anything where a quality-architect (Quinn) will run audits. Pure
+libraries, internal CLIs, and back-office scripts usually don't need
+it; when in doubt, leave it out.
+
+This step does **not** alter scout's existing autonomous flow — it
+adds one more derived file. Scout derives every field below from the
+codebase and stack it already surveyed (dependencies, routes, UI
+framework, auth method, data handling, target platforms). **No user
+interview** — there is no QA onboarding questionnaire here; scout is
+autonomous and writes what the evidence supports, flagging the rest.
+
+Write `.agents/quality.md` from the template in
+`references/templates.md` (**[.agents/quality.md Template](references/templates.md#agentsqualitymd-template)**).
+The schema captures:
+
+- **Specialist Relevance** table — one row per specialist
+  (accessibility / security / privacy / performance / responsive /
+  content-seo / ux / seo), each rated `high | med | low` with a short
+  evidence-based *why* (e.g. "high — handles PII in `users` table, no
+  consent flow detected").
+- **QA Priorities** — the top risk areas for this product and why
+  (fragile flows, recently churned modules, untested surfaces).
+- **Target environments / viewports** — the environments and
+  device/viewport matrix audits should target (derived from responsive
+  breakpoints, supported browsers, deploy targets).
+- **Standing waivers** — known, accepted deviations an audit should
+  not re-flag (e.g. "legacy `/admin` excluded from a11y scope until
+  Q3 rewrite"). Empty is fine — write `_None._`.
+
+The quality-architect (Quinn) reads `.agents/quality.md` **on demand**
+when running `quality-audit-workflow` and its specialist audits — that
+workflow already references this file as an optional per-product
+profile, so writing it here **closes that read contract**. Keep
+`.agents/quality.md` **out of the hook's always-injected shared-doc
+set** (`SDLC_SHARED_DOCS` in `hooks/config.sh`): it is read-on-demand
+by the one role that needs it, not broadcast into every session.
 
 ## Step 6.5 — Generate .agents/team-comms.md
 
