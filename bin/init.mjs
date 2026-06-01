@@ -913,6 +913,7 @@ function parseArgs(argv) {
     targets: null,
     bundle: null,
     symlink: false, // external skills: copy by default, symlink from cache if true
+    unknown: [], // unrecognized tokens — guarded in main() so a typo/quoting slip doesn't silently install the full catalog
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -927,6 +928,12 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
+    }
+    // Anything else is unrecognized. Skip the leading `init` subcommand. A
+    // common cause is a flag+value passed as a single shell token — e.g. zsh
+    // not word-splitting an unquoted variable: `init "--bundle team-web"`.
+    else if (!(i === 0 && a === "init")) {
+      out.unknown.push(a);
     }
   }
   return out;
@@ -1761,6 +1768,18 @@ async function main() {
   }
 
   const args = parseArgs(argv);
+
+  // Guard: don't silently fall back to a full-catalog install when arguments
+  // were passed but couldn't be parsed (a typo'd flag, or a flag+value smashed
+  // into one shell token). A loud error beats the wrong install.
+  if (args.unknown.length) {
+    console.error(`\n  ! Unrecognized argument(s): ${args.unknown.map((t) => `"${t}"`).join(", ")}`);
+    console.error(`    Known flags: --agents <list> | --skills <list> | --bundle <id> | --target <list> | --all | --update | --symlink | --yes`);
+    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle team-web\`, not \`"--bundle team-web"\`).`);
+    console.error(`    To install the entire catalog on purpose, use --all.\n`);
+    process.exit(1);
+  }
+
   const catalog = loadCatalog();
 
   console.log("\n  sdlc-skills — SDLC agents and skills for Claude Code\n");
