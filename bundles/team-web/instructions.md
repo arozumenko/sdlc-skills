@@ -34,4 +34,7 @@ them per project in `AGENTS.md`, which always wins over this file.
 
 A change is done when it compiles, its tests pass, the affected side of the
 API contract is consistent, and — for user-facing flows — the e2e path is
-green. "I wrote the code" is not done.
+green. For changed user-facing pages, a `quality-architect` shift-left audit
+(PM-dispatched) leaves **no open p0/p1 dimensional findings**
+(accessibility / performance / privacy / responsive / UX). "I wrote the
+code" is not done.

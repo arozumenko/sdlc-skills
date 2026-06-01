@@ -83,12 +83,15 @@ flowchart TD
         js["js-dev — JS/TS frontend"]
         qa["qa-engineer — live test + AFS"]
         tae["test-automation-engineer — Playwright e2e"]
+        qarch["quality-architect (quinn) —<br/>PM-dispatched shift-left audit"]
         pm --> ba --> tl
         tl --> py
         tl --> js
         py --> qa
         js --> qa
         qa --> tae
+        pm --> qarch
+        js --> qarch
     end
 
     brief -->|"agents boot from this"| pm
@@ -115,6 +118,7 @@ flowchart TD
 | `js-dev` | jay | dev | **Frontend** — JS/TS SPA/SSR, UI, client state, API client |
 | `qa-engineer` | sage | qa | Executes tests against the running app + API; writes Automation-Friendly Specs |
 | `test-automation-engineer` | axel | qa | Durable Playwright e2e through the real stack |
+| `quality-architect` | quinn | qa | PM-dispatched shift-left quality audits — a11y / perf / privacy / responsive / content-SEO / UX + persona review; owns the quality bar |
 
 ## How this team works
 
@@ -126,9 +130,9 @@ working agreements (installed into your project's `AGENTS.md`).
 
 ## What this bundle adds
 
-- **Agents + skills** — the 8 roles above and their declared skills.
+- **Agents + skills** — the 9 roles above and their declared skills.
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
-- **Briefings** — stack overlays in [`briefings/`](briefings/) → seeded into `.agents/memory/<role>/project_briefing.md` for `scout`, `tech-lead`, `python-dev`, `qa-engineer`, `test-automation-engineer` (scout refines them per project).
+- **Briefings** — stack overlays in [`briefings/`](briefings/) → seeded into `.agents/memory/<role>/project_briefing.md` for `scout`, `tech-lead`, `python-dev`, `qa-engineer`, `test-automation-engineer`, `quality-architect` (scout refines them per project).
 - **Skill overlays** — per-role capability tuning (fetched from `skills.json`): `fastapi` + `fastmcp-server` for `python-dev` and `tech-lead`; `vercel-react-best-practices` for `js-dev` and `tech-lead`.
 - **Hooks** — _(none yet)_.
 

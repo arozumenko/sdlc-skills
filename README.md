@@ -163,7 +163,7 @@ ship today:
 
 | Bundle | Roster | What it's for |
 |---|---|---|
-| `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
+| `team-web` | shared core + python-dev/js-dev + QA + `quality-architect` (Quinn) | JS/TS frontend + FastAPI/FastMCP backend delivery team; Quinn runs PM-dispatched shift-left quality audits (a11y / perf / privacy / responsive / UX) |
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
 | `web-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |

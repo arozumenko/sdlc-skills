@@ -4,13 +4,14 @@
   "description": "Fullstack web delivery team — JS/TS frontend, Python backend, QA, and core roles.",
   "agents": [],
   "skills": [],
-  "localSkills": ["browser-verify", "bugfix-workflow", "code-review", "completing-a-task", "git-workflow", "implement-feature", "issue-tracking", "memory", "plan-feature", "playwright-testing", "reproducing-issues", "root-cause-analysis", "seeding-a-project", "session-retrospective", "test-automation-workflow", "test-case-analysis"],
+  "localSkills": ["accessibility-audit", "browser-verify", "bugfix-workflow", "code-review", "completing-a-task", "content-seo-audit", "deep-research", "git-workflow", "implement-feature", "issue-tracking", "memory", "performance-audit", "plan-feature", "playwright-testing", "privacy-audit", "quality-audit-workflow", "reproducing-issues", "responsive-audit", "root-cause-analysis", "security-audit", "seeding-a-project", "session-retrospective", "test-automation-workflow", "test-case-analysis", "test-generation", "ux-audit"],
   "briefings": {
     "scout": "briefings/scout.md",
     "tech-lead": "briefings/tech-lead.md",
     "python-dev": "briefings/python-dev.md",
     "qa-engineer": "briefings/qa-engineer.md",
-    "test-automation-engineer": "briefings/test-automation-engineer.md"
+    "test-automation-engineer": "briefings/test-automation-engineer.md",
+    "quality-architect": "briefings/quality-architect.md"
   },
   "skillOverlays": {
     "tech-lead": { "add": ["fastapi", "fastmcp-server", "vercel-react-best-practices"] },
@@ -18,6 +19,6 @@
     "js-dev": { "add": ["vercel-react-best-practices"] }
   },
   "instructions": "instructions.md",
-  "localAgents": ["scout", "ba", "tech-lead", "project-manager", "qa-engineer", "test-automation-engineer", "python-dev", "js-dev"],
+  "localAgents": ["scout", "ba", "tech-lead", "project-manager", "qa-engineer", "test-automation-engineer", "quality-architect", "python-dev", "js-dev"],
   "targets": ["claude"]
 }
