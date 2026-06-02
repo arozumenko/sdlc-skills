@@ -964,10 +964,12 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
-    --interactive, -i          When installing quality-architect, pick its QA
-                               specialists/connectors and optional MCP servers
-                               via a menu (needs a terminal; writes .mcp.json +
-                               .mcp.json.example)
+    --interactive, -i          Menu to pick optional MCP servers (and, for
+                               quality-architect, its QA specialists/connectors).
+                               Applies to the quality-architect agent and the
+                               test-automation / web-qa / quality-engineering
+                               bundles. Needs a terminal; writes .mcp.json +
+                               .mcp.json.example (expanded, never clobbered)
     --symlink                  Symlink external skills from the shared cache
                                instead of copying them (default: copy, which
                                is self-contained and portable across runtimes)
@@ -1909,33 +1911,41 @@ function trimInstalledAgentSkills(target, name, removeSet) {
   writeFileSync(f, text.replace(/^skills:\s*\[[^\]]*\]/m, `skills: [${kept.join(", ")}]`));
 }
 
-// The three interactive menus. Returns { removeSet, mcpIds } or null.
-async function runQaInteractive() {
-  const SPECIALISTS = [
-    { value: "accessibility-audit", label: "Accessibility + WCAG", desc: "axe-core, WCAG 2.1 AA/AAA" },
-    { value: "security-audit", label: "Security + OWASP", desc: "XSS, CSRF, headers, secrets" },
-    { value: "privacy-audit", label: "Privacy + GDPR", desc: "cookies, trackers, consent" },
-    { value: "performance-audit", label: "Performance + CWV", desc: "Core Web Vitals, console, JS" },
-    { value: "responsive-audit", label: "Responsive / mobile", desc: "touch targets, viewport" },
-    { value: "content-seo-audit", label: "Content + SEO", desc: "copy, meta tags, structured data" },
-    { value: "ux-audit", label: "UI/UX + page types", desc: "forms, 20+ page-type checks" },
-    { value: "test-generation", label: "Test generation", desc: "coverage-gap proposals" },
-    { value: "requirement-traceability", label: "Requirement traceability", desc: "req↔case↔result triangulation" },
-  ];
-  const INTEGRATIONS = [
-    { value: "quality-onboarding", label: "Project onboarding", desc: "build .agents/quality.md", default: true },
-    { value: "onetest", label: "OneTest", desc: "TMS adapter + run-sync MCP", default: false },
-  ];
-  const picksSpec = await selectMany("Specialist skills (QA analysis domains)", SPECIALISTS.map((i) => ({ ...i, default: true })));
-  const picksInt = await selectMany("Integration skills (optional connectors)", INTEGRATIONS);
+// QA/test bundles that get the interactive MCP-server picker even without the
+// quality-architect agent (the specialist/connector menus stay agent-specific).
+const INTERACTIVE_BUNDLES = new Set(["test-automation", "web-qa", "quality-engineering"]);
+
+// Interactive menus. When `qa` is true (quality-architect in the roster) the
+// specialist + connector menus run and unticked items are trimmed from Quinn;
+// the MCP-server menu always runs. Returns { removeSet, mcpIds }.
+async function runInteractive(qa) {
+  const removeSet = new Set();
+  let wantsOnetest = false;
+  if (qa) {
+    const SPECIALISTS = [
+      { value: "accessibility-audit", label: "Accessibility + WCAG", desc: "axe-core, WCAG 2.1 AA/AAA" },
+      { value: "security-audit", label: "Security + OWASP", desc: "XSS, CSRF, headers, secrets" },
+      { value: "privacy-audit", label: "Privacy + GDPR", desc: "cookies, trackers, consent" },
+      { value: "performance-audit", label: "Performance + CWV", desc: "Core Web Vitals, console, JS" },
+      { value: "responsive-audit", label: "Responsive / mobile", desc: "touch targets, viewport" },
+      { value: "content-seo-audit", label: "Content + SEO", desc: "copy, meta tags, structured data" },
+      { value: "ux-audit", label: "UI/UX + page types", desc: "forms, 20+ page-type checks" },
+      { value: "test-generation", label: "Test generation", desc: "coverage-gap proposals" },
+      { value: "requirement-traceability", label: "Requirement traceability", desc: "req↔case↔result triangulation" },
+    ];
+    const INTEGRATIONS = [
+      { value: "quality-onboarding", label: "Project onboarding", desc: "build .agents/quality.md", default: true },
+      { value: "onetest", label: "OneTest", desc: "TMS adapter + run-sync MCP", default: false },
+    ];
+    const picksSpec = await selectMany("Specialist skills (QA analysis domains)", SPECIALISTS.map((i) => ({ ...i, default: true })));
+    const picksInt = await selectMany("Integration skills (optional connectors)", INTEGRATIONS);
+    for (const s of SPECIALISTS) if (!picksSpec.includes(s.value)) removeSet.add(s.value);
+    if (!picksInt.includes("quality-onboarding")) removeSet.add("quality-onboarding"); // onetest is wired as an MCP, not a skill
+    wantsOnetest = picksInt.includes("onetest");
+  }
   const picksMcp = await selectMany("Optional tool integrations (MCP servers)", MCP_CATALOG.map((m) => ({ value: m.id, group: m.group, label: m.label, desc: m.desc, default: false })));
-  const removeSet = new Set([
-    ...SPECIALISTS.map((s) => s.value).filter((v) => !picksSpec.includes(v)),
-    // quality-onboarding is a real skill toggle; onetest is wired as an MCP, not a skill
-    ...(picksInt.includes("quality-onboarding") ? [] : ["quality-onboarding"]),
-  ]);
   const mcpIds = [...picksMcp];
-  if (picksInt.includes("onetest") && !mcpIds.includes("onetest")) mcpIds.push("onetest");
+  if (wantsOnetest && !mcpIds.includes("onetest")) mcpIds.push("onetest");
   return { removeSet, mcpIds };
 }
 
@@ -2021,19 +2031,21 @@ async function main() {
   let installed = 0;
   let skipped = 0;
 
-  // Interactive QA selection (opt-in) — only when quality-architect is installed.
+  // Interactive selection (opt-in). The MCP-server picker runs for the QA/test
+  // bundles too; the specialist/connector menus only when quality-architect is in.
   const qaInRoster =
     (agentsSelection || []).includes("quality-architect") ||
     (bundlePlan && (bundlePlan.localAgents || []).includes("quality-architect"));
+  const interactiveApplies = qaInRoster || (args.bundle && INTERACTIVE_BUNDLES.has(args.bundle));
   let qaPick = null;
-  if (args.interactive && qaInRoster) {
+  if (args.interactive && interactiveApplies) {
     if (!process.stdin.isTTY) {
-      console.log("\n  ! --interactive needs a terminal — proceeding with defaults (all specialists, no MCP servers).");
+      console.log("\n  ! --interactive needs a terminal — proceeding with defaults.");
     } else {
-      qaPick = await runQaInteractive();
+      qaPick = await runInteractive(qaInRoster);
     }
   } else if (args.interactive) {
-    console.log("\n  ! --interactive only applies when installing the quality-architect agent — ignoring.");
+    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / web-qa / quality-engineering bundles — ignoring.");
   }
 
   for (const t of targets) {
