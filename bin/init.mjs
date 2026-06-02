@@ -1231,8 +1231,8 @@ function applySkillOverlay(target, name, effectiveSkills, registry) {
 // hook already injected those) and label the emitted event as SessionStart.
 //
 // Applied to every agent on Copilot install; the `hooks:` guard leaves any
-// author-defined hooks untouched. (`orchestrator: true` is no longer required —
-// it remains a harmless sdlc-only semantic key that Copilot ignores.)
+// author-defined hooks untouched. (No longer gated on `orchestrator: true` — that
+// flag has been dropped from the agent frontmatter entirely.)
 function injectCopilotSessionStartHook(agentText, name) {
   const m = agentText.match(/^---\s*\n([\s\S]*?)\n---[ \t]*\n?/);
   if (!m) return agentText;

@@ -4,7 +4,6 @@ description: Use when a TMS case or batch of cases needs to be automated, when a
 model: sonnet
 color: cyan
 group: qa
-orchestrator: true
 theme: {color: colour51, icon: "🎯", short_name: tal}
 aliases: [tal, ta-lead, automation-lead]
 skills: [test-automation-workflow, test-case-analysis, code-review, issue-tracking, atlassian-content, verification-before-completion, completing-a-task, git-workflow, plan-feature, memory]
