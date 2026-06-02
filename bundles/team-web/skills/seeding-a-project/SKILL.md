@@ -270,6 +270,18 @@ its dedicated agent installed.
 idempotence rules, per-agent injection locations, report format —
 lives in **[references/role-overrides.md](references/role-overrides.md)**.
 
+## Step 7a — Per-role briefings (every role, default or not)
+
+Every role gets a `.agents/memory/<role>/project_briefing.md` (Project Knowledge
++ My Role Focus) — full procedure in
+[references/role-customization.md § 7b](references/role-customization.md).
+**If a briefing already exists** — a team bundle seeds a *generic stack overlay*
+there at install, and a re-run finds your own prior one — follow the
+**Re-seeding rule** there: **replace** a generic overlay, but **append** to
+anything project-specific (`## This project — <Name> (seeded YYYY-MM-DD)`),
+never clobbering prior facts or the entries an agent appended. Same instinct as
+the bundle-block preservation in Steps 1–2.
+
 ## Step 7 — Role customization (non-default stacks)
 
 Only runs when the detected stack doesn't match the default role set
