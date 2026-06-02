@@ -3,7 +3,6 @@ name: performance-audit
 description: Use when auditing performance, Core Web Vitals (LCP/CLS/TTFB), network waterfall, console errors, or runtime JavaScript issues on a web page.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

@@ -3,7 +3,6 @@ name: test-generation
 description: Use when proposing candidate test scenarios from a live page or audit findings as a prioritized coverage-gap report — handed to qa-engineer for AFS, never written as framework test files.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

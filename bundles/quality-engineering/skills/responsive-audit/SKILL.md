@@ -3,7 +3,6 @@ name: responsive-audit
 description: Use when auditing responsive and mobile-web behavior — touch-target size, viewport configuration, horizontal overflow, breakpoints, mobile navigation — via device emulation.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

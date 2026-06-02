@@ -3,7 +3,6 @@ name: quality-audit-workflow
 description: Use when running or orchestrating a multi-dimension product quality audit — mode dispatch, p0–p3 finding schema, evidence rules, specialist routing, persona review, and report/issue output.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

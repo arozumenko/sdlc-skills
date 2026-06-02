@@ -3,7 +3,6 @@ name: accessibility-audit
 description: Use when auditing a rendered web page for accessibility and WCAG 2.1 AA/AAA conformance — contrast, ARIA, keyboard navigation, focus order, screen-reader semantics — from axe-core results plus visual review.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

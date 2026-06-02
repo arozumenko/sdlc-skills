@@ -3,7 +3,6 @@ name: security-audit
 description: Use when auditing a web page for security exposure — XSS, CSRF, missing or weak headers (CSP, HSTS, X-Frame-Options), mixed content, exposed secrets, and the OWASP Top 10 surface.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

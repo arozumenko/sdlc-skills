@@ -3,7 +3,6 @@ name: content-seo-audit
 description: Use when auditing content quality and SEO on a web page — copy clarity, meta tags, structured data, headings, canonical/robots, broken links.
 license: Apache-2.0
 compatibility: Requires Chrome/Chromium + Node 22+ via the browser-verify skill (CDP).
-allowed-tools: Bash(node:*) Bash(bash:*)
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
