@@ -913,6 +913,7 @@ function parseArgs(argv) {
     targets: null,
     bundle: null,
     symlink: false, // external skills: copy by default, symlink from cache if true
+    interactive: false, // --interactive: pick quality-architect specialists/connectors/MCPs via a menu
     unknown: [], // unrecognized tokens — guarded in main() so a typo/quoting slip doesn't silently install the full catalog
   };
   for (let i = 0; i < argv.length; i++) {
@@ -921,6 +922,7 @@ function parseArgs(argv) {
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
     else if (a === "--symlink") out.symlink = true;
+    else if (a === "--interactive" || a === "-i") out.interactive = true;
     else if (a === "--bundle") out.bundle = (argv[++i] || "").trim();
     else if (a === "--agents") out.agents = splitList(argv[++i]);
     else if (a === "--skills") out.skills = splitList(argv[++i]);
@@ -962,6 +964,10 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
+    --interactive, -i          When installing quality-architect, pick its QA
+                               specialists/connectors and optional MCP servers
+                               via a menu (needs a terminal; writes .mcp.json +
+                               .mcp.json.example)
     --symlink                  Symlink external skills from the shared cache
                                instead of copying them (default: copy, which
                                is self-contained and portable across runtimes)
@@ -1759,6 +1765,180 @@ function runFixCopilot(argv) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Optional interactive mode (`init --interactive`) for the quality-architect
+// agent: pick which QA specialists/connectors to keep and which MCP servers to
+// wire. Zero-dep arrow-key picker (raw-mode stdin). No targets/credentials are
+// prompted; MCP selections are written as .mcp.json + .mcp.json.example with
+// placeholder values (and .env.example for ELITEA), never live secrets.
+// ---------------------------------------------------------------------------
+
+async function selectMany(title, items) {
+  if (!items.length) return [];
+  // No TTY (CI, piped) → accept the defaults without drawing a menu.
+  if (!process.stdin.isTTY) return items.filter((i) => i.default !== false).map((i) => i.value);
+  console.log(`\n  ${title}`);
+  console.log(`  ↑↓ move · space toggle · a all · n none · enter confirm`);
+  const sel = items.map((i) => i.default !== false);
+  let cur = 0;
+  const rows = [];
+  let lastG = null;
+  items.forEach((it, i) => {
+    if (it.group && it.group !== lastG) { lastG = it.group; rows.push({ g: it.group }); }
+    rows.push({ i });
+  });
+  const render = () =>
+    rows.map((r) => {
+      if (r.g) return `    — ${r.g} —`;
+      const it = items[r.i];
+      return `  ${r.i === cur ? "❯" : " "} ${sel[r.i] ? "◉" : "○"} ${it.label}${it.desc ? `  (${it.desc})` : ""}`;
+    });
+  let lines = render();
+  lines.forEach((l) => process.stdout.write(l + "\n"));
+  const redraw = () => {
+    process.stdout.write(`\x1b[${lines.length}A\x1b[0J`);
+    lines = render();
+    lines.forEach((l) => process.stdout.write(l + "\n"));
+  };
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+    const cleanup = () => { stdin.removeListener("data", onData); stdin.setRawMode(wasRaw || false); stdin.pause(); };
+    function onData(buf) {
+      const k = buf.toString();
+      if (k === "\r" || k === "\n") { cleanup(); resolve(items.filter((_, i) => sel[i]).map((i) => i.value)); }
+      else if (k === "\x03") { cleanup(); process.exit(130); }
+      else if (k === " ") { sel[cur] = !sel[cur]; redraw(); }
+      else if (k === "a") { sel.fill(true); redraw(); }
+      else if (k === "n") { sel.fill(false); redraw(); }
+      else if (k === "\x1b[A" || k === "k") { cur = (cur - 1 + items.length) % items.length; redraw(); }
+      else if (k === "\x1b[B" || k === "j") { cur = (cur + 1) % items.length; redraw(); }
+    }
+    stdin.on("data", onData);
+  });
+}
+
+// Optional MCP servers that sharpen specific audit dimensions. Values are
+// placeholders — written to .mcp.json(.example); the user fills real tokens.
+const MCP_CATALOG = [
+  { id: "playwright", group: "Browser automation", label: "Playwright", desc: "multi-browser automation", cfg: { command: "npx", args: ["-y", "@playwright/mcp"] } },
+  { id: "chrome-devtools", group: "Browser automation", label: "Chrome DevTools", desc: "Chrome + Lighthouse", cfg: { command: "npx", args: ["-y", "chrome-devtools-mcp"] } },
+  { id: "accessibility-scanner", group: "Accessibility", label: "axe-core scanner", desc: "automated WCAG scanning", cfg: { command: "npx", args: ["-y", "mcp-accessibility-scanner"] } },
+  { id: "snyk", group: "Security", label: "Snyk", desc: "SAST / SCA / IaC", cfg: { command: "snyk", args: ["mcp", "-t", "stdio"] } },
+  { id: "sentry", group: "Error tracking", label: "Sentry", desc: "prod error correlation", cfg: { command: "npx", args: ["-y", "@sentry/mcp-server"], env: { SENTRY_AUTH_TOKEN: "YOUR_SENTRY_TOKEN" } } },
+  { id: "browserstack", group: "Cross-browser", label: "BrowserStack", desc: "real device/browser", cfg: { command: "npx", args: ["-y", "@browserstack/mcp-server"], env: { BROWSERSTACK_USERNAME: "YOUR_USERNAME", BROWSERSTACK_ACCESS_KEY: "YOUR_ACCESS_KEY" } } },
+  { id: "postman", group: "API testing", label: "Postman", desc: "API collections / mocks", cfg: { command: "npx", args: ["-y", "@postman/postman-mcp-server"], env: { POSTMAN_API_KEY: "YOUR_API_KEY" } } },
+  { id: "context7", group: "Research", label: "Context7", desc: "library docs lookup", cfg: { type: "http", url: "https://mcp.context7.com/mcp", headers: { CONTEXT7_API_KEY: "YOUR_CONTEXT7_API_KEY" } } },
+  { id: "tavily", group: "Research", label: "Tavily Web Search", desc: "web search / extract", cfg: { type: "http", url: "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY" } },
+  { id: "github", group: "Integrations", label: "GitHub", desc: "issues, PRs, code search", cfg: { type: "http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: "Bearer YOUR_GITHUB_PAT" } } },
+  { id: "atlassian", group: "Integrations", label: "Atlassian Rovo", desc: "Jira / Confluence", cfg: { type: "http", url: "https://mcp.atlassian.com/v1/mcp" } },
+  { id: "onetest", group: "Integrations", label: "OneTest", desc: "test management / runs", cfg: { type: "http", url: "https://tms.onetest.ai/mcp/test-management", headers: { Authorization: "Bearer YOUR_OCTO_API_KEY", "X-Project-Id": "YOUR_PROJECT_ID" } } },
+  { id: "elitea-next", group: "Integrations", label: "ELITEA Next", desc: "EPAM ELITEA project (SSE)", needsEnv: true, cfg: { type: "sse", url: "https://next.elitea.ai/app/${ELITEA_PROJECT_ID:-630}/sse", headersHelper: "printf '{\"Authorization\":\"Bearer %s\"}' $(grep -m1 '^ELITEA_TOKEN=' .env | cut -d= -f2-)" } },
+];
+
+// Per-host .mcp.json location + servers-key. Copilot/VS Code uses `servers`.
+const MCP_HOST = {
+  claude: [".mcp.json", "mcpServers"], codex: [".mcp.json", "mcpServers"],
+  cursor: [".cursor/mcp.json", "mcpServers"], windsurf: [".windsurf/mcp.json", "mcpServers"],
+  copilot: [".vscode/mcp.json", "servers"],
+};
+
+function writeMcpSelections(targets, ids) {
+  if (!ids.length) return;
+  const servers = {};
+  let needsEnv = false;
+  for (const id of ids) {
+    const e = MCP_CATALOG.find((m) => m.id === id);
+    if (!e) continue;
+    servers[id] = e.cfg;
+    if (e.needsEnv) needsEnv = true;
+  }
+  // Expand existing config — never clobber other servers/keys. If a real file
+  // exists but isn't valid JSON, leave it untouched rather than overwrite it.
+  const mergeInto = (path, regenIfBroken) => {
+    if (!existsSync(path)) return {};
+    try {
+      return JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      // real file: don't destroy unparseable user config; .example is our own template
+      return regenIfBroken ? {} : false;
+    }
+  };
+  for (const t of targets) {
+    const [rel, key] = MCP_HOST[t.id] || [".mcp.json", "mcpServers"];
+    const real = join(CWD, rel);
+    const curReal = mergeInto(real, false);
+    if (curReal === false) {
+      console.log(`      ! ${rel} exists but isn't valid JSON — left untouched (would add: ${ids.join(", ")})`);
+    } else {
+      curReal[key] = Object.assign(curReal[key] || {}, servers);
+      mkdirSync(dirname(real), { recursive: true });
+      writeFileSync(real, JSON.stringify(curReal, null, 2) + "\n");
+    }
+    const exPath = join(CWD, rel + ".example");
+    const curEx = mergeInto(exPath, true);
+    curEx[key] = Object.assign(curEx[key] || {}, servers);
+    mkdirSync(dirname(exPath), { recursive: true });
+    writeFileSync(exPath, JSON.stringify(curEx, null, 2) + "\n");
+    console.log(`      ${curReal === false ? "·" : "✓"} ${rel} + .example (${ids.join(", ")})`);
+  }
+  if (needsEnv) {
+    const envEx = join(CWD, ".env.example");
+    const prev = existsSync(envEx) ? readFileSync(envEx, "utf8") : "";
+    if (!prev.includes("ELITEA_TOKEN")) {
+      writeFileSync(envEx, prev + (prev && !prev.endsWith("\n") ? "\n" : "") + "# ELITEA Next personal access token (https://next.elitea.ai → Profile → API Tokens)\nELITEA_TOKEN=\n");
+    }
+    console.log(`      ✓ .env.example (ELITEA_TOKEN — copy to .env, fill it; default ELITEA_PROJECT_ID=630)`);
+  }
+  console.log(`      ${"ℹ"}  .mcp.json holds placeholder tokens — fill them and gitignore .mcp.json`);
+}
+
+// Re-write an installed agent's `skills:` line, dropping `removeSet`. Composes
+// on top of any bundle overlay already applied (reads the installed copy).
+function trimInstalledAgentSkills(target, name, removeSet) {
+  const f = target.id === "copilot"
+    ? join(CWD, target.dir, "agents", `${name}.agent.md`)
+    : join(CWD, target.dir, "agents", name, "AGENT.md");
+  if (!existsSync(f)) return;
+  const text = readFileSync(f, "utf8");
+  const m = text.match(/^skills:\s*\[([^\]]*)\]/m);
+  if (!m) return;
+  const kept = m[1].split(",").map((s) => s.trim()).filter(Boolean).filter((s) => !removeSet.has(s));
+  writeFileSync(f, text.replace(/^skills:\s*\[[^\]]*\]/m, `skills: [${kept.join(", ")}]`));
+}
+
+// The three interactive menus. Returns { removeSet, mcpIds } or null.
+async function runQaInteractive() {
+  const SPECIALISTS = [
+    { value: "accessibility-audit", label: "Accessibility + WCAG", desc: "axe-core, WCAG 2.1 AA/AAA" },
+    { value: "security-audit", label: "Security + OWASP", desc: "XSS, CSRF, headers, secrets" },
+    { value: "privacy-audit", label: "Privacy + GDPR", desc: "cookies, trackers, consent" },
+    { value: "performance-audit", label: "Performance + CWV", desc: "Core Web Vitals, console, JS" },
+    { value: "responsive-audit", label: "Responsive / mobile", desc: "touch targets, viewport" },
+    { value: "content-seo-audit", label: "Content + SEO", desc: "copy, meta tags, structured data" },
+    { value: "ux-audit", label: "UI/UX + page types", desc: "forms, 20+ page-type checks" },
+    { value: "test-generation", label: "Test generation", desc: "coverage-gap proposals" },
+    { value: "requirement-traceability", label: "Requirement traceability", desc: "req↔case↔result triangulation" },
+  ];
+  const INTEGRATIONS = [
+    { value: "quality-onboarding", label: "Project onboarding", desc: "build .agents/quality.md", default: true },
+    { value: "onetest", label: "OneTest", desc: "TMS adapter + run-sync MCP", default: false },
+  ];
+  const picksSpec = await selectMany("Specialist skills (QA analysis domains)", SPECIALISTS.map((i) => ({ ...i, default: true })));
+  const picksInt = await selectMany("Integration skills (optional connectors)", INTEGRATIONS);
+  const picksMcp = await selectMany("Optional tool integrations (MCP servers)", MCP_CATALOG.map((m) => ({ value: m.id, group: m.group, label: m.label, desc: m.desc, default: false })));
+  const removeSet = new Set([
+    ...SPECIALISTS.map((s) => s.value).filter((v) => !picksSpec.includes(v)),
+    // quality-onboarding is a real skill toggle; onetest is wired as an MCP, not a skill
+    ...(picksInt.includes("quality-onboarding") ? [] : ["quality-onboarding"]),
+  ]);
+  const mcpIds = [...picksMcp];
+  if (picksInt.includes("onetest") && !mcpIds.includes("onetest")) mcpIds.push("onetest");
+  return { removeSet, mcpIds };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
 
@@ -1840,6 +2020,21 @@ async function main() {
   console.log("");
   let installed = 0;
   let skipped = 0;
+
+  // Interactive QA selection (opt-in) — only when quality-architect is installed.
+  const qaInRoster =
+    (agentsSelection || []).includes("quality-architect") ||
+    (bundlePlan && (bundlePlan.localAgents || []).includes("quality-architect"));
+  let qaPick = null;
+  if (args.interactive && qaInRoster) {
+    if (!process.stdin.isTTY) {
+      console.log("\n  ! --interactive needs a terminal — proceeding with defaults (all specialists, no MCP servers).");
+    } else {
+      qaPick = await runQaInteractive();
+    }
+  } else if (args.interactive) {
+    console.log("\n  ! --interactive only applies when installing the quality-architect agent — ignoring.");
+  }
 
   for (const t of targets) {
     console.log(`  → ${t.label} (${t.dir}/)`);
@@ -1930,6 +2125,19 @@ async function main() {
       } else {
         console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
+    }
+  }
+
+  // Apply interactive QA picks: trim quality-architect to the chosen
+  // specialists/connectors, then write the selected MCP servers.
+  if (qaPick) {
+    if (qaPick.removeSet.size) {
+      for (const t of targets) trimInstalledAgentSkills(t, "quality-architect", qaPick.removeSet);
+      console.log(`\n  → quality-architect tuned (dropped: ${[...qaPick.removeSet].join(", ")})`);
+    }
+    if (qaPick.mcpIds.length) {
+      console.log(`\n  → MCP servers`);
+      writeMcpSelections(targets, qaPick.mcpIds);
     }
   }
 
