@@ -6,7 +6,7 @@ type: functional        # functional | regression | smoke | integration | explor
 module: <feature area>
 platform: both          # ios | android | both
 app_type: native        # native | pwa | hybrid
-runner_mode: manual     # playwright | manual
+runner_mode: manual     # playwright | appium | device-farm | manual
 device_type: simulator  # real | simulator | emulator
 size:                   # S | M | L — set by mobile-test-sizer (optional)
 orientation: portrait   # portrait | landscape | both

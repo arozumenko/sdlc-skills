@@ -223,17 +223,26 @@ last_updated: {YYYY-MM-DD}
 |-------|-------|
 | Platform | {iOS / Android / Both} |
 | App type | {native / pwa / hybrid} |
-| Runner mode | {appium / playwright / manual} |
+| Runner mode | {device-farm / appium / playwright / manual} |
 | Bundle ID / Package | {identifier} |
 | Build path | {/path/to/app.apk or IPA, or "n/a" for PWA} |
 | App version | {x.y.z} |
 
 ## Test Devices
 
-| Device | OS | Type | Appium device name |
-|--------|----|------|--------------------|
-| {Pixel 8 Emulator} | {Android 14} | {emulator} | {emulator-5554} |
-| {iPhone 15 Pro} | {iOS 17.4} | {simulator} | {iPhone 15 Pro} |
+| Device | OS | Type | Notes |
+|--------|----|------|-------|
+| {Pixel 8 Emulator} | {Android 14} | {emulator} | Appium device name: emulator-5554 |
+| {iPhone 15 Pro} | {iOS 17.4} | {simulator} | Appium device name: iPhone 15 Pro |
+| {Cloud device} | {Android 14} | {real} | device-farm: auto-allocated from Mobitru pool |
+
+## Device Farm Preferences
+_(device-farm runner_mode only — constraints passed to `device_farm_find_device` at run time)_
+
+| Platform | Preferred OS version | Notes |
+|----------|---------------------|-------|
+| {android} | {14} | |
+| {ios} | {17} | |
 
 ## Authentication
 

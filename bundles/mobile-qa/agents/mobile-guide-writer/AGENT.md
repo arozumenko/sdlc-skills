@@ -20,7 +20,9 @@ You are a **fallback agent** — invoked only when Appium MCP is not available. 
 ## Setup
 
 1. Read the test case file (path given in the prompt).
-2. Read `.agents/mobile-qa/app_profile.md` — for device name, platform, app version, and any screen/gesture notes.
+2. Read `runner_mode` from TC frontmatter. If it is **not** `manual` → stop immediately and tell the lead:
+   > "TC {tc_id} has runner_mode: {mode}, not manual. Dispatch `mobile-test-runner` instead — I only handle manual-mode cases."
+3. Read `.agents/mobile-qa/app_profile.md` — for device name, platform, app version, and any screen/gesture notes.
 
 ## What You Produce
 
