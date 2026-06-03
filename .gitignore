@@ -8,7 +8,8 @@ node_modules/
 __pycache__/
 .venv/
 
-# Mobile QA — binary artifacts and ephemeral test screenshots
+# Mobile QA — binary artifacts, ephemeral test screenshots, local guides
 *.apk
 *.ipa
 reports/screenshots/
+bundles/mobile-qa/QUICKSTART-LOCAL.md
