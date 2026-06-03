@@ -4,6 +4,25 @@ This is a **standalone manual-QA team** for mobile apps. These are team-wide
 defaults; `mobile-app-profiler` refines them per project in `AGENTS.md`,
 which always wins over this file.
 
+## MCP Setup
+
+Install the MCP servers your runner mode needs — once per project:
+
+```bash
+# Mobitru device farm (runner_mode: device-farm — real cloud devices)
+# 1. Copy .env.example → .env and fill in MOBITRU_API_TOKEN
+# 2. Export the variable, then register:
+claude mcp add mobitru -e MOBITRU_API_TOKEN=$MOBITRU_API_TOKEN -- npx -y @mobitru/mcp@latest
+
+# Local Appium (runner_mode: appium — simulator / emulator / USB device)
+claude mcp add appium-mcp -- npx -y appium-mcp@latest
+
+# Playwright (runner_mode: playwright — PWA / hybrid only; usually pre-installed)
+claude mcp add playwright -- npx -y @playwright/mcp@latest
+```
+
+See `.env.example` for the full list of required environment variables and how to obtain them.
+
 ## Pipeline
 
 Onboard once with `mobile-app-profiler`, then drive `mobile-run-lead` — it is the
