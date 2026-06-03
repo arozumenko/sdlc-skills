@@ -1,9 +1,9 @@
 {
   "id": "mobile-qa",
   "title": "Mobile QA Team",
-  "description": "Standalone agentic manual-QA team for mobile apps — onboard the app, author test cases, run them via Playwright MCP (PWA/hybrid) or guided manual mode (native iOS/Android), and report.",
+  "description": "Standalone agentic manual-QA team for mobile apps — onboard the app via Appium MCP (native iOS/Android) or Playwright MCP (PWA/hybrid), author test cases, run them automatically or generate manual guides as fallback, and report.",
   "agents": [],
-  "localAgents": ["mobile-app-profiler", "mobile-test-sizer", "mobile-test-author", "mobile-run-lead", "mobile-test-runner", "mobile-test-reporter"],
+  "localAgents": ["mobile-app-profiler", "mobile-test-sizer", "mobile-test-author", "mobile-run-lead", "mobile-test-runner", "mobile-guide-writer", "mobile-test-reporter"],
   "localSkills": ["mobile-testing"],
   "skills": [],
   "seed": { "knowledge": ".agents/mobile-qa/knowledge" },

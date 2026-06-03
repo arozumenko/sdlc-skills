@@ -1,9 +1,26 @@
-# Mobile testing skill — no additional MCP setup required.
-# Playwright mode reuses the @playwright/mcp server already wired by the playwright-testing skill.
-# Manual mode requires no tooling.
-# Appium mode (future): will require an Appium MCP server when available.
-dependencies: {}
+# Mobile testing skill — two MCP servers depending on app type.
+# Playwright MCP: for PWA and hybrid app testing (mobile viewport emulation).
+# Appium MCP: for native iOS and Android app testing (requires platform prerequisites).
+#
+# Prerequisites for Appium MCP:
+#   Android: Android Studio + SDK, ANDROID_HOME env var set, JDK 8+
+#   iOS:     macOS only — Xcode + Command Line Tools, iOS Simulator or real device
+#
+# If Appium MCP is not available, mobile-guide-writer handles native cases
+# by generating manual step guides instead of automated execution.
+dependencies:
+  mcp:
+    - name: playwright
+      command: npx
+      args: ["@playwright/mcp@latest"]
+      env: {}
+    - name: appium-mcp
+      command: npx
+      args: ["-y", "appium-mcp@latest"]
+      env:
+        ANDROID_HOME: ""
+        SCREENSHOTS_DIR: "reports/screenshots"
 permissions:
   filesystem: read
-  network: false
+  network: true
   shell: false

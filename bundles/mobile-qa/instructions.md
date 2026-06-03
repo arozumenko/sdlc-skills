@@ -25,10 +25,13 @@ standalone for authoring work outside a run.
   mobile test cases under `tasks/<suite>/TC-NNN_<slug>.md`. Uses mobile gesture vocabulary
   (Tap, Swipe, Long-press, etc.), sets `platform`, `app_type`, and `runner_mode` from the
   profile. Dispatched by the lead, or run standalone.
-- **`mobile-test-runner`** — receives a single `TC-NNN` file path; routes by `runner_mode`:
-  `playwright` → runs via Playwright MCP with mobile viewport and emits a PASS/FAIL JSON result;
-  `manual` → generates a human-executable step guide to `reports/manual-guides/` and emits BLOCKED.
-- **`mobile-test-reporter`** — collects runner results and writes the run report to
+- **`mobile-test-runner`** — receives a single `TC-NNN` file path; handles `playwright` and `appium` modes:
+  `playwright` → runs via Playwright MCP with mobile viewport, emits PASS/FAIL;
+  `appium` → runs via Appium MCP (native automation), emits PASS/FAIL.
+- **`mobile-guide-writer`** — handles `manual` mode: reads the TC file and writes a human-executable
+  step checklist to `reports/manual-guides/TC-NNN-guide.md`, emits BLOCKED. Fallback when Appium MCP
+  is not available.
+- **`mobile-test-reporter`** — collects all results (runner + guide-writer) and writes the run report to
   `reports/RUN-YYYY-MM-DD-NNN.md`, including device/platform/OS context, runner mode breakdown,
   and a Manual Execution Guides section for native runs.
 
@@ -37,11 +40,14 @@ standalone for authoring work outside a run.
 | `app_type` | `runner_mode` | What the runner does |
 |------------|---------------|----------------------|
 | `pwa` | `playwright` | Runs live via Playwright MCP with mobile viewport + touch emulation |
-| `hybrid` | `playwright` | Runs web views via Playwright MCP; native screens flagged for manual |
-| `native` | `manual` | Generates step guide; human executes on device |
+| `hybrid` | `playwright` | Runs web views via Playwright MCP |
+| `native` (Appium available) | `appium` | Runs via Appium MCP — real native automation on simulator/emulator/real device |
+| `native` (no Appium) | `manual` | `mobile-guide-writer` generates a step checklist; human executes on device |
 
 The runner_mode is set in each test case's frontmatter by `mobile-test-author`, derived
-from the `app_type` in `app_profile.md`. Do not set it manually.
+from the `app_type` and Appium availability in `app_profile.md`. Do not set it manually.
+To upgrade from `manual` to `appium`: `claude mcp add appium-mcp -- npx -y appium-mcp@latest`,
+then re-run `mobile-app-profiler`.
 
 ## Project Layout
 

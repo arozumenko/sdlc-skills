@@ -1,9 +1,11 @@
 # Rules — mobile-run-lead
 
-1. **Read runner_mode from app_profile.md before dispatching any runner.** Never assume playwright; native apps use manual mode.
-2. **Dispatch mobile-test-runner sequentially, one per TC.** Never dispatch multiple runners in parallel — mobile runs must be sequential to avoid device state conflicts.
-3. **Every TC file must have a result entry.** If a runner produces no JSON, add a BLOCKED entry with failure_reason "Runner agent did not return a result".
-4. **Do not invent test cases.** If the suite is empty and there is no material to author from, stop and ask the user. Never generate test cases from thin air.
-5. **Pass run_id and suite context to the reporter.** The reporter cannot determine these from the result JSON alone — always include them explicitly in the dispatch prompt.
-6. **Collect usage metrics from the `<usage>` block.** If absent, set the fields to null — do not omit them from the result JSON.
-7. **Manual-mode BLOCKED results with a guide are expected, not failures.** Distinguish in the summary between "BLOCKED due to environment issue" (unexpected) and "BLOCKED because manual execution required" (by design).
+1. **Ask for base_url before starting playwright-mode runs if not provided.** Never default to the profile's base_url silently — the user may want a different environment.
+2. **Pass base_url explicitly to every runner dispatch prompt.** The runner must not re-derive it from the profile; the lead controls the target environment.
+3. **Route by TC runner_mode, not profile runner_mode.** A suite may be mixed (playwright + appium + manual). Route each TC to the right agent independently.
+4. **Dispatch sequentially, one agent per TC.** Mobile runs are sequential — never dispatch two runners in parallel.
+5. **Every TC file must have a result entry.** Missing result → add BLOCKED with failure_reason "Agent did not return a result".
+6. **Distinguish BLOCKED (guide) from BLOCKED (environment issue) in the summary.** Check `manual_guide` field: non-null = guide generated (expected); null = unexpected blockage.
+7. **Pass run_id, suite name, and base_url explicitly to the reporter.** The reporter cannot derive these from results alone.
+8. **Do not invent test cases.** Empty suite + no user descriptions → stop and ask.
+9. **Collect usage metrics from `<usage>` block.** If absent → set tokens/tool_uses/duration_ms to null.

@@ -116,10 +116,11 @@ _(Add only when behaviour differs between iOS and Android)_
 | `app_type` | `runner_mode` | How it runs |
 |------------|---------------|-------------|
 | `pwa` | `playwright` | Playwright MCP with mobile viewport + touch emulation |
-| `hybrid` | `playwright` | Playwright MCP for web view; manual for native screens |
-| `native` | `manual` | mobile-test-runner generates a step guide; human executes on device |
+| `hybrid` | `playwright` | Playwright MCP for web views |
+| `native` (Appium available) | `appium` | Appium MCP — real native automation via XCUITest / UiAutomator2 |
+| `native` (no Appium) | `manual` | mobile-guide-writer generates a step checklist; human executes on device |
 
-`runner_mode` is derived from `app_type` in `mobile_app_profile.md`. The `mobile-test-author` sets it automatically.
+`runner_mode` is derived from `app_type` and Appium availability in `mobile_app_profile.md`. The `mobile-test-author` sets it automatically. To switch from `manual` to `appium`: install Appium MCP, then re-run `mobile-app-profiler`.
 
 ---
 

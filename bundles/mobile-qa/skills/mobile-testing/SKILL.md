@@ -1,25 +1,26 @@
 ---
 name: mobile-testing
-description: Mobile app test execution patterns for QA agents. Covers two modes: Playwright MCP with mobile viewport emulation (PWA/hybrid apps) and guided manual execution (native iOS/Android apps). Use when running mobile test cases, choosing locator strategies for mobile, or handling mobile-specific interactions (gestures, permissions, deep links).
+description: Mobile app test execution patterns for QA agents. Covers three modes: Playwright MCP with mobile viewport (PWA/hybrid), Appium MCP for native iOS/Android automation, and manual guide generation (fallback when Appium is not available). Use when running mobile test cases, choosing locator strategies for mobile, or handling mobile-specific interactions (gestures, permissions, deep links, APK/IPA install).
 license: Apache-2.0
-compatibility: Playwright mode requires Node.js 18+ and @playwright/mcp. Manual mode requires no additional tooling.
+compatibility: "Playwright mode: Node.js 18+, @playwright/mcp. Appium mode: Node.js 22+, JDK 8+, appium-mcp, Android SDK (Android) or macOS+Xcode (iOS). Manual mode: no additional tooling."
 metadata:
   authors:
     - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Mobile Testing
 
-Mobile app test execution for QA agents. Two modes depending on `app_type` in the app profile.
+Mobile app test execution for QA agents. Three modes depending on `app_type` and available tooling.
 
 ## Mode Selection
 
 | `app_type` in profile | `runner_mode` | Execution method |
 |-----------------------|---------------|-----------------|
 | `pwa` | `playwright` | Playwright MCP — mobile viewport + touch emulation |
-| `hybrid` | `playwright` | Playwright MCP for web views; manual for native screens |
-| `native` | `manual` | Generate step-by-step guide; human executes on device |
+| `hybrid` | `playwright` | Playwright MCP for web views |
+| `native` (Appium available) | `appium` | Appium MCP — real native automation via XCUITest / UiAutomator2 |
+| `native` (no Appium) | `manual` | mobile-guide-writer generates a step-by-step guide; human executes on device |
 
 Always read `runner_mode` from the test case frontmatter. If missing, read `app_type` from `.agents/mobile-qa/app_profile.md`.
 
@@ -31,125 +32,150 @@ Drive the browser through the Playwright MCP with mobile viewport and touch emul
 
 ### Core Loop
 
-1. Navigate to the URL (substitute `{{base_url}}` with the real URL).
-2. **Snapshot the page** — get the accessibility tree + element refs before acting.
-3. Interact using touch-aware actions: tap (click), swipe (drag), fill form.
+1. Navigate to the URL (substitute `{{base_url}}`).
+2. **Snapshot the page** — accessibility tree + element refs before acting.
+3. Interact: tap (click), swipe (drag), fill form.
 4. Wait for expected condition (element appears, navigation settles).
 5. Re-snapshot → collect evidence: screenshot + console messages.
 
-### Mobile Viewport Configuration
+### Mobile Viewport
 
-Instruct Playwright MCP to emulate a mobile device. Prefer named device presets:
+Instruct the Playwright MCP to emulate a mobile device before any navigation:
 
-| Device | Viewport | Touch | User-Agent |
-|--------|----------|-------|------------|
-| iPhone 15 | 393×852 | enabled | Safari/iOS |
-| Pixel 8 | 412×915 | enabled | Chrome/Android |
-| iPad Pro | 1024×1366 | enabled | Safari/iPadOS |
+| Device preset | Viewport | Touch |
+|--------------|----------|-------|
+| iPhone 15 | 393×852 | enabled |
+| Pixel 8 | 412×915 | enabled |
+| iPad Pro | 1024×1366 | enabled |
 
-Set viewport at session start, before any navigation. Use the `evaluate` tool if the MCP doesn't expose a direct device preset option:
-
-```js
-// Set mobile viewport via evaluate (fallback)
-Object.defineProperty(navigator, 'userAgent', { value: '<mobile UA>' });
-```
-
-### Locator Strategy (PWA/Hybrid)
-
-Prefer in order: `data-testid` → ARIA role → visible text → `name` attribute → CSS class → XPath.
-
-Mobile web apps often use different selectors than desktop — check for `data-mobile-*` test IDs and aria-labels on touch targets.
-
-### Touch Action Mapping
+### Touch Action Mapping (Playwright)
 
 | TC step verb | Playwright MCP action |
 |-------------|-----------------------|
-| Tap | `click` (Playwright handles touch when touch is enabled) |
+| Tap | `click` |
 | Double-tap | `dblclick` |
-| Long-press | `hover` + wait 1000ms (approximate) |
-| Swipe down to refresh | `drag` from top of element downward |
-| Swipe to dismiss | `drag` element off-screen |
-| Scroll | `wheel` or drag on scrollable container |
-| Accept system dialog | `handle_dialog` → accept |
-| Dismiss system dialog | `handle_dialog` → dismiss |
+| Long-press | `hover` + wait 1000ms |
+| Swipe | `drag` with start/end coordinates |
+| Scroll | `wheel` or drag |
+| Accept dialog | `handle_dialog` → accept |
+| Dismiss dialog | `handle_dialog` → dismiss |
 
-See `references/gestures.md` for complete gesture coverage.
+See `references/gestures.md` for coordinate-based swipe patterns.
 
 ---
 
-## Manual Mode (Native iOS / Android)
+## Appium Mode (Native iOS / Android)
 
-For native apps, the `mobile-test-runner` generates a human-executable guide and returns BLOCKED.
+Drive the native app via Appium MCP. Tool names follow the `mcp__appium-mcp__*` prefix convention.
 
-### Guide Format
+### Session Lifecycle
 
-```markdown
-# Manual Execution Guide: TC-NNN — {Title}
+```
+# 1. Select device
+select_device → list available simulators/emulators/real devices → pick target
 
-**Device:** {device from app_profile.md}
-**Platform:** {ios | android}
-**App Version:** {app_version from app_profile.md}
+# 2. Install and launch app (APK or IPA)
+appium_app_lifecycle → { action: "install", app: "/path/to/app.apk" }
+appium_session_management → { action: "create", capabilities: { ... } }
 
-## Setup
-- [ ] Launch {App Name} on the device
-- [ ] Ensure starting state: {preconditions from TC}
-
-## Steps
-
-### Step 1 — {Action from TC}
-**Do:** {Expanded human-readable instruction}
-**Expected:** {Expected result from TC}
-- [ ] PASS — result matches expected
-- [ ] FAIL — describe what you actually saw: _______________
-
-### Step 2 — ...
-
-## Final State
-{Expected Final State from TC}
-- [ ] PASS — state matches
-- [ ] FAIL — describe actual state: _______________
-
-## Screenshots
-Upload screenshots to `reports/screenshots/TC-NNN_{YYYY-MM-DD}.png`
-
-## Teardown
-{Teardown steps from TC}
+# 3. Execute test steps
+# 4. Teardown
+appium_app_lifecycle → { action: "terminate" }
+appium_session_management → { action: "delete" }
 ```
 
-Save guide to `reports/manual-guides/TC-NNN-guide.md`.
-
-### Result JSON for Manual Cases
+### Appium Capabilities (from app_profile.md)
 
 ```json
 {
-  "tc_id": "TC-001",
-  "result": "BLOCKED",
-  "failure_reason": "Manual execution required — native app. Guide: reports/manual-guides/TC-001-guide.md",
-  "manual_guide": "reports/manual-guides/TC-001-guide.md",
-  ...
+  "platformName": "Android",
+  "appium:automationName": "UiAutomator2",
+  "appium:deviceName": "emulator-5554",
+  "appium:app": "/path/to/app.apk",
+  "appium:noReset": false
 }
 ```
 
+For iOS:
+```json
+{
+  "platformName": "iOS",
+  "appium:automationName": "XCUITest",
+  "appium:deviceName": "iPhone 15 Pro",
+  "appium:platformVersion": "17.4",
+  "appium:app": "/path/to/app.ipa",
+  "appium:noReset": false
+}
+```
+
+### Core Interaction Loop (Appium)
+
+1. **Get page source** — `appium_get_page_source` — XML UI tree (equivalent of Playwright snapshot).
+2. **Find element** — `appium_find_element` with locator strategy (see `references/locators.md`).
+3. **Interact** — `appium_gesture`, `appium_set_value`, `appium_alert`.
+4. **Screenshot** — `appium_screenshot` after each significant step.
+5. **Verify** — `appium_get_text` or `appium_get_page_source` to confirm expected state.
+
+### Appium Tool Reference
+
+| Tool | When to use |
+|------|------------|
+| `select_device` | Session start — pick simulator/emulator/real device |
+| `appium_session_management` | Create, switch, delete sessions |
+| `appium_app_lifecycle` | Install APK/IPA, launch, terminate, clear app data |
+| `appium_get_page_source` | **Primary verification** — get full UI XML tree |
+| `appium_find_element` | Locate an element by Accessibility ID, XPath, etc. |
+| `appium_gesture` | Tap, swipe, scroll, long-press, pinch |
+| `appium_drag_and_drop` | Drag one element onto another |
+| `appium_set_value` | Enter text into a focused field |
+| `appium_get_text` | Read text content of an element |
+| `appium_alert` | Accept or dismiss system alert / permission dialog |
+| `appium_mobile_permissions` | Grant or revoke app permissions (Android) |
+| `appium_screenshot` | Capture screen as PNG evidence |
+| `appium_orientation` | Get or set portrait/landscape |
+| `appium_mobile_device_control` | Lock/unlock screen, open notifications shade |
+| `appium_mobile_device_info` | Device metadata, battery, OS version |
+| `generate_locators` | Auto-generate reliable locators for current screen |
+
+See `references/gestures.md` for gesture parameters and `references/locators.md` for locator strategy.
+
+### Appium Failure Protocol
+
+When a step fails:
+1. `appium_screenshot` + `appium_get_page_source` — capture evidence
+2. State actual vs expected in one sentence
+3. Try next locator strategy (Accessibility ID → XPath → class chain)
+4. If still failing → FAIL and stop; include page source excerpt in failure_reason
+
 ---
 
-## Appium Mode (Future)
+## Manual Mode (Fallback — no Appium)
 
-Not yet available in this bundle. When an Appium MCP server is wired:
+For native apps when Appium MCP is not installed. Handled by `mobile-guide-writer` agent (not the runner).
 
-- Use `environment-setup-xcuitest` skill for iOS setup
-- Use `appium-troubleshooting` skill for debugging
-- Locator strategy: see `references/locators.md`
-- Gesture commands: see `references/gestures.md`
+The guide-writer reads the TC file and generates `reports/manual-guides/{TC_ID}-guide.md` — a human-executable checklist. The runner returns `result: "BLOCKED"` with `manual_guide` path.
 
-Change `runner_mode` in test case frontmatter from `manual` to `appium` when Appium MCP is available.
+To enable Appium and eliminate manual mode for Android:
+```bash
+claude mcp add appium-mcp -- npx -y appium-mcp@latest
+# Set ANDROID_HOME in your environment
+# Then re-run mobile-app-profiler to update runner_mode: manual → appium
+```
+
+For iOS on macOS:
+```bash
+# macOS only — requires Xcode
+xcode-select --install
+claude mcp add appium-mcp -- npx -y appium-mcp@latest
+```
 
 ---
 
 ## Evidence Collection
 
-After every significant interaction (both modes):
-1. **Screenshot** — visual proof saved to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png`
-2. **Console messages** (Playwright mode) — catch JS errors the UI hides
-3. **Notes** — any observation not captured by the screenshot
+After every significant step (all modes):
+1. **Screenshot** — `appium_screenshot` (native) or Playwright screenshot — save to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}_step{N}.png`
+2. **Page source / snapshot** — `appium_get_page_source` (native) or Playwright snapshot (web)
+3. **Notes** — any observation not captured visually
 
 See `references/gestures.md` and `references/locators.md` for deeper reference.

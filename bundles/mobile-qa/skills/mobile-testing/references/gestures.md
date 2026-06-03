@@ -1,81 +1,138 @@
 # Mobile Gestures Reference
 
-## Playwright Mode (PWA / Hybrid)
+## Appium Mode — Appium MCP Tool Parameters
 
-Playwright MCP handles touch automatically when mobile viewport is enabled. Map TC verbs to Playwright actions:
+All gestures go through `appium_gesture`. Pass the action and parameters as shown.
 
-| TC Verb | Playwright MCP action | Notes |
-|---------|----------------------|-------|
-| Tap | `click` | Touch events fire automatically in mobile viewport |
-| Double-tap | `dblclick` | |
-| Long-press | `hover` (1000ms timeout) | Approximate — use evaluate for `pointerdown` if needed |
-| Swipe left | Drag from right side of element to left | Use `drag` with start/end coordinates |
-| Swipe right | Drag from left to right | |
-| Swipe up (scroll) | `wheel` with negative deltaY, or drag upward | |
-| Swipe down (scroll) | `wheel` with positive deltaY, or drag downward | |
-| Pull-to-refresh | Drag from top of page downward 150px+ | Requires networkidle wait after |
-| Pinch in (zoom out) | Not directly supported — document as manual step | |
-| Pinch out (zoom in) | Not directly supported — document as manual step | |
-| Scroll to element | `scroll_into_view` / evaluate `scrollIntoView()` | |
-| Accept dialog | `handle_dialog` → accept | Works for both permission dialogs and browser alerts |
-| Dismiss dialog | `handle_dialog` → dismiss | |
-
-### Swipe Implementation Pattern
-
+### Tap
+```json
+{ "action": "tap", "elementId": "<element_id_from_find_element>" }
+// or by coordinate:
+{ "action": "tap", "x": 200, "y": 400 }
 ```
-// Swipe left on a carousel element
+
+### Double-tap
+```json
+{ "action": "doubleTap", "elementId": "<element_id>" }
+```
+
+### Long-press
+```json
+{ "action": "longPress", "elementId": "<element_id>", "duration": 1500 }
+```
+
+### Swipe
+```json
+{ "action": "swipe", "direction": "left" }
+{ "action": "swipe", "direction": "right" }
+{ "action": "swipe", "direction": "up" }
+{ "action": "swipe", "direction": "down" }
+// Precise coordinate swipe:
+{ "action": "swipe", "startX": 800, "startY": 400, "endX": 100, "endY": 400, "duration": 300 }
+```
+
+### Scroll
+```json
+{ "action": "scroll", "direction": "down", "distance": 0.5 }
+// distance: 0.0–1.0 (fraction of screen height)
+```
+
+### Pinch / Zoom (via appium_perform_actions)
+```json
+[
+  { "type": "pointer", "id": "finger1", "actions": [
+    { "type": "pointerDown", "x": 200, "y": 400 },
+    { "type": "pointerMove", "x": 100, "y": 400, "duration": 500 },
+    { "type": "pointerUp" }
+  ]},
+  { "type": "pointer", "id": "finger2", "actions": [
+    { "type": "pointerDown", "x": 300, "y": 400 },
+    { "type": "pointerMove", "x": 400, "y": 400, "duration": 500 },
+    { "type": "pointerUp" }
+  ]}
+]
+```
+
+### Drag and Drop
+```json
+// via appium_drag_and_drop:
+{ "sourceElementId": "<id>", "targetElementId": "<id>" }
+```
+
+### System Buttons
+```json
+// via appium_mobile_device_control:
+{ "action": "pressButton", "name": "home" }    // iOS: Home
+{ "action": "pressButton", "name": "back" }    // Android: Back
+{ "action": "open_notifications" }             // Android only: notification shade
+```
+
+### Permission Dialogs
+```json
+// via appium_alert (when system dialog appears):
+{ "action": "accept" }    // "Allow" / "OK"
+{ "action": "dismiss" }   // "Don't Allow" / "Deny"
+
+// or via appium_mobile_permissions (Android, pre-grant):
+{ "action": "grant", "appPackage": "com.example.app", "permissions": ["android.permission.CAMERA"] }
+```
+
+### Device Orientation
+```json
+// via appium_orientation:
+{ "orientation": "LANDSCAPE" }
+{ "orientation": "PORTRAIT" }
+```
+
+---
+
+## Playwright Mode — Touch Action Mapping (PWA / Hybrid)
+
+| TC Verb | Playwright MCP action | Parameters |
+|---------|----------------------|-----------|
+| Tap | `click` | element selector |
+| Double-tap | `dblclick` | element selector |
+| Long-press | `hover` (1000ms) | element selector |
+| Swipe left | `drag` | startX: 80% width → endX: 20% width |
+| Swipe right | `drag` | startX: 20% width → endX: 80% width |
+| Swipe up | `drag` | startY: 80% height → endY: 20% height |
+| Swipe down | `drag` | startY: 20% height → endY: 80% height |
+| Scroll | `wheel` or drag | deltaY for direction |
+| Accept dialog | `handle_dialog` | accept |
+| Dismiss dialog | `handle_dialog` | dismiss |
+
+### Playwright Swipe Pattern
+
+```js
+// Swipe left on a carousel (coordinates via evaluate):
+// Start at 80% of element width, end at 20%
 drag(
-  startX: element.x + element.width * 0.8,
-  startY: element.y + element.height * 0.5,
-  endX:   element.x + element.width * 0.2,
-  endY:   element.y + element.height * 0.5
+  startX: elementBounds.x + elementBounds.width * 0.8,
+  startY: elementBounds.y + elementBounds.height * 0.5,
+  endX:   elementBounds.x + elementBounds.width * 0.2,
+  endY:   elementBounds.y + elementBounds.height * 0.5
 )
 ```
 
 ---
 
-## Manual Mode (Native iOS / Android)
+## Manual Mode — Human-Readable Guide Descriptions
 
-Describe gestures in human-readable terms in the execution guide:
+When writing step guides for `mobile-guide-writer`, describe gestures unambiguously:
 
-| TC Verb | Guide description |
-|---------|-----------------|
-| Tap | "Tap [element] with your finger" |
-| Double-tap | "Quickly double-tap [element]" |
-| Long-press | "Press and hold [element] for 1–2 seconds until the context menu / action appears" |
-| Swipe left | "Swipe left across [element] — start from the right third and end at the left edge" |
-| Swipe right | "Swipe right across [element]" |
-| Swipe up | "Scroll up by swiping upward from the bottom of [element]" |
-| Swipe down | "Pull down from the top of the list to trigger refresh" |
-| Pinch in | "Place two fingers on [element] and pinch them together to zoom out" |
-| Pinch out | "Place two fingers on [element] and spread them apart to zoom in" |
-| Rotate device | "Rotate the device to landscape/portrait orientation" |
-| Press Home | "Press the Home button (iOS: swipe up from bottom; Android: press ⊙)" |
-| Press Back | "Tap the system Back button (Android) / swipe right from left edge (iOS)" |
-| Accept permission | "Tap 'Allow' on the system permission dialog" |
-| Deny permission | "Tap 'Don't Allow' / 'Deny' on the system permission dialog" |
-| Open deep link | "Open Safari/Chrome and navigate to `{scheme}://path`" |
-
----
-
-## Appium Mode (Future Reference)
-
-When Appium MCP is available, use these W3C Actions:
-
-```json
-// Tap at coordinate
-{ "action": "pointer", "type": "pointerDown", "x": 200, "y": 400 }
-{ "action": "pause", "duration": 50 }
-{ "action": "pointer", "type": "pointerUp" }
-
-// Swipe left
-{ "action": "pointer", "type": "pointerDown", "x": 800, "y": 400 }
-{ "action": "pause", "duration": 300 }
-{ "action": "pointer", "type": "pointerMove", "x": 100, "y": 400, "duration": 300 }
-{ "action": "pointer", "type": "pointerUp" }
-```
-
-iOS scroll via `mobile: scroll`:
-```json
-{ "script": "mobile: scroll", "args": [{ "direction": "down" }] }
-```
+| TC Verb | Guide wording |
+|---------|--------------|
+| Tap | "Tap **[element label]** with one finger" |
+| Double-tap | "Quickly double-tap **[element]**" |
+| Long-press | "Press and hold **[element]** for 1–2 seconds until the context menu appears" |
+| Swipe left | "Swipe left across **[element]** — start at the right edge, end at the left" |
+| Swipe right | "Swipe right across **[element]**" |
+| Pull-to-refresh | "Pull the list down past the loading indicator, then release" |
+| Pinch in | "Place two fingers on **[element]** and pinch together to zoom out" |
+| Pinch out | "Spread two fingers apart on **[element]** to zoom in" |
+| Rotate | "Rotate the device to **landscape / portrait** orientation" |
+| Press Home | "iOS: swipe up from the bottom edge. Android: press ⊙ Home button" |
+| Press Back | "Android: press ← Back. iOS: swipe right from the left screen edge" |
+| Accept permission | "Tap **Allow** (or **OK**) on the system permission dialog" |
+| Deny permission | "Tap **Don't Allow** (or **Deny**) on the system permission dialog" |
+| Open deep link | "Open the browser and navigate to `{scheme}://path`" |

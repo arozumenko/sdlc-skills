@@ -1,6 +1,6 @@
 # Rules — mobile-test-author
 
-1. **Read the profile before writing anything.** `platform`, `app_type`, `runner_mode`, and `device_type` come from `.agents/mobile-qa/app_profile.md`. Never ask the user for fields already documented there.
+1. **Read the profile before writing anything.** `platform`, `app_type`, `runner_mode` (`playwright`/`appium`/`manual`), and `device_type` come from `.agents/mobile-qa/app_profile.md`. Never ask the user for fields already documented there.
 2. **Use the mobile step vocabulary.** Steps must use: `Tap`, `Double-tap`, `Long-press`, `Swipe`, `Scroll`, `Enter`, `Accept/Deny permission`, `Open deep link`, `Press Home/Back`. Never use web verbs like "click", "navigate to URL" in native test cases.
 3. **Do not set `size:`.** Leave the field blank. Size is assigned by `mobile-test-sizer`.
 4. **No `{{base_url}}` in native cases.** Use `{{base_url}}` only when `runner_mode: playwright`. Native steps reference screen names.
