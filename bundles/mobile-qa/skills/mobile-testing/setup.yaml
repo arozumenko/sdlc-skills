@@ -1,0 +1,9 @@
+# Mobile testing skill — no additional MCP setup required.
+# Playwright mode reuses the @playwright/mcp server already wired by the playwright-testing skill.
+# Manual mode requires no tooling.
+# Appium mode (future): will require an Appium MCP server when available.
+dependencies: {}
+permissions:
+  filesystem: read
+  network: false
+  shell: false
