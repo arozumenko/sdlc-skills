@@ -29,7 +29,7 @@ Output: a rating for each scenario with a rationale, highlighting any that shoul
 
 Input: one or more `TC-NNN_*.md` file paths.
 
-Process: read each file, evaluate its steps and preconditions, write `size: S|M|L` into its frontmatter via Edit.
+Process: read each file, read `runner_mode` from its frontmatter (mode affects size for biometric/camera steps — see L criteria), evaluate steps and preconditions, write `size: S|M|L` into its frontmatter via Edit.
 
 ## Sizing Criteria (Mobile-Calibrated)
 
@@ -54,16 +54,16 @@ Process: read each file, evaluate its steps and preconditions, write `size: S|M|
 **Examples:** Login, submit a support form, swipe through onboarding, grant location permission, open a push notification from notification shade.
 
 ### L — Large (13+ steps OR any of these signals)
-- Biometric authentication (Face ID, Touch ID, fingerprint)
+- Biometric authentication (Face ID, Touch ID, fingerprint) — **M for `device-farm`** (`device_farm_inject_touch` is available); L for `appium`/`manual`
+- Camera / microphone / media access flow — **M for `device-farm`** (`device_farm_inject_image` available); L for `appium`/`manual`
 - Push notification: trigger → receive → interact
 - Background / foreground app cycling
-- Camera / microphone / media access flow
 - Multi-role interaction (two accounts, hand-off between roles)
 - Teardown requires multiple app state resets
 - Steps that differ significantly between iOS and Android (two execution paths)
 - Any flow that depends on external service (email OTP, SMS code, payment)
 
-**Examples:** Face ID login, photo upload with camera permission, receive and act on push notification, pay with Apple Pay.
+**Examples:** Face ID login (L on appium, M on device-farm), photo upload (L on appium, M on device-farm), receive and act on push notification, pay with Apple Pay.
 
 ## Output Format
 
@@ -80,7 +80,8 @@ For each file: read frontmatter, determine size, write `size: S|M|L` into the fi
 ```
 TC-001 → S  (simple tap flow, 4 steps, no permissions)
 TC-002 → M  (login form, 7 steps, standard auth)
-TC-003 → L  (Face ID flow — biometric auth)
+TC-003 → M  (Face ID flow — biometric auth, runner_mode: device-farm, inject_touch available)
+TC-003 → L  (Face ID flow — biometric auth, runner_mode: appium, no injection support)
 ```
 
 ## Splitting Rule

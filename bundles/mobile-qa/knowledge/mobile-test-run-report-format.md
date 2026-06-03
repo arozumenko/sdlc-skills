@@ -28,7 +28,7 @@ device: iPhone 15 Pro (iOS 17.4) / Pixel 8 Emulator (Android 14)
 app_version: 2.3.1
 environment: https://app.example.com   # only for PWA/hybrid; omit for native
 date: 2026-05-18
-runner_mode: manual                    # playwright | manual
+runner_mode: manual                    # playwright | appium | device-farm | manual | mixed
 ---
 
 # Mobile Test Run Report: Smoke Tests — 2026-05-18
@@ -50,10 +50,12 @@ runner_mode: manual                    # playwright | manual
 
 ### Runner Mode Breakdown
 
-| Mode       | Count | Notes                        |
-|------------|-------|------------------------------|
-| Manual     | 8     | Executed on real/simulated device |
-| Playwright | 2     | Executed via browser MCP     |
+| Mode        | Count | Notes                                    |
+|-------------|-------|------------------------------------------|
+| Device Farm | 6     | Real device automation via Mobitru MCP   |
+| Appium      | 4     | Native automation via local Appium MCP   |
+| Playwright  | 2     | Executed via browser MCP                 |
+| Manual      | 2     | Executed on real/simulated device        |
 
 ### Size Distribution
 
@@ -112,7 +114,7 @@ _Guides generated for native test cases. Execute against the target device:_
 |---------|----------|-------------|
 | YAML frontmatter | Yes | Machine-readable metadata; `environment` only for PWA/hybrid |
 | Summary table | Yes | Aggregate metrics |
-| Runner Mode Breakdown | Yes | Manual vs Playwright split |
+| Runner Mode Breakdown | Yes | Breakdown by mode (Appium / Playwright / Manual); derived from result objects, not the app profile |
 | Size Distribution | If sizes present | S/M/L breakdown; omit when all `size` are null |
 | Results table | Yes | One row per TC, sorted by ID; includes Platform, Mode columns |
 | Failed Tests | If failures | Detailed breakdown with screenshot path and platform observed |
@@ -161,5 +163,6 @@ Each `mobile-test-runner` agent outputs one JSON block. The `mobile-test-reporte
 }
 ```
 
+`runner_mode`: value from the TC's own frontmatter — `playwright`, `appium`, or `manual`. Derive Runner Mode Breakdown by counting this field across all result objects, not from the app profile (a suite may be mixed-mode).  
 `manual_guide`: path to the generated guide file when `runner_mode` is `manual` and result is `BLOCKED`; `null` otherwise.  
 `tokens`, `tool_uses`, `duration_ms`: attached by `mobile-run-lead` from usage reporting; may be null (Performance Metrics section omitted when null).

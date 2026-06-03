@@ -41,11 +41,17 @@ standalone for authoring work outside a run.
 |------------|---------------|----------------------|
 | `pwa` | `playwright` | Runs live via Playwright MCP with mobile viewport + touch emulation |
 | `hybrid` | `playwright` | Runs web views via Playwright MCP |
-| `native` (Appium available) | `appium` | Runs via Appium MCP — real native automation on simulator/emulator/real device |
-| `native` (no Appium) | `manual` | `mobile-guide-writer` generates a step checklist; human executes on device |
+| `native` (Mobitru MCP available) | `device-farm` | Runs via Mobitru MCP — real device from cloud farm; supports biometrics (`inject_touch`), camera injection (`inject_image`), network throttling, and screen recording |
+| `native` (local Appium available) | `appium` | Runs via Appium MCP — native automation on local simulator/emulator/real device |
+| `native` (neither available) | `manual` | `mobile-guide-writer` generates a step checklist; human executes on device |
 
 The runner_mode is set in each test case's frontmatter by `mobile-test-author`, derived
-from the `app_type` and Appium availability in `app_profile.md`. Do not set it manually.
+from `app_type` and MCP availability in `app_profile.md`. Do not set it manually.
+When both Mobitru and local Appium are available, `mobile-app-profiler` defaults to `device-farm`
+(real devices preferred). Specify `runner_mode: appium` explicitly to override.
+
+To upgrade to `device-farm`: `claude mcp add mobitru -- npx -y @mobitru/mcp@latest`
+(verify exact package name at mobitru.com/docs), then re-run `mobile-app-profiler`.
 To upgrade from `manual` to `appium`: `claude mcp add appium-mcp -- npx -y appium-mcp@latest`,
 then re-run `mobile-app-profiler`.
 

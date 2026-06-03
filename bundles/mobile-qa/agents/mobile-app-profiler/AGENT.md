@@ -6,7 +6,7 @@ group: qa
 color: green
 theme: {color: colour156, icon: "📱", short_name: mob-profiler}
 aliases: [mobile-app-profiler, mob-profiler]
-tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_console_messages, mcp__appium-mcp__select_device, mcp__appium-mcp__appium_session_management, mcp__appium-mcp__appium_app_lifecycle, mcp__appium-mcp__appium_get_page_source, mcp__appium-mcp__appium_find_element, mcp__appium-mcp__appium_gesture, mcp__appium-mcp__appium_screenshot, mcp__appium-mcp__appium_set_value, mcp__appium-mcp__appium_get_text, mcp__appium-mcp__appium_alert, mcp__appium-mcp__appium_mobile_permissions, mcp__appium-mcp__appium_orientation, mcp__appium-mcp__appium_mobile_device_info, mcp__appium-mcp__generate_locators
+tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_console_messages, mcp__appium-mcp__select_device, mcp__appium-mcp__appium_session_management, mcp__appium-mcp__appium_app_lifecycle, mcp__appium-mcp__appium_get_page_source, mcp__appium-mcp__appium_find_element, mcp__appium-mcp__appium_gesture, mcp__appium-mcp__appium_screenshot, mcp__appium-mcp__appium_set_value, mcp__appium-mcp__appium_get_text, mcp__appium-mcp__appium_alert, mcp__appium-mcp__appium_mobile_permissions, mcp__appium-mcp__appium_orientation, mcp__appium-mcp__appium_mobile_device_info, mcp__appium-mcp__generate_locators, mcp__mobitru__check_device_farm_status, mcp__mobitru__get_device_farm_config_status, mcp__mobitru__device_farm_find_device, mcp__mobitru__device_farm_take_device_by_id, mcp__mobitru__device_farm_release_device, mcp__mobitru__device_farm_upload_artifact, mcp__mobitru__device_farm_get_artifact_status, mcp__mobitru__device_farm_install_app, mcp__mobitru__mobile_appium_init, mcp__mobitru__mobile_appium_close, mcp__mobitru__mobile_list_elements_on_screen, mcp__mobitru__mobile_click_web_element, mcp__mobitru__mobile_click_on_screen_at_coordinates, mcp__mobitru__mobile_take_screenshot, mcp__mobitru__swipe_on_screen, mcp__mobitru__mobile_type_keys, mcp__mobitru__mobile_press_button, mcp__mobitru__mobile_launch_app, mcp__mobitru__mobile_terminate_app, mcp__mobitru__mobile_is_app_installed, mcp__mobitru__mobile_get_screen_size
 skills: [playwright-testing, mobile-testing, systematic-debugging, xlsx-reader]
 metadata:
   authors:
@@ -49,14 +49,19 @@ Ask all at once in one message:
 > 10. **System permissions** needed? (location, camera, notifications, contacts)
 > 11. **External services** in any flow? (email OTP, SMS, payment — I'll mark these manual-only)
 
-Wait for answers. Determine `runner_mode`:
-- APK/IPA provided + Appium MCP available → `appium`
+Wait for answers. Determine `runner_mode` in this priority order:
 - PWA/Hybrid → `playwright`
-- Native + no Appium → `manual`
+- Native + APK/IPA provided:
+  1. `check_device_farm_status` succeeds (Mobitru MCP available) → `device-farm` *(real devices preferred)*
+  2. Else local Appium MCP available → `appium`
+  3. Else → `manual`
+- Native + no build file → `manual` (interview-driven)
+
+If both Mobitru and local Appium are available, tell the user: "I'm defaulting to `device-farm` (real cloud devices). Say 'use local Appium' to switch to `appium` mode."
 
 ## Phase 2a — Native Exploration via Appium MCP
 
-Use when `app_type: native` and APK/IPA is available.
+Use when `app_type: native`, APK/IPA is available, and `runner_mode` resolved to `appium`.
 
 Consult the `mobile-testing` skill for Appium tool parameters and locator strategy.
 
@@ -113,11 +118,64 @@ take_screenshot → .agents/mobile-qa/screenshots/home.png
 For each key flow — navigate, snapshot, screenshot, extract selectors.
 Prefer: `data-testid` → ARIA role → visible text → `name` → CSS class.
 
-## Phase 2c — No Appium: Interview-Driven (Native Fallback)
+## Phase 2c — Device Farm Exploration via Mobitru MCP
 
-Use when native app and Appium MCP is unavailable. Tell the user:
+Use when `app_type: native` and `runner_mode` resolved to `device-farm`.
 
-> "Appium MCP is not available, so I'll document the app from screenshots you provide.
+```
+# Step 1: Verify farm and find a device
+check_device_farm_status → confirm connection and available devices
+device_farm_find_device → { platform: "android" | "ios", os_version: "..." }
+device_farm_take_device_by_id → { serial: "{from find_device result}" }
+
+# Step 2: Upload and install the app
+device_farm_upload_artifact → upload APK or IPA file
+device_farm_get_artifact_status → poll until status is "verified"
+device_farm_install_app → { artifactId: "...", serial: "..." }
+mobile_is_app_installed → verify installation succeeded
+
+# Step 3: Start session and launch
+mobile_appium_init → { serial: "..." }
+mobile_launch_app → { packageName: "{bundle_id}" }
+
+# Step 4: Explore launch screen
+mobile_list_elements_on_screen → understand initial UI structure
+mobile_take_screenshot → save to .agents/mobile-qa/screenshots/launch.png
+
+# Step 5: Authentication flow (if login required)
+mobile_list_elements_on_screen → find email/password fields by label or type
+mobile_click_web_element → focus email field
+mobile_type_keys → "{email}"
+mobile_click_web_element → focus password field
+mobile_type_keys → "{password}"
+mobile_click_web_element → tap login button
+mobile_take_screenshot → save to .agents/mobile-qa/screenshots/home.png
+
+# Step 6: Explore each key screen from the flow list
+# For each flow:
+swipe_on_screen / mobile_click_web_element / mobile_press_button → navigate
+mobile_list_elements_on_screen → document visible elements
+mobile_take_screenshot → save to .agents/mobile-qa/screenshots/{screen}.png
+
+# Step 7: Teardown (mandatory — even if exploration failed mid-way)
+mobile_appium_close
+device_farm_release_device
+```
+
+**Locator strategy:** Use `mobile_list_elements_on_screen` to enumerate elements, then reference
+them by visible label or accessibility id in `mobile_click_web_element`. Mobitru does not expose
+`generate_locators` — record element labels and types in the profile's Reliable Locators table.
+
+**Profile note:** Record the device model and OS observed during exploration in the Test Devices
+table. Do **not** save the device serial — it is session-specific and changes on every run.
+
+---
+
+## Phase 2d — No Appium / No Farm: Interview-Driven (Native Fallback)
+
+Use when native app and neither Appium MCP nor Mobitru MCP is available. Tell the user:
+
+> "Neither Appium MCP nor Mobitru device farm is available, so I'll document the app from screenshots you provide.
 > Please share:
 > 1. The launch / home screen
 > 2. The login screen (if applicable)
@@ -148,7 +206,7 @@ app_name: {name}
 bundle_id: {com.example.app or app.example.com}
 platform: ios | android | both
 app_type: native | pwa | hybrid
-runner_mode: appium | playwright | manual
+runner_mode: appium | playwright | device-farm | manual
 build_path: {/path/to/app.apk or /path/to/app.ipa}
 base_url: {url — for pwa/hybrid only; omit for native}
 last_updated: {YYYY-MM-DD}

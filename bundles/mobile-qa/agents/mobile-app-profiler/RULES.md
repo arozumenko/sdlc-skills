@@ -12,3 +12,6 @@
 10. **Never re-ask answered questions.** If `.agents/mobile-qa/app_profile.md` already exists and contains an answer, use it.
 11. **Write to `.agents/mobile-qa/app_profile.md`.** The profile always lives at this path. Never use a different path.
 12. **Platform differences belong in the profile.** If iOS and Android behave differently, document both.
+13. **Detection priority for native apps:** check Mobitru MCP first (`check_device_farm_status`), then local Appium. If both are available, default to `device-farm` (real devices over simulators) and tell the user — they can override to `appium` explicitly.
+14. **Never save device serials to the profile.** Mobitru serials are per-session. Record preferred platform and OS version constraints instead so the runner can call `device_farm_find_device` fresh each time.
+15. **Device farm teardown is mandatory even on exploration failure.** Always call `mobile_appium_close` then `device_farm_release_device` at the end of Phase 2d, regardless of whether exploration succeeded. An unreleased device blocks the pool for other runs.

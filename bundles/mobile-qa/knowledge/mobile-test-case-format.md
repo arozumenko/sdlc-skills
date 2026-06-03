@@ -102,7 +102,7 @@ _(Add only when behaviour differs between iOS and Android)_
 | `module` | Yes | string | Feature area under test |
 | `platform` | Yes | `ios` `android` `both` | Target platform(s) |
 | `app_type` | Yes | `native` `pwa` `hybrid` | App technology — drives runner selection |
-| `runner_mode` | Yes | `playwright` `manual` | How mobile-test-runner executes this case |
+| `runner_mode` | Yes | `playwright` `appium` `device-farm` `manual` | How mobile-test-runner executes this case |
 | `device_type` | Yes | `real` `simulator` `emulator` | Execution environment |
 | `size` | No | `S` `M` `L` | Execution-size rating, assigned by `mobile-test-sizer` |
 | `orientation` | No | `portrait` `landscape` `both` | Required device orientation |
@@ -117,10 +117,11 @@ _(Add only when behaviour differs between iOS and Android)_
 |------------|---------------|-------------|
 | `pwa` | `playwright` | Playwright MCP with mobile viewport + touch emulation |
 | `hybrid` | `playwright` | Playwright MCP for web views |
-| `native` (Appium available) | `appium` | Appium MCP — real native automation via XCUITest / UiAutomator2 |
-| `native` (no Appium) | `manual` | mobile-guide-writer generates a step checklist; human executes on device |
+| `native` (Mobitru MCP available) | `device-farm` | Mobitru MCP — real cloud device; supports biometrics injection, camera injection, screen recording |
+| `native` (local Appium available) | `appium` | Appium MCP — real native automation via XCUITest / UiAutomator2 |
+| `native` (neither available) | `manual` | mobile-guide-writer generates a step checklist; human executes on device |
 
-`runner_mode` is derived from `app_type` and Appium availability in `mobile_app_profile.md`. The `mobile-test-author` sets it automatically. To switch from `manual` to `appium`: install Appium MCP, then re-run `mobile-app-profiler`.
+`runner_mode` is derived from `app_type` and Appium availability in `mobile_app_profile.md`. The `mobile-test-author` sets it automatically. To switch from `manual` to `appium`: install Appium MCP, re-run `mobile-app-profiler`, then update `runner_mode: appium` in existing TC frontmatter (or re-author them).
 
 ---
 

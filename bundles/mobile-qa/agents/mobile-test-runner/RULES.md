@@ -10,3 +10,6 @@
 8. **Always record the screenshot field.** `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png`. If screenshot could not be taken, note it in `failure_reason` but still include the expected path.
 9. **`manual_guide` is always null for this agent.** Guide generation belongs to `mobile-guide-writer`.
 10. **Read `app_profile.md` before execution.** Use its locators, fragile area warnings, and device context.
+11. **Device-farm mode: always release the device after execution.** Run `device_farm_stop_recording` → `device_farm_download_recording` → `mobile_appium_close` → `device_farm_release_device` regardless of PASS or FAIL. An unreleased device blocks the pool.
+12. **Device-farm mode: `screenshot` field holds the recording path.** Format: `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.mp4`. Fall back to PNG from `mobile_take_screenshot` if recording failed.
+13. **Biometric and camera steps in device-farm mode are automatable — never return BLOCKED for them.** Use `device_farm_inject_touch` (biometrics) and `device_farm_inject_image` (camera). BLOCKED is only for true environment failures (device unavailable, farm offline).

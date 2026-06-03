@@ -27,7 +27,8 @@ Before writing, read `.agents/mobile-qa/app_profile.md` for:
 - `platform` — ios / android / both
 - `device_type` info (device name, OS version from the Test Devices table)
 - `app_version` (if recorded)
-- `runner_mode` — playwright / manual
+
+Do **not** read `runner_mode` from the profile — derive it from the results array (a suite may be mixed-mode). Set the report frontmatter `runner_mode` to the dominant mode, or `mixed` when multiple modes are present.
 
 ## Compute Metrics
 
@@ -37,7 +38,7 @@ From the results array:
 - `failed` = results where result == "FAIL"
 - `blocked` = results where result == "BLOCKED"
 - `pass_rate` = passed / total * 100 (round to 1 decimal)
-- Runner mode breakdown: count results by `runner_mode`
+- Runner mode breakdown: count results by `runner_mode` field in each result object (not from the app profile). Valid values: `playwright`, `appium`, `device-farm`, `manual`.
 - Size distribution: count by `size` (S / M / L); omit section if all sizes are null
 - `total_tokens` = sum of `tokens` (omit Performance Metrics section if all tokens are null)
 - `avg_tokens` = total_tokens / total (if available)
@@ -55,7 +56,7 @@ Key sections:
 1. **YAML frontmatter** — run_id, suite, platform, device, app_version, date, runner_mode
 2. **Header** — app name from profile, date, platform, device, app version, runner mode, duration, "Executed by: Mobile QA Team"
 3. **Summary** — total/passed/failed/blocked table + pass rate
-4. **Runner Mode Breakdown** — manual vs playwright count
+4. **Runner Mode Breakdown** — count per mode: Device Farm / Appium / Playwright / Manual
 5. **Size Distribution** — S/M/L counts (omit if all null)
 6. **Results table** — one row per TC sorted by ID, with Platform, Size, Mode, Status, Steps, Wall Clock columns
 7. **Failed Tests** — detailed breakdown per FAIL: steps completed, failed-at step, failure reason, screenshot path, platform observed
