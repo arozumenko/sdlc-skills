@@ -2,7 +2,11 @@
   "mcpServers": {
     "appium-mcp": {
       "command": "npx",
-      "args": ["-y", "appium-mcp@latest"]
+      "args": ["-y", "appium-mcp@latest"],
+      "env": {
+        "ANDROID_HOME": "C:\\Users\\olexi\\AppData\\Local\\Android\\Sdk",
+        "ANDROID_SDK_ROOT": "C:\\Users\\olexi\\AppData\\Local\\Android\\Sdk"
+      }
     }
   }
 }

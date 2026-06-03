@@ -7,3 +7,8 @@ node_modules/
 *.pyc
 __pycache__/
 .venv/
+
+# Mobile QA — binary artifacts and ephemeral test screenshots
+*.apk
+*.ipa
+reports/screenshots/
