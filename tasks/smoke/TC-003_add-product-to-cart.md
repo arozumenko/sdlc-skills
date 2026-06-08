@@ -39,8 +39,8 @@ size: M
 |---|--------|----------------|
 | 1 | Launch the app on `emulator-5554` via Appium session (capabilities: `platformName=Android`, `appium:app=<apk_path>`, `appium:deviceName=emulator-5554`, `appium:automationName=UiAutomator2`, `appium:noReset=false`) | Login screen is displayed |
 | 2 | Tap the **"Sign in with correct user"** button (`id: com.epam.mobitru:id/type_and_login`) | Product List screen is displayed; Cart header shows "Cart (0)" or "Cart" (`id: com.epam.mobitru:id/cart_title`) |
-| 3 | Locate the **"Add to cart"** button for the Lenovo Legion product (`accessibility id: "Add to cart Lenovo Legion"`) in the product grid | The "Add to cart" button for Lenovo Legion is visible without scrolling (it is the first item in the grid) |
-| 4 | Tap the **"Add to cart"** button for Lenovo Legion (`accessibility id: "Add to cart Lenovo Legion"`) | The button is tapped |
+| 3 | Locate the **"Add to cart"** button for the Lenovo Legion product (`accessibility id: "Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`) in the product grid | The "Add to cart" button for Lenovo Legion is visible without scrolling (it is the first item in the grid) |
+| 4 | Tap the **"Add to cart"** button for Lenovo Legion (`accessibility id: "Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`) | The button is tapped |
 | 5 | Observe the **"Add to cart"** button for Lenovo Legion | The button label changes to **"Added to cart"** and the button appearance switches to an outline/inactive style, indicating it is no longer interactive |
 | 6 | Observe the **Cart header button** (`id: com.epam.mobitru:id/cart_title`) in the top navigation bar | The cart counter updates to **"Cart (1)"** |
 
@@ -54,5 +54,5 @@ The Product List screen is still displayed. The Lenovo Legion card's action butt
 
 ## Platform Notes
 
-- **Android only**: The "Add to cart" button uses an `accessibility id` locator keyed on the product name. If the Lenovo Legion product name or its accessibility label differs in a future app version, update the locator accordingly.
+- **Android only**: The "Add to cart" button uses an `accessibility id` locator keyed on the full product name (`"Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`). If the product name or its accessibility label differs in a future app version, update the locator accordingly.
 - The exact accessibility id pattern for the "Added to cart" state is not confirmed in the profile; the visual/label change is the primary assertion. If runner supports text assertion, assert `getText()` on the button equals `"Added to cart"`.
