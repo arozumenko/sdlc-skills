@@ -10,6 +10,11 @@
 # by generating manual step guides instead of automated execution.
 dependencies:
   mcp:
+    - name: mobitru
+      command: npx
+      args: ["-y", "mobitru-mcp-server@latest"]
+      env:
+        MOBITRU_API_TOKEN: ""
     - name: playwright
       command: npx
       args: ["@playwright/mcp@latest"]

@@ -20,7 +20,7 @@ After installing, register the MCP servers you need (see `.env.example` for toke
 
 ```bash
 # Mobitru device farm — real cloud devices (runner_mode: device-farm)
-claude mcp add mobitru -e MOBITRU_API_TOKEN=$MOBITRU_API_TOKEN -- npx -y @mobitru/mcp@latest
+claude mcp add mobitru -e MOBITRU_API_TOKEN=$MOBITRU_API_TOKEN -- npx -y mobitru-mcp-server@latest
 
 # Local Appium — simulator / emulator / USB device (runner_mode: appium)
 claude mcp add appium-mcp -- npx -y appium-mcp@latest

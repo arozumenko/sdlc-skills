@@ -162,7 +162,7 @@ Recordings: reports/screenshots/ ({N} .mp4 files — one per TC)
 {If manual/guide cases:}
 Manual guides: reports/manual-guides/ ({N} files ready for device execution)
 To automate native tests: claude mcp add appium-mcp -- npx -y appium-mcp@latest
-To use cloud real devices:  claude mcp add mobitru -- npx -y @mobitru/mcp@latest
+To use cloud real devices:  claude mcp add mobitru -- npx -y mobitru-mcp-server@latest
 
 {If failures:}
 Failed tests:
