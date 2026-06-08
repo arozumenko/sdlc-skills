@@ -10,7 +10,7 @@
 | App type | Native (APK) |
 | APK path | `C:\MyDevelopment\sdlc-skills\bundles\mobile-qa\MobitruDemo.app.1.2.0.apk` |
 | runner_mode | `appium` |
-| Appium server | `http://localhost:4723` (start with ANDROID_HOME set) |
+| Appium server | embedded (managed by appium-mcp via MCP env vars) |
 | Device | emulator-5554 (Pixel 6, API 33, x86_64) |
 | automationName | UiAutomator2 |
 
@@ -110,7 +110,7 @@
 - **No quantity decrease (−) button observed** on cart screen — only Remove and Plus (+) were found by generate_locators. Needs follow-up.
 - **Product prices are dynamic** in accessibility descriptions — locators using accessibility id for product cards will be price-sensitive if prices change.
 - **Login fields lack direct resource-id** on the EditText level; parent LinearLayout ids (`login_email`, `login_password`) must be used in xpath.
-- **Appium server startup requirement**: must be launched with `ANDROID_HOME` and `ANDROID_SDK_ROOT` set to `C:\Users\olexi\AppData\Local\Android\Sdk`. The MCP embedded mode does not currently inherit these vars from `.mcp.json` without a Claude Code restart.
+- **No manual Appium startup needed**: appium-mcp runs in embedded mode. ANDROID_HOME, ANDROID_SDK_ROOT, and JAVA_HOME are set in `.mcp.json` env and inherited automatically.
 - **System permissions**: none observed during explored flows.
 - **External services**: none observed.
 - **Catalogue size**: 12 products total (observed from "Mobile phones (12)" label).
@@ -124,15 +124,9 @@ appium_capabilities:
   appium:deviceName: emulator-5554
   appium:automationName: UiAutomator2
   appium:noReset: false
-  remoteServerUrl: http://localhost:4723
 ```
 
 `noReset: false` clears app data on each session start — ensures clean login state without manual logout workaround.
 Use `appium:fullReset: true` only if you need a full reinstall (slower, needed after permission changes).
 
-Start Appium before running:
-```powershell
-$env:ANDROID_HOME = "C:\Users\olexi\AppData\Local\Android\Sdk"
-$env:ANDROID_SDK_ROOT = "C:\Users\olexi\AppData\Local\Android\Sdk"
-appium
-```
+appium-mcp runs in **embedded mode** — no manual Appium startup needed. ANDROID_HOME, ANDROID_SDK_ROOT, and JAVA_HOME are injected via `.mcp.json` env and inherited by the embedded Appium server process.
