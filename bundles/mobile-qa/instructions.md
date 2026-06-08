@@ -10,9 +10,9 @@ Install the MCP servers your runner mode needs — once per project:
 
 ```bash
 # Mobitru device farm (runner_mode: device-farm — real cloud devices)
-# 1. Copy .env.example → .env and fill in MOBITRU_API_TOKEN
-# 2. Export the variable, then register:
-claude mcp add mobitru -e MOBITRU_API_TOKEN=$MOBITRU_API_TOKEN -- npx -y mobitru-mcp-server@latest
+# 1. Copy .env.example → .env and fill in DEVICE_FARM_API_KEY and DEVICE_FARM_SLUG
+# 2. Export the variables, then register:
+claude mcp add mobitru -e DEVICE_FARM_API_KEY=$DEVICE_FARM_API_KEY -e DEVICE_FARM_SLUG=$DEVICE_FARM_SLUG -e DEVICE_FARM_BASE_URL=app.mobitru.com -- npx -y mobitru-mcp-server@latest mobile
 
 # Local Appium (runner_mode: appium — simulator / emulator / USB device)
 claude mcp add appium-mcp -- npx -y appium-mcp@latest
@@ -69,8 +69,7 @@ from `app_type` and MCP availability in `app_profile.md`. Do not set it manually
 When both Mobitru and local Appium are available, `mobile-app-profiler` defaults to `device-farm`
 (real devices preferred). Specify `runner_mode: appium` explicitly to override.
 
-To upgrade to `device-farm`: `claude mcp add mobitru -- npx -y mobitru-mcp-server@latest`
-(verify exact package name at mobitru.com/docs), then re-run `mobile-app-profiler`.
+To upgrade to `device-farm`: `claude mcp add mobitru -e DEVICE_FARM_API_KEY=<key> -e DEVICE_FARM_SLUG=<slug> -e DEVICE_FARM_BASE_URL=app.mobitru.com -- npx -y mobitru-mcp-server@latest mobile`, then re-run `mobile-app-profiler`.
 To upgrade from `manual` to `appium`: `claude mcp add appium-mcp -- npx -y appium-mcp@latest`,
 then re-run `mobile-app-profiler`.
 

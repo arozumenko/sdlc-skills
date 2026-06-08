@@ -20,7 +20,7 @@ After installing, register the MCP servers you need (see `.env.example` for toke
 
 ```bash
 # Mobitru device farm — real cloud devices (runner_mode: device-farm)
-claude mcp add mobitru -e MOBITRU_API_TOKEN=$MOBITRU_API_TOKEN -- npx -y mobitru-mcp-server@latest
+claude mcp add mobitru -e DEVICE_FARM_API_KEY=$DEVICE_FARM_API_KEY -e DEVICE_FARM_SLUG=$DEVICE_FARM_SLUG -e DEVICE_FARM_BASE_URL=app.mobitru.com -- npx -y mobitru-mcp-server@latest mobile
 
 # Local Appium — simulator / emulator / USB device (runner_mode: appium)
 claude mcp add appium-mcp -- npx -y appium-mcp@latest
@@ -153,6 +153,6 @@ independently and maintain separate `app_profile.md` files.
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/mobile-qa/knowledge/` (mobile test-case format, template, report format).
 - **Bundle-local skill** — [`skills/mobile-testing/`](skills/mobile-testing/) — mobile execution workflow (viewport setup, gesture mapping, Appium tool reference, manual guide patterns).
-- **Environment template** — [`.env.example`](.env.example) — `MOBITRU_API_TOKEN` and MCP registration commands.
+- **Environment template** — [`.env.example`](.env.example) — `DEVICE_FARM_API_KEY`, `DEVICE_FARM_SLUG`, and MCP registration commands.
 
 See [`bundle.json`](bundle.json) for the exact manifest and [`../SPEC.md`](../SPEC.md) for how bundles are defined and installed.

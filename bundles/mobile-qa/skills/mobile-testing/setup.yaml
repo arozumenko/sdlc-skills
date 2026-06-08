@@ -12,9 +12,11 @@ dependencies:
   mcp:
     - name: mobitru
       command: npx
-      args: ["-y", "mobitru-mcp-server@latest"]
+      args: ["-y", "mobitru-mcp-server@latest", "mobile"]
       env:
-        MOBITRU_API_TOKEN: ""
+        DEVICE_FARM_API_KEY: ""
+        DEVICE_FARM_SLUG: ""
+        DEVICE_FARM_BASE_URL: "app.mobitru.com"
     - name: playwright
       command: npx
       args: ["@playwright/mcp@latest"]
