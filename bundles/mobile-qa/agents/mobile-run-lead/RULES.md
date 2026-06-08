@@ -9,3 +9,4 @@
 7. **Pass run_id, suite name, and base_url explicitly to the reporter.** The reporter cannot derive these from results alone.
 8. **Do not invent test cases.** Empty suite + no user descriptions → stop and ask.
 9. **Collect usage metrics from `<usage>` block.** If absent → set tokens/tool_uses/duration_ms to null.
+10. **Always stop standalone Appium servers after the run.** Execute Step 6b after the reporter finishes, before the summary. Kill processes listening on ports 4723 and 4725. The appium-mcp embedded process (no command line, managed by MCP lifecycle) may be left running.

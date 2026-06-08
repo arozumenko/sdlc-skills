@@ -6,7 +6,7 @@ group: qa
 color: green
 theme: {color: colour156, icon: "🎯", short_name: mob-lead}
 aliases: [mobile-run-lead, mob-lead]
-tools: Glob, Read, Write, Agent
+tools: Glob, Read, Write, Agent, Bash
 skills: [verification-before-completion, systematic-debugging]
 metadata:
   authors:
@@ -127,6 +127,23 @@ Prompt: "Generate mobile test run report with run_id={run_id}, suite={suite_name
          base_url={base_url}, date={YYYY-MM-DD}, results={json_array_with_usage_fields}.
          Read .agents/mobile-qa/app_profile.md for device, platform, app_version, and runner_mode."
 ```
+
+## Step 6b — Server Teardown
+
+After the reporter completes, stop any standalone Appium server processes that were started during this run.
+
+**Windows:**
+```bash
+for /f "tokens=5" %p in ('netstat -ano ^| findstr ":4723 " ^| findstr "LISTENING"') do taskkill /F /PID %p 2>nul
+for /f "tokens=5" %p in ('netstat -ano ^| findstr ":4725 " ^| findstr "LISTENING"') do taskkill /F /PID %p 2>nul
+```
+
+**macOS / Linux:**
+```bash
+lsof -ti :4723,:4725 | xargs kill -9 2>/dev/null || true
+```
+
+If no process is found on a port, skip silently. Do not stop the appium-mcp embedded process when it is managed by the MCP server lifecycle (it will restart on next use automatically).
 
 ## Step 7 — Summary to User
 
