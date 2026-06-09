@@ -85,12 +85,13 @@ If any TC in the suite has `runner_mode: device-farm`, book **one device for the
 check_device_farm_status → confirm farm is online
 device_farm_find_device → { platform: "{from profile}", osVersion: "{preferred from profile}" }
 device_farm_take_device_by_id → { serial: "{result}" }   # store as suite_serial
+mobile_use_device         → { device: "{suite_serial}" }  # set MCP server's current device — once per suite
+mobile_appium_close       → (ignore errors)               # reset any stale session from a previous run
 device_farm_install_app → { artifactID: "{artifact_id from profile}", serial: "{suite_serial}" }
 mobile_appium_init → { deviceSerial: "{suite_serial}", useDeviceFarm: true, sessionType: "native" }
-mobile_set_orientation → portrait
 ```
 
-Store `suite_serial` — pass it to every `mobile-test-runner` dispatch in Step 4. The Appium session and device stay alive for the duration of the suite. Runners inherit the active session from the MCP server — they do NOT call `mobile_appium_init`.
+Store `suite_serial` — pass it to every `mobile-test-runner` dispatch in Step 4. The Appium session and device stay alive for the duration of the suite. Runners inherit the active session from the MCP server — they do NOT call `mobile_appium_init`, `mobile_use_device`, or `mobile_terminate_app` at TC end. App lifecycle between TCs is managed entirely by `inherit_state` in each runner's Session Start.
 
 ## Step 4 — Execute Test Cases (sequential)
 
@@ -114,6 +115,7 @@ Agent: mobile-test-runner
 Prompt: "Execute the mobile test case at {file_path}.
          device_serial={suite_serial}   ← pre-booked by run-lead; skip find/take/install steps
          inherit_state={true|false}   ← from suite_plan; true = skip terminate/launch/orientation setup
+         Do NOT call mobile_terminate_app at TC end — leave app running; run-lead owns cleanup.
          Read .agents/mobile-qa/app_profile.md for artifact_id, package, orientation, and reliable locators."
 ```
 

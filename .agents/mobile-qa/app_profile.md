@@ -171,7 +171,7 @@ A TC can inherit state from the previous TC **only if** both conditions hold:
 1. The previous TC's `postcondition_state` exactly matches this TC's `precondition_state` (all fields).
 2. The previous TC PASSed — a FAIL invalidates state; the next TC must restart fresh.
 
-If the previous TC FAILed → runner sets `inherit_state: false` regardless of plan; run-lead must start a fresh session for the next TC in the group.
+If the previous TC FAILed → **run-lead** sets `inherit_state: false` for the next TC in the group (overrides the session plan). The next runner dispatched with `inherit_state: false` does terminate → launch → orient from step 1.
 
 ### Reset Cost Reference
 
@@ -221,7 +221,7 @@ orientation: portrait
 
 - **Device serial is dynamic.** Farm is shared — `find_device` returns a different device each time. Never hard-code the serial.
 - **Install app once per suite.** `device_farm_install_app` called by the lead before TC-001. Runners reuse the same installation.
-- **Enforce PORTRAIT per TC.** Call `mobile_set_orientation → portrait` both after `mobile_appium_init` AND after `mobile_launch_app` — some devices reset orientation on app start (confirmed on `4B071FDAP001H9`).
+- **Enforce PORTRAIT after each `mobile_launch_app`.** Call `mobile_set_orientation → portrait` immediately after launch — some devices reset orientation on app start (confirmed on `4B071FDAP001H9`). With session grouping, launch happens only in `inherit_state: false` TCs, so orientation is set once per session, not per TC.
 
 Suite flow (run-lead, once):
 1. `check_device_farm_status`
@@ -234,11 +234,20 @@ Suite flow (run-lead, once):
 8. `mobile_appium_close` → `device_farm_release_device` → after all TCs done
 
 Per-TC flow (runner, session pre-initialized by lead):
+
+**`inherit_state: false` (first TC in group, or after a FAIL):**
 1. `mobile_terminate_app` → `{ packageName: "com.epam.mobitru" }` (clean start; no-op if not running)
 2. `mobile_launch_app` → `{ packageName: "com.epam.mobitru" }`
 3. `mobile_set_orientation` → `portrait`  ← once, after launch
 4. ... run test steps ...
-5. `mobile_terminate_app` → end of TC; session stays alive for next runner
+5. (end — leave app running; do NOT call `mobile_terminate_app`)
+
+**`inherit_state: true` (chained TC — previous TC left app in required state):**
+1. `mobile_list_elements_on_screen` → verify precondition screen; fall back to full reset if mismatch
+2. ... run test steps from `setup_steps + 1` ...
+3. (end — leave app running; do NOT call `mobile_terminate_app`)
+
+The `mobile_terminate_app` at step 1 of `inherit_state: false` is the cleanup for the previous TC's final state — it is always the next TC's responsibility, never the ending TC's.
 
 ### Appium Mode (local emulator, legacy)
 

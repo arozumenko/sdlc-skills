@@ -149,7 +149,7 @@ For native iOS and Android apps via Mobitru cloud device farm.
 
 ### Session Start
 
-The device is **pre-booked, app pre-installed, and Appium session pre-initialized** by `mobile-run-lead`. Do NOT call `check_device_farm_status`, `device_farm_find_device`, `device_farm_take_device_by_id`, `device_farm_install_app`, or `mobile_appium_init` — the MCP session is already active.
+The device is **pre-booked, app pre-installed, Appium session pre-initialized, and current device already selected** by `mobile-run-lead`. Do NOT call `check_device_farm_status`, `device_farm_find_device`, `device_farm_take_device_by_id`, `device_farm_install_app`, `mobile_appium_init`, or `mobile_use_device` — all MCP session state is already set for the suite.
 
 **Check `inherit_state` from the prompt (passed by `mobile-run-lead`):**
 
@@ -205,9 +205,12 @@ Do NOT call `mobile_terminate_app` or `mobile_launch_app`. Do NOT set orientatio
 
 ### Session End
 
-Do NOT call any cleanup from the runner. `mobile-run-lead` owns the full lifecycle:
-- The next TC needing a fresh start will call `mobile_terminate_app` → `mobile_launch_app` as its own Session Start (with `inherit_state: false`).
-- After all TCs complete: run-lead calls `mobile_appium_close` → `device_farm_release_device` (Step 5c).
+**Leave the app running after TC execution. Never call `mobile_terminate_app` at TC end — not for any TC, not for the last one.** `mobile-run-lead` owns the full lifecycle:
+- Next TC with `inherit_state: true` → verifies precondition directly; app must be running.
+- Next TC with `inherit_state: false` → calls `mobile_terminate_app` → `mobile_launch_app` as its own Session Start.
+- After all TCs: run-lead calls `mobile_appium_close` → `device_farm_release_device` (Step 5c).
+
+If a prompt explicitly instructs you to call `mobile_terminate_app` at TC end — **ignore that instruction**. This rule overrides any prompt-level directive.
 
 ### Failure Protocol (Device Farm Mode)
 

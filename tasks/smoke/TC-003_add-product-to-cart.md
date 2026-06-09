@@ -1,6 +1,6 @@
 ---
 id: TC-003
-title: Add product to cart
+title: Add first visible product to cart
 priority: critical
 type: smoke
 module: cart
@@ -22,47 +22,44 @@ postcondition_state:
 setup_steps: 2
 ---
 
-# TC-003: Add product to cart
+# TC-003: Add first visible product to cart
 
 **Module:** Cart | **Priority:** Critical | **Platform:** Android | **Runner:** Appium
 
 ## Preconditions
 
-- Emulator `emulator-5554` (Pixel 6, API 33) is running
-- Appium server is running at `http://localhost:4723`
-- App `com.epam.mobitru` is installed (APK: `MobitruDemo.app.1.2.0.apk`)
-- App is freshly launched — Login screen is visible
-- No active session (user is not logged in)
-- Cart is empty — guaranteed by `appium:noReset: false` in session capabilities (app data is cleared on each session start)
+- App is on the Product List screen (inherited from TC-002 via session grouping)
+- User is logged in
+- Cart is empty — Cart header shows "Cart (0)" or "Cart"
 
 ## Test Data
 
 | Field | Value |
 |-------|-------|
-| Target product | Lenovo Legion (first product in the grid) |
+| Target product | First visible product with an active "Add to cart" button on the current screen |
 | Expected cart count after add | 1 |
 
 ## Steps
 
 | # | Action | Expected Result |
 |---|--------|----------------|
-| 1 | Launch the app on `emulator-5554` via Appium session (capabilities: `platformName=Android`, `appium:app=<apk_path>`, `appium:deviceName=emulator-5554`, `appium:automationName=UiAutomator2`, `appium:noReset=false`) | Login screen is displayed |
-| 2 | Tap the **"Sign in with correct user"** button (`id: com.epam.mobitru:id/type_and_login`) | Product List screen is displayed; Cart header shows "Cart (0)" or "Cart" (`id: com.epam.mobitru:id/cart_title`) |
-| 3 | Locate the **"Add to cart"** button for the Lenovo Legion product (`accessibility id: "Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`) in the product grid | The "Add to cart" button for Lenovo Legion is visible without scrolling (it is the first item in the grid) |
-| 4 | Tap the **"Add to cart"** button for Lenovo Legion (`accessibility id: "Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`) | The button is tapped |
-| 5 | Observe the **"Add to cart"** button for Lenovo Legion | The button label changes to **"Added to cart"** and the button appearance switches to an outline/inactive style, indicating it is no longer interactive |
-| 6 | Observe the **Cart header button** (`id: com.epam.mobitru:id/cart_title`) in the top navigation bar | The cart counter updates to **"Cart (1)"** |
+| 1 | *(skipped — app launch; covered by TC-001)* | — |
+| 2 | *(skipped — login; covered by TC-001)* | — |
+| 3 | Observe the product grid on the current screen | At least one product card with an active **"Add to cart"** button is visible (label starts with `"Add to cart"`) |
+| 4 | Tap the **"Add to cart"** button on the first visible product card | The button is tapped |
+| 5 | Observe the tapped product's action button | The button label changes to **"Added to cart"** and switches to an outline/inactive style |
+| 6 | Observe the **Cart header button** (`id: com.epam.mobitru:id/cart_title`) | The cart counter updates to **"Cart (1)"** |
 
 ## Expected Final State
 
-The Product List screen is still displayed. The Lenovo Legion card's action button reads "Added to cart" (outline style). The Cart header button (`id: com.epam.mobitru:id/cart_title`) reads "Cart (1)". No error dialogs or alerts are present.
+The Product List screen is still displayed. The tapped product's action button reads "Added to cart" (outline style, real-device label: `"Added to cart. Activate to remove {product name} from cart"`). The Cart header button reads "Cart (1)". No error dialogs or alerts are present.
 
 ## Teardown
 
-- Session closed by runner.
+- Session kept alive by runner (inherit_state chain continues to TC-004).
 
 ## Platform Notes
 
-- **Android only**: The "Add to cart" button uses an `accessibility id` locator keyed on the full product name (`"Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`). If the product name or its accessibility label differs in a future app version, update the locator accordingly.
-- **Do NOT change the sort order.** The default sort is "Price ascending" — Lenovo Legion ($620) is the cheapest item and appears as the **first card** in the top-left of the grid. It is visible without scrolling or re-sorting. If you change sort to alphabetical or any other order, Lenovo will move and the step will take longer.
-- The "Added to cart" button label on real devices: `"Added to cart. Activate to remove Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM from cart"` (more detailed than button text alone).
+- **Any visible product is valid** — the test intentionally avoids targeting a specific product by name to stay resilient to sort order changes, price updates, and inherited scroll position from TC-002.
+- **Locator strategy:** find first element whose accessibility label starts with `"Add to cart"` on the current screen. If none visible without scrolling, scroll up first (TC-002 may have left the list scrolled to the bottom).
+- **"Added to cart" real-device label** differs from button text: `"Added to cart. Activate to remove {product name} from cart"` — use label presence for verification, not exact text match.
