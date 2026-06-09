@@ -6,11 +6,20 @@ type: smoke
 module: product-list
 platform: android
 app_type: native
-runner_mode: appium
-device_type: emulator
+runner_mode: device-farm
+device_type: real
 orientation: portrait
 tags: [smoke, product-list, catalogue]
 size: M
+precondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: empty
+postcondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: empty
+setup_steps: 2
 ---
 
 # TC-002: Product List shows 12 items

@@ -6,11 +6,19 @@ type: smoke
 module: authentication
 platform: android
 app_type: native
-runner_mode: appium
-device_type: emulator
+runner_mode: device-farm
+device_type: real
 orientation: portrait
 tags: [smoke, login, happy-path]
 size: S
+precondition_state:
+  auth: logged_out
+  screen: login
+  cart: empty
+postcondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: empty
 ---
 
 # TC-001: Login via "Sign in with correct user"

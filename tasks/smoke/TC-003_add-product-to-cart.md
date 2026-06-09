@@ -6,11 +6,20 @@ type: smoke
 module: cart
 platform: android
 app_type: native
-runner_mode: appium
-device_type: emulator
+runner_mode: device-farm
+device_type: real
 orientation: portrait
 tags: [smoke, cart, add-to-cart, happy-path]
 size: M
+precondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: empty
+postcondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: has_items
+setup_steps: 2
 ---
 
 # TC-003: Add product to cart
@@ -55,4 +64,5 @@ The Product List screen is still displayed. The Lenovo Legion card's action butt
 ## Platform Notes
 
 - **Android only**: The "Add to cart" button uses an `accessibility id` locator keyed on the full product name (`"Add to cart Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM"`). If the product name or its accessibility label differs in a future app version, update the locator accordingly.
-- The exact accessibility id pattern for the "Added to cart" state is not confirmed in the profile; the visual/label change is the primary assertion. If runner supports text assertion, assert `getText()` on the button equals `"Added to cart"`.
+- **Do NOT change the sort order.** The default sort is "Price ascending" — Lenovo Legion ($620) is the cheapest item and appears as the **first card** in the top-left of the grid. It is visible without scrolling or re-sorting. If you change sort to alphabetical or any other order, Lenovo will move and the step will take longer.
+- The "Added to cart" button label on real devices: `"Added to cart. Activate to remove Lenovo Legion Duel Dual-Sim 256GB ROM + 12GB RAM from cart"` (more detailed than button text alone).

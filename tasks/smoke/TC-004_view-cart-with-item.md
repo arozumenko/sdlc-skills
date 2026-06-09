@@ -6,11 +6,20 @@ type: smoke
 module: cart
 platform: android
 app_type: native
-runner_mode: appium
-device_type: emulator
+runner_mode: device-farm
+device_type: real
 orientation: portrait
 tags: [smoke, cart, checkout, happy-path]
 size: M
+precondition_state:
+  auth: logged_in
+  screen: product_list
+  cart: has_items
+postcondition_state:
+  auth: logged_in
+  screen: cart
+  cart: has_items
+setup_steps: 2
 ---
 
 # TC-004: View cart with item
