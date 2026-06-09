@@ -19,7 +19,7 @@ postcondition_state:
   auth: logged_in
   screen: cart
   cart: has_items
-setup_steps: 2
+setup_steps: 3
 ---
 
 # TC-004: View cart with item
