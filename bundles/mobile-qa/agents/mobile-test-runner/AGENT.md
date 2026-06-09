@@ -70,41 +70,62 @@ For native iOS and Android apps.
 
 ### Session Start
 
+**Check `inherit_state` from the prompt (passed by `mobile-run-lead`):**
+
+**`inherit_state: false` — the app needs a clean start:**
 ```
-# Attach to existing session if one is open, otherwise create:
 appium_session_management → { action: "list" }
-# If none active:
-appium_app_lifecycle → { action: "launch" }   # app already installed by profiler
-appium_session_management → { action: "create", capabilities: {
-  platformName: "{from profile}",
-  automationName: "{UiAutomator2 | XCUITest}",
-  deviceName: "{from profile}",
-  app: "{build_path from profile}",
-  noReset: true
-}}
 ```
+- If a session is active: reuse it — terminate and relaunch the app within it:
+  ```
+  appium_app_lifecycle → { action: "terminate", packageName: "{bundle_id from profile}" }
+  appium_app_lifecycle → { action: "launch",    packageName: "{bundle_id from profile}" }
+  ```
+- If no session exists: create one (first TC in suite):
+  ```
+  appium_session_management → { action: "create", capabilities: {
+    platformName: "{from profile}",
+    automationName: "{UiAutomator2 | XCUITest}",
+    deviceName: "{from profile}",
+    app: "{build_path from profile}",
+    noReset: true
+  } }
+  ```
+
+**`inherit_state: true` — session and app state are inherited from the previous TC:**
+```
+# App is running on the correct screen — no launch or session creation needed
+appium_session_management → { action: "list" }   # confirm an active session exists; use it
+```
+If no active session found → fall back to `inherit_state: false` path and note it in `notes`.
 
 ### Execution Protocol
 
-1. Verify preconditions from TC — check the page source confirms the expected starting screen.
-2. **For each step:**
+1. Verify preconditions from TC — `appium_get_page_source` to confirm the expected starting screen.
+   - If `inherit_state: true` and source does not match → fall back to `inherit_state: false` path (terminate + relaunch app), mark `fallback_occurred = true`, and continue.
+2. Determine execution start point:
+   - `inherit_state: true` AND `fallback_occurred = false`: read `setup_steps` from TC frontmatter (default `0`). Record `steps_skipped = setup_steps`. Begin execution from step `setup_steps + 1`.
+   - Otherwise (`inherit_state: false` or fallback occurred): record `steps_skipped = 0`. Execute all TC steps from step 1.
+3. **For each step:**
    a. Map the TC verb to an Appium tool call (see `mobile-testing` `references/gestures.md`).
    b. Execute: `appium_gesture` / `appium_set_value` / `appium_alert` / `appium_mobile_permissions`.
    c. After each action: `appium_get_page_source` to verify the step's expected result.
    d. `appium_screenshot` after significant steps (navigation, form submit, permission dialog).
    e. Locator fails → `appium_get_page_source` snapshot → hypothesis → retry with next strategy.
-3. Execute Teardown steps; if none, navigate to the home screen via `appium_gesture` home button.
-4. **Verification before PASS** (mandatory):
+4. Execute Teardown steps; if none, navigate to the home screen via `appium_gesture` home button.
+5. **Verification before PASS** (mandatory):
    - `appium_get_page_source` — confirm Expected Final State is in the UI tree.
    - Only if confirmed → PASS.
-5. Save final screenshot to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png`.
+6. Save final screenshot to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png`.
 
 ### Session End
 
-Always close the session after execution:
+Do NOT delete the session unless `close_session_after=true` was passed in the prompt (set by run-lead only for the last TC in the suite):
 ```
+# Only if close_session_after=true:
 appium_session_management → { action: "delete" }
 ```
+Otherwise leave the session alive — the next chained TC will reuse it (via terminate+relaunch or inherit).
 
 ### Failure Protocol (Appium)
 
@@ -128,36 +149,39 @@ For native iOS and Android apps via Mobitru cloud device farm.
 
 ### Session Start
 
-```
-# Step 1: Reserve a real device
-check_device_farm_status → confirm farm is online
-device_farm_find_device → { platform: "{from TC frontmatter}", os_version: "{preferred from profile}" }
-device_farm_take_device_by_id → { serial: "{from find_device result}" }  # note the serial
+The device is **pre-booked, app pre-installed, and Appium session pre-initialized** by `mobile-run-lead`. Do NOT call `check_device_farm_status`, `device_farm_find_device`, `device_farm_take_device_by_id`, `device_farm_install_app`, or `mobile_appium_init` — the MCP session is already active.
 
-# Step 2: Install the app (reuse existing artifact if already uploaded)
-device_farm_list_artifacts → find artifact matching build_path filename
-# If not found or not in "verified" status:
-device_farm_upload_artifact → upload build_path from app_profile.md
-device_farm_get_artifact_status → poll until "verified"
-device_farm_install_app → { artifactId: "...", serial: "..." }
+**Check `inherit_state` from the prompt (passed by `mobile-run-lead`):**
 
-# Step 3: Start session, launch, begin recording
-mobile_appium_init → { serial: "..." }
-mobile_launch_app → { packageName: "{bundle_id from profile}" }
-device_farm_start_recording
+**`inherit_state: false` (default — full reset):**
 ```
+mobile_terminate_app → { packageName: "{bundle_id from profile}" }
+mobile_launch_app    → { packageName: "{bundle_id from profile}" }
+mobile_set_orientation → portrait   ← after launch; some devices reset orientation on app start
+```
+
+**`inherit_state: true` (session chaining — previous TC left the app in the required state):**
+```
+# Skip terminate/launch/orientation — app is already running on the correct screen
+# Just verify the precondition state before executing steps (see Execution Protocol step 1)
+```
+Do NOT call `mobile_terminate_app` or `mobile_launch_app`. Do NOT set orientation (already set by the previous TC's setup). If the precondition check (step 1 below) fails — fall back to a full reset (`inherit_state: false` path) and note it in `notes`.
 
 ### Execution Protocol
 
-1. Verify preconditions — `mobile_list_elements_on_screen` to confirm starting screen matches TC.
-2. **For each step:**
+1. Verify preconditions — `mobile_list_elements_on_screen` to confirm starting screen matches TC `precondition_state`.
+   - If `inherit_state: true` and screen does not match → fall back to full reset (terminate → launch → set orientation), mark `fallback_occurred = true`, and continue.
+2. Determine execution start point:
+   - `inherit_state: true` AND `fallback_occurred = false`: read `setup_steps` from TC frontmatter (default `0`). Record `steps_skipped = setup_steps`. Begin execution from step `setup_steps + 1`.
+   - Otherwise (`inherit_state: false` or fallback occurred): record `steps_skipped = 0`. Execute all TC steps from step 1.
+3. **For each step:**
    a. Map TC verb to Mobitru tool (see table below).
    b. Execute the action.
    c. After each significant action: `mobile_list_elements_on_screen` to verify expected result.
    d. `mobile_take_screenshot` after navigation, form submit, and permission dialogs.
    e. Element not found → `mobile_list_elements_on_screen` again → retry with coordinates via `mobile_click_on_screen_at_coordinates`.
-3. Execute Teardown steps.
-4. **Verification before PASS** (mandatory):
+4. Execute Teardown steps.
+5. **Verification before PASS** (mandatory):
    - `mobile_list_elements_on_screen` — confirm Expected Final State elements are present.
    - Only if confirmed → PASS.
 
@@ -179,14 +203,11 @@ device_farm_start_recording
 | `Camera: inject image` | `device_farm_inject_image` → `{ filePath: "..." }` | Never BLOCKED |
 | `Change orientation` | `mobile_set_orientation` | |
 
-### Session End (mandatory regardless of PASS or FAIL)
+### Session End
 
-```
-device_farm_stop_recording
-device_farm_download_recording → save to reports/screenshots/{TC_ID}_{YYYY-MM-DD}.mp4
-mobile_appium_close
-device_farm_release_device
-```
+Do NOT call any cleanup from the runner. `mobile-run-lead` owns the full lifecycle:
+- The next TC needing a fresh start will call `mobile_terminate_app` → `mobile_launch_app` as its own Session Start (with `inherit_state: false`).
+- After all TCs complete: run-lead calls `mobile_appium_close` → `device_farm_release_device` (Step 5c).
 
 ### Failure Protocol (Device Farm Mode)
 
@@ -194,7 +215,7 @@ When a step produces unexpected state:
 1. `mobile_take_screenshot` + `mobile_list_elements_on_screen` — capture evidence.
 2. State actual vs expected: "Element listing shows Login screen is still active; Home screen has not appeared."
 3. Retry once: alternative selector or `mobile_click_on_screen_at_coordinates`.
-4. Still failing → FAIL. Complete Session End steps. Include element listing excerpt in `failure_reason`. If crash suspected, call `device_farm_get_device_crashlogs` and append path to `notes`.
+4. Still failing → FAIL. Include element listing excerpt in `failure_reason`. If crash suspected, call `device_farm_get_device_crashlogs` and append path to `notes`. Emit the JSON result.
 
 ---
 
@@ -213,11 +234,13 @@ End your response with exactly one JSON block:
   "size": "M",
   "result": "PASS",
   "steps_total": 5,
+  "steps_skipped": 0,
   "steps_completed": 5,
   "failure_step": null,
   "failure_reason": null,
   "screenshot": "reports/screenshots/TC-001_2026-06-03.png",
   "manual_guide": null,
+  "inherit_state": false,
   "duration_seconds": 42,
   "notes": "",
   "tokens": null,
@@ -229,6 +252,9 @@ End your response with exactly one JSON block:
 `result`: `PASS` | `FAIL` | `BLOCKED`  
 `runner_mode`: reflect what actually ran — `playwright`, `appium`, or `device-farm`. Read from TC frontmatter.  
 `screenshot`: `.png` for playwright/appium; `.mp4` recording path for device-farm.  
-`manual_guide`: always `null` for this agent (guide-writer handles manual mode).
+`manual_guide`: always `null` for this agent (guide-writer handles manual mode).  
+`steps_total`: total steps in the TC file as written.  
+`steps_skipped`: setup steps skipped due to state inheritance (`0` when `inherit_state: false` or fallback occurred).  
+`steps_completed`: steps actually executed (`steps_total − steps_skipped` on PASS; fewer on FAIL).
 
 Read `SOUL.md` in this directory for your personality, voice, and values.

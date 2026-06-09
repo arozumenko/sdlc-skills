@@ -59,16 +59,62 @@ Prompt: "Score the size (S/M/L) of these mobile test cases and write `size:` int
 Format: `RUN-{YYYY-MM-DD}-{NNN}` (zero-padded, starts at 001).
 `Glob reports/RUN-{YYYY-MM-DD}-*.md` → find today's count → increment.
 
+## Step 3b — Session Planning
+
+Check whether `{suite_folder}/session_plan.md` exists.
+
+**If present — staleness check first:**
+Read its frontmatter. Compare `generated_for_tc_ids` against the TC IDs found in Step 1.
+- IDs match → plan is fresh; read `groups:` from frontmatter, store as `suite_plan`.
+- IDs differ (TCs added, removed, or renamed) → plan is stale; regenerate (overwrite) by dispatching `mobile-suite-planner`.
+
+**If absent — generate:**
+```
+Agent: mobile-suite-planner
+Prompt: "Plan the suite at {suite_folder}"
+```
+Then read the generated `{suite_folder}/session_plan.md` frontmatter and store `groups:` as `suite_plan`.
+
+If `session_plan.md` cannot be read or parsed → fall back: set `inherit_state: false` for every TC and continue.
+
+## Step 3c — Device Farm Suite Setup (device-farm suites only)
+
+If any TC in the suite has `runner_mode: device-farm`, book **one device for the entire suite** before executing any TC. This avoids repeated book/install/release overhead per case.
+
+```
+check_device_farm_status → confirm farm is online
+device_farm_find_device → { platform: "{from profile}", osVersion: "{preferred from profile}" }
+device_farm_take_device_by_id → { serial: "{result}" }   # store as suite_serial
+device_farm_install_app → { artifactID: "{artifact_id from profile}", serial: "{suite_serial}" }
+mobile_appium_init → { deviceSerial: "{suite_serial}", useDeviceFarm: true, sessionType: "native" }
+mobile_set_orientation → portrait
+```
+
+Store `suite_serial` — pass it to every `mobile-test-runner` dispatch in Step 4. The Appium session and device stay alive for the duration of the suite. Runners inherit the active session from the MCP server — they do NOT call `mobile_appium_init`.
+
 ## Step 4 — Execute Test Cases (sequential)
 
-For each TC file, read its `runner_mode` from frontmatter. Route accordingly:
+Iterate using `suite_plan` from Step 3b (list of groups → list of TCs with `inherit_state`). Within each group, execute TCs sequentially. When a TC FAILs, set `inherit_state: false` for the next TC in the same group (the failure invalidates the shared state — the next TC must reset).
 
-**If `runner_mode: playwright`, `runner_mode: appium`, or `runner_mode: device-farm`** → dispatch `mobile-test-runner`:
+For each TC, look up its `runner_mode` from frontmatter. Route accordingly:
+
+**If `runner_mode: playwright` or `runner_mode: appium`** → dispatch `mobile-test-runner`:
 ```
 Agent: mobile-test-runner
 Prompt: "Execute the mobile test case at {file_path}.
          base_url={base_url}
+         inherit_state={true|false}   ← from suite_plan; true = skip app restart, start from current state
+         close_session_after={true|false}   ← true only for the last TC in the entire suite
          Read .agents/mobile-qa/app_profile.md for device context, build_path, runner_mode, credentials, and reliable locators."
+```
+
+**If `runner_mode: device-farm`** → dispatch `mobile-test-runner` with pre-booked serial:
+```
+Agent: mobile-test-runner
+Prompt: "Execute the mobile test case at {file_path}.
+         device_serial={suite_serial}   ← pre-booked by run-lead; skip find/take/install steps
+         inherit_state={true|false}   ← from suite_plan; true = skip terminate/launch/orientation setup
+         Read .agents/mobile-qa/app_profile.md for artifact_id, package, orientation, and reliable locators."
 ```
 
 **If `runner_mode: manual`** → dispatch `mobile-guide-writer`:
@@ -118,6 +164,17 @@ If matched → add warning to Step 7 summary:
 ⚠️ Possible isolation issue — {TC-ID}: {failure_reason}
    Check Teardown. Consider fresh app install before re-run.
 ```
+
+## Step 5c — Device Farm Suite Teardown (device-farm suites only)
+
+After all TCs complete (pass or fail), close the Appium session and release the suite device:
+
+```
+mobile_appium_close
+device_farm_release_device → { serial: "{suite_serial}" }
+```
+
+Do this before generating the report. If release fails, log a warning in the summary but do not block the report.
 
 ## Step 6 — Generate Report
 
