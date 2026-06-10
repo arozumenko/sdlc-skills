@@ -1,3 +1,10 @@
+# Claude Code — local machine overrides (paths, personal env vars)
+.claude/settings.local.json
+.claude/settings.json.bak
+
+# External skills cloned by the init script (nested git repos — not redistributed)
+.claude/skills/playwright-best-practices/
+
 node_modules/
 *.log
 .DS_Store
