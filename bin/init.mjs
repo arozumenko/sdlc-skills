@@ -622,6 +622,65 @@ function mergeVersionedHooks(path, spec, markerSubstr) {
   return true;
 }
 
+// Codex gates sub-agent dispatch behind [agents] in .codex/config.toml: a CLI
+// orchestrator (project-manager, test-automation-lead, test-run-lead) can only
+// spawn ICs when max_threads >= 1 and max_depth >= 2 (depth 2 so a main →
+// orchestrator → IC chain isn't cut off at the orchestrator). Ensure both —
+// create the file/section when absent, raise a value only if it's below the
+// minimum, and otherwise leave the user's config untouched. Minimal section-aware
+// TOML editing (stdlib only, no parser): comment-safe, preserves other tables,
+// idempotent on re-run.
+function ensureCodexAgentsConfig(projectDir) {
+  const file = join(projectDir, ".codex", "config.toml");
+  const existed = existsSync(file);
+  const raw = existed ? readFileSync(file, "utf8") : "";
+  const lines = raw === "" ? [] : raw.replace(/\n+$/, "").split("\n");
+
+  const isHeader = (l) => /^\s*\[/.test(l); // any [table] / [[array-of-tables]]
+  const isAgents = (l) => /^\s*\[agents\]\s*(#.*)?$/.test(l);
+
+  const changes = [];
+  let hdr = lines.findIndex(isAgents);
+  if (hdr === -1) {
+    if (lines.length && lines[lines.length - 1].trim() !== "") lines.push(""); // blank separator
+    hdr = lines.length;
+    lines.push("[agents]");
+    changes.push("[agents]");
+  }
+
+  // The table body spans (hdr, end), where end is the next table header or EOF.
+  let end = lines.length;
+  for (let i = hdr + 1; i < lines.length; i++) {
+    if (isHeader(lines[i])) { end = i; break; }
+  }
+
+  // Required minimums. max_depth = 2 (not 1) so the orchestrator can dispatch ICs
+  // even when it is itself a sub-agent (main → orchestrator → IC).
+  const want = { max_threads: 1, max_depth: 2 };
+  const insert = [];
+  for (const [key, min] of Object.entries(want)) {
+    let found = false;
+    for (let i = hdr + 1; i < end; i++) {
+      const m = lines[i].match(new RegExp(`^\\s*${key}\\s*=\\s*(-?\\d+)`));
+      if (m) {
+        found = true;
+        if (parseInt(m[1], 10) < min) {
+          lines[i] = lines[i].replace(/=\s*-?\d+/, `= ${min}`);
+          changes.push(`${key}→${min}`);
+        }
+        break;
+      }
+    }
+    if (!found) { insert.push(`${key} = ${min}`); changes.push(`+${key}`); }
+  }
+  if (insert.length) lines.splice(hdr + 1, 0, ...insert); // new keys under the header, in order
+
+  if (!changes.length) return { status: "ok" };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, lines.join("\n") + "\n");
+  return { status: existed ? "extended" : "created" };
+}
+
 function installCoreHooks(targets) {
   const srcDir = join(PKG_ROOT, "hooks");
   if (!existsSync(srcDir)) return;
@@ -720,6 +779,11 @@ function installCoreHooks(targets) {
       };
       if (mergeClaudeSettingsHooks(join(CWD, ".codex", "hooks.json"), spec, "sdlc-core"))
         console.log(`      ✓ hooks Codex (.codex/hooks.json)`);
+      // Enable sub-agent dispatch so CLI orchestrators can spawn ICs (Codex
+      // disables it unless [agents] has max_threads >= 1 and max_depth >= 2).
+      const agentsCfg = ensureCodexAgentsConfig(CWD);
+      if (agentsCfg.status !== "ok")
+        console.log(`      ✓ sub-agent dispatch enabled (.codex/config.toml [agents]; ${agentsCfg.status})`);
     } else if (t.id === "windsurf") {
       console.log(`      — hooks Windsurf (no documented hook API; skipped)`);
     }
