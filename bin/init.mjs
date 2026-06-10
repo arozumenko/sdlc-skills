@@ -23,8 +23,9 @@
  *      GitHub Copilot CLI target (--target copilot) flattens agents to
  *      `.github/agents/<name>.agent.md` (not a directory) with SOUL.md
  *      appended as a `## Persona` section, and rewrites `model: sonnet`
- *      → `model: claude-sonnet-4.6`. Other targets keep the directory
- *      layout.
+ *      → `model: Claude Sonnet 4.6` (Copilot's picker display name). The
+ *      Codex target assigns each role a concrete Codex (GPT) model by name.
+ *      Other targets keep the directory layout and the authored model.
  *
  *      To repair an already-directory-installed project for Copilot:
  *        npx github:arozumenko/sdlc-skills init fix-copilot
@@ -79,24 +80,27 @@ const TARGETS = [
   { id: "codex", dir: ".codex", label: "Codex" },
 ];
 
-// Claude Code / agentskills.io short-form model aliases → Anthropic's canonical
-// dashed model IDs. Hosts that need a concrete provider id (Copilot CLI, Codex)
-// can't resolve a bare `sonnet`. Keep in lockstep with the current model family.
-const MODEL_ALIASES = {
-  sonnet: "claude-sonnet-4-6",
-  opus: "claude-opus-4-7",
-  haiku: "claude-haiku-4-5",
-};
-
 // GitHub Copilot's model picker lists Claude models by display name
-// ("Claude Sonnet 4.6"), not by the dashed provider id Codex/Claude use.
-// Copilot agent frontmatter must match that name, so the Copilot flatten
-// path maps aliases through this table instead of MODEL_ALIASES.
+// ("Claude Sonnet 4.6"), not by a dashed provider id. Copilot agent frontmatter
+// must match that display name, so the Copilot flatten path maps each authored
+// `model:` alias through this table.
 const COPILOT_MODEL_NAMES = {
   sonnet: "Claude Sonnet 4.6",
   opus: "Claude Opus 4.7",
   haiku: "Claude Haiku 4.5",
 };
+
+// Codex is an OpenAI host, so a Claude model (alias or dashed id) is unusable
+// there. The Codex flatten path ignores the authored `model:` tier and assigns
+// each role a concrete Codex (GPT) model BY NAME; any role not listed gets the
+// lightweight default. Tune here when the roster or the Codex lineup changes.
+const CODEX_MODELS = {
+  scout: "gpt-5.5",
+  "test-automation-lead": "gpt-5.4",
+  "project-manager": "gpt-5.4",
+  "test-run-lead": "gpt-5.4",
+};
+const CODEX_MODEL_DEFAULT = "gpt-5.4-mini";
 
 // ---------------------------------------------------------------------------
 // Catalog discovery — read the agents/ and skills/ dirs at the repo root so
@@ -1382,16 +1386,18 @@ function tomlMultiline(s) {
   return '"""\n' + body.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"') + '\n"""';
 }
 
-function transformAgentForCodex(agentText, soulText, name, { normalizeModel = true } = {}) {
+function transformAgentForCodex(agentText, soulText, name) {
   const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
   const frontmatter = fm ? fm[1] : "";
   let body = fm ? agentText.slice(fm.index + fm[0].length) : agentText;
 
   const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
   const description = descMatch ? descMatch[1].trim().replace(/^["']|["']$/g, "") : `${name} agent`;
-  const modelMatch = frontmatter.match(/^model:\s*(.+)$/m);
-  let model = modelMatch ? modelMatch[1].trim() : null;
-  if (model && normalizeModel && MODEL_ALIASES[model]) model = MODEL_ALIASES[model];
+  // The authored `model:` is a Claude tier (sonnet/opus/haiku) — unusable on
+  // Codex (an OpenAI host) — so it's ignored: assign the role's Codex model by
+  // name, defaulting any unlisted role to the lightweight tier. Every Codex
+  // agent therefore ships a concrete, valid model id.
+  const model = CODEX_MODELS[name] ?? CODEX_MODEL_DEFAULT;
 
   // Inline SOUL.md as a persona section (Codex has no sibling-file mechanism),
   // mirroring Copilot's inline soul mode; drop the now-stale "Read SOUL.md in
@@ -1427,8 +1433,7 @@ function writeCodexAgent(src, name, targetDir, update) {
   const toml = transformAgentForCodex(
     readFileSync(agentFile, "utf8"),
     existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
-    name,
-    { normalizeModel: true }
+    name
   );
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, toml);
