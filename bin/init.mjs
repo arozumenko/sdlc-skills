@@ -981,6 +981,9 @@ function parseArgs(argv) {
     targets: null,
     bundle: null,
     symlink: false, // external skills: copy by default, symlink from cache if true
+    interactive: false, // --interactive: pick quality-architect specialists/connectors/MCPs via a menu
+    mcp: null, // --mcp <ids>: write these MCP servers non-interactively, in each target's native form
+    unknown: [], // unrecognized tokens — guarded in main() so a typo/quoting slip doesn't silently install the full catalog
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -988,13 +991,21 @@ function parseArgs(argv) {
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
     else if (a === "--symlink") out.symlink = true;
+    else if (a === "--interactive" || a === "-i") out.interactive = true;
     else if (a === "--bundle") out.bundle = (argv[++i] || "").trim();
     else if (a === "--agents") out.agents = splitList(argv[++i]);
     else if (a === "--skills") out.skills = splitList(argv[++i]);
     else if (a === "--target") out.targets = splitList(argv[++i]);
+    else if (a === "--mcp") out.mcp = splitList(argv[++i]);
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
+    }
+    // Anything else is unrecognized. Skip the leading `init` subcommand. A
+    // common cause is a flag+value passed as a single shell token — e.g. zsh
+    // not word-splitting an unquoted variable: `init "--bundle team-web"`.
+    else if (!(i === 0 && a === "init")) {
+      out.unknown.push(a);
     }
   }
   return out;
@@ -1023,6 +1034,15 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
+    --interactive, -i          Menu to pick optional MCP servers (and, for
+                               quality-architect, its QA specialists/connectors).
+                               Applies to the quality-architect agent and the
+                               test-automation / web-qa / quality-engineering
+                               bundles. Needs a terminal.
+    --mcp <a,b,c>              Write these MCP servers non-interactively, each in
+                               its target's native form (Claude .mcp.json; Copilot
+                               .vscode/mcp.json + .copilot/mcp-config.json; Codex
+                               .codex/config.toml). Merges in, never clobbers.
     --symlink                  Symlink external skills from the shared cache
                                instead of copying them (default: copy, which
                                is self-contained and portable across runtimes)
@@ -1589,13 +1609,19 @@ async function interactivePick(catalog, args) {
     if (agentsSelection === null) agentsSelection = catalog.agents;
     if (skillsSelection === null) skillsSelection = catalog.skills;
   } else if (agentsSelection === null && skillsSelection === null) {
-    // Neither specified and not --all → install everything by default,
-    // but print what we're doing so users aren't surprised.
-    console.log(
-      "\n  No --agents / --skills specified. Installing full catalog.\n  (Use --agents or --skills to narrow.)"
-    );
-    agentsSelection = catalog.agents;
-    skillsSelection = catalog.skills;
+    if (args.mcp && args.mcp.length) {
+      // --mcp on its own → MCP-only run; don't fall into the full-catalog default.
+      agentsSelection = [];
+      skillsSelection = [];
+    } else {
+      // Neither specified and not --all → install everything by default,
+      // but print what we're doing so users aren't surprised.
+      console.log(
+        "\n  No --agents / --skills specified. Installing full catalog.\n  (Use --agents or --skills to narrow.)"
+      );
+      agentsSelection = catalog.agents;
+      skillsSelection = catalog.skills;
+    }
   } else {
     if (agentsSelection === null) agentsSelection = [];
     // --agents X without --skills → auto-resolve each agent's declared
@@ -1821,6 +1847,293 @@ function runFixCopilot(argv) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Optional interactive mode (`init --interactive`) for the quality-architect
+// agent: pick which QA specialists/connectors to keep and which MCP servers to
+// wire. Zero-dep arrow-key picker (raw-mode stdin). No targets/credentials are
+// prompted; MCP selections are written as .mcp.json + .mcp.json.example with
+// placeholder values (and .env.example for ELITEA), never live secrets.
+// ---------------------------------------------------------------------------
+
+async function selectMany(title, items) {
+  if (!items.length) return [];
+  // No TTY (CI, piped) → accept the defaults without drawing a menu.
+  if (!process.stdin.isTTY) return items.filter((i) => i.default !== false).map((i) => i.value);
+  console.log(`\n  ${title}`);
+  console.log(`  ↑↓ move · space toggle · a all · n none · enter confirm`);
+  const sel = items.map((i) => i.default !== false);
+  let cur = 0;
+  const rows = [];
+  let lastG = null;
+  items.forEach((it, i) => {
+    if (it.group && it.group !== lastG) { lastG = it.group; rows.push({ g: it.group }); }
+    rows.push({ i });
+  });
+  const render = () =>
+    rows.map((r) => {
+      if (r.g) return `    — ${r.g} —`;
+      const it = items[r.i];
+      return `  ${r.i === cur ? "❯" : " "} ${sel[r.i] ? "◉" : "○"} ${it.label}${it.desc ? `  (${it.desc})` : ""}`;
+    });
+  let lines = render();
+  lines.forEach((l) => process.stdout.write(l + "\n"));
+  const redraw = () => {
+    process.stdout.write(`\x1b[${lines.length}A\x1b[0J`);
+    lines = render();
+    lines.forEach((l) => process.stdout.write(l + "\n"));
+  };
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+    const cleanup = () => { stdin.removeListener("data", onData); stdin.setRawMode(wasRaw || false); stdin.pause(); };
+    function onData(buf) {
+      const k = buf.toString();
+      if (k === "\r" || k === "\n") { cleanup(); resolve(items.filter((_, i) => sel[i]).map((i) => i.value)); }
+      else if (k === "\x03") { cleanup(); process.exit(130); }
+      else if (k === " ") { sel[cur] = !sel[cur]; redraw(); }
+      else if (k === "a") { sel.fill(true); redraw(); }
+      else if (k === "n") { sel.fill(false); redraw(); }
+      else if (k === "\x1b[A" || k === "k") { cur = (cur - 1 + items.length) % items.length; redraw(); }
+      else if (k === "\x1b[B" || k === "j") { cur = (cur + 1) % items.length; redraw(); }
+    }
+    stdin.on("data", onData);
+  });
+}
+
+// Optional MCP servers offered by --interactive / --mcp. Each entry's `cfg` is the
+// host-neutral base; remote servers that need a token carry a `secret` descriptor so
+// the four auth dialects are generated per host: Claude `headersHelper` (reads .env) /
+// VS Code `${input:}` prompt / Copilot-CLI + Cursor + Windsurf literal placeholder /
+// Codex `mcp-remote` stdio wrapper + a [mcp_servers.<id>.env] token.
+const MCP_CATALOG = [
+  { id: "playwright", group: "Browser automation", label: "Playwright", desc: "multi-browser automation", cfg: { command: "npx", args: ["-y", "@playwright/mcp@latest"] } },
+  { id: "chrome-devtools", group: "Browser automation", label: "Chrome DevTools", desc: "Chrome + Lighthouse", cfg: { command: "npx", args: ["-y", "chrome-devtools-mcp"] } },
+  { id: "accessibility-scanner", group: "Accessibility", label: "axe-core scanner", desc: "automated WCAG scanning", cfg: { command: "npx", args: ["-y", "mcp-accessibility-scanner"] } },
+  { id: "snyk", group: "Security", label: "Snyk", desc: "SAST / SCA / IaC", cfg: { command: "snyk", args: ["mcp", "-t", "stdio"] } },
+  { id: "sentry", group: "Error tracking", label: "Sentry", desc: "prod error correlation", cfg: { command: "npx", args: ["-y", "@sentry/mcp-server"], env: { SENTRY_AUTH_TOKEN: "YOUR_SENTRY_TOKEN" } } },
+  { id: "browserstack", group: "Cross-browser", label: "BrowserStack", desc: "real device/browser", cfg: { command: "npx", args: ["-y", "@browserstack/mcp-server"], env: { BROWSERSTACK_USERNAME: "YOUR_USERNAME", BROWSERSTACK_ACCESS_KEY: "YOUR_ACCESS_KEY" } } },
+  { id: "postman", group: "API testing", label: "Postman", desc: "API collections / mocks", cfg: { command: "npx", args: ["-y", "@postman/postman-mcp-server"], env: { POSTMAN_API_KEY: "YOUR_API_KEY" } } },
+  { id: "context7", group: "Research", label: "Context7", desc: "library docs lookup", cfg: { type: "http", url: "https://mcp.context7.com/mcp" }, secret: { header: "CONTEXT7_API_KEY", scheme: "", env: "CONTEXT7_API_KEY", input: "context7-key", prompt: "Context7 API Key", placeholder: "YOUR_CONTEXT7_API_KEY" } },
+  { id: "tavily", group: "Research", label: "Tavily Web Search", desc: "web search / extract", cfg: { type: "http", url: "https://mcp.tavily.com/mcp/?tavilyApiKey=YOUR_TAVILY_API_KEY" } },
+  { id: "github", group: "Integrations", label: "GitHub", desc: "issues, PRs, code search", cfg: { type: "http", url: "https://api.githubcopilot.com/mcp/" }, secret: { header: "Authorization", scheme: "Bearer ", env: "GITHUB_PAT", input: "github-pat", prompt: "GitHub PAT", placeholder: "YOUR_GITHUB_PAT" } },
+  { id: "atlassian", group: "Integrations", label: "Atlassian Rovo", desc: "Jira / Confluence", cfg: { type: "http", url: "https://mcp.atlassian.com/v1/mcp" } },
+  { id: "onetest", group: "Integrations", label: "OneTest", desc: "test management / runs", cfg: { type: "http", url: "https://tms.onetest.ai/mcp/test-management", headers: { "X-Project-Id": "YOUR_PROJECT_ID" } }, secret: { header: "Authorization", scheme: "Bearer ", env: "OCTO_API_KEY", input: "onetest-key", prompt: "OneTest API Key", placeholder: "YOUR_OCTO_API_KEY" } },
+  { id: "elitea-next", group: "Integrations", label: "ELITEA Next", desc: "EPAM ELITEA project", cfg: { type: "http", url: "https://next.elitea.ai/app/${ELITEA_PROJECT_ID:-630}/mcp" }, secret: { header: "Authorization", scheme: "Bearer ", env: "ELITEA_TOKEN", input: "elitea-token", prompt: "ELITEA API Key", placeholder: "YOUR_ELITEA_TOKEN", claudeUrl: "https://next.elitea.ai/app/${ELITEA_PROJECT_ID:-630}/sse", claudeType: "sse" } },
+];
+
+// JSON hosts: file, servers-key, auth style. Copilot is special (TWO files: VS Code
+// `.vscode/mcp.json` with inputs[] prompts + Copilot CLI `.copilot/mcp-config.json`);
+// Codex is special (TOML, in `.codex/config.toml`).
+const MCP_JSON_HOSTS = {
+  claude: { rel: ".mcp.json", key: "mcpServers", auth: "headersHelper" },
+  cursor: { rel: ".cursor/mcp.json", key: "mcpServers", auth: "literal" },
+  windsurf: { rel: ".windsurf/mcp.json", key: "mcpServers", auth: "literal" },
+};
+const MCP_COPILOT = [
+  { rel: ".vscode/mcp.json", key: "servers", auth: "input", stdioType: true, inputs: true }, // VS Code Copilot
+  { rel: ".copilot/mcp-config.json", key: "mcpServers", auth: "literal", stdioType: true }, // Copilot CLI
+];
+
+function tomlArray(arr) {
+  return `[${arr.map(tomlBasicString).join(", ")}]`;
+}
+
+// One server's config object for a JSON host. authStyle: headersHelper (Claude reads the
+// token from .env) | input (VS Code `${input:}` prompt) | literal (a YOUR_… placeholder).
+// stdioType adds an explicit "type":"stdio" (Copilot wants it).
+function mcpConfigFor(entry, authStyle, stdioType = false) {
+  const cfg = entry.cfg;
+  if (cfg.command) {
+    const out = stdioType ? { type: "stdio" } : {};
+    out.command = cfg.command;
+    out.args = [...cfg.args];
+    if (cfg.env) out.env = { ...cfg.env };
+    return out;
+  }
+  const sec = entry.secret;
+  const claude = authStyle === "headersHelper";
+  const out = {
+    type: claude && sec && sec.claudeType ? sec.claudeType : cfg.type || "http",
+    url: claude && sec && sec.claudeUrl ? sec.claudeUrl : cfg.url,
+  };
+  const headers = { ...(cfg.headers || {}) };
+  if (sec) {
+    if (claude) {
+      // Claude builds the auth header(s) at launch from a .env token — no secret on disk.
+      const parts = [`${JSON.stringify(sec.header)}:${JSON.stringify(sec.scheme + "%s")}`];
+      for (const [k, v] of Object.entries(cfg.headers || {})) parts.push(`${JSON.stringify(k)}:${JSON.stringify(v)}`);
+      out.headersHelper = `printf '{${parts.join(",")}}' $(grep -m1 '^${sec.env}=' .env | cut -d= -f2-)`;
+      return out;
+    }
+    headers[sec.header] = authStyle === "input" ? `${sec.scheme}\${input:${sec.input}}` : `${sec.scheme}${sec.placeholder}`;
+  }
+  if (Object.keys(headers).length) out.headers = headers;
+  return out;
+}
+
+// One server as a Codex [mcp_servers.<id>] TOML block. Remote servers are bridged to
+// stdio via `mcp-remote` (Codex MCP is command-based); the token rides a [.env] table.
+function codexMcpToml(entry) {
+  const { id, cfg, secret: sec } = entry;
+  const lines = [`[mcp_servers.${id}]`];
+  let env = cfg.env ? { ...cfg.env } : null;
+  if (cfg.command) {
+    lines.push(`command = ${tomlBasicString(cfg.command)}`, `args = ${tomlArray(cfg.args)}`);
+  } else {
+    const args = ["-y", "mcp-remote", cfg.url];
+    const headers = { ...(cfg.headers || {}) };
+    if (sec) {
+      headers[sec.header] = `${sec.scheme}\${${sec.env}}`;
+      env = { ...(env || {}), [sec.env]: sec.placeholder };
+    }
+    for (const [k, v] of Object.entries(headers)) args.push("--header", `${k}: ${v}`);
+    args.push("--transport", "http-only", "--silent");
+    lines.push(`command = "npx"`, `args = ${tomlArray(args)}`);
+  }
+  let out = lines.join("\n");
+  if (env) out += `\n\n[mcp_servers.${id}.env]\n` + Object.entries(env).map(([k, v]) => `${k} = ${tomlBasicString(v)}`).join("\n");
+  return out;
+}
+
+// VS Code secret prompts: one promptString per selected secret-bearing server.
+function mcpInputs(entries) {
+  return entries
+    .filter((e) => e.secret)
+    .map((e) => ({ type: "promptString", id: e.secret.input, description: e.secret.prompt, password: true }));
+}
+
+// Merge selected servers into one JSON host file (never clobber other servers/keys; an
+// unparseable real file is left untouched). For VS Code, also merge the inputs[] prompts.
+function writeJsonMcpFile(rel, key, entries, authStyle, { stdioType = false, inputs = false } = {}) {
+  const path = join(CWD, rel);
+  let cur = {};
+  if (existsSync(path)) {
+    try {
+      cur = JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      console.log(`      ! ${rel} exists but isn't valid JSON — left untouched`);
+      return false;
+    }
+  }
+  cur[key] = cur[key] || {};
+  for (const e of entries) cur[key][e.id] = mcpConfigFor(e, authStyle, stdioType);
+  if (inputs) {
+    const have = new Set((cur.inputs || []).map((i) => i.id));
+    const add = mcpInputs(entries).filter((i) => !have.has(i.id));
+    if (add.length) cur.inputs = [...(cur.inputs || []), ...add];
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(cur, null, 2) + "\n");
+  return true;
+}
+
+// Append selected servers to .codex/config.toml as [mcp_servers.<id>] tables, skipping
+// any already present (don't clobber), preserving [agents] and other config.
+function writeCodexMcp(entries) {
+  const file = join(CWD, ".codex", "config.toml");
+  const before = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const blocks = entries
+    .filter((e) => !new RegExp(`^\\s*\\[mcp_servers\\.${e.id.replace(/[-.]/g, "\\$&")}\\]`, "m").test(before))
+    .map(codexMcpToml);
+  if (!blocks.length) return false;
+  let out = before.replace(/\n+$/, "");
+  out = (out ? out + "\n\n" : "") + blocks.join("\n\n") + "\n";
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, out);
+  return true;
+}
+
+function writeMcpSelections(targets, ids) {
+  const entries = ids.map((id) => MCP_CATALOG.find((m) => m.id === id)).filter(Boolean);
+  if (!entries.length) return;
+  const wrote = [];
+  for (const t of targets) {
+    if (t.id === "codex") {
+      if (writeCodexMcp(entries)) wrote.push(".codex/config.toml [mcp_servers]");
+    } else if (t.id === "copilot") {
+      for (const h of MCP_COPILOT) if (writeJsonMcpFile(h.rel, h.key, entries, h.auth, h)) wrote.push(h.rel);
+    } else {
+      const h = MCP_JSON_HOSTS[t.id] || { rel: ".mcp.json", key: "mcpServers", auth: "literal" };
+      if (writeJsonMcpFile(h.rel, h.key, entries, h.auth)) wrote.push(h.rel);
+    }
+  }
+  for (const w of [...new Set(wrote)]) console.log(`      ✓ ${w} (${ids.join(", ")})`);
+
+  // Claude reads secret tokens from .env (headersHelper); seed .env.example with each
+  // selected secret server's var. Other hosts carry the secret inline (prompt/env/placeholder).
+  const envVars = [...new Set(entries.filter((e) => e.secret).map((e) => e.secret.env))];
+  if (envVars.length && targets.some((t) => t.id === "claude")) {
+    const envEx = join(CWD, ".env.example");
+    let txt = existsSync(envEx) ? readFileSync(envEx, "utf8") : "";
+    let changed = false;
+    for (const v of envVars) {
+      if (!new RegExp(`^${v}=`, "m").test(txt)) {
+        txt += (txt && !txt.endsWith("\n") ? "\n" : "") + `${v}=\n`;
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeFileSync(envEx, txt);
+      console.log(`      ✓ .env.example (${envVars.join(", ")} — copy to .env, fill, gitignore .env)`);
+    }
+  }
+  console.log(`      ${"ℹ"}  MCP configs use placeholder tokens / secret prompts — fill them and gitignore real secrets`);
+}
+
+// Re-write an installed agent's `skills:` line, dropping `removeSet`. Composes
+// on top of any bundle overlay already applied (reads the installed copy).
+function trimInstalledAgentSkills(target, name, removeSet) {
+  const f = target.id === "copilot"
+    ? join(CWD, target.dir, "agents", `${name}.agent.md`)
+    : join(CWD, target.dir, "agents", name, "AGENT.md");
+  if (!existsSync(f)) return;
+  const text = readFileSync(f, "utf8");
+  const m = text.match(/^skills:\s*\[([^\]]*)\]/m);
+  if (!m) return;
+  const kept = m[1].split(",").map((s) => s.trim()).filter(Boolean).filter((s) => !removeSet.has(s));
+  writeFileSync(f, text.replace(/^skills:\s*\[[^\]]*\]/m, `skills: [${kept.join(", ")}]`));
+}
+
+// QA/test bundles that get the interactive MCP-server picker even without the
+// quality-architect agent (the specialist/connector menus stay agent-specific).
+const INTERACTIVE_BUNDLES = new Set(["test-automation", "web-qa", "quality-engineering"]);
+
+// Interactive menus. When `qa` is true (quality-architect in the roster) the
+// specialist + connector menus run and unticked items are trimmed from Quinn;
+// the MCP-server menu always runs. Returns { removeSet, mcpIds }.
+async function runInteractive(qa) {
+  const removeSet = new Set();
+  let wantsOnetest = false;
+  if (qa) {
+    const SPECIALISTS = [
+      { value: "accessibility-audit", label: "Accessibility + WCAG", desc: "axe-core, WCAG 2.1 AA/AAA" },
+      { value: "security-audit", label: "Security + OWASP", desc: "XSS, CSRF, headers, secrets" },
+      { value: "privacy-audit", label: "Privacy + GDPR", desc: "cookies, trackers, consent" },
+      { value: "performance-audit", label: "Performance + CWV", desc: "Core Web Vitals, console, JS" },
+      { value: "responsive-audit", label: "Responsive / mobile", desc: "touch targets, viewport" },
+      { value: "content-seo-audit", label: "Content + SEO", desc: "copy, meta tags, structured data" },
+      { value: "ux-audit", label: "UI/UX + page types", desc: "forms, 20+ page-type checks" },
+      { value: "test-generation", label: "Test generation", desc: "coverage-gap proposals" },
+      { value: "requirement-traceability", label: "Requirement traceability", desc: "req↔case↔result triangulation" },
+    ];
+    const INTEGRATIONS = [
+      { value: "quality-onboarding", label: "Project onboarding", desc: "build .agents/quality.md", default: true },
+      { value: "onetest", label: "OneTest", desc: "TMS adapter + run-sync MCP", default: false },
+    ];
+    const picksSpec = await selectMany("Specialist skills (QA analysis domains)", SPECIALISTS.map((i) => ({ ...i, default: true })));
+    const picksInt = await selectMany("Integration skills (optional connectors)", INTEGRATIONS);
+    for (const s of SPECIALISTS) if (!picksSpec.includes(s.value)) removeSet.add(s.value);
+    if (!picksInt.includes("quality-onboarding")) removeSet.add("quality-onboarding"); // onetest is wired as an MCP, not a skill
+    wantsOnetest = picksInt.includes("onetest");
+  }
+  const picksMcp = await selectMany("Optional tool integrations (MCP servers)", MCP_CATALOG.map((m) => ({ value: m.id, group: m.group, label: m.label, desc: m.desc, default: false })));
+  const mcpIds = [...picksMcp];
+  if (wantsOnetest && !mcpIds.includes("onetest")) mcpIds.push("onetest");
+  return { removeSet, mcpIds };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
 
@@ -1830,6 +2143,18 @@ async function main() {
   }
 
   const args = parseArgs(argv);
+
+  // Guard: don't silently fall back to a full-catalog install when arguments
+  // were passed but couldn't be parsed (a typo'd flag, or a flag+value smashed
+  // into one shell token). A loud error beats the wrong install.
+  if (args.unknown.length) {
+    console.error(`\n  ! Unrecognized argument(s): ${args.unknown.map((t) => `"${t}"`).join(", ")}`);
+    console.error(`    Known flags: --agents <list> | --skills <list> | --bundle <id> | --target <list> | --all | --update | --symlink | --yes`);
+    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle team-web\`, not \`"--bundle team-web"\`).`);
+    console.error(`    To install the entire catalog on purpose, use --all.\n`);
+    process.exit(1);
+  }
+
   const catalog = loadCatalog();
 
   console.log("\n  sdlc-skills — SDLC agents and skills for Claude Code\n");
@@ -1890,6 +2215,23 @@ async function main() {
   console.log("");
   let installed = 0;
   let skipped = 0;
+
+  // Interactive selection (opt-in). The MCP-server picker runs for the QA/test
+  // bundles too; the specialist/connector menus only when quality-architect is in.
+  const qaInRoster =
+    (agentsSelection || []).includes("quality-architect") ||
+    (bundlePlan && (bundlePlan.localAgents || []).includes("quality-architect"));
+  const interactiveApplies = qaInRoster || (args.bundle && INTERACTIVE_BUNDLES.has(args.bundle));
+  let qaPick = null;
+  if (args.interactive && interactiveApplies) {
+    if (!process.stdin.isTTY) {
+      console.log("\n  ! --interactive needs a terminal — proceeding with defaults.");
+    } else {
+      qaPick = await runInteractive(qaInRoster);
+    }
+  } else if (args.interactive) {
+    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / web-qa / quality-engineering bundles — ignoring.");
+  }
 
   for (const t of targets) {
     console.log(`  → ${t.label} (${t.dir}/)`);
@@ -1983,9 +2325,32 @@ async function main() {
     }
   }
 
+  // Apply interactive QA picks: trim quality-architect to the chosen
+  // specialists/connectors, then write the selected MCP servers.
+  if (qaPick) {
+    if (qaPick.removeSet.size) {
+      for (const t of targets) trimInstalledAgentSkills(t, "quality-architect", qaPick.removeSet);
+      console.log(`\n  → quality-architect tuned (dropped: ${[...qaPick.removeSet].join(", ")})`);
+    }
+    if (qaPick.mcpIds.length) {
+      console.log(`\n  → MCP servers`);
+      writeMcpSelections(targets, qaPick.mcpIds);
+    }
+  }
+
+  // Non-interactive MCP install (--mcp a,b,c), independent of the QA picker.
+  if (args.mcp && args.mcp.length) {
+    console.log(`\n  → MCP servers`);
+    writeMcpSelections(targets, args.mcp);
+  }
+
   // Core hooks (per-role memory + lean .agents/*.md context injection) land in
   // each selected runtime's native hook format. Every install, not just bundles.
-  if (existsSync(join(PKG_ROOT, "hooks"))) {
+  // A bare `--mcp` run is MCP-only — the user just wants the server configs, not a
+  // full project wiring — so skip the per-role memory/context hooks in that case.
+  const mcpOnly =
+    args.mcp && args.mcp.length && args.agents === null && args.skills === null && !args.all && !args.bundle;
+  if (!mcpOnly && existsSync(join(PKG_ROOT, "hooks"))) {
     console.log(`\n  → hooks (memory + project-context injection)`);
     installCoreHooks(targets);
   }
