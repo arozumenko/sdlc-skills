@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Per-agent start hook for sdlc-skills — injects, for the spawning role, its
-# persistent memory snapshot (.agents/memory/<role>/snapshot.md) PLUS the lean
-# shared project docs (role-overrides/profile/workflow/testing/team-comms).
+# persistent memory (.agents/memory/<role>/snapshot.md and/or MEMORY.md) PLUS the
+# lean shared project docs (role-overrides/profile/workflow/testing/team-comms).
 # A dispatched subagent gets a fresh context that does NOT inherit the parent's
 # SessionStart injection, so it needs the project docs delivered here too.
 # Replaces the per-agent `@.agents/...` imports, and re-runs on every dispatch so
 # the context survives compaction within a long session.
 #
 # Copilot CLI (subagentStart): agent name arrives on stdin as `agentName`.
+# VS Code Copilot Chat (SubagentStart): name on stdin as `agent_type` — for a
+#   dispatched custom agent this is its `name:` (e.g. test-automation-engineer),
+#   which matches .agents/memory/<role>/; the built-in `Plan` agent has no memory
+#   dir and correctly gets only the shared docs.
 # Codex (SubagentStart): name on stdin as `agent_type`.
 # Claude Code (SubagentStart): name on stdin, field underdocumented (issue
 #   #19170 proposes `agent_name`); we try several.
@@ -21,12 +25,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "${SCRIPT_DIR}/lib.sh"
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+# Project root: Claude Code sets CLAUDE_PROJECT_DIR; Copilot (CLI + VS Code) sets
+# COPILOT_PROJECT_DIR; fall back to PWD. Using COPILOT_PROJECT_DIR is essential —
+# without it a real Copilot CLI subagent dispatch resolves .agents/memory against
+# the wrong dir and injects nothing (the worker gets no memory).
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}"
 
 # Role from explicit arg (Kiro) or parsed from the SubagentStart payload (CC).
 agent="${1:-}"
 if [ -z "$agent" ]; then
-  payload="$(cat 2>/dev/null || true)"
+  # Bounded read — a plain `cat` hangs to the 10s timeout when the runtime leaves
+  # the subagentStart pipe open, killing the hook with no output (the worker then
+  # gets no memory). See read_stdin_payload in lib.sh.
+  payload="$(read_stdin_payload)"
   for key in agentName agent_name subagent_type agent_type agentType name; do
     agent="$(json_string_field "$payload" "$key")"
     [ -n "$agent" ] && break
@@ -34,19 +45,21 @@ if [ -z "$agent" ]; then
 fi
 [ -n "$agent" ] || exit 0
 
-context=""
-
-# Role memory snapshot (if present).
-snap="${PROJECT_DIR}/.agents/memory/${agent}/snapshot.md"
-if [ -f "$snap" ]; then
-  context="# Your persistent memory — .agents/memory/${agent}/snapshot.md"$'\n\n'"$(cat "$snap")"
-fi
-
-# Lean shared project docs, so the dispatched worker is self-sufficient.
-context="${context}$(collect_shared_context "${PROJECT_DIR}/.agents")"
+# Build this agent's additionalContext: its role memory (inlined, cap-aware) plus a
+# read-list for the shared docs only when it won't get them via instruction files —
+# i.e. a CLI sub-agent (never inherits them) or the files aren't on disk yet (cold
+# first run). See build_capped_context.
+#   cli_sub: under the Copilot CLI, agent-start only ever fires for a dispatched
+#     sub-agent (the CLI ignores frontmatter hooks), so COPILOT_CLI here ⇒ CLI
+#     sub-agent. VS Code agents (SDLC_VSCODE) do inherit instruction files.
+if [ -n "${COPILOT_CLI:-}" ]; then cli_sub=1; else cli_sub=""; fi
+if instructions_present "$PROJECT_DIR"; then instr_present=1; else instr_present=""; fi
+context="$(build_capped_context "$PROJECT_DIR" "$agent" "$instr_present" "$cli_sub")"
 
 # Nothing to inject (unseeded project, no memory yet) — exit quietly.
-if [ -z "${context//[$'\n\t ']/}" ]; then
+# is_blank (not ${context//…}) — that substitution is O(n²) on bash 3.2 and
+# hangs the hook past its timeout on a multi-KB context. See lib.sh.
+if is_blank "$context"; then
   exit 0
 fi
 

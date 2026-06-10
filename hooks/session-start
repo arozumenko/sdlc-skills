@@ -16,14 +16,42 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "${SCRIPT_DIR}/lib.sh"
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+# Project root: Claude Code sets CLAUDE_PROJECT_DIR; Copilot (CLI + VS Code) sets
+# COPILOT_PROJECT_DIR; fall back to PWD. Without COPILOT_PROJECT_DIR a real Copilot
+# CLI run (no Claude Code parent) would resolve .agents/ against the wrong dir and
+# inject nothing.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}"
 AGENTS_DIR="${PROJECT_DIR}/.agents"
 
-# Shared project context for the parent/orchestrator session. A missing file is
-# skipped — same no-op-on-missing behaviour the old @import relied on. (Dispatched
-# subagents get their own copy via agent-start, since SessionStart context does
-# not propagate into a subagent's fresh context.)
-context="$(collect_shared_context "$AGENTS_DIR")"
+# Did the shared-doc instruction files already exist? Capture this BEFORE we (re)write
+# them — it tells us whether THIS session loaded them into the system prompt at
+# startup. If not, the agent needs a read-list for the shared docs (build_capped_context).
+if instructions_present "$PROJECT_DIR"; then instr_present=1; else instr_present=""; fi
+
+# (Re)write the warm-cache instruction files: ALL shared docs → system prompt for the
+# NEXT session. Reaches the top-level agent in both runtimes + VS Code subagents (NOT
+# CLI subagents — they get the read-list instead). Side-effect only.
+refresh_shared_instructions "$PROJECT_DIR"
+
+# Read the hook payload (SessionStart delivers it on stdin); used to resolve the
+# Copilot CLI orchestrator. Bounded read — a plain `cat` can hang on runtimes that
+# leave the pipe open (see read_stdin_payload in lib.sh).
+payload="$(read_stdin_payload)"
+
+# The Copilot CLI launches the main agent via `--agent <name>` and records it as the
+# first `subagent.selected` event in its session-state log; resolve it so the CLI
+# orchestrator loads its own role memory. (VS Code / Claude have no session-state
+# dir → empty here; their orchestrator memory comes via the frontmatter SessionStart
+# hook → agent-start.)
+sid="$(json_string_field "$payload" sessionId)"
+[ -n "$sid" ] || sid="$(json_string_field "$payload" session_id)"
+cli_role="$(resolve_cli_session_agent "$sid")"
+
+# Orchestrator additionalContext: its role memory, plus a shared-docs read-list only
+# if the instruction files weren't loaded this session (instr_present empty). The
+# orchestrator is a top-level agent, never a CLI sub-agent → cli_sub="". cli_role may
+# be empty (non-CLI / unresolved) → then just the read-list when needed.
+context="$(build_capped_context "$PROJECT_DIR" "$cli_role" "$instr_present" "")"
 
 # Per-role memory: runtimes whose per-agent start hook can inject context
 # (Claude Code, Codex, Copilot CLI) load it per dispatch via agent-start, so
@@ -48,7 +76,8 @@ Roles: ${roster}.
 fi
 
 # Nothing to inject (unseeded project on Claude Code) — exit quietly.
-if [ -z "${context//[$'\n\t ']/}" ]; then
+# is_blank, not ${context//…}: O(n²) substitution would hang the hook (see lib.sh).
+if is_blank "$context"; then
   exit 0
 fi
 

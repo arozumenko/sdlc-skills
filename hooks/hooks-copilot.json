@@ -18,6 +18,14 @@
         "env": { "COPILOT_CLI": "1" },
         "timeoutSec": 10
       }
+    ],
+    "SubagentStart": [
+      {
+        "type": "command",
+        "command": "\"./hooks/run-hook.cmd\" agent-start",
+        "env": { "SDLC_VSCODE": "1" },
+        "timeout": 10
+      }
     ]
   }
 }
