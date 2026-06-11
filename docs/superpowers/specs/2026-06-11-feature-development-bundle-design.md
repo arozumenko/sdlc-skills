@@ -223,6 +223,35 @@ the existing install path:
 
 Skip-if-exists / `--update` behavior is unchanged.
 
+## Extensibility — designed to grow
+
+The schema is open so new roles and platforms drop in without touching the
+installer:
+
+- **Add a dev role** — author its canonical `agents/<name>/AGENT.md`, add the
+  name to `localAgents`, and add one `devRoles.<name>` entry (`label`,
+  `platform`, optional `briefing`/`skillOverlay`). It appears in the picker
+  automatically. No `init.mjs` change.
+- **Add a platform** (e.g. `android`, `data`) — add a `platforms.<id>` entry
+  with its shared-role `briefings`/`skillOverlays`, then tag dev roles with it.
+  The active-platform/merge logic is platform-count-agnostic, so two, three, or
+  more platforms compose by the same union/intersection rules.
+- **Add a core role** — add it to `coreAgents` + `localAgents`; platforms can
+  start tuning it via their `skillOverlays`/`briefings` maps. Roles with no
+  platform entry simply install untuned.
+- **Other bundles are unaffected** — the `devRoles`/`platforms` path is gated on
+  those keys being present, so `manual-qa`/`test-automation` and any future
+  flat bundle keep the legacy behavior.
+
+## Agent frontmatter: no `tools:` key
+
+Agents must **not** carry a `tools:` frontmatter key (tool access is host- and
+runtime-resolved, not declared per agent). The current tree is already clean
+(all 35 `AGENT.md` files), and the bundle's mirrored agents inherit that from
+canonical `agents/`. The plan adds a guard so the cleanup can't silently
+regress: `validate-bundles.mjs` (or `npm test`) fails if any `AGENT.md` declares
+`tools:`.
+
 ## Instructions
 
 A single merged, platform-neutral `instructions.md` describing the
@@ -241,6 +270,9 @@ Add checks, only when `devRoles`/`platforms`/`coreAgents` are present:
   `devRoles.<r>.skillOverlay` targets that dev role.
 - Each overlay `add` resolves in the catalog or is reported pending (reuse
   existing overlay resolution).
+
+Plus a repo-wide guard (runs for every bundle / every `AGENT.md`): fail if any
+agent frontmatter declares a `tools:` key.
 
 `sync-bundles.mjs` needs **no change** (mirrors by `localAgents`/`localSkills`).
 `gen-marketplaces.mjs` needs **no change** (it does not enumerate bundles).
