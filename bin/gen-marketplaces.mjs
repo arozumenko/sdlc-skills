@@ -17,9 +17,10 @@
  *   node bin/gen-marketplaces.mjs --check    # fail if any file is stale (CI)
  */
 
-import { existsSync, readFileSync, readdirSync, writeFileSync, statSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { buildItemIndex, resolveItem, catalogIds } from "./lib/item-resolver.mjs";
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(PKG_ROOT, "package.json"), "utf8")).version || "0.0.0";
@@ -39,21 +40,6 @@ const RUNTIMES = [
   { id: "copilot", out: ".github/plugin/marketplace.json", agents: false, skills: true },
 ];
 
-function listDirs(parent) {
-  const root = join(PKG_ROOT, parent);
-  if (!existsSync(root)) return [];
-  return readdirSync(root)
-    .filter((n) => !n.startsWith(".") && n !== "README.md")
-    .filter((n) => {
-      try {
-        return statSync(join(root, n)).isDirectory();
-      } catch {
-        return false;
-      }
-    })
-    .sort();
-}
-
 function frontmatterField(file, field) {
   if (!existsSync(file)) return null;
   const fm = readFileSync(file, "utf8").match(/^---\s*\n([\s\S]*?)\n---/m);
@@ -62,13 +48,23 @@ function frontmatterField(file, field) {
   return m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
 }
 
-function skillDescriptions() {
+/** Source path string for an agent/skill that was resolved via item-resolver. */
+function resolvedSource(resolved, kind) {
+  if (resolved.bundle === null) {
+    return `./${kind}/${resolved.name}`;
+  }
+  return `./bundles/${resolved.bundle}/${kind}/${resolved.name}`;
+}
+
+/** External (repo:) skill entries from skills.json, keyed by id. */
+function externalSkills() {
   const out = {};
   const reg = join(PKG_ROOT, "skills.json");
   if (existsSync(reg)) {
     try {
-      for (const s of JSON.parse(readFileSync(reg, "utf8")).skills || [])
-        if (s.id && s.description) out[s.id] = s.description;
+      for (const s of JSON.parse(readFileSync(reg, "utf8")).skills || []) {
+        if (s.id && s.repo) out[s.id] = s;
+      }
     } catch {
       /* ignore */
     }
@@ -76,41 +72,64 @@ function skillDescriptions() {
   return out;
 }
 
-function buildPlugins(rt, agents, skills, skillDescs) {
+function buildPlugins(rt, index, externals) {
   const plugins = [UMBRELLA];
+
   if (rt.agents) {
-    for (const a of agents) {
+    for (const id of catalogIds(index, "agents")) {
+      const resolved = resolveItem(index, "agents", id);
+      if (!resolved) continue;
+      const agentFile = join(resolved.dir, "agents", id, "AGENT.md");
       plugins.push({
-        name: a,
-        source: `./agents/${a}`,
-        description: frontmatterField(join(PKG_ROOT, "agents", a, "AGENT.md"), "description") || `${a} agent`,
+        name: id,
+        source: resolvedSource(resolved, "agents"),
+        description: frontmatterField(agentFile, "description") || `${id} agent`,
         version: VERSION,
       });
     }
   }
+
   if (rt.skills) {
-    for (const s of skills) {
+    // Collect dir-backed skill ids (orphans + bundle-owned).
+    const dirIds = new Set(catalogIds(index, "skills"));
+
+    // Dir-backed skills first (sorted).
+    for (const id of [...dirIds].sort()) {
+      const resolved = resolveItem(index, "skills", id);
+      if (!resolved) continue;
+      const skillFile = join(resolved.dir, "skills", id, "SKILL.md");
       plugins.push({
-        name: s,
-        source: `./skills/${s}`,
-        description:
-          skillDescs[s] || frontmatterField(join(PKG_ROOT, "skills", s, "SKILL.md"), "description") || `${s} skill`,
+        name: id,
+        source: resolvedSource(resolved, "skills"),
+        description: frontmatterField(skillFile, "description") || `${id} skill`,
+        version: VERSION,
+      });
+    }
+
+    // External (repo:) skills — only those NOT already covered by a dir-backed entry.
+    for (const id of Object.keys(externals).sort()) {
+      if (dirIds.has(id)) continue; // dir-backed takes precedence
+      const s = externals[id];
+      plugins.push({
+        name: id,
+        source: `./skills/${id}`,
+        description: s.description || `${id} skill`,
         version: VERSION,
       });
     }
   }
+
   return plugins;
 }
 
 function main() {
   const check = process.argv.includes("--check");
-  const agents = listDirs("agents");
-  const skills = listDirs("skills");
-  const skillDescs = skillDescriptions();
+  const index = buildItemIndex(PKG_ROOT);
+  const externals = externalSkills();
 
   let stale = 0;
   for (const rt of RUNTIMES) {
-    const manifest = { name: "sdlc-skills", owner: OWNER, plugins: buildPlugins(rt, agents, skills, skillDescs) };
+    const manifest = { name: "sdlc-skills", owner: OWNER, plugins: buildPlugins(rt, index, externals) };
     const text = JSON.stringify(manifest, null, 2) + "\n";
     const path = join(PKG_ROOT, rt.out);
     const current = existsSync(path) ? readFileSync(path, "utf8") : null;

@@ -13,158 +13,290 @@
     },
     {
       "name": "atlassian-content",
-      "source": "./skills/atlassian-content",
-      "description": "Create well-formatted Jira issues/comments (ADF, API v3) and Confluence pages (storage format) with accountId-backed mentions and mandatory post-creation re-fetch + repair",
+      "source": "./bundles/test-automation/skills/atlassian-content",
+      "description": "Create well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch + repair. Load for \"file a bug\", \"comment on JIRA-123\", \"write up a decision page\", or any authored Atlassian content.",
       "version": "0.2.0"
     },
     {
       "name": "browser-verify",
-      "source": "./skills/browser-verify",
-      "description": "Browser verification via CDP — visual checks, screenshots, accessibility",
+      "source": "./bundles/feature-development/skills/browser-verify",
+      "description": "Use when you need to run arbitrary JS in a page, inspect cookies/localStorage, check computed styles, emulate devices, or drive real mouse/keyboard events. Chrome DevTools Protocol browser automation with zero external dependencies.",
       "version": "0.2.0"
     },
     {
       "name": "bugfix-workflow",
-      "source": "./skills/bugfix-workflow",
-      "description": "End-to-end bugfix workflow — reproduce, test, fix, verify, document",
+      "source": "./bundles/feature-development/skills/bugfix-workflow",
+      "description": "Use when the user says \"fix bug\", \"fix #NNN\", or you hit a failing test or reproducible defect that needs fixing end-to-end (not investigation alone). The full bugfix workflow from reproduction through a verified, documented fix.",
       "version": "0.2.0"
     },
     {
       "name": "code-review",
-      "source": "./skills/code-review",
-      "description": "Structured code review — security, quality, conventions",
+      "source": "./bundles/feature-development/skills/code-review",
+      "description": "Review code for correctness, security, performance, and maintainability. Use when the user asks to \"review this code\", \"check my changes\", \"review PR\", \"audit\" — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted.",
       "version": "0.2.0"
     },
     {
       "name": "completing-a-task",
-      "source": "./skills/completing-a-task",
-      "description": "Five-step task completion protocol: verify locally → commit on feature branch → push & open PR → comment on tracker issue → notify the orchestrator. Used by devs at handoff",
+      "source": "./bundles/feature-development/skills/completing-a-task",
+      "description": "Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
       "version": "0.2.0"
     },
     {
       "name": "deep-research",
       "source": "./skills/deep-research",
-      "description": "Deep research workflow — trends, topic analysis, fact-checking",
+      "description": "Disk-first, checkpointed research workflow with three modes — trend research, topic analysis, and fact-checking. Use when the user asks to \"research trends\", \"analyze a topic\", \"fact-check this\", \"verify claims\", \"what's the state of X\", or hands you a document to vet.",
       "version": "0.2.0"
     },
     {
       "name": "gathering-context",
       "source": "./skills/gathering-context",
-      "description": "Cross-channel context gathering — email, Teams, local KB",
+      "description": "Gather cross-channel context (local KB, email, Teams, optional web) about a person or topic before responding. Use when the user says \"what do we know about X\", \"find prior discussions with Y\", or before drafting any reply where prior history matters.",
       "version": "0.2.0"
     },
     {
       "name": "git-workflow",
-      "source": "./skills/git-workflow",
-      "description": "Git branching, PR creation, and merge workflow",
+      "source": "./bundles/feature-development/skills/git-workflow",
+      "description": "Use when the user asks to \"commit\", \"create PR\", \"branch\", \"merge\", \"rebase\", \"cherry-pick\", \"tag\", or otherwise manage git history. Guides disciplined git operations — branching, commits, PRs, and recovery.",
       "version": "0.2.0"
     },
     {
       "name": "implement-feature",
-      "source": "./skills/implement-feature",
-      "description": "End-to-end feature implementation workflow — plan, test, build, ship",
+      "source": "./bundles/feature-development/skills/implement-feature",
+      "description": "Use when the user says \"implement\", \"build feature\", \"work on task\", or once a plan or story is approved and you're about to start building. The end-to-end feature-implementation workflow; delegates the final handoff to completing-a-task.",
       "version": "0.2.0"
     },
     {
       "name": "issue-tracking",
-      "source": "./skills/issue-tracking",
-      "description": "GitHub issue lifecycle — labelling, commenting, closing",
+      "source": "./bundles/feature-development/skills/issue-tracking",
+      "description": "Create, manage, and track issues in GitHub, Linear, or GitLab. Use when the user asks to \"create an issue\", \"file a bug\", \"check issues\", \"update a ticket\", \"create an epic\", or anything about issue/ticket management.",
       "version": "0.2.0"
     },
     {
       "name": "memory",
-      "source": "./skills/memory",
-      "description": "Persistent file-based memory across conversations",
+      "source": "./bundles/feature-development/skills/memory",
+      "description": "Per-role persistent memory — durable facts, preferences, decisions, and a daily log, as plain markdown. Use when the user says \"remember this\" or \"log this\", asks \"what did you learn yesterday\", or whenever you discover something worth keeping across sessions.",
       "version": "0.2.0"
     },
     {
       "name": "microsoft-365",
       "source": "./skills/microsoft-365",
-      "description": "Microsoft Graph (email/calendar/Teams) integration",
+      "description": "Microsoft 365 (Graph) access to email, Teams, calendar, and SharePoint. Use when the user asks to \"check my email/Teams/calendar\", \"what meetings do I have\", \"any messages about X\", or whenever a task needs live M365 data rather than memory. Scriptable scans + interactive query.py.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "mobile-testing",
+      "source": "./bundles/manual-qa/skills/mobile-testing",
+      "description": "Mobile app testing for all manual-qa agents. Covers native iOS/Android via Appium MCP and Mobitru device farm, and PWA/hybrid via Playwright mobile viewport. Use when profiling a mobile app, authoring mobile TCs, sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report.",
       "version": "0.2.0"
     },
     {
       "name": "obsidian-vault",
       "source": "./skills/obsidian-vault",
-      "description": "Read/write the user's Obsidian second brain",
+      "description": "Headless, file-system Obsidian vault operations (no Obsidian app needed). Use when the user says \"save to vault\", \"log this note\", \"find my notes about X\", \"what's in my inbox\", \"open loops\", or when filing an incoming signal (email/chat/memo) or updating people/project/meeting notes.",
       "version": "0.2.0"
     },
     {
       "name": "plan-feature",
-      "source": "./skills/plan-feature",
-      "description": "Structured feature planning — requirements, feasibility, acceptance criteria",
+      "source": "./bundles/feature-development/skills/plan-feature",
+      "description": "Use when the user says \"plan a feature\", \"design this\", \"how should we build\", or before writing code for any non-trivial feature. Produces an approved task breakdown before implementation begins — plan first, build second.",
       "version": "0.2.0"
     },
     {
       "name": "playwright-testing",
-      "source": "./skills/playwright-testing",
-      "description": "End-to-end browser testing with Playwright",
+      "source": "./bundles/feature-development/skills/playwright-testing",
+      "description": "UI/E2E test automation with Playwright MCP. Use when the user asks to \"test the UI\", \"automate browser tests\", \"check the page\", \"take a screenshot\", \"run Playwright\", \"write E2E tests\", or anything about browser-based testing.",
       "version": "0.2.0"
     },
     {
       "name": "reproducing-issues",
-      "source": "./skills/reproducing-issues",
-      "description": "Reproduce a vague bug report into precise repeatable steps + evidence, ending in a CONFIRMED/CANNOT-REPRODUCE verdict (reproduction only)",
+      "source": "./bundles/feature-development/skills/reproducing-issues",
+      "description": "Turn a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Reproduction and documentation only — does not fix code.",
       "version": "0.2.0"
     },
     {
       "name": "root-cause-analysis",
-      "source": "./skills/root-cause-analysis",
-      "description": "Trace a confirmed bug to its exact cause — execution path, classification, confidence, impact analysis (investigation only)",
+      "source": "./bundles/feature-development/skills/root-cause-analysis",
+      "description": "Use after a bug is reproduced/confirmed and before proposing a fix, or when the user says \"investigate issue\", to trace a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.",
       "version": "0.2.0"
     },
     {
       "name": "seeding-a-project",
-      "source": "./skills/seeding-a-project",
-      "description": "Generate AGENTS.md, .agents/ content docs, and per-role memory briefings for a new project (used by scout)",
+      "source": "./bundles/feature-development/skills/seeding-a-project",
+      "description": "Generate AGENTS.md and .agents/ configuration files for a new project. Use when the user asks to \"seed the project\", \"onboard this repo\", \"generate project config\", \"create AGENTS.md\", or after the scout has explored the codebase.",
       "version": "0.2.0"
     },
     {
       "name": "session-retrospective",
-      "source": "./skills/session-retrospective",
-      "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout)",
+      "source": "./bundles/feature-development/skills/session-retrospective",
+      "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-workflow",
-      "source": "./skills/test-automation-workflow",
-      "description": "End-to-end test automation workflow — explore, specify (AFS), implement, review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown) over HTTP or MCP",
+      "source": "./bundles/feature-development/skills/test-automation-workflow",
+      "description": "Use when a TMS test case needs to become an automated test, or when automating a regression batch — \"automate TC-NNN\", \"convert this case to Playwright\", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).",
       "version": "0.2.0"
     },
     {
       "name": "test-case-analysis",
-      "source": "./skills/test-case-analysis",
-      "description": "Execute a TMS test case against the live app, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer",
+      "source": "./bundles/feature-development/skills/test-case-analysis",
+      "description": "Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — \"analyse SCRUM-T101\", \"run this case and emit an AFS\", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.",
       "version": "0.2.0"
     },
     {
       "name": "tosca-automation",
       "source": "./skills/tosca-automation",
-      "description": "Tricentis TOSCA Cloud full lifecycle — create/update/run TestCases, Modules (Html + SapEngine), Reusable Blocks, Playlists, Inventory folders, TSU import/export. Bundled `tosca_cli.py` (httpx + typer + rich)",
+      "description": "Tricentis TOSCA Cloud automation via the bundled tosca_cli.py — create/update/run TestCases, Modules, Reusable Blocks, Playlists, folders, and TSU import/export. Use when the user asks to create a TOSCA test case, run a playlist, organize cases, or any TOSCA Cloud REST/CLI operation.",
       "version": "0.2.0"
     },
     {
       "name": "verifying-outcomes",
       "source": "./skills/verifying-outcomes",
-      "description": "Goal-backward verification — check outcomes, not task completion",
+      "description": "Goal-backward verification — checks whether the desired outcome was achieved, not whether tasks were marked done. Use when the user asks to \"verify\", \"did this actually work\", \"is X really done\" — or before you claim a task is complete and before closing an issue / merging a PR.",
       "version": "0.2.0"
     },
     {
       "name": "vividus",
       "source": "./skills/vividus",
-      "description": "Bootstrap, configure, and author tests for the Vividus BDD framework (JBehave-based, 47+ plugins covering web/Selenium+Playwright, REST, mobile/Appium, DB, messaging, AWS/Azure, visual, accessibility). Config-first `.story` files, suite/profile/environment triple, BOM-pinned versions, MCP-server grounding. Templates in `assets/` for scaffolding",
+      "description": "Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based, config-first .story files spanning web/REST/mobile/DB via 47+ plugins. Use when the user mentions Vividus, .story files, vividus-bom/-starter, backtick-parameter BDD, or ./gradlew runStories.",
       "version": "0.2.0"
     },
     {
       "name": "xlsx-reader",
-      "source": "./skills/xlsx-reader",
-      "description": "Read .xlsx spreadsheets (test cases, checklists) into Markdown for agent ingestion.",
+      "source": "./bundles/manual-qa/skills/xlsx-reader",
+      "description": "Read .xlsx/.xls spreadsheets (test cases, checklists, requirement matrices) into Markdown tables so an agent can ingest them. Use when the user provides an Excel file of test cases or requirements, or asks to import a spreadsheet.",
       "version": "0.2.0"
     },
     {
       "name": "xray-testing",
       "source": "./skills/xray-testing",
-      "description": "CRUD + results import on Xray entities (Test / Precondition / Test Set / Test Plan / Test Execution / Test Run) across Xray Cloud (GraphQL) and Server/DC (REST). JUnit / Cucumber / Xray JSON import formats",
+      "description": "CRUD + results import on Xray entities (Test, Precondition, Test Set/Plan/Execution/Run) across Cloud (GraphQL) and Server/DC (REST). Load for \"pull test PROJ-T42\", \"create Xray test from this AFS\", \"upload JUnit to test plan\", or any Xray CRUD.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "appium-troubleshooting",
+      "source": "./skills/appium-troubleshooting",
+      "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "brainstorming",
+      "source": "./skills/brainstorming",
+      "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "dispatching-parallel-agents",
+      "source": "./skills/dispatching-parallel-agents",
+      "description": "Dispatch one focused agent per independent problem domain and run them concurrently — for 2+ tasks with no shared state or sequential dependencies (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "environment-setup-xcuitest",
+      "source": "./skills/environment-setup-xcuitest",
+      "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "fastapi",
+      "source": "./skills/fastapi",
+      "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "fastmcp-server",
+      "source": "./skills/fastmcp-server",
+      "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "playwright-best-practices",
+      "source": "./skills/playwright-best-practices",
+      "description": "Playwright selector strategy, wait patterns, and auth/flaky-test guidance.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "playwright-cli",
+      "source": "./skills/playwright-cli",
+      "description": "Drive Playwright from the command line — launch browsers, navigate, interact via snapshots/locators, manage tabs and storage, mock network, record traces, and generate Playwright tests (by Microsoft Playwright)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "receiving-code-review",
+      "source": "./skills/receiving-code-review",
+      "description": "How to process review feedback — verify technically, don't perform agreement (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "requesting-code-review",
+      "source": "./skills/requesting-code-review",
+      "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "subagent-driven-development",
+      "source": "./skills/subagent-driven-development",
+      "description": "Execute an implementation plan by dispatching a fresh subagent per task with two-stage review (spec compliance, then code quality), in the current session (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "swift-concurrency-pro",
+      "source": "./skills/swift-concurrency-pro",
+      "description": "Swift concurrency code review and authoring — actors, async/await, structured concurrency (by Paul Hudson)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "swift-testing-pro",
+      "source": "./skills/swift-testing-pro",
+      "description": "Swift Testing code review and authoring — modern APIs (by Paul Hudson)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "swiftdata-pro",
+      "source": "./skills/swiftdata-pro",
+      "description": "SwiftData code review and authoring — modern APIs, CloudKit compatibility (by Paul Hudson)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "swiftui-pro",
+      "source": "./skills/swiftui-pro",
+      "description": "SwiftUI code review and authoring — modern APIs, performance, accessibility (by Paul Hudson)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "systematic-debugging",
+      "source": "./skills/systematic-debugging",
+      "description": "Root-cause tracing, condition-based waiting, defense-in-depth for reproducing and fixing bugs (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "tdd",
+      "source": "./skills/tdd",
+      "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "source": "./skills/vercel-react-best-practices",
+      "description": "React & Next.js performance + best-practices guidance from Vercel Engineering — writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "verification-before-completion",
+      "source": "./skills/verification-before-completion",
+      "description": "Pre-handoff check — verify the work against the spec before calling it done (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "writing-skills",
+      "source": "./skills/writing-skills",
+      "description": "Meta-skill for authoring SKILL.md files — structure, triggers, and verification (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xcuitest-real-device-config",
+      "source": "./skills/xcuitest-real-device-config",
+      "description": "Prepare a real iOS/tvOS device for Appium XCUITest automation — device trust, Developer Mode, provisioning, WebDriverAgent code-signing (official Appium)",
       "version": "0.2.0"
     }
   ]

@@ -13,55 +13,55 @@
     },
     {
       "name": "ba",
-      "source": "./agents/ba",
+      "source": "./bundles/feature-development/agents/ba",
       "description": "Business analyst agent — turns vague ideas into user stories with acceptance criteria.",
       "version": "0.2.0"
     },
     {
       "name": "tech-lead",
-      "source": "./agents/tech-lead",
+      "source": "./bundles/feature-development/agents/tech-lead",
       "description": "Tech lead agent — decomposes stories into dependency-ordered tasks, owns architecture decisions and code review.",
       "version": "0.2.0"
     },
     {
       "name": "project-manager",
-      "source": "./agents/project-manager",
+      "source": "./bundles/feature-development/agents/project-manager",
       "description": "Project manager agent — routes tasks to developers, coordinates team progress, owns the merge gate.",
       "version": "0.2.0"
     },
     {
       "name": "python-dev",
-      "source": "./agents/python-dev",
+      "source": "./bundles/feature-development/agents/python-dev",
       "description": "Python developer agent — implements Django, FastAPI, Flask services with TDD.",
       "version": "0.2.0"
     },
     {
       "name": "js-dev",
-      "source": "./agents/js-dev",
+      "source": "./bundles/feature-development/agents/js-dev",
       "description": "JavaScript/TypeScript developer agent — React, Next.js, Node services with TDD.",
       "version": "0.2.0"
     },
     {
       "name": "ios-dev",
-      "source": "./agents/ios-dev",
+      "source": "./bundles/feature-development/agents/ios-dev",
       "description": "iOS/Swift developer agent — SwiftUI, SwiftData, Swift Testing with TDD and no-simulator discipline.",
       "version": "0.2.0"
     },
     {
       "name": "qa-engineer",
-      "source": "./agents/qa-engineer",
+      "source": "./bundles/feature-development/agents/qa-engineer",
       "description": "QA engineer agent — verifies features, reproduces bugs, writes E2E tests via Playwright.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-engineer",
-      "source": "./agents/test-automation-engineer",
+      "source": "./bundles/feature-development/agents/test-automation-engineer",
       "description": "Test automation engineer agent — turns automation-ready specs into green tests inside the project's existing framework (Playwright, Cypress, pytest, JUnit, NUnit, WDIO).",
       "version": "0.2.0"
     },
     {
       "name": "scout",
-      "source": "./agents/scout",
+      "source": "./bundles/feature-development/agents/scout",
       "description": "Codebase scout agent — maps unfamiliar repos, generates CLAUDE.md and project configuration.",
       "version": "0.2.0"
     },
@@ -73,49 +73,49 @@
     },
     {
       "name": "bugfix-workflow",
-      "source": "./skills/bugfix-workflow",
+      "source": "./bundles/feature-development/skills/bugfix-workflow",
       "description": "End-to-end bugfix workflow: reproduce → root cause → fix → regression test.",
       "version": "0.2.0"
     },
     {
       "name": "plan-feature",
-      "source": "./skills/plan-feature",
+      "source": "./bundles/feature-development/skills/plan-feature",
       "description": "Structured feature planning: requirements, investigation, feasibility, implementation plan.",
       "version": "0.2.0"
     },
     {
       "name": "implement-feature",
-      "source": "./skills/implement-feature",
+      "source": "./bundles/feature-development/skills/implement-feature",
       "description": "Feature implementation workflow: plan review, tests, implementation, verification, delivery.",
       "version": "0.2.0"
     },
     {
       "name": "code-review",
-      "source": "./skills/code-review",
+      "source": "./bundles/feature-development/skills/code-review",
       "description": "Structured code review for correctness, security, performance, and maintainability.",
       "version": "0.2.0"
     },
     {
       "name": "git-workflow",
-      "source": "./skills/git-workflow",
+      "source": "./bundles/feature-development/skills/git-workflow",
       "description": "Git operations: branching, commits, PRs, rebasing, cherry-picks, releases.",
       "version": "0.2.0"
     },
     {
       "name": "browser-verify",
-      "source": "./skills/browser-verify",
+      "source": "./bundles/feature-development/skills/browser-verify",
       "description": "Chrome DevTools Protocol browser automation — inspect, click, screenshot, verify UI.",
       "version": "0.2.0"
     },
     {
       "name": "playwright-testing",
-      "source": "./skills/playwright-testing",
+      "source": "./bundles/feature-development/skills/playwright-testing",
       "description": "UI/E2E test automation with Playwright MCP.",
       "version": "0.2.0"
     },
     {
       "name": "issue-tracking",
-      "source": "./skills/issue-tracking",
+      "source": "./bundles/feature-development/skills/issue-tracking",
       "description": "Create and manage issues in GitHub, Linear, or GitLab.",
       "version": "0.2.0"
     },
@@ -139,7 +139,7 @@
     },
     {
       "name": "memory",
-      "source": "./skills/memory",
+      "source": "./bundles/feature-development/skills/memory",
       "description": "Per-role persistent memory — facts, preferences, decisions, and daily log as plain markdown.",
       "version": "0.2.0"
     },
@@ -157,31 +157,31 @@
     },
     {
       "name": "seeding-a-project",
-      "source": "./skills/seeding-a-project",
+      "source": "./bundles/feature-development/skills/seeding-a-project",
       "description": "Generate AGENTS.md, .agents/ project docs, and per-role memory briefings after codebase exploration.",
       "version": "0.2.0"
     },
     {
       "name": "session-retrospective",
-      "source": "./skills/session-retrospective",
+      "source": "./bundles/feature-development/skills/session-retrospective",
       "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout).",
       "version": "0.2.0"
     },
     {
       "name": "completing-a-task",
-      "source": "./skills/completing-a-task",
+      "source": "./bundles/feature-development/skills/completing-a-task",
       "description": "Five-step task handoff protocol: commit → push → PR → comment → notify.",
       "version": "0.2.0"
     },
     {
       "name": "test-case-analysis",
-      "source": "./skills/test-case-analysis",
+      "source": "./bundles/feature-development/skills/test-case-analysis",
       "description": "Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer. Does not write automation code.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-workflow",
-      "source": "./skills/test-automation-workflow",
+      "source": "./bundles/feature-development/skills/test-automation-workflow",
       "description": "End-to-end test automation workflow: explore → specify → implement → review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown).",
       "version": "0.2.0"
     },
