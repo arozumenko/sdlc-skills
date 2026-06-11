@@ -2,9 +2,9 @@
 name: bugfix-workflow
 description: Use when the user says "fix bug", "fix #NNN", or you hit a failing test or reproducible defect that needs fixing end-to-end (not investigation alone). The full bugfix workflow from reproduction through a verified, documented fix.
 license: Apache-2.0
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

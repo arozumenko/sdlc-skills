@@ -2,10 +2,10 @@
 name: test-case-analysis
 description: Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — "analyse SCRUM-T101", "run this case and emit an AFS", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.
 license: Apache-2.0
-authors:
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.1.0"
 ---
 

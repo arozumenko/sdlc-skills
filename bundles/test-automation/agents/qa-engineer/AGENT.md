@@ -7,9 +7,10 @@ group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
 skills: [playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
-authors:
-  - Artem Rozumenko <artem_rozumenko@epam.com>
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+metadata:
+  authors:
+    - Artem Rozumenko <artem_rozumenko@epam.com>
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
 ---
 
 # QA Engineer

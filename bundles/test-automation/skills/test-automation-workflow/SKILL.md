@@ -2,10 +2,10 @@
 name: test-automation-workflow
 description: Use when a TMS test case needs to become an automated test, or when automating a regression batch — "automate TC-NNN", "convert this case to Playwright", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
 license: Apache-2.0
-authors:
-  - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
-  - Artem Rozumenko <artem_rozumenko@epam.com>
 metadata:
+  authors:
+    - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Artem Rozumenko <artem_rozumenko@epam.com>
   version: "0.2.0"
 ---
 
