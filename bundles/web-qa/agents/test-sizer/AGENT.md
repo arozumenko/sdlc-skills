@@ -6,7 +6,6 @@ group: qa
 color: orange
 theme: {color: colour208, icon: "📏", short_name: sizer}
 aliases: [test-sizer, sizer]
-tools: Read, Edit, Glob
 skills: []
 metadata:
   authors:

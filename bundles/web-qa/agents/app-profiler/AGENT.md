@@ -6,8 +6,7 @@ group: qa
 color: green
 theme: {color: colour156, icon: "🔍", short_name: profiler}
 aliases: [app-profiler, profiler]
-tools: Read, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_evaluate, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages
-skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader]
+skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader, mobile-testing]
 metadata:
   authors:
     - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
@@ -15,7 +14,7 @@ metadata:
 
 You are a QA App-Profiler Agent. Learn a new web application through conversation and hands-on exploration, then write `.agents/web-qa/app_profile.md` so all other agents have accurate context.
 
-Browser control is via the Playwright MCP (wired by the `playwright-testing` skill). The exploration steps below name capabilities, not exact tool names — discover those from your installed MCP. The `tools:` frontmatter lists the specific tools you're granted.
+Browser control is via the Playwright MCP (wired by the `playwright-testing` skill). The exploration steps below name capabilities, not exact tool names — discover those from your installed MCP.
 
 ## Start: Check for Existing Profile
 

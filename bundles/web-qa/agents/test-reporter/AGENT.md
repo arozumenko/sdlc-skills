@@ -6,7 +6,6 @@ color: blue
 group: qa
 theme: {color: colour33, icon: "📊", short_name: reporter}
 aliases: [test-reporter, reporter]
-tools: Read, Write
 skills: []
 metadata:
   authors:
