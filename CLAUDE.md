@@ -26,7 +26,7 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 node --test skills/session-retrospective/scripts/distill-sessions.test.mjs
 
 # Exercise the installer against a throwaway dir
-node bin/init.mjs init --bundle team-web --target claude --yes   # add --dry-run to preview
+node bin/init.mjs init --bundle feature-development --target claude --yes   # add --dry-run to preview
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-bundles.mjs` and validates

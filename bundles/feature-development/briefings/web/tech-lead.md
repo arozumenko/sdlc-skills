@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-web) — fullstack web architecture defaults; scout refines per project
+description: Stack overlay (feature-development/web) — fullstack web architecture defaults; scout refines per project
 type: project
 ---
 

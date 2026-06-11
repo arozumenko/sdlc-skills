@@ -1078,7 +1078,7 @@ function parseArgs(argv) {
     }
     // Anything else is unrecognized. Skip the leading `init` subcommand. A
     // common cause is a flag+value passed as a single shell token — e.g. zsh
-    // not word-splitting an unquoted variable: `init "--bundle team-web"`.
+    // not word-splitting an unquoted variable: `init "--bundle feature-development"`.
     else if (!(i === 0 && a === "init")) {
       out.unknown.push(a);
     }
@@ -1125,8 +1125,8 @@ function printHelp() {
     -h, --help                 Show this help
 
   Examples:
-    npx github:arozumenko/sdlc-skills init --bundle team-web
-    npx github:arozumenko/sdlc-skills init --bundle team-ios --target claude
+    npx github:arozumenko/sdlc-skills init --bundle feature-development
+    npx github:arozumenko/sdlc-skills init --bundle feature-development --target claude
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
@@ -2225,7 +2225,7 @@ async function main() {
   if (args.unknown.length) {
     console.error(`\n  ! Unrecognized argument(s): ${args.unknown.map((t) => `"${t}"`).join(", ")}`);
     console.error(`    Known flags: --agents <list> | --skills <list> | --bundle <id> | --target <list> | --all | --update | --symlink | --yes`);
-    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle team-web\`, not \`"--bundle team-web"\`).`);
+    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle feature-development\`, not \`"--bundle feature-development"\`).`);
     console.error(`    To install the entire catalog on purpose, use --all.\n`);
     process.exit(1);
   }

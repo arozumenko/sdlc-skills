@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-ios) — iOS detection hints; scout refines per project
+description: Stack overlay (feature-development/ios) — iOS detection hints; scout refines per project
 type: project
 ---
 

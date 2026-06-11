@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-web) — web QA defaults; scout refines per project
+description: Stack overlay (feature-development/web) — web QA defaults; scout refines per project
 type: project
 ---
 

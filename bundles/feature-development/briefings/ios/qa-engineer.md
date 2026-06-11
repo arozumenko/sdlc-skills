@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-ios) — iOS QA defaults; scout refines per project
+description: Stack overlay (feature-development/ios) — iOS QA defaults; scout refines per project
 type: project
 ---
 

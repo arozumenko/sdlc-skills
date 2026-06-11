@@ -53,4 +53,4 @@ External †: `tdd`, `systematic-debugging`, `requesting-code-review`, `receivin
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/team-web`](../../bundles/team-web)
+- Team bundles that include this agent: [`../../bundles/feature-development`](../../bundles/feature-development) (selected in the dev-role picker)

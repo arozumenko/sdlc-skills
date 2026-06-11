@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-web) — fullstack web detection hints; scout refines per project
+description: Stack overlay (feature-development/web) — fullstack web detection hints; scout refines per project
 type: project
 ---
 

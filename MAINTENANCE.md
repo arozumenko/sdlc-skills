@@ -47,12 +47,11 @@ want to control rollout timing.
 
 ## Updating a bundle install
 
-If you installed a **team bundle** (`--bundle team-web` / `--bundle
-team-ios`), update it the same way — re-run with the same `--bundle` and
-add `--update`:
+If you installed a **team bundle** (e.g. `--bundle feature-development`),
+update it the same way — re-run with the same `--bundle` and add `--update`:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle team-web --update --yes
+npx github:arozumenko/sdlc-skills init --bundle feature-development --update --yes
 ```
 
 What `--update` does for a bundle:

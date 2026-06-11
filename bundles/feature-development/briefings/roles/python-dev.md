@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-web) — FastAPI + FastMCP backend defaults; scout refines per project
+description: Stack overlay (feature-development/web) — FastAPI + FastMCP backend defaults; scout refines per project
 type: project
 ---
 

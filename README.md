@@ -132,8 +132,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 ```bash
 # A team bundle — the whole team in one shot (agents, their skills,
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
-npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
-npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
+npx github:arozumenko/sdlc-skills init --bundle feature-development   # web + iOS: pick python-dev, js-dev, test-automation-engineer, ios-dev
 npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 
@@ -158,13 +157,12 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Four
+files** into the project — one command instead of hand-listing roles. Three
 ship today:
 
 | Bundle | Roster | What it's for |
 |---|---|---|
-| `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
-| `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
+| `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI); core roles auto-tune per picked platforms. |
 | `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 
@@ -357,12 +355,12 @@ catalog.
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 | `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
 | `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) | `qa-engineer`, `test-automation-engineer`, `manual-qa` agents |
-| `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `team-web` overlay (`python-dev`, `tech-lead`) |
-| `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `team-web` overlay |
-| `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `team-web` overlay (`js-dev`, `tech-lead`) |
-| `environment-setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/environment-setup-xcuitest` | `team-ios` overlay (`qa-engineer`) |
-| `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `team-ios` overlay (`qa-engineer`) |
-| `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `team-ios` overlay (`qa-engineer`) |
+| `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `feature-development` web overlay (`python-dev`, `tech-lead`) |
+| `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `feature-development` web overlay |
+| `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `feature-development` web overlay (`js-dev`, `tech-lead`) |
+| `environment-setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/environment-setup-xcuitest` | `feature-development` iOS overlay (`qa-engineer`) |
+| `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `feature-development` iOS overlay (`qa-engineer`) |
+| `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `feature-development` iOS overlay (`qa-engineer`) |
 
 ## Using these agents and skills
 
@@ -417,11 +415,11 @@ sdlc-skills/
 │   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
 ├── bundles/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # team-web, team-ios, manual-qa, test-automation
+│   └── <bundle-id>/            # feature-development, manual-qa, test-automation
 │       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
-│       ├── briefings/<role>.md # seeded into .agents/memory/<role>/ (team-web/ios)
+│       ├── briefings/<role>.md # seeded into .agents/memory/<role>/
 │       ├── knowledge/          # reference docs seeded into the project (manual-qa)
 │       └── agents/<name>/      # bundle-local agents (manual-qa)
 ├── skills.json                 # catalog: monorepo + external skill sources
@@ -463,8 +461,8 @@ re-distributes nothing, only catalogs and wires.
 - **[`obra/superpowers`](https://github.com/obra/superpowers)** — Jesse Vincent. `brainstorming`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `writing-skills`. MIT.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
 - **[`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli)** — Microsoft Playwright. `skills/playwright-cli/` (drive Playwright from the command line — browser launch, navigation, snapshot/locator interaction, tabs and storage, network mocking, tracing, test generation). Used by `qa-engineer` and `test-automation-engineer`. Apache-2.0.
-- **[`fastapi/fastapi`](https://github.com/fastapi/fastapi)** — Sebastián Ramírez. Official FastAPI agent skill. `team-web` backend overlay. MIT.
-- **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest environment setup, real-device config, and troubleshooting. `team-ios` QA overlay. Apache-2.0.
+- **[`fastapi/fastapi`](https://github.com/fastapi/fastapi)** — Sebastián Ramírez. Official FastAPI agent skill. `feature-development` web/backend overlay. MIT.
+- **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest environment setup, real-device config, and troubleshooting. `feature-development` iOS QA overlay. Apache-2.0.
 - **Bundle-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
 
 Thanks to all maintainers.

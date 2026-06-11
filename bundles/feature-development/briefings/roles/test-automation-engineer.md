@@ -1,6 +1,6 @@
 ---
 name: Project briefing
-description: Stack overlay (team-web) — web test-automation defaults; scout refines per project
+description: Stack overlay (feature-development/web) — web test-automation defaults; scout refines per project
 type: project
 ---
 
