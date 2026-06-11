@@ -10,10 +10,8 @@
     "test": "node --test",
     "validate:bundles": "node bin/validate-bundles.mjs",
     "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
-    "validate:sync": "node bin/sync-bundles.mjs --check",
-    "validate": "npm run validate:bundles && npm run validate:marketplaces && npm run validate:sync",
-    "gen:marketplaces": "node bin/gen-marketplaces.mjs",
-    "sync:bundles": "node bin/sync-bundles.mjs"
+    "validate": "npm run validate:bundles && npm run validate:marketplaces",
+    "gen:marketplaces": "node bin/gen-marketplaces.mjs"
   },
   "repository": {
     "type": "git",

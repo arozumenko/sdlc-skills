@@ -14,7 +14,7 @@
 //   - every `localSkills` entry has skills/<name>/SKILL.md in the bundle dir
 // Exits non-zero with a per-error report when anything fails.
 
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -136,9 +136,13 @@ function main() {
     const localSkills = Array.isArray(b.localSkills) ? b.localSkills : [];
     if (b.localSkills !== undefined && !Array.isArray(b.localSkills))
       err(id, "`localSkills` must be an array");
-    for (const ls of localSkills)
-      if (!existsSync(join(dir, "skills", ls, "SKILL.md")))
+    for (const ls of localSkills) {
+      const sp = join(dir, "skills", ls);
+      if (!existsSync(join(sp, "SKILL.md")))
         err(id, `localSkill "${ls}" missing skills/${ls}/SKILL.md`);
+      if (existsSync(sp) && lstatSync(sp).isSymbolicLink())
+        err(id, `skill "${ls}" must be a real directory, not a symlink`);
+    }
     const effectiveSkillIds = new Set([...skillIds, ...localSkills]);
 
     // feature-development-style bundles: flat devRoles + platform overlays.
@@ -198,9 +202,13 @@ function main() {
       }
     }
 
-    for (const la of b.localAgents || [])
-      if (!existsSync(join(dir, "agents", la, "AGENT.md")))
+    for (const la of b.localAgents || []) {
+      const ap = join(dir, "agents", la);
+      if (!existsSync(join(ap, "AGENT.md")))
         err(id, `localAgent "${la}" missing agents/${la}/AGENT.md`);
+      if (existsSync(ap) && lstatSync(ap).isSymbolicLink())
+        err(id, `agent "${la}" must be a real directory, not a symlink`);
+    }
 
     for (const src of Object.keys(b.seed || {}))
       if (!existsSync(join(dir, src))) err(id, `seed source missing: ${src}`);

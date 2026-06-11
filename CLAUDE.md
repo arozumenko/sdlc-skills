@@ -5,10 +5,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 A **content + distribution layer**, not an application. It ships role-based
-agent personas (`agents/`) and workflow skills (`skills/`), catalogs them in
-`skills.json`, and installs them into any AI IDE via `bin/init.mjs` (the npx
-installer) or per-host native plugin manifests. There is no build step — the
-installer discovers content at runtime.
+agent personas and workflow skills, catalogs them in `skills.json`, and installs
+them into any AI IDE via `bin/init.mjs` (the npx installer) or per-host native
+plugin manifests. There is no build step — the installer discovers content at
+runtime.
+
+**Content lives in bundles.** Each bundle (`bundles/<id>/`) physically owns its
+`agents/` and `skills/` directories — real copies, not mirrors. The same agent
+or skill id may appear in several bundles with different content (intentional
+divergence is normal). Top-level `agents/` and `skills/` hold only the
+standalone-only "orphan" content not belonging to any bundle: one agent
+(`personal-assistant`) and eight skills (`deep-research`, `gathering-context`,
+`verifying-outcomes`, `microsoft-365`, `obsidian-vault`, `tosca-automation`,
+`vividus`, `xray-testing`). `skills.json` registers those orphan monorepo skills
+plus the 21 external (`repo:`) skills fetched from upstream at install time.
 
 Read `README.md` for the full catalog and install paths, `AGENTS.md` for the
 consumer-facing summary, and `bundles/SPEC.md` before touching bundles.
@@ -23,25 +33,31 @@ npm run validate:marketplaces  # gen-marketplaces.mjs --check — fails if gener
 npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .github/plugin marketplaces
 
 # Run a single test file
-node --test skills/session-retrospective/scripts/distill-sessions.test.mjs
+node --test bin/lib/item-resolver.test.mjs
 
 # Exercise the installer against a throwaway dir
 node bin/init.mjs init --bundle feature-development --target claude --yes   # add --dry-run to preview
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-bundles.mjs` and validates
-every `skills/*/SKILL.md` against the agentskills.io spec via `skills-ref`.
+every `skills/*/SKILL.md` and `bundles/*/skills/*/SKILL.md` against the
+agentskills.io spec via `skills-ref`.
 
 ## Architecture
 
-**Three resolution layers.** `agents/<name>/AGENT.md` declares (in frontmatter)
-the skills a role needs. `skills.json` is the registry mapping each skill id to
-either a monorepo path (`monorepo: sdlc-skills`) or an external repo
-(`repo: owner/repo` + optional `subdir`/`ref`). `bin/init.mjs` resolves an
-agent's `skills:` list against the registry, copies monorepo skills directly,
-and git-clones externals into `~/.cache/sdlc-skills/registry/` then copies (or
-`--symlink`s) them in. Adding a folder under `agents/` or `skills/` + a
-`skills.json` entry makes it installable on the next run — no manifest editing.
+**Resolution layers.** Each bundle's `agents/<name>/AGENT.md` declares (in
+frontmatter) the skills a role needs. `skills.json` is the registry mapping
+orphan and external skill ids: monorepo entries (`monorepo: sdlc-skills`) for
+the orphan skills in top-level `skills/`, and `repo: owner/repo` entries for
+externals. `bin/init.mjs` resolves an agent's `skills:` list against the
+registry, copies monorepo/bundle skills directly, and git-clones externals into
+`~/.cache/sdlc-skills/registry/` then copies (or `--symlink`s) them in.
+
+**Standalone resolution order.** `--agents <name>` / `--skills <id>` resolve:
+orphan top-level first, then alphabetical-first bundle that owns the id (a
+one-line notice prints when the id appears in more than one bundle). Use the
+qualified form `--agents <bundle>/<name>` (or `--skills <bundle>/<id>`) to pin
+a specific bundle's copy. `--bundle` is unchanged.
 
 **Per-host install shapes.** The installer emits each host's native form:
 directories for Claude/Cursor/Windsurf, flat `<name>.agent.md` for Copilot CLI
@@ -50,14 +66,16 @@ TOML for Codex (`writeCodexAgent`). Claude Code preloads skill content from
 frontmatter; for the others, `injectSkillsSection` writes a bracketed
 `SKILLS-INJECTED` block into the agent file (idempotent on `--update`).
 
-**Bundles** (`bundles/<id>/`) are team presets installed with `--bundle`. A
-bundle does **not** fork agents — it selects shared agents and tunes the
-*installed copy* via two parallel overlays: `briefings/<role>.md` (behavior →
-seeded into `.agents/memory/<role>/project_briefing.md`) and `skillOverlays` in
+**Bundles** (`bundles/<id>/`) are team presets installed with `--bundle`. Each
+bundle **physically owns** its `agents/` and `skills/` as real directories —
+there is no sync and no cross-bundle equality requirement. The same id may
+differ across bundles by design. A bundle tunes the *installed copy* via two
+parallel overlays: `briefings/<role>.md` (behavior → seeded into
+`.agents/memory/<role>/project_briefing.md`) and `skillOverlays` in
 `bundle.json` (capability → rewrites the installed agent's `skills:` add/remove).
 It also splices `instructions.md` into a `<!-- BUNDLE:<id> -->` block in
-`AGENTS.md`/`CLAUDE.md` and seeds `knowledge/` reference docs. See the
-overlay-not-fork rationale in `bundles/SPEC.md`.
+`AGENTS.md`/`CLAUDE.md` and seeds `knowledge/` reference docs. See
+`bundles/SPEC.md` for the full spec.
 
 **Hooks** (`hooks/`) inject context at session/subagent start because Claude's
 `@import` doesn't work in subagent files, on other IDEs, or across
@@ -68,8 +86,10 @@ templates the installer materializes per target. Big manuals are deliberately
 *not* injected — agents read those on demand.
 
 **Generated vs hand-curated manifests.** The Cursor/Codex/Copilot marketplace
-manifests are generated by `gen-marketplaces.mjs` from the catalog — edit the
-generator or sources, then `npm run gen:marketplaces`, never the output files.
+manifests are generated by `gen-marketplaces.mjs` by discovering agents/skills
+across top-level orphans and all bundles (one entry per id, sourced from the
+alphabetical-first owner) — edit the generator or sources, then
+`npm run gen:marketplaces`, never the output files.
 Claude Code's `.claude-plugin/marketplace.json` is hand-curated and left alone.
 
 ## What runs where: nothing ships from this repo at runtime

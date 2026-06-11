@@ -12,8 +12,8 @@ A bundle composes five things:
 
 | Layer | Where it comes from |
 |---|---|
-| **Agents** | selected from the shared `agents/` dir (the bundle picks a set) |
-| **Skills** | auto-pulled from each agent's `skills:` frontmatter, plus any team-wide extras the bundle declares |
+| **Agents** | owned by the bundle under `bundles/<id>/agents/` |
+| **Skills** | auto-pulled from each agent's `skills:` frontmatter, plus any team-wide extras the bundle declares; bundle-local skills live under `bundles/<id>/skills/` |
 | **Instructions** | a team-level guidance file the bundle ships |
 | **Briefings** | per-role *stack overlays* the bundle seeds into each role's memory |
 | **Hooks** | IDE automation (Claude `settings.json`), v1 Claude-only |
@@ -26,9 +26,11 @@ read `.agents/` context. The stack-specific agent *is* the dev role
 (`python-dev` vs `js-dev` vs `ios-dev`) — there is no "scout for iOS"
 distinct from "scout for web", only one scout producing different output.
 
-So a bundle does **not** copy agents. A shared agent becomes
-stack-specific (e.g. "qa-engineer for iOS") through **two parallel overlays
-on top of its generic `AGENT.md` (which holds stack-agnostic practices):**
+A bundle owns a real copy of each agent it uses (see "Bundle-owned content"
+below), but it does **not** fork an agent's *behavior* into a stack-specific
+variant. A shared agent becomes stack-specific (e.g. "qa-engineer for iOS")
+not by rewriting its `AGENT.md` body but through **two parallel overlays on
+top of that generic body (which holds stack-agnostic practices):**
 
 1. **Briefing overlay** (behavior) — a per-role file installed into
    `.agents/memory/<role>/project_briefing.md` (the exact slot scout fills
@@ -37,11 +39,10 @@ on top of its generic `AGENT.md` (which holds stack-agnostic practices):**
    agent's `skills:` frontmatter for this team: `add` stack-specific skills,
    `remove` generic ones that don't fit. Tunes *what* the role can do.
 
-Both leave the global agent unforked — only the *installed copy* is tuned.
+Both leave the source agent unmodified — only the *installed copy* is tuned.
 Example: a bundle can give `qa-engineer` an iOS briefing **and** a skill
 overlay that drops the web `playwright-*`/`browser-verify` skills and adds a
-native iOS UI-testing skill. A bundle-local agent that genuinely doesn't
-exist globally is still possible via `localAgents` (an escape hatch).
+native iOS UI-testing skill.
 
 ## Flat dev-role selection (`coreAgents` / `devRoles` / `platforms`)
 
@@ -65,44 +66,27 @@ roles imply:
 non-interactively. Bundles without `devRoles` keep the legacy fixed-roster
 behavior.
 
-## Bundle mirroring — self-documenting bundles, single source of truth
+## Bundle-owned content
 
-A bundle's own `agents/` and `skills/` dirs are where it **declares its
-roster**. Two kinds of entries live there:
+Each bundle physically owns its `agents/` and `skills/` directories — real
+files, authored and maintained directly under `bundles/<id>/agents/<name>/`
+and `bundles/<id>/skills/<name>/`. The same agent or skill id may appear in
+several bundles with different content; divergence across bundles is allowed
+and expected (hand-editing a bundle's copy to suit the team is normal).
 
-1. **Bundle-local content** — for roles that only make sense inside the
-   team and don't exist globally, drop `AGENT.md` / `SKILL.md` directly
-   under `bundles/<id>/agents/<name>/` or `bundles/<id>/skills/<name>/`.
-   Example: `manual-qa`'s six role-specific agents (`app-profiler`,
-   `test-sizer`, …) live only here and are authored here.
-2. **Synced mirror of a canonical** — for items whose canonical home is
-   `agents/<name>/` or `skills/<name>/` (so standalone
-   `--agents <name>` / `--skills <id>` keeps working), the bundle dir
-   holds a **real copy** of the canonical content. The copy is generated
-   by `bin/sync-bundles.mjs`, which walks each bundle's `localAgents` /
-   `localSkills` entries and deep-copies the matching canonical
-   directory. Run it after editing any canonical file the bundle
-   mirrors:
+There is **no sync and no cross-bundle equality requirement**. The bundle dir
+is the source of truth for its content.
 
-   ```bash
-   npm run sync:bundles            # refresh all mirrored copies
-   npm run validate:sync           # CI guardrail — fails if any drift
-   ```
+Agents and skills are declared in the manifest via `localAgents` /
+`localSkills`. The bundle's own dir is self-documenting —
+`ls bundles/feature-development/agents/` shows the full roster as real
+directories, indexable by tools that don't follow symlinks.
 
-   `npm run validate` invokes `validate:sync`, so PR CI catches drift
-   automatically. **Never hand-edit a synced copy** — the source of
-   truth is the canonical `agents/<name>/` or `skills/<name>/`; the
-   sync script will clobber any local edit on the next run.
-
-In both cases the manifest declares the item via `localAgents` /
-`localSkills` (not `agents` / `skills`). The bundle's own dir becomes
-self-documenting — `ls bundles/feature-development/agents/` shows the full
-roster as real directories, indexable by mirrors that don't follow
-symlinks (e.g. the EPAM indexer). This is how `feature-development` and
-`test-automation` are organized today: shared agents (`scout`, `ba`, …)
-are mirrored from canonical into each owning bundle alongside the
-single-bundle items (`ios-dev`, `python-dev`, `js-dev`,
-`atlassian-content`).
+**Standalone install resolution.** `--agents <name>` / `--skills <id>` check,
+in order: the top-level orphan dirs (`agents/`, `skills/`) first, then the
+alphabetical-first bundle that declares the id (a one-line notice prints when
+more than one bundle owns it). To pin a specific bundle's copy use the
+qualified form `--agents <bundle>/<name>` or `--skills <bundle>/<id>`.
 
 ## Directory layout
 
@@ -118,9 +102,9 @@ bundles/<id>/
 ├── hooks/                   optional — Claude settings.json automation
 │   ├── hooks.json            hook config fragment (event → command)
 │   └── scripts/              scripts the hooks invoke (chmod +x on install)
-├── agents/                  optional — bundle-local roles; real content (manual-qa) or a synced mirror of agents/<name>/ (feature-development/test-automation)
+├── agents/                  optional — agents this bundle owns (real copies; same id may differ from other bundles)
 │   └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
-└── skills/                  optional — bundle-local skills; real content or a synced mirror of skills/<name>/
+└── skills/                  optional — skills this bundle owns (real copies)
     └── <name>/               installed like a monorepo skill (SKILL.md + references/scripts)
 ```
 
@@ -159,7 +143,7 @@ The descriptor carries no install config.
   "id": "feature-development",              // must match the directory name
   "title": "Feature Development",           // human label
   "description": "...",                      // one-line summary
-  "agents": ["scout", "ba", "..."],          // shared agents to install (resolved against agents/)
+  "agents": ["scout", "ba", "..."],          // agents to install (resolved from this bundle's agents/ dir or the orphan top-level)
   "skills": [],                              // team-wide extra skills beyond what agents pull
   "briefings": {                             // role → briefing file (behavior overlay)
     "qa-engineer": "briefings/qa-engineer.md"
@@ -170,8 +154,8 @@ The descriptor carries no install config.
   "seed": { "knowledge": ".agents/manual-qa/knowledge" }, // optional, bundle-relative src → project-relative dest
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
-  "localAgents": [],                         // optional bundle-local roles in agents/
-  "localSkills": [],                         // optional bundle-local skills in skills/ (no skills.json entry needed)
+  "localAgents": [],                         // agents this bundle owns (under bundles/<id>/agents/)
+  "localSkills": [],                         // skills this bundle owns (under bundles/<id>/skills/; no skills.json entry needed)
   "targets": ["claude"]                      // IDE targets that get HOOKS (agents/skills/briefings install everywhere)
 }
 ```
@@ -181,7 +165,7 @@ The descriptor carries no install config.
 1. **Resolve** — read `bundles/<id>/bundle.json`; merge `agents[]` into the
    agent install list (existing logic auto-pulls each agent's declared
    skills); append `skills[]`; install `localAgents` from
-   `bundles/<id>/agents/` like global agents; install `localSkills` from
+   `bundles/<id>/agents/`; install `localSkills` from
    `bundles/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
    any agent in the bundle that declares it in `skills:` frontmatter, with no
    `skills.json` entry needed — the description is read from each
@@ -200,8 +184,8 @@ The descriptor carries no install config.
    The install union is recomputed from the effective sets: a `remove`d skill
    no remaining agent needs isn't installed; `add`ed skills that resolve are
    installed; `add`s not yet in the catalog are reported as **pending content**
-   (the role's frontmatter only lists skills that actually exist). The global
-   agent is never modified.
+   (the role's frontmatter only lists skills that actually exist). The bundle's
+   source agent is never modified — only the installed copy is tuned.
 3. **Instructions** — splice `instructions.md` into root context files
    inside `<!-- BUNDLE:<id> START -->` / `<!-- BUNDLE:<id> END -->` markers.
    Re-running replaces the marked block in place — idempotent, no `--update`
@@ -258,8 +242,8 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   `.github/workflows/validate.yml`) checks each bundle: dir name matches
   `id`, a `README.md` exists, a `BUNDLE.md` exists with non-empty
   `name`/`description`/`owner` frontmatter, `agents[]` is non-empty and every entry exists
-  under `agents/`, every `briefings` role is in `agents[]` and its file
-  exists, every `skills[]` id resolves in `skills.json`/`skills/`,
+  under `bundles/<id>/agents/`, every `briefings` role is in `agents[]` and its file
+  exists, every `skills[]` id resolves in `skills.json`/`bundles/<id>/skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each
   `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
   `SKILL.md`, and every `seed` source path exists.
@@ -271,5 +255,5 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 | id | team | dev roles |
 |---|---|---|
 | `feature-development` | cross-platform (web + iOS) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`; core roles auto-tune |
-| `manual-qa` | manual QA for web | 5 local agents: `setup`, `tc-writer`, `orchestrator`, `executor`, `reporter` |
+| `manual-qa` | manual QA for web | 6 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter` |
 | `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |
