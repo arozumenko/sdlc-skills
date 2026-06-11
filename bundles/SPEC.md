@@ -63,7 +63,7 @@ roles imply:
 
 `--yes` / non-interactive installs all dev roles; `--agents <subset>` selects
 non-interactively. Bundles without `devRoles` keep the legacy fixed-roster
-behavior. See `docs/superpowers/specs/2026-06-11-feature-development-bundle-design.md`.
+behavior.
 
 ## Bundle mirroring — self-documenting bundles, single source of truth
 
