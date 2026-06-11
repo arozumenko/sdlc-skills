@@ -16,9 +16,9 @@ GitHub Copilot CLI, Windsurf, Codex).
 flowchart TB
     subgraph sdlc["sdlc-skills — content + install resolution"]
         direction TB
-        agents[/"agents/<br/>self-describing personas"/]
-        skills[/"skills/<br/>monorepo skills"/]
-        registry[("skills.json<br/>catalog: monorepo + external")]
+        agents[/"bundles/<br/>agent + skill content"/]
+        skills[/"orphan skills/<br/>standalone-only content"/]
+        registry[("skills.json<br/>catalog: orphan + external")]
         installer(["bin/init.mjs<br/>npx installer"])
         agents --- skills
         skills --- registry
@@ -51,9 +51,17 @@ for content dirs, `( )` round-ended for the installer, cylinders for the
 registry, `[[ ]]` subroutines for external sources. GitHub's Mermaid
 renderer uses theme-adaptive colors in both light and dark mode.)
 
-Agents are **self-describing** — each `agents/<name>/AGENT.md` carries
-its own metadata (role, group, theme, aliases, skills, model). IDE plugin
-systems read it at install time. Nothing duplicated.
+Agents are **self-describing** — each `AGENT.md` carries its own metadata
+(role, group, theme, aliases, skills, model). IDE plugin systems read it at
+install time. Nothing duplicated.
+
+Most agents and skills live inside bundles (`bundles/<id>/agents/` and
+`bundles/<id>/skills/`). The top-level `agents/` and `skills/` directories
+hold only standalone-only "orphan" content: one agent (`personal-assistant`)
+and eight skills (`deep-research`, `gathering-context`, `verifying-outcomes`,
+`microsoft-365`, `obsidian-vault`, `tosca-automation`, `vividus`,
+`xray-testing`). `skills.json` registers those orphan monorepo skills and
+the external skills fetched from upstream.
 
 External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
 `systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
@@ -114,8 +122,8 @@ want to be happy).
 > `.agents/test-automation.yaml` → single-case pilot → scale-up.
 
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
-> Gemini CLI, Copilot CLI) only see skills present in this repo's
-> `skills/` directory — they don't know how to fetch from upstream. The
+> Gemini CLI, Copilot CLI) only see skills present locally in this repo —
+> they don't know how to fetch from upstream. The
 > npx installer reads `skills.json` and resolves external dependencies
 > automatically (Matt Pocock's TDD, Jesse Vincent's debugging skills,
 > Paul Hudson's Swift skills). If you want the full catalog, use the
@@ -236,9 +244,10 @@ original `model:` value. Full help: `init fix-copilot --help`.
 ### 2. Monorepo-only fallbacks (for when you refuse to install Node)
 
 Each of these paths reads the native plugin manifest this repo ships and
-installs **only the skills present in `skills/`** — external skills
-(Matt Pocock's TDD, the superpowers skills, the twostraws Swift skills)
-are not fetched. If you want those, go back to path 1.
+installs **only the monorepo content** — the orphan `skills/` entries plus the
+bundle-owned agents/skills the manifest points at. External skills (Matt
+Pocock's TDD, the superpowers skills, the twostraws Swift skills) are not
+fetched. If you want those, go back to path 1.
 
 **Claude Code plugin marketplace** — `.claude-plugin/marketplace.json`
 
@@ -251,7 +260,7 @@ are not fetched. If you want those, go back to path 1.
 **Cursor native plugin** — `.cursor-plugin/plugin.json`
 
 Point Cursor's plugin manager at this repo URL; it reads the manifest
-and installs skills + agents from `./skills/` and `./agents/`.
+and installs skills + agents from the discovered orphan and bundle dirs.
 
 **Gemini CLI extension** — `gemini-extension.json` + `GEMINI.md`
 
@@ -270,14 +279,15 @@ cloned into your project.
 
 ### 3. agentskills.io / third-party consumption
 
-Every skill under `skills/<name>/` follows the
-[agentskills.io](https://agentskills.io) spec — `SKILL.md` with
-`name` + `description` frontmatter. Any skill runtime (Vercel, custom
-frameworks, other IDEs) can point directly at `skills/<name>/`.
+Every `SKILL.md` in this repo — the orphans under `skills/<name>/` and the
+bundle-owned skills under `bundles/<id>/skills/<name>/` — follows the
+[agentskills.io](https://agentskills.io) spec (`name` + `description`
+frontmatter). Any skill runtime (Vercel, custom frameworks, other IDEs) can
+point directly at a `SKILL.md` directory.
 
 ## Catalog
 
-### Agents (10)
+### Agents (catalog across bundles)
 
 | Agent | Persona | Role |
 |---|---|---|
@@ -292,9 +302,13 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief |
 
-### Monorepo skills
+### Skills
 
-**SDLC-coupled (9):**
+Most skills are bundle-owned (under `bundles/<id>/skills/`). Eight orphan skills
+live in the top-level `skills/` dir and are available standalone. The full set
+installable via bundles is listed below.
+
+**SDLC-coupled (9, bundle-owned):**
 
 | Skill | What it does |
 |---|---|
@@ -308,7 +322,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `seeding-a-project` | Scout's project onboarding / configuration flow |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Generic dev skills (16):**
+**Other skills (16, mix of bundle-owned and orphan):**
 
 | Skill | What it does |
 |---|---|
@@ -327,7 +341,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
-| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Mirrored into the `manual-qa` bundle as its primary consumer |
+| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Owned by the `manual-qa` bundle |
 
 ### External skills (fetched by the installer)
 
@@ -401,11 +415,11 @@ sdlc-skills/
 │   └── marketplace.json        # Claude Code marketplace entry list
 ├── .cursor-plugin/
 │   └── plugin.json             # Cursor native plugin manifest
-├── agents/                     # role-based personas (self-describing)
+├── agents/                     # orphan-only personas (personal-assistant); standalone install
 │   └── <agent-name>/
 │       ├── AGENT.md            # frontmatter (group, theme, aliases, skills) + instructions
 │       └── SOUL.md             # personality / voice / working style
-├── skills/                     # agentskills.io-compliant skills
+├── skills/                     # orphan-only skills (8 entries); standalone install
 │   └── <skill-name>/
 │       ├── SKILL.md            # frontmatter: name + description
 │       ├── references/         # optional supporting docs
@@ -421,7 +435,8 @@ sdlc-skills/
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
 │       ├── briefings/<role>.md # seeded into .agents/memory/<role>/
 │       ├── knowledge/          # reference docs seeded into the project (manual-qa)
-│       └── agents/<name>/      # bundle-local agents (manual-qa)
+│       ├── agents/<name>/      # agents this bundle owns (real copies; divergence OK)
+│       └── skills/<name>/      # skills this bundle owns
 ├── skills.json                 # catalog: monorepo + external skill sources
 ├── AGENTS.md                   # generic / GitHub Copilot CLI fallback
 ├── GEMINI.md                   # Gemini CLI context file
@@ -433,24 +448,25 @@ sdlc-skills/
 
 ## Adding content
 
-1. **New agent** → create `agents/<name>/AGENT.md` (with YAML frontmatter:
-   `name`, `description`, `model`, `color`, `group`, `theme`, `aliases`,
-   `skills`) and `agents/<name>/SOUL.md`. No separate registry needed.
-2. **New monorepo skill** → create `skills/<name>/SKILL.md` with
-   agentskills.io frontmatter (`name`, `description`). Supporting files
-   go in `skills/<name>/references/` or `skills/<name>/scripts/`. Register
-   in `skills.json` with `{"id": "<name>", "monorepo": "sdlc-skills",
-   "name": "<name>"}`.
-3. **New external skill** → register in `skills.json` with
+1. **New bundle agent** → create `bundles/<bundle-id>/agents/<name>/AGENT.md`
+   (with YAML frontmatter: `name`, `description`, `model`, `color`, `group`,
+   `theme`, `aliases`, `skills`) and a `SOUL.md`. Declare it in `bundle.json`
+   under `localAgents`. No separate registry needed.
+2. **New bundle skill** → create `bundles/<bundle-id>/skills/<name>/SKILL.md`
+   with agentskills.io frontmatter (`name`, `description`). Declare it in
+   `bundle.json` under `localSkills`. No `skills.json` entry needed.
+3. **New orphan monorepo skill** (standalone, no bundle) → create
+   `skills/<name>/SKILL.md`. Register in `skills.json` with
+   `{"id": "<name>", "monorepo": "sdlc-skills", "name": "<name>"}`.
+4. **New external skill** → register in `skills.json` with
    `{"id": "<name>", "repo": "owner/repo", "ref": "main", "subdir": "path/to/skill"}`.
    The installer will clone + copy on first install (or symlink with `--symlink`).
-4. **Reference the new skill in an agent's `skills:` list** —
+5. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 
-No build step, no generated manifests. The installer discovers agents
-at runtime (`listDirs("agents")`) and reads `skills.json` for skill
-resolution — add a folder or a registry entry, it shows up on the next
-`init` run.
+No build step, no generated manifests. The installer discovers bundle content
+at runtime and reads `skills.json` for orphan/external skill resolution — add
+a folder or a registry entry, it shows up on the next `init` run.
 
 ## Acknowledgements
 
