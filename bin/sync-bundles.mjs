@@ -6,7 +6,7 @@
  * Every bundle's `localAgents` / `localSkills` entry whose canonical home
  * exists is mirrored as a real (deep-dereferenced) copy under
  * bundles/<id>/agents/<name>/ and bundles/<id>/skills/<name>/. Entries
- * without a canonical home (e.g. web-qa's role-specific agents) are
+ * without a canonical home (e.g. manual-qa's role-specific agents) are
  * genuinely bundle-local — left untouched.
  *
  * The rule the script enforces:

@@ -1,5 +1,5 @@
 {
-  "id": "web-qa",
+  "id": "manual-qa",
   "title": "Web QA Team",
   "description": "Standalone agentic manual-QA team for web and mobile apps — onboard the app, author test cases, run them live, and report. Supports Playwright (web/PWA/hybrid), Appium MCP (native local), and Mobitru device farm (cloud real devices).",
   "agents": [],
@@ -10,7 +10,7 @@
     "app-profiler": { "add": ["mobile-testing"] },
     "test-runner":  { "add": ["mobile-testing"] }
   },
-  "seed": { "knowledge": ".agents/web-qa/knowledge" },
+  "seed": { "knowledge": ".agents/manual-qa/knowledge" },
   "instructions": "instructions.md",
   "targets": ["claude"]
 }

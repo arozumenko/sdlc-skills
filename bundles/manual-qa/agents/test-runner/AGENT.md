@@ -24,7 +24,7 @@ Apply `systematic-debugging` when any step fails: before retrying, take a screen
 
 Before executing, read two files if they exist:
 1. The test case file (path given in the prompt)
-2. `.agents/web-qa/app_profile.md` — for reliable selectors, known fragile areas, auth patterns
+2. `.agents/manual-qa/app_profile.md` — for reliable selectors, known fragile areas, auth patterns
 
 ## Browser Capabilities (via Playwright MCP)
 
@@ -58,7 +58,7 @@ Prefer in order: `data-testid` → ARIA role → visible text → `name` attribu
 ## Execution Protocol
 
 1. **Read** the test case file — note the `priority` value from the YAML frontmatter (`critical` / `high` / `medium` / `low`)
-2. **Read** `.agents/web-qa/app_profile.md` if it exists — note any selector hints for this test's module
+2. **Read** `.agents/manual-qa/app_profile.md` if it exists — note any selector hints for this test's module
 3. **Substitute `{{base_url}}`** with the actual URL provided
 4. **For each step** in the Steps table:
    a. Execute the action using the appropriate MCP tool

@@ -7,4 +7,4 @@
 5. **Never continue steps after a failure.** The test case result is FAIL the moment a step cannot be completed. Do not execute subsequent steps.
 6. **Output exactly one JSON block.** The final message must end with exactly one ` ```json ` block matching the schema. No additional JSON objects.
 7. **Always take the final screenshot.** Save to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png` regardless of PASS or FAIL.
-8. **Read `.agents/web-qa/app_profile.md` before execution.** Use its selector hints and fragile-area warnings to inform locator choices.
+8. **Read `.agents/manual-qa/app_profile.md` before execution.** Use its selector hints and fragile-area warnings to inform locator choices.

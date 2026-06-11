@@ -1,6 +1,6 @@
 ---
 name: mobile-testing
-description: Mobile app testing for all web-qa agents. Covers native iOS/Android via Appium MCP and Mobitru device farm, and PWA/hybrid via Playwright mobile viewport. Use when profiling a mobile app, authoring mobile TCs, sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report.
+description: Mobile app testing for all manual-qa agents. Covers native iOS/Android via Appium MCP and Mobitru device farm, and PWA/hybrid via Playwright mobile viewport. Use when profiling a mobile app, authoring mobile TCs, sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report.
 license: Apache-2.0
 compatibility: "Appium mode: Node.js 22+, JDK 8+, appium-mcp, Android SDK (Android) or macOS+Xcode (iOS). Device-farm mode: mobitru-mcp-server, DEVICE_FARM_API_KEY. Playwright mode: Node.js 18+, @playwright/mcp. Manual mode: no additional tooling."
 metadata:
@@ -11,7 +11,7 @@ metadata:
 
 # Mobile Testing
 
-Add-on skill for all web-qa agents. Augments app-profiler, test-author, test-sizer, test-run-lead, test-runner, and test-reporter to handle native iOS/Android apps (via Appium MCP or Mobitru device farm) and PWA/hybrid apps (via Playwright mobile viewport).
+Add-on skill for all manual-qa agents. Augments app-profiler, test-author, test-sizer, test-run-lead, test-runner, and test-reporter to handle native iOS/Android apps (via Appium MCP or Mobitru device farm) and PWA/hybrid apps (via Playwright mobile viewport).
 
 ## When to Use Each Section
 
@@ -35,7 +35,7 @@ Apply this section instead of (or in addition to) the standard web-profiling flo
 
 ### Check for Existing Profile
 
-Read `.agents/web-qa/app_profile.md` if it exists. If it does — say "I found an existing profile for {app_name}. I'll update it." Use its content as a starting point; don't re-ask answered questions.
+Read `.agents/manual-qa/app_profile.md` if it exists. If it does — say "I found an existing profile for {app_name}. I'll update it." Use its content as a starting point; don't re-ask answered questions.
 
 ### Phase 1 — Interview
 
@@ -85,7 +85,7 @@ appium_session_management → { action: "create", capabilities: {
 
 # 3. Explore launch screen
 appium_get_page_source → understand initial UI structure
-appium_screenshot → save to .agents/web-qa/screenshots/launch.png
+appium_screenshot → save to .agents/manual-qa/screenshots/launch.png
 
 # 4. Authentication flow (if login required)
 appium_find_element → locate email/password fields
@@ -93,14 +93,14 @@ generate_locators → auto-generate reliable locators for login screen
 appium_set_value → fill credentials
 appium_gesture → { action: "tap", elementId: "..." }
 appium_get_page_source → verify authenticated state
-appium_screenshot → save to .agents/web-qa/screenshots/home.png
+appium_screenshot → save to .agents/manual-qa/screenshots/home.png
 
 # 5. Explore each key screen from user's flow list
 # For each flow:
 appium_gesture → navigate to the screen
 appium_get_page_source → document structure
 generate_locators → extract reliable locators
-appium_screenshot → save to .agents/web-qa/screenshots/{screen}.png
+appium_screenshot → save to .agents/manual-qa/screenshots/{screen}.png
 
 # 6. Teardown
 appium_session_management → { action: "delete" }
@@ -117,7 +117,7 @@ evaluate → set mobile viewport (e.g. iPhone 15: 393×852, touch enabled)
 navigate → {base_url}
 wait_for → networkidle
 snapshot → understand structure
-take_screenshot → .agents/web-qa/screenshots/home.png
+take_screenshot → .agents/manual-qa/screenshots/home.png
 ```
 
 For each key flow — navigate, snapshot, screenshot, extract selectors.
@@ -145,7 +145,7 @@ mobile_launch_app → { packageName: "{bundle_id}" }
 
 # 4. Explore launch screen
 mobile_list_elements_on_screen → understand initial UI structure
-mobile_take_screenshot → save to .agents/web-qa/screenshots/launch.png
+mobile_take_screenshot → save to .agents/manual-qa/screenshots/launch.png
 
 # 5. Authentication flow (if login required)
 mobile_list_elements_on_screen → find email/password fields
@@ -154,13 +154,13 @@ mobile_type_keys → "{email}"
 mobile_click_web_element → focus password field
 mobile_type_keys → "{password}"
 mobile_click_web_element → tap login button
-mobile_take_screenshot → save to .agents/web-qa/screenshots/home.png
+mobile_take_screenshot → save to .agents/manual-qa/screenshots/home.png
 
 # 6. Explore each key screen from the flow list
 # For each flow:
 swipe_on_screen / mobile_click_web_element / mobile_press_button → navigate
 mobile_list_elements_on_screen → document visible elements
-mobile_take_screenshot → save to .agents/web-qa/screenshots/{screen}.png
+mobile_take_screenshot → save to .agents/manual-qa/screenshots/{screen}.png
 
 # 7. Teardown (mandatory — even if exploration failed mid-way)
 mobile_appium_close
@@ -195,9 +195,9 @@ Ask only about gaps you couldn't determine from exploration:
 > - [gap]: e.g. "The payment screen — test card number?"
 > - [gap]: e.g. "Camera flow — is the device camera available in the simulator?"
 
-### Phase 4 — Write `.agents/web-qa/app_profile.md`
+### Phase 4 — Write `.agents/manual-qa/app_profile.md`
 
-For mobile apps, write the profile using the mobile template below (extends the standard web-qa profile with mobile-specific sections):
+For mobile apps, write the profile using the mobile template below (extends the standard manual-qa profile with mobile-specific sections):
 
 ```markdown
 ---
@@ -324,8 +324,8 @@ State dimensions and their legal values — used by the session planner.
 
 ### Setup
 
-1. Read `.agents/web-qa/app_profile.md` — get `platform`, `app_type`, `runner_mode`, credentials, key screens, gestures map, locators. **Don't ask for anything already there.**
-2. Read `.agents/web-qa/knowledge/mobile-test-case-format.md` if present — canonical format.
+1. Read `.agents/manual-qa/app_profile.md` — get `platform`, `app_type`, `runner_mode`, credentials, key screens, gestures map, locators. **Don't ask for anything already there.**
+2. Read `.agents/manual-qa/knowledge/mobile-test-case-format.md` if present — canonical format.
 3. `Glob tasks/{suite}/TC-*.md` to find the current highest TC ID.
 
 Set defaults for every TC from profile: `platform`, `app_type`, `runner_mode`, `device_type`.
@@ -447,7 +447,7 @@ TC-004 → L  (Face ID flow — biometric auth, runner_mode: appium, no injectio
 
 `Glob` all `TC-*.md` in the suite folder. Sort by filename (natural order).
 
-Read `.agents/web-qa/app_profile.md`:
+Read `.agents/manual-qa/app_profile.md`:
 - If missing: warn — "No app_profile.md found. Consider running `app-profiler` first. Proceeding anyway…"
 - If present: read `runner_mode`, `platform`, `build_path`, `base_url` (PWA/hybrid only).
 
@@ -519,7 +519,7 @@ Prompt: "Execute the mobile test case at {file_path}.
          base_url={base_url}
          inherit_state={true|false}
          close_session_after={true|false}   ← true only for the last TC in the suite
-         Read .agents/web-qa/app_profile.md for device context, build_path, runner_mode, credentials, and reliable locators."
+         Read .agents/manual-qa/app_profile.md for device context, build_path, runner_mode, credentials, and reliable locators."
 ```
 
 **`runner_mode: device-farm`** → dispatch `test-runner` with pre-booked serial:
@@ -529,7 +529,7 @@ Prompt: "Execute the mobile test case at {file_path}.
          device_serial={suite_serial}
          inherit_state={true|false}
          Do NOT call mobile_terminate_app at TC end — leave app running; run-lead owns cleanup.
-         Read .agents/web-qa/app_profile.md for artifact_id, package, orientation, and reliable locators."
+         Read .agents/manual-qa/app_profile.md for artifact_id, package, orientation, and reliable locators."
 ```
 
 **`runner_mode: manual`** → dispatch `test-runner` (generates a guide, returns BLOCKED; see Part 7):
@@ -537,7 +537,7 @@ Prompt: "Execute the mobile test case at {file_path}.
 Agent: test-runner
 Prompt: "Execute the mobile test case at {file_path}.
          runner_mode is manual — generate a step guide for human execution.
-         Read .agents/web-qa/app_profile.md for device name, platform, and app version."
+         Read .agents/manual-qa/app_profile.md for device name, platform, and app version."
 ```
 
 Wait for each agent to complete before starting the next.
@@ -590,7 +590,7 @@ Do this before generating the report. If release fails, log a warning in the sum
 Agent: test-reporter
 Prompt: "Generate mobile test run report with run_id={run_id}, suite={suite_name},
          base_url={base_url}, date={YYYY-MM-DD}, results={json_array_with_usage_fields}.
-         Read .agents/web-qa/app_profile.md for device, platform, app_version, and runner_mode."
+         Read .agents/manual-qa/app_profile.md for device, platform, app_version, and runner_mode."
 ```
 
 ### Step 6b — Server Teardown (appium mode)
@@ -652,7 +652,7 @@ If either state field is absent → warn and mark TC as `ungroupable`.
 
 ### Step 2 — Read the State Model
 
-Read `.agents/web-qa/app_profile.md` State Model section for defined state dimensions and boundary rules.
+Read `.agents/manual-qa/app_profile.md` State Model section for defined state dimensions and boundary rules.
 
 ### Step 3 — Build Groups
 
@@ -725,10 +725,10 @@ If every TC is its own group: "No state chaining possible. Add precondition_stat
 ### Setup (always read first)
 
 1. Read the test case file.
-2. Read `runner_mode` from TC frontmatter. If absent → read from `.agents/web-qa/app_profile.md`.
-3. Read `.agents/web-qa/app_profile.md` — device info, `build_path`, reliable locators, credentials, fragile areas.
+2. Read `runner_mode` from TC frontmatter. If absent → read from `.agents/manual-qa/app_profile.md`.
+3. Read `.agents/manual-qa/app_profile.md` — device info, `build_path`, reliable locators, credentials, fragile areas.
 4. Route:
-   - `playwright` → Playwright Mode (standard web-qa flow + mobile viewport; consult `playwright-testing` skill)
+   - `playwright` → Playwright Mode (standard manual-qa flow + mobile viewport; consult `playwright-testing` skill)
    - `appium` → Appium Mode section below
    - `device-farm` → Device Farm Mode section below
    - `manual` → go to Part 7
@@ -931,7 +931,7 @@ For native apps when Appium MCP is not available. Generate a human-executable ch
 
 1. Read the test case file.
 2. Confirm `runner_mode: manual`. If not manual → route to Part 6 (Appium or Device Farm mode).
-3. Read `.agents/web-qa/app_profile.md` — for device name, platform, app version.
+3. Read `.agents/manual-qa/app_profile.md` — for device name, platform, app version.
 
 ### Guide Format
 
@@ -1040,7 +1040,7 @@ Received from test-run-lead:
 - `date` — YYYY-MM-DD
 - `results` — JSON array of runner result objects (with `tokens`, `tool_uses`, `duration_ms`)
 
-Before writing, read `.agents/web-qa/app_profile.md` for `platform`, device name and OS version (from Test Devices table), `app_version`.
+Before writing, read `.agents/manual-qa/app_profile.md` for `platform`, device name and OS version (from Test Devices table), `app_version`.
 
 ### Compute Metrics
 

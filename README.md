@@ -134,7 +134,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
 npx github:arozumenko/sdlc-skills init --bundle team-web   # JS/TS frontend + Python backend
 npx github:arozumenko/sdlc-skills init --bundle team-ios   # Swift / SwiftUI
-npx github:arozumenko/sdlc-skills init --bundle web-qa     # manual-QA team (live browser testing via Playwright MCP)
+npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 
 # Full catalog, all detected IDEs
@@ -165,7 +165,7 @@ ship today:
 |---|---|---|
 | `team-web` | shared core + python-dev/js-dev + QA | JS/TS frontend + FastAPI/FastMCP backend delivery team |
 | `team-ios` | shared core + ios-dev + QA | Swift / SwiftUI delivery team |
-| `web-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/web-qa/knowledge/`. |
+| `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
@@ -329,7 +329,7 @@ frameworks, other IDEs) can point directly at `skills/<name>/`.
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
-| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Mirrored into the `web-qa` bundle as its primary consumer |
+| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Mirrored into the `manual-qa` bundle as its primary consumer |
 
 ### External skills (fetched by the installer)
 
@@ -356,7 +356,7 @@ catalog.
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 | `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
-| `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) | `qa-engineer`, `test-automation-engineer`, `web-qa` agents |
+| `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) | `qa-engineer`, `test-automation-engineer`, `manual-qa` agents |
 | `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `team-web` overlay (`python-dev`, `tech-lead`) |
 | `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `team-web` overlay |
 | `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `team-web` overlay (`js-dev`, `tech-lead`) |
@@ -417,13 +417,13 @@ sdlc-skills/
 │   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
 ├── bundles/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # team-web, team-ios, web-qa, test-automation
+│   └── <bundle-id>/            # team-web, team-ios, manual-qa, test-automation
 │       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
 │       ├── briefings/<role>.md # seeded into .agents/memory/<role>/ (team-web/ios)
-│       ├── knowledge/          # reference docs seeded into the project (web-qa)
-│       └── agents/<name>/      # bundle-local agents (web-qa)
+│       ├── knowledge/          # reference docs seeded into the project (manual-qa)
+│       └── agents/<name>/      # bundle-local agents (manual-qa)
 ├── skills.json                 # catalog: monorepo + external skill sources
 ├── AGENTS.md                   # generic / GitHub Copilot CLI fallback
 ├── GEMINI.md                   # Gemini CLI context file
