@@ -133,8 +133,8 @@ operator's confirmation.
 ### Source of truth — operator's pre-fill or scout asks
 
 The operator pre-fills answers in the onboarding prompt under a
-`## Project systems` block (see the `TEST-AUTOMATION-ONBOARDING.md`
-dispatcher at repo root for the template). Each field either has a
+`## Project systems` block (see the test-automation onboarding guide,
+`docs/onboarding/test-automation.md`, for the template). Each field either has a
 value or `ASK`:
 
 - **If a value is provided**, scout uses it. No question.

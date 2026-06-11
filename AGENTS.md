@@ -7,21 +7,32 @@ of native plugin formats and a shared npx installer.
 
 ## What's here
 
-- **`agents/<name>/AGENT.md` + `SOUL.md`** — role personas: BA, Tech Lead,
-  PM, Python / JS / iOS devs, QA, Scout, Personal Assistant. Each agent's
-  frontmatter declares the skills it depends on.
-- **`skills/<name>/SKILL.md`** — [agentskills.io](https://agentskills.io)
-  spec-compliant workflow skills: `plan-feature`, `implement-feature`,
-  `bugfix-workflow`, `code-review`, `tdd`, `completing-a-task`,
-  `git-workflow`, `memory`, `playwright-testing`, `browser-verify`,
-  `issue-tracking`, `xray-testing`, `atlassian-content`,
-  `tosca-automation`, `vividus`, `test-case-analysis`,
-  `test-automation-workflow`, `verifying-outcomes`, `gathering-context`,
-  `deep-research`, `obsidian-vault`, `microsoft-365`, `seeding-a-project`.
-- **`skills.json`** — catalog of all skills, monorepo and external.
-  The installer uses it to resolve + fetch external skills (from
-  `mattpocock/skills`, `obra/superpowers`, `twostraws/*-Agent-Skill`,
-  `microsoft/playwright-cli`).
+Content lives in **bundles** (`bundles/<id>/`) — team presets that physically
+own their `agents/` and `skills/` as real directories. Three bundles ship:
+
+- **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
+  Python / JS / iOS devs, QA, Scout, test-automation-engineer.
+- **`test-automation`** — TMS-driven automation pipeline: test-automation-lead,
+  qa-engineer, test-automation-engineer, Scout.
+- **`manual-qa`** — live-browser manual-QA team: test-run-lead, test-author,
+  test-sizer, test-runner, test-reporter, app-profiler.
+
+The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
+content: one agent (`personal-assistant`) and eight skills (`deep-research`,
+`gathering-context`, `verifying-outcomes`, `microsoft-365`, `obsidian-vault`,
+`tosca-automation`, `vividus`, `xray-testing`).
+
+- **`<owner>/agents/<name>/AGENT.md` + `SOUL.md`** — role personas. Each
+  agent's frontmatter declares the skills it depends on.
+- **`<owner>/skills/<name>/SKILL.md`** — [agentskills.io](https://agentskills.io)
+  spec-compliant workflow skills (e.g. `plan-feature`, `implement-feature`,
+  `bugfix-workflow`, `code-review`, `completing-a-task`, `git-workflow`,
+  `memory`, `playwright-testing`, `browser-verify`, `issue-tracking`,
+  `test-case-analysis`, `test-automation-workflow`, `seeding-a-project`).
+- **`skills.json`** — registry of the orphan monorepo skills plus the external
+  (`repo:`) skills the installer fetches from upstream (from `mattpocock/skills`,
+  `obra/superpowers`, `twostraws/*-Agent-Skill`, `microsoft/playwright-cli`,
+  `appium/skills`, and more).
 
 ## Install — the recommended path
 
@@ -58,10 +69,12 @@ once if you want the full catalog.
 
 ## Using an agent
 
-Load `./agents/<name>/AGENT.md` and `./agents/<name>/SOUL.md` when
-starting work in that role. The `AGENT.md` declares the skills the agent
-relies on — load each skill's `SKILL.md` when its trigger conditions are
-met, not preemptively.
+Load the agent's `AGENT.md` and `SOUL.md` when starting work in that role.
+The source lives under the bundle that owns it
+(`bundles/<id>/agents/<name>/`); only `personal-assistant` lives at the
+top-level `agents/`. The `AGENT.md` declares the skills the agent relies on —
+load each skill's `SKILL.md` when its trigger conditions are met, not
+preemptively.
 
 ## Using a skill
 

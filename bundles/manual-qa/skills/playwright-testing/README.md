@@ -1,12 +1,14 @@
 # playwright-testing
 
-> UI/E2E test automation with the Playwright MCP server.
+> Live browser testing through the Playwright MCP server — no test code generated.
 
 A skill for the [sdlc-skills](../../README.md) toolkit. Full instructions live in [`SKILL.md`](SKILL.md); this file is just how to install it.
 
+This is the **manual-QA** copy: it drives a real browser live to explore web apps and execute test cases (used by `app-profiler` and `test-runner`). It does **not** write Playwright code — that is the `test-automation-engineer`'s automation-focused copy in the feature-development / test-automation bundles.
+
 ## When it triggers
 
-Loads on _"test the UI"_, _"automate browser tests"_, _"check the page"_, _"take a screenshot"_, _"run Playwright"_, _"write E2E tests"_, or anything about browser-based testing.
+Loads when a manual-QA agent does browser testing **via Playwright MCP**: profiling/exploring a web (or PWA/hybrid) app, executing a web test case live against a running app, verifying UI state, or collecting browser evidence (snapshots, screenshots, console, network).
 
 ## Requirements
 

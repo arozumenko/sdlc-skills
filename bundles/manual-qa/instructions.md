@@ -1,8 +1,8 @@
-# Web QA Team — shared conventions
+# Manual QA Team — shared conventions
 
-This is a **standalone manual-QA team** for web apps. These are team-wide
-defaults; scout (if present) or app-profiler refines them per project in `AGENTS.md`,
-which always wins over this file.
+This is a **standalone manual-QA team** for web and mobile apps. These are
+team-wide defaults; scout (if present) or app-profiler refines them per project
+in `AGENTS.md`, which always wins over this file.
 
 ## Pipeline
 

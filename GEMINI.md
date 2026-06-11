@@ -6,7 +6,11 @@ for software delivery. Load what matches the task; don't bulk-load everything.
 ## Agents (personas)
 
 When the task fits one of these roles, read the matching `AGENT.md` +
-`SOUL.md` and adopt the persona for the rest of the session:
+`SOUL.md` and adopt the persona for the rest of the session. Each agent lives
+inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
+`personal-assistant` lives at the top-level `agents/`.
+
+**Feature delivery (`feature-development` bundle):**
 
 - `ba` — Business analyst (requirements, user stories, acceptance criteria)
 - `tech-lead` — Technical decomposition, interface design, code review
@@ -17,9 +21,24 @@ When the task fits one of these roles, read the matching `AGENT.md` +
 - `qa-engineer` — Test verification, bug reproduction, E2E tests, TMS case execution + AFS emission (via `test-case-analysis` skill)
 - `test-automation-engineer` — Implements automation from specs in the project's existing framework
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring
-- `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
 
-Each agent lives at `./agents/<name>/AGENT.md`.
+**Test automation (`test-automation` bundle):**
+
+- `test-automation-lead` — Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and framework architecture
+- plus `qa-engineer`, `test-automation-engineer`, `scout` (same roles as above)
+
+**Manual QA (`manual-qa` bundle):**
+
+- `test-run-lead` — Orchestrates a manual-QA run: assembles the suite, dispatches a runner per case, triggers the report
+- `test-author` — Turns rough ideas into formatted `TC-NNN` cases
+- `test-sizer` — Rates case size/complexity (S/M/L) before authoring
+- `test-runner` — Executes one case against a running app via Playwright MCP, returns structured JSON
+- `test-reporter` — Turns run results into a Markdown report
+- `app-profiler` — Onboards a web app, writes the shared app profile
+
+**Standalone:**
+
+- `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
 
 ## Workflow skills
 
@@ -52,7 +71,11 @@ are capability definitions, not always-on context.
 | `microsoft-365` | Microsoft 365 (email / calendar / Teams) |
 | `seeding-a-project` | Generating `AGENTS.md` / `.agents/` docs / per-role memory briefings for a new project |
 
-Each skill lives at `./skills/<name>/SKILL.md`.
+Each skill lives under the bundle that owns it
+(`bundles/<id>/skills/<name>/SKILL.md`); the eight orphan skills
+(`deep-research`, `gathering-context`, `verifying-outcomes`, `microsoft-365`,
+`obsidian-vault`, `tosca-automation`, `vividus`, `xray-testing`) live at the
+top-level `skills/`.
 
 ## External skills — fallback install
 
@@ -74,6 +97,6 @@ way.
 
 ## Using skills in conversation
 
-- "Load the `tdd` skill" → read `./skills/tdd/SKILL.md`.
-- "I'm starting as `ios-dev`" → read `./agents/ios-dev/AGENT.md` + `SOUL.md`.
+- "Load the `deep-research` skill" → read its `SKILL.md` (under `skills/` for orphans, or the owning `bundles/<id>/skills/<name>/`).
+- "I'm starting as `ios-dev`" → read `bundles/feature-development/agents/ios-dev/AGENT.md` + `SOUL.md`.
 - Don't restate a skill's contents verbatim. Follow its workflow.

@@ -36,7 +36,7 @@ remains the orchestrator for feature-development work; on hybrid
 projects, PM and `test-automation-lead` coexist as peers, and PM points
 TA traffic at `test-automation-lead` via a user-readable prompt (not a
 subagent dispatch). Full routing rules:
-[`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md).
+[`agents/test-automation-lead/AGENT.md`](../../bundles/test-automation/agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -55,7 +55,7 @@ Plus:
 
 Your host can be GitHub Copilot CLI, Claude Code, Cursor, or
 Windsurf — the installer targets all four. Host-specific launch
-syntax and install flags: [README.md](README.md).
+syntax and install flags: [README.md](../../README.md).
 
 ---
 
@@ -118,7 +118,7 @@ Swap `--target` per host (`claude` / `cursor` / `windsurf` /
 `copilot`). Omit `--target` to install into every detected IDE
 directory. For Copilot users who see directories where `.agent.md`
 files should be: `npx github:arozumenko/sdlc-skills init fix-copilot`
-(see [README.md](README.md) for the `--soul` modes).
+(see [README.md](../../README.md) for the `--soul` modes).
 
 **External skills are real copies, not symlinks** (since v0.2 of the
 installer). Each external skill from `skills.json` is git-cloned to a
@@ -135,7 +135,7 @@ the override into `.agents/role-overrides.md` with a fallback-tier
 warning. The pipeline runs, but a tech-lead or generic dev filling
 test-automation-engineer's slot ships less framework-faithful tests than test-automation-engineer would —
 prefer installing the dedicated agent when you can. See
-[`skills/seeding-a-project/references/role-overrides.md`](skills/seeding-a-project/references/role-overrides.md)
+[`skills/seeding-a-project/references/role-overrides.md`](../../bundles/test-automation/skills/seeding-a-project/references/role-overrides.md)
 for the substitution table.
 
 ### 2. Seed via scout
@@ -171,7 +171,7 @@ Merge strategy:     <squash | rebase | merge | ASK>
 Scout writes `.agents/testing.md`, `.agents/architecture.md`,
 `.agents/workflow.md`, `.agents/profile.md`,
 `.agents/test-automation.yaml`, `.agents/team-comms.md`. Full
-procedure: [`skills/seeding-a-project/SKILL.md`](skills/seeding-a-project/SKILL.md).
+procedure: [`skills/seeding-a-project/SKILL.md`](../../bundles/test-automation/skills/seeding-a-project/SKILL.md).
 
 **After scout completes, review `.agents/testing.md`.** If the
 framework name, version, run command, or CI command is wrong, fix
@@ -190,7 +190,7 @@ transport, or an MCP server name when multiple candidates exist).
 
 Full schema + all adapter variants (Xray / Zephyr / TestRail /
 Azure / markdown; MCP vs HTTP transport):
-[`skills/test-automation-workflow/references/tms-adapters.md`](skills/test-automation-workflow/references/tms-adapters.md).
+[`skills/test-automation-workflow/references/tms-adapters.md`](../../bundles/test-automation/skills/test-automation-workflow/references/tms-adapters.md).
 
 No TMS? The markdown fallback is a one-liner:
 
@@ -238,7 +238,7 @@ Launch `test-automation-lead` and hand it this no-op routing prompt:
 
 If the smoke fails, the dispatch wiring is broken on this host. See
 [`agents/test-automation-lead/AGENT.md` § How you dispatch a subagent
-(host preflight)](agents/test-automation-lead/AGENT.md) and re-read
+(host preflight)](../../bundles/test-automation/agents/test-automation-lead/AGENT.md) and re-read
 `.agents/team-comms.md` for the per-host invocation pattern. Re-run
 the smoke until it passes before continuing.
 
@@ -249,10 +249,10 @@ a navigation, a simple form. The point is to prove the pipeline, not
 the app.
 
 The full slot-by-slot routing flow lives in test-automation-lead —
-[`agents/test-automation-lead/AGENT.md` § The pipeline](agents/test-automation-lead/AGENT.md).
+[`agents/test-automation-lead/AGENT.md` § The pipeline](../../bundles/test-automation/agents/test-automation-lead/AGENT.md).
 The IC-facing process for each slot (analyst six-phase loop, implementer
 six-phase loop, AFS rules, no-defect-masking, run-report template) is in
-[`skills/test-automation-workflow/SKILL.md`](skills/test-automation-workflow/SKILL.md).
+[`skills/test-automation-workflow/SKILL.md`](../../bundles/test-automation/skills/test-automation-workflow/SKILL.md).
 Shape:
 
 1. **Analyst (qa-engineer + `test-case-analysis`)** executes the
@@ -273,8 +273,8 @@ Shape:
 
 Once one case works end-to-end, batch is safe. Parallelism and
 serialization rules (page-object collisions, independent-surface
-parallelism, reviewer batching): [`agents/test-automation-lead/AGENT.md` § Batching](agents/test-automation-lead/AGENT.md) and
-[`skills/test-automation-workflow/references/commands.md`](skills/test-automation-workflow/references/commands.md)
+parallelism, reviewer batching): [`agents/test-automation-lead/AGENT.md` § Batching](../../bundles/test-automation/agents/test-automation-lead/AGENT.md) and
+[`skills/test-automation-workflow/references/commands.md`](../../bundles/test-automation/skills/test-automation-workflow/references/commands.md)
 for host-specific sub-agent spawning recipes.
 
 ---
@@ -296,7 +296,7 @@ one unilaterally — that's an architectural decision. **`test-automation-lead`
 
    > Bootstrap a test-automation scaffold for this empty repo. Pick
    > the framework per the project's primary language per
-   > [`skills/test-automation-workflow/references/framework-scaffold.md`](skills/test-automation-workflow/references/framework-scaffold.md).
+   > [`skills/test-automation-workflow/references/framework-scaffold.md`](../../bundles/test-automation/skills/test-automation-workflow/references/framework-scaffold.md).
    > Define page-object style, fixture pattern, naming, run command,
    > and CI command. Write the chosen conventions into
    > `.agents/testing.md`. Then dispatch `test-automation-engineer` to
@@ -317,7 +317,7 @@ laid down"). That's fine. The sweep gets real once 3–4 cases have
 shipped and a body of convention exists to mirror.
 
 test-automation-lead's full framework-architecture contract lives in
-[`agents/test-automation-lead/AGENT.md` § Framework Architecture](agents/test-automation-lead/AGENT.md).
+[`agents/test-automation-lead/AGENT.md` § Framework Architecture](../../bundles/test-automation/agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -326,7 +326,7 @@ test-automation-lead's full framework-architecture contract lives in
 - **"Custom agent not found" on Copilot CLI** → installer wrote
   directories instead of flat `.agent.md` files. Run
   `npx github:arozumenko/sdlc-skills init fix-copilot`. See
-  [README.md](README.md) for `--soul` modes.
+  [README.md](../../README.md) for `--soul` modes.
 - **qa-engineer returns `ready-for-automation` with a sparse selector
   table** → she skipped exploration. Re-run with: *"Execute every
   step via playwright-testing or browser-verify MCP tools before
@@ -349,7 +349,7 @@ test-automation-lead's full framework-architecture contract lives in
 
 ## Maintenance
 
-General update / sync notes live in [MAINTENANCE.md](MAINTENANCE.md). One
+General update / sync notes live in [MAINTENANCE.md](../../MAINTENANCE.md). One
 flow specific to the test-automation roster matters often enough to put
 inline:
 
