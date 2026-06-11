@@ -20,3 +20,6 @@ __pycache__/
 *.ipa
 reports/screenshots/
 bundles/mobile-qa/QUICKSTART-LOCAL.md
+
+# Agent working directories — generated at onboarding/run time, not distributed
+.agents/
