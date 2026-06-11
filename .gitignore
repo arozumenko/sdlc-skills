@@ -23,5 +23,8 @@ bundles/mobile-qa/QUICKSTART-LOCAL.md
 # Agent working directories — generated at onboarding/run time, not distributed
 .agents/
 
+# Test run reports — generated per project, not distributed
+reports/
+
 # Test cases and suite plans — project-specific, not distributed with the repo
 tasks/
