@@ -28,3 +28,5 @@ reports/
 
 # Test cases and suite plans — project-specific, not distributed with the repo
 tasks/
+# Local-only brainstorming/spec/plan scaffolding (not distributed)
+docs/superpowers/
