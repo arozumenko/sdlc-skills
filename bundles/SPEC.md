@@ -5,7 +5,7 @@ above agents: instead of hand-listing roles
 (`--agents scout,ba,tech-lead,…`), you install a curated team in one shot:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle team-web
+npx github:arozumenko/sdlc-skills init --bundle feature-development
 ```
 
 A bundle composes five things:
@@ -38,10 +38,32 @@ on top of its generic `AGENT.md` (which holds stack-agnostic practices):**
    `remove` generic ones that don't fit. Tunes *what* the role can do.
 
 Both leave the global agent unforked — only the *installed copy* is tuned.
-Example: `team-ios` gives `qa-engineer` an iOS briefing **and** a skill
+Example: a bundle can give `qa-engineer` an iOS briefing **and** a skill
 overlay that drops the web `playwright-*`/`browser-verify` skills and adds a
 native iOS UI-testing skill. A bundle-local agent that genuinely doesn't
 exist globally is still possible via `localAgents` (an escape hatch).
+
+## Flat dev-role selection (`coreAgents` / `devRoles` / `platforms`)
+
+A bundle can offer an **unrestricted pick-list of developer roles** instead of
+installing a fixed roster. When `bundle.json` declares `devRoles`, the installer
+shows a flat checklist of those roles (any combination), always installs
+`coreAgents`, and tunes the core roles from the **platforms** the picked dev
+roles imply:
+
+- `coreAgents` — roles that always install, regardless of which dev roles are
+  picked.
+- `devRoles` — `{ name: { label, platform, briefing?, skillOverlay? } }`. The
+  flat pick-list; each role is tagged with an internal `platform`.
+- `platforms` — `{ id: { label, briefings{}, skillOverlays{} } }`. Shared-role
+  tuning applied when any selected dev role carries that platform. Across
+  multiple active platforms, skillOverlay `add`s union and `remove`s apply only
+  where every active platform removes the skill; per-platform briefings for the
+  same core role are concatenated under `## <label> stack` headers.
+
+`--yes` / non-interactive installs all dev roles; `--agents <subset>` selects
+non-interactively. Bundles without `devRoles` keep the legacy fixed-roster
+behavior.
 
 ## Bundle mirroring — self-documenting bundles, single source of truth
 
@@ -74,12 +96,12 @@ roster**. Two kinds of entries live there:
 
 In both cases the manifest declares the item via `localAgents` /
 `localSkills` (not `agents` / `skills`). The bundle's own dir becomes
-self-documenting — `ls bundles/team-ios/agents/` shows the full team-ios
+self-documenting — `ls bundles/feature-development/agents/` shows the full
 roster as real directories, indexable by mirrors that don't follow
-symlinks (e.g. the EPAM indexer). This is how `team-ios`, `team-web`,
-and `test-automation` are organized today: shared agents (`scout`,
-`ba`, …) are mirrored from canonical into each owning bundle alongside
-the single-bundle items (`ios-dev`, `python-dev`, `js-dev`,
+symlinks (e.g. the EPAM indexer). This is how `feature-development` and
+`test-automation` are organized today: shared agents (`scout`, `ba`, …)
+are mirrored from canonical into each owning bundle alongside the
+single-bundle items (`ios-dev`, `python-dev`, `js-dev`,
 `atlassian-content`).
 
 ## Directory layout
@@ -96,7 +118,7 @@ bundles/<id>/
 ├── hooks/                   optional — Claude settings.json automation
 │   ├── hooks.json            hook config fragment (event → command)
 │   └── scripts/              scripts the hooks invoke (chmod +x on install)
-├── agents/                  optional — bundle-local roles; real content (manual-qa) or a synced mirror of agents/<name>/ (team-ios/team-web/test-automation)
+├── agents/                  optional — bundle-local roles; real content (manual-qa) or a synced mirror of agents/<name>/ (feature-development/test-automation)
 │   └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
 └── skills/                  optional — bundle-local skills; real content or a synced mirror of skills/<name>/
     └── <name>/               installed like a monorepo skill (SKILL.md + references/scripts)
@@ -134,8 +156,8 @@ The descriptor carries no install config.
 
 ```jsonc
 {
-  "id": "team-web",                         // must match the directory name
-  "title": "Web Team",                      // human label
+  "id": "feature-development",              // must match the directory name
+  "title": "Feature Development",           // human label
   "description": "...",                      // one-line summary
   "agents": ["scout", "ba", "..."],          // shared agents to install (resolved against agents/)
   "skills": [],                              // team-wide extra skills beyond what agents pull
@@ -206,7 +228,7 @@ event name → matcher-groups:
     {
       "matcher": "Edit|Write",
       "hooks": [
-        { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/team-web/format.sh" }
+        { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/feature-development/format.sh" }
       ]
     }
   ]
@@ -225,7 +247,7 @@ On install:
 - `settings.json` is backed up to `settings.json.bak` before any change. If
   it fails to parse, it's left untouched and the merge is skipped.
 
-Neither seed bundle (`team-web`, `team-ios`) ships hooks yet — the merge
+The `feature-development` bundle does not ship hooks yet — the merge
 machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 
 ## Idempotency & validation
@@ -248,6 +270,6 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 
 | id | team | dev roles |
 |---|---|---|
-| `team-web` | fullstack web | `python-dev` (backend) + `js-dev` (frontend) |
-| `team-ios` | iOS | `ios-dev` |
+| `feature-development` | cross-platform (web + iOS) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`; core roles auto-tune |
 | `manual-qa` | manual QA for web | 5 local agents: `setup`, `tc-writer`, `orchestrator`, `executor`, `reporter` |
+| `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |

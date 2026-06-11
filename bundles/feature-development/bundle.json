@@ -1,0 +1,61 @@
+{
+  "id": "feature-development",
+  "title": "Feature Development",
+  "description": "Cross-platform delivery team — pick any combination of developer roles. Shared core roles auto-tune to whatever you pick.",
+  "agents": [],
+  "coreAgents": ["scout", "ba", "project-manager", "tech-lead", "qa-engineer"],
+  "devRoles": {
+    "python-dev": {
+      "label": "Python backend (FastAPI)",
+      "platform": "web",
+      "briefing": "briefings/roles/python-dev.md",
+      "skillOverlay": { "add": ["fastapi", "fastmcp-server"] }
+    },
+    "js-dev": {
+      "label": "JS/TS frontend (React)",
+      "platform": "web",
+      "skillOverlay": { "add": ["vercel-react-best-practices"] }
+    },
+    "test-automation-engineer": {
+      "label": "Test automation (E2E / Playwright)",
+      "platform": "web",
+      "briefing": "briefings/roles/test-automation-engineer.md"
+    },
+    "ios-dev": {
+      "label": "iOS — Swift/SwiftUI",
+      "platform": "ios"
+    }
+  },
+  "platforms": {
+    "web": {
+      "label": "Web",
+      "briefings": {
+        "scout": "briefings/web/scout.md",
+        "tech-lead": "briefings/web/tech-lead.md",
+        "qa-engineer": "briefings/web/qa-engineer.md"
+      },
+      "skillOverlays": {
+        "tech-lead": { "add": ["fastapi", "fastmcp-server", "vercel-react-best-practices"] }
+      }
+    },
+    "ios": {
+      "label": "iOS",
+      "briefings": {
+        "scout": "briefings/ios/scout.md",
+        "tech-lead": "briefings/ios/tech-lead.md",
+        "qa-engineer": "briefings/ios/qa-engineer.md"
+      },
+      "skillOverlays": {
+        "tech-lead": { "add": ["swiftui-pro", "swiftdata-pro", "swift-testing-pro", "swift-concurrency-pro"] },
+        "qa-engineer": {
+          "add": ["swift-testing-pro", "environment-setup-xcuitest", "xcuitest-real-device-config", "appium-troubleshooting"],
+          "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
+        }
+      }
+    }
+  },
+  "localSkills": ["browser-verify", "bugfix-workflow", "code-review", "completing-a-task", "git-workflow", "implement-feature", "issue-tracking", "memory", "plan-feature", "playwright-testing", "reproducing-issues", "root-cause-analysis", "seeding-a-project", "session-retrospective", "test-automation-workflow", "test-case-analysis"],
+  "localAgents": ["scout", "ba", "project-manager", "tech-lead", "qa-engineer", "python-dev", "js-dev", "test-automation-engineer", "ios-dev"],
+  "instructions": "instructions.md",
+  "targets": ["claude"]
+}

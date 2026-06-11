@@ -65,6 +65,13 @@ import {
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline";
+import {
+  resolveSelection as resolveDevRoleSelection,
+  buildOverlays,
+  buildBriefingPlan,
+  composeBriefing,
+  briefingDescription,
+} from "./lib/bundle-selection.mjs";
 import { execSync } from "child_process";
 import { homedir } from "os";
 
@@ -206,6 +213,9 @@ function loadBundle(id) {
   b.briefings = b.briefings || {};
   b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
   b.seed = b.seed || {}; // bundle-relative source → project-relative dest (reference files)
+  b.coreAgents = b.coreAgents || null; // present => devRole selection path
+  b.devRoles = b.devRoles || null;     // { name: { label, platform, briefing?, skillOverlay? } }
+  b.platforms = b.platforms || {};     // { id: { label, briefings{}, skillOverlays{} } }
   return b;
 }
 
@@ -229,7 +239,63 @@ function parseSkillDescription(skillMdPath) {
 // Validate a bundle against the catalog and resolve the skills its local
 // agents declare. Returns { localAgents, extraSkillIds } and mutates
 // args.agents to include the bundle's shared agents.
-function applyBundle(bundle, args, catalog) {
+async function applyBundle(bundle, args, catalog) {
+  // ----- Flat dev-role selection (feature-development-style bundles) -----
+  // When the manifest declares devRoles, the install roster is
+  // coreAgents ∪ (picked dev roles). Selection is a flat, unrestricted
+  // multi-select; the picked roles' platforms drive the core-role overlays.
+  if (bundle.devRoles) {
+    const devRoleNames = Object.keys(bundle.devRoles);
+    const sel = resolveDevRoleSelection({
+      explicit: args.agents,
+      devRoleNames,
+      yes: args.yes,
+      isTTY: process.stdin.isTTY,
+    });
+    // Core roles always install, so naming one in --agents is harmless — only
+    // warn about names that match neither a dev role nor a core role.
+    const coreSet = new Set(bundle.coreAgents || []);
+    const unknown = sel.unknown.filter((n) => !coreSet.has(n));
+    if (unknown.length) {
+      console.error(`  ! --agents names not recognized for ${bundle.id}: ${unknown.join(", ")}`);
+    }
+    if (sel.unknown.length !== unknown.length) {
+      console.log("  (core roles always install — no need to name them in --agents)");
+    }
+    let selected;
+    if (sel.mode === "picker") {
+      selected = await selectMany(
+        "Developer roles — pick any combination (space toggles, enter confirms):",
+        devRoleNames.map((r) => ({ value: r, label: r, desc: bundle.devRoles[r].label, default: true }))
+      );
+    } else {
+      selected = sel.roles;
+    }
+    // Dev roles install ONLY as bundle-local agents — clear them from the global
+    // --agents path so they aren't also resolved against the global catalog. For
+    // a devRoles bundle bundle.agents is [], so the legacy union below is a no-op.
+    args.agents = [...bundle.agents];
+    // Restrict the installed roster and pre-merge the overlays/briefings.
+    bundle.localAgents = [...new Set([...(bundle.coreAgents || []), ...selected])];
+    bundle.skillOverlays = buildOverlays(bundle, selected);
+    const bplan = buildBriefingPlan(bundle, selected);
+    bundle._resolvedBriefings = {};
+    for (const [role, entries] of Object.entries(bplan)) {
+      const resolved = entries.map((e) => ({
+        label: e.label,
+        content: readFileSync(join(bundle.dir, e.path), "utf8"),
+      }));
+      bundle._resolvedBriefings[role] = {
+        content: composeBriefing(resolved),
+        description: briefingDescription(resolved),
+      };
+    }
+    console.log(
+      `  Roster: ${bundle.coreAgents.length} core + ${selected.length} dev role(s)` +
+        (selected.length ? ` (${selected.join(", ")})` : " (none selected)")
+    );
+  }
+
   const unknownShared = bundle.agents.filter((a) => !catalog.agents.includes(a));
   if (unknownShared.length) {
     console.error(
@@ -371,12 +437,25 @@ function applyBundle(bundle, args, catalog) {
 function installBriefings(bundle, update) {
   let installed = 0;
   let skipped = 0;
-  for (const [role, rel] of Object.entries(bundle.briefings)) {
-    const src = join(bundle.dir, rel);
-    if (!existsSync(src)) {
-      console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
-      continue;
+  // Resolved entries: [{ role, content, description }]. New bundles pre-resolve
+  // (merged/concatenated) in applyBundle; legacy bundles read role→path here.
+  let entries;
+  if (bundle._resolvedBriefings) {
+    entries = Object.entries(bundle._resolvedBriefings).map(([role, v]) => ({ role, ...v }));
+  } else {
+    entries = [];
+    for (const [role, rel] of Object.entries(bundle.briefings)) {
+      const src = join(bundle.dir, rel);
+      if (!existsSync(src)) {
+        console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
+        continue;
+      }
+      const content = readFileSync(src, "utf8");
+      const dm = content.match(/^description:\s*(.+)$/m);
+      entries.push({ role, content, description: dm ? dm[1].trim() : "Project overview and this role's focus" });
     }
+  }
+  for (const { role, content, description } of entries) {
     const destDir = join(CWD, ".agents", "memory", role);
     const dest = join(destDir, "project_briefing.md");
     if (existsSync(dest) && !update) {
@@ -385,12 +464,8 @@ function installBriefings(bundle, update) {
       continue;
     }
     mkdirSync(destDir, { recursive: true });
-    const content = readFileSync(src, "utf8");
     writeFileSync(dest, content);
-    // Per the memory skill spec, the index line carries the entry's own
-    // description. Pull it from the briefing's frontmatter.
-    const dm = content.match(/^description:\s*(.+)$/m);
-    ensureMemoryIndexLine(destDir, role, dm ? dm[1].trim() : "Project overview and this role's focus");
+    ensureMemoryIndexLine(destDir, role, description);
     console.log(`      ✓ briefing ${role}`);
     installed++;
   }
@@ -1003,7 +1078,7 @@ function parseArgs(argv) {
     }
     // Anything else is unrecognized. Skip the leading `init` subcommand. A
     // common cause is a flag+value passed as a single shell token — e.g. zsh
-    // not word-splitting an unquoted variable: `init "--bundle team-web"`.
+    // not word-splitting an unquoted variable: `init "--bundle feature-development"`.
     else if (!(i === 0 && a === "init")) {
       out.unknown.push(a);
     }
@@ -1050,8 +1125,8 @@ function printHelp() {
     -h, --help                 Show this help
 
   Examples:
-    npx github:arozumenko/sdlc-skills init --bundle team-web
-    npx github:arozumenko/sdlc-skills init --bundle team-ios --target claude
+    npx github:arozumenko/sdlc-skills init --bundle feature-development
+    npx github:arozumenko/sdlc-skills init --bundle feature-development --target claude
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
@@ -2150,7 +2225,7 @@ async function main() {
   if (args.unknown.length) {
     console.error(`\n  ! Unrecognized argument(s): ${args.unknown.map((t) => `"${t}"`).join(", ")}`);
     console.error(`    Known flags: --agents <list> | --skills <list> | --bundle <id> | --target <list> | --all | --update | --symlink | --yes`);
-    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle team-web\`, not \`"--bundle team-web"\`).`);
+    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle feature-development\`, not \`"--bundle feature-development"\`).`);
     console.error(`    To install the entire catalog on purpose, use --all.\n`);
     process.exit(1);
   }
@@ -2175,7 +2250,7 @@ async function main() {
   let bundlePlan = null;
   if (args.bundle) {
     bundle = loadBundle(args.bundle);
-    bundlePlan = applyBundle(bundle, args, catalog);
+    bundlePlan = await applyBundle(bundle, args, catalog);
   }
 
   const { targets, agentsSelection, skillsSelection, externalSkills } =
@@ -2356,7 +2431,7 @@ async function main() {
   }
 
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
-  if (bundle && Object.keys(bundle.briefings).length) {
+  if (bundle && (Object.keys(bundle.briefings).length || (bundle._resolvedBriefings && Object.keys(bundle._resolvedBriefings).length))) {
     console.log(`\n  → .agents/memory/ (shared, all IDEs)`);
     const b = installBriefings(bundle, args.update);
     installed += b.installed;

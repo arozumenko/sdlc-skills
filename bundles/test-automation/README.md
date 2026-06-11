@@ -120,8 +120,8 @@ conditionally, only when the project declares `tms.adapter: xray`.
 - You want a single orchestrator (Tal) to own routing, framework decisions, and
   the automation merge — without standing up a full feature-development team.
 
-Compared to **`team-web`**, which includes `test-automation-engineer` +
-`qa-engineer` as part of a fullstack delivery team but has no automation
+Compared to **`feature-development`**, which includes `test-automation-engineer` +
+`qa-engineer` as part of a cross-platform delivery team but has no automation
 orchestrator, this bundle adds Tal and focuses the whole team on the
 TMS → merged-test pipeline.
 
