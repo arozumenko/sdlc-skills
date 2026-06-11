@@ -437,12 +437,25 @@ async function applyBundle(bundle, args, catalog) {
 function installBriefings(bundle, update) {
   let installed = 0;
   let skipped = 0;
-  for (const [role, rel] of Object.entries(bundle.briefings)) {
-    const src = join(bundle.dir, rel);
-    if (!existsSync(src)) {
-      console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
-      continue;
+  // Resolved entries: [{ role, content, description }]. New bundles pre-resolve
+  // (merged/concatenated) in applyBundle; legacy bundles read role→path here.
+  let entries;
+  if (bundle._resolvedBriefings) {
+    entries = Object.entries(bundle._resolvedBriefings).map(([role, v]) => ({ role, ...v }));
+  } else {
+    entries = [];
+    for (const [role, rel] of Object.entries(bundle.briefings)) {
+      const src = join(bundle.dir, rel);
+      if (!existsSync(src)) {
+        console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
+        continue;
+      }
+      const content = readFileSync(src, "utf8");
+      const dm = content.match(/^description:\s*(.+)$/m);
+      entries.push({ role, content, description: dm ? dm[1].trim() : "Project overview and this role's focus" });
     }
+  }
+  for (const { role, content, description } of entries) {
     const destDir = join(CWD, ".agents", "memory", role);
     const dest = join(destDir, "project_briefing.md");
     if (existsSync(dest) && !update) {
@@ -451,12 +464,8 @@ function installBriefings(bundle, update) {
       continue;
     }
     mkdirSync(destDir, { recursive: true });
-    const content = readFileSync(src, "utf8");
     writeFileSync(dest, content);
-    // Per the memory skill spec, the index line carries the entry's own
-    // description. Pull it from the briefing's frontmatter.
-    const dm = content.match(/^description:\s*(.+)$/m);
-    ensureMemoryIndexLine(destDir, role, dm ? dm[1].trim() : "Project overview and this role's focus");
+    ensureMemoryIndexLine(destDir, role, description);
     console.log(`      ✓ briefing ${role}`);
     installed++;
   }
@@ -2422,7 +2431,7 @@ async function main() {
   }
 
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
-  if (bundle && Object.keys(bundle.briefings).length) {
+  if (bundle && (Object.keys(bundle.briefings).length || (bundle._resolvedBriefings && Object.keys(bundle._resolvedBriefings).length))) {
     console.log(`\n  → .agents/memory/ (shared, all IDEs)`);
     const b = installBriefings(bundle, args.update);
     installed += b.installed;
