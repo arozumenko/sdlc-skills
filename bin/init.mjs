@@ -72,6 +72,7 @@ import {
   composeBriefing,
   briefingDescription,
 } from "./lib/bundle-selection.mjs";
+import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { execSync } from "child_process";
 import { homedir } from "os";
 
@@ -161,10 +162,12 @@ function copyTreeDereferenced(src, dest, { force = false } = {}) {
 }
 
 function loadCatalog() {
+  const index = buildItemIndex(PKG_ROOT);
   return {
-    agents: listDirs("agents"),
-    skills: listDirs("skills"),
+    agents: catalogIds(index, "agents"),
+    skills: catalogIds(index, "skills"),
     registry: loadSkillRegistry(),
+    index,
   };
 }
 
@@ -1018,12 +1021,12 @@ function parseAgentSkillDeps(agentName, agentsRoot = join(PKG_ROOT, "agents")) {
     .filter(Boolean);
 }
 
-function partitionSkillIds(ids, availableSkills, registry) {
+function partitionSkillIds(ids, availableSkills, registry, index) {
   const monorepo = [];
   const external = [];
   const unknown = [];
   for (const id of ids) {
-    if (availableSkills.includes(id)) {
+    if (availableSkills.includes(id) || (index && itemKnown(index, "skills", id))) {
       monorepo.push(id);
       continue;
     }
@@ -1034,12 +1037,12 @@ function partitionSkillIds(ids, availableSkills, registry) {
   return { monorepo, external, unknown };
 }
 
-function inferSkillsFromAgents(agentNames, availableSkills, registry) {
+function inferSkillsFromAgents(agentNames, availableSkills, registry, index) {
   const declared = new Set();
   for (const name of agentNames) {
     for (const skill of parseAgentSkillDeps(name)) declared.add(skill);
   }
-  return partitionSkillIds([...declared], availableSkills, registry);
+  return partitionSkillIds([...declared], availableSkills, registry, index);
 }
 
 // ---------------------------------------------------------------------------
@@ -1136,19 +1139,6 @@ function printHelp() {
 // ---------------------------------------------------------------------------
 // Install logic
 // ---------------------------------------------------------------------------
-
-function resolveSelection(requested, available, kind) {
-  if (requested === null) return null; // not specified — ask later
-  if (requested.length === 0) return [];
-  if (requested.length === 1 && requested[0] === "all") return available;
-  const unknown = requested.filter((r) => !available.includes(r));
-  if (unknown.length) {
-    console.error(`  ! Unknown ${kind}: ${unknown.join(", ")}`);
-    console.error(`    Available: ${available.join(", ") || "(none)"}`);
-    process.exit(1);
-  }
-  return requested;
-}
 
 function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // kind: "agents" | "skills"; target: {id, dir, label}
@@ -1644,8 +1634,20 @@ async function interactivePick(catalog, args) {
     }
   }
 
-  // Resolve agents via strict monorepo-only check.
-  let agentsSelection = resolveSelection(args.agents, catalog.agents, "agent");
+  // Resolve agents (bare ids and qualified `bundle/name`), resolver-aware.
+  let agentsSelection;
+  if (args.agents === null) agentsSelection = null;
+  else if (args.agents.length === 0) agentsSelection = [];
+  else if (args.agents.length === 1 && args.agents[0] === "all") agentsSelection = catalog.agents;
+  else {
+    const bad = args.agents.filter((a) => !itemKnown(catalog.index, "agents", a));
+    if (bad.length) {
+      console.error(`  ! Unknown agent: ${bad.join(", ")}`);
+      console.error(`    Available: ${catalog.agents.join(", ") || "(none)"}`);
+      process.exit(1);
+    }
+    agentsSelection = args.agents;
+  }
 
   // Resolve skills with awareness of externals from skills.json. An
   // explicit --skills list may contain both monorepo ids (installed by
@@ -1664,6 +1666,7 @@ async function interactivePick(catalog, args) {
       args.skills,
       catalog.skills,
       catalog.registry,
+      catalog.index,
     );
     if (unknown.length) {
       const externalIds = (catalog.registry?.skills || [])
@@ -1709,7 +1712,8 @@ async function interactivePick(catalog, args) {
         const { monorepo, external, unknown } = inferSkillsFromAgents(
           agentsSelection,
           catalog.skills,
-          catalog.registry
+          catalog.registry,
+          catalog.index
         );
         if (monorepo.length) {
           console.log(
@@ -2262,7 +2266,8 @@ async function main() {
     const { monorepo, external, unknown } = partitionSkillIds(
       bundlePlan.extraSkillIds,
       catalog.skills,
-      catalog.registry
+      catalog.registry,
+      catalog.index
     );
     for (const id of monorepo) if (!skillsSelection.includes(id)) skillsSelection.push(id);
     for (const e of external) if (!externalSkills.some((x) => x.id === e.id)) externalSkills.push(e);
@@ -2308,19 +2313,25 @@ async function main() {
     console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / manual-qa / quality-engineering bundles — ignoring.");
   }
 
+  // Resolve where each standalone-selected agent/skill physically lives.
+  const agentSrc = {};
+  for (const name of agentsSelection || []) agentSrc[name] = resolveItem(catalog.index, "agents", name);
+  const skillSrc = {};
+  for (const name of skillsSelection || []) skillSrc[name] = resolveItem(catalog.index, "skills", name);
+  for (const [name, r] of [...Object.entries(agentSrc), ...Object.entries(skillSrc)]) {
+    if (r && r.ambiguousAcross.length) {
+      console.log(`  • "${name}" exists in ${r.ambiguousAcross.join(", ")} — using ${r.bundle}. Qualify as <bundle>/${r.name} to pick another.`);
+    }
+  }
+
   for (const t of targets) {
     console.log(`  → ${t.label} (${t.dir}/)`);
     for (const name of agentsSelection) {
-      const r = copyItem("agents", name, t, args.update, catalog.registry);
-      if (r.status === "installed") {
-        console.log(`      ✓ agent  ${name}`);
-        installed++;
-      } else if (r.status === "exists") {
-        console.log(`      — agent  ${name} (exists; use --update)`);
-        skipped++;
-      } else {
-        console.log(`      ! agent  ${name} (missing in repo)`);
-      }
+      const r = agentSrc[name];
+      const res = copyItem("agents", r.name, t, args.update, catalog.registry, r.dir);
+      if (res.status === "installed") { console.log(`      ✓ agent  ${r.name}`); installed++; }
+      else if (res.status === "exists") { console.log(`      — agent  ${r.name} (exists; use --update)`); skipped++; }
+      else { console.log(`      ! agent  ${r.name} (missing)`); }
     }
     if (bundlePlan) {
       for (const name of bundlePlan.localAgents) {
@@ -2375,16 +2386,11 @@ async function main() {
       }
     }
     for (const name of skillsSelection) {
-      const r = copyItem("skills", name, t, args.update, catalog.registry);
-      if (r.status === "installed") {
-        console.log(`      ✓ skill  ${name}`);
-        installed++;
-      } else if (r.status === "exists") {
-        console.log(`      — skill  ${name} (exists; use --update)`);
-        skipped++;
-      } else {
-        console.log(`      ! skill  ${name} (missing in repo)`);
-      }
+      const r = skillSrc[name];
+      const res = copyItem("skills", r.name, t, args.update, catalog.registry, r.dir);
+      if (res.status === "installed") { console.log(`      ✓ skill  ${r.name}`); installed++; }
+      else if (res.status === "exists") { console.log(`      — skill  ${r.name} (exists; use --update)`); skipped++; }
+      else { console.log(`      ! skill  ${r.name} (missing)`); }
     }
     for (const entry of externalSkills) {
       const r = installExternalSkill(entry, t.dir, args.symlink, args.update);
