@@ -15,8 +15,6 @@ jobs:
           node-version: "20"
       - name: Validate bundles
         run: node bin/validate-bundles.mjs
-      - name: Validate bundle mirrors are in sync with canonical
-        run: node bin/sync-bundles.mjs --check
 
   skills:
     runs-on: ubuntu-latest
@@ -30,7 +28,7 @@ jobs:
       - name: Validate skills against the Agent Skills spec
         run: |
           status=0
-          for dir in skills/*/; do
+          for dir in skills/*/ bundles/*/skills/*/; do
             if [ -f "$dir/SKILL.md" ]; then
               echo "::group::$dir"
               skills-ref validate "$dir" || status=1
