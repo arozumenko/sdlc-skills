@@ -141,6 +141,45 @@ function main() {
         err(id, `localSkill "${ls}" missing skills/${ls}/SKILL.md`);
     const effectiveSkillIds = new Set([...skillIds, ...localSkills]);
 
+    // feature-development-style bundles: flat devRoles + platform overlays.
+    if (b.coreAgents !== undefined) {
+      if (!Array.isArray(b.coreAgents)) err(id, "`coreAgents` must be an array");
+      else for (const a of b.coreAgents) {
+        roster.add(a);
+        if (!(b.localAgents || []).includes(a)) err(id, `coreAgent "${a}" not in localAgents`);
+      }
+    }
+    if (b.devRoles !== undefined) {
+      if (typeof b.devRoles !== "object" || Array.isArray(b.devRoles)) {
+        err(id, "`devRoles` must be an object");
+      } else {
+        for (const [r, def] of Object.entries(b.devRoles)) {
+          roster.add(r);
+          if (!(b.localAgents || []).includes(r)) err(id, `devRole "${r}" not in localAgents`);
+          if (!def || !def.platform) err(id, `devRole "${r}" missing platform`);
+          else if (!b.platforms || !b.platforms[def.platform])
+            err(id, `devRole "${r}" platform "${def && def.platform}" not in platforms`);
+          if (def && def.briefing && !existsSync(join(dir, def.briefing)))
+            err(id, `devRole "${r}" briefing missing: ${def.briefing}`);
+          for (const s of (def && def.skillOverlay && def.skillOverlay.add) || [])
+            if (!effectiveSkillIds.has(s))
+              console.warn(`  • ${id}: devRole "${r}" skillOverlay add "${s}" not in catalog yet (pending content)`);
+        }
+      }
+    }
+    for (const [pid, pdef] of Object.entries(b.platforms || {})) {
+      for (const [role, rel] of Object.entries((pdef && pdef.briefings) || {})) {
+        if (!roster.has(role)) err(id, `platform "${pid}" briefing role "${role}" not in roster`);
+        if (!existsSync(join(dir, rel))) err(id, `platform "${pid}" briefing file missing: ${rel}`);
+      }
+      for (const [role, ov] of Object.entries((pdef && pdef.skillOverlays) || {})) {
+        if (!roster.has(role)) err(id, `platform "${pid}" skillOverlay role "${role}" not in roster`);
+        for (const s of (ov && ov.add) || [])
+          if (!effectiveSkillIds.has(s))
+            console.warn(`  • ${id}: platform "${pid}" skillOverlay add "${s}" not in catalog yet (pending content)`);
+      }
+    }
+
     for (const s of b.skills || [])
       if (!skillIds.has(s)) err(id, `skill "${s}" not in skills.json or skills/`);
 
