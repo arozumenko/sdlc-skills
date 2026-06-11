@@ -6,7 +6,6 @@ group: qa
 color: green
 theme: {color: colour156, icon: "✍️", short_name: author}
 aliases: [test-author, author]
-tools: Read, Write, Glob
 skills: []
 metadata:
   authors:

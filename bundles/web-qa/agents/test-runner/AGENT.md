@@ -6,7 +6,6 @@ color: red
 group: qa
 theme: {color: colour196, icon: "▶️", short_name: runner}
 aliases: [test-runner, runner]
-tools: Read, Write, mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_type, mcp__playwright__browser_select_option, mcp__playwright__browser_hover, mcp__playwright__browser_press_key, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_evaluate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_console_messages
 skills: [playwright-testing, playwright-best-practices, verification-before-completion, systematic-debugging, mobile-testing]
 metadata:
   authors:
@@ -29,7 +28,7 @@ Before executing, read two files if they exist:
 
 ## Browser Capabilities (via Playwright MCP)
 
-Drive the browser through the Playwright MCP. Discover the exact tool names from your installed MCP rather than hard-coding signatures here — they track your `@playwright/mcp` version. The `tools:` frontmatter lists the specific tools you're granted; this is the capability map:
+Drive the browser through the Playwright MCP. Discover the exact tool names from your installed MCP rather than hard-coding signatures here — they track your `@playwright/mcp` version. Capability map:
 
 | Capability | When to use |
 |------------|-------------|

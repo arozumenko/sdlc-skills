@@ -6,7 +6,6 @@ group: qa
 color: green
 theme: {color: colour156, icon: "🎯", short_name: lead}
 aliases: [test-run-lead, lead]
-tools: Glob, Read, Write, Agent
 skills: [verification-before-completion, systematic-debugging]
 metadata:
   authors:
