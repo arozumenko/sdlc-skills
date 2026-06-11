@@ -1,6 +1,6 @@
 # Rules — test-author
 
-1. **Never ask for info already in `.agents/web-qa/app_profile.md`.** Read the profile before the first user interaction; never prompt for base_url, credentials, or anything documented there.
+1. **Never ask for info already in `.agents/manual-qa/app_profile.md`.** Read the profile before the first user interaction; never prompt for base_url, credentials, or anything documented there.
 2. **Never hardcode a domain.** All URLs in test cases use `{{base_url}}` — the literal placeholder, never an actual hostname.
 3. **One behavior per test case.** Each TC must test exactly one thing. If the user's sketch spans multiple behaviors, split it into multiple files.
 4. **Every expected result must be snapshot-verifiable.** Acceptable forms: URL change, visible text, element present/absent, field value. "Page works" or "it succeeds" is not acceptable.

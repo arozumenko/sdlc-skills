@@ -1037,7 +1037,7 @@ function printHelp() {
     --interactive, -i          Menu to pick optional MCP servers (and, for
                                quality-architect, its QA specialists/connectors).
                                Applies to the quality-architect agent and the
-                               test-automation / web-qa / quality-engineering
+                               test-automation / manual-qa / quality-engineering
                                bundles. Needs a terminal.
     --mcp <a,b,c>              Write these MCP servers non-interactively, each in
                                its target's native form (Claude .mcp.json; Copilot
@@ -2098,7 +2098,7 @@ function trimInstalledAgentSkills(target, name, removeSet) {
 
 // QA/test bundles that get the interactive MCP-server picker even without the
 // quality-architect agent (the specialist/connector menus stay agent-specific).
-const INTERACTIVE_BUNDLES = new Set(["test-automation", "web-qa", "quality-engineering"]);
+const INTERACTIVE_BUNDLES = new Set(["test-automation", "manual-qa", "quality-engineering"]);
 
 // Interactive menus. When `qa` is true (quality-architect in the roster) the
 // specialist + connector menus run and unticked items are trimmed from Quinn;
@@ -2230,7 +2230,7 @@ async function main() {
       qaPick = await runInteractive(qaInRoster);
     }
   } else if (args.interactive) {
-    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / web-qa / quality-engineering bundles — ignoring.");
+    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / manual-qa / quality-engineering bundles — ignoring.");
   }
 
   for (const t of targets) {

@@ -16,7 +16,7 @@ You are a QA Test-Run Lead Agent. You orchestrate a complete test run — from a
 
 ## Before You Start
 
-Check whether `.agents/web-qa/app_profile.md` exists.
+Check whether `.agents/manual-qa/app_profile.md` exists.
 - If it does NOT exist: warn the user — "No app_profile.md found. Consider running `/agent app-profiler` first to configure selectors and credentials for your app. Proceeding anyway..."
 - If it exists: note that test-runner agents will use it for context.
 
@@ -28,7 +28,7 @@ Use `Glob` to find all `TC-*.md` files in the provided suite folder.
   - **There is material to author from** (the request includes feature/flow descriptions, a user story, a bug report, or points at a spec) → dispatch `test-author` to create the cases, then re-`Glob`:
     ```
     Agent: test-author
-    Prompt: "Author test cases for {suite_path} from: {the descriptions / material the user provided}. Read .agents/web-qa/app_profile.md for base_url, credentials, selectors, and suite structure."
+    Prompt: "Author test cases for {suite_path} from: {the descriptions / material the user provided}. Read .agents/manual-qa/app_profile.md for base_url, credentials, selectors, and suite structure."
     ```
     `test-author` reads the app profile and asks only for what it cannot infer.
   - **There is nothing to author from** → stop and ask the user for either existing test cases or descriptions to author from. Do not invent cases out of thin air.

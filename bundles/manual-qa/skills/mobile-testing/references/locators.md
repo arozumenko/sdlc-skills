@@ -37,7 +37,7 @@ generate_locators → returns suggested locator map for current screen
 appium_find_element → { strategy: "accessibility id", value: "SignInButton" }
 ```
 
-Always try `generate_locators` first on a new screen — it uses Appium's intelligence to suggest the best available locators. Record the results in `.agents/web-qa/app_profile.md` under Reliable Locators.
+Always try `generate_locators` first on a new screen — it uses Appium's intelligence to suggest the best available locators. Record the results in `.agents/manual-qa/app_profile.md` under Reliable Locators.
 
 ### Cross-Platform Strategy
 
@@ -58,7 +58,7 @@ Mobitru does not expose `generate_locators`. Use `mobile_list_elements_on_screen
 - Visible label (the text shown on screen)
 - Accessibility id (from the element listing)
 
-Record element labels and accessibility ids in `.agents/web-qa/app_profile.md` under Reliable Locators during app profiling (Part 1, Phase 2c).
+Record element labels and accessibility ids in `.agents/manual-qa/app_profile.md` under Reliable Locators during app profiling (Part 1, Phase 2c).
 
 ---
 

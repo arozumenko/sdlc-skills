@@ -47,7 +47,7 @@ For each FAIL result, classify it into one type based on `failure_reason`. Add `
 
 If `failure_reason` is ambiguous, default to **App behaviour**.
 
-The report format specification is at `.agents/web-qa/knowledge/test-run-report-format.md` — consult it for any formatting questions not covered here.
+The report format specification is at `.agents/manual-qa/knowledge/test-run-report-format.md` — consult it for any formatting questions not covered here.
 
 ## Report to Write
 

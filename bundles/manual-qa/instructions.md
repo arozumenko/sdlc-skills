@@ -12,7 +12,7 @@ the suite needs them. You can still invoke `test-sizer` or `test-author`
 standalone for authoring work outside a run.
 
 - **`app-profiler`** — run once to onboard the app: explores the UI, records its
-  structure and flows, and writes `.agents/web-qa/app_profile.md`.
+  structure and flows, and writes `.agents/manual-qa/app_profile.md`.
 - **`test-run-lead`** — the run orchestrator; run it as the **active agent**
   (it uses the Agent tool to spawn sub-runs). Assembles the suite first —
   dispatching **`test-author`** to write missing cases and **`test-sizer`** to
@@ -36,8 +36,8 @@ standalone for authoring work outside a run.
 tasks/<suite>/TC-NNN_<slug>.md     test cases (authored by test-author)
 reports/RUN-YYYY-MM-DD-NNN.md     run reports (written by test-reporter)
 reports/screenshots/               evidence screenshots from test-runner runs
-.agents/web-qa/knowledge/          seeded reference docs (format, template, …)
-.agents/web-qa/app_profile.md      app map written by app-profiler
+.agents/manual-qa/knowledge/          seeded reference docs (format, template, …)
+.agents/manual-qa/app_profile.md      app map written by app-profiler
 ```
 
 ## `{{base_url}}` rule

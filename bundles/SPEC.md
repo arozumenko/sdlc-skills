@@ -51,7 +51,7 @@ roster**. Two kinds of entries live there:
 1. **Bundle-local content** — for roles that only make sense inside the
    team and don't exist globally, drop `AGENT.md` / `SKILL.md` directly
    under `bundles/<id>/agents/<name>/` or `bundles/<id>/skills/<name>/`.
-   Example: `web-qa`'s six role-specific agents (`app-profiler`,
+   Example: `manual-qa`'s six role-specific agents (`app-profiler`,
    `test-sizer`, …) live only here and are authored here.
 2. **Synced mirror of a canonical** — for items whose canonical home is
    `agents/<name>/` or `skills/<name>/` (so standalone
@@ -96,7 +96,7 @@ bundles/<id>/
 ├── hooks/                   optional — Claude settings.json automation
 │   ├── hooks.json            hook config fragment (event → command)
 │   └── scripts/              scripts the hooks invoke (chmod +x on install)
-├── agents/                  optional — bundle-local roles; real content (web-qa) or a synced mirror of agents/<name>/ (team-ios/team-web/test-automation)
+├── agents/                  optional — bundle-local roles; real content (manual-qa) or a synced mirror of agents/<name>/ (team-ios/team-web/test-automation)
 │   └── <name>/               installed like a global agent (AGENT.md + SOUL.md)
 └── skills/                  optional — bundle-local skills; real content or a synced mirror of skills/<name>/
     └── <name>/               installed like a monorepo skill (SKILL.md + references/scripts)
@@ -145,7 +145,7 @@ The descriptor carries no install config.
   "skillOverlays": {                         // role → capability overlay (optional)
     "qa-engineer": { "add": ["xcuitest"], "remove": ["playwright-testing"] }
   },
-  "seed": { "knowledge": ".agents/web-qa/knowledge" }, // optional, bundle-relative src → project-relative dest
+  "seed": { "knowledge": ".agents/manual-qa/knowledge" }, // optional, bundle-relative src → project-relative dest
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
   "localAgents": [],                         // optional bundle-local roles in agents/
@@ -172,7 +172,7 @@ The descriptor carries no install config.
    dest; copied into the project once at install (idempotent; `--update` does a
    clean replace). Use for reference docs agents read at runtime (a subagent's
    cwd is the project root). Example:
-   `"seed": { "knowledge": ".agents/web-qa/knowledge" }`.
+   `"seed": { "knowledge": ".agents/manual-qa/knowledge" }`.
 2b. **Skill overlays** — for each `skillOverlays[<role>]`, rewrite the
    *installed* agent's `skills:` frontmatter to `(declared − remove) + add`.
    The install union is recomputed from the effective sets: a `remove`d skill
@@ -242,7 +242,7 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
   `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
   `SKILL.md`, and every `seed` source path exists.
 - A bundle may have an empty `agents` array if it provides `localAgents` —
-  a fully self-contained team (e.g. `web-qa`).
+  a fully self-contained team (e.g. `manual-qa`).
 
 ## Current bundles
 
@@ -250,4 +250,4 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 |---|---|---|
 | `team-web` | fullstack web | `python-dev` (backend) + `js-dev` (frontend) |
 | `team-ios` | iOS | `ios-dev` |
-| `web-qa` | manual QA for web | 5 local agents: `setup`, `tc-writer`, `orchestrator`, `executor`, `reporter` |
+| `manual-qa` | manual QA for web | 5 local agents: `setup`, `tc-writer`, `orchestrator`, `executor`, `reporter` |
