@@ -372,10 +372,15 @@ async function applyBundle(bundle, args, catalog) {
       process.exit(1);
     }
   }
-  const declaredOf = (a) =>
-    catalog.agents.includes(a)
-      ? parseAgentSkillDeps(a)
-      : parseAgentSkillDeps(a, bundleAgentsRoot);
+  const declaredOf = (a) => {
+    // Bundle owns its agents — read declared skills from THIS bundle's copy
+    // when present, else resolve the agent's real location (orphan or another
+    // bundle). Top-level `agents/` no longer holds bundle agents.
+    if (existsSync(join(bundleAgentsRoot, a, "AGENT.md")))
+      return parseAgentSkillDeps(a, bundleAgentsRoot);
+    const r = resolveItem(catalog.index, "agents", a);
+    return r ? parseAgentSkillDeps(r.name, join(r.dir, "agents")) : [];
+  };
   const isResolvable = (id) => {
     const e = registryEntry(catalog.registry, id);
     return catalog.skills.includes(id) || !!(e && e.repo);
@@ -889,7 +894,7 @@ function ensureMemoryIndexLine(destDir, role, description) {
 //   external entry: {id, repo: "owner/repo", ref, subdir?} → git clone + symlink
 // ---------------------------------------------------------------------------
 
-function loadSkillRegistry() {
+export function loadSkillRegistry() {
   const registryPath = join(PKG_ROOT, "skills.json");
   if (!existsSync(registryPath)) return { skills: [] };
   try {
@@ -1037,10 +1042,12 @@ function partitionSkillIds(ids, availableSkills, registry, index) {
   return { monorepo, external, unknown };
 }
 
-function inferSkillsFromAgents(agentNames, availableSkills, registry, index) {
+export function inferSkillsFromAgents(agentNames, availableSkills, registry, index) {
   const declared = new Set();
   for (const name of agentNames) {
-    for (const skill of parseAgentSkillDeps(name)) declared.add(skill);
+    const r = index ? resolveItem(index, "agents", name) : null;
+    const agentsRoot = r ? join(r.dir, "agents") : undefined;
+    for (const skill of parseAgentSkillDeps(r ? r.name : name, agentsRoot)) declared.add(skill);
   }
   return partitionSkillIds([...declared], availableSkills, registry, index);
 }
@@ -2473,7 +2480,9 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error("Install failed:", err.message);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Install failed:", err.message);
+    process.exit(1);
+  });
+}
