@@ -137,7 +137,7 @@ test("mergeCoreOverlay: tech-lead unions adds across platforms (deduped)", () =>
 test("buildOverlays: dev-role own overlays + core platform overlays", () => {
   const ov = buildOverlays(BUNDLE, ["js-dev", "ios-dev"]);
   assert.deepEqual(ov["js-dev"], { add: ["vercel-react-best-practices"] });
-  assert.deepEqual(ov["tech-lead"], { add: ["vercel-react-best-practices", "swiftui-pro"], remove: [] });
+  assert.deepEqual(ov["tech-lead"], { add: ["fastapi", "vercel-react-best-practices", "swiftui-pro"], remove: [] });
   assert.deepEqual(ov["qa-engineer"], { add: ["xcuitest-real-device-config"], remove: [] });
   assert.ok(!("scout" in ov)); // scout has no skillOverlay anywhere
 });
