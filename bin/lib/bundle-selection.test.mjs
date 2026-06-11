@@ -103,6 +103,17 @@ test("buildBriefingPlan: one platform => single entry; two => concatenated entri
   ]);
 });
 
+test("buildBriefingPlan: a dev role's own briefing is included under its label", () => {
+  const b = {
+    coreAgents: [],
+    devRoles: { "python-dev": { label: "Python backend", platform: "web", briefing: "briefings/roles/python-dev.md" } },
+    platforms: { web: { label: "Web", briefings: {} } },
+  };
+  assert.deepEqual(buildBriefingPlan(b, ["python-dev"]), {
+    "python-dev": [{ label: "Python backend", path: "briefings/roles/python-dev.md" }],
+  });
+});
+
 test("composeBriefing: single => as-is; many => headered", () => {
   assert.equal(composeBriefing([{ label: "Web", content: "body" }]), "body");
   assert.equal(
