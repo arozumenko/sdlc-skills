@@ -64,7 +64,6 @@ import {
 } from "fs";
 import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
-import { createInterface } from "readline";
 import {
   resolveSelection as resolveDevRoleSelection,
   buildOverlays,
@@ -1596,9 +1595,6 @@ function writeCodexAgent(src, name, targetDir, update) {
   return { status: "installed", dest };
 }
 
-function ask(rl, q) {
-  return new Promise((resolve) => rl.question(q, resolve));
-}
 
 async function interactivePick(catalog, args) {
   const detected = TARGETS.filter((t) => existsSync(join(CWD, t.dir)));
@@ -1616,42 +1612,30 @@ async function interactivePick(catalog, args) {
     }
   } else if (args.all || args.yes) {
     targets = detected.length > 0 ? detected : [TARGETS[0]];
+  } else if (detected.length === 0) {
+    // Nothing on disk to infer from — ask which runtime to set up rather than
+    // silently assuming Claude. Same arrow-key picker as the role selection,
+    // single choice. A trailing "All of the above" row installs every target.
+    const choice = await selectOne(
+      "No IDE directories detected. Install for which runtime?",
+      [
+        ...TARGETS.map((t) => ({ value: t.id, label: t.label, desc: t.dir + "/" })),
+        { value: "__all__", label: "All of the above" },
+      ],
+      TARGETS[0].id,
+    );
+    targets = choice === "__all__" ? TARGETS.slice() : TARGETS.filter((t) => t.id === choice);
   } else {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      if (detected.length === 0) {
-        // Nothing on disk to infer from — ask which runtime to set up rather
-        // than silently assuming Claude. Offer the full supported roster.
-        console.log("  No IDE directories detected. Which runtime(s) to install for?");
-        TARGETS.forEach((t, i) =>
-          console.log(`    ${i + 1}. ${t.label} (${t.dir}/)`)
-        );
-        console.log("    a. All of the above\n");
-        const choice =
-          (await ask(rl, `  Install to which? [1=${TARGETS[0].label}]: `))
-            .trim()
-            .toLowerCase() || "1";
-        targets =
-          choice === "a"
-            ? TARGETS.slice()
-            : [TARGETS[parseInt(choice) - 1] || TARGETS[0]];
-      } else {
-        console.log("  Detected IDE directories:");
-        detected.forEach((t, i) =>
-          console.log(`    ${i + 1}. ${t.label} (${t.dir}/)`)
-        );
-        console.log("    a. All of the above\n");
-        const choice =
-          (await ask(rl, "  Install to which? [a]: ")).trim().toLowerCase() ||
-          "a";
-        targets =
-          choice === "a"
-            ? detected
-            : [detected[parseInt(choice) - 1] || detected[0]];
-      }
-    } finally {
-      rl.close();
-    }
+    // One or more IDE directories already exist — pick among the detected ones.
+    const choice = await selectOne(
+      "Detected IDE directories. Install to which?",
+      [
+        ...detected.map((t) => ({ value: t.id, label: t.label, desc: t.dir + "/" })),
+        { value: "__all__", label: "All of the above" },
+      ],
+      "__all__",
+    );
+    targets = choice === "__all__" ? detected : detected.filter((t) => t.id === choice);
   }
 
   // Resolve agents (bare ids and qualified `bundle/name`), resolver-aware.
@@ -2001,6 +1985,44 @@ async function selectMany(title, items) {
   });
 }
 
+// Single-choice sibling of selectMany — same arrow-key UX, but the highlighted
+// row IS the selection (radio, not checkbox) and enter confirms exactly one.
+// `defaultValue` pre-highlights a row; falls back to the first item.
+async function selectOne(title, items, defaultValue) {
+  if (!items.length) return null;
+  let cur = Math.max(0, items.findIndex((i) => i.value === defaultValue));
+  // No TTY (CI, piped) → take the default without drawing a menu.
+  if (!process.stdin.isTTY) return items[cur].value;
+  console.log(`\n  ${title}`);
+  console.log(`  ↑↓ move · enter confirm`);
+  const render = () =>
+    items.map((it, i) =>
+      `  ${i === cur ? "❯" : " "} ${i === cur ? "◉" : "○"} ${it.label}${it.desc ? `  (${it.desc})` : ""}`
+    );
+  let lines = render();
+  lines.forEach((l) => process.stdout.write(l + "\n"));
+  const redraw = () => {
+    process.stdout.write(`\x1b[${lines.length}A\x1b[0J`);
+    lines = render();
+    lines.forEach((l) => process.stdout.write(l + "\n"));
+  };
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode(true);
+    stdin.resume();
+    const cleanup = () => { stdin.removeListener("data", onData); stdin.setRawMode(wasRaw || false); stdin.pause(); };
+    function onData(buf) {
+      const k = buf.toString();
+      if (k === "\r" || k === "\n") { cleanup(); resolve(items[cur].value); }
+      else if (k === "\x03") { cleanup(); process.exit(130); }
+      else if (k === "\x1b[A" || k === "k") { cur = (cur - 1 + items.length) % items.length; redraw(); }
+      else if (k === "\x1b[B" || k === "j") { cur = (cur + 1) % items.length; redraw(); }
+    }
+    stdin.on("data", onData);
+  });
+}
+
 // Optional MCP servers offered by --interactive / --mcp. Each entry's `cfg` is the
 // host-neutral base; remote servers that need a token carry a `secret` descriptor so
 // the four auth dialects are generated per host: Claude `headersHelper` (reads .env) /
@@ -2256,7 +2278,7 @@ async function main() {
 
   const catalog = loadCatalog();
 
-  console.log("\n  sdlc-skills — SDLC agents and skills for Claude Code\n");
+  console.log("\n  sdlc-skills — SDLC agents and skills for AI coding assistants\n");
   console.log(
     `  Catalog: ${catalog.agents.length} agent(s), ${catalog.skills.length} skill(s)`
   );
@@ -2484,10 +2506,11 @@ async function main() {
     installHooks(bundle, targets);
   }
 
+  const launchNames = targets.map((t) => t.label).join(", ");
   console.log(
     `\n  Done: ${installed} installed, ${skipped} skipped.` +
       (installed > 0
-        ? "\n  Launch Claude Code in this project to use them."
+        ? `\n  Launch ${launchNames} in this project to use them.`
         : "") +
       "\n"
   );
