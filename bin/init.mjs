@@ -266,10 +266,21 @@ async function applyBundle(bundle, args, catalog) {
     }
     let selected;
     if (sel.mode === "picker") {
-      selected = await selectMany(
-        "Developer roles — pick any combination (space toggles, enter confirms):",
-        devRoleNames.map((r) => ({ value: r, label: r, desc: bundle.devRoles[r].label, default: true }))
-      );
+      // Nothing pre-checked — the user must consciously pick the team's dev
+      // role(s). Re-prompt until at least one is chosen rather than silently
+      // installing an empty roster.
+      const roleItems = devRoleNames.map((r) => ({
+        value: r,
+        label: r,
+        desc: bundle.devRoles[r].label,
+        default: false,
+      }));
+      const title = "Developer roles — pick at least one (space toggles, enter confirms):";
+      selected = await selectMany(title, roleItems);
+      while (selected.length === 0) {
+        console.log("  Select at least one developer role to continue.");
+        selected = await selectMany(title, roleItems);
+      }
     } else {
       selected = sel.roles;
     }
