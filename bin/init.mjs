@@ -1620,8 +1620,21 @@ async function interactivePick(catalog, args) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     try {
       if (detected.length === 0) {
-        console.log("  No IDE directories detected. Installing to .claude/");
-        targets = [TARGETS[0]];
+        // Nothing on disk to infer from — ask which runtime to set up rather
+        // than silently assuming Claude. Offer the full supported roster.
+        console.log("  No IDE directories detected. Which runtime(s) to install for?");
+        TARGETS.forEach((t, i) =>
+          console.log(`    ${i + 1}. ${t.label} (${t.dir}/)`)
+        );
+        console.log("    a. All of the above\n");
+        const choice =
+          (await ask(rl, `  Install to which? [1=${TARGETS[0].label}]: `))
+            .trim()
+            .toLowerCase() || "1";
+        targets =
+          choice === "a"
+            ? TARGETS.slice()
+            : [TARGETS[parseInt(choice) - 1] || TARGETS[0]];
       } else {
         console.log("  Detected IDE directories:");
         detected.forEach((t, i) =>
