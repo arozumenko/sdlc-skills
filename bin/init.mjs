@@ -2480,7 +2480,24 @@ async function main() {
   );
 }
 
-if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
+// Detect "run as the main module" robustly. npx/npm invoke the `init` bin
+// through a symlink in node_modules/.bin/, so process.argv[1] is the symlink
+// path while import.meta.url resolves to the realpath of this file — a direct
+// string compare fails there and main() would silently never run. Resolve both
+// through realpath before comparing.
+function isMainModule() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (entry === self) return true;
+  try {
+    return realpathSync(entry) === realpathSync(self);
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   main().catch((err) => {
     console.error("Install failed:", err.message);
     process.exit(1);
