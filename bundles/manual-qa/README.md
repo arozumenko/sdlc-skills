@@ -1,9 +1,7 @@
 # Manual QA Team
 
-A standalone agentic manual-QA team for web and mobile apps. Cases are authored
-as structured Markdown and run live — web via Playwright MCP, mobile via Appium
-MCP (local native) or the Mobitru device farm (cloud real devices) — no test
-code is generated, making this distinct from a Playwright automation engineer.
+A standalone agentic manual-QA team for web and mobile apps. Cases are authored as structured Markdown and run live — web via Playwright MCP, mobile via Appium
+MCP (local native) or the Mobitru device farm (cloud real devices) — no test code is generated, making this distinct from a Playwright automation engineer.
 
 ## Install
 
