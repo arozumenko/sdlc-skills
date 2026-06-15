@@ -1,6 +1,6 @@
 ---
-name: Web Testing Team
-description: Standalone agentic manual-QA team for web apps — onboard, author cases, run live via Playwright MCP, and report.
+name: Manual QA Team
+description: Standalone agentic manual tests execution team for web and mobile apps.
 owner: Applied AI
 ---
 
