@@ -115,23 +115,35 @@ projects — authenticate once, use everywhere).
 
 ### Login flow (important for Claude)
 
-When the user is not authenticated, **run `auth.py login` via Bash tool**. The
-output will contain `LOGIN_URL=...` and `LOGIN_CODE=...` lines. **You must relay
-both values to the user in your response** — they need to open the URL in their
-browser and enter the code to complete sign-in. The script blocks until they do.
+The default `login` opens an **interactive browser** (auth-code + PKCE on a
+localhost redirect). This passes Conditional Access policies that block the
+device-code flow. Because it needs a browser + a local redirect listener, **ask
+the user to run it in their own terminal**:
 
 ```
-python3 scripts/auth.py login    # Device-code flow — relay URL and code to user
-python3 scripts/auth.py status   # Check token validity
-python3 scripts/auth.py logout   # Clear cached credentials
+python3 scripts/auth.py login            # Browser auth-code+PKCE (default)
+python3 scripts/auth.py status           # Check token validity
+python3 scripts/auth.py logout           # Clear cached credentials
 ```
+
+If the browser flow can't be used (no GUI / SSH), fall back:
+
+```
+python3 scripts/auth.py login device     # Device-code — relay LOGIN_URL/LOGIN_CODE to user
+python3 scripts/auth.py login authcode   # Browser via nativeclient redirect (manual URL paste)
+```
+
+For `login device`, the output contains `LOGIN_URL=...` and `LOGIN_CODE=...` —
+relay both to the user. Note: many tenants block device-code via Conditional
+Access ("...an authentication flow that is restricted by your admin"); prefer
+the default browser flow.
 
 ### Environment variables (optional)
 
 | Variable | Default | Description |
 |---|---|---|
 | `SDLC_SKILLS_CACHE_DIR` | `~/.msgraph-skill` | Shared cache root for all sdlc-skills (token cache, venv). When set, the skill stores its data under `$SDLC_SKILLS_CACHE_DIR/msgraph/`. |
-| `MSGRAPH_CLIENT_ID` | `084a3e9f-a9f4-43f7-89f9-d229cf97853e` | Override with your own Azure AD app |
+| `MSGRAPH_CLIENT_ID` | `3d7688c6-f449-4d04-8b0d-57d94818e922` | Public client with localhost redirect; override with your own Azure AD app |
 | `MSGRAPH_TENANT_ID` | `common` | Restrict to a specific tenant |
 
 Variables can be set via environment or in a `.env` file at the skill root or cwd.
@@ -146,7 +158,7 @@ register your own Azure AD app:
 2. Add delegated permissions: `Mail.Read`, `Calendars.Read`, `Team.ReadBasic.All`,
    `Channel.ReadBasic.All`, `Sites.Read.All`, `Files.Read.All`.
 3. Under Authentication → Add platform → Mobile and desktop, enable the
-   `https://login.microsoftonline.com/common/oauth2/nativeclient` redirect URI.
+   `http://localhost` redirect URI (required for the default browser flow).
 4. Set `MSGRAPH_CLIENT_ID=<your-app-id>` in your `.env` and re-run login.
 
 ## Installation
@@ -172,3 +184,32 @@ on first script run — no manual setup needed.
 ```bash
 python3 scripts/auth.py login
 ```
+
+## Known issues / troubleshooting
+
+- **Conditional Access blocks device-code** — Error: *"Your sign-in was
+  successful but does not meet the criteria to access this resource ... an
+  authentication flow that is restricted by your admin."* Many tenants block the
+  device-code flow via Conditional Access. This is why the default `login` now
+  uses the interactive browser (auth-code + PKCE) flow. If you still see this
+  message *after* the browser sign-in, the CA policy is keying on device
+  compliance / managed app / location rather than the auth flow — that needs
+  your tenant admin (check Entra → Sign-in logs → your sign-in → Conditional
+  Access tab for the exact policy).
+
+- **`AADSTS50011` redirect URI mismatch** — The configured `MSGRAPH_CLIENT_ID`
+  app has no `http://localhost` redirect registered. The default app does; if
+  you override it with your own app, register the `http://localhost` redirect
+  (Authentication → Mobile and desktop applications). The legacy device-code
+  flow (`login device`) needs no redirect URI if you must avoid this.
+
+- **Default app is a shared public client** — `3d7688c6-...` is a third-party
+  public-client app reused because it has the `http://localhost` redirect. It is
+  not controlled by this project. For a durable / auditable setup, register your
+  own Azure AD app (see *Custom Azure AD app* above) and set `MSGRAPH_CLIENT_ID`.
+
+- **Teams scopes may not consent on the default app** — The default app's
+  registered scopes do **not** include `Team.ReadBasic.All` /
+  `Channel.ReadBasic.All`. Mail, calendar, and SharePoint work; Teams scans may
+  fail with a consent error. Use your own app registration with all six
+  delegated permissions if you need Teams.
