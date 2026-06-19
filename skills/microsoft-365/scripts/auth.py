@@ -2,9 +2,17 @@
 Shared authentication helper for skill-msgraph scripts.
 
 Usage as a CLI:
-    python3 scripts/auth.py login    # device-code flow, caches token
-    python3 scripts/auth.py status   # show token validity + scopes
-    python3 scripts/auth.py logout   # clear cache
+    python3 scripts/auth.py login            # browser auth-code+PKCE (default)
+    python3 scripts/auth.py login device     # device-code flow (legacy)
+    python3 scripts/auth.py login authcode   # browser via nativeclient redirect
+    python3 scripts/auth.py status           # show token validity + scopes
+    python3 scripts/auth.py logout           # clear cache
+
+The default `login` uses an interactive browser (auth-code + PKCE) on a
+localhost redirect. This passes Conditional Access policies that block the
+device-code flow ("...an authentication flow that is restricted by your
+admin"). The default app below is registered with an http://localhost
+redirect so this works out of the box.
 
 Usage from other scripts:
     from auth import get_client
@@ -27,7 +35,9 @@ import _bootstrap  # noqa: F401 — auto-installs deps, re-execs if needed
 
 import tempfile
 import time
+import webbrowser
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 import msal
 from azure.core.credentials import AccessToken, TokenCredential
@@ -70,8 +80,16 @@ _load_dotenv()
 # Defaults
 # ---------------------------------------------------------------------------
 
-DEFAULT_CLIENT_ID = "084a3e9f-a9f4-43f7-89f9-d229cf97853e"
+# Public client app registered with an http://localhost redirect URI, so the
+# interactive browser (auth-code + PKCE) flow works without registering your
+# own app. Override with MSGRAPH_CLIENT_ID to use your own.
+DEFAULT_CLIENT_ID = "3d7688c6-f449-4d04-8b0d-57d94818e922"
 DEFAULT_TENANT_ID = "common"
+
+# Legacy "native client" redirect URI, used by the `login authcode` flow: the
+# browser lands on this (blank) page carrying ?code=...&state=... which the
+# user pastes back. Only works with an app registered for this redirect.
+NATIVE_CLIENT_REDIRECT = "https://login.microsoftonline.com/common/oauth2/nativeclient"
 
 SCOPES = [
     "Mail.Read",
@@ -192,6 +210,70 @@ class _MSALCredential(TokenCredential):
     # Auth management (used by CLI)
     # ------------------------------------------------------------------
 
+    def login_interactive(self) -> dict:
+        """Open the system browser (auth-code + PKCE) on a localhost redirect.
+
+        This is the default flow. It passes Conditional Access policies that
+        block the device-code flow. Requires the app to allow an
+        ``http://localhost`` redirect URI (the default app does).
+        """
+        result = self._app.acquire_token_interactive(
+            scopes=self._scopes,
+            prompt="select_account",
+        )
+        if "error" in result:
+            raise RuntimeError(
+                f"Authentication failed: {result.get('error_description', result['error'])}"
+            )
+        self._save_cache()
+        return result
+
+    def login_authcode(self) -> dict:
+        """Browser auth-code + PKCE flow via the legacy ``nativeclient`` redirect.
+
+        Fallback for apps registered with the ``nativeclient`` redirect instead
+        of ``http://localhost``. The browser lands on the blank nativeclient
+        page carrying the auth code in the URL, which the user pastes back.
+        """
+        flow = self._app.initiate_auth_code_flow(
+            self._scopes,
+            redirect_uri=NATIVE_CLIENT_REDIRECT,
+            prompt="select_account",
+        )
+        auth_uri = flow["auth_uri"]
+        print("=" * 60)
+        print("  Microsoft Graph — Browser Login (auth-code + PKCE)")
+        print("=" * 60)
+        print()
+        print("  1. A browser window should open. If not, open this URL:")
+        print()
+        print(f"     {auth_uri}")
+        print()
+        print("  2. Sign in. Your browser will land on a (blank) page at")
+        print("     login.microsoftonline.com/.../nativeclient")
+        print("  3. Copy that page's FULL URL from the address bar and paste")
+        print("     it below.")
+        print()
+        print("=" * 60)
+        print()
+        try:
+            webbrowser.open(auth_uri)
+        except Exception:
+            pass
+        redirected = input("Paste the full redirect URL here: ").strip()
+        query = urlparse(redirected).query
+        if not query:
+            # User may have pasted just the "code=...&state=..." fragment.
+            query = redirected.lstrip("?")
+        auth_response = {k: v[0] for k, v in parse_qs(query).items()}
+        result = self._app.acquire_token_by_auth_code_flow(flow, auth_response)
+        if "error" in result:
+            raise RuntimeError(
+                f"Authentication failed: {result.get('error_description', result['error'])}"
+            )
+        self._save_cache()
+        return result
+
     def login(self) -> dict:
         """Initiate device-code flow and block until the user completes it."""
         flow = self._app.initiate_device_flow(scopes=self._scopes)
@@ -298,7 +380,20 @@ def _cmd_login() -> None:
     print(f"Client ID : {cred._app.client_id}")
     print(f"Token cache: {cred._cache_path}")
     print()
-    result = cred.login()
+    # Default to the interactive browser flow (auth-code + PKCE on localhost),
+    # which works with the default app and passes Conditional Access policies
+    # that block device-code. Overrides:
+    #   login device     -> device-code flow (legacy)
+    #   login authcode   -> browser via nativeclient redirect (manual paste)
+    mode = sys.argv[2].lower() if len(sys.argv) > 2 else "localhost"
+    if mode == "device":
+        result = cred.login()
+    elif mode == "authcode":
+        result = cred.login_authcode()
+    else:
+        print("Opening your browser for sign-in …")
+        print()
+        result = cred.login_interactive()
     account = result.get("id_token_claims", {}).get("preferred_username", "unknown")
     print(f"Logged in as: {account}")
     print(f"Token cache : {cred._cache_path}")
