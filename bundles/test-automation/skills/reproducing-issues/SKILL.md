@@ -64,8 +64,13 @@ CONFIRMED:**
 
 - **CONFIRMED** — reproduced at least once, repeatable (or intermittent rate
   documented), failure clearly captured (screenshot / log / response), steps
-  precise enough for anyone to follow. Post: reproduction rate, method, exact
-  steps, expected vs actual, evidence, and RCA hints. → ready for RCA.
+  precise enough for anyone to follow. Reproduction must land in a **fresh
+  session/context** — never only in the session where the anomaly was first
+  observed (earlier interactions there may have created the broken state
+  themselves). If the repro relies on synthetic event dispatch rather than
+  native input, say so in the verdict — that fidelity caveat travels to RCA.
+  Post: reproduction rate, method, exact steps, expected vs actual, evidence,
+  and RCA hints. → ready for RCA.
 - **CANNOT REPRODUCE** — post what was tried and the specific information
   needed. → not ready.
 - **PARTIALLY CONFIRMED** — reproducible but inconsistent; post the rate and

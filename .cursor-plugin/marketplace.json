@@ -86,7 +86,7 @@
     {
       "name": "test-automation-lead",
       "source": "./bundles/test-automation/agents/test-automation-lead",
-      "description": "Use when a TMS case or batch of cases needs to be automated, when an automation PR needs the merge gate, or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the analyst → implementer → reviewer pipeline, owns the automation merge, owns test-framework architecture.",
+      "description": "Use when a TMS case or batch of cases needs to be automated, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the analyst → implementer → reviewer pipeline, owns the automation merge, owns test-framework architecture.",
       "version": "0.2.0"
     },
     {
@@ -150,6 +150,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "efficiency-audit",
+      "source": "./bundles/test-automation/skills/efficiency-audit",
+      "description": "Measure the token/cost/time efficiency of AI coding-agent work — per session, per role, per day, and per individual sub-agent — with every dollar metered by ccusage. Use when the user asks \"what did this cost\", cost per session/role/test case, which role/sub-agent burned the most, tool-call/skill/time breakdowns, \"before vs after\" cost comparisons, or wants to audit AI spend over time.",
+      "version": "0.2.0"
+    },
+    {
       "name": "gathering-context",
       "source": "./skills/gathering-context",
       "description": "Gather cross-channel context (local KB, email, Teams, optional web) about a person or topic before responding. Use when the user says \"what do we know about X\", \"find prior discussions with Y\", or before drafting any reply where prior history matters.",
@@ -206,7 +212,7 @@
     {
       "name": "playwright-testing",
       "source": "./bundles/feature-development/skills/playwright-testing",
-      "description": "UI/E2E test automation with Playwright MCP. Use when the user asks to \"test the UI\", \"automate browser tests\", \"check the page\", \"take a screenshot\", \"run Playwright\", \"write E2E tests\", or anything about browser-based testing.",
+      "description": "Use when a manual-QA agent does live browser testing through the Playwright MCP server — exploring/profiling a web app or executing a web test case against a running app, with no test code generated. Web/PWA/hybrid targets; used by app-profiler and test-runner. Mobile native → use mobile-testing instead.",
       "version": "0.2.0"
     },
     {

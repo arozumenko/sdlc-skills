@@ -28,16 +28,21 @@ cat .agents/test-automation.yaml 2>/dev/null
 # If nothing — run seeding-a-project before proceeding
 # (invoke the seeding-a-project skill via the running host)
 
-# Detect framework if testing.md didn't name it
-ls playwright.config.* cypress.config.* wdio.conf.* 2>/dev/null
-find . -maxdepth 3 -name pytest.ini -o -name pyproject.toml -o -name pom.xml 2>/dev/null
-grep -l "playwright\|cypress\|selenium\|webdriver" package.json pyproject.toml pom.xml build.gradle 2>/dev/null
+# Detect framework if testing.md didn't name it — scan broadly across
+# surfaces, not just browser runners. Match whatever the project uses.
+ls playwright.config.* cypress.config.* wdio.conf.* 2>/dev/null   # UI
+find . -maxdepth 3 -name pytest.ini -o -name pyproject.toml -o -name pom.xml -o -name build.gradle 2>/dev/null
+# UI runners, API/test frameworks, mobile drivers, load tools — one grep, unordered:
+grep -lE "playwright|cypress|selenium|webdriver|supertest|httpx|rest-assured|restassured|appium|espresso|k6|gatling|jmeter|locust" \
+  package.json pyproject.toml pom.xml build.gradle 2>/dev/null
+ls k6.config.* *.jmx Gatling* 2>/dev/null                        # perf, if any
 
 # Find where tests live
-ls tests/ test/ __tests__/ e2e/ integration/ cypress/ 2>/dev/null
+ls tests/ test/ __tests__/ e2e/ integration/ api/ cypress/ 2>/dev/null
 
-# Find existing page objects / helpers
-find tests -name "*.page.*" -o -name "*Page.*" 2>/dev/null | head
+# Find the existing abstraction layer (page objects for UI, API clients /
+# screen objects on other surfaces) / helpers
+find tests -name "*.page.*" -o -name "*Page.*" -o -name "*client*" -o -name "*Client*" 2>/dev/null | head
 ```
 
 ## Phase 2: Ingest case from TMS
@@ -118,30 +123,19 @@ Host-native sub-agent spawning:
 
 ### Claude Code (this harness)
 
-```
-# Single case — run directly
-Agent({
-  subagent_type: "general-purpose",
-  description: "Analysis pass — execute case CASE-ID",
-  prompt: "You are qa-engineer (Sage). Read .claude/agents/qa-engineer/AGENT.md
-          and the test-case-analysis skill at
-          .claude/skills/test-case-analysis/SKILL.md. Load case CASE-ID via
-          the adapter declared in .agents/test-automation.yaml, execute it
-          against $BASE_URL using playwright-testing or browser-verify skill,
-          produce the AFS at
-          test-specs/{feature}/l{pri}_{slug}_CASE-ID.md, and return the path."
-})
-
-# Batch — parallel sub-agents, one per case
-# Fire N Agent calls in one message; collect paths; verify files exist.
-```
+Use the canonical dispatch templates in
+[orchestration-playbook.md § Canonical dispatch templates](./orchestration-playbook.md#canonical-dispatch-templates)
+— native subagent types, per-case parameters, and the reviewer
+triangulation preamble. For a batch, fire one dispatch per case in a
+single message; collect paths; verify files exist.
 
 ### Copilot / other hosts
 
-Use the host's equivalent of `runSubagent` / `task` / `Agent`. Pass the
-same prompt. The `qa-engineer` persona lives in `.github/agents/`
-(Copilot) or `.claude/agents/` (Claude Code). The `test-case-analysis`
-skill it loads lives under the matching `.../skills/` path.
+Use the exact dispatch form `.agents/team-comms.md` documents for the
+host. Pass the same prompt. The `qa-engineer` persona lives in
+`.github/agents/` (Copilot) or `.claude/agents/` (Claude Code). The
+`test-case-analysis` skill it loads lives under the matching
+`.../skills/` path.
 
 **Collecting results** (critical for background / parallel runs):
 
@@ -153,6 +147,12 @@ skill it loads lives under the matching `.../skills/` path.
 5. Aggregate paths before handing off to automation engineers.
 
 ## Phase 5–6: Automation implementation
+
+Run with **whatever the project uses** — the run command lives in
+`.agents/testing.md` § Run command (or `.agents/test-automation.yaml`
+`framework.run_command`). The recipes below are examples per common
+framework and surface, not a default; match the one the project
+actually has.
 
 ### Playwright (TypeScript/JavaScript)
 
@@ -197,24 +197,46 @@ mvn test -Dtest=CheckoutApplyPromoIT
 npx wdio run ./wdio.conf.ts --spec=tests/checkout/apply-promo.e2e.ts
 ```
 
+### API / service suites (non-UI examples)
+
+```bash
+# Node — supertest / Playwright request, run one spec
+npx playwright test tests/api/orders.spec.ts            # Playwright API project
+npx jest tests/api/orders.test.ts                       # supertest under Jest
+
+# Python — pytest + httpx
+pytest tests/api/test_orders.py -k create_order -v
+
+# Java — RestAssured under JUnit
+mvn test -Dtest=OrdersApiIT
+```
+
+### Performance / load suites (non-UI examples)
+
+```bash
+k6 run perf/checkout.js                                  # k6
+mvn gatling:test -Dgatling.simulationClass=CheckoutSim   # Gatling
+locust -f perf/checkout.py --headless -u 50 -r 5         # Locust
+```
+
 ## Phase 7: Review
 
 ```bash
 # Code-review skill
 # Invoke via host: Skill tool with "code-review" against the branch diff
-
-# QA review — delegate to qa-engineer agent
-Agent({
-  subagent_type: "general-purpose",
-  description: "QA review of automation diff",
-  prompt: "You are qa-engineer (Sage). Review the diff between main and
-          HEAD for test-automation correctness: do assertions prove the
-          AC, are selectors stable, is the sad path covered, is there
-          defect masking? Report findings."
-})
 ```
 
+QA review — delegate to the reviewer slot. Use the canonical dispatch
+templates in
+[orchestration-playbook.md § Canonical dispatch templates](./orchestration-playbook.md#canonical-dispatch-templates)
+— native subagent types, per-case parameters, and the reviewer
+triangulation preamble.
+
 ## Phase 8: Deliver + TMS sync
+
+The commit + PR below is a **Playwright/UI worked example**; the shape is
+the same for any framework — substitute the project's abstraction layer
+(API client / screen object), soft-assertion mechanism, and run command.
 
 ```bash
 # Commit, push, PR — via completing-a-task skill
@@ -227,7 +249,7 @@ test(CASE-ID): automate apply-promo flow
 - Page object extension in tests/pages/checkout.page.ts
 - Regression for GH#234 via expect.soft
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+<your host's co-author trailer, if the project convention uses one>
 EOF
 )"
 git push -u origin HEAD
@@ -240,20 +262,30 @@ gh pr create --title "test(CASE-ID): automate apply-promo flow" \
 
 ## Test plan
 - [x] Ran locally, green
-- [x] Ran in CI pipeline, green
-- [x] TMS execution updated to PASSED
+- [ ] Ran in CI pipeline, green
+- [ ] TMS execution updated to PASSED
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+<your host's co-author trailer, if the project convention uses one>
 EOF
 )"
+```
 
-# TMS back-write (example: Zephyr Scale over HTTP)
+### Post-merge TMS back-write (orchestrator, per seeded policy — playbook § Merging step 5)
+
+Owned by the **orchestrator after the merge** — see
+[orchestration-playbook.md § Merging automation PRs](./orchestration-playbook.md#merging-automation-prs),
+step 5 — never fired unconditionally at PR-open. Gated on CI / an opt-in
+env flag, and only runs when the seed declares a real `tms.adapter`
+(graceful on failure — `SKILL.md` § Phase 5).
+
+```bash
+# Example: Zephyr Scale over HTTP
 curl -s -X POST -H "Authorization: Bearer $ZEPHYR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"projectKey\":\"SCRUM\",\"testCaseKey\":\"$TMS_ID\",\"statusName\":\"Pass\"}" \
   "https://api.zephyrscale.smartbear.com/v2/testexecutions"
 
-# TMS back-write over MCP (preferred when server is configured):
+# Over MCP (preferred when server is configured):
 # mcp__<server>__ZephyrConnector_create_test_execution({ projectKey, testCaseKey, statusName })
 ```
 
@@ -283,5 +315,8 @@ test-results/
   unsynced/        # TMS back-writes that failed and need manual sync
 ```
 
-Analyst writes under `screenshots/` and `json/` during execution.
-Engineer's test runs extend the same tree for CI artifacts.
+Analyst writes evidence here during execution; the engineer's test runs
+extend the same tree for CI artifacts. The artifact *kinds* follow the
+surface — `screenshots/` for UI, request/response captures or `json/`
+transcripts for API, metric summaries for perf — but the tree and the
+`reports/` + `json/` + `unsynced/` layout stay the same.

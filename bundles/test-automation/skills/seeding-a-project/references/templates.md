@@ -191,6 +191,24 @@ Brief description.
 ## Conventions
 - Top 3-5 conventions detected
 
+## Environment & access
+
+- Base URL / API base: `${BASE_URL}` (e.g. `https://staging.example.com` /
+  `${API_BASE}` for the API root) — where tests point by default
+
+### Roles & sample users
+
+Credential matrix mapping role keys to their purpose and the env var that
+holds the credential. **Never write actual secrets here** — only the env-var
+name that resolves to the credential at run time.
+
+| Role key | Purpose | Credential env var |
+|----------|---------|--------------------|
+| `${TEST_USER}` | Standard authenticated user — default happy-path account | `TEST_USER_PASSWORD` |
+| `${TRIAL_USER}` | Trial / limited-tier account — gating & upsell paths | `TRIAL_USER_PASSWORD` |
+| `${ADMIN_USER}` | Elevated / admin account — privileged flows only | `ADMIN_USER_PASSWORD` |
+| _(add per project)_ | _(role-specific purpose)_ | _(env var, never the secret)_ |
+
 ## Project systems
 
 _Captured during seeding-a-project Step 0.7 from operator input (or
@@ -206,6 +224,15 @@ first test-case-analysis run)._
 - **System**: <zephyr-scale | testrail | xray | azure-test-plans | markdown | none>
 - **Project key**: <SCRUM / QA-PROJECT / ...>
 - **Configured in**: `.agents/test-automation.yaml` (adapter + transport + credentials)
+
+### Task source (where work to automate comes from)
+- **Intake**: <operator-drops-case-ids | tms-folder | tms-suite | jira-board-query | github-issues>
+  - `operator-drops-case-ids` *(default)* — the user hands the orchestrator TMS
+    case IDs / a batch to automate.
+  - `tms-folder` / `tms-suite` — iterate a named TMS folder or test suite.
+  - `jira-board-query` — cases linked to a board/sprint query.
+  - `github-issues` — issues (label/milestone) drive the work.
+- **Selector**: <the folder path / suite id / JQL / label — whatever the intake needs>
 
 ### Knowledge base
 - **System**: <confluence | notion | obsidian | github-wiki | readme-only | none>
@@ -233,7 +260,7 @@ whether lightweight clarifications can bundle.
     (new findings added as comments on the existing per-case ticket).
     Real defects (reproducible bugs, blockers) still get their own
     tickets regardless — bundling only applies to the clarification-
-    weight tier. The bundling decision is Sage's — she classifies
+    weight tier. The bundling decision is the analyst's — they classify
     each finding at filing time.
 - **Link originating case**: <yes | no> — should the ticket reference
   the TMS case ID that surfaced it?
@@ -246,10 +273,27 @@ whether lightweight clarifications can bundle.
     git-tracking / offline access
 - **Markdown location**: `test-specs/` (or project-specific path)
 
+### Status reporting
+
+_Which outward-facing writes the pipeline performs at task completion. The
+implementer / orchestrator read this before posting; if a write is `no`, they
+skip it silently — it's not part of this project's way of work._
+
+- **TMS execution back-write**: <yes | no> — push pass/fail/blocked back to the
+  TMS execution record after a run. Implies a real `tms.adapter` (not
+  `markdown` / `none`); `no` for projects that don't track executions in a TMS.
+- **Comment PR link on the originating story/issue**: <yes | no> — post the
+  automation PR link as a comment on the linked story. `no` where bots commenting
+  on stories is unwanted.
+- **File tickets for defects**: governed by **§ Bug filing** above (`none` there
+  = don't file).
+- **Gating**: result back-write runs only in CI / under an opt-in flag, never on
+  a local dev run (see `test-automation-workflow` § Phase 5).
+
 ### Automation PR policy
 
-_Where automation PRs target, and who merges them. Read by PM
-(merge gate) and by Axel (branch base)._
+_Where automation PRs target, and who merges them. Read by the
+orchestrator (merge gate) and the implementer (branch base)._
 
 - **Base branch for automation PRs**: <main | master | develop |
   feature/<name> | ASK>
@@ -259,20 +303,27 @@ _Where automation PRs target, and who merges them. Read by PM
     uses a dedicated line for test-automation work (common in
     pilot / testing mode — e.g. `feature/test-automation-pilot`).
 - **Merge policy**: <auto-merge | human-approved | manual>
-  - `auto-merge` *(default)* — PM merges once review + CI pass.
-    Closes the loop autonomously; best for mature pipelines.
-  - `human-approved` — PM **waits for an explicit human approval
-    signal** on the PR (e.g. the `human-approved` label, or a
-    reviewer from a designated human set) before merging. PM
-    still owns the merge — it just doesn't fire on review-bot
-    approval alone.
-  - `manual` — PM never merges. Summarizes the green PR and
-    hands back to the operator. Right when the project is in
-    early pilot mode, or base branch is a protected release
-    line.
+  - `auto-merge` *(default)* — the orchestrator (test-automation-lead)
+    merges once review + CI pass. Closes the loop autonomously; best
+    for mature pipelines.
+  - `human-approved` — the orchestrator **waits for an explicit human
+    approval signal** on the PR (e.g. the `human-approved` label, or a
+    reviewer from a designated human set) before merging. It still
+    owns the merge — it just doesn't fire on review-bot approval alone.
+  - `manual` — the orchestrator never merges. Summarizes the green PR
+    and hands back to the operator. Right when the project is in
+    early pilot mode, or base branch is a protected release line.
 - **Squash / rebase / merge commit**: <squash | rebase | merge>
   — optional; defaults to `squash`. Override when the project's
   branch-protection rules require a different strategy.
+
+### Additional notes
+
+_Free-form way-of-work context that doesn't fit a structured field above —
+exceptions, timing constraints, who to loop in, tribal knowledge. Carried
+verbatim from the operator's onboarding prompt; `none` if they left it blank._
+
+- <verbatim operator notes, or `none`>
 ```
 
 ---
@@ -494,12 +545,12 @@ Detected from codebase analysis. These are descriptive (what IS), not prescripti
 
 ## .agents/testing.md Template
 
-Scout's read by Sage (qa-engineer) and Axel (test-automation-engineer)
-before they touch tests. **Treat the sections below as themes, not
-required fields.** Scout fills what the repo actually evidences; unknown
-or absent topics are flagged under § Unconfirmed so agents know to ask
-PM before improvising. Stay short — link to deeper docs rather than
-restating them.
+Scout's read by the analyst and implementer before they touch tests.
+**Treat the sections below as themes, not required fields.** Scout fills
+what the repo actually evidences; unknown or absent topics are flagged
+under § Unconfirmed so agents know to ask the orchestrator
+(test-automation-lead) before improvising. Stay short — link to deeper
+docs rather than restating them.
 
 ```markdown
 # Testing
@@ -510,6 +561,8 @@ restating them.
 ## Framework
 - **Name + version:** e.g. Playwright 1.47 / Cypress 13 / pytest 8 +
   playwright-python 0.4 / WDIO 8 / JUnit 5 + Playwright-Java / NUnit 4
+- **Test type:** ui | api | mobile | perf | mixed — free text (on a
+  mixed repo, note which directories are which)
 - **Why this stack** (only if non-obvious from the repo)
 
 ## Run commands
@@ -518,9 +571,10 @@ restating them.
   `npx cross-env TEST_ENV_NAME=SIT1 LOCAL_RUN=true npx playwright test path/to/spec --grep TC-001 --reporter=list`)
 - **Whole suite, local:** exact command
 - **CI variant — what the pipeline actually runs:** exact command,
-  verbatim. Tests Axel writes must be runnable with this command.
-- **Differences to flag** (headless vs headed, viewport, retry count,
-  env, …) — anything that changes test behavior between local and CI.
+  verbatim. Tests the implementer writes must be runnable with this command.
+- **Differences to flag** (retry count, env, …) — anything that changes
+  test behavior between local and CI.
+  <!-- UI suites only — also flag headless vs headed, viewport; omit for API / perf / mobile projects -->
 
 ## Structure
 - **Tests live in:** `tests/` / `e2e/` / `cypress/e2e/` /
@@ -541,9 +595,9 @@ restating them.
 
 ## Test data strategy
 - **Where data lives** (path)
-- **Generation pattern:** generate-per-test / reuse-shared-with-cleanup /
-  static-fixtures / mixed — and **how to tell which applies for a new
-  test**
+- **Generation pattern:** reuse-existing / generate-per-test /
+  generate-shared-with-cleanup / mixed — and **how to tell which
+  applies for a new test**
 - **Cleanup ownership:** afterEach / afterAll / external script / none
 - **Anything project-specific** (tenant scoping, env-keyed subfolders
   like `data/sit1/`, factories vs JSON, …)
@@ -551,22 +605,25 @@ restating them.
 ## Hooks, fixtures, and run-mode policy
 - **Auto-applied hooks** the framework wires in (authed session,
   base URL, browser context …) — name + where they live
+  <!-- UI suites only — browser-context/viewport/headless framing; omit for API / perf / mobile projects -->
 - **Project-wide teardown / reset** — name + trigger
 - **Serial vs parallel rule:** when does the project enforce serial
   mode (`test.describe.configure({ mode: 'serial' })` or equivalent)?
   Data dependency is the usual reason — document the rule explicitly so
-  Axel applies it correctly when AFS test-data inventory signals shared
-  state.
+  the implementer applies it correctly when AFS test-data inventory
+  signals shared state.
 
 ## Locator strategy
+<!-- UI suites only — omit for API / perf / mobile projects -->
 - **Ladder** (preferred order):
   `getByRole` with accessible name → `getByTestId` / `data-testid` →
   `getByLabel` / `getByPlaceholder` → `getByText` →
   CSS / XPath as last resort (with a comment explaining why)
 - **Stop+flag rule:** if a target element has no test ID **and** roles
   / labels are insufficient (multi-match accessible name, no a11y
-  affordance), Axel pauses and surfaces the gap to PM rather than
-  falling back to brittle CSS chains.
+  affordance), the implementer pauses and surfaces the gap to the
+  orchestrator (test-automation-lead) rather than falling back to
+  brittle CSS chains.
 - **Edge cases & project exceptions** — record any selectors where the
   default ladder doesn't fit (e.g. a component library that wraps role
   internally; legacy widgets with no accessibility tree)
@@ -579,7 +636,8 @@ restating them.
 - **CI artifacts:** what the pipeline uploads (HTML report, JSON,
   videos)
 - **Step logger / reporter:** Allure / `test.step` / custom — name and
-  how to extend, so Axel integrates rather than introducing a new one
+  how to extend, so the implementer integrates rather than introducing a
+  new one
 
 ## CI integration
 - **Workflow file:** `.github/workflows/<name>.yml` (or GitLab CI /
@@ -606,8 +664,8 @@ restating them.
   any framework-version pitfalls]
 
 ## Unconfirmed
-- [Scout's flagged gaps — Axel and Sage ask PM/user before improvising
-  on these]
+- [Scout's flagged gaps — the implementer and analyst ask the
+  orchestrator / user before improvising on these]
 ```
 
 ---

@@ -323,50 +323,53 @@ Added when **both**:
 Scope the TMS tool set by intent:
 
 - **Read-only / exploration** sessions (qa-engineer running
-  `test-case-analysis`, project-manager, qa-engineer as reviewer) →
+  `test-case-analysis`, qa-engineer as reviewer) →
   `get_*`, `list_*`, `search_*`
 - **Write / back-write** sessions (test-automation-engineer) → add
   `create_*`, `update_*`, `sync_*`
 - **Jira integration** → add `jira_toolset` tools when the agent
-  touches stories (PM, qa-engineer in analysis). Prefer
+  touches stories (test-automation-lead, qa-engineer in analysis). Prefer
   `search_using_jql` +
   `execute_generic_rq` / `getIssue` rather than blanket `*`.
 
 The intent is detected from `group:` + skill list + description. If
 ambiguous, default to read-only (safer).
 
-### + Orchestrator inheritance (PM and tech-lead)
+### + Orchestrator inheritance (the roster's routing agents)
 
-Coordinator-tier agents (`project-manager` and `tech-lead`, typically
-`group: core`) don't usually declare TMS or Jira skills themselves,
-but they **route and review** work that other agents do. If they
-can't read the team's tickets and stories, they can't preview what
-they're routing or catch issues during review. Treat them as
-**read-only inheritors**: whenever the team's worker agents get a
-given MCP role, the coordinators also get the read slice.
+The roster's routing agents — in this bundle, `test-automation-lead`
+(typically `group: core`) — don't always declare TMS or Jira skills
+themselves, but they **route and review** work that other agents do.
+If they can't read the team's tickets and stories, they can't preview
+what they're routing or catch issues during review. Treat them as
+**inheritors**: whenever the team's worker agents get a given MCP
+role, the routing agents also get the read slice.
 
 Concretely:
 
-- **`project-manager`** — whenever any other installed agent gets
-  TMS MCP tools, PM is given the read slice (`get_*` / `list_*` /
-  `search_*`) regardless of her own skill list. Same for Jira
-  (`search_using_jql`, `getIssue` / equivalent). Rationale: PM needs
-  to open `SCRUM-T101` to see what she's routing to Mira, and open
-  the linked `SCRUM-42` story to catch context mismatches.
-- **`tech-lead`** — always gets Jira read (he decomposes stories
-  into tasks). Gets TMS read only when the team is doing
-  test-automation work (detected by any other agent having
-  `test-case-analysis`, `test-automation-workflow`, or
-  `playwright-testing` in its skills). Rationale: Rio reviews PRs
-  and needs to trace a test back to its originating case.
+- **`test-automation-lead`** — always gets the base set plus
+  `execute` (he runs the live-run merge gate himself). Whenever any
+  other installed agent gets TMS MCP tools, he is given the read
+  slice (`get_*` / `list_*` / `search_*`) regardless of his own
+  skill list. Same for the tracker (`search_using_jql`, `getIssue` /
+  equivalent). Rationale: he needs to open `SCRUM-T101` to see what
+  he's routing to Sage, and open the linked `SCRUM-42` story to
+  catch context mismatches.
+- **TMS execution-write verbs** (`create_*` / `update_*` / `sync_*`
+  on executions) — added to `test-automation-lead` **only when**
+  `.agents/profile.md` § Status reporting assigns the TMS execution
+  back-write to the orchestrator: he runs the live-run gate and the
+  merge himself, so the post-merge back-write is his to perform.
+  Otherwise the write verbs stay scoped to the implementer.
 
-Inheritance is **read-only**. Write/create/update/delete flavors of
-the same toolset stay scoped to the worker agents that own the
-workflow. Coordinators never back-write executions or edit tickets.
+Inheritance is read-only by default. Write/create/update/delete
+flavors of the same toolset stay scoped to the worker agents that
+own the workflow — except the § Status reporting case above, where
+the orchestrator owns the post-merge TMS back-write.
 
 Scout implements this after the primary per-agent pass: once every
 worker's `tools:` line is computed, scout scans the roster for TMS
-/ Jira role assignments and fills in the coordinator inheritance
+/ Jira role assignments and fills in the routing-agent inheritance
 slice. If the project has no TMS / Jira MCP configured at all, this
 step is a no-op.
 
@@ -406,29 +409,22 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
         'playwright_<server>/*',
         'elitea_dev/JiraIntegration_search_using_jql']
 
-# project-manager (Max) — routes, reviews, delegates
-# Read-only TMS + Jira inherited from the worker roster (see § Orchestrator
-# inheritance): PM needs to preview cases she's routing and story context.
-tools: ['vscode', 'read', 'search', 'agent', 'todo',
+# test-automation-lead (Tal) — routes, gates AFS quality, runs the
+# live-run merge gate, merges. Base set + execute; read-only TMS + Jira
+# inherited from the worker roster (see § Orchestrator inheritance).
+# Execution-write verbs included here because profile.md § Status
+# reporting assigns the post-merge TMS back-write to the orchestrator.
+tools: ['vscode', 'execute', 'read', 'search', 'web', 'agent', 'todo',
         'elitea_dev/ZephyrConnector_get_test_case',
         'elitea_dev/ZephyrConnector_get_test_case_test_steps',
         'elitea_dev/ZephyrConnector_get_test_case_links',
         'elitea_dev/ZephyrConnector_get_issue_link_test_cases',
+        'elitea_dev/ZephyrConnector_create_test_execution',
+        'elitea_dev/ZephyrConnector_update_test_execution',
         'elitea_dev/JiraIntegration_search_using_jql',
         'elitea_dev/JiraIntegration_execute_generic_rq']
 
-# tech-lead (Rio) — decomposes, reviews code
-# Jira read always. TMS read inherited when the team does test-automation
-# work (see § Orchestrator inheritance).
-tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
-        'elitea_dev/JiraIntegration_search_using_jql',
-        'elitea_dev/ZephyrConnector_get_test_case',
-        'elitea_dev/ZephyrConnector_get_test_case_links']
-
 # scout (Kit) — maps the repo, no MCP needed
-tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
-
-# js-dev / python-dev / ios-dev — code, run tests, git
 tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
 ```
 
@@ -499,17 +495,18 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
    - Write the `tools:` line immediately before the closing `---` of
      the frontmatter block
 
-7. **Orchestrator pass (PM + tech-lead).** After step 6, scan the
+7. **Orchestrator pass (the roster's routing agents — in this
+   bundle, `test-automation-lead`).** After step 6, scan the
    worker roster for TMS / Jira role assignments. Apply orchestrator
    inheritance (see § Orchestrator inheritance):
-   - `project-manager` gets the read slice of every TMS / Jira
-     toolset any worker has.
-   - `tech-lead` gets Jira read always; TMS read only when any
-     worker has a test-automation skill (`test-case-analysis`,
-     `test-automation-workflow`, `playwright-testing`).
-   - Read slice = `get_*` / `list_*` / `search_*` variants. Never
-     include `create_*` / `update_*` / `sync_*` — orchestrators
-     don't back-write.
+   - `test-automation-lead` gets the base set + `execute` plus the
+     read slice of every TMS / Jira toolset any worker has.
+   - Read slice = `get_*` / `list_*` / `search_*` variants.
+   - Add the TMS execution-write verbs (`create_*` / `update_*` /
+     `sync_*` on executions) only when `.agents/profile.md`
+     § Status reporting assigns the TMS back-write to the
+     orchestrator — in this bundle he runs the live-run gate and
+     the merge himself, so the post-merge back-write is his.
 
 8. **Validate.** Re-read each modified agent, confirm `tools:` is
    valid YAML and every MCP tool name actually appears in the live

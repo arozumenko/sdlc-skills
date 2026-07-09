@@ -122,7 +122,7 @@ collect_shared_context() {
 # it via the agent body's @-import, so injecting it here too would duplicate it.
 # Echoes one name per line (after the SOUL gate). Shared by collect_role_memory,
 # build_capped_context's inline memory loop, and list_role_memory_files so all agree.
-SDLC_ROLE_MEMORY_FILES_DEFAULT="SOUL.md snapshot.md MEMORY.md"
+SDLC_ROLE_MEMORY_FILES_DEFAULT="SOUL.md snapshot.md MEMORY.md project_briefing.md"
 role_memory_files() {
   local mf
   for mf in ${SDLC_ROLE_MEMORY_FILES:-$SDLC_ROLE_MEMORY_FILES_DEFAULT}; do
@@ -378,9 +378,21 @@ resolve_cli_session_agent() {
   printf ''
 }
 
+# True under Cursor — the plugin path sets CURSOR_PLUGIN_ROOT; the `npx … init`
+# project install sets CURSOR_HOOK=1 in the generated .cursor/hooks.json command
+# (mirrors CODEX_HOOK below).
+is_cursor() {
+  [ -n "${CURSOR_HOOK:-}" ] || [ -n "${CURSOR_PLUGIN_ROOT:-}" ]
+}
+
 # True only under plain Claude Code. Mirrors the branching in the emit_* helpers.
+# The plugin path sets CLAUDE_PLUGIN_ROOT; the `npx … init` project install wires
+# only CLAUDE_PROJECT_DIR into .claude/settings.json — accept either, minus the
+# runtimes that set their own markers (Copilot CLI, Cursor, and raw-mode hosts
+# like Kiro, where SDLC_HOOK_RAW=1 must win over a CLAUDE_PROJECT_DIR leaked
+# from a parent Claude Code shell).
 is_claude_code() {
-  [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ] && [ -z "${CURSOR_PLUGIN_ROOT:-}" ]
+  [ -z "${SDLC_HOOK_RAW:-}" ] && { [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ -n "${CLAUDE_PROJECT_DIR:-}" ]; } && [ -z "${COPILOT_CLI:-}" ] && ! is_cursor
 }
 
 # True under Codex, which exports PLUGIN_ROOT (a Codex-specific extension) and
@@ -409,13 +421,14 @@ has_subagent_hook() {
 #   Copilot CLI / SDK      -> additionalContext (top-level)
 #   Kiro / raw             -> plain text on stdout (agentSpawn appends stdout)
 # Set SDLC_HOOK_RAW=1 (Kiro) for raw; CODEX_HOOK=1 selects the Codex shape;
-# SDLC_VSCODE=1 selects the VS Code Copilot Chat shape (same as Claude/Codex).
+# CURSOR_HOOK=1 the Cursor shape (non-plugin installs); SDLC_VSCODE=1 selects
+# the VS Code Copilot Chat shape (same as Claude/Codex).
 emit_session_context() {
   if [ -n "${SDLC_HOOK_RAW:-}" ]; then printf '%s\n' "$1"; return; fi
   local ctx; ctx="$(escape_for_json "$1")"
-  if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+  if is_cursor; then
     printf '{\n  "additional_context": "%s"\n}\n' "$ctx"
-  elif [ -n "${SDLC_VSCODE:-}" ] || is_codex || { [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; }; then
+  elif [ -n "${SDLC_VSCODE:-}" ] || is_codex || is_claude_code; then
     printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$ctx"
   else
     printf '{\n  "additionalContext": "%s"\n}\n' "$ctx"

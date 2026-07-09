@@ -4,7 +4,7 @@
 
 - [Lightweight injection vs. full customization (when to defer to Step 7)](#lightweight-injection-vs-full-customization-when-to-defer-to-step-7)
 - [Role-similarity rules](#role-similarity-rules)
-- [How scout delivers the overrides — externalized via @-import](#how-scout-delivers-the-overrides--externalized-via--import)
+- [How scout delivers the overrides — externalized under `.agents/`](#how-scout-delivers-the-overrides--externalized-under-agents)
 - [Why this design (principle recap)](#why-this-design-principle-recap)
 - [What workflow skills do (and don't do)](#what-workflow-skills-do-and-dont-do)
 - [Report (end of Step 6.9)](#report-end-of-step-69)
@@ -13,9 +13,10 @@ Scout compares the **workflow slots** the project needs (derived from
 which workflow skills are installed and from the project's stated
 pipelines) against the **installed agent roster**. For any slot that
 has no dedicated agent installed, scout picks the best-matching
-installed agent and **injects per-project routing overrides directly
-into the AGENT.md files of the routing agents** (PM, tech-lead, any
-other agent whose handoff prompts name specific agents).
+installed agent and **records per-project routing overrides in
+`.agents/role-overrides.md`** for the routing agents — in this
+bundle, the orchestrator (`test-automation-lead`) — to consult at
+dispatch time.
 
 Test-automation is the worked example — but the mechanism is general:
 the same substitution machinery applies to any slot (requirements
@@ -27,11 +28,11 @@ needed slot has its dedicated agent installed.
 
 ## Lightweight injection vs. full customization (when to defer to Step 7)
 
-- **Lightweight substitution** (this step) — scout adds a
-  marker-bracketed "Project-specific routing overrides" section to
-  each affected agent's AGENT.md. The agent's persona / Session Start
-  / default instructions stay intact; the override section gets
-  consulted before routing.
+- **Lightweight substitution** (this step) — scout records the
+  "Project-specific routing overrides" mapping in
+  `.agents/role-overrides.md`. Every agent's persona / Session Start
+  / default instructions stay intact; the orchestrator consults the
+  override file before routing.
 - **Full customization** (Step 7) — scout clones an existing agent
   into a new `.agent.md` file with a rewritten persona, frontmatter,
   and Session Start matching the slot. Use when the installed agent
@@ -45,13 +46,13 @@ role-similarity heuristic (below) produces a weak match.
 ## Role-similarity rules
 
 Scout uses these tiered fallbacks when picking a substitute. First
-row wins; later rows emit warnings in the injected section.
+row wins; later rows emit warnings in the override file.
 
 | Slot | Preferred | Fallback 1 | Fallback 2 | Last resort | None viable |
 |---|---|---|---|---|---|
 | Requirements (BA) | `ba` | `tech-lead` | `project-manager` | operator | blocker |
 | Architecture / decomposition | `tech-lead` | Language-matched dev | `ba` | operator | blocker |
-| Routing & merge gate (PM) | `project-manager` | `tech-lead` | operator | — | blocker |
+| Routing & merge gate (orchestrator) | `test-automation-lead` | `project-manager` | `tech-lead` | operator | blocker |
 | Code impl — JS/TS | `js-dev` | `python-dev` (cross-lang warning) | `tech-lead` | operator | blocker |
 | Code impl — Python | `python-dev` | `js-dev` (cross-lang) | `tech-lead` | operator | blocker |
 | Code impl — iOS/Swift | `ios-dev` | `tech-lead` (cross-lang warning) | operator | — | blocker |
@@ -70,9 +71,9 @@ override notes.
 When the best-match column for a slot is `blocker`, scout **does
 not halt the seed**. It:
 
-1. Writes the blocker into the `#### Blockers` list of the injected
-   override block (per-agent AGENT.md) so downstream agents see why
-   their handoff target is missing.
+1. Writes the blocker into the `#### Blockers` list of
+   `.agents/role-overrides.md` so downstream agents see why their
+   handoff target is missing.
 2. Emits the blocker in the Step 6.9 summary report under
    `Blockers: <list>` (see § Report below).
 3. Continues to the next slot and the next phase (7, etc.).
@@ -87,11 +88,11 @@ report and the operator chooses whether to re-run with Step 7 or
 install the dedicated agent and re-run with the blocker resolved
 naturally.
 
-## How scout delivers the overrides — externalized via @-import
+## How scout delivers the overrides — externalized under `.agents/`
 
 Scout **does not modify agent source files**. Instead it writes a
-single markdown file under `.agents/` and relies on an `@`-import
-directive that already ships in the source of each routing agent.
+single markdown file under `.agents/` that the orchestrator reads as
+part of its session context (see § How the orchestrator consumes it).
 This preserves the rule that `npx init --update` is always safe:
 agent frontmatter + body stay canonical, only the project-local
 `.agents/` content changes.
@@ -105,11 +106,10 @@ anything else:
 # Project-specific routing overrides
 
 _Scout wrote this on 2026-04-24 because these slots lack dedicated
-installed agents. Routing agents (PM, tech-lead) auto-load this
-file via `@.agents/role-overrides.md`; the substitute mappings
-below override the defaults their AGENT.md bodies name. Delete
-this file (or re-run scout after installing the dedicated agents)
-to disable._
+installed agents. The orchestrator reads this file at session start
+(it's in the workflow skill's session-context list); the substitute
+mappings below override the slot defaults. Delete this file (or
+re-run scout after installing the dedicated agents) to disable._
 
 ## Detected roster
 
@@ -129,29 +129,24 @@ to disable._
 - (none)
 ```
 
-### How routing agents consume it
+### How the orchestrator consumes it
 
-Source AGENT.md files for routing agents (PM, tech-lead) carry an
-`@`-import at the top alongside the `snapshot.md` import:
+`.agents/role-overrides.md` is part of the orchestrator's session
+context. The workflow skill's session-context list
+(`test-automation-workflow` SKILL.md § Orchestrator slot contract)
+names it alongside `profile.md` / `workflow.md` / `testing.md` /
+`team-comms.md`, and `orchestration-playbook.md` § Slot defaults
+declares its mappings authoritative when the file is present. The
+orchestrator — `test-automation-lead` in this bundle, or whichever
+agent fills the slot per `.agents/team-comms.md` § Roster — reads
+it once at session start and resolves slot → agent at dispatch
+time.
 
-```markdown
----
-name: project-manager
-…
----
-
-@.agents/memory/project-manager/snapshot.md
-@.agents/role-overrides.md
-```
-
-- `@.agents/role-overrides.md` **missing on disk** (the common case
-  — no substitutions needed) → Claude Code treats the import as a
-  silent no-op; Copilot / Cursor / Windsurf never tried to resolve
-  it. Zero runtime impact.
-- **Present** → Claude Code auto-loads the content at session start.
-  Copilot / Cursor / Windsurf agents see the `@` path in their
-  flat body and read the file on demand (per the conditional-skill
-  convention established elsewhere in this repo).
+- **Missing on disk** (the common case — no substitutions needed)
+  → the orchestrator uses the playbook's slot defaults. Zero
+  runtime impact.
+- **Present** → its substitute mappings override the slot defaults
+  for this project.
 
 ### Idempotence and cleanup
 
@@ -160,27 +155,11 @@ name: project-manager
   deleting the file entirely if no slots need substitution. No
   marker-block parsing; file presence is the signal.
 - The operator can delete `.agents/role-overrides.md` by hand at
-  any time; routing agents behave as if no substitutions exist
-  until scout writes again.
-- Source `agents/project-manager/AGENT.md` and
-  `agents/tech-lead/AGENT.md` are never touched by scout — they
-  already carry the `@.agents/role-overrides.md` line in the
-  installed copies (scoped to routing agents only; workers don't
-  get the import because they don't route).
-
-### Which routing agents get the import at source
-
-Only agents whose bodies name other agents by default for handoff
-(so they can be overridden):
-
-- `project-manager` — universal router. Always has the import at
-  source.
-- `tech-lead` — has the import at source because the PM →
-  tech-lead handoff can be overridden when a language-matched dev
-  substitutes for the test-automation implementer slot.
-- Worker agents (devs, QA when not substituted, scout itself,
-  personal-assistant) — **no import**. They're the recipients of
-  routing, not the routers, so they don't read overrides.
+  any time; the orchestrator falls back to the playbook's slot
+  defaults until scout writes again.
+- Agent source files are never touched by scout — the overrides
+  live entirely in `.agents/`, outside the `npx init --update`
+  upgrade path.
 
 ## Why this design (principle recap)
 
@@ -198,10 +177,10 @@ to Step 6.8 (MCP inventory / `tools:` frontmatter).
 Workflow skills (`test-automation-workflow`, `implement-feature`,
 `plan-feature`, `bugfix-workflow`) describe slots generically —
 "analyst", "implementer", "reviewer", etc. They **do not**
-reference per-project substitutions. The routing agent (PM)
-resolves slot → agent at handoff time by reading
-`.agents/role-overrides.md` when present, falling back to the
-defaults named in its own AGENT.md body when absent.
+reference per-project substitutions. The orchestrator
+(`test-automation-lead`) resolves slot → agent at handoff time by
+reading `.agents/role-overrides.md` when present, falling back to
+the playbook's slot defaults when absent.
 
 This keeps skills source-stable: sdlc-skills updates don't clobber
 project-specific substitutions, because the substitutions live in

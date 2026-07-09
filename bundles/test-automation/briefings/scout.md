@@ -9,12 +9,17 @@ type: project
 - **Engagement type:** Test-automation. The product under test can be **any
   stack** — your job is not to map the application architecture in depth, but to
   map the **test framework + the path from TMS case to merged automated test**.
-- **Detect the test framework:** look for `playwright.config.*`, `cypress.config.*`,
-  `wdio.conf.*`, `pytest.ini`/`conftest.py` + `playwright`/`pytest` deps,
-  `pom.xml` with JUnit/Playwright-Java, `*.csproj` with NUnit/Playwright.NET.
-  Record the framework, its version, the page-object/fixture convention, the
-  locator strategy, and the **run command** + **CI command**. Write these into
-  `.agents/testing.md`.
+- **Detect the test framework (any surface, no preferred order):** scan for
+  whatever the project actually uses — UI runners (`playwright.config.*`,
+  `cypress.config.*`, `wdio.conf.*`, Selenium), API/test frameworks
+  (`pytest.ini`/`conftest.py`, JUnit/TestNG via `pom.xml`, NUnit/xUnit via
+  `*.csproj`, Jest/Vitest, RestAssured, Postman/Newman), mobile (Appium,
+  Espresso, XCUITest), and performance (k6, JMeter, Gatling, Locust). Record the
+  framework, its version, the abstraction-layer convention (page object / API
+  client / service or screen object / scenario module), the handle strategy, the
+  **run command** + **CI command**, and a free-text **test-type** descriptor
+  (e.g. `ui` / `api` / `mobile` / `perf` / `mixed`) as a hint for the engineer —
+  not an enforced enum. Write these into `.agents/testing.md`.
 - **Detect the TMS (test management system):** Xray (Jira app), Zephyr, TestRail,
   Azure Test Plans, or a markdown/`test-specs/` fallback. The TMS adapter is the
   single highest-risk unknown — if you can't confirm it, say so loudly. Record it

@@ -144,6 +144,13 @@ value or `ASK`:
 - **If scout is running non-interactively** (no stdin / batch mode)
   and the value is `ASK`, scout writes `Unconfirmed` and continues.
   The operator fills the gap later by editing `profile.md`.
+- **Re-seed stomp protection.** On a re-seed, an existing
+  non-`Unconfirmed` value in `.agents/profile.md` counts as a
+  pre-filled answer — never downgrade a hand-filled field back to
+  `Unconfirmed`. If scout's fresh evidence disagrees, surface the
+  delta and ask (interactive), or keep the existing value and note
+  the discrepancy in the Step 0.7 report (non-interactive).
+  `profile.md` is the one file operators are told to hand-edit.
 
 ### Fields scout captures
 
@@ -154,6 +161,11 @@ value or `ASK`:
    `azure-test-plans` / `markdown` / `none`. Project key. (This also
    lives in `.agents/test-automation.yaml` for the pipeline;
    `profile.md` mirrors it for quick reference.)
+2b. **Task source (intake)** — how the pipeline receives work to automate:
+   `operator-drops-case-ids` *(default)* / `tms-folder` / `tms-suite` /
+   `jira-board-query` / `github-issues`, plus the selector it needs (folder
+   path, suite id, JQL, label). Recorded in `profile.md` § Task source — so
+   the orchestrator knows where its work comes from, not just how to report on it.
 3. **Knowledge base** — `confluence` / `notion` / `obsidian` /
    `github-wiki` / `readme-only` / `none`. Space / database name.
 4. **Bug filing style** — where a defect discovered during
@@ -189,16 +201,46 @@ value or `ASK`:
    `feature/test-automation-pilot` line when the team is piloting
    automation without affecting `main`.
 10. **Merge policy** — `auto-merge` / `human-approved` / `manual`.
-    Determines what PM does after review + CI pass:
-    - `auto-merge` *(default)* — PM merges autonomously.
-    - `human-approved` — PM waits for a human approval signal
-      (e.g. `human-approved` label or a designated human reviewer)
-      before merging.
-    - `manual` — PM never merges; hands back to the operator.
-    Right for early pilots and protected release lines.
+    Determines what the orchestrator does after review + CI pass:
+    - `auto-merge` *(default)* — the orchestrator merges autonomously.
+    - `human-approved` — the orchestrator waits for a human approval
+      signal (e.g. `human-approved` label or a designated human
+      reviewer) before merging.
+    - `manual` — the orchestrator never merges; hands back to the
+      operator. Right for early pilots and protected release lines.
 11. **Squash / rebase / merge-commit** — optional; defaults to
     `squash`. Override if branch-protection demands a different
     strategy.
+12. **Status reporting** — which outward-facing writes the pipeline
+    performs at completion (recorded in profile.md § Status reporting).
+    These are the project's *way of work* for external writes; the
+    pipeline does exactly what's set here, no more:
+    - **TMS execution back-write** `yes` / `no` — push pass/fail/blocked
+      back to the TMS execution record. Default `yes` when a real
+      `tms.adapter` is configured; `no` for `markdown` / `none`.
+    - **Comment PR link on the originating story** `yes` / `no` — post
+      the automation PR link on the linked story. Default `yes` when an
+      issue tracker is configured; `no` where bots commenting on stories
+      is unwanted.
+    `no` → the implementer skips that write silently. Result back-write
+    is additionally CI/flag-gated (never on a local run).
+13. **Base URL / API base** — where the tests point by default: the
+    app base URL and/or API root. An env-var name is an acceptable
+    value (e.g. `${BASE_URL}` / `${API_BASE}`) — never a secret.
+    Recorded in `.agents/profile.md` § Environment & access; the
+    orchestrator's dispatch templates fill `{BASE_URL}` from it.
+14. **Roles & sample users** — the credential matrix: role key →
+    purpose → credential env-var name (e.g. `${TEST_USER}` → standard
+    authenticated user → `TEST_USER_PASSWORD`). **Never the secret
+    value** — only the env-var name that resolves to it at run time.
+    Recorded in `.agents/profile.md` § Roles & sample users; the
+    orchestrator's dispatch templates fill `{USER_SET}` from it.
+15. **Additional notes** — free-form way-of-work context that doesn't
+    fit any structured field above (exceptions, timing constraints, who
+    to loop in, tribal knowledge). Carried verbatim from the operator's
+    `## Notes` block in the onboarding prompt; `none` if left blank.
+    Recorded in `.agents/profile.md` § Additional notes — not parsed or
+    validated, just surfaced for every agent to read.
 
 ### Coherence checks (before writing profile.md)
 
@@ -242,10 +284,11 @@ at runtime:
 - `test-automation-workflow` reads § Test case storage to decide
   whether AFS files should be written to git under `test-specs/`,
   pushed back to the TMS, or both.
-- `project-manager` reads § Automation PR policy at session start —
-  uses the base branch when routing Axel's PRs, and only fires the
-  merge when the policy is `auto-merge` (waits for a human signal
-  under `human-approved`, never merges under `manual`).
+- the orchestrator (`test-automation-lead`) reads § Automation PR
+  policy at session start — uses the base branch when routing Axel's
+  PRs, and only fires the merge when the policy is `auto-merge`
+  (waits for a human signal under `human-approved`, never merges
+  under `manual`).
 - `test-automation-engineer` reads § Automation PR policy to cut
   feature branches from the correct base and target the PR at the
   right branch.
@@ -259,6 +302,8 @@ Issue tracker:           <value>  [pre-filled | asked | Unconfirmed]
 Issue tracker key:       <value>
 TMS:                     <value>
 TMS project key:         <value>
+Task source (intake):    <value>
+Task source selector:    <value>
 Knowledge base:          <value>
 KB space:                <value>
 Bug filing style:        <value>
@@ -269,6 +314,9 @@ Test case storage:       <value>
 Automation PR base:      <value>
 Merge policy:            <value>
 Merge strategy:          <value>
+Base URL / API base:     <value>
+Roles & sample users:    <N roles — keys + env-var names, no secrets>
+Additional notes:        <verbatim from operator's ## Notes block, or none>
 
 Any "Unconfirmed" field — edit .agents/profile.md § Project systems
 before the first test-case-analysis run.

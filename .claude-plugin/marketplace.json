@@ -156,6 +156,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "efficiency-audit",
+      "source": "./bundles/test-automation/skills/efficiency-audit",
+      "description": "Per-project/session/role/day and per-sub-agent AI-agent cost & efficiency, metered by ccusage — separates orchestrator overhead from dispatched sub-agents (model-aware); snapshots + before/after diffs.",
+      "version": "0.2.0"
+    },
+    {
       "name": "seeding-a-project",
       "source": "./bundles/feature-development/skills/seeding-a-project",
       "description": "Generate AGENTS.md, .agents/ project docs, and per-role memory briefings after codebase exploration.",

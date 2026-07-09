@@ -449,10 +449,13 @@ async function applyBundle(bundle, args, catalog) {
 
 // Seed per-role briefing overlays into .agents/memory/<role>/project_briefing.md
 // (IDE-neutral — every agent reads .agents/, regardless of host). This is the
-// same slot scout fills at runtime, so an existing briefing is left in place
-// unless --update (scout's project-specific version wins over the bundle's
-// stack defaults). Each install also ensures a MEMORY.md index line.
-function installBriefings(bundle, update) {
+// same slot scout fills at runtime with real, `type: project` project facts —
+// once it exists it is ALWAYS left in place, even under --update, because the
+// installer can't tell "still the generic bundle stub" from "scout already
+// seeded this with real project data." --update is for refreshing agent/skill
+// definitions, not for touching scout's output; re-run scout to refresh a
+// briefing on purpose. Each install also ensures a MEMORY.md index line.
+function installBriefings(bundle) {
   let installed = 0;
   let skipped = 0;
   // Resolved entries: [{ role, content, description }]. New bundles pre-resolve
@@ -476,8 +479,8 @@ function installBriefings(bundle, update) {
   for (const { role, content, description } of entries) {
     const destDir = join(CWD, ".agents", "memory", role);
     const dest = join(destDir, "project_briefing.md");
-    if (existsSync(dest) && !update) {
-      console.log(`      — briefing ${role} (exists; use --update)`);
+    if (existsSync(dest)) {
+      console.log(`      — briefing ${role} (exists; kept — re-run scout to refresh it on purpose)`);
       skipped++;
       continue;
     }
@@ -804,7 +807,11 @@ function installCoreHooks(targets) {
       copyHookScripts(join(CWD, rel));
       // Cursor's subagentStart is permission-only (no context injection) — wire
       // sessionStart only; per-role memory falls back to the `memory` skill.
-      const spec = { sessionStart: [{ command: `./${rel}/run-hook.cmd session-start` }] };
+      // For a CLI (non-plugin) project install CURSOR_PLUGIN_ROOT isn't set, so
+      // the command sets CURSOR_HOOK=1 to select the Cursor emit shape (Unix sh
+      // env-prefix form — doesn't work under cmd.exe, so Windows Cursor is
+      // unserved; same pattern and limitation as CODEX_HOOK below).
+      const spec = { sessionStart: [{ command: `CURSOR_HOOK=1 ./${rel}/run-hook.cmd session-start` }] };
       if (mergeVersionedHooks(join(CWD, ".cursor", "hooks.json"), spec, rel))
         console.log(`      ✓ hooks Cursor (.cursor/hooks.json)`);
     } else if (t.id === "copilot") {
@@ -2492,7 +2499,7 @@ async function main() {
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
   if (bundle && (Object.keys(bundle.briefings).length || (bundle._resolvedBriefings && Object.keys(bundle._resolvedBriefings).length))) {
     console.log(`\n  → .agents/memory/ (shared, all IDEs)`);
-    const b = installBriefings(bundle, args.update);
+    const b = installBriefings(bundle);
     installed += b.installed;
     skipped += b.skipped;
   }
