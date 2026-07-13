@@ -97,14 +97,17 @@ tms:
   # cases_dir: test-specs
 
 framework:
-  language: typescript       # typescript | javascript | python | java | csharp
-  runner: playwright         # playwright | cypress | pytest | junit | nunit | xunit | wdio
+  language: typescript       # typescript | javascript | python | java | csharp | ...
+  surface: ui                # ui | api | mobile | perf | mixed (hint, not an enforced enum)
+  runner: playwright         # any runner the project uses — UI: playwright | cypress | wdio;
+                             # API: pytest+httpx | supertest | rest-assured;
+                             # mobile: appium | espresso; perf: k6 | gatling | jmeter
   tests_dir: tests
-  pages_dir: tests/pages
+  pages_dir: tests/pages     # the abstraction layer: page objects (UI) / API clients / screen objects
   fixtures: tests/fixtures
   env_file: .env
   run_command: "npm run test:ci"
-  headed_command: "npm run test:headed"
+  headed_command: "npm run test:headed"   # UI only; omit on non-UI surfaces
 
 evidence:
   screenshots_dir: test-results/screenshots
@@ -252,6 +255,21 @@ Back-write failures (execution update) — queue the update, log it in
 `test-results/unsynced/`, surface a warning at end-of-run. Humans can
 sync manually; the test result is already on disk.
 
+### Back-write / reporting is gated and best-effort
+
+The adapter's `update_execution` / result push — and any framework-wired
+reporter that posts results (a Playwright `jira-reporter`, an Xray
+results-import reporter) — runs **only in CI or under an explicit opt-in
+flag** (`process.env.CI`, `TMS_SYNC=1`, or the framework equivalent); a
+local `npx playwright test …` iteration must not fire TMS network calls.
+It **degrades gracefully** offline — missing credentials, an unreachable
+host, or an auth redirect log once and continue, never a per-test error,
+never a failed run. And it **validates the base URL** before posting (no
+redirect loop — `redirect count exceeded` repeated per test is the
+classic wrong-base-URL / login-redirect symptom). The full rule lives in
+[`SKILL.md`](../SKILL.md) § Phase 5 — Debug → "TMS / result-reporting
+reporters — gate them".
+
 ## Writing a new adapter
 
 Adapter lives outside this repo — in the project's own scripts — unless
@@ -267,5 +285,4 @@ it's common enough to upstream. Minimum requirements:
 - Tolerates the TMS being down (returns structured error, does not crash
   the workflow)
 
-A reference implementation for `markdown` ships with this skill and is
-worth reading before writing a new one.
+The `markdown` adapter block above is the reference — mirror its shape.

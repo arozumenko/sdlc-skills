@@ -1,6 +1,6 @@
 # test-case-analysis
 
-> Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Does not write test code.
+> Execute a TMS test case end-to-end against the real system, capture the concrete handles the implementer needs (selectors / endpoints / element-ids / metric queries — whatever the surface uses), flag defects, and emit an Automation-Friendly Spec (AFS). Does not write test code.
 
 A skill for the [sdlc-skills](../../README.md) toolkit. Full instructions live in [`SKILL.md`](SKILL.md); this file is just how to install it.
 
@@ -10,7 +10,7 @@ Loads on _"analyse SCRUM-T101 for automation"_, _"run this case and emit an AFS"
 
 ## Requirements
 
-- None hard-bundled. Needs access to the TMS holding the case, plus a browser/app to execute it.
+- None hard-bundled. Needs access to the TMS holding the case, plus whatever drives the surface under test (a browser for UI, an HTTP client for API, a device/emulator for mobile, a load tool for perf).
 
 ## Install
 

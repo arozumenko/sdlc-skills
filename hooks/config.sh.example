@@ -11,7 +11,9 @@
 
 # Role memory files injected from .agents/memory/<role>/ (space-separated).
 # SOUL.md is the persona — injected only under Copilot (Claude/Codex get it via @-import).
-#: "${SDLC_ROLE_MEMORY_FILES:=SOUL.md snapshot.md MEMORY.md}"
+# project_briefing.md is the seeded per-role project briefing, injected after
+# SOUL/snapshot/MEMORY — kept in the default so it rides along at dispatch.
+#: "${SDLC_ROLE_MEMORY_FILES:=SOUL.md snapshot.md MEMORY.md project_briefing.md}"
 
 # additionalContext byte cap — the runtime drops payloads over ~10KB. (default 10240)
 #: "${SDLC_CTX_CAP:=10240}"

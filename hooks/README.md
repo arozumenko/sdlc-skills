@@ -64,9 +64,9 @@ hold on every runtime — the thing `@import` never had.
 scheme superpowers uses), so one script serves every runtime:
 
 - `SDLC_HOOK_RAW=1` → plain text on stdout (Kiro `agentSpawn` appends stdout to context)
-- `CURSOR_PLUGIN_ROOT` set → `{ "additional_context": ... }`
+- `CURSOR_PLUGIN_ROOT` set or `CURSOR_HOOK=1` → `{ "additional_context": ... }` (Cursor; the `npx … init` config sets `CURSOR_HOOK=1`)
 - `PLUGIN_ROOT` set or `CODEX_HOOK=1` → `{ "hookSpecificOutput": { "hookEventName": ..., "additionalContext": ... } }` (Codex; same shape as CC)
-- `CLAUDE_PLUGIN_ROOT` set and `COPILOT_CLI` unset → `{ "hookSpecificOutput": ... }` (Claude Code)
+- `CLAUDE_PLUGIN_ROOT` (plugin path) **or** `CLAUDE_PROJECT_DIR` (the `npx … init` project install) set, and `COPILOT_CLI` unset → `{ "hookSpecificOutput": ... }` (Claude Code)
 - `COPILOT_CLI=1` → `{ "additionalContext": ... }` (SDK standard)
 
 `agent-start` emits the `SubagentStart`/`hookSpecificOutput` variant on Claude
@@ -110,6 +110,8 @@ Two install paths:
     re-run; uses `${CLAUDE_PROJECT_DIR}`).
   - **Cursor** → merges `sessionStart` into `.cursor/hooks.json`, preserving the
     user's other hooks (`subagentStart` is permission-only, so it's not wired).
+    The command sets `CURSOR_HOOK=1` so the script emits Cursor's
+    `additional_context` shape on a non-plugin project install.
   - **Copilot CLI** → writes `.github/hooks/sdlc-skills.json` (`sessionStart` +
     `subagentStart`, `COPILOT_CLI=1`).
   - **Codex** → writes `.codex/hooks.json` (Claude-shaped SessionStart +
@@ -130,10 +132,11 @@ TMP=$(mktemp -d); mkdir -p "$TMP/.agents/memory/project-manager"
 echo '## snapshot' > "$TMP/.agents/memory/project-manager/snapshot.md"
 echo '# overrides' > "$TMP/.agents/role-overrides.md"
 
-# Claude Code SessionStart
-CLAUDE_PLUGIN_ROOT=/x CLAUDE_PROJECT_DIR="$TMP" bash hooks/session-start
+# Claude Code SessionStart — CLAUDE_PROJECT_DIR alone is enough (the npx … init
+# path); the plugin path additionally sets CLAUDE_PLUGIN_ROOT and behaves the same.
+CLAUDE_PROJECT_DIR="$TMP" bash hooks/session-start
 # Claude Code SubagentStart
-CLAUDE_PLUGIN_ROOT=/x CLAUDE_PROJECT_DIR="$TMP" \
+CLAUDE_PROJECT_DIR="$TMP" \
   bash hooks/agent-start <<<'{"agent_name":"project-manager"}'
 # Cursor (note the roster reminder)
 CURSOR_PLUGIN_ROOT=/x CLAUDE_PROJECT_DIR="$TMP" bash hooks/session-start

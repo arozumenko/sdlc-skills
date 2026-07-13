@@ -1,16 +1,32 @@
-# Browser tools — pick the right one
+# Execution tools — pick the right one for the surface
 
-Three skills can drive a browser in this monorepo. None replaces the
-others — they sit at different layers and excel at different things.
-Load this reference when you have to pick (or switch) during AFS
-authoring, ad-hoc verification, or while implementing a test.
+To execute a case against the real system you reach for whatever tool
+fits the **surface under test** — there is no single default. Pick by
+surface first, then by tool within that surface:
 
-## The three tools
+| Surface | Run it against the real system with |
+|---|---|
+| **UI (browser)** | a browser tool — `playwright-testing` (MCP), `playwright-cli`, or `browser-verify` (see the UI worked example below) |
+| **API / service** | an HTTP client — `curl` / `httpie` from the shell, the project's request library, or an MCP/HTTP tool the host exposes; assert status + named response fields |
+| **Mobile** | the platform's device/emulator driver (Appium / Espresso / XCUITest) against a running build |
+| **Performance / load** | a load tool (k6 / Gatling / JMeter / Locust) run against the target, reading the named metric + threshold |
+
+The honesty rule below is surface-independent: don't synthesize an
+observation you couldn't reproduce through a real tool against the real
+system, whatever the surface.
+
+## UI worked example — the three browser tools
+
+When the surface is a browser, three skills can drive it in this
+monorepo. None replaces the others — they sit at different layers and
+excel at different things. Load this reference when you have to pick (or
+switch) during AFS authoring, ad-hoc verification, or while implementing
+a UI test.
 
 | Skill | Layer | Best at | Reach for it when |
 |---|---|---|---|
-| [`playwright-testing`](../../playwright-testing/) | Playwright **MCP server** (in-host tool calls) | Snapshot-driven interaction — `browser_snapshot`, `browser_click`, `browser_fill`, `browser_navigate`. Accessible-name discovery falls out for free. | **Default** for analyst exploration and any interactive check when the Playwright MCP server is wired into the host. |
-| [`playwright-cli`](../../playwright-cli/) | Microsoft Playwright **CLI** (shell) | Same Playwright browser surface, driven from `npx playwright-cli` / `playwright-cli` commands. Multi-tab, storage, request mocking, tracing, `codegen` (test generation), persistent profiles. | The Playwright MCP server isn't available, or you want a reproducible **shell command** instead of a tool call — CI smoke, trace capture, codegen, deep CLI flows. |
+| [`playwright-testing`](../../playwright-testing/) | Playwright **MCP server** (in-host tool calls) | Snapshot-driven interaction — `browser_snapshot`, `browser_click`, `browser_fill`, `browser_navigate`. Accessible-name discovery falls out for free. | **Default for UI** analyst exploration and any interactive browser check when the Playwright MCP server is wired into the host. |
+| `playwright-cli` | Microsoft Playwright **CLI** (shell) | Same Playwright browser surface, driven from `npx playwright-cli` / `playwright-cli` commands. Multi-tab, storage, request mocking, tracing, `codegen` (test generation), persistent profiles. | The Playwright MCP server isn't available, or you want a reproducible **shell command** instead of a tool call — CI smoke, trace capture, codegen, deep CLI flows. |
 | [`browser-verify`](../../browser-verify/) | **Chrome DevTools Protocol** (CDP) | Computed styles, real CDP input events, storage/cookies dump, axe accessibility audit, screenshot diffs. Lighter than full Playwright. | Visual smoke check, accessibility audit, deep DOM inspection, or when Playwright (MCP + CLI) is overkill for the question. |
 
 ## Availability — check before you pick
@@ -22,7 +38,7 @@ Before choosing a tool, scan the host's environment:
    CLI, Cursor, Windsurf). If present, `playwright-testing` is the
    default.
 2. **`playwright-cli` installed?** Check `npx playwright-cli --version`,
-   or whether the `playwright-cli` skill is loaded into the session. If
+   or whether the Playwright CLI is available. If
    yes, it's an in-shell substitute when MCP is down — and a complement
    for CLI-native workflows like `codegen` and trace recording.
 3. **`browser-verify` skill loaded?** It's a monorepo skill, almost

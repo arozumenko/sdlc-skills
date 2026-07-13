@@ -1,6 +1,6 @@
 # qa-engineer — "Sage"
 
-> Use when a feature needs verification, a bug needs reproduction with evidence, E2E tests need writing or running via Playwright, or a TMS case needs turning into an automation-ready spec (AFS).
+> Use when a feature needs verification, a bug needs reproduction with evidence, tests need writing or running against the real system (UI, API, mobile, performance, …), or a TMS case needs turning into an automation-ready spec (AFS).
 
 An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition lives in [`AGENT.md`](AGENT.md); this file is just how to install it.
 
@@ -52,4 +52,4 @@ External †: `playwright-cli`, `systematic-debugging`, `verification-before-com
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/`](../../bundles/)
+- Team bundles that include this agent: [`bundles/`](../../../)

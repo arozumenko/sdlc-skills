@@ -70,6 +70,26 @@ After every significant interaction, collect:
 
 **Never use fixed waits when a condition-based wait works.**
 
+## Synthetic Input Hygiene
+
+Some interactions can't be driven natively (OS-level file drag, clipboard
+writes) and need synthesized events (`dispatchEvent` with a constructed
+`DataTransfer`, force-clicks, JS-evaluated state). These are not real user
+input — sloppy sequences create app states no user can reach:
+
+- **One continuous gesture per `DataTransfer`** — `dragenter → dragover →
+  drop` with the same handle. Never start a second gesture (a second
+  `dragenter` with no `dragleave`/`drop` ending the first); apps that
+  count enter/leave pairs are left permanently desynced.
+- **Fresh context per experiment.** While debugging, earlier synthetic
+  input in the same page may have poisoned the app's internal state —
+  re-verify anything suspicious in a new, isolated context before
+  trusting it.
+- **A "bug" seen only after synthetic input isn't a bug yet.** Before
+  filing it, reproduce it in a pristine context with a single correct
+  gesture. If it doesn't reproduce clean, it was self-inflicted session
+  state — document what you ruled out instead of filing.
+
 ## Bug Report Format
 
 When you find an issue:

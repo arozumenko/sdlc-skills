@@ -113,13 +113,33 @@ Look for:
 
 ## Phase 5: Test Infrastructure
 
+Detect the test framework(s) **broadly and without ordering** — no framework
+is the default. Scan across every test surface the repo might exercise (UI
+runners, API/unit test frameworks, mobile, performance), and let the files
+present decide. A repo may use several; record what you actually find.
+
 ```bash
-# Test framework
-cat pytest.ini 2>/dev/null
-cat conftest.py 2>/dev/null | head -30
-cat jest.config.* 2>/dev/null | head -20
-cat vitest.config.* 2>/dev/null | head -20
-cat playwright.config.* 2>/dev/null | head -30
+# Test framework — probe broadly, no single tool privileged.
+# Whichever config/manifest is present is the truth.
+ls pytest.ini conftest.py tox.ini 2>/dev/null              # pytest / Python
+ls jest.config.* vitest.config.* mocha* .mocharc* 2>/dev/null  # JS unit runners
+ls playwright.config.* cypress.config.* wdio.conf.* 2>/dev/null # browser/UI runners
+ls karate-config.* *.feature 2>/dev/null                   # Cucumber/Karate BDD
+find . \( -name "build.gradle*" -o -name "pom.xml" \) \
+  -not -path "*/node_modules/*" 2>/dev/null | head -5      # JUnit/TestNG (JVM)
+ls *.csproj 2>/dev/null                                    # NUnit/xUnit (.NET)
+ls go.mod Cargo.toml 2>/dev/null                           # go test / cargo test
+# API: REST-assured / requests / supertest / Postman/newman / pact (contract)
+grep -rliE "rest-assured|supertest|requests|httpx|newman|pact" \
+  --include=*.{js,ts,py,java,kt,xml,json,gradle} . 2>/dev/null | head -5
+# Mobile: Appium / Espresso / XCUITest / Detox / Maestro
+grep -rliE "appium|espresso|xcuitest|detox|maestro" . 2>/dev/null | head -5
+# Performance: k6 / JMeter / Gatling / Locust / Artillery
+ls *.jmx 2>/dev/null
+grep -rlwiE "k6|gatling|locust|artillery" \
+  --include=*.{js,ts,py,scala,java,json,yml,yaml,gradle,toml,txt} \
+  --exclude={package-lock.json,yarn.lock,pnpm-lock.yaml} \
+  --exclude-dir={node_modules,dist,build,.venv} . 2>/dev/null | head -5
 
 # Test files
 find . -path "*/test*" -name "*.py" -not -path "./.venv/*" | head -10
@@ -128,7 +148,19 @@ find . -path "*/__tests__/*" -o -name "*.test.*" -o -name "*.spec.*" | head -10
 # Read a sample test to understand patterns
 ```
 
-Look for: framework, fixture patterns, mocking approach, test data strategy, CI test commands.
+Look for: framework(s), fixture patterns, mocking approach, test data strategy, CI test commands.
+
+**Record three things into `.agents/testing.md` for the engineer** (use the
+template in `seeding-a-project/references/templates.md`):
+
+1. **Framework(s) + version** — exactly what's installed (e.g. `pytest 8`,
+   `Playwright 1.47`, `WDIO 8`, `k6`), not a recommendation.
+2. **The single-case run command** — the actual invocation that runs one test
+   against the real system (verify it runs; flag if you can't).
+3. **A free-text TEST-TYPE descriptor** — e.g. `ui` / `api` / `mobile` /
+   `perf` / `mixed`. This is a **hint** for the engineer to match per case, **not
+   an enforced enum**: if the repo spans surfaces, write `mixed` and note which
+   directories are which. Don't force a single label on a polyglot repo.
 
 ---
 
@@ -171,21 +203,18 @@ confirm rather than assume GitHub.
 ```
 === Recommended Team for [Project Name] ===
 
-Role             Persona  Focus for this project
+Role                      Persona  Focus for this project
 ──────────────────────────────────────────────────────────────────
-project-manager  Max      [what PM coordinates on this project]
-python-dev       [Name]   [what this role actually does here]
-js-dev           [Name]   [what this role actually does here]
-ba               [Name]   [what this role actually does here]
-tech-lead        Rio      [Godot / Rust / web context]
-qa-engineer      Sage     [test framework and approach for this stack]
-scout            Kit      Codebase exploration (this session)
+test-automation-lead      Tal      [pipeline routing, merge gate, framework architecture here]
+test-automation-engineer  Axel     [framework + surfaces this role implements against]
+qa-engineer               Sage     [test framework and approach for this stack]
+scout                     Kit      Codebase exploration (this session)
 ```
 
 **2. Explain the reasoning.** If you're recommending role changes, say why:
-- "python-dev and js-dev defaults don't fit a Godot project — I've repurposed them for game dev roles."
-- "ba becomes Game Designer because the workflow is GDD-driven, not user-story-driven."
-- "QA needs rewriting for GUT/playtesting instead of Playwright."
+- "test-automation-engineer's default examples lean web/UI — this is a pure API service, so I've tuned the briefing toward the HTTP-client test stack."
+- "The repo has both pytest and Cypress suites — I've noted the split so the implementer matches the right one per surface."
+- "QA's focus is exploratory + contract testing here — I've noted the detected framework so the engineer matches it."
 
 If the default roles fit, say so: "Default team fits a web app project — no role changes needed."
 
@@ -199,14 +228,14 @@ If the default roles fit, say so: "Default team fits a web app project — no ro
 
 **Role fit pattern-matching** (use Phase 1–2 data):
 
-| Detected | python-dev suggestion | js-dev suggestion |
-|----------|-----------------------|-------------------|
-| `*.gd`, `project.godot`, `Godot.app` | GDScript developer | Level designer |
-| `Cargo.toml`, `*.rs` | Rust developer | Ask engineer |
-| `*.ipynb`, ML libs in requirements | ML/data dev (fits) | Data viz / ML ops |
-| `package.json` + `*.py` | Backend developer (fits) | Frontend developer (fits) |
-| Only `package.json` | Second JS/TS dev or remove | Frontend developer (fits) |
-| None of the above | Keep default or ask | Keep default or ask |
+| Detected | Implementer (test-automation-engineer) focus | Analyst/reviewer (qa-engineer) focus |
+|----------|----------------------------------------------|--------------------------------------|
+| `playwright.config.*` / `cypress.config.*` / `wdio.conf.*` | That UI framework, its page objects + fixtures | Browser-driven exploration, selector review |
+| HTTP-test stack (pytest + httpx, REST Assured, supertest, …) | API-client layer, contract assertions | Request/response evidence, schema checks |
+| Mobile (Appium caps, XCUITest, Espresso) | Screen objects, device/emulator runs | Accessibility-id review, device evidence |
+| Perf (k6, Gatling, JMeter) | Scenario modules, thresholds | Metric/threshold review |
+| Mixed suites (several of the above) | Match the framework per surface, note the split | Same — per-surface evidence |
+| None of the above (greenfield) | Bootstrap per playbook § Framework architecture | Exploration against the live app |
 
 ---
 
@@ -244,12 +273,13 @@ Present a complete plan of what will be written or modified before touching any 
 
 Files to UPDATE:   CLAUDE.md (fix [N] drift items)
 Files to CREATE:   AGENTS.md
-                   .agents/{profile, architecture, conventions, testing, team-comms}.md
+                   .agents/{profile, workflow, architecture, conventions, testing, team-comms}.md
+                   .agents/test-automation.yaml
                    .agents/memory/<role>/project_briefing.md (per role)
                    .agents/onboarding.md
 
-Roles to tune:     python-dev → [Persona] ([new focus])
-                   js-dev → [Persona] ([new focus])
+Roles to tune:     test-automation-engineer → [focus] (framework, surfaces)
+                   qa-engineer → [focus] (exploration tooling, evidence style)
                    ...
 
 Memory to seed:    [N] role files — all roles get project context
@@ -263,11 +293,11 @@ Proceed? [yes / no / adjust]
 
 ## Phase 7: Configure & Tune Team
 
-Execute everything approved in Phase 6. Report each file as you generate it: `✓ SOUL.md — python-dev → Vad (Godot GDScript)`
+Execute everything approved in Phase 6. Report each file as you generate it: `✓ project_briefing.md — test-automation-engineer (Playwright + API-client split)`
 
-**File generation uses the `seeding-a-project` skill.** Read
-`sdlc-skills/skills/seeding-a-project/SKILL.md` for the generation flow, and
-the skill's `references/` directory for templates:
+**File generation uses the `seeding-a-project` skill.** Read the installed
+skill's SKILL.md (load it via your host's skill mechanism) for the
+generation flow, and the skill's `references/` directory for templates:
 
 - `references/templates.md` — CLAUDE.md / AGENTS.md / `.agents/{profile, architecture, conventions, testing}.md` templates, plus per-role `project_briefing.md` memory-seeding templates
 - `references/team-comms-templates.md` — `.agents/team-comms.md` templates by host
@@ -277,7 +307,7 @@ the skill's `references/` directory for templates:
 **7a — Generate config files:**
 1. `CLAUDE.md` first — **sensitive.** If it already exists: surgical edits only — fix drift items approved in Phase 5.75, nothing else. If it doesn't exist: create from template. Never restructure or reword prose.
 2. `AGENTS.md` — full reference, linked from CLAUDE.md. Update, don't overwrite.
-3. `.agents/` content files as needed (profile, architecture, conventions, testing, team-comms).
+3. `.agents/` content files as needed (profile, workflow, architecture, conventions, testing, team-comms, test-automation.yaml).
 
 `CLAUDE.md` lives at the project root.
 
@@ -294,7 +324,7 @@ Role Focus" based on your actual understanding of what that role does on
 this project — not placeholder text.
 
 **7d — Generate `.agents/team-comms.md`:**
-Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5g). Every project gets a `team-comms.md`; PM and every routing-capable role point at it for all routing decisions.
+Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5f). Every project gets a `team-comms.md`; PM and every routing-capable role point at it for all routing decisions.
 
 **Legacy marker cleanup.** Earlier iterations of this design used `<!-- SCOUT:TEAM-ROSTER:BEGIN -->` / `END` markers inside agent files. Those are gone. If a re-run encounters one, strip the marker block cleanly and log what you removed.
 
@@ -311,11 +341,11 @@ Three outputs, in order:
 - Open items (blocked issues, missing addons, decisions pending)
 - First recommended task with issue number
 
-**2. Create GitHub issue** — "Onboarding [date]" with the same content as onboarding.md:
+**2. File the onboarding record in the tracker** — "Onboarding [date]" with the same content as onboarding.md, filed in the tracker captured in `.agents/profile.md` § Issue tracker (e.g. on GitHub Issues):
 ```bash
 gh issue create --title "Onboarding [date]" --body "$(cat .agents/onboarding.md)"
 ```
-If `gh` is unavailable, warn and skip — don't fail the session.
+If no tracker is configured (or its CLI is unavailable), warn and skip — `.agents/onboarding.md` is the trail. Don't fail the session.
 
 **3. Report to the operator** — summarize what was seeded and what each role should do first. Give the key facts directly in your terminal close-out message so the engineer can relay context to whichever agent they launch next. Routing for each role is recorded in `.agents/team-comms.md`.
 

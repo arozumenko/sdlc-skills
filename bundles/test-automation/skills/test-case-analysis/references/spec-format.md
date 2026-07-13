@@ -9,8 +9,9 @@
 - [Test Data](#test-data)
 - [Test Steps](#test-steps)
 - [Expected Results](#expected-results)
+- [Coverage Map](#coverage-map)
 - [Cleanup](#cleanup)
-- [Stable Selectors (discovered during exploration)](#stable-selectors-discovered-during-exploration)
+- [Concrete Handles (discovered during exploration)](#concrete-handles-discovered-during-exploration)
 - [Network Behavior](#network-behavior)
 - [Known Defects Found During Exploration](#known-defects-found-during-exploration)
 - [Blocked Steps](#blocked-steps)
@@ -28,10 +29,16 @@ without re-exploring the app.
 ## Location
 
 ```
-test-specs/{feature}/l{priority}_{slug}_{tms-id}.md
+test-specs/{feature}/l{priority}_{slug}_{tms-id}.md      # fresh implementation
+test-specs/{feature}/lcovered_{slug}_{tms-id}.md         # already-covered traceability AFS
+test-specs/{feature}/lextend_{slug}_{tms-id}.md          # extend-existing extension AFS
 ```
 
 - `priority`: `1` critical, `2` high, `3` medium, `4` low
+- `lcovered_` / `lextend_`: replace the priority digit for `already-covered`
+  and `extend-existing` outcomes (SKILL.md § Classify findings). The filename
+  prefix is the contract — downstream audits grep for it to tell dedup and
+  extension work apart from fresh-implementation coverage.
 - `slug`: short snake_case description
 - `tms-id`: original TMS case key when available (e.g. `ZEP-T123`,
   `TR-4567`, `XRAY-456`), or `ad-hoc` for analyst-authored cases
@@ -42,6 +49,8 @@ Examples:
 test-specs/login/l1_valid_login_ZEP-T101.md
 test-specs/checkout/l2_apply_promo_code_TR-2044.md
 test-specs/user-profile/l3_avatar_upload_ad-hoc.md
+test-specs/login/lcovered_remember_me_ZEP-T108.md
+test-specs/checkout/lextend_promo_stacking_TR-2051.md
 ```
 
 ## Required structure
@@ -54,8 +63,12 @@ test-specs/user-profile/l3_avatar_upload_ad-hoc.md
 - **Linked Story**: {JIRA-123, GH#45, or `none`}
 - **Priority**: {l1 | l2 | l3 | l4}
 - **Environment Explored**: {stage | uat | local}
+- **User set**: {e.g. `${TEST_USER}` — credential env-var key(s) into `.agents/profile.md` § Roles & sample users}
 - **Analyst**: {agent or human who produced this}
-- **Status**: {ready-for-automation | blocked | defect-found | un-automatable}
+- **Status**: {ready-for-automation | blocked | defect-found | un-automatable | already-covered | extend-existing | out-of-scope-by-author}
+  (`un-automatable` and `out-of-scope-by-author` are **return-only statuses —
+  never written into an AFS file**: no AFS is emitted for either, per
+  test-case-analysis SKILL.md, so grep-audits over `test-specs/` never see them.)
 
 ## Preconditions
 - User must be logged out
@@ -64,17 +77,17 @@ test-specs/user-profile/l3_avatar_upload_ad-hoc.md
 (Omit section if no preconditions.)
 
 ## Test Data
-### Existing (re-use)
+### reuse-existing
 - `${TEST_EMAIL}` = stored in `.env`
 - `${TEST_CUSTOMER_ID}` = `CUS-42` (seeded by fixtures/users.sql)
 
-### Must Generate (in test setup)
+### generate-per-test (in test setup, cleaned up in its own teardown)
 - Unique order reference: `ORDER-${Date.now()}`
 - Temporary promo code via `POST /api/admin/promos`
 
-### Must Clean Up (in teardown)
-- Delete generated order
-- Expire generated promo
+### generate-shared-with-cleanup (shared across tests; cleaned up in suite teardown)
+- Promo campaign shared by the feature's tests (via `POST /api/admin/promos`)
+  — expire when the suite finishes
 
 ## Test Steps
 1. Navigate to `${BASE_URL}/checkout`
@@ -90,13 +103,54 @@ test-specs/user-profile/l3_avatar_upload_ad-hoc.md
 - `POST /api/checkout/promos` returns 200
 - No console errors
 
+## Coverage Map
+
+Two axes, so the ORIGINAL CASE and YOUR ENRICHMENT are both accounted for.
+
+**Axis 1 — Case coverage.** One row per original-case **element** — every step,
+*plus any requirement the case carries in its description or preconditions* —
+with a disposition, so nothing the case asks for is dropped silently. (A TMS
+case is more than its step list: some TMSs carry real acceptance criteria in the
+**description** and setup in **preconditions**. Pure-setup preconditions live in
+the AFS § Preconditions; add a row here for anything that must be *verified* — a
+description-borne acceptance criterion, or a precondition the test asserts — so
+it's asserted, not lost as prose.) Decomposition (one case step → several AFS
+steps) goes in "Covered by".
+
+| Case element | Expected result | Covered by (AFS step) | Asserted where | Disposition |
+|---|---|---|---|---|
+| desc: discount never exceeds 50% | cap enforced | step 4 | `step 4`: total ≥ 50% of subtotal | asserted |
+| 1 Navigate to checkout | title "Checkout" | step 1 | `step 1`: title visible | asserted |
+| 2 Apply promo code | discount line shows | steps 3–4 | `step 4`: discount row | asserted *(decomposed)* |
+| 3 Retry declined card | retry prompt shown | — | — | blocked *(no declined card in env)* |
+
+Disposition ∈ `asserted` | `already-covered` | `clarification` (live product
+diverges from the case — reverse-masking guard) | `blocked` | `out-of-scope`.
+Anything not `asserted` / `already-covered` must ALSO appear in § Blocked Steps,
+§ Known Defects, or as a CLARIFICATION — never a bare omission.
+
+**Axis 2 — Analyst additions.** Anything you assert that the case did NOT ask
+for (an observable you found worth guarding during execution). List each with a
+one-line reason grounded in what you observed — this keeps enrichment honest and
+lets the reviewer tell it from scope creep.
+
+- `step 2` asserts no console errors during payment — *added: observed a
+  transient 500 in exploration; guard prevents silent regression.*
+- (state "none" if you added nothing beyond the case.)
+
 ## Cleanup
 1. Cancel the draft order via UI or `DELETE /api/orders/{id}`
 2. Expire the generated promo
 
-## Stable Selectors (discovered during exploration)
+## Concrete Handles (discovered during exploration)
 
-Capture selectors using this ladder, in order of preference:
+Capture the concrete handles the implementer needs — selectors,
+endpoints, element-ids, metric queries, whatever the surface uses.
+Resolve the most stable, semantic handle available, and give a
+fallback.
+
+**Worked UI example** — capture selectors using this ladder, in order
+of preference:
 
 1. `getByRole(role, { name })` — preferred when the accessible name is
    stable and unique
@@ -106,10 +160,15 @@ Capture selectors using this ladder, in order of preference:
 5. CSS / XPath — last resort, with a comment about why a higher tier
    couldn't disambiguate
 
-If a target element has no test ID **and** roles / labels can't
-disambiguate it, **stop and flag the gap** in the AFS § Blocked Steps
-or § Automation Hints instead of falling back to brittle CSS. Axel
-will route the gap to PM rather than ship a fragile selector.
+(API: named response field-path → JSON schema → status code. Mobile:
+accessibility-id → id → visible text. Perf: named metric + threshold.)
+
+If you can't resolve a stable, semantic handle (a UI element with no
+test ID where roles / labels can't disambiguate it; an undocumented
+response field), **stop and flag the gap** in the AFS § Blocked Steps
+or § Automation Hints instead of falling back to a brittle one. The
+implementer / orchestrator will route the gap rather than ship a
+fragile handle.
 
 | Element | Recommended Locator | Fallback |
 |---|---|---|
@@ -143,8 +202,16 @@ will route the gap to PM rather than ship a fragile selector.
 
 - Metadata, Preconditions, Test Data (all three subsections),
   Test Steps, Expected Results
-- **Stable Selectors** — this is the whole point; exploration without
-  selector capture is half-done work
+- **Coverage Map** — both axes. Axis 1 must have a row + disposition for
+  *every* original-case element — each step, **plus any requirement carried by
+  the case's description or preconditions** (some TMSs put acceptance criteria
+  there); pure-setup preconditions land in § Preconditions instead. Decomposition
+  shown in "Covered by". Axis 2 lists every assertion you added beyond the case,
+  each with a one-line grounded reason. Building it IS your self-audit — it's how
+  you catch a dropped or misread requirement before it ships downstream.
+- **Concrete Handles** — this is the whole point; exploration without
+  capturing the handles the implementer needs (selectors / endpoints /
+  element-ids / metric queries) is half-done work
 - **Known Defects Found** — even if empty, state "none found"
 - **Blocked Steps** — even if empty, state "none"
 
@@ -154,7 +221,10 @@ will route the gap to PM rather than ship a fragile selector.
   `.agents/testing.md`, the engineer can derive it. Fill this in only
   when there's a non-obvious call (e.g. "use the WebSocket fixture, not
   the HTTP one").
-- **Network Behavior** — skip for pure-UI assertions without XHR.
+- **Network Behavior** — captures the traffic *behind* an action, so
+  skip it when there's nothing underneath to note (a pure-UI assertion
+  with no XHR). For an API case the traffic *is* the action — it lives
+  in Test Steps / Expected Results, not here.
 
 ## Variable convention
 
@@ -170,6 +240,10 @@ Secrets never leave the `.env`.
 
 ## Status vocabulary
 
+Full status set + routing is the single source of truth in
+test-case-analysis SKILL.md § Classify findings — this section
+summarizes.
+
 - **ready-for-automation** — fully explored, all data identified, no
   blockers. Safe to hand off.
 - **blocked** — analyst hit a wall (missing access, missing data,
@@ -180,3 +254,9 @@ Secrets never leave the `.env`.
 - **un-automatable** — physical device, manual-only visual check, flow
   that genuinely cannot be scripted. Do not automate. Keep as a manual
   case in TMS.
+- **already-covered** — existing automation already asserts this; emit a
+  `covered` traceability AFS rather than new test code.
+- **extend-existing** — partly covered; emit an `extend` extension AFS
+  pointing the engineer at the suite to extend.
+- **out-of-scope-by-author** — see SKILL.md § Classify findings for the
+  full routing.

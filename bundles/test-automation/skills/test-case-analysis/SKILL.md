@@ -1,6 +1,6 @@
 ---
 name: test-case-analysis
-description: Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — "analyse SCRUM-T101", "run this case and emit an AFS", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.
+description: Use when a TMS test case needs manual execution, handle discovery (selectors / endpoints / element-ids / metric queries — whatever the surface uses), or defect investigation before automation — "analyse SCRUM-T101", "run this case and emit an AFS", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.
 license: Apache-2.0
 metadata:
   authors:
@@ -11,14 +11,15 @@ metadata:
 
 # Test Case Analysis
 
-Execute a TMS test case against the live app, observe what actually
+Execute a TMS test case against the live system, observe what actually
 happens, and emit an **Automation-Friendly Spec (AFS)** a downstream
 engineer can implement without re-exploring.
 
-**Core philosophy:** a written test case is a hypothesis. The app is
-the only source of truth. This skill never trusts the case as
-authored — it runs it step by step, captures stable selectors,
-flags defects, and only then produces a spec.
+**Core philosophy:** a written test case is a hypothesis. The running
+system is the only source of truth. This skill never trusts the case as
+authored — it runs it step by step against the real system, captures
+the stable handles the implementer will need, flags defects, and only
+then produces a spec.
 
 ## Absolute boundaries
 
@@ -28,9 +29,17 @@ flags defects, and only then produces a spec.
   picks the AFS up.
 - **No automating un-automatable cases.** Physical device, visual
   judgment that can't be asserted, flows that genuinely can't be
-  scripted — mark the AFS `un-automatable` and stop.
+  scripted — return `un-automatable` to the orchestrator (no AFS
+  file is written) and stop.
 - **No skipping exploration.** Even if the TMS case looks complete,
   execute it. The case describes intent; only execution reveals truth.
+- **External writes follow the seeded policy.** Whether you file a
+  tracking ticket for a defect — and where / in what style — is set by
+  `.agents/profile.md` § Bug filing; whether the run syncs to a TMS is
+  set by `.agents/test-automation.yaml` § `tms`. Do those per the seed,
+  for the case you were dispatched for — not for cases you're merely
+  surveying. If the seed establishes no tracker filing or no TMS sync,
+  don't invent one.
 
 ## Analyst slot contract
 
@@ -40,9 +49,10 @@ standalone for "analyse SCRUM-T101" — role, context, parameters, and
 return shape are fixed here so dispatch prompts don't have to inline
 them.
 
-**Role.** Execute one TMS test case end-to-end against the live app,
-capture stable selectors, classify the finding, emit an AFS. No
-automation code (see § Absolute boundaries).
+**Role.** Execute one TMS test case end-to-end against the live
+system, capture the stable handles the implementer needs, classify
+the finding, emit an AFS. No automation code (see § Absolute
+boundaries).
 
 **Session context — read once at session start.** Typically
 auto-imported via `@-blocks` in your agent's `AGENT.md`; if your
@@ -84,7 +94,7 @@ Missing context → flag the gap; don't fabricate defaults.
 
 ## Phase 0 — Case-gate (preflight, runs BEFORE Phase 1)
 
-Before fetching the case body, probe its TMS author metadata. Skip cases the author has marked as not actionable — there's no analyst value in executing them, and downstream the implementer / orchestrator will reject them.
+Before fetching the case body, probe its author metadata. **When `source: tms`** this is the TMS author-status / folder / version probe below; **for `markdown`/`story`/`url` sources** it degrades to: the case exists and isn't marked `draft` / `out-of-scope` in its frontmatter. Skip cases the author has marked as not actionable — there's no analyst value in executing them, and downstream the implementer / orchestrator will reject them.
 
 **What to probe** (project-defined in `.agents/testing.md` § TMS case-gate; if absent, default to fetching all and flag the gap):
 
@@ -99,7 +109,7 @@ Before fetching the case body, probe its TMS author metadata. Skip cases the aut
 **Outcomes:**
 
 - All probes clear → continue to Phase 1.
-- Status excluded → don't fetch the body; return `out-of-scope-by-author` with the field value as evidence; close the case in the tracker (or mark per project convention).
+- Status excluded → don't fetch the body; return `out-of-scope-by-author` with the field value as evidence. The orchestrator closes/updates the tracker entry per its Tracker discipline (on standalone runs: per the seeded policy) — don't write the tracker transition yourself.
 - Folder/membership mismatch → don't dispatch; return to the orchestrator with the discrepancy. Iteration drift is an orchestrator-side routing issue, not an analyst-side execution issue.
 - TMS unreachable for the probe → fall back to fetching the body (Phase 1 will surface it); flag the gap for scout to fill in `.agents/testing.md`.
 
@@ -108,8 +118,8 @@ Before fetching the case body, probe its TMS author metadata. Skip cases the aut
 ```
 1. Fetch the case         → TMS adapter (pluggable; see test-automation.yaml)
 2. Read app context       → .agents/architecture.md + previous AFS files
-3. Execute                → browser-driving capability (your agent's wired MCP), step-by-step
-4. Capture selectors      → stable, accessible, fallback-ready
+3. Execute                → run it against the real system with whatever tool fits the surface, step-by-step
+4. Capture handles        → concrete handles (selectors / endpoints / element-ids / metric queries), fallback-ready
 5. Classify findings      → ready / already-covered / extend-existing / blocked / defect-found / un-automatable
 6. Emit AFS               → test-specs/<feature>/l<pri>_<slug>_<tms-id>.md
 ```
@@ -125,50 +135,68 @@ the markdown case from `test-specs/`. If the TMS is unreachable,
 open the case in the browser and copy it by hand — do not block on a
 flaky TMS.
 
-Extract: name, priority, preconditions, steps, expected, cleanup,
-linked story, attachments.
+Extract every field the TMS carries: name, **description**, priority,
+**preconditions**, steps, expected, cleanup, linked story, attachments.
+Some TMSs put real acceptance criteria in the description or preconditions —
+not just the steps table — so capture those too; they become Coverage-Map
+rows (spec-format § Coverage Map), not dropped prose.
 
 ### 2. Read app context
 
 - `.agents/architecture.md` — know the surfaces you'll touch
 - Previous AFS files in `test-specs/<feature>/` — match their shape
-- Existing page objects — selector notes should align with what exists
+- The project's existing abstraction layer (page objects for UI, API
+  clients / service objects for API, screen objects for mobile) —
+  your captured handles should align with what exists
 
 ### 3. Execute
 
-Three browser tools sit at different layers; pick by what's wired and
-what challenge you're solving. Full triage:
+Run the case against the real system with whatever tool fits the
+surface under test — a browser for UI, an HTTP client for API, a
+device/emulator for mobile, a load tool for perf. Pick by what the
+case touches and what's wired; switching tools mid-case is fine when
+the first one isn't producing useful evidence — note which tool
+produced which observation in the AFS so the next reader can follow.
+
+**Worked UI example** — three browser tools sit at different layers.
+Full triage:
 [`../test-automation-workflow/references/browser-tools.md`](../test-automation-workflow/references/browser-tools.md).
 In short:
 
-- **Default** — [`playwright-testing`](../playwright-testing/)
+- **Default UI tool** — [`playwright-testing`](../playwright-testing/)
   (Playwright MCP). Prefer its accessibility-snapshot tool for accessible-name
   discovery — it yields both the ref you need to click and the
   role-name pair you'll assert on.
-- **MCP server not wired** — [`playwright-cli`](../playwright-cli/)
-  drives the same browser surface from the shell (`codegen`,
+- **MCP server not wired** — the Playwright CLI from the shell
+  drives the same browser surface (`codegen`,
   `--trace`, multi-tab, storage, request mocking).
 - **Visual / CDP / a11y** — [`browser-verify`](../browser-verify/)
   for computed styles, real CDP input events, storage/cookies, or axe
   audits.
 
-Soft guidance, not a hard rule: switching tools mid-case is fine when
-the first one isn't producing useful evidence — note which tool
-produced which observation in the AFS so the next reader can follow.
-
 For each step:
 
-1. Perform the real action. Never synthesize a click via
-   `page.evaluate` — the app may react differently.
-2. Screenshot. Always.
-3. Check console messages. **Even when the UI looks fine.** Silent
-   JS errors are the worst bugs.
-4. Check network. Note which requests fire and which payloads matter.
+1. Perform the real action against the live surface. Never synthesize
+   it (e.g. a UI click via `page.evaluate`, or a hand-crafted response
+   instead of a real request) — the system may react differently.
+2. Capture evidence. Always — a screenshot for UI, the request/response
+   pair for API, the device log for mobile, the metric sample for perf.
+3. Check the side channels. **Even when the surface looks fine** —
+   console messages for UI, error fields / status codes for API,
+   crash logs for mobile. Silent errors are the worst bugs.
+4. Note the underlying traffic — which requests fire and which payloads
+   matter (for UI cases; for API cases this is the action itself).
 5. Observe actual vs expected. Record both if they differ.
 
-### 4. Capture selectors
+### 4. Capture handles
 
-Priority order — document in the AFS for every interactive element:
+Capture the concrete handles the implementer needs — whatever the
+surface uses: selectors for UI, endpoints + named response fields for
+API, accessibility-ids / ids for mobile, metric queries + thresholds
+for perf. Resolve the most stable, semantic handle available.
+
+**Worked UI example** — selector priority order, document in the AFS
+for every interactive element:
 
 1. `data-testid` / `data-test` — stable, intentional
 2. ARIA role + accessible name — `getByRole('button', { name: 'Apply' })`
@@ -176,8 +204,11 @@ Priority order — document in the AFS for every interactive element:
 4. Text content — `getByText('Sign in')` (fragile to i18n)
 5. CSS selector — last resort; prefer one anchored to a stable attribute
 
-Always give a **fallback**. Apps change. A single selector per
-element is a single point of failure.
+(API analogue: named response field-path → JSON schema → status code.
+Mobile analogue: accessibility-id → id → visible text.)
+
+Always give a **fallback**. Systems change. A single handle per thing
+under test is a single point of failure.
 
 ### 5. Classify findings
 
@@ -237,84 +268,28 @@ Status per case (goes in the AFS metadata block):
 When you find a defect during execution:
 
 - Do not force-continue past it hoping it "probably works later".
-- **Always file a tracking ticket.** Nothing slips through: every
-  finding (clarification, question, blocker, full defect) gets
-  tracked somewhere the team sees. How depends on profile.md.
-- Determine **where** the ticket lands by reading
-  `.agents/profile.md` § Project systems § Bug filing. Two orthogonal
-  fields drive the routing — scout's Step 0.7 fills both:
+- **Observed only via simulated input? Gate it first.** A finding first
+  seen through synthetic event dispatch (or mid-debugging, after earlier
+  experimental input in the same page) does not classify as a real
+  defect until it passes the pristine-repro gate in
+  [references/defect-filing.md](references/defect-filing.md) — fresh
+  isolated context, single complete gesture.
+- **File every finding — nothing slips through tracking.** Every
+  finding (clarification, question, blocker, full defect) gets tracked
+  somewhere the team sees.
+- **Route by `.agents/profile.md` § Bug filing** — it carries the
+  issue tracker (the *system*), the filing style (the *shape*), and the
+  target. Your agent's wired bug-filing skill does the *how*; this skill
+  hands it the *what* and the *where*.
+- **Default strict-per-bug; `bundle-per-case` is opt-in** and only when
+  both its prerequisites hold (umbrella-title convention + documented
+  comment-anchor format). The umbrella-lookup is the fragile step —
+  getting it wrong duplicates tickets, so without both prerequisites
+  `strict-per-bug` is the safe default; one more ticket is cheaper than
+  a missed clarification.
 
-  **Issue tracker** — the *system* the ticket lands in
-  (`github-issues` / `gitlab-issues` / `jira` / `azure-devops` /
-  `linear` / …). Your agent has a bug-filing capability wired in; use
-  it. Filing the ticket itself is not this skill's job — this skill
-  hands you the *what* (severity, repro, evidence) and the *where*
-  (tracker + style + target); your agent's bug-filing skill does
-  the *how*.
-
-  **Bug filing style** — the *shape* of the ticket. Three styles:
-  - **`github-issue`** *(default)* — open a standalone issue in the
-    tracker named above. Same shape regardless of tracker system (a
-    standalone issue in GitHub / GitLab / Jira / …).
-  - **`story-subtask`** — create a sub-task under the originating
-    story (Jira / Azure DevOps only; the story the TMS case is
-    linked to). Fetch the story ID via the TMS adapter's
-    `get_test_case_links`, then pass it as the parent when handing
-    off to the bug-filing skill.
-  - **`separate-ticket`** — file in a dedicated QA/bugs project,
-    not the main development tracker. Target is named in
-    profile.md § Bug filing target. Same tracker system, different
-    project key.
-- Determine **whether to bundle or split** by reading
-  § Bundling policy and classifying the finding's severity:
-  - **Classify the finding first**:
-    - *Lightweight clarification / question* — expected behavior
-      unclear, minor UI copy ambiguity, missing doc, "should this
-      modal close on outside-click?"-type questions
-    - *Real defect* — reproducible bug, functional breakage,
-      incorrect data, blocker — anything where the product is
-      provably wrong
-  - **`strict-per-bug`** *(default)* — every finding (either class)
-    gets its own ticket. Done.
-  - **`bundle-per-case`** *(opt-in, requires umbrella-ticket
-    convention already in place on the project)*:
-    - If the finding is a *real defect* → its own ticket (same as
-      strict-per-bug). Real defects never bundle.
-    - If the finding is a *lightweight clarification* → check if
-      there's already an open "umbrella" ticket for this TMS case.
-      - If yes: add the finding as a comment on the existing ticket.
-      - If no: file a new umbrella ticket (title e.g.
-        "Clarifications for SCRUM-T101") and make this the first
-        comment. Future lightweight findings on the same case
-        attach here.
-
-    The umbrella-lookup is the fragile step — getting it wrong
-    duplicates tickets. Defer to `strict-per-bug` unless the
-    operator's `profile.md § Bug filing style` explicitly selects
-    `bundle-per-case` **and** the project already has:
-    - A title convention for umbrella tickets (so the
-      find-or-create search has something stable to match on).
-    - A documented comment-anchor format that the analyst can
-      reference from the AFS (e.g. "comment-3" or a permalink fragment).
-    Without both, `strict-per-bug` is the safe default; one more
-    ticket is cheaper than a missed clarification.
-- Hand the body, tracker, style, and (for `story-subtask`) parent
-  story ID to your agent's bug-filing skill. Do not run a dev-side
-  fix lifecycle (failing test → RCA → implement fix → verify) — those
-  steps belong to whoever picks the defect up later, not to you
-  during analysis. You file and walk away.
-- If `.agents/profile.md` § Bug filing is `Unconfirmed`, or your
-  agent has no wired tooling for the named tracker, stop and ask the
-  operator before filing — don't pick a default silently. Flag the
-  gap in the AFS so scout can fill the field on the next onboarding
-  pass.
-- Note the finding in the AFS under "Known Defects Found" with the
-  ticket ID, filing style, and a recommendation — soft-expect
-  (isolated) or natural-fail (blocking). Under `bundle-per-case`,
-  reference both the umbrella ticket ID and the comment anchor so
-  the downstream implementer can find the specific note (e.g.
-  "Known defect: JIRA SCRUM-BUG-42 comment-3 — soft-expect", or
-  "Known defect: GH#234 — natural-fail").
+Full bug-filing + bundle-per-case mechanics:
+[references/defect-filing.md](references/defect-filing.md).
 
 ### 6. Emit AFS
 
@@ -328,6 +303,20 @@ test-specs/<feature>/l<priority>_<slug>_<tms-id>.md
 The AFS is the contract. If it's ambiguous, the downstream engineer
 will come back asking — which means the execution pass wasn't
 complete. Make it stand alone.
+
+**Before you emit, build the Coverage Map — it's your self-audit.** Walk
+*every* element of the original case into an Axis-1 row (Case element → Expected
+result → Covered by → Asserted where → Disposition) — not just the numbered
+steps, but **any requirement the case carries in its description or
+preconditions** too (some TMSs put acceptance criteria there; pure-setup
+preconditions go to § Preconditions instead). Decomposition (one case step you
+executed as several) goes in "Covered by", and any element you couldn't satisfy
+gets a `blocked` / `clarification` / `out-of-scope` disposition that also lands
+in § Blocked Steps or § Known Defects — never a bare omission. Then list in
+Axis 2 every observable you assert *beyond* the case, each with a one-line
+grounded reason. Constructing the map is how you catch a dropped or
+misread step here, at the source, instead of leaking it downstream. Full shape:
+[`references/spec-format.md`](references/spec-format.md) § Coverage Map.
 
 ## Evidence paths (convention)
 
@@ -345,8 +334,10 @@ When handed multiple cases:
 
 - Single case → run directly. No delegation.
 - Multiple cases → delegate one sub-agent per case via the host's
-  subagent dispatch — `Agent(...)` (Claude Code), `runSubagent(...)`
-  (Copilot). Each sub-agent gets its own browser context.
+  subagent dispatch, in the form `.agents/team-comms.md` documents
+  (Claude Code: an `Agent(...)` tool call). Each sub-agent gets its
+  own isolated execution context
+  (its own browser context for UI, its own client/session for API).
 - After sub-agents finish, retrieve each one's final message via the
   host's result-retrieval tool (NOT a shell command), extract the
   AFS path, **verify the file exists on disk**, and recreate it
@@ -356,28 +347,35 @@ When handed multiple cases:
 
 When the AFS is ready:
 
-1. Commit the AFS on a feature branch — `test(spec): add AFS for <id>`
+1. If `.agents/workflow.md` grants commit authority to this slot,
+   commit the AFS on a feature branch — `test(spec): add AFS for <id>`.
+   If it doesn't, don't touch git (the working tree is shared with
+   other slots) — return the AFS path and content to the caller and
+   skip step 2.
 2. Push; open a small PR if the project reviews specs before
    automation starts, otherwise hand the AFS path directly back to
    the caller (your agent knows whether the automation role expects
    the spec via PR or via direct handoff)
 3. If a defect was found, link the issue in the PR body
-4. If the case is `blocked` or `un-automatable`, stop here and
-   report up — do not pass a broken spec downstream
+4. If the case is `blocked`, stop here and report up — do not pass a
+   broken spec downstream. (`un-automatable` never reaches this
+   handoff — it's return-only, no AFS is written.)
 
 ## Anti-patterns
 
 - **Writing automation code.** Not this skill's scope. Stop.
 - **Copying the case text into the AFS verbatim without executing.**
-  The AFS needs *discovered* selectors, *observed* network calls,
-  *confirmed* expected vs actual. A copy-paste AFS is lying.
-- **Skipping the console check** because "the UI looks fine". Silent
-  errors are the ones that ship.
+  The AFS needs *discovered* handles, *observed* traffic, *confirmed*
+  expected vs actual. A copy-paste AFS is lying.
+- **Skipping the side-channel check** because "the surface looks fine"
+  (console for UI, error fields / status codes for API, crash logs for
+  mobile). Silent errors are the ones that ship.
 - **Force-continuing past a defect** to complete the AFS. A defect
   invalidates downstream steps — you no longer know what "expected"
   means.
-- **Inventing selectors.** If you didn't click it, it doesn't go in
-  the selector table. Run the step.
+- **Inventing handles.** If you didn't exercise it, it doesn't go in
+  the handles table (a selector you never clicked, an endpoint you
+  never called). Run the step.
 - **`test.fail()`-style thinking.** If a step fails for a real
   product reason, that's a defect, not a caveat in the AFS.
 - **Skipping Phase 0 (case-gate)** because the case "looked fine"
@@ -402,3 +400,6 @@ When the AFS is ready:
 - [references/spec-format.md](references/spec-format.md) — the
   Automation-Friendly Spec (AFS) structure, required sections,
   examples. This is what the skill's output looks like.
+- [references/defect-filing.md](references/defect-filing.md) — full
+  bug-filing mechanics: issue-tracker routing, the three filing styles,
+  and the bundle-per-case umbrella-ticket convention.

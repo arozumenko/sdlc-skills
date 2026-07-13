@@ -28,6 +28,7 @@ project-root/
     ├── architecture.md           ← System design map (if complex enough)
     ├── conventions.md            ← Detected coding standards
     ├── testing.md                ← Test infrastructure details
+    ├── test-automation.yaml      ← TMS adapter + transport config (Step 6.6)
     ├── onboarding.md             ← Scout's own audit trail
     └── memory/<role-id>/
         ├── MEMORY.md             ← Index (add a line for each entry)
@@ -35,6 +36,28 @@ project-root/
 ```
 
 Not every project needs all files. Skip what's not relevant.
+
+**Captures the external-write policy; performs no external writes.** This skill
+writes only local files (`.agents/*`, `AGENTS.md` / `CLAUDE.md`, installed agent
+configs). One thing it captures *into* those files is the project's **external-write
+way of work** — does the project sync results to a TMS (which adapter)? file
+tickets for defects (where, what style)? post status / progress to a tracker? —
+recorded in `.agents/test-automation.yaml` § `tms`, `.agents/profile.md` § Bug
+filing / § Status reporting, and `.agents/workflow.md`, so the pipeline knows
+which writes are part of this project's workflow. Seeding itself **never creates a
+ticket, updates a TMS execution, or posts a comment** — probing a TMS / tracker to
+detect the adapter is strictly **read-only**, whether run by scout or by
+`test-automation-lead` self-orienting inline. Seeding decides the policy; the
+pipeline executes it.
+
+**Minimum viable seed (inline self-orientation).** When the
+test-automation-lead runs this skill *inline* to self-orient — rather
+than dispatching a dedicated scout pass — it may defer the heavier
+steps (full PR survey Step 0.5, role-overrides Step 6.9, role
+customization Step 7) and capture inline only the blocking fields the
+pipeline can't run without: the TMS (Step 0.7 / Step 6.6), the base
+branch + merge policy, the test user / credential env keys, and the
+base URL / API base. Everything else can be filled in later.
 
 ## References
 
@@ -85,15 +108,17 @@ tracker, TMS, KB, bug-filing style, automation PR policy — and
 writes it into `.agents/profile.md` § Project systems. The operator
 can pre-fill these in the onboarding prompt (under a
 `## Project systems` block); unspecified fields become `ASK` and
-scout either asks interactively or writes `Unconfirmed`.
+scout either asks interactively or writes `Unconfirmed`. A trailing
+free-form `## Notes` block in the prompt is carried verbatim into
+§ Additional notes for anything that doesn't fit a structured field.
 
 Downstream skills read this section at runtime:
 `test-case-analysis` (bug filing), `bugfix-workflow` (tracker CLI),
 `test-automation-workflow` (test-case storage),
-`project-manager` + `test-automation-engineer` (merge policy, base
-branch).
+`test-automation-lead` + `test-automation-engineer` (merge policy,
+base branch).
 
-**Full procedure** — all 11 captured fields, defaults, destinations,
+**Full procedure** — all captured fields, defaults, destinations,
 report format — lives in **[references/scout-survey.md](references/scout-survey.md)
 § Step 0.7**.
 
@@ -189,6 +214,32 @@ in **[references/team-comms-workflow.md](references/team-comms-workflow.md)**.
 Templates live in
 **[references/team-comms-templates.md](references/team-comms-templates.md)**.
 
+## Step 6.6 — Generate .agents/test-automation.yaml
+
+When the project uses a TMS (captured in Step 0.7 and recorded in
+`.agents/profile.md`), scout writes `.agents/test-automation.yaml` by
+following the onboarding procedure in the **test-automation-workflow**
+skill's **[references/tms-adapters.md](../test-automation-workflow/references/tms-adapters.md)
+§ "If you're onboarding a new project"**: pick the adapter row matching
+the captured TMS, pick the transport (MCP if already wired into the host,
+HTTP otherwise), copy that adapter's config block into the file, and
+wire the required env vars (the adapter's `auth_env` line names them).
+
+Don't restate the YAML schema here — `tms-adapters.md` is the single
+source of truth for adapter fields, transports, and status verbs.
+
+If the project has **no TMS** (markdown source of truth), write the
+one-liner:
+
+```yaml
+tms: { adapter: markdown, cases_dir: test-specs }
+```
+
+Mark any field you couldn't confirm with the skill's normal
+`Unconfirmed` convention rather than guessing. This file is consumed
+downstream by Step 6.8 (tool-whitelist wiring) and by the whole
+test-automation pipeline at runtime.
+
 ## Step 6.8 — Wire agent tool whitelists (restrictive hosts)
 
 Hosts that default to a restrictive tool-permission model — notably
@@ -212,11 +263,12 @@ lives in **[references/agent-tools-wiring.md](references/agent-tools-wiring.md)*
 Scout compares the **workflow slots** the project needs (from
 installed workflow skills + stated pipelines) against the **installed
 agent roster**. For any slot lacking a dedicated agent, scout picks
-the best-matching installed agent and injects per-project routing
-overrides into the AGENT.md files of the routing agents (PM, tech-
-lead, any other agent whose handoff prompts name specific agents).
+the best-matching installed agent and records per-project routing
+overrides in `.agents/role-overrides.md`, which the orchestrator
+(`test-automation-lead` in this bundle) reads at session start and
+consults at dispatch time.
 
-Lightweight substitution (SCOUT-INJECTED marker-bracketed section)
+Lightweight substitution (the `.agents/role-overrides.md` mapping)
 is the default; full persona rewrite (Step 7) is the escalation when
 the installed agent is too distant from the slot.
 

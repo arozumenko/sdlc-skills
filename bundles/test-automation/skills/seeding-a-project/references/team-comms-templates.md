@@ -50,12 +50,10 @@ the top telling each runtime which section applies.
 | Role | `subagent_type` | Hand off… |
 |------|-----------------|-----------|
 <!-- one row per .claude/agents/ subdirectory, from AGENT.md name + description -->
-| BA | `ba` | Requirements, user stories |
-| Tech Lead | `tech-lead` | Architecture, task decomposition |
-| Python Dev | `python-dev` | Backend, APIs, data |
-| JS Dev | `js-dev` | Frontend, React, Node |
-| QA Engineer | `qa-engineer` | Testing, verification |
-| Scout | `scout` | Codebase exploration, re-discovery |
+| Test Automation Lead (orchestrator) | `test-automation-lead` | Pipeline routing, dispatch, merge gate |
+| QA Engineer | `qa-engineer` | Test-case analysis, review |
+| Test Automation Engineer | `test-automation-engineer` | Automation implementation |
+| Scout | `scout` | Codebase onboarding, re-discovery |
 
 Use the `subagent_type` value exactly — it must match a directory name in
 `.claude/agents/`.
@@ -71,14 +69,14 @@ the `prompt`.
 **Single subagent:**
 
     Agent(
-      subagent_type="ba",
-      prompt="Write a user story for password reset. Context: <...>. Return Gherkin only."
+      subagent_type="qa-engineer",
+      prompt="Analyst slot — analyse CASE-101 per the test-case-analysis skill. Context: <...>. Return the AFS path + status."
     )
 
 **Parallel subagents — launch in one assistant turn, multiple tool calls:**
 
-    Agent(subagent_type="scout", prompt="Map the auth module. Report files, entry points, tech-debt, <200 words.")
-    Agent(subagent_type="ba",    prompt="Draft acceptance criteria for password-reset from: <...>")
+    Agent(subagent_type="scout",       prompt="Map the auth module. Report files, entry points, tech-debt, <200 words.")
+    Agent(subagent_type="qa-engineer",  prompt="Analyst slot — analyse CASE-102 per test-case-analysis. Return the AFS path + status.")
 
 Both run concurrently; both results arrive on your next turn.
 
@@ -86,7 +84,7 @@ Both run concurrently; both results arrive on your next turn.
 
 | Situation | Hand off? |
 |---|---|
-| Need a result to continue (BA writes story → TL decomposes → dev implements) | **Yes — subagent** |
+| Need a result to continue (analyst writes the AFS → implementer automates → reviewer verdicts) | **Yes — subagent** |
 | Parallel independent work | **Yes — multiple subagents in one turn** |
 | Quick research / investigation / planning by another persona | **Yes** |
 | Small task clearly inside your own role | **No — just do it** |
@@ -144,12 +142,10 @@ steps in the same reply.
 | Role | Copilot agent name | Hand off… |
 |------|--------------------|-----------|
 <!-- one row per .github/agents/ entry, from the agent file's frontmatter name + description -->
-| BA | `ba` | Requirements, user stories |
-| Tech Lead | `tech-lead` | Architecture, task decomposition |
-| Python Dev | `python-dev` | Backend, APIs, data |
-| JS Dev | `js-dev` | Frontend, React, Node |
-| QA Engineer | `qa-engineer` | Testing, verification |
-| Scout | `scout` | Codebase exploration, re-discovery |
+| Test Automation Lead (orchestrator) | `test-automation-lead` | Pipeline routing, dispatch, merge gate |
+| QA Engineer | `qa-engineer` | Test-case analysis, review |
+| Test Automation Engineer | `test-automation-engineer` | Automation implementation |
+| Scout | `scout` | Codebase onboarding, re-discovery |
 
 Use the agent name exactly as it appears in the file's YAML frontmatter.
 
@@ -166,17 +162,17 @@ recognizes the pattern and dispatches under the hood.
    subagents must declare the capability in its YAML frontmatter:
 
        tools: ['agent', ...existing tools...]
-       agents: ['ba', 'tech-lead', 'python-dev', 'js-dev', 'qa-engineer', 'scout']
+       agents: ['test-automation-lead', 'qa-engineer', 'test-automation-engineer', 'scout']
 
    The `agents:` list is a whitelist of names this agent is allowed to
    spawn. Scout wires this in at seed time.
 
 2. **Invocation is prose.** The runtime pattern-matches on your reply.
    Write it as an instruction, not as a function call.
-   - Correct: "Use the BA agent to write a user story for password reset. Return Gherkin only."
+   - Correct: "Use the qa-engineer agent to analyse CASE-101 per the test-case-analysis skill and return the AFS path + status."
    - Correct: "Have the Scout agent map the auth module and report in under 200 words."
    - Wrong: "Delegate the research step." (too vague — won't trigger)
-   - Wrong: `Agent(subagent_type="ba", prompt="…")` (Claude-only syntax — Copilot prints it as plain text)
+   - Wrong: `Agent(subagent_type="qa-engineer", prompt="…")` (Claude-only syntax — Copilot prints it as plain text)
 
 3. **`handoffs:` is user-driven, not programmatic.** Copilot's
    `handoffs:` frontmatter renders as buttons the user clicks to continue
@@ -186,16 +182,18 @@ recognizes the pattern and dispatches under the hood.
 
 **Single subagent (what you actually write in your reply):**
 
-> Use the `ba` agent to write a user story for password reset. Context:
-> <paste relevant facts>. Return Gherkin only.
+> Use the `qa-engineer` agent to analyse CASE-101 per the
+> test-case-analysis skill. Context: <paste relevant facts>. Return
+> the AFS path + status.
 
 **Parallel subagents — list them in the same reply:**
 
 > Use the `scout` agent to map the auth module and report files, entry
 > points, and tech-debt in under 200 words.
 >
-> Use the `ba` agent to draft acceptance criteria for password reset
-> from the following requirements: <paste>.
+> Use the `test-automation-engineer` agent to implement the AFS at
+> test-specs/auth/l1_login_CASE-101.md per the test-automation-workflow
+> skill. Branch: tests/CASE-101-login. Return the Run Report.
 
 Both trigger the Copilot `agent` tool and run to completion; both
 results land back in your next turn.
@@ -204,7 +202,7 @@ results land back in your next turn.
 
 | Situation | Hand off? |
 |---|---|
-| Need a result to continue (BA writes story → TL decomposes → dev implements) | **Yes — subagent** |
+| Need a result to continue (analyst writes the AFS → implementer automates → reviewer verdicts) | **Yes — subagent** |
 | Parallel independent work | **Yes — list multiple in the same reply** |
 | Quick research / investigation / planning by another persona | **Yes** |
 | Small task clearly inside your own role | **No — just do it** |

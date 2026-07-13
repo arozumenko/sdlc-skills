@@ -1,6 +1,6 @@
 ---
 name: test-automation-workflow
-description: Use when a TMS test case needs to become an automated test, or when automating a regression batch — "automate TC-NNN", "convert this case to Playwright", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
+description: Use when a TMS test case needs to become an automated test, or when automating a regression batch — "automate TC-NNN", "convert this case to a framework test", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
 license: Apache-2.0
 metadata:
   authors:
@@ -13,9 +13,9 @@ metadata:
 
 This skill describes how individual contributors (analyst, implementer, reviewer) do their craft inside the analyst → implementer → reviewer pipeline. **Orchestration of that pipeline is the `test-automation-lead` agent's job.** That role owns slot routing, dispatch templates, AFS quality gating, status discipline, automation merge gate, and framework architecture decisions. This skill describes what each IC slot does once dispatched.
 
-If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
+If you arrived here looking for routing / slot defaults / "when to involve tech-lead" / canonical dispatch prompts, read [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md). On projects without `test-automation-lead` installed, those responsibilities fall to whichever agent has been substituted via `.agents/role-overrides.md`.
 
-**Core philosophy:** do not automate what you have not executed. Every case is run manually first (pick whichever browser tool is wired and fits the challenge — `playwright-testing` over MCP, `playwright-cli` from the shell, `browser-verify` over CDP; full triage in [`references/browser-tools.md`](references/browser-tools.md)) so defects, missing data, and environmental gaps surface *before* a line of automation code is written. Then a separate engineer implements the automation inside the project's existing framework. Then a reviewer re-runs it.
+**Core philosophy:** do not automate what you have not executed. Every case is run manually first against the real system, with whatever tool fits the surface under test — a browser for UI, an HTTP client for API, a device/emulator for mobile, a load tool for perf (for a Playwright/browser project that's `playwright-testing` over MCP, `playwright-cli` from the shell, or `browser-verify` over CDP; full triage in [`references/browser-tools.md`](references/browser-tools.md)) — so defects, missing data, and environmental gaps surface *before* a line of automation code is written. Then a separate engineer implements the automation inside the project's existing framework. Then a reviewer re-runs it.
 
 **Why split the work across slots:** context. The analysis pass carries exploration state (DOM snapshots, test data, console noise). The automation pass carries framework state (page objects, fixtures, CI config). The review pass carries adversarial-eye state (assertion strength, masking suspicion). Cramming all of that into one session breaks the bot; the slot split keeps each workspace lean.
 
@@ -33,7 +33,7 @@ This skill section IS the orchestrator-slot contract for the test-automation pip
 - `.agents/team-comms.md` — host, dispatch syntax, installed roster
 - `.agents/role-overrides.md` (if present) — slot substitutions when the default agent isn't installed
 
-Missing files are tolerated except when ALL are absent — in that case the project isn't seeded; pause and ask the operator to run scout.
+Missing files are tolerated; when ALL are absent the project was never seeded — **self-orient by running the `seeding-a-project` skill yourself** (scout's own onboarding procedure — load it on demand), asking the user only for the blocking unknowns it can't infer, then proceed — rather than dead-stopping. Full procedure: [`references/orchestration-playbook.md`](references/orchestration-playbook.md) § Self-orientation.
 
 **Per-batch parameters** (caller / user provides):
 
@@ -83,7 +83,7 @@ Missing context → flag the gap; don't fabricate defaults.
 - User set — a key into `.agents/profile.md` § Roles & sample users (e.g. `${TEST_USER}`)
 - Branch name — if the caller created the branch. **Don't `switch`, `commit`, `push`, or otherwise touch git unless `.agents/workflow.md` grants commit authority to this slot.**
 
-**Retry budget.** Soft limit: **≤ 2 reruns** against the same root cause before escalating. The orchestrator's R2 cap rule will refuse R3 on the same cause regardless — see `agents/test-automation-lead/AGENT.md` § R2 cap rule.
+**Retry budget.** Soft limit: **≤ 2 reruns** against the same root cause before escalating. The orchestrator's R2 cap rule will refuse R3 on the same cause regardless — see [`references/orchestration-playbook.md`](references/orchestration-playbook.md) § R2 cap rule.
 
 **Return contract:**
 
@@ -101,10 +101,10 @@ Missing context → flag the gap; don't fabricate defaults.
 5. Implement automation         (implementer six-phase loop — see § Implementer below)
 6. Run & stabilize              (implementer — green or real defect; Run Report)
 7. Review                       (reviewer slot + code-review skill)
-8. Deliver & sync TMS           (completing-a-task + TMS adapter back-write)
+8. Deliver & sync TMS           (completing-a-task; orchestrator back-writes post-merge)
 ```
 
-Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](skills/test-case-analysis/SKILL.md)). Steps 5–6 belong to the implementer slot (driven by this skill — see § Implementer six-phase loop below). Step 7 is the reviewer slot (driven by [`code-review`](skills/code-review/SKILL.md)). Step 8 is the handoff.
+Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](../test-case-analysis/SKILL.md)). Steps 5–6 belong to the implementer slot (driven by this skill — see § Implementer six-phase loop below). Step 7 is the reviewer slot (driven by [`code-review`](../code-review/SKILL.md)). Step 8 is the handoff.
 
 `test-automation-lead` resolves each slot to a concrete agent at dispatch time. ICs don't need to know the routing rules — they need to know how to execute their phase once dispatched.
 
@@ -118,7 +118,7 @@ Before anything, read what scout / seeding-a-project produced:
 - `.agents/profile.md` — languages, default branch
 - `.agents/test-automation.yaml` — TMS config + framework hints (if present)
 
-**If none of these exist**, ask `test-automation-lead` to run scout first. Do not try to automate into a codebase you have not mapped.
+**If none of these exist**, return to `test-automation-lead` — who self-orients the project (or runs scout) before re-dispatching you. Do not try to automate into a codebase you have not mapped.
 
 Framework detection patterns (if `testing.md` doesn't name it):
 
@@ -130,11 +130,11 @@ grep -r "pytest-playwright\|playwright.sync_api" --include="*.txt" --include="*.
 test -f wdio.conf.ts -o -f wdio.conf.js && echo "wdio"
 ```
 
-**No framework yet?** Return `needs-escalation` (mid-flow escalation). The orchestrator owns the bootstrap decision per [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md) § Framework Architecture. Once an approved plan is handed back, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
+**No framework yet?** Return `needs-escalation` (mid-flow escalation). The orchestrator owns the bootstrap decision per [`references/orchestration-playbook.md`](references/orchestration-playbook.md) § Framework architecture. Once an approved plan is handed back, execute it against [`references/framework-scaffold.md`](references/framework-scaffold.md).
 
-### 2. Ingest case from TMS
+### 2. Ingest the case (source-pluggable — TMS or otherwise)
 
-TMS is pluggable along two axes — **adapter** (which TMS) and **transport** (HTTP or MCP). The active combination is declared in `.agents/test-automation.yaml` (see [`references/tms-adapters.md`](references/tms-adapters.md)).
+A case can come from a **TMS** (the most common source in practice) or from another source — a **markdown** spec in-repo, a linked **story/issue**, or a plain **URL/feature** brief. The source + adapter + transport are declared in `.agents/test-automation.yaml` (see [`references/tms-adapters.md`](references/tms-adapters.md)); if unset, the source defaults to `markdown`. For a TMS source there are two further axes — **adapter** (which TMS) and **transport** (HTTP or MCP).
 
 Supported adapters out of the box: `zephyr-scale`, `testrail`, `xray`, `azure-test-plans`, `markdown` (plain files). Each adapter exposes the same verbs regardless of transport:
 
@@ -150,16 +150,16 @@ update_execution(id, status, evidence) → back-writes result
 - `transport: mcp` — preferred when the host has a TMS MCP server configured (Elitea, Atlassian Remote MCP, vendor TestRail / Xray MCP). The adapter calls `mcp__<server>__<tool>` instead of issuing HTTP. Secrets live in the host's MCP config.
 - `transport: http` — the TMS's public API with credentials from env vars. Works everywhere without host integration.
 
-If no adapter is configured, default to `markdown`: cases live in `test-specs/{feature}/l{priority}_{name}.md`.
+With no TMS configured, the `markdown` source is a first-class peer (not a degraded fallback): cases live in `test-specs/{feature}/l{priority}_{name}.md`, and the same `fetch_case`/`update_execution` verbs apply over files.
 
 **Never hardcode a TMS.** All TMS logic flows through the adapter.
 
 ### 3. Execute manually (analyst slot)
 
-The analyst — typically `qa-engineer`, occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](skills/test-case-analysis/) skill:
+The analyst — typically `qa-engineer`, occasionally a substitute — runs the case step-by-step against the real application, using the [`test-case-analysis`](../test-case-analysis/) skill:
 
-- UI cases → [`playwright-testing`](skills/playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
-- Fallback / deep inspection → [`browser-verify`](skills/browser-verify/) (CDP — real input events, computed styles, storage).
+- UI cases → [`playwright-testing`](../playwright-testing/) MCP tools, preferring `browser_snapshot` for accessible-name discovery.
+- Fallback / deep inspection → [`browser-verify`](../browser-verify/) (CDP — real input events, computed styles, storage).
 - API cases → `curl` / project's HTTP client.
 
 For every step: screenshot, console, network. For every assertion: proof.
@@ -168,13 +168,14 @@ For every step: screenshot, console, network. For every assertion: proof.
 
 ### 4. Produce automation-ready spec (AFS)
 
-The analyst writes an **Automation-Friendly Spec** (AFS) — a markdown file in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and required sections live in [`skills/test-case-analysis/references/spec-format.md`](skills/test-case-analysis/references/spec-format.md).
+The analyst writes an **Automation-Friendly Spec** (AFS) — a markdown file in `test-specs/{feature}/l{priority}_{slug}_{tms-id}.md`. Format and required sections live in [`skills/test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md).
 
 **AFS quality bar — implementer-readable contract.** Every AFS must satisfy:
 
-- **User selection section** — explicitly names the env var keys (e.g. `${TEST_USER}` / `${TRIAL_USER}` for projects with multi-credential sets).
+- **User set** — explicitly names the env var keys (e.g. `${TEST_USER}` / `${TRIAL_USER}` for projects with multi-credential sets), per spec-format's metadata block.
 - **Test data inventory** — three buckets: `reuse-existing` / `generate-per-test` / `generate-shared-with-cleanup`. Every datum classified.
-- **Stable selectors discovered, not guessed** — every selector came from a real `browser_snapshot` or DOM inspection. Unobserved selectors marked "to-verify in implementer Phase 2 (Explore)".
+- **Coverage Map** (spec-format § Coverage Map) — Axis 1 has a row + disposition for **every** original-case element: each step, plus any requirement carried by the description or preconditions (pure-setup preconditions reflected in AFS § Preconditions) — nothing silently dropped; decomposition shown in "Covered by". Axis 2 lists every assertion added beyond the case. This is the traceability spine the implementer walks and the reviewer ticks.
+- **Stable handles discovered, not guessed** — every handle came from real observation (a `browser_snapshot` / DOM inspection for UI, a real response for API, an accessibility-id for mobile). Unobserved handles marked "to-verify in implementer Phase 2 (Explore)".
 - **Known Defects Found** — every defect filed with ticket ID + recommended handling (`expect.soft()` or natural-fail).
 - **Cleanup steps** — state mutations + reset between runs.
 
@@ -188,7 +189,7 @@ If the case cannot be automated at all (e.g. physical card reader), the analyst 
 
 ### Phase 1 — Absorb
 
-Read the AFS end-to-end. Re-read `.agents/testing.md`. Open three neighbouring tests in the same feature area. Check the AFS `Status` field against the slot contract (§ Implementer slot contract above):
+Read the AFS end-to-end. **Read the FULL original case** (TMS case ID / path from your dispatch — its description, preconditions, test data, steps + expected, not just the steps table) and **walk the AFS Coverage Map row by row against it** (spec-format § Coverage Map): every original-case element — each step, **plus any requirement carried by the case's description or preconditions** — must have an Axis-1 row with a real disposition (or, for pure-setup preconditions, be reflected in AFS § Preconditions), and every `asserted` row must name where its expected result is asserted. If a case element has no row, or a row claims `asserted` with no assertion to point at, return `needs-analyst-rerun` naming the row — before writing any code (don't silently implement the shortfall; coverage is the contract, and the reviewer + orchestrator gate on it). Sanity-check Axis 2 too: each "addition" should be a grounded observable, not silent scope creep. Re-read `.agents/testing.md`. Open three neighbouring tests in the same feature area. Check the AFS `Status` field against the slot contract (§ Implementer slot contract above):
 
 | Status | Action |
 |---|---|
@@ -202,14 +203,14 @@ Read the AFS end-to-end. Re-read `.agents/testing.md`. Open three neighbouring t
 
 **This table is the single source of truth.** Orchestrator briefs, dispatch prompts, and project workflows defer to it. New statuses get added here first.
 
-### Phase 2 — Explore (skip if AFS selectors are confirmed against current DOM)
+### Phase 2 — Explore (skip if AFS handles are confirmed against the current surface)
 
-If your Absorb pass surfaces a discrepancy between AFS selectors and the live DOM (UI changed since analyst pass, or AFS noted "to-verify" selectors), **explore before writing code**:
+If your Absorb pass surfaces a discrepancy between the AFS-stated handles and the live surface under test (the surface changed since analyst pass, or the AFS noted "to-verify" handles) — **or** the straightforward implementation isn't yielding a reliable test — **explore before (and during) writing code**. Exploration here is *technique* latitude (the **how**): drive the surface with whatever tool fits it (for a Playwright/browser project, switch between `playwright-cli` codegen / `playwright-testing` MCP / `browser-verify`, headed vs headless), try a different handle or wait strategy. It does **not** extend to changing *what* is asserted or the case's scope (the **what**) — that's the analyst/reviewer contract; a scope change returns `needs-analyst-rerun`. Steps:
 
-1. Use the project's browser-driving capability (`playwright-cli` codegen, `playwright-testing` MCP, or `browser-verify` for computed styles).
-2. Diff observed selectors vs AFS-stated selectors.
+1. Drive the surface under test with whatever capability fits it (for a browser project: `playwright-cli` codegen, `playwright-testing` MCP, or `browser-verify` for computed styles).
+2. Diff observed handles vs AFS-stated handles.
 3. **Amend the AFS in-place** with a `docs(afs): amend selectors per implementer exploration` commit — do NOT silently drift from the AFS.
-4. If the gap is too wide (multiple steps obsolete, app flow changed), **return `needs-analyst-rerun` to the orchestrator** — re-exploration is the analyst's job, not yours.
+4. If the gap is a **scope/coverage** change (multiple steps obsolete, app flow changed, the case needs different assertions), **return `needs-analyst-rerun` to the orchestrator** — re-*scoping* is the analyst's job. (Re-exploring *technique* to make the existing scope testable is yours — that's this phase.)
 
 Phase 2 has a budget: **30 minutes of exploration** before escalating to the orchestrator.
 
@@ -220,10 +221,10 @@ Phase 2 has a budget: **30 minutes of exploration** before escalating to the orc
 Write the test. Follow the framework's conventions 1:1. Five rules (full detail in § Hard Rules below):
 
 1. Match the project's framework — read three neighbouring tests first.
-2. Extend existing page objects; never duplicate.
-3. Locator ladder: getByRole → testid → label → text → CSS (last resort).
+2. Extend the project's existing abstraction layer (page object / API client / screen object / scenario module); never duplicate.
+3. Resolve the most stable, semantic handle (UI example: getByRole → testid → label → text → CSS last resort).
 4. Env vars from `.env` via the project's existing loader. Never hardcode.
-5. No `waitForTimeout` / `sleep`. Use web-first assertions.
+5. No `waitForTimeout` / `sleep`. Use the framework's native waits (web-first assertions for UI).
 
 Apply the **No Defect Masking Rule** (§ Hard Rules → 2 below). Forbidden: `test.fail()`, `xit()`, `@Ignore`, `pytest.skip()`, demoted expects, weakened assertions.
 
@@ -233,7 +234,7 @@ When the AFS status is `extend-existing`, the artefact is an *edit to the coveri
 
 1. **Additive-only on the covering spec.** The spec file is the shared-caller file (Hard Rule 3 → § Additive-only on shared-caller files applies): existing `test()` bodies stay byte-identical; new `test()` blocks (or new `test.step()` sections, or new `expect()` lines inside an existing test only when the AFS Gap assertions section names that exact insertion point) sit alongside. Verify with `git diff <covering-spec> | grep -E '^-[^-]' | head` → empty.
 
-2. **Coverage tag chain.** Append `@<NEW-TMS-ID>` to the covering spec's `test.describe()` title alongside the existing `@<COVERING-TMS-ID>` tag. The describe-title tag list is the engagement-level coverage signal; each Jira/TMS case referenced by the spec gets its own tag in that list. Don't create a sibling `describe` block — that would fragment the cluster.
+2. **Coverage tag chain.** Append `@<NEW-TMS-ID>` to the covering test group's tag list alongside the existing `@<COVERING-TMS-ID>` tag — `test.describe()` title tags are the Playwright example; pytest markers / JUnit `@Tag`s / scenario tags are the analogues. The group-level tag list is the engagement-level coverage signal; each Jira/TMS case referenced by the spec gets its own tag in that list. Don't create a sibling group/describe block — that would fragment the cluster.
 
 3. **Same-PR amendment if the AFS drifts.** If Phase 2 surfaces an observation that the AFS § Gap assertions section didn't anticipate, amend the AFS via the Phase 2 amend-in-PR rule and ship the AFS update in the same PR — same as fresh implementation. If the amendment widens scope to the point of being a near-rewrite of the covering spec, return `needs-analyst-rerun` and ask analyst to reclassify (typically `ready-for-automation` with a split).
 
@@ -254,9 +255,9 @@ Classify the failure honestly:
 | **Product-isolated** (one assertion fails for product reason, rest of flow works) | `expect.soft()` with `// Known defect: <TICKET>` comment. File the defect via `atlassian-content` / `issue-tracking` if not already filed. |
 | **Product-blocking** (downstream steps can't run) | **Let it fail naturally.** File the defect. Return task status `blocked` to the orchestrator. Forbidden: `test.fail()`. |
 
-**Soft retry budget:** ≤ 2 reruns against the same root cause. After R2, **stop and return `needs-escalation`** with the rerun count + root-cause notes per rerun. the orchestrator applies the R2 cap rule (escalate to architectural / re-route to analyst / park — never R3). Fishing your way to green by R3+ is a smell, not a strategy: empirically R1→R2 fixes most things, R3 either parks anyway or is wasted effort.
+**Soft retry budget:** ≤ 2 reruns against the same root cause. After R2, **stop and return `needs-escalation`** with the rerun count + root-cause notes per rerun. The orchestrator applies the R2 cap rule (escalate to architectural / re-route to analyst / park — never R3). Fishing your way to green by R3+ is a smell, not a strategy: empirically R1→R2 fixes most things, R3 either parks anyway or is wasted effort.
 
-Read failure artifacts: `test-results/`, `playwright-report/`, `allure-results/`, `error-context.md`. The framework usually pinpoints the exact mismatch.
+Read whatever failure artifacts the project's framework emits (for a Playwright/browser project: `test-results/`, `playwright-report/`, `allure-results/`, `error-context.md`; for other frameworks the equivalent — JUnit/TAP/JSON reports, HAR/response dumps, perf result files). The framework usually pinpoints the exact mismatch.
 
 **When the artifacts aren't informative.** Three tiers of logging enhancement, three different authorities:
 
@@ -281,17 +282,31 @@ reporter: [
 
 The existing reporter's output file (`junit.xml` above) is unchanged, so anything parsing it (TMS adapter, CI pipeline, dashboard) keeps working. The stdout `['list']` gives the implementer richer console output during debug runs.
 
+#### TMS / result-reporting reporters — gate them
+
+The three-tier table above governs reporters added for **diagnostics** (richer console / extra report files). A different class of reporter **pushes results to the TMS / tracker** — a framework-wired reporter (e.g. a Playwright `jira-reporter` / an Xray results-import reporter) or an adapter back-write. Those need an extra discipline beyond "additive and reviewed":
+
+**TMS result-reporting must be gated, graceful, and config-validated — never fire on every local run.** Any mechanism that posts results to the TMS / tracker — a framework-wired reporter (e.g. a Playwright `jira-reporter` / an Xray results-import reporter) or an adapter back-write — MUST:
+
+1. **Gate on CI or an explicit opt-in env flag** (`process.env.CI`, `TMS_SYNC=1`, or the framework equivalent). A developer running the suite locally (`npx playwright test …`) to iterate must NOT trigger TMS network calls — default OFF locally.
+2. **Degrade gracefully** — on missing credentials, an unreachable host, or an auth redirect, log ONCE and continue. Never emit a per-test error, never spam the console, never fail the test run. The test result is the product; TMS sync is a best-effort side-effect.
+3. **Validate the endpoint before posting** — confirm the TMS base URL resolves without a redirect loop. (`redirect count exceeded` / a `fetch failed` repeated per test is the classic symptom of a wrong base URL or an auth redirect to a login page — fix the config or gate the reporter; don't let it spam.)
+
+When you meet an ungated reporter spamming a local run, treat it as a defect to fix (gate it + make it graceful), not noise to ignore.
+
 ### Phase 6 — Handoff
 
-Five-step task-completion protocol (see [`completing-a-task`](skills/completing-a-task/) skill):
+Five-step task-completion protocol (see [`completing-a-task`](../completing-a-task/) skill):
 
 1. **Verify locally** — single test green, lint clean, diff reviewed.
-2. **Commit on a feature branch** — match the convention from `.agents/workflow.md` (typically `tests/<TMS-ID>-<slug>` or `automation/<case-id>-<slug>`).
-3. **Push & open PR** via the project's PR tool — `gh pr create` (GitHub), `glab mr create` (GitLab), `az repos pr create` (Azure DevOps). Target branch per `.agents/profile.md` § Automation PR policy.
-4. **Comment on the originating story/issue** with the PR link via `issue-tracking` (tracker-aware; reads `.agents/profile.md` § Issue tracker).
-5. **Back-write the TMS execution** via the configured adapter.
+2. **Commit on a feature branch** — only if `.agents/workflow.md` grants commit authority to this slot; match the convention (typically `tests/<TMS-ID>-<slug>` or `automation/<case-id>-<slug>`; when the caller created the branch, use it). No commit authority → stop after step 1 and return the diff + Run Report; the caller lands the branch and opens the PR.
+3. **Push & open PR** via the project's PR tool — `gh pr create` (GitHub), `glab mr create` (GitLab), `az repos pr create` (Azure DevOps). Target branch per `.agents/profile.md` § Automation PR policy. **Include the Run Report in the PR description** — that copy is the durable one the reviewer and orchestrator read (§ Run Report below).
+4. **Comment on the originating story/issue** with the PR link via `issue-tracking` — **only if `.agents/profile.md` § Status reporting → "Comment PR link" is `yes`** (skip silently if `no` or no tracker is configured).
+5. **Verify the TMS back-write wiring** — the execution back-write itself happens **post-merge and belongs to the orchestrator** (playbook § Merging automation PRs); at handoff you confirm the wiring exists (a CI-gated reporter or the orchestrator's adapter protocol) — **only if the seed configures it** (§ Status reporting → "TMS execution back-write" `yes`, i.e. a real `tms.adapter`, not `markdown` / `none`). Perform the write yourself only when running standalone (no orchestrator) — then per the seeded policy, gated + graceful per § Phase 5 → TMS / result-reporting reporters: never on a local iteration; gate on CI / an opt-in flag, degrade gracefully offline (log once, never fail the run). No TMS sync in the seed → nothing to back-write.
 
-Return the **Run Report** to the orchestrator as your final message.
+Steps 4–5 are **seed-governed**: perform the external writes the project's seeded way-of-work establishes, skip the ones it doesn't. The seed (`.agents/*`) is the contract; never invent a write it didn't set up, never drop one it did.
+
+Return the **Run Report** to the orchestrator as your final message — and make sure the same Run Report is in the PR description (step 3): that copy is durable, and it's where the orchestrator fills the Independent-gate verdict row.
 
 ---
 
@@ -305,12 +320,12 @@ End every implementer / runner session with this exact structure (no prose summa
 - **Independent-gate verdict:** (the orchestrator fills this after the independent live-run gate; implementer leaves blank)
 - **Duration:** {n}s
 - **Steps passed:** (list each AFS step that ran clean, by name)
-- **Failed step:** {step name} — POM method {Page.method()} — {file:line}
+- **Failed step:** {step name} — abstraction-layer method ({Page.method()} for UI; client/service method elsewhere) — {file:line}
 - **Failure type:** infrastructure | product-isolated | product-blocking
-- **Locator that failed:** `{selector}` — timeout {n}ms
+- **Handle that failed:** `{selector / response field-path / accessibility-id / metric query}` — timeout {n}ms
 - **Console errors:** (paste, or "none")
 - **Network failures:** (4xx/5xx requests, or "none")
-- **Artifacts:** `test-results/...`, `playwright-report/...`
+- **Artifacts:** framework report dir — `test-results/` / `playwright-report/` / `allure-results/` / JUnit XML / HAR or perf summary
 - **Reruns:** {n} (root cause of each — infrastructure / product / flake)
 - **Final run duration baseline:** {n}s (the orchestrator uses this for future regression checks)
 - **Recommendation:** route to (analyst rerun / implementer fix / the orchestrator merge / file bug {PROJECT-NNNN})
@@ -331,6 +346,8 @@ Missing fields are unacceptable — every field has a defensible "none" or "n/a"
 - Read `.agents/testing.md` first. Whatever framework it names, that's your framework.
 - If nothing is documented, detect it (see § Discover framework above). First hit wins.
 - No framework at all? Return `needs-escalation` — framework bootstrap is the orchestrator's call.
+
+**Skills are accelerants, not prerequisites.** Use an installed skill when one fits the project's framework (e.g. `playwright-testing` for a Playwright/browser project). If none is installed you are not blocked: conform to the existing framework by reading `.agents/testing.md` + three neighbouring tests; if the framework is unfamiliar or greenfield, learn it from its official docs (and, where the host has skill-discovery wired, optionally install a matching skill — or author a small project-local skill that persists for later cases); worst case, write from first principles + the docs and say so in your Run Report. Only return `needs-escalation` when something is genuinely unobtainable — a paid license, a physical device, an unknown undocumented tool. Never silently force a framework or tool the project doesn't use.
 
 ### 2. No Defect Masking
 
@@ -364,15 +381,17 @@ Masking is bi-directional. The case text is a *hypothesis*; the live product is 
 
 Why this matters empirically: the test will pass-by-luck on the next product change that happens to land on the asserted value, then fail unpredictably when the product moves again. The live-contract assertion is durable.
 
-> **the orchestrator-side gate.** the orchestrator also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on the orchestrator, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to the orchestrator with the violation noted.
+> **The orchestrator-side gate.** The orchestrator also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on the orchestrator, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to the orchestrator with the violation noted.
 
 **A red test exposing a real product bug is a correct test.** Your job is to keep it honest, not to keep it green.
 
-### 3. Respect the page object layer
+### 3. Respect the project's abstraction layer
+
+Use the project's existing abstraction over the thing under test — page object for UI, API client / service object for API, screen object for mobile, scenario module for perf. Extend it, don't duplicate it, and centralize the address of the thing under test there. The page-object example:
 
 - Extend existing page objects. Don't duplicate. Don't introduce a second `LoginPage` next to the existing one.
-- If a page object doesn't exist for the surface you're testing, create it — in the exact style the existing ones use.
-- Centralize selectors in the page object. A `data-testid` should appear in exactly one file.
+- If a page object doesn't exist for the surface you're testing, create it — in the exact style the existing ones use. (Exception: if `.agents/testing.md` records the project's flat-path default — no abstraction layer yet; layers emerge at 3+ duplication per framework-scaffold § Path-dependent — follow that instead of minting a lone page object.)
+- Centralize selectors in the page object. A `data-testid` should appear in exactly one file. (Same discipline for the analogues: an endpoint path / base URL lives once in the API client; a screen's accessibility-ids live once in the screen object.)
 - Semantic method names (`login()`, `applyPromoCode()`), not `clickButton3()`.
 
 #### Additive-only on shared-caller files
@@ -407,9 +426,11 @@ Use framework-native waits — `waitForResponse`, `waitForURL`, `wait_for_select
 
 If you think you need a sleep to make a test stable, **escalate to the orchestrator** with the reasoning before adding it.
 
-### 6. Locator ladder
+### 6. Resolve the most stable, semantic handle
 
-Pick selectors in this order, walking down only when the previous tier genuinely can't disambiguate:
+Bind to whatever you're observing through the most stable, semantic handle the surface offers, walking down to less stable tiers only when the previous one genuinely can't disambiguate. The worked example below is the **UI** ladder; the same instinct applies per surface — API: named response field / JSON-schema path → status; mobile: accessibility-id → id → text; perf: a named metric / threshold rather than a positional sample.
+
+UI ladder (Playwright example):
 
 1. `getByRole(role, { name })` with the accessible name
 2. `getByTestId(...)` / `data-testid`
@@ -417,7 +438,7 @@ Pick selectors in this order, walking down only when the previous tier genuinely
 4. `getByText(...)`
 5. CSS / XPath — last resort, with a one-line comment explaining why the higher tiers didn't fit
 
-**Stop+flag** if the target element has no test ID **and** roles / labels can't disambiguate it. Surface the gap to the orchestrator, who routes it to the dev to add a test ID or accessibility attribute.
+**Stop+flag** if the handle can't be made stable and semantic — e.g. a UI target with no test ID **and** roles / labels that can't disambiguate it. Surface the gap to the orchestrator, who routes it to the dev to add a test ID, accessibility attribute, or stable identifier.
 
 ### 7. Reuse before create
 
@@ -446,6 +467,12 @@ You (implementer) are the right person to make this call — you've seen the sur
 Why this matters empirically: seed/cleanup is the largest flake source in any non-trivial suite — state leaks across tests, fixtures interact with parallel runners, cleanup race conditions. Eliminating the mutation eliminates the entire flake class.
 
 The rule sequence: Rule 7 (reuse before create) tells you to find an existing helper; this rule tells you to find existing **data**. Both are the same instinct — prefer what's already proven stable over freshly-built state.
+
+### 11. Scaffold minimal — no unsolicited integrations
+
+When you scaffold a framework or set up test infra (framework-execution mode), build only what runs tests: runner + config, abstraction layer, fixtures, one smoke test, run/CI command. **Don't wire integrations the task didn't ask for and the project doesn't declare — especially network-calling ones** (TMS/result reporters, analytics, dashboards, notification hooks). A TMS-reporting reporter is opt-in: add it only when explicitly requested **or** declared in `.agents/test-automation.yaml`, and then gated + graceful per § Phase 5 → "TMS / result-reporting reporters — gate them". Genuinely-needed integration? Propose it to the orchestrator and wait; never wire it silently.
+
+Why this matters: an unsolicited side-effect — the `jira-reporter`-firing-on-every-local-`npx playwright test` class, making per-test network calls that fail and spam offline — breaks local dev and erodes trust. The user asked for tests, not for their machine to phone a TMS on every run.
 
 ---
 
@@ -477,7 +504,7 @@ Missing context → flag the gap; don't fabricate defaults.
 
 - Verdict: `APPROVED` | `CHANGES_REQUESTED`
 - Findings list with `file:line` refs (Critical / Important / Nit per the `code-review` skill's Output Format)
-- Recommendation: ship vs amend. The the orchestrator decides final disposition; reviewer recommends.
+- Recommendation: ship vs amend. The orchestrator decides final disposition; reviewer recommends.
 
 ### Triangulate three artifacts — never two
 
@@ -486,6 +513,8 @@ The reviewer's mandatory triangle:
 1. **Original TMS case** — fetch via the project's TMS adapter (full fields, not summary view). This is the *upstream contract*.
 2. **AFS** at `test-specs/<feature>/l*_<id>.md` — the analyst's translation of (1).
 3. **Implementation** — the PR diff, the spec, the page-object changes.
+
+This triangle governs pipeline PRs born from a case. For a **case-less audit** — legacy or AI-generated tests with no TMS provenance — review against § Standing reviewer checks and record the missing upstream contract as a finding; don't refuse the review for lack of a case.
 
 A reviewer who looks only at AFS ↔ implementation is doing half the job — they miss the class of bug where the AFS itself drifted from the TMS case. Three failure modes, three responses:
 
@@ -499,6 +528,8 @@ Empirically: AFS-drift bugs slip through file:line review because the file and t
 
 ### Standing reviewer checks
 
+- **Coverage completeness (vs the source case)** — **tick the AFS Coverage Map Axis 1 against the full original case** (artifact #1 of your triangle, fetched via the TMS adapter / source — its description, preconditions, test data, steps + expected, not just the steps table): every original-case element — each step, **plus any acceptance criterion in the case's description or preconditions** — has a row (pure-setup preconditions reflected in AFS § Preconditions), and every `asserted` row's expected result maps to a real assertion in the implementation; non-`asserted` rows (`already-covered` / `clarification` under the reverse-masking guard / `blocked` / `out-of-scope`) have a documented disposition. A case step with no row, or an `asserted` row whose assertion isn't in the code, is `CHANGES_REQUESTED`. Then sanity-check Axis 2 — each addition is a grounded observable, not scope creep. This is the "did we deliver what was asked" gate, and it is the reviewer's last call. Tick against the **source case**, not just the AFS.
+- **Per-step assertion** — every step that carries a case-side (or Axis-2) expected result has a **real assertion AT that step**, not only an end-state assertion. A step performed as a bare action (navigation/click/request) with no `expect()` where an observable is specified is `CHANGES_REQUESTED`. (A green test proves nothing about an intermediate step that was never asserted — this is the one gap no automated gate can see.)
 - Assertion strength (no demoted expects, no missing `toBeEnabled` guards)
 - Selector stability (locator ladder per testing.md)
 - Defect masking — bi-directional: no `test.fail`/`xit`/weakened assertions away from defects; no assertions held to stale case-text against live-correct product (§ Reverse-masking guard)
@@ -527,16 +558,19 @@ All dispatches share the parent's working tree; the same-surface-serial rule is 
 - **Automating an unexecuted case.** You don't know what the app does until you've driven it. Don't skip step 3.
 - **Copying framework conventions from a different project.** Read `.agents/testing.md` and the existing `tests/` directory. Match what's there.
 - **Hardcoding the TMS.** Everything goes through the adapter.
+- **Wiring a TMS/result reporter that fires on every local run, makes per-test network calls, and spams/fails offline** — gate it (CI/env), make it graceful (§ Phase 5).
+- **Scaffolding more than was asked — wiring unsolicited integrations.** A fresh scaffold or setup that adds a TMS/result reporter, analytics, or any network-calling hook the task didn't request and the project doesn't declare. Scaffold minimal; integrations are explicit, gated decisions (§ Hard Rules → 11).
+- **Ignoring the seeded write-policy.** Back-writing a TMS, filing a ticket, or posting status on a project whose seed doesn't establish it — **or** skipping a write the seeded way-of-work requires. External writes are governed by `.agents/*` (`test-automation.yaml` § tms, `profile.md` § Bug filing / § Status reporting / § Automation PR policy), decided at seeding: do what the seed says, no more, no less. Seeding itself performs none of these — it only records the policy.
 - **Masking a product defect with `test.fail()`, `xit`, `@Ignore`, or weakened assertions.** A red test is the correct signal. File the bug, don't hide it.
 - **One-shot mega-agent.** Context fragmentation is a feature, not a bug. Respect the slot split.
-- **Bypassing the orchestrator on routing decisions.** the orchestrator is the orchestrator; ICs execute their phase and return status. Don't decide who runs next yourself.
-- **"I wrote the code and it compiles."** Not done. Not until the test ran green (or red for a real product reason), evidence captured, PR open, TMS updated.
+- **Bypassing the orchestrator on routing decisions.** Routing is the orchestrator's call; ICs execute their phase and return status. Don't decide who runs next yourself.
+- **"I wrote the code and it compiles."** Not done. Not until the test ran green (or red for a real product reason), evidence captured, PR open with the Run Report, and the seeded back-writes done by their owner (orchestrator post-merge; you only when standalone).
 
 ## References
 
-- [`skills/test-case-analysis/references/spec-format.md`](skills/test-case-analysis/references/spec-format.md) — AFS structure, required sections, examples.
+- [`skills/test-case-analysis/references/spec-format.md`](../test-case-analysis/references/spec-format.md) — AFS structure, required sections, examples.
 - [`references/tms-adapters.md`](references/tms-adapters.md) — adapter contract, supported TMSes, `.agents/test-automation.yaml` schema.
 - [`references/commands.md`](references/commands.md) — framework detection, sub-agent spawning per host, TMS CLI examples, AFS template.
 - [`references/framework-scaffold.md`](references/framework-scaffold.md) — minimal scaffolds for projects without a framework, per language.
 - [`references/browser-tools.md`](references/browser-tools.md) — browser-tool triage for analyst execution.
-- [`agents/test-automation-lead/AGENT.md`](agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.
+- [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.

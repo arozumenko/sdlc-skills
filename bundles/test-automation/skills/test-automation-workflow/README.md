@@ -6,7 +6,7 @@ A skill for the [sdlc-skills](../../README.md) toolkit. Full instructions live i
 
 ## When it triggers
 
-Loads on _"automate TC-NNN"_, _"convert this case to Playwright"_, or any flow from a manual test case to green framework tests.
+Loads on _"automate TC-NNN"_, _"convert this case to a framework test"_, or any flow from a manual test case to green framework tests.
 
 ## Requirements
 

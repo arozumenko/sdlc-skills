@@ -40,18 +40,30 @@ payload="$(read_stdin_payload)"
 
 # The Copilot CLI launches the main agent via `--agent <name>` and records it as the
 # first `subagent.selected` event in its session-state log; resolve it so the CLI
-# orchestrator loads its own role memory. (VS Code / Claude have no session-state
-# dir → empty here; their orchestrator memory comes via the frontmatter SessionStart
-# hook → agent-start.)
+# orchestrator loads its own role memory. (VS Code has no session-state dir → empty
+# here; its orchestrator memory comes via the frontmatter SessionStart hook →
+# agent-start.)
 sid="$(json_string_field "$payload" sessionId)"
 [ -n "$sid" ] || sid="$(json_string_field "$payload" session_id)"
-cli_role="$(resolve_cli_session_agent "$sid")"
+role="$(resolve_cli_session_agent "$sid")"
+
+# Claude Code exports the `--agent <name>` launch role to hooks as
+# CLAUDE_CODE_AGENT (verified on 2.1.205). Resolve it so a top-level
+# `claude --agent <role>` orchestrator gets its role memory here — SubagentStart
+# → agent-start only ever fires for the workers it dispatches, never for the
+# session's own agent. Also re-fires on clear/compact/resume, so the
+# orchestrator's memory survives compaction. Guarded to plain Claude Code so
+# the var leaked into another host's shell (Kiro raw / Cursor / Codex launched
+# from a Claude Code terminal) can't misroute another session's role here.
+if [ -z "$role" ] && is_claude_code && ! is_codex; then
+  role="${CLAUDE_CODE_AGENT:-}"
+fi
 
 # Orchestrator additionalContext: its role memory, plus a shared-docs read-list only
 # if the instruction files weren't loaded this session (instr_present empty). The
-# orchestrator is a top-level agent, never a CLI sub-agent → cli_sub="". cli_role may
-# be empty (non-CLI / unresolved) → then just the read-list when needed.
-context="$(build_capped_context "$PROJECT_DIR" "$cli_role" "$instr_present" "")"
+# orchestrator is a top-level agent, never a CLI sub-agent → cli_sub="". role may
+# be empty (no --agent launch / unresolved) → then just the read-list when needed.
+context="$(build_capped_context "$PROJECT_DIR" "$role" "$instr_present" "")"
 
 # Per-role memory: runtimes whose per-agent start hook can inject context
 # (Claude Code, Codex, Copilot CLI) load it per dispatch via agent-start, so
@@ -67,7 +79,7 @@ if ! has_subagent_hook; then
     done
   fi
   roster="${roster%, }"
-  [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, qa-engineer, test-automation-engineer, personal-assistant, scout"
+  [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, qa-engineer, test-automation-engineer, test-automation-lead, personal-assistant, scout"
   context="${context}"$'\n\n'"<role-memory-reminder>
 Each role in this project has persistent memory at .agents/memory/<role>/snapshot.md.
 When you act as one of these roles, invoke the \`memory\` skill to load your snapshot before starting work.

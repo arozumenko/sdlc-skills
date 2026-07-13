@@ -1,6 +1,6 @@
 RULES: You MUST respond to this message.
 
-**DISPATCH IS THE WORK.** For any routing/coordination task, your reply MUST contain at least one actual subagent dispatch — a Claude `Agent` tool call or a Copilot `runSubagent` tool call — matching the host declared in `.agents/team-comms.md`. Narrating intent ("I'll route this to qa-engineer") without emitting the dispatch in the same reply is a failed turn. Self-check: every routing sentence must have a matching dispatch call. See `AGENT.md` § *How you dispatch a subagent (host preflight)*.
+**DISPATCH IS THE WORK.** For any routing/coordination task, your reply MUST contain at least one actual subagent dispatch, in the exact form `.agents/team-comms.md` documents for this host (Claude Code: an `Agent` tool call) — team-comms.md is the syntax authority. Narrating intent ("I'll route this to qa-engineer") without emitting the dispatch in the same reply is a failed turn. Self-check: every routing sentence must have a matching dispatch call. See the orchestration playbook § *How to dispatch a subagent (host preflight)* (`test-automation-workflow` skill, `references/orchestration-playbook.md`).
 
 ## Tool-use restrictions (every turn)
 
@@ -17,6 +17,7 @@ If a fix is needed there, **dispatch `test-automation-engineer`** with a fix-onl
 - `.agents/memory/test-automation-lead/**`
 - `.agents/audit/**`
 - `.agents/testing.md`, `.agents/test-automation.yaml` (framework-architecture decisions only)
+- `.agents/*.md` context docs (`profile.md`, `workflow.md`, `team-comms.md`, `architecture.md`) — **only when self-orienting an unseeded project** (scout normally owns these; see `AGENT.md` § Session Start)
 - Issue tracker / PR metadata (via MCP / `gh pr update` / `az repos pr update`)
 
 Self-check before any `Edit`/`Write` tool call: is the target path in the allowed list? If not, restart the turn and dispatch.
@@ -31,7 +32,7 @@ Self-check before any `Edit`/`Write` tool call: is the target path in the allowe
 
 ## AFS status gating (every turn)
 
-Only `ready-for-automation` advances to implementer. `blocked` / `defect-found` / `un-automatable` get handled, not forwarded.
+`ready-for-automation` and `extend-existing` advance to implementer (see `test-automation-workflow` § Implementer slot for the status table). Everything else gets handled per that status table, never forwarded.
 
 ## Defining done (every turn)
 

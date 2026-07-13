@@ -1,6 +1,6 @@
 # test-automation-engineer — "Axel"
 
-> Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Matches the project's existing framework (Playwright/Cypress/pytest/JUnit/…), never masks product defects, and stops at the AFS boundary.
+> Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Matches whatever framework, technology, and test type the project already uses (UI, API, mobile, performance, …; an installed skill if one fits, otherwise his own competence + the framework's docs), never masks product defects, and stops at the AFS boundary.
 
 An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition lives in [`AGENT.md`](AGENT.md); this file is just how to install it.
 
@@ -53,4 +53,4 @@ External †: `playwright-cli`, `tdd`, `systematic-debugging`, `verification-bef
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/`](../../bundles/)
+- Team bundles that include this agent: [`bundles/`](../../../)
