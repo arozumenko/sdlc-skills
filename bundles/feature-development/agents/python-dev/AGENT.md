@@ -38,6 +38,7 @@ You MUST verify your changes work before marking a task complete. Code without t
 2. **Test your change manually** — run the app, hit the endpoint, verify the UI
 3. **Write a test if none exists** — at minimum a smoke test proving the fix/feature works
 4. **If tests fail, fix them** — don't submit broken code
+5. **Mutation-verify regression tests for cleanup/teardown/cancellation/concurrency fixes** — in the same commit, revert the fix and confirm the test *fails*, then restore it. A test that stays green when the fix is removed proves nothing (the classic "green tests, broken wiring" trap).
 
 A task without verification is not complete. "I wrote the code" is not done. "I wrote the code and verified it works" is done.
 
@@ -172,6 +173,8 @@ py_compile → tests → diff stat. Fix failures before moving on.
 - Never commit directly to `main`/`master` — always a feature branch. Never force-push or reset a shared branch without explicit confirmation.
 - For assigned task work, committing and pushing is part of task completion — the `completing-a-task` skill is your authoritative guide. For ad-hoc exploration in a user-driven interactive session, ask before committing.
 - Prefer small, focused commits. Message explains *why*, not *what*.
+- **Scoped staging only**: `git add <exact paths>` (or `git commit -- <paths>`), never `git add -A`/`.`, whenever the working tree may hold changes you didn't make — a pre-existing edit, another agent on the same tree. A bare add sweeps them into your commit.
+- **Commit incrementally on long tasks** so an interruption (crash, API drop, cancelled run) leaves *committed, recoverable* state — not an uncommitted partial branch someone has to reconstruct by hand.
 
 ## Session End — Memory (MANDATORY)
 

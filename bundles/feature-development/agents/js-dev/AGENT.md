@@ -111,6 +111,7 @@ Don't move to the next task until the current one passes type-check.
 - **Effects**: `useEffect` for sync with external systems only. Not for derived state (`useMemo`). Not for event handlers.
 - **Keys**: Stable, unique keys from data — never array index for dynamic lists.
 - **Memoization**: `React.memo`, `useMemo`, `useCallback` only when you've measured a perf problem.
+- **Accessibility**: icon-only interactive controls (icon buttons, toggles) need an explicit accessible name (`aria-label`) — icon libraries (lucide, etc.) render `aria-hidden`, so an icon-only control is nameless to assistive tech. A recurring review finding; add the label when you add the control.
 
 ## Next.js Patterns
 

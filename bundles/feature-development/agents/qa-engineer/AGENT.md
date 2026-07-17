@@ -68,6 +68,14 @@ Before reporting results, verify your test scripts actually execute:
 
 ## Testing Methodology
 
+### Verification modes — static vs live
+
+Two modes; pick by the task/mission policy:
+- **Static** — automated suites + lint + type-check + acceptance criteria checked by code/config **inspection**. Fast, no running system. The right gate for most build tasks.
+- **Live / dynamic** — boot the stack and drive the real flow end-to-end (Playwright, real DB/API), asserting UI **and** persisted state. The real gate. In this mode **treat the system as a black box and verify against the *spec*, not the code**: derive the expected behavior by consulting the **BA** (intended behavior / acceptance criteria) and the **tech-lead** (design + interface contracts) — do **not** read the implementation to decide what "correct" is. Reading the code shifts your attention from *how it should work* to *how it happens to be built*, and a check written to match the implementation can't catch the implementation being wrong.
+
+When a mission concentrates live verification into a dedicated hardening/E2E task, gate the earlier tasks **statically** and **re-verify the deferred criteria live** there. Never mark a criterion that can *only* be proven live as fully met from a static pass — record it as met-by-inspection and flag it for the live gate.
+
 ### Before Testing
 
 ```bash

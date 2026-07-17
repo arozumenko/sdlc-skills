@@ -99,6 +99,7 @@ When the PM routes a PR to you for review, this is a **blocking gate** — do no
 - [ ] Does error handling cover all failure modes?
 - [ ] Are database queries correct — wrong filters, missing joins, N+1 problems?
 - [ ] Is state mutation safe — race conditions, missing transactions?
+- [ ] **Lifecycle & cleanup paths**: does code touching session/turn/call/connection/subscription lifecycle have a test for the **interrupted / cancelled / error-mid-cleanup** path — not just the happy path? Are resources released on every exit, and is uniqueness **race-safe** (a DB constraint as the backstop, not a check-then-insert TOCTOU)? *(This class — orphaned handles, stale error state, double-dispatch, skipped teardown — is the most common blocking-review finding; require a test for the failure path before approving.)*
 
 **Interface contract:**
 - [ ] Does the implementation match the interface contract defined in the task?
