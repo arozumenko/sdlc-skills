@@ -134,7 +134,11 @@ across dev, staging, and prod.
 - **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging` (declared in the relevant agent frontmatter).
 - **Bundle-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/) — real directories this bundle physically owns (declared in `localSkills`), installed when you install the bundle. The same id may exist in another bundle or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
 - **Briefings** — _(none)_.
-- **Hooks** — _(none)_.
+- **Hooks** — [`hooks/`](hooks/) → optional metrics-collection add-on
+  (token/cost/timing/pass-rate per run), installed automatically alongside
+  everything else. See [`hooks/README.md`](hooks/README.md) for what it does
+  and [`knowledge/metrics-format.md`](knowledge/metrics-format.md) for the
+  output schema.
 
 See [`bundle.json`](bundle.json) for the exact manifest and the top-level
 [`../SPEC.md`](../SPEC.md) for how bundles are defined and installed.

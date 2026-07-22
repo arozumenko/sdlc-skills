@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Registered on TWO hook events (see hooks.json):
+#
+# - SubagentStop (matcher "test-reporter") — the PRIMARY trigger. Fires once,
+#   exactly when the reporter subagent completes — i.e. once per suite,
+#   immediately, regardless of how long the surrounding interactive session
+#   keeps going afterward.
+# - SessionEnd (matcher "*") — a FALLBACK safety net for sessions that never
+#   reach a test-reporter dispatch at all (sizing-only/aborted sessions —
+#   the same edge case this script has always needed to tolerate). Fires
+#   once at true session termination. Harmless if it fires AFTER
+#   SubagentStop already cleaned up this session's state (see the
+#   `[ -f "$TRACE_FILE" ]` guard below — a no-op in that case).
+#
+# NOTE: this used to be registered on the `Stop` event alone, which fires
+# once per CLAUDE TURN — for a long autonomous multi-turn test-run-lead run,
+# that meant this script (and its unconditional cleanup below) ran many
+# times mid-suite, wiping accumulated trace data before the run finished and
+# losing the real metrics entirely (see git history / 2026-07-22 fix, round
+# 1, for the original incident writeup). Round 1 moved this to `SessionEnd`
+# alone, which fixed the data-LOSS bug but turned out to fire too rarely —
+# if the interactive session stays open across multiple suites, metrics for
+# an already-finished suite just sit pending until the whole session ends,
+# possibly much later. Round 2 (this version) adds `SubagentStop` as the
+# precise, immediate anchor, keeping `SessionEnd` only as a fallback.
+#
+# (This bundle copy doesn't plumb transcript_path through to
+# build-run-metrics.mjs at all yet — see the sibling elitea-testing/
+# qa-challenges copies for the transcript_path resolution SubagentStop needs,
+# since its own transcript_path points at the reporter's own transcript, not
+# the orchestrator's. Not applicable here until that feature gap is ported.)
+#
+# Files are scoped by session_id (2026-07-22 fix, round 3) — see
+# benchmark-session-start for why (prevents concurrent-session/test-fixture
+# collisions).
+#
+# If a TC trace exists it captures a post-snapshot and assembles the
+# final metrics JSON via build-run-metrics.mjs.
+set -euo pipefail
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+# build-run-metrics.mjs lives next to this script (bundle-installed), not at
+# <project>/scripts/ — resolve self-relatively (run-hook.cmd always sets $0
+# to the full path, so this works regardless of cwd).
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+STATE_DIR="${PROJECT_DIR}/.claude"
+
+# Cheap pre-check that needs no stdin/sid: this hook fires globally (matcher
+# "*" on SessionEnd) for every Claude Code session on the machine, not just
+# this project's benchmark runs — bail before paying for payload parsing
+# unless there's at least one candidate trace file (scoped or, for
+# back-compat, legacy unscoped) to actually process.
+compgen -G "${STATE_DIR}/benchmark-tc-trace*.jsonl" > /dev/null 2>&1 || exit 0
+
+# Read hook payload for session_id (field may be absent — that's fine).
+payload="$(cat 2>/dev/null || true)"
+sid="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.session_id||p.sessionId||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+sid="${sid//[^A-Za-z0-9._-]/}"
+SID_SUFFIX="${sid:+-$sid}"
+
+STATE_FILE="${STATE_DIR}/benchmark-state${SID_SUFFIX}.json"
+TRACE_FILE="${STATE_DIR}/benchmark-tc-trace${SID_SUFFIX}.jsonl"
+PRE_FILE="${STATE_DIR}/benchmark-pre${SID_SUFFIX}.json"
+POST_FILE="${STATE_DIR}/benchmark-post${SID_SUFFIX}.json"
+SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
+SESSION_STARTED_AT_FILE="${STATE_DIR}/benchmark-session-started-at${SID_SUFFIX}.txt"
+
+# Nothing to do if THIS session's (scoped) trace doesn't exist — e.g. the
+# pre-check above matched a *different* session's legacy/scoped trace file.
+[ -f "$TRACE_FILE" ] || exit 0
+
+# Read state written by benchmark-preflight / benchmark-tc.
+first_dispatch_at=""
+pre_file="$PRE_FILE"
+if [ -f "$STATE_FILE" ]; then
+  first_dispatch_at="$(node -e "
+    try{const s=JSON.parse(require('fs').readFileSync('${STATE_FILE}','utf8'));
+    console.log(s.first_dispatch_at||s.started_at||'');}catch{}process.exit(0);" 2>/dev/null || true)"
+  pre_file_raw="$(node -e "
+    try{const s=JSON.parse(require('fs').readFileSync('${STATE_FILE}','utf8'));
+    console.log(s.pre_file||'');}catch{}process.exit(0);" 2>/dev/null || true)"
+  [ -n "$pre_file_raw" ] && pre_file="$pre_file_raw"
+fi
+
+# True session start written by benchmark-session-start (SessionStart hook).
+session_started_at="$(cat "$SESSION_STARTED_AT_FILE" 2>/dev/null || true)"
+
+# Capture post-run token snapshot.
+ccusage session --json > "$POST_FILE" 2>/dev/null \
+  || printf '{}' > "$POST_FILE"
+
+# Assemble metrics (errors are non-fatal — hook must not block Claude).
+node "${HOOK_DIR}/build-run-metrics.mjs" \
+  "$pre_file" \
+  "$first_dispatch_at" \
+  "$TRACE_FILE" \
+  "${sid:-}" \
+  "$POST_FILE" \
+  "${session_started_at:-}" \
+  2>/dev/null || true
+
+# Clean up session state so the next run starts fresh.
+rm -f "$STATE_FILE" "$TRACE_FILE" "$PRE_FILE" "$POST_FILE" "$SESSION_STARTED_AT_FILE" "$SESSION_PRE_FILE"

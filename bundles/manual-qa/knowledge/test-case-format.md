@@ -42,6 +42,7 @@ module: authentication                       # feature area
 size: M                                      # S | M | L — assigned by test-sizer (optional)
 requirements: [REQ-001, REQ-002]             # traceability (omit if no req IDs)
 tags: [smoke, login, happy-path]             # free-form, used for filtering
+external_id: JIRA-4821                       # original id from another system (optional; set by test-run-lead when normalizing)
 ---
 
 # TC-001: Login with Valid Credentials
@@ -83,7 +84,8 @@ User is authenticated and on the dashboard. No error messages visible. URL is `{
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Unique identifier. Never reuse or reassign. |
+| `id` | Yes | Unique identifier, canonical `TC-NNN` form. Never reuse or reassign. `test-run-lead` normalizes this against the filename before each run — see its `RULES.md`. |
+| `external_id` | No | Original id from another system (e.g. a Jira key), when this case was imported with a non-canonical id. Set automatically by `test-run-lead` when it normalizes `id:` — never overwritten once set, so traceability to the source system survives. |
 | `title` | Yes | Concise name. Start with a verb: "Login with...", "Submit form when...", "Verify that..." |
 | `priority` | Yes | `critical` = blocks release if fails; `high` = major feature; `medium` = secondary; `low` = cosmetic |
 | `type` | Yes | `smoke` = quick sanity; `functional` = feature logic; `regression` = verifying no breakage; `integration` = cross-system; `exploratory` = freeform |

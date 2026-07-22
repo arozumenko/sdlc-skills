@@ -27,6 +27,10 @@ bundles/mobile-qa/QUICKSTART-LOCAL.md
 reports/
 
 # Test cases and suite plans — project-specific, not distributed with the repo
-tasks/
+# tasks/baseline-web/ is negated below (baseline TCs are distributed with the repo)
+tasks/*
+!tasks/baseline-web/
 # Local-only brainstorming/spec/plan scaffolding (not distributed)
 docs/superpowers/
+.playwright-mcp/
+.playwright-mcp.config.json

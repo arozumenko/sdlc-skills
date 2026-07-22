@@ -12,5 +12,6 @@
   },
   "seed": { "knowledge": ".agents/manual-qa/knowledge" },
   "instructions": "instructions.md",
+  "hooks": "hooks/hooks.json",
   "targets": ["claude"]
 }

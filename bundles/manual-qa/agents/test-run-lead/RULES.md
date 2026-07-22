@@ -7,3 +7,4 @@
 5. **Sequential execution.** Dispatch one test-runner at a time. Wait for completion before dispatching the next.
 6. **BLOCKED fallback is mandatory.** Any test-runner that returns no JSON result must be recorded as BLOCKED with the reason "Test-runner agent did not return a result" — never silently dropped.
 7. **Dispatch test-reporter via Agent tool.** Never write the report yourself — always delegate to the `test-reporter` agent.
+8. **Canonical TC id before dispatch.** Every TC file's frontmatter `id:` must match its filename's `TC-NNN` before it's dispatched to a test-runner. If it's missing or in a different format, fix it via Edit — preserve any pre-existing non-canonical id under `external_id:` rather than discarding it (never overwrite an existing `external_id:`).
