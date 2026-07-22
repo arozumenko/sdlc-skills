@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# SessionStart hook — records the true session-start timestamp AND a ccusage
+# pre-snapshot taken at that same true start, so tokens spent before any
+# sub-agent dispatch (e.g. test-run-lead's own Glob / id-normalization /
+# sizing-check / Run-ID work — or any orchestration at all when the session
+# is launched directly as `claude --agent=test-run-lead`) are included in
+# the session's token/cost delta, not just its duration.
+# Writes only on the first SessionStart of a session (no-op on clear/compact
+# if the timestamp file already exists, so compaction doesn't reset the
+# clock or re-baseline the token snapshot mid-session).
+#
+# Files are scoped by session_id (2026-07-22 fix) — prevents two concurrent
+# sessions (or a hand-run test against these same paths) from corrupting
+# each other's state. `/compact` and `/resume` keep the SAME session_id
+# (confirmed via Claude Code's docs), so the fresh-session guard below still
+# correctly no-ops across those. `/clear` gets a genuinely NEW session_id
+# (Claude Code resets cost-tracking to $0 on `/clear`) — so post-/clear now
+# correctly re-baselines too, matching Claude Code's own semantics (today,
+# with fixed filenames, /clear did NOT reset the baseline — a deliberate
+# behavior improvement, confirmed with Olha).
+set -euo pipefail
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+STATE_DIR="${PROJECT_DIR}/.claude"
+
+payload="$(cat 2>/dev/null || true)"
+sid="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.session_id||p.sessionId||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+sid="${sid//[^A-Za-z0-9._-]/}"   # defense-in-depth: sid becomes a filename fragment
+SID_SUFFIX="${sid:+-$sid}"       # empty sid -> empty suffix -> today's exact filenames
+
+TS_FILE="${STATE_DIR}/benchmark-session-started-at${SID_SUFFIX}.txt"
+SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
+
+mkdir -p "$STATE_DIR"
+if [ ! -f "$TS_FILE" ]; then
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$TS_FILE" 2>/dev/null || true
+  ccusage session --json > "$SESSION_PRE_FILE" 2>/dev/null \
+    || printf '{}' > "$SESSION_PRE_FILE"
+
+  # Opportunistic cleanup: remove session-scoped ephemeral files older than 7
+  # days — left behind by sessions that crashed/were force-killed before ever
+  # reaching SubagentStop/SessionEnd (which normally cleans these up). Only
+  # runs on a genuine fresh-session firing, not on every SessionStart re-fire.
+  find "$STATE_DIR" -maxdepth 1 -type f \
+    \( -name 'benchmark-state-*.json' -o -name 'benchmark-tc-trace-*.jsonl' \
+       -o -name 'benchmark-pre-*.json' -o -name 'benchmark-post-*.json' \
+       -o -name 'benchmark-session-pre-*.json' -o -name 'benchmark-session-started-at-*.txt' \) \
+    -mtime +7 -delete 2>/dev/null || true
+fi

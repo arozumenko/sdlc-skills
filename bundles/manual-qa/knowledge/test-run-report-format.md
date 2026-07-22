@@ -82,6 +82,28 @@ date: 2026-05-18
 
 ---
 
+## Optional Tokenomics-Export Frontmatter Keys
+
+Not written by `test-reporter` — add these by hand, after the fact, only
+when preparing a `build-tokenomics-report.mjs` export (see
+`../hooks/templates/tokenomics-readme.template.md`, copied once per project
+to `reports/tokenomics/README.md`). Every one of these is a human judgment
+call that no hook can measure; the export script defaults-and-flags
+whatever is missing rather than guessing.
+
+```yaml
+work_item_ref: JIRA-1234          # ticket/link for this suite's work-item, if any
+work_item_brief: "1-2 sentence summary of what this run covers"
+maturity: pilot                   # production | pilot | experimental
+effort_days: 2                    # person-days, no AI — a human estimate, never guessed
+env_setup: multi-fixture          # trivial | single-fixture | multi-fixture | external-deps | full-env
+scenario_complexity: M            # XS-XL override — otherwise derived from the Size Distribution table
+scenarios_authored: 8             # override if this run reruns a subset of a larger authored set
+scenarios_automated: 0            # override if any TCs were coded into a scripted framework
+```
+
+---
+
 ## Section Reference
 
 | Section | Required | Description |

@@ -1,0 +1,62 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/manual-qa/run-hook.cmd\" benchmark-session-start",
+          "async": true
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "Agent",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/manual-qa/run-hook.cmd\" benchmark-preflight",
+          "async": true
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Agent",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/manual-qa/run-hook.cmd\" benchmark-tc",
+          "async": true
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/manual-qa/run-hook.cmd\" benchmark-stop",
+          "async": true
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "matcher": "test-reporter",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/manual-qa/run-hook.cmd\" benchmark-stop",
+          "async": true
+        }
+      ]
+    }
+  ]
+}

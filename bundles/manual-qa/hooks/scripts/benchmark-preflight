@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# PreToolUse[Agent] hook — fires before every sub-agent call.
+# On the first call of a session: captures first_dispatch_at timestamp,
+# resolves a ccusage pre-snapshot, then creates the benchmark state file.
+# Subsequent calls are no-ops (state file already exists).
+#
+# Files are scoped by session_id (2026-07-22 fix) — see benchmark-session-start
+# for why (prevents concurrent-session/test-fixture collisions).
+set -euo pipefail
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+STATE_DIR="${PROJECT_DIR}/.claude"
+
+payload="$(cat 2>/dev/null || true)"
+sid="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.session_id||p.sessionId||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+sid="${sid//[^A-Za-z0-9._-]/}"
+SID_SUFFIX="${sid:+-$sid}"
+
+STATE_FILE="${STATE_DIR}/benchmark-state${SID_SUFFIX}.json"
+TRACE_FILE="${STATE_DIR}/benchmark-tc-trace${SID_SUFFIX}.jsonl"
+PRE_FILE="${STATE_DIR}/benchmark-pre${SID_SUFFIX}.json"
+SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
+
+# Only act on the first dispatch of this session.
+[ -f "$STATE_FILE" ] && exit 0
+
+mkdir -p "$STATE_DIR"
+: > "$TRACE_FILE"
+first_dispatch_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Prefer the snapshot benchmark-session-start already took at the session's
+# TRUE start — it covers any orchestration tokens spent before this first
+# dispatch (test-run-lead's own Glob / id-normalization / sizing-check /
+# Run-ID work). Fall back to capturing our own snapshot now (scoped only
+# from this dispatch onward, matching the old behavior) if session-start's
+# snapshot isn't there — e.g. that hook wasn't wired, or this project was
+# updated mid-session and only got the new benchmark-preflight.
+if [ -f "$SESSION_PRE_FILE" ]; then
+  cp "$SESSION_PRE_FILE" "$PRE_FILE"
+else
+  ccusage session --json > "$PRE_FILE" 2>/dev/null \
+    || printf '{}' > "$PRE_FILE"
+fi
+
+printf '{"first_dispatch_at":"%s","pre_file":"%s","trace_file":"%s"}\n' \
+  "$first_dispatch_at" "$PRE_FILE" "$TRACE_FILE" > "$STATE_FILE"

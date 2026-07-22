@@ -32,6 +32,27 @@ Use `Glob` to find all `TC-*.md` files in the provided suite folder.
     `test-author` reads the app profile and asks only for what it cannot infer.
   - **There is nothing to author from** → stop and ask the user for either existing test cases or descriptions to author from. Do not invent cases out of thin air.
 
+## Step 1b — Normalize Test Case IDs (when needed)
+
+Your own result-collection in Step 4 (and the metrics hooks, if installed)
+both key everything off `test-runner` echoing back a `tc_id` in canonical
+`TC-NNN` form. The filename is the source of truth for that id — a file
+found at `TC-NNN_<slug>.md` has canonical id `TC-NNN`. For each TC file
+Globbed in Step 1, check its frontmatter `id:` against the id implied by its
+own filename:
+
+- **Already matches** — leave it as-is.
+- **Missing** — set `id: TC-NNN` (from the filename) via Edit.
+- **Present but different** — e.g. imported from another system (`QA-4821`,
+  `smoke_01`) or just mismatched from the filename. This is a mapping
+  situation, not an error: **add** `external_id: <the original value>` to the
+  frontmatter (only if `external_id:` isn't already set — never overwrite an
+  existing one) to preserve traceability to the source system, then set
+  `id:` to the canonical `TC-NNN`.
+
+This is mechanical — do it directly via Edit, no sub-agent dispatch needed.
+Only touch files that are actually inconsistent; skip the rest.
+
 ## Step 2 — Size Unsized Cases (when needed)
 
 Read each TC file's frontmatter and check for a `size:` value.
