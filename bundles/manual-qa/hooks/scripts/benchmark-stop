@@ -24,11 +24,51 @@
 # possibly much later. Round 2 (this version) adds `SubagentStop` as the
 # precise, immediate anchor, keeping `SessionEnd` only as a fallback.
 #
-# (This bundle copy doesn't plumb transcript_path through to
-# build-run-metrics.mjs at all yet — see the sibling elitea-testing/
-# qa-challenges copies for the transcript_path resolution SubagentStop needs,
-# since its own transcript_path points at the reporter's own transcript, not
-# the orchestrator's. Not applicable here until that feature gap is ported.)
+# `SubagentStop`'s own `transcript_path` field points at the dispatched
+# subagent's OWN (small) transcript — e.g. test-reporter's — not the
+# orchestrator's main thread. Resolved below (ported 2026-07-31 from the
+# sibling elitea-testing/qa-challenges copies) so resolve-subagent-traces.mjs
+# (also ported this round — see its own header) has the right transcript to
+# read. NOTE: this is a narrower port than those two siblings' own
+# transcript_path handling — this bundle copy's build-run-metrics.mjs still
+# does NOT accept/consume a transcript_path argument at all (no `turns`/
+# `countTurns()` here — that's a separate, previously-deferred feature gap,
+# out of scope for this change) — transcript_path is resolved here ONLY for
+# resolve-subagent-traces.mjs's sake, not passed through to
+# build-run-metrics.mjs's own invocation below.
+#
+# PREMATURE-FIRING GUARD (ported 2026-07-31 from qa-project, where this was
+# found and fixed across three rounds — full incident writeup kept there,
+# summarized here): the `matcher: "test-reporter"` filter configured in
+# hooks.json for this SubagentStop binding does NOT reliably restrict
+# firings to test-reporter dispatches on newer Claude Code builds — observed
+# firing repeatedly per session, on every orchestrator pause while a
+# dispatched task was still running in the background, not on actual
+# sub-agent completions. This is a Claude-Code-runtime-level behavior, not a
+# project-specific bug, so it applies to any project installing this bundle
+# too, once re-run under the same Claude Code version.
+#
+# Fix: re-derive the real subagent identity from the payload's own
+# `agent_type` field rather than trusting the matcher. Ground-truth real-run
+# evidence (qa-project, 2026-07-30): this field is always PRESENT on
+# affected builds, but `""` (empty string) on every premature firing and the
+# real dispatched name ("test-reporter") only on the one genuine completion
+# — a naive `if (p[k])` truthy check treats `""` as "not found" and fails
+# open, so the empty-string case must be handled explicitly ("not-done", not
+# "unknown"). Also tried gating on the payload's `background_tasks:
+# [{id, status, ...}]` list (any `status: "running"` entry meaning "not
+# really done") — DISPROVEN on the same real log: the ONE genuine
+# test-reporter completion still carried background_tasks showing ITS OWN
+# task as `status: "running"` (a snapshot-ordering quirk), which would have
+# false-positive-skipped the one firing actually wanted. Not used here
+# either, for the same reason. A secondary, field-independent signal (elapsed
+# wall-clock time since the session's most-recent Agent dispatch) is kept as
+# a fallback net for payload shapes with no agent-identity field at all.
+#
+# DEBUG LOGGING: every SubagentStop firing's raw payload is appended to
+# benchmark-stop-debug.log (gitignored scratch, not part of any commit) —
+# this is what confirmed the real field/value behavior above; kept on so any
+# future payload-shape change surfaces the same way.
 #
 # Files are scoped by session_id (2026-07-22 fix, round 3) — see
 # benchmark-session-start for why (prevents concurrent-session/test-fixture
@@ -52,14 +92,28 @@ STATE_DIR="${PROJECT_DIR}/.claude"
 # back-compat, legacy unscoped) to actually process.
 compgen -G "${STATE_DIR}/benchmark-tc-trace*.jsonl" > /dev/null 2>&1 || exit 0
 
-# Read hook payload for session_id (field may be absent — that's fine).
+# Read hook payload for hook_event_name/session_id/transcript_path (fields
+# may be absent — that's fine, downstream treats all as optional).
 payload="$(cat 2>/dev/null || true)"
+hook_event_name="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.hook_event_name||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
 sid="$(printf '%s' "$payload" | node -e "
   const c=[];process.stdin.on('data',d=>c.push(d));
   process.stdin.on('end',()=>{
     try{const p=JSON.parse(Buffer.concat(c).toString());
     console.log(p.session_id||p.sessionId||'');}catch{}process.exit(0);
   });" 2>/dev/null || true)"
+transcript_path="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.transcript_path||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+
 sid="${sid//[^A-Za-z0-9._-]/}"
 SID_SUFFIX="${sid:+-$sid}"
 
@@ -69,10 +123,99 @@ PRE_FILE="${STATE_DIR}/benchmark-pre${SID_SUFFIX}.json"
 POST_FILE="${STATE_DIR}/benchmark-post${SID_SUFFIX}.json"
 SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
 SESSION_STARTED_AT_FILE="${STATE_DIR}/benchmark-session-started-at${SID_SUFFIX}.txt"
+LAST_DISPATCH_FILE="${STATE_DIR}/benchmark-last-dispatch-at${SID_SUFFIX}.txt"
+DEBUG_LOG="${STATE_DIR}/benchmark-stop-debug.log"
+
+# DEBUG LOGGING — see header note. Best-effort, never fatal.
+{
+  printf '[%s] hook_event_name=%s sid=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${hook_event_name:-<empty>}" "${sid:-<empty>}"
+  printf '  raw payload: %s\n' "$payload"
+} >> "$DEBUG_LOG" 2>/dev/null || true
+
+# PREMATURE-FIRING GUARDS — see header note. Both guards are SubagentStop-
+# only; SessionEnd (matcher "*") always proceeds unfiltered, same as before.
+if [ "$hook_event_name" = "SubagentStop" ]; then
+  # Primary: agent-identity re-check. Three-way result: "not-done" (positive
+  # premature signal — field present but empty) / "mismatch" (some OTHER
+  # agent's real completion) / "unknown" (field(s) absent entirely — fail
+  # open, same safety net as before). Deliberately does NOT look at
+  # background_tasks (tried, disproven — see header note).
+  guard_verdict="$(printf '%s' "$payload" | node -e "
+    const c=[];process.stdin.on('data',d=>c.push(d));
+    process.stdin.on('end',()=>{
+      try{
+        const p=JSON.parse(Buffer.concat(c).toString());
+        const keys=['agent_type','subagent_type','agentType','agent_name','agentName','name'];
+        for (const k of keys) {
+          if (k in p) {
+            const v = p[k];
+            if (v === '') { console.log('not-done'); process.exit(0); }
+            if (v) { console.log(v === 'test-reporter' ? 'match' : 'mismatch:' + v); process.exit(0); }
+          }
+        }
+        console.log('unknown');
+      }catch{ console.log('unknown'); }
+      process.exit(0);
+    });" 2>/dev/null || echo unknown)"
+  case "$guard_verdict" in
+    not-done)
+      printf '  [guard] SKIP (agent_type present but empty -- not yet a real completion)\n' >> "$DEBUG_LOG" 2>/dev/null || true
+      exit 0
+      ;;
+    mismatch:*)
+      printf '  [guard] SKIP (agent-type mismatch: %s)\n' "${guard_verdict#mismatch:}" >> "$DEBUG_LOG" 2>/dev/null || true
+      exit 0
+      ;;
+    match)
+      : # genuine test-reporter completion — proceed
+      ;;
+    unknown)
+      : # no usable signal on this payload shape — fall through to secondary net
+      ;;
+  esac
+
+  # Secondary net: elapsed-time re-check — only reached when the above found
+  # no usable field at all ("unknown"). Real-data-derived threshold from
+  # qa-project (2026-07-30): every premature firing landed 8-12s after the
+  # most recent dispatch, every genuine completion took 40s+.
+  if [ "$guard_verdict" = "unknown" ] && [ -f "$LAST_DISPATCH_FILE" ]; then
+    last_dispatch_at="$(cat "$LAST_DISPATCH_FILE" 2>/dev/null || true)"
+    if [ -n "$last_dispatch_at" ]; then
+      now_epoch="$(date -u +%s)"
+      last_epoch="$(date -u -d "$last_dispatch_at" +%s 2>/dev/null || true)"
+      if [ -n "$last_epoch" ]; then
+        elapsed_ms=$(( (now_epoch - last_epoch) * 1000 ))
+        PREMATURE_FIRING_THRESHOLD_MS=20000
+        if [ "$elapsed_ms" -lt "$PREMATURE_FIRING_THRESHOLD_MS" ]; then
+          printf '  [guard] SKIP (elapsed %sms since last dispatch, threshold %sms)\n' "$elapsed_ms" "$PREMATURE_FIRING_THRESHOLD_MS" >> "$DEBUG_LOG" 2>/dev/null || true
+          exit 0
+        fi
+      fi
+    fi
+  fi
+fi
+
+printf '  [guard] PROCEED (build-run-metrics will run)\n' >> "$DEBUG_LOG" 2>/dev/null || true
 
 # Nothing to do if THIS session's (scoped) trace doesn't exist — e.g. the
 # pre-check above matched a *different* session's legacy/scoped trace file.
 [ -f "$TRACE_FILE" ] || exit 0
+
+# SubagentStop's own transcript_path is the REPORTER's own (small) transcript
+# — useless for resolve-subagent-traces.mjs, which needs the ORCHESTRATOR's
+# main thread (that's where Claude Code delivers <task-notification> usage
+# data for async Agent dispatches — see that script's header). Claude Code
+# names a session's MAIN transcript "<session_id>.jsonl" directly under
+# ~/.claude/projects/<project-slug>/, while subagent transcripts live one
+# level deeper under "<session_id>/subagents/agent-*.jsonl" — so find the
+# parent by searching for a file named after the session id (a UUID, unique
+# per machine) rather than re-deriving Claude Code's own project-slug
+# algorithm. Falls back to empty (same as today when transcript_path is
+# simply absent) if nothing matches — never fatal.
+if [ "$hook_event_name" = "SubagentStop" ] && [ -n "${sid:-}" ]; then
+  parent_transcript="$(find "${HOME:-$USERPROFILE}/.claude/projects" -maxdepth 2 -name "${sid}.jsonl" 2>/dev/null | head -n1 || true)"
+  [ -n "$parent_transcript" ] && transcript_path="$parent_transcript"
+fi
 
 # Read state written by benchmark-preflight / benchmark-tc.
 first_dispatch_at=""
@@ -94,7 +237,22 @@ session_started_at="$(cat "$SESSION_STARTED_AT_FILE" 2>/dev/null || true)"
 ccusage session --json > "$POST_FILE" 2>/dev/null \
   || printf '{}' > "$POST_FILE"
 
+# Backfill/rebuild the tc-trace from the main transcript's own
+# <task-notification> messages (see resolve-subagent-traces.mjs header for
+# the full incident writeup — benchmark-tc-hook.mjs's real-time PostToolUse
+# capture doesn't work under async Agent dispatch, but each dispatch's real
+# usage numbers are still reliably delivered to the orchestrator's own
+# transcript once the sub-agent finishes, regardless of dispatch model).
+# No-op (leaves TRACE_FILE as-is) if it can't find anything — never fatal,
+# never blocks the fallback SessionEnd path.
+if [ -n "${transcript_path:-}" ]; then
+  node "${HOOK_DIR}/resolve-subagent-traces.mjs" "$transcript_path" "$TRACE_FILE" 2>/dev/null || true
+fi
+
 # Assemble metrics (errors are non-fatal — hook must not block Claude).
+# NOTE: transcript_path is deliberately NOT passed here — see header note,
+# this bundle copy's build-run-metrics.mjs doesn't accept/consume it (no
+# turns/countTurns() here yet, a separate deferred feature gap).
 node "${HOOK_DIR}/build-run-metrics.mjs" \
   "$pre_file" \
   "$first_dispatch_at" \
@@ -105,4 +263,4 @@ node "${HOOK_DIR}/build-run-metrics.mjs" \
   2>/dev/null || true
 
 # Clean up session state so the next run starts fresh.
-rm -f "$STATE_FILE" "$TRACE_FILE" "$PRE_FILE" "$POST_FILE" "$SESSION_STARTED_AT_FILE" "$SESSION_PRE_FILE"
+rm -f "$STATE_FILE" "$TRACE_FILE" "$PRE_FILE" "$POST_FILE" "$SESSION_STARTED_AT_FILE" "$SESSION_PRE_FILE" "$LAST_DISPATCH_FILE"
