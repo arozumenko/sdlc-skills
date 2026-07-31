@@ -26,16 +26,21 @@
 #
 # `SubagentStop`'s own `transcript_path` field points at the dispatched
 # subagent's OWN (small) transcript — e.g. test-reporter's — not the
-# orchestrator's main thread. Resolved below (ported 2026-07-31 from the
-# sibling elitea-testing/qa-challenges copies) so resolve-subagent-traces.mjs
-# (also ported this round — see its own header) has the right transcript to
-# read. NOTE: this is a narrower port than those two siblings' own
-# transcript_path handling — this bundle copy's build-run-metrics.mjs still
-# does NOT accept/consume a transcript_path argument at all (no `turns`/
-# `countTurns()` here — that's a separate, previously-deferred feature gap,
-# out of scope for this change) — transcript_path is resolved here ONLY for
-# resolve-subagent-traces.mjs's sake, not passed through to
-# build-run-metrics.mjs's own invocation below.
+# orchestrator's main thread, which is what `countTurns()` in
+# build-run-metrics.mjs actually wants to count test-run-lead's own turns.
+# Resolved below (ported 2026-07-31, together with build-run-metrics.mjs's
+# own turns/subagent_dispatches/orchestrator_cost_pct/tokens_by_model/
+# cache_read_share_pct/models_used feature set — this bundle copy used to
+# carry a leaner, older subset while knowledge/metrics-format.md already
+# documented the fuller schema; this closes that doc/code gap and is also a
+# prerequisite for resolve-subagent-traces.mjs, ported the same round — see
+# its own header) — same technique the sibling elitea-testing/qa-challenges
+# copies already used: Claude Code names a session's MAIN transcript
+# "<session_id>.jsonl" directly under ~/.claude/projects/<project-slug>/,
+# while subagent transcripts live one level deeper under
+# "<session_id>/subagents/agent-*.jsonl" — so find the parent by searching
+# for a file named after the session id (a UUID, unique per machine) rather
+# than re-deriving Claude Code's own project-slug algorithm.
 #
 # PREMATURE-FIRING GUARD (ported 2026-07-31 from qa-project, where this was
 # found and fixed across three rounds — full incident writeup kept there,
@@ -250,9 +255,6 @@ if [ -n "${transcript_path:-}" ]; then
 fi
 
 # Assemble metrics (errors are non-fatal — hook must not block Claude).
-# NOTE: transcript_path is deliberately NOT passed here — see header note,
-# this bundle copy's build-run-metrics.mjs doesn't accept/consume it (no
-# turns/countTurns() here yet, a separate deferred feature gap).
 node "${HOOK_DIR}/build-run-metrics.mjs" \
   "$pre_file" \
   "$first_dispatch_at" \
@@ -260,6 +262,7 @@ node "${HOOK_DIR}/build-run-metrics.mjs" \
   "${sid:-}" \
   "$POST_FILE" \
   "${session_started_at:-}" \
+  "${transcript_path:-}" \
   2>/dev/null || true
 
 # Clean up session state so the next run starts fresh.

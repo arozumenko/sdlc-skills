@@ -5,7 +5,7 @@
 //   3. Latest RUN-*.md report in reports/ (for run_id, suite, result data)
 //
 // Usage (called by benchmark-stop hook):
-//   node build-run-metrics.mjs <pre-file> <first_dispatch_at> <tc-trace> <sid> <post-file> [session_started_at]
+//   node build-run-metrics.mjs <pre-file> <first_dispatch_at> <tc-trace> <sid> <post-file> [session_started_at] [transcript_path]
 //
 // Writes: reports/metrics/RUN-YYYY-MM-DD-NNN.json
 //         Appends ## Timing Breakdown / ## ccusage Session Delta sections to
@@ -23,6 +23,17 @@
 //                               if other sessions may have run concurrently.
 //   "subagents_only"         — no ccusage pre/post data at all; only sub-agent
 //                               (tc-trace) token counts are available.
+//
+// NOTE: kept in sync by hand with the sibling copies at elitea-testing/scripts/
+// and qa-challenges/scripts/ — same logic; only PROJECT_DIR derivation differs
+// below, since this copy is installed to .claude/hooks/manual-qa/ by the
+// bundle installer instead of staying at <project>/scripts/. Full feature
+// parity (turns/subagent_dispatches/orchestrator_cost_pct/tokens_by_model/
+// cache_read_share_pct/scopedModelsUsed/models_used) ported into this bundle
+// copy 2026-07-31 — previously a leaner, older subset lived here (no
+// countTurns(), no per-model/per-agent breakdown) while
+// knowledge/metrics-format.md already documented the fuller schema; this
+// port closes that doc/code gap.
 
 import { readFileSync, writeFileSync, appendFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -33,7 +44,7 @@ import { join } from 'path';
 // not <project>/scripts/.
 const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
-const [,, preFile, firstDispatchAt, tcTraceFile, sid, postFile, sessionStartedAt] = process.argv;
+const [,, preFile, firstDispatchAt, tcTraceFile, sid, postFile, sessionStartedAt, transcriptPath] = process.argv;
 
 // --- Read inputs ---
 
@@ -44,6 +55,29 @@ function readJsonSafe(path) {
 function readJsonFromFd(path) {
   // path may be a /dev/fd/N process substitution on bash, or a real file path
   return readJsonSafe(path);
+}
+
+// Counts model exchanges ("turns", per the tokenomics-dataset glossary: one
+// request<->response exchange) from the Claude Code transcript JSONL that
+// the Stop hook payload points to via `transcript_path`. Nothing else in
+// this pipeline counts turns today — every other session/ccusage source is
+// silent on it. Missing/unreadable transcript -> null, never fatal (hooks
+// must not block Claude).
+function countTurns(path) {
+  if (!path || !existsSync(path)) return null;
+  try {
+    const lines = readFileSync(path, 'utf8').trim().split('\n').filter(Boolean);
+    let turns = 0;
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'assistant') turns++;
+      } catch { /* skip malformed transcript lines */ }
+    }
+    return turns || null;
+  } catch {
+    return null;
+  }
 }
 
 const preCcusage = readJsonSafe(preFile);
@@ -92,19 +126,11 @@ function modelPricingFamily(modelId) {
 }
 
 // Last-known-good literal model ids — used ONLY when ccusage gives us
-// nothing at all to resolve a real id from (no scoped session match). These
-// WILL go stale the next time Anthropic ships new default models — same as
-// every other hand-maintained constant in this file (see header: kept in
-// sync by hand across repos). Update by hand when that happens; nothing
-// here is self-updating.
-//
-// NOTE: this bundle copy predates the elitea-testing/qa-challenges sibling
-// scripts' `turns` / `subagent_dispatches` / `orchestrator_cost_pct` /
-// `tokens_by_model` / `cache_read_share_pct` instrumentation (no
-// scopedModelsUsed here either) — that feature gap is a separate,
-// larger porting task, not fixed by this change. Only the model-key
-// pricing-lookup fix below (this table + modelPricingFamily) was ported
-// here, matching what actually exists in this file today.
+// nothing at all to resolve a real id from (no scoped session match; see
+// scopedModelsUsed below). These WILL go stale the next time Anthropic
+// ships new default models — same as every other hand-maintained constant
+// in this file (see header: kept in sync by hand across repos). Update by
+// hand when that happens; nothing here is self-updating.
 const FALLBACK_MAIN_AGENT_MODEL_ID = 'claude-sonnet-4-5-20250929';
 const FALLBACK_SUPPORT_AGENT_MODEL_ID = 'claude-haiku-4-5-20251001';
 
@@ -178,7 +204,8 @@ const session = {};
 let tokensCoverage = 'subagents_only';
 let ccusageBlock = null;
 let costBlock = null;   // populated here for the scoped path; unscoped path fills it in later, once `model` is resolved
-let scopedModel = null; // model(s) ccusage says actually ran this session, if we got a scoped match
+let scopedModel = null; // model(s) ccusage says actually ran this session, if we got a scoped match (joined string, back-compat)
+let scopedModelsUsed = null; // same, as an actual array (tokenomics-dataset `models_used`)
 
 const preHasData = Object.keys(preCcusage).length > 0 && (preCcusage.session ?? preCcusage.daily);
 const postHasData = Object.keys(postCcusage).length > 0 && (postCcusage.session ?? postCcusage.daily);
@@ -225,7 +252,10 @@ if (preHasData && postHasData) {
   if (scoped) {
     // Real model(s) used, straight from ccusage — may be more than one if
     // the session mixed models (e.g. a Haiku sub-agent alongside Sonnet).
-    if (postEntry.modelsUsed?.length) scopedModel = postEntry.modelsUsed.join('+');
+    if (postEntry.modelsUsed?.length) {
+      scopedModel = postEntry.modelsUsed.join('+');
+      scopedModelsUsed = postEntry.modelsUsed;
+    }
 
     // Cost from ccusage's own already-priced per-model breakdown — correct
     // even for mixed-model sessions or offline cached pricing, so we don't
@@ -262,6 +292,7 @@ session.pre_flight_duration_ms = (sessionStartMs && firstDispatchMs)
   : null;
 session.total_session_duration_ms = sessionStartMs ? endMs - sessionStartMs : null;
 session.total_tool_uses = tcTraces.reduce((sum, t) => sum + (t.tool_uses ?? 0), 0) || null;
+session.turns = countTurns(transcriptPath);
 
 // Support-agent aggregates (reporter, etc.)
 const supportTokens = supportTraces.reduce((s, t) => s + (t.total_tokens ?? 0), 0);
@@ -271,10 +302,25 @@ session.support_agent_tokens = supportTokens || null;
 session.support_agent_tool_uses = supportToolUses || null;
 session.support_agent_duration_ms = supportDurationMs || null;
 
+// Count of subagent/sub-task dispatches this session (tokenomics-dataset
+// field: `subagent_dispatches`) — every Agent-tool call this session made,
+// TC runners plus support agents (reporter, etc.) alike. Already implicit
+// in the trace file; just never surfaced as its own field before.
+session.subagent_dispatches = tcTraces.length + supportTraces.length;
+
 // Orchestrator overhead = total minus TC runners minus support agents
 const tcTokens = tcTraces.reduce((s, t) => s + (t.total_tokens ?? 0), 0);
 session.orchestrator_tokens = session.total_tokens != null
   ? Math.max(0, session.total_tokens - tcTokens - supportTokens)
+  : null;
+
+// Token-based proxy for the tokenomics-dataset field `orchestrator_cost_pct`
+// (share of cost on the main thread vs subagents). We don't have a true
+// per-dispatch cost split, so this approximates via token share instead —
+// close enough here since the orchestrator and TC-runner subagents run the
+// same model (sonnet); documented as a proxy, not a real cost split.
+session.orchestrator_cost_pct = (session.orchestrator_tokens != null && session.total_tokens)
+  ? Math.round((session.orchestrator_tokens / session.total_tokens) * 1000) / 10
   : null;
 
 const tcDurationMs = tcTraces.reduce((s, t) => s + (t.duration_ms ?? 0), 0);
@@ -369,6 +415,102 @@ if (session.orchestrator_tokens != null) {
 }
 session.tokens_by_agent = Object.keys(tokensByAgent).length ? tokensByAgent : null;
 
+// --- Per-model token breakdown (tokenomics-dataset `tokens_by_model` /
+// `cache_read_share_pct`) ---
+//
+// This system's agents are not single-model: test-reporter runs on haiku,
+// every other manual-qa agent (test-run-lead, test-runner, test-sizer,
+// test-author, app-profiler) runs on sonnet — see each agent's AGENT.md
+// frontmatter `model:` field. benchmark-tc-hook.mjs already tags every
+// dispatch's trace line with role: 'test-runner' | 'support', and 'support'
+// IS the haiku reporter, so we regroup the trace's own per-type token
+// counts (already recorded per dispatch) by role into a per-model
+// breakdown — no new instrumentation needed.
+//
+// The KEYS of that breakdown must be real model ids so they line up with
+// `primary_model` / `models_used` downstream (build-tokenomics-report.mjs
+// derives primary_model from this map's own keys — see its comment). We
+// can't get a real id per dispatch: PostToolUse's Agent tool_response has
+// no model/modelUsed field (confirmed against Claude Code's hook docs), so
+// benchmark-tc-hook.mjs cannot be made to tag traces with one. Instead we
+// take ccusage's own scoped modelsUsed[] for the WHOLE session
+// (scopedModelsUsed, resolved above) and assign its haiku-looking entry to
+// the support/reporter bucket and its other entry to the main
+// orchestrator+runner bucket. Only fall back to a literal last-known-good id
+// when ccusage gave us no scoped match at all (full_session_unscoped /
+// subagents_only paths).
+function resolveAgentModelIds(modelsUsed) {
+  if (!modelsUsed?.length) {
+    return { main: FALLBACK_MAIN_AGENT_MODEL_ID, support: FALLBACK_SUPPORT_AGENT_MODEL_ID };
+  }
+  const haikuId = modelsUsed.find(m => /haiku/i.test(m));
+  // Single-model session (only test-runner dispatched, no reporter ran; or
+  // ccusage only ever reports one entry): pick the first non-haiku id, or
+  // just modelsUsed[0] if every entry happens to look like haiku.
+  const mainId = modelsUsed.find(m => !/haiku/i.test(m)) ?? modelsUsed[0];
+  return { main: mainId, support: haikuId ?? FALLBACK_SUPPORT_AGENT_MODEL_ID };
+}
+
+function sumTraceField(traces, field) {
+  return traces.reduce((s, t) => s + (t[field] ?? 0), 0);
+}
+
+let tokensByModel = null;
+if (session.total_tokens != null) {
+  const { main: mainModelId, support: supportModelId } = resolveAgentModelIds(scopedModelsUsed);
+
+  const supportByType = {
+    input:        sumTraceField(supportTraces, 'input_tokens'),
+    output:       sumTraceField(supportTraces, 'output_tokens'),
+    cache_create: sumTraceField(supportTraces, 'cache_creation_input_tokens'),
+    cache_read:   sumTraceField(supportTraces, 'cache_read_input_tokens'),
+  };
+  // Everything not attributed to the haiku reporter — orchestrator + TC-runner
+  // subagents — is the main model.
+  const mainByType = {
+    input:        Math.max(0, (session.input_tokens ?? 0) - supportByType.input),
+    output:       Math.max(0, (session.output_tokens ?? 0) - supportByType.output),
+    cache_create: Math.max(0, (session.cache_creation_input_tokens ?? 0) - supportByType.cache_create),
+    cache_read:   Math.max(0, (session.cache_read_input_tokens ?? 0) - supportByType.cache_read),
+  };
+  tokensByModel = { [mainModelId]: mainByType };
+  if (supportTokens > 0) {
+    if (supportModelId === mainModelId) {
+      // Degenerate case: main and support resolved to the SAME id (e.g. a
+      // modelsUsed[] where every entry looks like haiku). Merge into the
+      // one bucket instead of letting one key silently clobber the other.
+      tokensByModel[mainModelId] = {
+        input:        tokensByModel[mainModelId].input        + supportByType.input,
+        output:       tokensByModel[mainModelId].output       + supportByType.output,
+        cache_create: tokensByModel[mainModelId].cache_create + supportByType.cache_create,
+        cache_read:   tokensByModel[mainModelId].cache_read   + supportByType.cache_read,
+      };
+    } else {
+      tokensByModel[supportModelId] = supportByType;
+    }
+  }
+}
+session.tokens_by_model = tokensByModel;
+
+// Cache-read *cost* share (distinct from cache-read *token* share, which
+// runs higher — see docs/metrics-framework.md's "cache efficiency"). Uses
+// our own MODEL_PRICING table against the per-model breakdown above so
+// numerator and denominator come from the same estimate — independent of
+// whether the headline session.cost_usd came from ccusage's own scoped
+// pricing or our fallback table.
+let cacheReadSharePct = null;
+if (tokensByModel) {
+  let totalCostEst = 0;
+  let cacheReadCostEst = 0;
+  for (const [modelKey, t] of Object.entries(tokensByModel)) {
+    const pricing = MODEL_PRICING[modelPricingFamily(modelKey)];
+    totalCostEst += calcCost(pricing, t.input, t.output, t.cache_create, t.cache_read);
+    cacheReadCostEst += (t.cache_read * pricing.cache_read) / 1_000_000;
+  }
+  cacheReadSharePct = totalCostEst > 0 ? Math.round((cacheReadCostEst / totalCostEst) * 1000) / 10 : null;
+}
+session.cache_read_share_pct = cacheReadSharePct;
+
 // --- Locate latest RUN-*.md report to pull run_id and pass/fail data ---
 
 function findLatestRunReport() {
@@ -458,6 +600,13 @@ if (reportPath) {
 // wins over the report's `model:` line (usually absent) and the hardcoded
 // default — it reflects what actually ran, including mixed-model sessions.
 if (scopedModel) model = scopedModel;
+
+// tokenomics-dataset `models_used` — prefer ccusage's own scoped detection
+// (real, authoritative); fall back to what we inferred from the trace's
+// role split (see tokens_by_model above), then to the single resolved
+// `model` string as a last resort.
+session.models_used = scopedModelsUsed
+  ?? (tokensByModel ? Object.keys(tokensByModel) : (model ? [model] : null));
 
 // --- Build per-TC array ---
 
@@ -554,10 +703,11 @@ const output = {
 writeFileSync(outPath, JSON.stringify(output, null, 2) + '\n');
 console.log(`[build-run-metrics] wrote ${outPath}`);
 
-// Durable, append-only ledger of every completed run (unfiltered, on
-// purpose — see elitea-testing/qa-challenges sibling copies for rationale).
-// A per-run RUN-<id>.json can still be lost to a filesystem mistake or a
-// future bug; this file never gets rewritten, only appended to.
+// Durable, append-only ledger of every completed run (including the
+// unknown-suite/orphaned-session synthetic path above — unfiltered, on
+// purpose: any filtering logic here would itself be one more thing that can
+// go stale). A per-run RUN-<id>.json can still be lost to a filesystem
+// mistake or a future bug; this file never gets rewritten, only appended to.
 const ledgerPath = join(metricsDir, 'all-runs.jsonl');
 appendFileSync(ledgerPath, JSON.stringify(output) + '\n');
 console.log(`[build-run-metrics] appended to ${ledgerPath}`);
