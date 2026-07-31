@@ -18,10 +18,31 @@
 # correctly re-baselines too, matching Claude Code's own semantics (today,
 # with fixed filenames, /clear did NOT reset the baseline — a deliberate
 # behavior improvement, confirmed with Olha).
+#
+# RETRY-FOR-SCOPING (ported 2026-07-31 from qa-project, round 4): this hook
+# fires at the very first moment of a brand-new session, before Claude
+# Code's own usage logs (which ccusage reads from) have anything for this
+# session id yet — a single un-retried `ccusage session --json` call here
+# almost always misses its own session's `period` entry, silently degrading
+# every downstream token/cost figure to "full_session_unscoped" (summed
+# across every session ever recorded on the machine — confirmed on a real
+# qa-project run, and confirmed AGAIN on the very next real run after an
+# initial attempt-count-based retry fix — see ccusage-wait.sh for the full
+# incident writeup: what actually failed wasn't the timing estimate, still
+# unresolved is whether `sleep` reliably blocks in this hook's real
+# execution context). See ccusage-wait.sh (sourced below) for the retry
+# mechanism itself and why benchmark-preflight now does more than just
+# reuse SESSION_PRE_FILE when it exists.
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 STATE_DIR="${PROJECT_DIR}/.claude"
+# ccusage-wait.sh lives next to this script (bundle-installed), not at
+# <project>/scripts/ — resolve self-relatively, same pattern benchmark-stop
+# already uses for build-run-metrics.mjs.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=ccusage-wait.sh
+. "${HOOK_DIR}/ccusage-wait.sh"
 
 payload="$(cat 2>/dev/null || true)"
 sid="$(printf '%s' "$payload" | node -e "
@@ -35,12 +56,24 @@ SID_SUFFIX="${sid:+-$sid}"       # empty sid -> empty suffix -> today's exact fi
 
 TS_FILE="${STATE_DIR}/benchmark-session-started-at${SID_SUFFIX}.txt"
 SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
+CCUSAGE_WAIT_DEBUG_LOG="${STATE_DIR}/benchmark-ccusage-wait-debug.log"
 
 mkdir -p "$STATE_DIR"
 if [ ! -f "$TS_FILE" ]; then
   date -u +%Y-%m-%dT%H:%M:%SZ > "$TS_FILE" 2>/dev/null || true
-  ccusage session --json > "$SESSION_PRE_FILE" 2>/dev/null \
-    || printf '{}' > "$SESSION_PRE_FILE"
+  if [ -n "$sid" ]; then
+    # async: true in hooks.json -- this hook never blocks the user's
+    # interactive session, so it's safe to spend up to the full budget here
+    # (currently 60s of real elapsed time, not attempt-count-based -- see
+    # ccusage-wait.sh header for why that changed).
+    wait_for_scoped_ccusage "$sid" "$SESSION_PRE_FILE" "$CCUSAGE_WAIT_DEBUG_LOG" "session-start" || true
+  else
+    # No session_id on this payload at all (older Claude Code / unusual
+    # invocation) -- nothing to retry-match against, take one snapshot as
+    # before rather than burning the full retry window for nothing.
+    ccusage session --json > "$SESSION_PRE_FILE" 2>/dev/null \
+      || printf '{}' > "$SESSION_PRE_FILE"
+  fi
 
   # Opportunistic cleanup: remove session-scoped ephemeral files older than 7
   # days — left behind by sessions that crashed/were force-killed before ever

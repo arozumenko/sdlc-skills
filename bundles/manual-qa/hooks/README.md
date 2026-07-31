@@ -30,7 +30,7 @@ This merges 5 hook events (`SessionStart`, `PreToolUse`, `PostToolUse`,
 `SubagentStop`, `SessionEnd`) into `.claude/settings.json` under groups
 tagged `"_bundle": "manual-qa"` (merge-not-clobber — your other hooks and
 other bundles' hooks are left untouched; `.claude/settings.json.bak` is
-written first), and copies 10 files into `.claude/hooks/manual-qa/`.
+written first), and copies 12 files into `.claude/hooks/manual-qa/`.
 Nothing in `agents/` or `skills/` is touched — this is additive only.
 
 ## What to expect after a run
