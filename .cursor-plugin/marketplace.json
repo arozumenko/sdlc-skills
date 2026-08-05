@@ -24,6 +24,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "discovery-researcher",
+      "source": "./bundles/product-discovery/agents/discovery-researcher",
+      "description": "Use when a discovery hypothesis or product claim needs evidence — stakeholder interviews, market/vendor research, or adversarial verification before a bet is promoted. Sam — skeptical researcher who grounds every claim in a source.",
+      "version": "0.2.0"
+    },
+    {
       "name": "ios-dev",
       "source": "./bundles/feature-development/agents/ios-dev",
       "description": "Use when iOS work needs to be implemented — Swift, SwiftUI features, SwiftData models, or any Apple-platform task requiring TDD and verification before handoff. Io — energetic developer, opinionated about modern Apple APIs, pragmatic about delivery.",
@@ -39,6 +45,12 @@
       "name": "personal-assistant",
       "source": "./agents/personal-assistant",
       "description": "Use when the user wants a conversational assistant to answer questions, run errands across their tools (email, calendar, Teams, notes), or quietly maintain a second-brain knowledge base in the background. Octo — the user's personal assistant, engaged and resourceful.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "product-owner",
+      "source": "./bundles/product-discovery/agents/product-owner",
+      "description": "Use when a raw ask, feature request, or product idea needs discovery — turning it into problems, personas, journeys, and a verified, prioritized hypothesis before engineering. Priya — decisive Product Owner who runs the discovery loop and guards the promotion gate.",
       "version": "0.2.0"
     },
     {
@@ -132,6 +144,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "capture-learning",
+      "source": "./bundles/product-discovery/skills/capture-learning",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
       "name": "code-review",
       "source": "./bundles/feature-development/skills/code-review",
       "description": "Review code for correctness, security, performance, and maintainability. Use when the user asks to \"review this code\", \"check my changes\", \"review PR\", \"audit\" — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted.",
@@ -147,6 +165,24 @@
       "name": "deep-research",
       "source": "./skills/deep-research",
       "description": "Disk-first, checkpointed research workflow with three modes — trend research, topic analysis, and fact-checking. Use when the user asks to \"research trends\", \"analyze a topic\", \"fact-check this\", \"verify claims\", \"what's the state of X\", or hands you a document to vet.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "define-outcomes",
+      "source": "./bundles/product-discovery/skills/define-outcomes",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
+      "name": "define-personas",
+      "source": "./bundles/product-discovery/skills/define-personas",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
+      "name": "discovery-status",
+      "source": "./bundles/product-discovery/skills/discovery-status",
+      "description": ">-",
       "version": "0.2.0"
     },
     {
@@ -168,15 +204,33 @@
       "version": "0.2.0"
     },
     {
+      "name": "grill-decision",
+      "source": "./bundles/product-discovery/skills/grill-decision",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
       "name": "implement-feature",
       "source": "./bundles/feature-development/skills/implement-feature",
       "description": "Use when the user says \"implement\", \"build feature\", \"work on task\", or once a plan or story is approved and you're about to start building. The end-to-end feature-implementation workflow; delegates the final handoff to completing-a-task.",
       "version": "0.2.0"
     },
     {
+      "name": "intake-triage",
+      "source": "./bundles/product-discovery/skills/intake-triage",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
       "name": "issue-tracking",
       "source": "./bundles/feature-development/skills/issue-tracking",
       "description": "Create, manage, and track issues in GitHub, Linear, or GitLab. Use when the user asks to \"create an issue\", \"file a bug\", \"check issues\", \"update a ticket\", \"create an epic\", or anything about issue/ticket management.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "journeys-to-hypotheses",
+      "source": "./bundles/product-discovery/skills/journeys-to-hypotheses",
+      "description": ">-",
       "version": "0.2.0"
     },
     {
@@ -204,6 +258,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "opportunity-tree",
+      "source": "./bundles/product-discovery/skills/opportunity-tree",
+      "description": ">-",
+      "version": "0.2.0"
+    },
+    {
       "name": "plan-feature",
       "source": "./bundles/feature-development/skills/plan-feature",
       "description": "Use when the user says \"plan a feature\", \"design this\", \"how should we build\", or before writing code for any non-trivial feature. Produces an approved task breakdown before implementation begins — plan first, build second.",
@@ -213,6 +273,12 @@
       "name": "playwright-testing",
       "source": "./bundles/feature-development/skills/playwright-testing",
       "description": "Use when a manual-QA agent does live browser testing through the Playwright MCP server — exploring/profiling a web app or executing a web test case against a running app, with no test code generated. Web/PWA/hybrid targets; used by app-profiler and test-runner. Mobile native → use mobile-testing instead.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "prioritize-bets",
+      "source": "./bundles/product-discovery/skills/prioritize-bets",
+      "description": ">-",
       "version": "0.2.0"
     },
     {
@@ -237,6 +303,12 @@
       "name": "session-retrospective",
       "source": "./bundles/feature-development/skills/session-retrospective",
       "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "stakeholder-interview",
+      "source": "./bundles/product-discovery/skills/stakeholder-interview",
+      "description": ">-",
       "version": "0.2.0"
     },
     {

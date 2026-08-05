@@ -146,6 +146,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 npx github:arozumenko/sdlc-skills init --bundle feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev
 npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
+npx github:arozumenko/sdlc-skills init --bundle product-discovery  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -168,7 +169,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Three
+files** into the project — one command instead of hand-listing roles. Four
 ship today:
 
 | Bundle | Roster | What it's for |
@@ -176,6 +177,7 @@ ship today:
 | `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI); core roles auto-tune per picked platforms. |
 | `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
+| `product-discovery` | 2 bundle-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 bundle-local skills and seeds an empty `docs/discovery/` scaffold. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
 author your own.
@@ -447,7 +449,7 @@ sdlc-skills/
 │   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
 ├── bundles/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # feature-development, manual-qa, test-automation
+│   └── <bundle-id>/            # feature-development, manual-qa, test-automation, product-discovery
 │       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
