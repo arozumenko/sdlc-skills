@@ -86,14 +86,18 @@ layout, ID conventions, and hypothesis lifecycle.
 
 ## Reused skills
 
-These skills are **not** owned by this bundle — they're pulled in via agent
-frontmatter from the top-level orphan catalog (`skills.json`), so there's no
-duplicate copy here:
+These skills are **not** owned by this bundle — there's no duplicate copy
+here. They're pulled in through each agent's `skills:` frontmatter via the
+installer's normal resolution, which differs per skill:
 
-- `deep-research`, `verifying-outcomes` — `discovery-researcher`'s evidence
-  and verification work.
-- `brainstorming` — `product-owner`'s framing work.
-- `memory` — both agents, for role memory and checkpointing.
+- `deep-research`, `verifying-outcomes` — orphan entries in the top-level
+  `skills.json`. Used by `discovery-researcher`'s evidence and verification
+  work.
+- `brainstorming` — a `repo:` entry in `skills.json`, fetched from upstream
+  at install time. Used by `product-owner`'s framing work.
+- `memory` — not in `skills.json`; resolves cross-bundle to the
+  alphabetical-first bundle that owns it (`feature-development`'s copy).
+  Used by both agents for role memory and checkpointing.
 
 ## What this bundle adds
 

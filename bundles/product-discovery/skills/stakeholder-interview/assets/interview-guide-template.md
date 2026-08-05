@@ -23,7 +23,7 @@ feeds: # what this interview is meant to unblock
 
 ## Theme: <highest-stakes theme first>
 
-1. <question> — *why:* tests `H<id>/A<n>` | validates `Problems/<slug>.md`
+1. <question> — *why:* tests `H<id>/A<n>` | validates `docs/discovery/problems/<slug>.md`
 2. <question> — *why:* …
 
 ## Theme: <next>
