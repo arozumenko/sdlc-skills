@@ -1,16 +1,6 @@
 ---
 name: define-personas
-description: >-
-  Create and maintain the canonical persona cards under docs/discovery/personas/ —
-  one file per persona, each with its app surface, goals, pains,
-  jobs-to-be-done, and evidence links — so journeys, hypotheses, and BDD
-  scenarios reference stable persona slugs instead of drifting ad-hoc actor
-  names. Use whenever personas come up — "define the personas", "who are our
-  users", "make a persona card for X", "which persona owns this journey" — and
-  proactively whenever a journey, BDD scenario, or hypothesis names an actor
-  that has no card yet or spells one inconsistently. NOT for org-chart or
-  stakeholder-power mapping, and NOT for market-segmentation research
-  (deep-research).
+description: Create and maintain the canonical persona cards under docs/discovery/personas/ — one file per persona, each with its app surface, goals, pains, jobs-to-be-done, and evidence links — so journeys, hypotheses, and BDD scenarios reference stable persona slugs instead of drifting ad-hoc actor names. Use whenever personas come up — "define the personas", "who are our users", "make a persona card for X", "which persona owns this journey" — and proactively whenever a journey, BDD scenario, or hypothesis names an actor that has no card yet or spells one inconsistently. NOT for org-chart or stakeholder-power mapping, and NOT for market-segmentation research (deep-research).
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:

@@ -1,20 +1,6 @@
 ---
 name: prioritize-bets
-description: >-
-  Rank the incubating and promotion-ready bets against the active
-  prioritization framework — use when deciding what to build next, when
-  validated hypotheses outnumber the team's appetite, when a ranking feels
-  stale, or when someone asks which bet comes first. Applies RICE by default
-  (WSJF and ICE are config options); the confidence factor is DERIVED from
-  each hypothesis's evidence-banded confidence block, never free-guessed;
-  persists scores into hypothesis frontmatter so the ranking survives the
-  session; warns — never blocks — when a bet is ranked on gut-band evidence;
-  and rewrites the derived priority board at docs/discovery/priority.md.
-  Trigger phrases — "what should we build next", "rank the backlog",
-  "prioritize the hypotheses", "which bet comes first", "the backlog is
-  stale". NOT for promotion-gate scoring, NOT for triaging raw incoming asks
-  (intake-triage), and NOT for attacking the assumptions inside one
-  hypothesis.
+description: Rank the incubating and promotion-ready bets against the active prioritization framework — use when deciding what to build next, when validated hypotheses outnumber the team's appetite, when a ranking feels stale, or when someone asks which bet comes first. Applies RICE by default (WSJF and ICE are config options); the confidence factor is DERIVED from each hypothesis's evidence-banded confidence block, never free-guessed; persists scores into hypothesis frontmatter so the ranking survives the session; warns — never blocks — when a bet is ranked on gut-band evidence; and rewrites the derived priority board at docs/discovery/priority.md. Trigger phrases — "what should we build next", "rank the backlog", "prioritize the hypotheses", "which bet comes first", "the backlog is stale". NOT for promotion-gate scoring, NOT for triaging raw incoming asks (intake-triage), and NOT for attacking the assumptions inside one hypothesis.
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:

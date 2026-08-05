@@ -1,19 +1,6 @@
 ---
 name: journeys-to-hypotheses
-description: >-
-  Convergence pass — read every user journey (maps, list, BDD) plus every
-  existing hypothesis AND, where one is configured, the project's issue
-  tracker, then classify each journey's scope as COVERED (by which
-  epic/hypothesis), GAP (no artifact yet), or OUT-OF-SCOPE (different
-  surface/persona/phase); regenerate the journey-coverage board; and, on
-  confirmation, author the missing problem statements + hypothesis stubs with
-  house frontmatter and collision-free IDs. Use whenever journeys and the
-  backlog need reconciling — "turn my journeys into hypotheses", "map the
-  journeys to the backlog", "what do my journeys cover", "convergence pass",
-  "where are the gaps in the backlog" — and proactively whenever new journey
-  files exist that no hypothesis or epic references. NOT for authoring
-  journeys themselves, NOT for promoting hypotheses, and NOT for breaking
-  epics into stories.
+description: Convergence pass — read every user journey (maps, list, BDD) plus every existing hypothesis AND, where one is configured, the project's issue tracker, then classify each journey's scope as COVERED (by which epic/hypothesis), GAP (no artifact yet), or OUT-OF-SCOPE (different surface/persona/phase); regenerate the journey-coverage board; and, on confirmation, author the missing problem statements + hypothesis stubs with house frontmatter and collision-free IDs. Use whenever journeys and the backlog need reconciling — "turn my journeys into hypotheses", "map the journeys to the backlog", "what do my journeys cover", "convergence pass", "where are the gaps in the backlog" — and proactively whenever new journey files exist that no hypothesis or epic references. NOT for authoring journeys themselves, NOT for promoting hypotheses, and NOT for breaking epics into stories.
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash(gh *), Bash(glab *)
 metadata:

@@ -1,19 +1,6 @@
 ---
 name: stakeholder-interview
-description: >-
-  Prepare and synthesize stakeholder interviews — two modes. PREPARE: aggregate
-  every open question, untested critical assumption, and unresolved escalation
-  across the workspace into a themed, value-of-information-ordered guide,
-  filtered to what THIS interviewee can answer. SYNTHESIZE: turn raw notes or a
-  transcript into a durable evidence file and propagate the answers into the
-  hypotheses they touch (evidence links, assumption verdicts, resolved
-  questions). Use whenever a stakeholder conversation, customer meeting, or user
-  session is being planned or has just happened — even if the user only says
-  "I'm meeting them Thursday" or pastes raw notes. Trigger phrases — "prep the
-  interview", "what should I ask", "here are my notes", "synthesize this
-  interview", "we talked to the customer". NOT for triaging raw feature asks
-  (intake-triage), NOT for team-internal meeting minutes, and NOT for
-  fact-checking a document (deep-research factcheck mode).
+description: "Prepare and synthesize stakeholder interviews — two modes. PREPARE: aggregate every open question, untested critical assumption, and unresolved escalation across the workspace into a themed, value-of-information-ordered guide, filtered to what THIS interviewee can answer. SYNTHESIZE: turn raw notes or a transcript into a durable evidence file and propagate the answers into the hypotheses they touch (evidence links, assumption verdicts, resolved questions). Use whenever a stakeholder conversation, customer meeting, or user session is being planned or has just happened — even if the user only says \"I'm meeting them Thursday\" or pastes raw notes. Trigger phrases — \"prep the interview\", \"what should I ask\", \"here are my notes\", \"synthesize this interview\", \"we talked to the customer\". NOT for triaging raw feature asks (intake-triage), NOT for team-internal meeting minutes, and NOT for fact-checking a document (deep-research factcheck mode)."
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:

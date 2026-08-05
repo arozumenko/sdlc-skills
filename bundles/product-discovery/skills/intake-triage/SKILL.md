@@ -1,17 +1,6 @@
 ---
 name: intake-triage
-description: >-
-  The front door for raw asks — use whenever feature requests, stakeholder asks,
-  support themes, or "someone wants X" arrive, before anything becomes a Problem or
-  Hypothesis. Verdicts every item Act Now / Plan Next / Collect More Signal /
-  Decline-or-Defer, writes one batch record, and mints accepted in-scope items as
-  Problems carrying discovered_from provenance. Out-of-scope asks are declined
-  quoting the scope line; raw material naming a person stays in the confidential
-  inbox and records refer by role. Trigger phrases — "triage these requests", "here
-  are the asks from the sales call", "someone wants X — what do we do with it",
-  "sort these into the pipeline". NOT for interview synthesis (that is
-  stakeholder-interview), NOT for bug or support-ticket triage, and NOT for meeting
-  minutes.
+description: The front door for raw asks — use whenever feature requests, stakeholder asks, support themes, or "someone wants X" arrive, before anything becomes a Problem or Hypothesis. Verdicts every item Act Now / Plan Next / Collect More Signal / Decline-or-Defer, writes one batch record, and mints accepted in-scope items as Problems carrying discovered_from provenance. Out-of-scope asks are declined quoting the scope line; raw material naming a person stays in the confidential inbox and records refer by role. Trigger phrases — "triage these requests", "here are the asks from the sales call", "someone wants X — what do we do with it", "sort these into the pipeline". NOT for interview synthesis (that is stakeholder-interview), NOT for bug or support-ticket triage, and NOT for meeting minutes.
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:

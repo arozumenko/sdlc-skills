@@ -1,17 +1,6 @@
 ---
 name: discovery-status
-description: >-
-  Report the whole discovery pipeline as one navigable dashboard — where every
-  hypothesis stands against the promotion gate, what is blocked and on whom, the
-  tracker board vs what docs/discovery/ says, and the exact next action (naming
-  the exact skill) for each item. Read-only: reads the docs/discovery/ tree and
-  the product-owner's role memory directly, and re-derives gate state from the
-  promotion checklist in prose (no vault, no validator script). Use at the start
-  of a session, whenever the PO is unsure what to do next, or whenever
-  promotion, gates, blockers, what's-stuck, where-am-I, or am-I-ready-for-review
-  come up — even without the word "status". NOT for code or CI status,
-  PR-review state, deployment health, or git status — those are different
-  tools.
+description: "Report the whole discovery pipeline as one navigable dashboard — where every hypothesis stands against the promotion gate, what is blocked and on whom, the tracker board vs what docs/discovery/ says, and the exact next action (naming the exact skill) for each item. Read-only: reads the docs/discovery/ tree and the product-owner's role memory directly, and re-derives gate state from the promotion checklist in prose (no vault, no validator script). Use at the start of a session, whenever the PO is unsure what to do next, or whenever promotion, gates, blockers, what's-stuck, where-am-I, or am-I-ready-for-review come up — even without the word \"status\". NOT for code or CI status, PR-review state, deployment health, or git status — those are different tools."
 license: MIT
 allowed-tools: Read, Grep, Glob, Bash(gh *), Bash(glab *)
 metadata:
