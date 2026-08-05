@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "description": "SDLC agents and skills for Claude Code, Cursor, Windsurf, GitHub Copilot, and Codex. Installable via plugin marketplace or npx (per-host native agent format: dirs, flat .agent.md, or Codex TOML).",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "init": "./bin/init.mjs"
   },

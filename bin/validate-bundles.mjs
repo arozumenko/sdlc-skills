@@ -25,14 +25,19 @@
 // only `--check-externals` / `npm run validate:externals` hits GitHub.
 //
 // The externals check reports two severities, not one:
-//   - FAIL (exit non-zero) — 404, a `name:`/`id` mismatch, or malformed/
-//     absent frontmatter. These are registry defects this repo owns, and
-//     must block.
-//   - WARN (non-fatal) — network transport errors, HTTP 429, and 5xx. These
-//     are upstream/infra conditions this repo does not own; each is retried
-//     once (with a short backoff) before being downgraded to a warning, so a
-//     single flaky shared-runner request can't redden an unrelated PR. Every
-//     request carries a timeout so a hung connection can't stall CI either.
+//   - FAIL (exit non-zero) — 404, a `name:`/`id` mismatch, malformed/absent
+//     frontmatter, and any other non-ok status by default (400, 401, 451, …).
+//     These are registry defects this repo owns, and must block.
+//   - WARN (non-fatal) — network transport errors, HTTP 429, 403, and 5xx.
+//     (403 is a deliberate member of this set; see httpStatusSeverity below
+//     for why.) These are upstream/infra conditions this repo does not own;
+//     each is retried once (with a short backoff) before being downgraded to
+//     a warning, so a single flaky shared-runner request can't redden an
+//     unrelated PR. Every request carries a timeout so a hung connection
+//     can't stall CI either.
+// One exception to "WARN never blocks": a run in which *every* entry WARNed
+// and none passed verified nothing at all, which is an infrastructure
+// failure rather than a pass — see summarizeExternalResults.
 
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { join, dirname } from "path";
@@ -269,17 +274,19 @@ export function buildSkillMdUrl(entry) {
 
 // HTTP statuses that mean "this repo's registry entry is wrong" (FAIL) vs
 // "upstream/infra is having a moment" (WARN, retried once before we believe
-// it). 404 is the R1 bug class (wrong/renamed subdir); 429 and 5xx are the
-// upstream's problem, not ours; anything else not-ok is treated as a
+// it). 404 is the bug class this guard exists to catch — a registry entry
+// pointing at a subdir that upstream renamed, moved, or never had, so the
+// install silently produces the wrong directory (or nothing). 429 and 5xx are
+// the upstream's problem, not ours; anything else not-ok is treated as a
 // registry defect by default, same bucket as 404.
 //
 // 403 is deliberately WARN, not FAIL: raw.githubusercontent.com returns 404
-// (not 403) for a private or nonexistent repo/path, so the "repo went
-// private" case that would justify a FAIL doesn't actually produce a 403 on
-// this host. A 403 from raw is overwhelmingly abuse-detection / rate-limiting
-// — the same transient class as 429/5xx. Don't move this back to FAIL
-// without re-verifying raw.githubusercontent.com's actual private-repo
-// status code.
+// (not 403) for a private or nonexistent repo/path (verified 2026-08-05), so
+// the "repo went private" case that would justify a FAIL doesn't actually
+// produce a 403 on this host. A 403 from raw is overwhelmingly abuse-detection
+// / rate-limiting — the same transient class as 429/5xx. Don't reclassify 403
+// as FAIL without re-verifying raw.githubusercontent.com's actual private-repo
+// status code first.
 function httpStatusSeverity(status) {
   if (status === 429 || status === 403 || status >= 500) return "warn";
   return "fail";
@@ -308,9 +315,12 @@ function isWarnableAttempt(attempt) {
 //
 // `fetchImpl` is injectable so tests can exercise every branch (404,
 // name-mismatch, absent frontmatter, retries, timeouts) with no network.
-// Returns { severity: "pass"|"warn"|"fail", id, msg } — never throws; a
-// mid-request failure (network error, or a body-read failure after a 200)
-// is captured as a WARN/FAIL result instead of escaping to the caller.
+// Returns { severity: "pass"|"warn"|"fail", id, msg }. The failure modes it
+// knows about — a network error, or a body-read failure after a 200 — are
+// captured as WARN results rather than escaping to the caller. It makes no
+// blanket "never throws" promise: an unforeseen throw (a malformed fetchImpl,
+// an OOM in a huge body) still escapes, which is why checkExternals contains
+// each call in its own try/catch.
 export async function checkExternalEntry(entry, opts = {}) {
   const {
     fetchImpl = fetch,
@@ -370,21 +380,47 @@ export async function checkExternalEntry(entry, opts = {}) {
 
 // Check every entry, sequentially (polite to GitHub, and keeps output order
 // stable). Exported for tests; the CLI wrapper below does the printing/exit.
+//
+// Each entry is contained in its own try/catch: an unexpected throw on one
+// entry must not abandon the remaining ones (silently shrinking coverage
+// while the summary still reads as a clean run). An escaped throw is recorded
+// as a FAIL for that entry — it is a defect in this repo's own checker, not
+// an upstream transient, so it must block rather than warn.
 export async function checkExternals(entries, opts = {}) {
   const results = [];
   for (const entry of entries) {
-    results.push(await checkExternalEntry(entry, opts));
+    try {
+      results.push(await checkExternalEntry(entry, opts));
+    } catch (e) {
+      results.push({
+        severity: "fail",
+        id: entry && entry.id,
+        msg: `${entry && entry.id}: unexpected error during check — ${(e && (e.stack || e.message)) || e}`,
+      });
+    }
   }
   return results;
 }
 
 // Pure aggregation over a list of per-entry results: counts each severity
-// and derives the exit decision (non-zero iff at least one FAIL — WARN never
-// blocks, per the FAIL/WARN adjudication). Exported and kept side-effect-free
-// (no printing, no process.exit) specifically so tests can assert on the
-// exit decision directly instead of only on printed log text or by probing
-// the CLI by hand — the "unguarded guard" this whole review thread started
-// from was exactly this layer being untested.
+// and derives the exit decision. Exported and kept side-effect-free (no
+// printing, no process.exit) specifically so tests can assert on the exit
+// decision directly instead of only on printed log text or by probing the
+// CLI by hand — the "unguarded guard" this whole review thread started from
+// was exactly this layer being untested.
+//
+// Two independent reasons to exit non-zero:
+//   1. failCount > 0 — at least one registry defect. An individual WARN
+//      still never blocks; that adjudication is unchanged.
+//   2. `verifiedNothing` — the run produced zero PASSes and at least one
+//      WARN, i.e. it confirmed nothing about any entry. Per-entry that is a
+//      tolerable transient, but in aggregate it means the guard did not run:
+//      a broken runner, no network egress, a global rate-limit, or a Node
+//      too old for global fetch (every entry then becomes a transport WARN).
+//      Exiting 0 there would advertise a check that never happened, which is
+//      exactly the failure this guard exists to prevent. The decision lives
+//      here rather than in the CLI wrapper so it is testable and so any
+//      future caller inherits it.
 export function summarizeExternalResults(results) {
   let passCount = 0;
   let warnCount = 0;
@@ -394,7 +430,16 @@ export function summarizeExternalResults(results) {
     else if (r.severity === "warn") warnCount++;
     else failCount++;
   }
-  return { total: results.length, passCount, warnCount, failCount, exitCode: failCount > 0 ? 1 : 0 };
+  const total = results.length;
+  const verifiedNothing = total > 0 && passCount === 0 && warnCount > 0;
+  return {
+    total,
+    passCount,
+    warnCount,
+    failCount,
+    verifiedNothing,
+    exitCode: failCount > 0 || verifiedNothing ? 1 : 0,
+  };
 }
 
 async function runCheckExternals() {
@@ -423,7 +468,8 @@ async function runCheckExternals() {
     else console.error(`  FAIL ${r.msg}`);
   }
 
-  const { total, passCount, warnCount, failCount, exitCode } = summarizeExternalResults(results);
+  const { total, passCount, warnCount, failCount, verifiedNothing, exitCode } =
+    summarizeExternalResults(results);
   // The summary line must never claim more was verified than actually was:
   // a WARN means that entry's registry correctness was NOT checked this run
   // (it was skipped as transient, not confirmed good), so whenever any WARN
@@ -433,6 +479,18 @@ async function runCheckExternals() {
   if (failCount > 0) {
     const warnNote = warnCount > 0 ? `, ${warnCount} WARN (transient, non-blocking)` : "";
     console.error(`\n${failCount} of ${total} external skill(s) FAILED${warnNote}.`);
+    process.exit(exitCode);
+  }
+  if (verifiedNothing) {
+    // Every entry WARNed and none passed: this run verified nothing at all.
+    // Individually each WARN is a tolerable transient; collectively they mean
+    // the check did not run (no egress, global rate-limit, or a Node without
+    // global fetch). Report it as an infrastructure failure, not a pass.
+    console.error(
+      `\n0 of ${total} external skill(s) verified — all ${warnCount} WARNed. The check did not actually run; ` +
+        `this is an infrastructure failure (network egress, a global rate-limit, or Node < 18 with no global fetch), ` +
+        `not a clean result. Failing rather than reporting an unverified pass.`
+    );
     process.exit(exitCode);
   }
   if (warnCount > 0) {
@@ -460,8 +518,30 @@ function isMainModule() {
   }
 }
 
+// Every flag this CLI accepts. Anything else is rejected rather than ignored:
+// a typo like `--check-external` used to fall through to bundle validation,
+// print "All N bundle(s) valid." and exit 0 — under a CI step named "Validate
+// external skill registry entries" that had in fact fetched nothing.
+const KNOWN_FLAGS = new Set(["--check-externals"]);
+
+// Exported for tests: given the argv tail, either the mode to run or the list
+// of unknown arguments to reject. Pure — no printing, no process.exit.
+export function parseValidateArgs(argv) {
+  const unknown = argv.filter((a) => !KNOWN_FLAGS.has(a));
+  if (unknown.length > 0) return { mode: "error", unknown, knownFlags: [...KNOWN_FLAGS] };
+  return { mode: argv.includes("--check-externals") ? "check-externals" : "bundles", unknown: [] };
+}
+
 if (isMainModule()) {
-  if (process.argv.includes("--check-externals")) {
+  const parsed = parseValidateArgs(process.argv.slice(2));
+  if (parsed.mode === "error") {
+    console.error(
+      `! unknown argument(s): ${parsed.unknown.join(", ")}\n` +
+        `  Known flags: ${parsed.knownFlags.join(", ")} (or no flag to validate bundles).\n` +
+        `  Refusing to run: a mistyped flag must not silently run a different check and exit 0.`
+    );
+    process.exit(2);
+  } else if (parsed.mode === "check-externals") {
     runCheckExternals().catch((err) => {
       console.error(`! checkExternals crashed: ${err.stack || err.message}`);
       process.exit(1);

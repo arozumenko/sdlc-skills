@@ -962,6 +962,20 @@ function shallowClone(repo, ref) {
   }
 }
 
+// True iff `name` is safe to use as a single directory name under the target
+// skills dir. Guards a supply-chain path: the value comes from a third-party
+// SKILL.md fetched at a moving ref, and `path.join` silently normalizes any
+// traversal it contains — join(".claude/skills", "../../../x") resolves
+// clean outside the project. The basename comparison catches "/" and (on
+// Windows) "\"; the explicit checks catch the separators and the "."/".."
+// specials on every platform, plus NUL. Exported for tests.
+export function isBarePathSegment(name) {
+  if (typeof name !== "string" || name === "") return false;
+  if (name === "." || name === "..") return false;
+  if (name.includes("/") || name.includes("\\") || name.includes("\0")) return false;
+  return basename(name) === name;
+}
+
 function installExternalSkill(entry, targetDir, useSymlink, update) {
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
@@ -971,14 +985,44 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
     console.error(`  ! ${entry.id}: ${entry.subdir || "."} not found in ${entry.repo}`);
     return { status: "error" };
   }
-  // Skill name derives from SKILL.md `name:` (if present, via the shared
-  // lib/skill-md.mjs parser that bin/validate-bundles.mjs --check-externals
-  // also uses) else subdir basename.
+  // Directory name for the installed skill, in three branches:
+  //   1. SKILL.md exists and declares a usable `name:` → that name (parsed by
+  //      the shared lib/skill-md.mjs, the same parser bin/validate-bundles.mjs
+  //      --check-externals uses, so the guard predicts this behavior exactly).
+  //   2. SKILL.md exists but has no parseable `name:` → the registry
+  //      `entry.id` (the initial value below), NOT the subdir basename.
+  //   3. No SKILL.md at all → the subdir basename, else `entry.id`.
   let skillName = entry.id;
   const skillMd = join(src, "SKILL.md");
   if (existsSync(skillMd)) {
     const parsedName = extractSkillMdName(readFileSync(skillMd, "utf8"));
-    if (parsedName) skillName = parsedName;
+    // SECURITY: `parsedName` is attacker-controlled content from a third-party
+    // repo cloned at a moving ref. It is about to become a path segment, and
+    // on `--update` the resulting path is handed to rmSync(recursive, force).
+    // `join()` *normalizes*, so a name like "../../../../tmp/x" would escape
+    // the install root entirely. Accept only a bare path segment; anything
+    // else is rejected loudly and we fall back to the registry id.
+    if (parsedName && !isBarePathSegment(parsedName)) {
+      console.error(
+        `  ! ${entry.id}: refusing upstream SKILL.md name ${JSON.stringify(parsedName)} from ` +
+          `${entry.repo} — it is not a bare directory name (contains a path separator, or is "." / ".."). ` +
+          `Installing as "${entry.id}" instead. Report this upstream; it may be an attempt to write outside the skills directory.`
+      );
+    } else if (parsedName) {
+      // Non-fatal, but the consumer must see it: the installer names the
+      // directory from upstream's `name:`, so when that differs from the
+      // registry id the skill lands somewhere nobody is looking for it.
+      // Without this, the call site prints a green "✓ skill <upstream-name>"
+      // and the id the user actually asked for vanishes silently.
+      if (parsedName !== entry.id) {
+        console.error(
+          `  ! ${entry.id}: upstream SKILL.md in ${entry.repo} declares name "${parsedName}", ` +
+            `not "${entry.id}" — installing as "${parsedName}". Any agent or bundle overlay that ` +
+            `references "${entry.id}" will NOT find it. Fix the skills.json id (or upstream) to match.`
+        );
+      }
+      skillName = parsedName;
+    }
   } else if (entry.subdir) {
     skillName = basename(entry.subdir);
   }

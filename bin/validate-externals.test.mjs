@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSkillMdUrl, checkExternalEntry, checkExternals, summarizeExternalResults } from "./validate-bundles.mjs";
+import {
+  buildSkillMdUrl,
+  checkExternalEntry,
+  checkExternals,
+  parseValidateArgs,
+  summarizeExternalResults,
+} from "./validate-bundles.mjs";
+import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 // Fast retries in tests — the production default (300ms) would make this
 // suite slow across the several warn/retry cases below.
@@ -157,27 +164,49 @@ function severityResults(severities) {
 
 test("summarizeExternalResults: all-PASS -> exitCode 0", () => {
   const s = summarizeExternalResults(severityResults(["pass", "pass", "pass"]));
-  assert.deepEqual(s, { total: 3, passCount: 3, warnCount: 0, failCount: 0, exitCode: 0 });
+  assert.deepEqual(s, { total: 3, passCount: 3, warnCount: 0, failCount: 0, verifiedNothing: false, exitCode: 0 });
 });
 
-test("summarizeExternalResults: WARN-only -> exitCode 0 (and reports 0 verified, not all valid)", () => {
+// An all-WARN run verified nothing at all: not one entry was confirmed. Per
+// entry a WARN is a tolerable transient and still never blocks (see the
+// PASS+WARN case below), but a run with zero PASSes is the guard not having
+// run — no egress, a global rate-limit, or a Node too old for global fetch.
+// That must not exit 0 advertising a check that never happened.
+test("summarizeExternalResults: WARN-only escalates -> verifiedNothing, exitCode 1 (the run confirmed nothing)", () => {
   const s = summarizeExternalResults(severityResults(["warn", "warn"]));
-  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 2, failCount: 0, exitCode: 0 });
+  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 2, failCount: 0, verifiedNothing: true, exitCode: 1 });
+});
+
+test("summarizeExternalResults: a single WARN alongside PASSes does NOT escalate (per-entry WARN stays non-blocking)", () => {
+  const s = summarizeExternalResults(severityResults(["pass", "warn"]));
+  assert.equal(s.verifiedNothing, false);
+  assert.equal(s.exitCode, 0);
+});
+
+test("summarizeExternalResults: an empty result list is not an all-WARN escalation", () => {
+  const s = summarizeExternalResults([]);
+  assert.deepEqual(s, { total: 0, passCount: 0, warnCount: 0, failCount: 0, verifiedNothing: false, exitCode: 0 });
+});
+
+test("summarizeExternalResults: all-FAIL is not reported as verifiedNothing (it already blocks on failCount)", () => {
+  const s = summarizeExternalResults(severityResults(["fail"]));
+  assert.equal(s.verifiedNothing, false);
+  assert.equal(s.exitCode, 1);
 });
 
 test("summarizeExternalResults: PASS+WARN -> exitCode 0", () => {
   const s = summarizeExternalResults(severityResults(["pass", "warn", "pass"]));
-  assert.deepEqual(s, { total: 3, passCount: 2, warnCount: 1, failCount: 0, exitCode: 0 });
+  assert.deepEqual(s, { total: 3, passCount: 2, warnCount: 1, failCount: 0, verifiedNothing: false, exitCode: 0 });
 });
 
 test("summarizeExternalResults: FAIL-only -> exitCode 1", () => {
   const s = summarizeExternalResults(severityResults(["fail", "fail"]));
-  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 0, failCount: 2, exitCode: 1 });
+  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 0, failCount: 2, verifiedNothing: false, exitCode: 1 });
 });
 
 test("summarizeExternalResults: FAIL+WARN -> exitCode 1 (a single FAIL blocks regardless of any WARNs)", () => {
   const s = summarizeExternalResults(severityResults(["fail", "warn", "pass"]));
-  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, exitCode: 1 });
+  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, verifiedNothing: false, exitCode: 1 });
 });
 
 test("checkExternals + summarizeExternalResults end-to-end: mixed entries produce the correct exit decision with no network", async () => {
@@ -203,5 +232,97 @@ test("checkExternals + summarizeExternalResults end-to-end: mixed entries produc
     ["pass", "fail", "warn"]
   );
   const s = summarizeExternalResults(results);
-  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, exitCode: 1 });
+  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, verifiedNothing: false, exitCode: 1 });
+});
+
+// --- checkExternals: per-entry error containment ---------------------------
+//
+// One entry throwing unexpectedly must not abandon the entries after it —
+// that would silently shrink coverage while the summary still read clean.
+
+test("checkExternals: an unexpected throw on one entry is contained as a FAIL and the remaining entries still run", async () => {
+  const entries = [
+    { id: "a", repo: "owner/repo", subdir: "a" },
+    { id: "boom", repo: "owner/repo", subdir: "boom" },
+    { id: "c", repo: "owner/repo", subdir: "c" },
+  ];
+  // A fetchImpl that resolves to null (a malformed impl, or a stub that
+  // forgot to return) makes checkExternalEntry throw a TypeError at
+  // `res.ok` — precisely the unforeseen class its own try/catch does NOT
+  // cover, and the reason checkExternals wraps each call.
+  const fetchImpl = async (url) => {
+    if (url.includes("/boom/")) return null;
+    return fakeRes({ ok: true, body: skillMd(url.includes("/a/") ? "a" : "c") });
+  };
+  const results = await checkExternals(entries, { fetchImpl, ...FAST });
+  assert.equal(results.length, 3, "every entry must produce a result, even after one throws");
+  assert.deepEqual(
+    results.map((r) => r.severity),
+    ["pass", "fail", "pass"],
+    "the throw must not abandon the entries queued behind it"
+  );
+  assert.equal(results[1].id, "boom");
+  assert.match(results[1].msg, /unexpected error/);
+});
+
+// --- parseValidateArgs: unknown-flag rejection -----------------------------
+//
+// A typo like `--check-external` used to fall through to bundle validation
+// and exit 0 under a CI step named "Validate external skill registry
+// entries", having fetched nothing.
+
+test("parseValidateArgs: no args -> bundle validation", () => {
+  assert.deepEqual(parseValidateArgs([]), { mode: "bundles", unknown: [] });
+});
+
+test("parseValidateArgs: --check-externals -> the externals check", () => {
+  assert.deepEqual(parseValidateArgs(["--check-externals"]), { mode: "check-externals", unknown: [] });
+});
+
+test("parseValidateArgs: a mistyped flag is rejected, never silently downgraded to bundle validation", () => {
+  const p = parseValidateArgs(["--check-external"]);
+  assert.equal(p.mode, "error");
+  assert.deepEqual(p.unknown, ["--check-external"]);
+  assert.ok(p.knownFlags.includes("--check-externals"), "the error must name the flags that do exist");
+});
+
+test("parseValidateArgs: an unknown flag alongside a valid one is still rejected", () => {
+  const p = parseValidateArgs(["--check-externals", "--yolo"]);
+  assert.equal(p.mode, "error");
+  assert.deepEqual(p.unknown, ["--yolo"]);
+});
+
+test("parseValidateArgs: a bare positional argument is rejected too", () => {
+  const p = parseValidateArgs(["externals"]);
+  assert.equal(p.mode, "error");
+  assert.deepEqual(p.unknown, ["externals"]);
+});
+
+// --- extractSkillMdName: the contract both callers depend on ---------------
+//
+// init.mjs tests the result for truthiness; validate-bundles.mjs tests it for
+// `=== null`. A "" return would make them disagree about the same document
+// (installer falls back to the id, guard FAILs), so empty must be null.
+
+test("extractSkillMdName: an empty name: value is null, not \"\" (both callers must agree)", () => {
+  for (const body of ["---\nname:\ndescription: d\n---\n", '---\nname: ""\n---\n', "---\nname: '   '\n---\n", "---\nname:    \n---\n"]) {
+    assert.equal(extractSkillMdName(body), null, `expected null for ${JSON.stringify(body)}`);
+  }
+});
+
+test("extractSkillMdName: a normal frontmatter name is returned trimmed and unquoted", () => {
+  assert.equal(extractSkillMdName('---\nname: "foo-skill"\ndescription: d\n---\n'), "foo-skill");
+  assert.equal(extractSkillMdName("---\nname:   foo-skill  \n---\n"), "foo-skill");
+});
+
+test("extractSkillMdName: a name: outside the leading frontmatter block is ignored", () => {
+  // No frontmatter at all — a `name:` in a fenced code block is documentation,
+  // not this skill's name, and must not become the install directory.
+  const body = "# Docs\n\n```yaml\nname: not-the-skill-name\n```\n";
+  assert.equal(extractSkillMdName(body), null);
+});
+
+test("extractSkillMdName: frontmatter wins over a later body occurrence", () => {
+  const body = "---\nname: real-name\n---\n\n```yaml\nname: decoy\n```\n";
+  assert.equal(extractSkillMdName(body), "real-name");
 });

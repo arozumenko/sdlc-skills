@@ -51,7 +51,7 @@ Read this before you install him, so the gap is never a surprise:
 
 In this repo: `implement-feature`, `bugfix-workflow`, `root-cause-analysis`, `code-review`, `git-workflow`, `completing-a-task`, `memory`.
 
-External †: `tdd`, `systematic-debugging`, `requesting-code-review`, `receiving-code-review`, `verification-before-completion`, `compose-state-hoisting`, `kotlin-flow-state-event-modeling`, `kotlin-coroutines-structured-concurrency`, `testing-setup`.
+External †: `tdd`, `systematic-debugging`, `requesting-code-review`, `receiving-code-review`, `verification-before-completion`, `compose-state-hoisting`, `kotlin-flow-state-event-modeling`, `kotlin-coroutines-structured-concurrency`, `testing-setup`, `compose-ui-testing-patterns`.
 
 † External skills resolve from `skills.json` or your [superpowers](https://github.com/obra/superpowers) install; pending ones are skipped with a notice.
 

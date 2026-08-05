@@ -401,7 +401,7 @@ so upstream content can change under an installed project between installs.
 | `kotlin-coroutines-structured-concurrency` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/kotlin-coroutines-structured-concurrency` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
 | `compose-ui-testing-patterns` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-ui-testing-patterns` | `android-dev`, `feature-development` Android overlay (`qa-engineer`) |
 | `testing-setup` | [`android/skills`](https://github.com/android/skills) → `testing/testing-setup` | `android-dev`, `feature-development` Android overlay (`tech-lead`, `qa-engineer`) |
-| `android-cli` | [`android/skills`](https://github.com/android/skills) → `devtools/android-cli` | `android-dev` (optional, manual — see its `AGENT.md`) |
+| `android-cli` | [`android/skills`](https://github.com/android/skills) → `devtools/android-cli` | No agent or overlay — installs only via an explicit `--skills android-cli` |
 
 ## Using these agents and skills
 
@@ -507,7 +507,7 @@ re-distributes nothing, only catalogs and wires.
 - **[`fastapi/fastapi`](https://github.com/fastapi/fastapi)** — Sebastián Ramírez. Official FastAPI agent skill. `feature-development` web/backend overlay. MIT.
 - **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest and UiAutomator2 environment setup, real-device config, and troubleshooting. `feature-development` iOS + Android QA overlays. Apache-2.0.
 - **Chris Banes' Compose/Kotlin agent skills** — [`chrisbanes/skills`](https://github.com/chrisbanes/skills). `compose-state-hoisting`, `kotlin-flow-state-event-modeling`, `kotlin-coroutines-structured-concurrency`, `compose-ui-testing-patterns`. Powers the `android-dev` agent. Apache-2.0.
-- **[`android/skills`](https://github.com/android/skills)** — official Google Android skills. `testing-setup`, `android-cli`. `feature-development` Android overlay + `android-dev`. Apache-2.0.
+- **[`android/skills`](https://github.com/android/skills)** — official Google Android skills. `testing-setup` — used by the `feature-development` Android overlay and `android-dev`; `android-cli` — in no agent or overlay, opt-in only via an explicit `--skills android-cli`. Apache-2.0.
 - **Bundle-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
 
 Thanks to all maintainers.
