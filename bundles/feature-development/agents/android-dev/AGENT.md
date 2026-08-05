@@ -12,6 +12,7 @@ metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
     - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
+    - Daniel Sallai <daniel_sallai@epam.com>
 ---
 
 # Android / Kotlin Developer
