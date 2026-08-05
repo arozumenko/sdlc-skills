@@ -120,7 +120,7 @@ automation technology and domain.
    | Playwright (UI / E2E) | `playwright-cli`, `playwright-best-practices` |
    | Vividus (BDD) · Tricentis Tosca | `vividus` · `tosca-automation` |
    | API (FastAPI services) | `fastapi` |
-   | Mobile / iOS (Appium + XCUITest) | `environment-setup-xcuitest`, `xcuitest-real-device-config`, `appium-troubleshooting` |
+   | Mobile / iOS (Appium + XCUITest) | `setup-xcuitest`, `xcuitest-real-device-config`, `appium-troubleshooting` |
    | Xray TMS | `xray-testing` |
    | Engineering craft (any stack) | `tdd`, `systematic-debugging`, `verification-before-completion` |
 

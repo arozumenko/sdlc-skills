@@ -10,6 +10,7 @@
     "test": "node --test",
     "validate:bundles": "node bin/validate-bundles.mjs",
     "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
+    "validate:externals": "node bin/validate-bundles.mjs --check-externals",
     "validate": "npm run validate:bundles && npm run validate:marketplaces",
     "gen:marketplaces": "node bin/gen-marketplaces.mjs"
   },

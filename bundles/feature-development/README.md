@@ -140,7 +140,7 @@ flowchart TD
 Picking any **web** role activates the web briefings/skills for `tech-lead` and
 `qa-engineer`; picking `ios-dev` activates the iOS ones. Pick both and the
 shared roles get the **superset** — e.g. `qa-engineer` keeps Playwright *and*
-gains the iOS testing skills (`swift-testing-pro`, `environment-setup-xcuitest`,
+gains the iOS testing skills (`swift-testing-pro`, `setup-xcuitest`,
 …). A bundle tunes the *installed copy* via two parallel overlays:
 `briefings/` (behavior) and `skillOverlays` in `bundle.json` (capability). See
 [`../SPEC.md`](../SPEC.md) for the overlay model.

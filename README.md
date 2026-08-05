@@ -390,7 +390,7 @@ catalog.
 | `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `feature-development` web overlay (`python-dev`, `tech-lead`) |
 | `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `feature-development` web overlay |
 | `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `feature-development` web overlay (`js-dev`, `tech-lead`) |
-| `environment-setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/environment-setup-xcuitest` | `feature-development` iOS overlay (`qa-engineer`) |
+| `setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/setup-xcuitest` | `feature-development` iOS overlay (`qa-engineer`) |
 | `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `feature-development` iOS overlay (`qa-engineer`) |
 | `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `feature-development` iOS overlay (`qa-engineer`) |
 

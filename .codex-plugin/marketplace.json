@@ -198,12 +198,6 @@
       "version": "0.2.0"
     },
     {
-      "name": "environment-setup-xcuitest",
-      "source": "./skills/environment-setup-xcuitest",
-      "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)",
-      "version": "0.2.0"
-    },
-    {
       "name": "fastapi",
       "source": "./skills/fastapi",
       "description": "Official FastAPI best-practices skill — Annotated style, async path operations, Pydantic v2, dependency injection; write new or refactor old FastAPI code to current patterns (by the FastAPI project)",
@@ -237,6 +231,12 @@
       "name": "requesting-code-review",
       "source": "./skills/requesting-code-review",
       "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "setup-xcuitest",
+      "source": "./skills/setup-xcuitest",
+      "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)",
       "version": "0.2.0"
     },
     {

@@ -48,7 +48,7 @@
       "skillOverlays": {
         "tech-lead": { "add": ["swiftui-pro", "swiftdata-pro", "swift-testing-pro", "swift-concurrency-pro"] },
         "qa-engineer": {
-          "add": ["swift-testing-pro", "environment-setup-xcuitest", "xcuitest-real-device-config", "appium-troubleshooting"],
+          "add": ["swift-testing-pro", "setup-xcuitest", "xcuitest-real-device-config", "appium-troubleshooting"],
           "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
         }
       }

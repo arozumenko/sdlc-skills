@@ -13,6 +13,16 @@
 //   - every `localAgents` entry has agents/<name>/AGENT.md in the bundle dir
 //   - every `localSkills` entry has skills/<name>/SKILL.md in the bundle dir
 // Exits non-zero with a per-error report when anything fails.
+//
+// `--check-externals`: opt-in, network-using mode. Instead of the bundle
+// checks above, fetches every skills.json `repo:` entry's upstream SKILL.md
+// and verifies (a) it exists and (b) its `name:` frontmatter equals the
+// registry `id` — bin/init.mjs derives the installed skill's directory name
+// from that upstream `name:`, not from the registry id, so a mismatch means
+// the skill silently installs under the wrong directory and any bundle
+// overlay referencing the registry id finds nothing. The default (no-flag)
+// path never touches the network, so `npm run validate` stays offline-safe;
+// only `--check-externals` / `npm run validate:externals` hits GitHub.
 
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname } from "path";
@@ -234,4 +244,77 @@ function main() {
   console.log(`\nAll ${bundleDirs.length} bundle(s) valid.`);
 }
 
-main();
+// Fetch a repo:-backed skills.json entry's upstream SKILL.md and confirm its
+// `name:` frontmatter matches the registry `id`. bin/init.mjs (installExternalSkill)
+// names the installed skill directory from that upstream `name:` field — never
+// from the registry id — so an id/name mismatch is a live bug: the skill
+// installs under a different directory than any bundle skillOverlay expects,
+// and is silently absent from the role that declared it. A 200 response alone
+// does not prove the entry works; the name must be checked too.
+async function checkExternalEntry(entry) {
+  const ref = entry.ref || "main";
+  const subdir = entry.subdir ? `${entry.subdir.replace(/\/+$/, "")}/` : "";
+  const url = `https://raw.githubusercontent.com/${entry.repo}/${ref}/${subdir}SKILL.md`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    return { ok: false, msg: `${entry.id}: fetch failed for ${url} — ${e.message}` };
+  }
+  if (!res.ok) {
+    return { ok: false, msg: `${entry.id}: ${res.status} ${res.statusText} fetching ${url}` };
+  }
+  const text = await res.text();
+  const m = text.match(/^name:\s*(.+)$/m);
+  const upstreamName = m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
+  if (upstreamName !== entry.id) {
+    return {
+      ok: false,
+      msg: `${entry.id}: upstream SKILL.md name "${upstreamName}" != registry id "${entry.id}" (${url})`,
+    };
+  }
+  return { ok: true, msg: `${entry.id}: name matches (${url})` };
+}
+
+async function checkExternals() {
+  const registryPath = join(PKG_ROOT, "skills.json");
+  if (!existsSync(registryPath)) {
+    console.log("No skills.json — nothing to check.");
+    return;
+  }
+  let reg;
+  try {
+    reg = JSON.parse(readFileSync(registryPath, "utf8"));
+  } catch (e) {
+    console.error(`! skills.json failed to parse: ${e.message}`);
+    process.exit(1);
+  }
+  const externals = (reg.skills || []).filter((s) => s.repo);
+  if (externals.length === 0) {
+    console.log("No repo: entries in skills.json — nothing to check.");
+    return;
+  }
+
+  let failCount = 0;
+  for (const entry of externals) {
+    const result = await checkExternalEntry(entry);
+    if (result.ok) {
+      console.log(`  PASS ${result.msg}`);
+    } else {
+      console.error(`  FAIL ${result.msg}`);
+      failCount++;
+    }
+  }
+
+  if (failCount > 0) {
+    console.error(`\n${failCount} of ${externals.length} external skill(s) failed.`);
+    process.exit(1);
+  }
+  console.log(`\nAll ${externals.length} external skill(s) valid.`);
+}
+
+if (process.argv.includes("--check-externals")) {
+  checkExternals();
+} else {
+  main();
+}
