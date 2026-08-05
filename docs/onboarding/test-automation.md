@@ -121,6 +121,7 @@ automation technology and domain.
    | Vividus (BDD) · Tricentis Tosca | `vividus` · `tosca-automation` |
    | API (FastAPI services) | `fastapi` |
    | Mobile / iOS (Appium + XCUITest) | `setup-xcuitest`, `xcuitest-real-device-config`, `appium-troubleshooting` |
+   | Mobile / Android (Appium + UiAutomator2) | `setup-uiautomator2`, `appium-troubleshooting` |
    | Xray TMS | `xray-testing` |
    | Engineering craft (any stack) | `tdd`, `systematic-debugging`, `verification-before-completion` |
 

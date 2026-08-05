@@ -5,7 +5,8 @@ developer roles you need** — any combination, no stack lock-in. A requirements
 plan → build → verify → merge relay: **BA** shapes stories, **tech-lead**
 decomposes them, **PM** routes the work and owns the merge gate, **devs** build
 (TDD), and **QA** verifies. The shared core roles auto-tune to whatever
-platforms your selection spans (web JS/TS + Python, iOS Swift/SwiftUI).
+platforms your selection spans (web JS/TS + Python, iOS Swift/SwiftUI, Android
+Kotlin/Compose).
 
 ## Install
 
@@ -20,7 +21,7 @@ dev — and the core `tech-lead` and `qa-engineer` automatically pick up the rig
 skills and briefings for the platforms you chose.
 
 - `--yes` (or a non-interactive shell) installs **all** developer roles.
-- `--agents python-dev,ios-dev` selects a subset non-interactively.
+- `--agents python-dev,ios-dev,android-dev` selects a subset non-interactively.
 
 Drops the selected agents into `.claude/`, pulls their skills, seeds per-role
 briefings, wires the memory/context hooks, and splices `instructions.md` into
@@ -51,8 +52,8 @@ agent to turn this into user stories."_ From there the work flows down the chain
   interface contracts and a critical path, then hands off to the PM.
 - **`project-manager` (Max)** routes tasks to the right devs (inline,
   sub-agent, or parallel) and owns the **merge gate**.
-- **devs** (`python-dev` / `js-dev` / `ios-dev` / `test-automation-engineer`)
-  implement with TDD and open a PR.
+- **devs** (`python-dev` / `js-dev` / `ios-dev` / `android-dev` /
+  `test-automation-engineer`) implement with TDD and open a PR.
 - **`qa-engineer` (Sage)** verifies the change — reproduces bugs with evidence,
   runs the E2E path, treats every green test with suspicion.
 - **`tech-lead`** does a **blocking code review**; on approval the **PM merges**,
@@ -92,7 +93,7 @@ flowchart TD
         ba["ba (Alex) — idea → user stories"]
         tl["tech-lead (Rio)<br/>decompose → tasks + contracts"]
         pm["project-manager (Max)<br/>routes work · owns merge gate"]
-        devs["devs — python / js / ios /<br/>test-automation (TDD → PR)"]
+        devs["devs — python / js / ios / android /<br/>test-automation (TDD → PR)"]
         qa["qa-engineer (Sage)<br/>verify · reproduce · E2E"]
         review{"tech-lead review<br/>= APPROVED?"}
         merge(["PM merges, back-writes tracker, reports"])
@@ -134,22 +135,25 @@ flowchart TD
 | JS/TS frontend | `js-dev` (Jay) | web | React / Next.js / Node (TypeScript) |
 | Test automation | `test-automation-engineer` (Axel) | web | End-to-end automation (Playwright), AFS → green test |
 | iOS app | `ios-dev` (Io) | iOS | Swift / SwiftUI / SwiftData |
+| Android app | `android-dev` (Dan) | Android | Kotlin / Jetpack Compose / Room / DataStore |
 
 ## How tuning works
 
 Picking any **web** role activates the web briefings/skills for `tech-lead` and
-`qa-engineer`; picking `ios-dev` activates the iOS ones. Pick both and the
-shared roles get the **superset** — e.g. `qa-engineer` keeps Playwright *and*
-gains the iOS testing skills (`swift-testing-pro`, `setup-xcuitest`,
-…). A bundle tunes the *installed copy* via two parallel overlays:
+`qa-engineer`; picking `ios-dev` activates the iOS ones; picking `android-dev`
+activates the Android ones. Pick more than one and the shared roles get the
+**superset** — e.g. `qa-engineer` keeps Playwright *and* gains the iOS testing
+skills (`swift-testing-pro`, `setup-xcuitest`, …) *and* the Android testing
+skills (`compose-ui-testing-patterns`, `setup-uiautomator2`, …). A bundle tunes
+the *installed copy* via two parallel overlays:
 `briefings/` (behavior) and `skillOverlays` in `bundle.json` (capability). See
 [`../SPEC.md`](../SPEC.md) for the overlay model.
 
 ## When to use it
 
 - A **full feature-delivery** engagement — requirements through merge — on web,
-  iOS, or both, where you want specialized roles handing off to each other
-  rather than one generalist.
+  iOS, Android, or any combination, where you want specialized roles handing
+  off to each other rather than one generalist.
 - You want platform-aware core roles (a tech-lead and QA that know your stack)
   without committing to a stack up front — pick the dev roles per project.
 

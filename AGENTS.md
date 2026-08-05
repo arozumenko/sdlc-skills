@@ -11,7 +11,7 @@ Content lives in **bundles** (`bundles/<id>/`) — team presets that physically
 own their `agents/` and `skills/` as real directories. Three bundles ship:
 
 - **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
-  Python / JS / iOS devs, QA, Scout, test-automation-engineer.
+  Python / JS / iOS / Android devs, QA, Scout, test-automation-engineer.
 - **`test-automation`** — TMS-driven automation pipeline: test-automation-lead,
   qa-engineer, test-automation-engineer, Scout.
 - **`manual-qa`** — live-browser manual-QA team: test-run-lead, test-author,
@@ -40,7 +40,7 @@ Works for Claude Code, Cursor, Windsurf, and GitHub Copilot. Fetches
 external skills automatically:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
+npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev,android-dev
 # or pick everything:
 npx github:arozumenko/sdlc-skills init --all
 ```

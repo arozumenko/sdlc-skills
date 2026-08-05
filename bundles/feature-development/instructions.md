@@ -37,9 +37,34 @@ stacks actually in play apply.
   regression coverage. Releases go through the project's signing/distribution
   flow (fastlane, Xcode Cloud, or manual archive) — note which in `AGENTS.md`.
 
+## Android stack (`android-dev`)
+
+- **App** (`android-dev`): Kotlin + Jetpack Compose (Material 3). Coroutines +
+  Flow for concurrency and state — no callback APIs where a suspend function
+  exists.
+- **Build:** Gradle + AGP, driven through a version catalog
+  (`gradle/libs.versions.toml`) — never hardcoded version strings.
+- **DI:** Hilt. **Data:** Room for relational data, DataStore for
+  preferences — never `SharedPreferences`.
+- **Assumption:** this overlay targets a **greenfield Compose** codebase. An
+  established Fragments/XML app is out of scope for `android-dev` — flag the
+  mismatch rather than forcing it.
+- **`android-dev` never touches a device or an emulator** — no
+  `connectedAndroidTest`, no `adb install`, no AVDs. He verifies through
+  compilation, host-side tests (JUnit, Robolectric, Compose-via-Robolectric),
+  and lint, and does not write `androidTest` sources while no CI runner is
+  configured for them.
+
 ## Definition of done (team-wide)
 
 A change is done when it builds, its tests pass, and — for the web stack — the
 affected side of the API contract is consistent and user-facing flows are green
 e2e; for the iOS stack — UI changes are verified in a simulator or preview and
-concurrency is race-free. "I wrote the code" is not done.
+concurrency is race-free; for the Android stack — `android-dev` never verifies
+on a device or emulator, so his handoff carries a `Not verified:` line naming
+what needs device coverage. **A change touching the Android stack is not done
+until every gap on that line is either closed by `qa-engineer` on an emulator
+or explicitly accepted by the user.** `project-manager` treats an unresolved
+`Not verified:` line as a routing obligation before merge, not as an FYI — the
+merge gate does not open on "I wrote the code" for Android any more than it
+does for the other stacks.

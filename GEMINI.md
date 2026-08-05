@@ -18,6 +18,7 @@ inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
 - `python-dev` — Python implementation with TDD
 - `js-dev` — TypeScript / React / Node implementation with TDD
 - `ios-dev` — Swift / SwiftUI / SwiftData implementation (no simulator)
+- `android-dev` — Kotlin / Jetpack Compose / Room / DataStore implementation (no device or emulator)
 - `qa-engineer` — Test verification, bug reproduction, E2E tests, TMS case execution + AFS emission (via `test-case-analysis` skill)
 - `test-automation-engineer` — Implements automation from specs in the project's existing framework
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring
@@ -99,4 +100,5 @@ way.
 
 - "Load the `deep-research` skill" → read its `SKILL.md` (under `skills/` for orphans, or the owning `bundles/<id>/skills/<name>/`).
 - "I'm starting as `ios-dev`" → read `bundles/feature-development/agents/ios-dev/AGENT.md` + `SOUL.md`.
+- "I'm starting as `android-dev`" → read `bundles/feature-development/agents/android-dev/AGENT.md` + `SOUL.md`.
 - Don't restate a skill's contents verbatim. Follow its workflow.

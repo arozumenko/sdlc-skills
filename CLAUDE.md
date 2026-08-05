@@ -36,7 +36,7 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 node --test bin/lib/item-resolver.test.mjs
 
 # Exercise the installer against a throwaway dir
-node bin/init.mjs init --bundle feature-development --target claude --yes   # add --dry-run to preview
+node bin/init.mjs init --bundle feature-development --target claude --yes
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-bundles.mjs` and validates

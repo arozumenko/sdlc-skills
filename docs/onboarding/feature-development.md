@@ -2,8 +2,9 @@
 
 The `feature-development` bundle drops a **cross-platform product team** into a
 repo: a BA, a PM orchestrator, a tech-lead, a QA engineer, scout, and whichever
-developer roles you pick (Python, JS/TS, iOS, test-automation). This guide takes
-you from "I want a delivery team here" to "the team is shipping features."
+developer roles you pick (Python, JS/TS, iOS, Android, test-automation). This
+guide takes you from "I want a delivery team here" to "the team is shipping
+features."
 
 For the pipeline picture, roster, and overlay model, read the bundle README
 first — this guide assumes it and focuses on **adoption**:
@@ -30,13 +31,13 @@ You → ba (story) → project-manager (routes) → tech-lead (decomposes)
 | Requirements | `ba` | Alex | Turns asks into user stories + acceptance criteria |
 | Orchestrator | `project-manager` | Max | Routes tasks, tracks state, owns the merge gate |
 | Decomposition | `tech-lead` | Rio | Breaks stories into technical tasks; owns interfaces |
-| Implementation | `python-dev` / `js-dev` / `ios-dev` / `test-automation-engineer` | Py / Jay / Io / Axel | Build the change in their stack, with tests |
+| Implementation | `python-dev` / `js-dev` / `ios-dev` / `android-dev` / `test-automation-engineer` | Py / Jay / Io / Dan / Axel | Build the change in their stack, with tests |
 | Verification | `qa-engineer` | Sage | Tests PRs, reproduces bugs, runs e2e |
 
 `project-manager` is the **top-level orchestrator you launch directly**. The
 core `tech-lead` and `qa-engineer` auto-tune to the platforms your dev-role
-selection spans (web, iOS, or both) via the bundle's overlay model — see
-[`bundles/SPEC.md`](../../bundles/SPEC.md).
+selection spans (web, iOS, Android, or any combination) via the bundle's
+overlay model — see [`bundles/SPEC.md`](../../bundles/SPEC.md).
 
 ---
 
@@ -56,6 +57,19 @@ Per-stack tooling — only what your selected dev roles need:
 | `js-dev` | Node + the project package manager (npm / pnpm / yarn); React focus |
 | `test-automation-engineer` | A Playwright-capable environment + the **Playwright MCP** server wired into your host |
 | `ios-dev` | macOS + Xcode toolchain (`xcodebuild`, a scheme); device automation adds Appium |
+| `android-dev` | JDK, Android SDK / `ANDROID_HOME` set (or a `local.properties` with `sdk.dir`) — every Gradle command fails outright without one. First `testDebugUnitTest` run downloads Robolectric `android-all` jars (~35MB each, one per API level under test) — this fails on an offline or network-restricted machine, so run it once with network access before going offline. |
+
+> **Heads-up on Android verification.** `android-dev` (Dan) never touches a
+> device or an emulator — no `connectedAndroidTest`, no `adb install`, no
+> AVDs — and does not write `androidTest` sources while no CI runner is
+> configured for them. His evidence is compilation, host-side unit tests
+> (JUnit, Robolectric, Compose-via-Robolectric), and lint; his handoff always
+> carries a `Not verified:` line naming what needs device coverage. That gap
+> is **not closed automatically** — either `qa-engineer` closes it on an
+> emulator, or you explicitly accept it. See
+> [`bundles/feature-development/agents/android-dev/README.md`](../../bundles/feature-development/agents/android-dev/README.md#what-dan-does-not-do)
+> for the full policy, including what changes if you install him standalone
+> (no `qa-engineer` to route to).
 
 Your host can be Claude Code, Cursor, Windsurf, or GitHub Copilot CLI. The
 bundle install (`--bundle`) currently targets **Claude Code**; other hosts use
@@ -79,16 +93,17 @@ npx github:arozumenko/sdlc-skills init --bundle feature-development
 The installer always sets up the **core roles** (`scout`, `ba`,
 `project-manager`, `tech-lead`, `qa-engineer`) and shows a checklist of
 **developer roles** to add. Pick the subset your stack needs — e.g. a Python
-backend dev + a JS frontend dev, or just `ios-dev`.
+backend dev + a JS frontend dev, or just `ios-dev`, or just `android-dev`.
 
 - `--yes` (or a non-interactive shell) installs **all** developer roles.
 - `--agents python-dev,js-dev` selects a subset non-interactively.
 
 Picking any **web** role (`python-dev` / `js-dev` / `test-automation-engineer`)
 activates the web briefings + skills for `tech-lead` and `qa-engineer`; picking
-`ios-dev` activates the iOS ones. Pick both platforms and the shared roles get
-the **superset** (e.g. `qa-engineer` keeps Playwright *and* gains the iOS
-testing skills).
+`ios-dev` activates the iOS ones; picking `android-dev` activates the Android
+ones. Pick more than one platform and the shared roles get the **superset**
+(e.g. `qa-engineer` keeps Playwright *and* gains the iOS testing skills *and*
+the Android testing skills).
 
 For Copilot / Cursor / Windsurf, use the manual form and swap `--target`:
 
@@ -170,7 +185,10 @@ tweak). The point is to prove the pipeline, not the feature.
 **Definition of done is team-wide:** the change builds, its tests pass, and —
 for web — the affected side of the API contract is consistent and user-facing
 flows are green e2e; for iOS — UI changes are verified in a simulator/preview
-and concurrency is race-free. "I wrote the code" is not done.
+and concurrency is race-free; for Android — `android-dev`'s handoff never
+covers device behavior on its own, so every gap named in his `Not verified:`
+line must be closed by `qa-engineer` on an emulator or explicitly accepted by
+you before the change merges. "I wrote the code" is not done.
 
 ---
 
@@ -258,8 +276,8 @@ context hooks, so it survives `/clear`, compaction, and resume):
   one-sided. A contract change isn't done until the consuming side is updated or
   explicitly versioned — flag the counterpart role.
 - **`qa-engineer` lacks the right test skills for your stack** → confirm the dev
-  roles you installed activated the right overlay (web vs iOS). Re-run
-  `--update` with the missing role to pick up the superset.
+  roles you installed activated the right overlay (web vs iOS vs Android).
+  Re-run `--update` with the missing role to pick up the superset.
 - **MCP auth errors** → token rotated / scope missing. Fix the MCP server config
   in the host (`~/.claude.json`, `.mcp.json`, Copilot settings), never in the
   project repo, then restart the session.
@@ -273,7 +291,7 @@ Re-run the same `init` command with `--update` to pull upstream fixes; add a dev
 role to an existing install with:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --update --bundle feature-development --agents ios-dev
+npx github:arozumenko/sdlc-skills init --update --bundle feature-development --agents android-dev
 ```
 
 Then re-run scout so its frontmatter audit verifies the context wiring for the
