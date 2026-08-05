@@ -1,7 +1,7 @@
 ---
 name: Product Management
 description: Product Owner discovery pipeline — take raw asks to verified, prioritized hypotheses ready for engineering.
-owner: AIRUN
+owner: Applied AI
 install_script: 'npx github:arozumenko/sdlc-skills init --bundle product-management'
 install_script_unix: 'npx github:arozumenko/sdlc-skills init --bundle product-management'
 ---
