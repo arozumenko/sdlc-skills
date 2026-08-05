@@ -8,7 +8,7 @@ of native plugin formats and a shared npx installer.
 ## What's here
 
 Content lives in **bundles** (`bundles/<id>/`) — team presets that physically
-own their `agents/` and `skills/` as real directories. Three bundles ship:
+own their `agents/` and `skills/` as real directories. Four bundles ship:
 
 - **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
   Python / JS / iOS devs, QA, Scout, test-automation-engineer.
@@ -16,6 +16,9 @@ own their `agents/` and `skills/` as real directories. Three bundles ship:
   qa-engineer, test-automation-engineer, Scout.
 - **`manual-qa`** — live-browser manual-QA team: test-run-lead, test-author,
   test-sizer, test-runner, test-reporter, app-profiler.
+- **`product-management`** — Product Owner discovery pipeline: product-owner
+  (Priya), discovery-researcher (Sam); 10 discovery skills seeding
+  `docs/discovery/`.
 
 The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
 content: one agent (`personal-assistant`) and eight skills (`deep-research`,
