@@ -306,6 +306,8 @@ point directly at a `SKILL.md` directory.
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 | `test-automation-lead` | Tal | Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and test-framework architecture (`test-automation` bundle) |
+| `product-owner` | Priya | Runs the discovery loop end to end — intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate (`product-management` bundle) |
+| `discovery-researcher` | Sam | Gathers and stress-tests evidence — stakeholder interviews, market/desk research, adversarial verification; dispatched by `product-owner` (`product-management` bundle) |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief (standalone orphan) |
 
 The **`manual-qa`** bundle ships a separate live-browser manual-QA team (functional
@@ -362,6 +364,21 @@ installable via bundles is listed below.
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 | `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Owned by the `manual-qa` bundle |
+
+**Product management (10, bundle-owned by `product-management`):**
+
+| Skill | What it does |
+|---|---|
+| `intake-triage` | Front door for raw asks — verdicts each Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems |
+| `define-personas` | Author and maintain canonical persona cards (surface, goals, pains, JTBD, evidence) referenced by stable slug |
+| `define-outcomes` | Draft, stress-test, and ratify measurable outcome anchors (dated baseline + target + timeframe) in `outcomes.md` |
+| `opportunity-tree` | Maintain the opportunity–solution tree over existing artifacts — Torres gate + Olsen scoring, regenerates the outcome-tree board |
+| `journeys-to-hypotheses` | Convergence pass — classify each journey COVERED / GAP / OUT-OF-SCOPE and author missing Problem + Hypothesis stubs |
+| `prioritize-bets` | Rank incubating/promotable hypotheses (RICE default; WSJF/ICE options); confidence derived from each bet's evidence band |
+| `stakeholder-interview` | Prepare a VOI-ordered interview guide, or synthesize raw notes into evidence and propagate answers into hypotheses |
+| `grill-decision` | Socratic one-question-at-a-time stress-test of a decision or hypothesis, capturing outcomes inline (DEC records, edits) |
+| `capture-learning` | Record a problem → outcome → lesson when a hypothesis closes or an experiment concludes |
+| `discovery-status` | Read-only pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item |
 
 ### External skills (fetched by the installer)
 
