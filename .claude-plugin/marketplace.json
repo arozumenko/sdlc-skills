@@ -48,6 +48,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "android-dev",
+      "source": "./bundles/feature-development/agents/android-dev",
+      "description": "Android/Kotlin developer agent — greenfield Jetpack Compose, Room/DataStore, Gradle/AGP with TDD and no-emulator discipline.",
+      "version": "0.2.0"
+    },
+    {
       "name": "qa-engineer",
       "source": "./bundles/feature-development/agents/qa-engineer",
       "description": "QA engineer agent — verifies features, reproduces bugs, writes E2E tests via Playwright.",

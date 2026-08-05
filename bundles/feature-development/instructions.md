@@ -67,7 +67,9 @@ there is nothing to name, not that the question was skipped — `project-manager
 confirms that rather than assuming it on a UI-affecting Android change. **A
 change touching the Android stack is not done until every gap on that line is
 either closed by `qa-engineer` on an emulator, or explicitly accepted by the
-user with that acceptance recorded on the PR or issue.** `project-manager`
+user with that acceptance recorded on the PR or issue, and, where the line is
+empty on a UI-affecting change, until `project-manager` has confirmed that
+emptiness is a finding rather than an omission.** `project-manager`
 treats an unresolved `Not verified:` line as a routing obligation before merge,
 not as an FYI — the merge gate does not open on "I wrote the code" for Android
 any more than it does for the other stacks.
