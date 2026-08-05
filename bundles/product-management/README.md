@@ -3,8 +3,10 @@
 A Product Owner discovery pipeline — take a raw ask (feature request,
 complaint, idea) all the way to a verified, prioritized hypothesis anchored to
 a ratified outcome, ready to hand off to engineering as groomed backlog work.
-Adapted from [PetroczyP/PO-RnD](https://github.com/PetroczyP/PO-RnD) (MIT) —
-see [`NOTICE.md`](NOTICE.md) for what was and wasn't ported.
+Adapted from [PetroczyP/PO-RnD](https://github.com/PetroczyP/PO-RnD) (MIT), with
+product-management insights drawn from
+[mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see
+[`NOTICE.md`](NOTICE.md) for full attribution and what was and wasn't ported.
 
 ## Install
 

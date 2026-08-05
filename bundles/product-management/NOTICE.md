@@ -16,3 +16,14 @@ outcomes, decisions, and evidence — has been re-expressed as plain markdown
 records and agent/skill personas native to `sdlc-skills`, installed via
 `bin/init.mjs` and tuned per team through the standard `bundle.json`
 overlay mechanism.
+
+## Additional acknowledgements
+
+Much of the product-management thinking behind this bundle draws on
+[mattpocock/skills](https://github.com/mattpocock/skills) ("Skills for Real
+Engineers", MIT) — its skill-design patterns and insights informed how these
+discovery skills are framed and composed.
+
+Individual skills also carry provenance footers crediting further upstream
+craft (e.g. `phuryn/pm-skills` and `shinpr/claude-code-discover`, both MIT)
+where specific methods were adapted.
