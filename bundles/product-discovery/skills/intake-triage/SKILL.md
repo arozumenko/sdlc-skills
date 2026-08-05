@@ -121,12 +121,17 @@ For each **Act Now** / **Plan Next** ask, write a Problem to
 - Leave `node_type:` / `parent:` unset — placing the Problem in the opportunity tree is
   `opportunity-tree`'s job, on its own turn.
 
-### 8. Route the queue
+### 8. Checkpoint progress
+Right after minting — this write is irreversible and a mid-batch interruption should not lose it —
+invoke the `memory` skill's **Log** op noting the batch record path and which Problems were just
+minted, so work resumes cleanly if the session breaks here.
+
+### 9. Route the queue
 Add every **Collect More Signal** ask to the open-questions queue (a bullet under the intake
 record's `## Collect More Signal queue`) so the next `stakeholder-interview` prep run picks it
 up. Nothing is silently dropped.
 
-### 9. Report and hand back
+### 10. Report and hand back
 Print what changed (the record path, each minted Problem, each decline with its scope citation,
 the queued items) and the next step: minted Problems are ready for `define-personas` /
 `stakeholder-interview` to gather evidence, then `journeys-to-hypotheses` to shape a bet.
