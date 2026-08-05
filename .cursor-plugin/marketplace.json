@@ -282,6 +282,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "android-cli",
+      "source": "./skills/android-cli",
+      "description": "Install and use the `android` CLI — create projects, run apps, manage virtual devices (screenshots, UI inspection), manage SDK components, look up Android docs (official Google Android skills, Apache-2.0)",
+      "version": "0.2.0"
+    },
+    {
       "name": "appium-troubleshooting",
       "source": "./skills/appium-troubleshooting",
       "description": "Diagnose Appium failures (XCUITest/UiAutomator2) — startup, driver readiness, WebDriverAgent, element lookup (official Appium)",
@@ -291,6 +297,18 @@
       "name": "brainstorming",
       "source": "./skills/brainstorming",
       "description": "Ideation before coding — explore the problem space before committing to a solution (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "compose-state-hoisting",
+      "source": "./skills/compose-state-hoisting",
+      "description": "Review and refactor Jetpack Compose state hoisting — keep UI state at its lowest owner, extract state holders only when warranted (by Chris Banes, Apache-2.0)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "compose-ui-testing-patterns",
+      "source": "./skills/compose-ui-testing-patterns",
+      "description": "Write and review Jetpack Compose UI tests — plain state-driven tests, screenshot tests, semantics assertions, focus/keyboard input (by Chris Banes, Apache-2.0)",
       "version": "0.2.0"
     },
     {
@@ -309,6 +327,18 @@
       "name": "fastmcp-server",
       "source": "./skills/fastmcp-server",
       "description": "Build MCP servers with FastMCP — tools, resources, authentication/OAuth, providers, middleware, context, deployment. Use when creating Python MCP servers (MIT)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "kotlin-coroutines-structured-concurrency",
+      "source": "./skills/kotlin-coroutines-structured-concurrency",
+      "description": "Review Kotlin coroutine usage for structured concurrency — scope lifecycle, suspend APIs over stored CoroutineScope, error handling (by Chris Banes, Apache-2.0)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "kotlin-flow-state-event-modeling",
+      "source": "./skills/kotlin-flow-state-event-modeling",
+      "description": "Pick the right Kotlin Flow primitive for state vs. events — StateFlow, SharedFlow, Channel, stateIn, SharingStarted (by Chris Banes, Apache-2.0)",
       "version": "0.2.0"
     },
     {
@@ -333,6 +363,12 @@
       "name": "requesting-code-review",
       "source": "./skills/requesting-code-review",
       "description": "How to hand off work for review — prepare context, state scope, make the reviewer's job easy (from obra/superpowers)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "setup-uiautomator2",
+      "source": "./skills/setup-uiautomator2",
+      "description": "Prepare and verify Appium UiAutomator2 — Node/Appium, Android SDK and Java prerequisites, driver install, doctor output, server smoke evidence (official Appium, Apache-2.0)",
       "version": "0.2.0"
     },
     {
@@ -381,6 +417,12 @@
       "name": "tdd",
       "source": "./skills/tdd",
       "description": "Test-driven development — vertical-slice tracer bullets, integration-style tests, interface design for testability (by Matt Pocock)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "testing-setup",
+      "source": "./skills/testing-setup",
+      "description": "Analyze and set up a native Android testing strategy — install test libraries, scaffold harnesses for unit, UI, screenshot, and end-to-end tests (official Google Android skills, Apache-2.0)",
       "version": "0.2.0"
     },
     {
