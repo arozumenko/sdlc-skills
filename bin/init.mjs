@@ -72,6 +72,7 @@ import {
   briefingDescription,
 } from "./lib/bundle-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
+import { extractSkillMdName } from "./lib/skill-md.mjs";
 import { execSync } from "child_process";
 import { homedir } from "os";
 
@@ -970,12 +971,14 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
     console.error(`  ! ${entry.id}: ${entry.subdir || "."} not found in ${entry.repo}`);
     return { status: "error" };
   }
-  // Skill name derives from SKILL.md `name:` (if present) else subdir basename.
+  // Skill name derives from SKILL.md `name:` (if present, via the shared
+  // lib/skill-md.mjs parser that bin/validate-bundles.mjs --check-externals
+  // also uses) else subdir basename.
   let skillName = entry.id;
   const skillMd = join(src, "SKILL.md");
   if (existsSync(skillMd)) {
-    const match = readFileSync(skillMd, "utf8").match(/^name:\s*(.+)$/m);
-    if (match) skillName = match[1].trim().replace(/^["']|["']$/g, "");
+    const parsedName = extractSkillMdName(readFileSync(skillMd, "utf8"));
+    if (parsedName) skillName = parsedName;
   } else if (entry.subdir) {
     skillName = basename(entry.subdir);
   }

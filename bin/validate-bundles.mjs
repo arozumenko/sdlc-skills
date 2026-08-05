@@ -23,10 +23,21 @@
 // overlay referencing the registry id finds nothing. The default (no-flag)
 // path never touches the network, so `npm run validate` stays offline-safe;
 // only `--check-externals` / `npm run validate:externals` hits GitHub.
+//
+// The externals check reports two severities, not one:
+//   - FAIL (exit non-zero) — 404, a `name:`/`id` mismatch, or malformed/
+//     absent frontmatter. These are registry defects this repo owns, and
+//     must block.
+//   - WARN (non-fatal) — network transport errors, HTTP 429, and 5xx. These
+//     are upstream/infra conditions this repo does not own; each is retried
+//     once (with a short backoff) before being downgraded to a warning, so a
+//     single flaky shared-runner request can't redden an unrelated PR. Every
+//     request carries a timeout so a hung connection can't stall CI either.
 
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -244,6 +255,41 @@ function main() {
   console.log(`\nAll ${bundleDirs.length} bundle(s) valid.`);
 }
 
+const CHECK_EXTERNALS_TIMEOUT_MS = 10_000;
+const CHECK_EXTERNALS_RETRY_DELAY_MS = 300;
+
+// Pure URL builder for a repo:-backed skills.json entry's upstream SKILL.md.
+// Exported so tests can assert on it directly (trailing-slash subdirs,
+// missing `ref` defaulting to "main") without any network involved.
+export function buildSkillMdUrl(entry) {
+  const ref = entry.ref || "main";
+  const subdir = entry.subdir ? `${entry.subdir.replace(/\/+$/, "")}/` : "";
+  return `https://raw.githubusercontent.com/${entry.repo}/${ref}/${subdir}SKILL.md`;
+}
+
+// HTTP statuses that mean "this repo's registry entry is wrong" (FAIL) vs
+// "upstream/infra is having a moment" (WARN, retried once before we believe
+// it). 404 is the R1 bug class (wrong/renamed subdir); 429 and 5xx are the
+// upstream's problem, not ours; anything else not-ok is treated as a
+// registry defect by default, same bucket as 404.
+function httpStatusSeverity(status) {
+  if (status === 429 || status >= 500) return "warn";
+  return "fail";
+}
+
+async function fetchAttempt(url, fetchImpl, timeoutMs) {
+  try {
+    const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+    return { transportError: null, res };
+  } catch (e) {
+    return { transportError: e, res: null };
+  }
+}
+
+function isWarnableAttempt(attempt) {
+  return Boolean(attempt.transportError) || (attempt.res && httpStatusSeverity(attempt.res.status) === "warn");
+}
+
 // Fetch a repo:-backed skills.json entry's upstream SKILL.md and confirm its
 // `name:` frontmatter matches the registry `id`. bin/init.mjs (installExternalSkill)
 // names the installed skill directory from that upstream `name:` field — never
@@ -251,32 +297,80 @@ function main() {
 // installs under a different directory than any bundle skillOverlay expects,
 // and is silently absent from the role that declared it. A 200 response alone
 // does not prove the entry works; the name must be checked too.
-async function checkExternalEntry(entry) {
-  const ref = entry.ref || "main";
-  const subdir = entry.subdir ? `${entry.subdir.replace(/\/+$/, "")}/` : "";
-  const url = `https://raw.githubusercontent.com/${entry.repo}/${ref}/${subdir}SKILL.md`;
-  let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    return { ok: false, msg: `${entry.id}: fetch failed for ${url} — ${e.message}` };
+//
+// `fetchImpl` is injectable so tests can exercise every branch (404,
+// name-mismatch, absent frontmatter, retries, timeouts) with no network.
+// Returns { severity: "pass"|"warn"|"fail", id, msg } — never throws; a
+// mid-request failure (network error, or a body-read failure after a 200)
+// is captured as a WARN/FAIL result instead of escaping to the caller.
+export async function checkExternalEntry(entry, opts = {}) {
+  const {
+    fetchImpl = fetch,
+    timeoutMs = CHECK_EXTERNALS_TIMEOUT_MS,
+    retryDelayMs = CHECK_EXTERNALS_RETRY_DELAY_MS,
+  } = opts;
+  const url = buildSkillMdUrl(entry);
+
+  let attempt = await fetchAttempt(url, fetchImpl, timeoutMs);
+  let retried = false;
+  if (isWarnableAttempt(attempt)) {
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    attempt = await fetchAttempt(url, fetchImpl, timeoutMs);
+    retried = true;
   }
+  const retriedNote = retried ? " (after 1 retry)" : "";
+
+  if (attempt.transportError) {
+    return {
+      severity: "warn",
+      id: entry.id,
+      msg: `${entry.id}: network error fetching ${url}${retriedNote} — ${attempt.transportError.message}`,
+    };
+  }
+
+  const res = attempt.res;
   if (!res.ok) {
-    return { ok: false, msg: `${entry.id}: ${res.status} ${res.statusText} fetching ${url}` };
+    const severity = httpStatusSeverity(res.status);
+    const suffix = severity === "warn" ? " — treating as a transient upstream/infra condition" : "";
+    return { severity, id: entry.id, msg: `${entry.id}: ${res.status} ${res.statusText} fetching ${url}${retriedNote}${suffix}` };
   }
-  const text = await res.text();
-  const m = text.match(/^name:\s*(.+)$/m);
-  const upstreamName = m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
+
+  let text;
+  try {
+    text = await res.text();
+  } catch (e) {
+    return {
+      severity: "warn",
+      id: entry.id,
+      msg: `${entry.id}: network error reading response body from ${url} — ${e.message}`,
+    };
+  }
+
+  const upstreamName = extractSkillMdName(text);
+  if (upstreamName === null) {
+    return { severity: "fail", id: entry.id, msg: `${entry.id}: no "name:" frontmatter found in ${url}` };
+  }
   if (upstreamName !== entry.id) {
     return {
-      ok: false,
+      severity: "fail",
+      id: entry.id,
       msg: `${entry.id}: upstream SKILL.md name "${upstreamName}" != registry id "${entry.id}" (${url})`,
     };
   }
-  return { ok: true, msg: `${entry.id}: name matches (${url})` };
+  return { severity: "pass", id: entry.id, msg: `${entry.id}: name matches (${url})` };
 }
 
-async function checkExternals() {
+// Check every entry, sequentially (polite to GitHub, and keeps output order
+// stable). Exported for tests; the CLI wrapper below does the printing/exit.
+export async function checkExternals(entries, opts = {}) {
+  const results = [];
+  for (const entry of entries) {
+    results.push(await checkExternalEntry(entry, opts));
+  }
+  return results;
+}
+
+async function runCheckExternals() {
   const registryPath = join(PKG_ROOT, "skills.json");
   if (!existsSync(registryPath)) {
     console.log("No skills.json — nothing to check.");
@@ -295,26 +389,51 @@ async function checkExternals() {
     return;
   }
 
+  const results = await checkExternals(externals);
   let failCount = 0;
-  for (const entry of externals) {
-    const result = await checkExternalEntry(entry);
-    if (result.ok) {
-      console.log(`  PASS ${result.msg}`);
+  let warnCount = 0;
+  for (const r of results) {
+    if (r.severity === "pass") console.log(`  PASS ${r.msg}`);
+    else if (r.severity === "warn") {
+      console.warn(`  WARN ${r.msg}`);
+      warnCount++;
     } else {
-      console.error(`  FAIL ${result.msg}`);
+      console.error(`  FAIL ${r.msg}`);
       failCount++;
     }
   }
 
+  const tail = warnCount > 0 ? ` (${warnCount} WARN — transient, non-blocking)` : "";
   if (failCount > 0) {
-    console.error(`\n${failCount} of ${externals.length} external skill(s) failed.`);
+    console.error(`\n${failCount} of ${externals.length} external skill(s) FAILED${tail}.`);
     process.exit(1);
   }
-  console.log(`\nAll ${externals.length} external skill(s) valid.`);
+  console.log(`\nAll ${externals.length} external skill(s) valid${tail}.`);
 }
 
-if (process.argv.includes("--check-externals")) {
-  checkExternals();
-} else {
-  main();
+// Detect "run as the main module" robustly (same rationale/approach as
+// bin/init.mjs's isMainModule): lets test files `import` the pure helpers
+// above without triggering CLI execution (bundle validation or a live
+// network check) as a side effect of the import.
+function isMainModule() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (entry === self) return true;
+  try {
+    return realpathSync(entry) === realpathSync(self);
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
+  if (process.argv.includes("--check-externals")) {
+    runCheckExternals().catch((err) => {
+      console.error(`! checkExternals crashed: ${err.stack || err.message}`);
+      process.exit(1);
+    });
+  } else {
+    main();
+  }
 }
