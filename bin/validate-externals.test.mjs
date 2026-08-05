@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSkillMdUrl, checkExternalEntry } from "./validate-bundles.mjs";
+import { buildSkillMdUrl, checkExternalEntry, checkExternals, summarizeExternalResults } from "./validate-bundles.mjs";
 
 // Fast retries in tests — the production default (300ms) would make this
 // suite slow across the several warn/retry cases below.
@@ -131,4 +131,77 @@ test("checkExternalEntry: a body-read failure after a 200 is captured as a WARN,
   const r = await checkExternalEntry({ id: "foo", repo: "owner/repo" }, { fetchImpl, ...FAST });
   assert.equal(r.severity, "warn");
   assert.match(r.msg, /stream reset mid-body/);
+});
+
+test("checkExternalEntry: 403 is a WARN, not a FAIL (raw.githubusercontent.com returns 404, not 403, for private/nonexistent repos — a 403 here means abuse-detection/rate-limiting, the transient class)", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    return fakeRes({ ok: false, status: 403, statusText: "Forbidden" });
+  };
+  const r = await checkExternalEntry({ id: "foo", repo: "owner/repo" }, { fetchImpl, ...FAST });
+  assert.equal(r.severity, "warn");
+  assert.equal(calls, 2, "403 is treated as transient — must be retried once, same as 429/5xx");
+});
+
+// --- summarizeExternalResults / checkExternals: aggregation + exit decision -
+//
+// This is the layer that was previously "correct only because a human
+// probed it by hand" — the exit code and the honest-summary decision both
+// live here. Assert on the exit decision (and the pass/warn/fail counts
+// that drive it) directly, not on printed log text.
+
+function severityResults(severities) {
+  return severities.map((severity, i) => ({ severity, id: `entry-${i}`, msg: `entry-${i}: ${severity}` }));
+}
+
+test("summarizeExternalResults: all-PASS -> exitCode 0", () => {
+  const s = summarizeExternalResults(severityResults(["pass", "pass", "pass"]));
+  assert.deepEqual(s, { total: 3, passCount: 3, warnCount: 0, failCount: 0, exitCode: 0 });
+});
+
+test("summarizeExternalResults: WARN-only -> exitCode 0 (and reports 0 verified, not all valid)", () => {
+  const s = summarizeExternalResults(severityResults(["warn", "warn"]));
+  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 2, failCount: 0, exitCode: 0 });
+});
+
+test("summarizeExternalResults: PASS+WARN -> exitCode 0", () => {
+  const s = summarizeExternalResults(severityResults(["pass", "warn", "pass"]));
+  assert.deepEqual(s, { total: 3, passCount: 2, warnCount: 1, failCount: 0, exitCode: 0 });
+});
+
+test("summarizeExternalResults: FAIL-only -> exitCode 1", () => {
+  const s = summarizeExternalResults(severityResults(["fail", "fail"]));
+  assert.deepEqual(s, { total: 2, passCount: 0, warnCount: 0, failCount: 2, exitCode: 1 });
+});
+
+test("summarizeExternalResults: FAIL+WARN -> exitCode 1 (a single FAIL blocks regardless of any WARNs)", () => {
+  const s = summarizeExternalResults(severityResults(["fail", "warn", "pass"]));
+  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, exitCode: 1 });
+});
+
+test("checkExternals + summarizeExternalResults end-to-end: mixed entries produce the correct exit decision with no network", async () => {
+  // entry a: matches -> pass. entry b: name mismatch -> fail. entry c: 503
+  // that persists through the retry -> warn. checkExternals runs entries
+  // sequentially, so a call-order counter is enough to key per-entry
+  // responses without needing to parse the URL.
+  const entries = [
+    { id: "a", repo: "owner/repo" },
+    { id: "b", repo: "owner/repo" },
+    { id: "c", repo: "owner/repo" },
+  ];
+  let call = 0;
+  const orderedFetchImpl = async () => {
+    call++;
+    if (call === 1) return fakeRes({ ok: true, body: skillMd("a") }); // entry a: pass
+    if (call === 2) return fakeRes({ ok: true, body: skillMd("mismatched-name") }); // entry b: fail
+    return fakeRes({ ok: false, status: 503, statusText: "Service Unavailable" }); // entry c: warn (both attempts)
+  };
+  const results = await checkExternals(entries, { fetchImpl: orderedFetchImpl, ...FAST });
+  assert.deepEqual(
+    results.map((r) => r.severity),
+    ["pass", "fail", "warn"]
+  );
+  const s = summarizeExternalResults(results);
+  assert.deepEqual(s, { total: 3, passCount: 1, warnCount: 1, failCount: 1, exitCode: 1 });
 });

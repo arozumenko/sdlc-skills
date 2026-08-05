@@ -272,8 +272,16 @@ export function buildSkillMdUrl(entry) {
 // it). 404 is the R1 bug class (wrong/renamed subdir); 429 and 5xx are the
 // upstream's problem, not ours; anything else not-ok is treated as a
 // registry defect by default, same bucket as 404.
+//
+// 403 is deliberately WARN, not FAIL: raw.githubusercontent.com returns 404
+// (not 403) for a private or nonexistent repo/path, so the "repo went
+// private" case that would justify a FAIL doesn't actually produce a 403 on
+// this host. A 403 from raw is overwhelmingly abuse-detection / rate-limiting
+// — the same transient class as 429/5xx. Don't move this back to FAIL
+// without re-verifying raw.githubusercontent.com's actual private-repo
+// status code.
 function httpStatusSeverity(status) {
-  if (status === 429 || status >= 500) return "warn";
+  if (status === 429 || status === 403 || status >= 500) return "warn";
   return "fail";
 }
 
@@ -370,6 +378,25 @@ export async function checkExternals(entries, opts = {}) {
   return results;
 }
 
+// Pure aggregation over a list of per-entry results: counts each severity
+// and derives the exit decision (non-zero iff at least one FAIL — WARN never
+// blocks, per the FAIL/WARN adjudication). Exported and kept side-effect-free
+// (no printing, no process.exit) specifically so tests can assert on the
+// exit decision directly instead of only on printed log text or by probing
+// the CLI by hand — the "unguarded guard" this whole review thread started
+// from was exactly this layer being untested.
+export function summarizeExternalResults(results) {
+  let passCount = 0;
+  let warnCount = 0;
+  let failCount = 0;
+  for (const r of results) {
+    if (r.severity === "pass") passCount++;
+    else if (r.severity === "warn") warnCount++;
+    else failCount++;
+  }
+  return { total: results.length, passCount, warnCount, failCount, exitCode: failCount > 0 ? 1 : 0 };
+}
+
 async function runCheckExternals() {
   const registryPath = join(PKG_ROOT, "skills.json");
   if (!existsSync(registryPath)) {
@@ -390,25 +417,31 @@ async function runCheckExternals() {
   }
 
   const results = await checkExternals(externals);
-  let failCount = 0;
-  let warnCount = 0;
   for (const r of results) {
     if (r.severity === "pass") console.log(`  PASS ${r.msg}`);
-    else if (r.severity === "warn") {
-      console.warn(`  WARN ${r.msg}`);
-      warnCount++;
-    } else {
-      console.error(`  FAIL ${r.msg}`);
-      failCount++;
-    }
+    else if (r.severity === "warn") console.warn(`  WARN ${r.msg}`);
+    else console.error(`  FAIL ${r.msg}`);
   }
 
-  const tail = warnCount > 0 ? ` (${warnCount} WARN — transient, non-blocking)` : "";
+  const { total, passCount, warnCount, failCount, exitCode } = summarizeExternalResults(results);
+  // The summary line must never claim more was verified than actually was:
+  // a WARN means that entry's registry correctness was NOT checked this run
+  // (it was skipped as transient, not confirmed good), so whenever any WARN
+  // occurred the line reports "<passCount> of <total> verified", not
+  // "All <total> valid" — a WARN-only run must not read as a clean bill of
+  // health.
   if (failCount > 0) {
-    console.error(`\n${failCount} of ${externals.length} external skill(s) FAILED${tail}.`);
-    process.exit(1);
+    const warnNote = warnCount > 0 ? `, ${warnCount} WARN (transient, non-blocking)` : "";
+    console.error(`\n${failCount} of ${total} external skill(s) FAILED${warnNote}.`);
+    process.exit(exitCode);
   }
-  console.log(`\nAll ${externals.length} external skill(s) valid${tail}.`);
+  if (warnCount > 0) {
+    console.warn(
+      `\n${passCount} of ${total} verified — ${warnCount} WARN (transient upstream/infra, non-blocking; NOT verified this run), 0 FAILED.`
+    );
+    return;
+  }
+  console.log(`\nAll ${total} external skill(s) valid.`);
 }
 
 // Detect "run as the main module" robustly (same rationale/approach as
