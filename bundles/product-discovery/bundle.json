@@ -1,0 +1,12 @@
+{
+  "id": "product-discovery",
+  "title": "Product Discovery",
+  "description": "Product Owner discovery pipeline — take raw asks to verified, prioritized hypotheses ready for engineering. Adapted from PO-RnD (MIT).",
+  "agents": [],
+  "localAgents": ["product-owner", "discovery-researcher"],
+  "localSkills": ["intake-triage", "define-personas", "define-outcomes", "opportunity-tree", "journeys-to-hypotheses", "prioritize-bets", "stakeholder-interview", "grill-decision", "capture-learning", "discovery-status"],
+  "skills": [],
+  "seed": { "discovery-scaffold": "docs/discovery" },
+  "instructions": "instructions.md",
+  "targets": ["claude"]
+}
