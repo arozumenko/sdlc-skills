@@ -5,8 +5,8 @@ developer roles you need** — any combination, no stack lock-in. A requirements
 plan → build → verify → merge relay: **BA** shapes stories, **tech-lead**
 decomposes them, **PM** routes the work and owns the merge gate, **devs** build
 (TDD), and **QA** verifies. The shared core roles auto-tune to whatever
-platforms your selection spans (web JS/TS + Python, iOS Swift/SwiftUI, Android
-Kotlin/Compose).
+platforms your selection spans (web JS/TS + Python, iOS Swift/SwiftUI,
+greenfield-Compose Android Kotlin).
 
 ## Install
 
@@ -135,7 +135,7 @@ flowchart TD
 | JS/TS frontend | `js-dev` (Jay) | web | React / Next.js / Node (TypeScript) |
 | Test automation | `test-automation-engineer` (Axel) | web | End-to-end automation (Playwright), AFS → green test |
 | iOS app | `ios-dev` (Io) | iOS | Swift / SwiftUI / SwiftData |
-| Android app | `android-dev` (Dan) | Android | Kotlin / Jetpack Compose / Room / DataStore |
+| Android app | `android-dev` (Dan) | Android | **Greenfield Compose only** — Kotlin / Jetpack Compose / Room / DataStore |
 
 ## How tuning works
 

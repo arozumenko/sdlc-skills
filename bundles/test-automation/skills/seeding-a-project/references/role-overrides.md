@@ -56,6 +56,7 @@ row wins; later rows emit warnings in the override file.
 | Code impl — JS/TS | `js-dev` | `python-dev` (cross-lang warning) | `tech-lead` | operator | blocker |
 | Code impl — Python | `python-dev` | `js-dev` (cross-lang) | `tech-lead` | operator | blocker |
 | Code impl — iOS/Swift | `ios-dev` | `tech-lead` (cross-lang warning) | operator | — | blocker |
+| Code impl — Android/Kotlin | `android-dev` | `tech-lead` (cross-lang warning) | operator | — | blocker |
 | Code impl — other language | `tech-lead` | Language-adjacent dev | operator | — | blocker |
 | QA / verification | `qa-engineer` | — (weak substitutes) | operator | — | **blocker: install qa-engineer, or escalate to Step 7** |
 | Test-automation analyst | `qa-engineer` + `test-case-analysis` skill | `qa-engineer` alone (skill inlined) | — | — | blocker (same as QA) |

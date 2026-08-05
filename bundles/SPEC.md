@@ -254,6 +254,6 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 
 | id | team | dev roles |
 |---|---|---|
-| `feature-development` | cross-platform (web + iOS + Android) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`, `android-dev`; core roles auto-tune |
+| `feature-development` | cross-platform (web + iOS + Android) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`, `android-dev` (greenfield Compose only); core roles auto-tune |
 | `manual-qa` | manual QA for web | 6 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter` |
 | `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |

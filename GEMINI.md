@@ -18,7 +18,7 @@ inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
 - `python-dev` — Python implementation with TDD
 - `js-dev` — TypeScript / React / Node implementation with TDD
 - `ios-dev` — Swift / SwiftUI / SwiftData implementation (no simulator)
-- `android-dev` — Kotlin / Jetpack Compose / Room / DataStore implementation (no device or emulator)
+- `android-dev` — **greenfield Compose only**; Kotlin / Jetpack Compose / Room / DataStore implementation (no device or emulator)
 - `qa-engineer` — Test verification, bug reproduction, E2E tests, TMS case execution + AFS emission (via `test-case-analysis` skill)
 - `test-automation-engineer` — Implements automation from specs in the project's existing framework
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring

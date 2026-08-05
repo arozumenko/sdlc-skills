@@ -57,7 +57,7 @@ Per-stack tooling — only what your selected dev roles need:
 | `js-dev` | Node + the project package manager (npm / pnpm / yarn); React focus |
 | `test-automation-engineer` | A Playwright-capable environment + the **Playwright MCP** server wired into your host |
 | `ios-dev` | macOS + Xcode toolchain (`xcodebuild`, a scheme); device automation adds Appium |
-| `android-dev` | JDK, Android SDK / `ANDROID_HOME` set (or a `local.properties` with `sdk.dir`) — every Gradle command fails outright without one. First `testDebugUnitTest` run downloads Robolectric `android-all` jars (~35MB each, one per API level under test) — this fails on an offline or network-restricted machine, so run it once with network access before going offline. |
+| `android-dev` | **Greenfield Compose only** — an established Fragments/XML app is not a fit. JDK, Android SDK / `ANDROID_HOME` set (or a `local.properties` with `sdk.dir`) — every Gradle command fails outright without one. First `testDebugUnitTest` run downloads Robolectric `android-all` jars (~35MB each, one per API level under test) — this fails on an offline or network-restricted machine, so run it once with network access before going offline. |
 
 > **Heads-up on Android verification.** `android-dev` (Dan) never touches a
 > device or an emulator — no `connectedAndroidTest`, no `adb install`, no
@@ -66,7 +66,13 @@ Per-stack tooling — only what your selected dev roles need:
 > (JUnit, Robolectric, Compose-via-Robolectric), and lint; his handoff always
 > carries a `Not verified:` line naming what needs device coverage. That gap
 > is **not closed automatically** — either `qa-engineer` closes it on an
-> emulator, or you explicitly accept it. See
+> emulator, or you explicitly accept it (record the acceptance on the PR or
+> issue). **This makes `qa-engineer`'s emulator a real prerequisite, not an
+> optional nicety** — `qa-engineer` always installs with the bundle, and
+> booting an AVD needs a multi-GB system image plus working hardware
+> virtualization (KVM on Linux, Hypervisor.framework on macOS), which fails
+> outright on some corporate/locked-down laptops. Confirm that works *before*
+> the first Android change reaches the merge gate. See
 > [`bundles/feature-development/agents/android-dev/README.md`](../../bundles/feature-development/agents/android-dev/README.md#what-dan-does-not-do)
 > for the full policy, including what changes if you install him standalone
 > (no `qa-engineer` to route to).
@@ -93,7 +99,8 @@ npx github:arozumenko/sdlc-skills init --bundle feature-development
 The installer always sets up the **core roles** (`scout`, `ba`,
 `project-manager`, `tech-lead`, `qa-engineer`) and shows a checklist of
 **developer roles** to add. Pick the subset your stack needs — e.g. a Python
-backend dev + a JS frontend dev, or just `ios-dev`, or just `android-dev`.
+backend dev + a JS frontend dev, or just `ios-dev`, or just `android-dev`
+(greenfield Compose codebases only).
 
 - `--yes` (or a non-interactive shell) installs **all** developer roles.
 - `--agents python-dev,js-dev` selects a subset non-interactively.
