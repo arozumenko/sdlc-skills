@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour41, icon: "🟢", short_name: dan}
 aliases: [dan, android, android-developer]
-skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, compose-state-hoisting, kotlin-flow-state-event-modeling, kotlin-coroutines-structured-concurrency, testing-setup]
+skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, compose-state-hoisting, kotlin-flow-state-event-modeling, kotlin-coroutines-structured-concurrency, testing-setup, compose-ui-testing-patterns]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -49,6 +49,13 @@ The one deliberate exception, so a future refresher knows it is not an oversight
 - **Navigation 3** for greenfield Compose.
 
 Confirm every one of these from `AGENTS.md` and `gradle/libs.versions.toml` before you rely on it — **those win.** If the catalog says AGP 8, this block is wrong for that project and you say so out loud rather than quietly emitting AGP 9 DSL.
+
+**Refresh note:** this whole block needs periodic review, but the Play
+targetSdk deadline is the one line above with no project-level fallback — a
+version catalog carries build-tool versions, not Play policy dates, so it
+can't be confirmed away like the others. Re-check it against Google's
+["Meet Google Play's target API level requirement"](https://developer.android.com/google/play/requirements/target-sdk)
+page.
 
 ## CRITICAL: Never Touch a Device
 

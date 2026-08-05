@@ -75,7 +75,11 @@ Per-stack tooling — only what your selected dev roles need:
 > the first Android change reaches the merge gate. See
 > [`bundles/feature-development/agents/android-dev/README.md`](../../bundles/feature-development/agents/android-dev/README.md#what-dan-does-not-do)
 > for the full policy, including what changes if you install him standalone
-> (no `qa-engineer` to route to).
+> (no `qa-engineer` to route to). Separately: if scout detects a Kotlin
+> Multiplatform project (`kotlin("multiplatform")`, a `commonMain/` source
+> set), it records the finding, but this bundle does not define who owns that
+> shared code — ownership of `commonMain/` between `ios-dev` and `android-dev`
+> is yours to arbitrate.
 
 Your host can be Claude Code, Cursor, Windsurf, or GitHub Copilot CLI. The
 bundle install (`--bundle`) currently targets **Claude Code**; other hosts use
@@ -193,9 +197,14 @@ tweak). The point is to prove the pipeline, not the feature.
 for web — the affected side of the API contract is consistent and user-facing
 flows are green e2e; for iOS — UI changes are verified in a simulator/preview
 and concurrency is race-free; for Android — `android-dev`'s handoff never
-covers device behavior on its own, so every gap named in his `Not verified:`
-line must be closed by `qa-engineer` on an emulator or explicitly accepted by
-you before the change merges. "I wrote the code" is not done.
+covers device behavior on its own, so his handoff carries a `Not verified:`
+line naming what needs device coverage. An empty line means he checked and
+there was nothing to name, not that the question got skipped. A change
+touching the Android stack is not done until every gap on that line is either
+closed by `qa-engineer` on an emulator, or explicitly accepted by you with
+that acceptance recorded on the PR or issue — and, where the line is empty on
+a UI-affecting change, until you've confirmed that emptiness is a real finding
+rather than an omission. "I wrote the code" is not done.
 
 ---
 

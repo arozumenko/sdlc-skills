@@ -399,7 +399,7 @@ so upstream content can change under an installed project between installs.
 | `compose-state-hoisting` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-state-hoisting` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
 | `kotlin-flow-state-event-modeling` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/kotlin-flow-state-event-modeling` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
 | `kotlin-coroutines-structured-concurrency` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/kotlin-coroutines-structured-concurrency` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
-| `compose-ui-testing-patterns` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-ui-testing-patterns` | `feature-development` Android overlay (`qa-engineer`) |
+| `compose-ui-testing-patterns` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-ui-testing-patterns` | `android-dev`, `feature-development` Android overlay (`qa-engineer`) |
 | `testing-setup` | [`android/skills`](https://github.com/android/skills) → `testing/testing-setup` | `android-dev`, `feature-development` Android overlay (`tech-lead`, `qa-engineer`) |
 | `android-cli` | [`android/skills`](https://github.com/android/skills) → `devtools/android-cli` | `android-dev` (optional, manual — see its `AGENT.md`) |
 
