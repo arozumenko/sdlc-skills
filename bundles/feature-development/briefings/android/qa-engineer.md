@@ -12,16 +12,22 @@ type: project
   UiAutomator2 through Appium; manual verification on a booted emulator.
 - **Run tests:** `./gradlew :module:testDebugUnitTest` for host-side. For
   instrumented (emulator) work there is no single Xcode-style command that
-  builds, installs, and runs — assemble it yourself, **pinned to the
-  emulator's serial** so a bare invocation can't silently misfire onto an
-  attached phone: confirm the target with `adb devices`, then deploy with
+  builds, installs, and runs — assemble it yourself, and **every one of these
+  commands is pinned to the emulator's serial, always, no exceptions:**
+  confirm the target with `adb devices`, then deploy with
   `ANDROID_SERIAL=emulator-5554 ./gradlew :app:installDebug` (or
   `adb -s emulator-5554 install <path-to-apk>`), and run the instrumented
-  suite with `./gradlew :module:connectedDebugAndroidTest` — get the exact
-  module, build variant, and a known-good AVD name/serial from AGENTS.md.
-  **These commands are yours, not `android-dev`'s** — he is forbidden every
-  one of them (`installDebug`, `connectedAndroidTest`, any `adb` subcommand
-  but `devices`); the difference is the whole point of having two roles.
+  suite with `ANDROID_SERIAL=emulator-5554 ./gradlew :module:connectedDebugAndroidTest`
+  — get the exact module, build variant, and a known-good AVD name/serial from
+  AGENTS.md. **The pin on `connected*AndroidTest` is not optional the way it
+  might look:** AGP's `connected*AndroidTest` tasks fan out to *every*
+  connected device by default — unrelated to installs, which just refuse
+  ambiguity — so with the user's phone attached alongside the emulator, a bare
+  invocation silently pushes both APKs onto the phone and runs the suite
+  there, in direct violation of rule 3 below. **These commands are yours, not
+  `android-dev`'s** — he is forbidden every one of them (`installDebug`,
+  `connectedAndroidTest`, any `adb` subcommand but `devices`); the difference
+  is the whole point of having two roles.
 - **`testTag`** is the stable selector for Compose UI automation — note where
   the app sets it (via `Modifier.testTag(...)` and `semantics {}`), or flag its
   absence early; UI automation is brittle without it, the direct analogue of
