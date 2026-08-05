@@ -13,8 +13,9 @@ yours below. For the catalog, install paths, and architecture, see the root
 | [**feature-development**](feature-development.md) | `--bundle feature-development` | A cross-platform delivery team — BA, PM, tech-lead, QA, scout, and pickable dev roles (Python / JS / iOS / test-automation). You're building features. |
 | [**manual-qa**](manual-qa.md) | `--bundle manual-qa` | A standalone manual-QA team that authors Markdown cases and runs them **live** against a web or mobile app (Playwright / Appium / Mobitru). No test code generated. |
 | [**test-automation**](test-automation.md) | `--bundle test-automation` | A TMS-driven automation pipeline — a lead (Tal) runs analyst → implementer → reviewer to turn TMS cases into merged, honest automated tests. |
+| [**product-management**](product-management.md) | `--bundle product-management` | A Product Owner discovery team — Priya runs raw ask → problem → hypothesis → ratified outcome → prioritized bet, dispatching Sam for evidence, then hands off to engineering. Upstream of delivery; writes no code. |
 
-Not sure between the last two? **manual-qa** runs cases live and writes no code;
+Not sure between the two testing bundles? **manual-qa** runs cases live and writes no code;
 **test-automation** generates and merges real test code in your framework. Many
 teams run **feature-development** plus one of them — each guide's *Hybrid*
 section covers combining bundles in one repo.
@@ -23,7 +24,7 @@ section covers combining bundles in one repo.
 > not a team), so it has no onboarding guide. Install it with
 > `--agents personal-assistant` and read its `AGENT.md`.
 
-## Concepts shared across all three
+## Concepts shared across all four
 
 Every guide builds on the same machinery; learn it once here.
 
@@ -38,8 +39,10 @@ Every guide builds on the same machinery; learn it once here.
   use **scout** + the `seeding-a-project` skill to write `AGENTS.md` and the
   `.agents/` content docs (architecture, testing, workflow, profile,
   team-comms). `manual-qa` has no scout — **app-profiler** writes
-  `.agents/manual-qa/app_profile.md` instead. `AGENTS.md` always wins over a
-  bundle's team-wide defaults.
+  `.agents/manual-qa/app_profile.md` instead; `product-management` also has no
+  scout — it seeds an empty `docs/discovery/` workspace and **product-owner**
+  fills it as the loop runs. `AGENTS.md` always wins over a bundle's team-wide
+  defaults.
 
 - **Memory + context hooks** re-inject each role's `.agents/memory/<role>/`
   snapshot and the shared `.agents/*` config at **every dispatch**, so context

@@ -119,10 +119,12 @@ want to be happy).
 > guide under [`docs/onboarding/`](docs/onboarding/) — start at the
 > [index](docs/onboarding/README.md) to pick yours:
 > [feature-development](docs/onboarding/feature-development.md) (dev team),
-> [manual-qa](docs/onboarding/manual-qa.md) (manual-QA team), or
+> [manual-qa](docs/onboarding/manual-qa.md) (manual-QA team),
 > [test-automation](docs/onboarding/test-automation.md) (TMS → merged-test
 > pipeline: install → MCP inventory → scout seed →
-> `.agents/test-automation.yaml` → single-case pilot → scale-up).
+> `.agents/test-automation.yaml` → single-case pilot → scale-up), or
+> [product-management](docs/onboarding/product-management.md) (PO discovery team:
+> raw ask → verified, prioritized hypothesis → engineering handoff).
 
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
 > Gemini CLI, Copilot CLI) only see skills present locally in this repo —
