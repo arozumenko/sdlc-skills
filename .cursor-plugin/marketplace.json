@@ -14,7 +14,7 @@
     {
       "name": "android-dev",
       "source": "./bundles/feature-development/agents/android-dev",
-      "description": "Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Native Android only — not React Native/Flutter, not server-side Spring/JVM. Dan — pragmatic Android engineer, Compose-first, allergic to build drift.",
+      "description": "Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Scoped to greenfield Compose codebases — he does not do XML/Views work or Java-interop migration, so an established Fragments/XML app is not a fit. Native Android only — not React Native/Flutter, not server-side Spring/JVM. Dan — pragmatic Android engineer, Compose-first, allergic to build drift.",
       "version": "0.2.0"
     },
     {

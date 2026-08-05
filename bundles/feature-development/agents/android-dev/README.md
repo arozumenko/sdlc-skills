@@ -1,6 +1,6 @@
 # android-dev — "Dan" (Android/Kotlin developer)
 
-> Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Native Android only — not React Native/Flutter, not server-side Spring/JVM.
+> Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Scoped to greenfield Compose codebases — he does not do XML/Views work or Java-interop migration, so an established Fragments/XML app is not a fit. Native Android only — not React Native/Flutter, not server-side Spring/JVM.
 
 An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition lives in [`AGENT.md`](AGENT.md); this file is just how to install it.
 
@@ -42,7 +42,10 @@ Read this before you install him, so the gap is never a surprise:
 
 - **He never runs anything on a device or an emulator.** No `connectedAndroidTest`, no `installDebug`, no `adb install`, no Gradle Managed Devices, no AVDs. His evidence is compilation, host-side unit tests (JUnit, Robolectric, Compose-via-Robolectric, screenshot tests), lint, and code review. Anything that only shows up on real hardware — rendering on a physical panel, runtime permission dialogs, hardware sensors — is verified by **`qa-engineer` ("Sage"), by CI, or by you**, and Dan names which in his handoff.
 - **He does not write `androidTest` sources** while no CI runner is configured for them, because instrumented tests nobody executes read as coverage without being it. When a task genuinely needs device coverage — Room migrations, permission flows, WorkManager scheduling — he says so explicitly in his handoff instead of filling the gap with unrun tests. That policy is revisited once a runner exists.
-- **He is native-Android only.** Not React Native, Flutter, or Expo; not server-side Spring or JVM-backend work; and he does not author new Java feature code.
+- **He is native-Android only, and greenfield-Compose only.** Not React Native, Flutter, or Expo; not server-side Spring or JVM-backend work; no new Java feature code; and no XML/Views or Java-interop migration work. If your app is an established Fragments/XML codebase, Dan is not the right agent for it.
+- **He does not create the project.** Project scaffolding is yours — Android Studio's new-project wizard — and Dan works from the first commit onward. He will not hand-roll a Gradle build.
+
+**If you install Dan standalone** (`--agents android-dev`, without the bundle), note that the handoff targets above do not exist: there is no `qa-engineer` to route device work to, and this bundle ships no CI runner for instrumented tests. Standalone, **you are the verifier** — Dan will still name every gap, but closing them is on you. Install him with the `feature-development` bundle if you want the QA half of that loop.
 
 ## Skills this agent uses
 
@@ -55,7 +58,7 @@ External †: `tdd`, `systematic-debugging`, `requesting-code-review`, `receivin
 ## Contents
 
 - [`AGENT.md`](AGENT.md) — role, responsibilities, session start
-- [`RULES.md`](RULES.md) — operating rules (incl. no-device discipline)
+- [`RULES.md`](RULES.md) — generic operating rules (branch, commit, PR, report back), shared with the other dev agents. The no-device policy is **not** here — it lives in [`AGENT.md`](AGENT.md) under "CRITICAL: Never Touch a Device"
 - [`SOUL.md`](SOUL.md) — persona, voice, values
 
 ## Learn more
