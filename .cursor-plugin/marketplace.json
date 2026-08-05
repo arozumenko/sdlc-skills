@@ -12,6 +12,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "android-dev",
+      "source": "./bundles/feature-development/agents/android-dev",
+      "description": "Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Native Android only — not React Native/Flutter, not server-side Spring/JVM. Dan — pragmatic Android engineer, Compose-first, allergic to build drift.",
+      "version": "0.2.0"
+    },
+    {
       "name": "app-profiler",
       "source": "./bundles/manual-qa/agents/app-profiler",
       "description": "Use when onboarding a new or changed web app for manual QA — interview the user, explore the running app via Playwright MCP, and write .agents/manual-qa/app_profile.md (URLs, auth, key pages, reliable selectors, fragile areas) that every other manual-qa agent reads.",
