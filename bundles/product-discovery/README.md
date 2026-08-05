@@ -77,7 +77,7 @@ decides what gets built or promoted.
 ## `docs/discovery/` scaffold
 
 Installed empty via `seed`. Holds problems, personas, journeys, hypotheses,
-the `outcomes.md` / `opportunities.md` / `decisions.md` registers, and
+the `outcomes.md` / `decisions.md` registers, and
 `evidence/` (intake, interviews, research, verifications, learnings). Derived
 boards (`outcome-tree.md`, `journey-coverage.md`, `priority.md`) are generated
 by skills at runtime — they are not seeded. See

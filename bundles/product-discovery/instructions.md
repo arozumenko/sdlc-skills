@@ -25,7 +25,6 @@ personas/                        persona sketches, referenced by role
 journeys/                        user/customer journey maps
 hypotheses/HYP-NNN-*.md          testable bets, status: incubating|promoted|parked
 outcomes.md                      ratification-gated outcome register
-opportunities.md                 opportunity-tree PM-bridge landing slot
 decisions.md                     append-only DEC log
 evidence/intake/                 raw, unprocessed asks
 evidence/interviews/             interview notes and summaries

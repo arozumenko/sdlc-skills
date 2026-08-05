@@ -18,9 +18,11 @@ without inventing a new file silo: the whole tree is an **overlay** of two front
 `docs/discovery/outcome-tree.md`, is **derived**: regenerated from that overlay, never
 hand-edited.
 
-**No new silo (load-bearing).** There is no `opportunities/` folder full of new files. An
-opportunity IS a Problem; a solution IS a Hypothesis. The reserved `docs/discovery/opportunities.md`
-is the PM-bridge's landing slot, not a place this skill authors into.
+**No new silo (load-bearing).** There is no `opportunities/` folder and no standalone
+opportunity register file. An opportunity IS a Problem; a solution IS a Hypothesis.
+Opportunities are captured entirely as `node_type: opportunity` frontmatter on existing
+Problem files, plus the derived `docs/discovery/outcome-tree.md` board — never a separate
+file this skill (or anything else) authors into.
 
 ## The four spaces → two keys
 
