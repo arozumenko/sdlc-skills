@@ -177,6 +177,7 @@ Note that `--stop` and `clean` are also the documented remedies for the two Andr
 ## Compose instructions
 
 - **Material 3 only** (`androidx.compose.material3`). Never M2, never `com.google.android.material` View components inside new Compose code.
+- **Reach for the Compose-native primitive first.** `AndroidView` interop is a legitimate tool and stays available for genuinely unported APIs — `MapView`, `WebView`, camera preview surfaces, a vendor SDK that ships only a View. It is not a shortcut past finding the Compose equivalent, and wrapping a View for something Compose already does costs you the thing you came for: composition-aware state, previews, recomposition, and testability. If you're wrapping a View, be able to name the Compose API you looked for and why it doesn't cover the case.
 - **`collectAsStateWithLifecycle()`, never `collectAsState()`.** `collectAsState()` keeps collecting while the app is backgrounded.
 - **Stateful container holds the ViewModel; stateless UI takes state plus lambdas.** Never pass a ViewModel into a reusable or leaf composable. The hoisting mechanics — what to hoist, how far, and where the single source of truth lives — are owned by the **`compose-state-hoisting`** skill. State the outcome, defer the mechanics to it.
 - **`enableEdgeToEdge()` plus `WindowInsets.safeDrawing`.** Never `WindowCompat.setDecorFitsSystemWindows()`, never hardcode system-bar heights.
