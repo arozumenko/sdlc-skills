@@ -32,6 +32,12 @@ type: project
   the seam can't be addressed if nobody records whether it applies.
 - **Data layer:** check for Room (`@Database`/`@Entity`), DataStore, or a
   networked backend (Retrofit/Ktor).
+- **AVD inventory:** run `emulator -list-avds` and record whether any AVD
+  exists at all, plus a known-good AVD name — **the QA role needs this** to
+  satisfy its "boot exactly one emulator" rule. Unlike Xcode, which ships
+  simulator devices out of the box, a machine can have a complete Android SDK
+  and zero AVDs; if that's the case here, say so explicitly rather than
+  leaving the field blank.
 
 ## My Role Focus
 

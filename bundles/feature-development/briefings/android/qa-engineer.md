@@ -8,11 +8,20 @@ type: project
 
 - **Stack:** Native Android app — Kotlin + Jetpack Compose. _(confirm module and variant from AGENTS.md)_
 - **Test layers:** unit/logic via JUnit/`kotlin.test` with MockK, Turbine, and
-  Robolectric (host-side, no device); UI flows on-device/emulator via
+  Robolectric (host-side, no device); UI flows instrumented (emulator) via
   UiAutomator2 through Appium; manual verification on a booted emulator.
-- **Run tests:** `./gradlew :module:testDebugUnitTest` for host-side; for
-  on-device/UI verification, get the exact module, build variant, and a
-  known-good AVD name from AGENTS.md.
+- **Run tests:** `./gradlew :module:testDebugUnitTest` for host-side. For
+  instrumented (emulator) work there is no single Xcode-style command that
+  builds, installs, and runs — assemble it yourself, **pinned to the
+  emulator's serial** so a bare invocation can't silently misfire onto an
+  attached phone: confirm the target with `adb devices`, then deploy with
+  `ANDROID_SERIAL=emulator-5554 ./gradlew :app:installDebug` (or
+  `adb -s emulator-5554 install <path-to-apk>`), and run the instrumented
+  suite with `./gradlew :module:connectedDebugAndroidTest` — get the exact
+  module, build variant, and a known-good AVD name/serial from AGENTS.md.
+  **These commands are yours, not `android-dev`'s** — he is forbidden every
+  one of them (`installDebug`, `connectedAndroidTest`, any `adb` subcommand
+  but `devices`); the difference is the whole point of having two roles.
 - **`testTag`** is the stable selector for Compose UI automation — note where
   the app sets it (via `Modifier.testTag(...)` and `semantics {}`), or flag its
   absence early; UI automation is brittle without it, the direct analogue of
@@ -27,8 +36,17 @@ wrong *kind* of device altogether.
 
 1. **Check what's running before anything else:** `adb devices`. If a running
    AVD is already listed, reuse it — don't boot a second one.
-2. **If none is running, boot exactly one** emulator (the AVD named in
-   AGENTS.md, or the project's documented default) and target that.
+2. **If none is running, check `emulator -list-avds` before booting.** If the
+   AVD named in AGENTS.md (scout's recorded default) is listed, boot exactly
+   one and target that — but disclose the cost first if this is its first
+   boot on this machine: a multi-GB system-image download plus a
+   hardware-acceleration dependency (KVM on Linux, Hypervisor.framework on
+   macOS) that some corporate laptops don't have. Report that cost rather
+   than silently starting the download — the same courtesy `android-dev`
+   extends for Robolectric's first-run download. **If zero AVDs exist on this
+   machine at all**, stop and report that instead of creating one —
+   `avdmanager create avd` is not authorised for you any more than it is for
+   `android-dev`.
 3. **Never target a physically attached device.** This is the real asymmetry
    with `android-dev`'s no-device policy: he never touches a device or emulator
    at all; you do, but only the emulator, never hardware. An emulator is
@@ -36,12 +54,20 @@ wrong *kind* of device altogether.
    their daily driver, and installing debug/test APKs onto it replaces
    whatever's there and takes over the screen. If `adb devices` lists a
    physical device alongside or instead of an emulator, do not target it —
-   name the gap and hand back rather than proceeding.
+   name the gap and hand back **to the user**, the only party who can supply
+   a real device, rather than proceeding.
 4. **Shut down what you booted** at task end if the user had nothing running
    before you started — don't leave emulator processes consuming the user's
    CPU/RAM after your task is done.
 5. This is a **native Android app — no web browser tools** (the team config
    drops the Playwright/browser skills); don't reach for them.
+6. **Accepted gap: jank and frame-timing regressions don't reproduce
+   meaningfully on an emulator**, and no role on this team touches physical
+   hardware. `android-dev`'s Compose performance rules (stable list keys,
+   `derivedStateOf`, no sorting in a composable body) can regress in ways
+   this team cannot observe pre-launch. That's an accepted trade for a
+   pre-launch greenfield app — flag it explicitly if the project nears a
+   performance-sensitive release rather than letting it be discovered there.
 
 ## My Role Focus
 

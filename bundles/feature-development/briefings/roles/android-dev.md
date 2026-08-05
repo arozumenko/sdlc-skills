@@ -6,7 +6,12 @@ type: project
 
 ## Project Knowledge
 
-- **Stack:** Native Android — Kotlin + Jetpack Compose, greenfield. _(confirm AGP/Kotlin/compileSdk/targetSdk from AGENTS.md and `gradle/libs.versions.toml`)_
+- **Stack:** Native Android — Kotlin + Jetpack Compose. This role assumes a
+  **greenfield Compose** codebase; confirm AGP/Kotlin/compileSdk/targetSdk
+  from AGENTS.md and `gradle/libs.versions.toml`, and confirm the
+  greenfield-Compose assumption itself against scout's findings — if the
+  project turns out to be an established XML/Views or Java-interop codebase,
+  that's out of scope for this role, not a challenge to rise to.
 - **JDK:** record the JDK version the project targets and `JAVA_HOME` in the
   shell you run Gradle from — a mismatch with Android Studio's embedded JDK is
   the single most common "works in the IDE, fails on the CLI" report.
@@ -19,9 +24,10 @@ type: project
 - **KSP vs KAPT:** check `gradle/libs.versions.toml` and the module
   `build.gradle.kts` for which annotation-processing backend is wired (Room 3.0
   is KSP-only) — don't assume KSP just because it's the modern default.
-- **Compose vs XML:** this project is Compose-first, greenfield. If any module
-  still carries XML/Views, that's a deviation worth flagging, not silently
-  working around.
+- **Compose vs XML:** this role assumes Compose-first, greenfield — confirm
+  against scout's findings rather than taking it as given. If any module
+  carries XML/Views, that's a deviation worth flagging, not silently working
+  around.
 - **Module graph & product flavors:** record the module list (`:app`, feature
   modules, `:core:*`, etc.) and any product flavors/build types beyond
   debug/release — they change which Gradle task name is correct.
@@ -35,5 +41,8 @@ Xcode's is. Read `AGENTS.md` and `gradle/libs.versions.toml` before emitting
 any Gradle command or build config; when this briefing's guidance conflicts
 with what scout recorded for this project, the project wins. Always invoke
 Gradle through the project's own `./gradlew` — never a global `gradle`, never
-a hand-rolled version. This is a greenfield Compose project: no XML/Views
-legacy to interoperate with, no Java-migration path to reason about.
+a hand-rolled version. This briefing assumes a greenfield Compose project — no
+XML/Views legacy to interoperate with, no Java-migration path to reason
+about — but that's an assumption, not a fact this file can know before scout
+has looked: confirm it against scout's findings, and flag it rather than
+silently working around it if the project turns out otherwise.
