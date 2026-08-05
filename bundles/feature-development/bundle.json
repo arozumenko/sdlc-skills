@@ -24,6 +24,11 @@
     "ios-dev": {
       "label": "iOS — Swift/SwiftUI",
       "platform": "ios"
+    },
+    "android-dev": {
+      "label": "Android — Kotlin/Compose",
+      "platform": "android",
+      "briefing": "briefings/roles/android-dev.md"
     }
   },
   "platforms": {
@@ -52,10 +57,25 @@
           "remove": ["playwright-testing", "playwright-cli", "browser-verify"]
         }
       }
+    },
+    "android": {
+      "label": "Android",
+      "briefings": {
+        "scout":       "briefings/android/scout.md",
+        "tech-lead":   "briefings/android/tech-lead.md",
+        "qa-engineer": "briefings/android/qa-engineer.md"
+      },
+      "skillOverlays": {
+        "tech-lead":   { "add": ["compose-state-hoisting", "kotlin-flow-state-event-modeling",
+                                 "kotlin-coroutines-structured-concurrency", "testing-setup"] },
+        "qa-engineer": { "add": ["testing-setup", "compose-ui-testing-patterns",
+                                 "setup-uiautomator2", "appium-troubleshooting"],
+                         "remove": ["playwright-testing", "playwright-cli", "browser-verify"] }
+      }
     }
   },
   "localSkills": ["browser-verify", "bugfix-workflow", "code-review", "completing-a-task", "git-workflow", "implement-feature", "issue-tracking", "memory", "plan-feature", "playwright-testing", "reproducing-issues", "root-cause-analysis", "seeding-a-project", "session-retrospective", "test-automation-workflow", "test-case-analysis"],
-  "localAgents": ["scout", "ba", "project-manager", "tech-lead", "qa-engineer", "python-dev", "js-dev", "test-automation-engineer", "ios-dev"],
+  "localAgents": ["scout", "ba", "project-manager", "tech-lead", "qa-engineer", "python-dev", "js-dev", "test-automation-engineer", "ios-dev", "android-dev"],
   "instructions": "instructions.md",
   "targets": ["claude"]
 }
