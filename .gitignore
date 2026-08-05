@@ -32,5 +32,6 @@ tasks/*
 !tasks/baseline-web/
 # Local-only brainstorming/spec/plan scaffolding (not distributed)
 docs/superpowers/
+.superpowers/
 .playwright-mcp/
 .playwright-mcp.config.json
