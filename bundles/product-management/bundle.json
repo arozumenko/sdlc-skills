@@ -1,6 +1,6 @@
 {
-  "id": "product-discovery",
-  "title": "Product Discovery",
+  "id": "product-management",
+  "title": "Product Management",
   "description": "Product Owner discovery pipeline — take raw asks to verified, prioritized hypotheses ready for engineering. Adapted from PO-RnD (MIT).",
   "agents": [],
   "localAgents": ["product-owner", "discovery-researcher"],

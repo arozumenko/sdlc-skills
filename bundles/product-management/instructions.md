@@ -1,4 +1,4 @@
-# Product Discovery — shared conventions
+# Product Management — shared conventions
 
 This is a **Product Owner discovery team**. It takes a raw ask — a feature
 request, complaint, or idea — and runs it through a discovery loop until it

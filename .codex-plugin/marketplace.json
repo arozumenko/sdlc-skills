@@ -31,7 +31,7 @@
     },
     {
       "name": "capture-learning",
-      "source": "./bundles/product-discovery/skills/capture-learning",
+      "source": "./bundles/product-management/skills/capture-learning",
       "description": "Capture a problem -> outcome -> lesson from product experiments and hypothesis outcomes (won or lost) into docs/discovery/evidence/learnings/ so the next similar discovery moves faster — use whenever a hypothesis closes, an experiment concludes with a metric movement or a killed assumption, a vendor / data source / external service behaves differently than its docs implied, or a non-obvious product decision needs its rationale preserved, even if the user never says the word \\\"learning\\\". Trigger phrases: capture learning, save what worked, document this lesson, what did we learn from X, we should remember that. NOT for meeting minutes or transcripts, NOT for a durable forward-looking rule (record a decision via grill-decision), NOT for a retrospective, and NOT for a bare todo or a one-off observation.",
       "version": "0.2.0"
     },
@@ -55,19 +55,19 @@
     },
     {
       "name": "define-outcomes",
-      "source": "./bundles/product-discovery/skills/define-outcomes",
+      "source": "./bundles/product-management/skills/define-outcomes",
       "description": "Draft, stress-test, and record ratification of outcome anchors in docs/discovery/outcomes.md — measurable customer-behavior metrics with a dated baseline, a target, and a quarterly timeframe — use whenever a hypothesis names no ratified outcome (and so cannot be promoted), a quarterly bet is being set, or someone asks what number a bet is actually trying to move. The skill drafts candidates and runs each through a definition-quality checklist; only the product owner's explicit in-chat act ratifies one, and never without a dated baseline. Trigger phrases — \"define the outcomes\", \"our hypotheses have no ratified outcome\", \"what metric is this bet moving\", \"set the quarterly targets\", \"ratify the anchor\". NOT for business / traction metrics as anchors (revenue, signups, ARR — those may appear only as lagging confirmation), NOT for team OKRs or engineering SLOs, and NOT a metrics-dashboard builder.",
       "version": "0.2.0"
     },
     {
       "name": "define-personas",
-      "source": "./bundles/product-discovery/skills/define-personas",
+      "source": "./bundles/product-management/skills/define-personas",
       "description": "Create and maintain the canonical persona cards under docs/discovery/personas/ — one file per persona, each with its app surface, goals, pains, jobs-to-be-done, and evidence links — so journeys, hypotheses, and BDD scenarios reference stable persona slugs instead of drifting ad-hoc actor names. Use whenever personas come up — \"define the personas\", \"who are our users\", \"make a persona card for X\", \"which persona owns this journey\" — and proactively whenever a journey, BDD scenario, or hypothesis names an actor that has no card yet or spells one inconsistently. NOT for org-chart or stakeholder-power mapping, and NOT for market-segmentation research (deep-research).",
       "version": "0.2.0"
     },
     {
       "name": "discovery-status",
-      "source": "./bundles/product-discovery/skills/discovery-status",
+      "source": "./bundles/product-management/skills/discovery-status",
       "description": "Report the whole discovery pipeline as one navigable dashboard — where every hypothesis stands against the promotion gate, what is blocked and on whom, the tracker board vs what docs/discovery/ says, and the exact next action (naming the exact skill) for each item. Read-only: reads the docs/discovery/ tree and the product-owner's role memory directly, and re-derives gate state from the promotion checklist in prose (no vault, no validator script). Use at the start of a session, whenever the PO is unsure what to do next, or whenever promotion, gates, blockers, what's-stuck, where-am-I, or am-I-ready-for-review come up — even without the word \\\"status\\\". NOT for code or CI status, PR-review state, deployment health, or git status — those are different tools.",
       "version": "0.2.0"
     },
@@ -91,7 +91,7 @@
     },
     {
       "name": "grill-decision",
-      "source": "./bundles/product-discovery/skills/grill-decision",
+      "source": "./bundles/product-management/skills/grill-decision",
       "description": "Socratic, one-question-at-a-time interview that stress-tests an architectural or product decision, a plan, a new initiative, or a Discovery Hypothesis. Walks the decision tree branch by branch, taking a position on each question instead of asking open-ended ones, and reads (never asks for) what is already written down. Challenges every idea against the project's guardrails, its open pending decisions, and its established terminology, and captures outcomes INLINE the moment they crystallize — a sharpened term edited into the artifact that used it, a real decision into a DEC entry in decisions.md, a hypothesis edited in place. Use whenever you're trying to make a hard call, sharpen fuzzy language, interrogate a fresh Hypothesis before promotion, or pressure-test a plan — even if you don't say \"grill\". NOT for adversarial claim verification against external sources, NOT for feasibility sign-off, NOT for code / PR review or CI status.",
       "version": "0.2.0"
     },
@@ -103,7 +103,7 @@
     },
     {
       "name": "intake-triage",
-      "source": "./bundles/product-discovery/skills/intake-triage",
+      "source": "./bundles/product-management/skills/intake-triage",
       "description": "The front door for raw asks — use whenever feature requests, stakeholder asks, support themes, or \"someone wants X\" arrive, before anything becomes a Problem or Hypothesis. Verdicts every item Act Now / Plan Next / Collect More Signal / Decline-or-Defer, writes one batch record, and mints accepted in-scope items as Problems carrying discovered_from provenance. Out-of-scope asks are declined quoting the scope line; raw material naming a person stays in the confidential inbox and records refer by role. Trigger phrases — \"triage these requests\", \"here are the asks from the sales call\", \"someone wants X — what do we do with it\", \"sort these into the pipeline\". NOT for interview synthesis (that is stakeholder-interview), NOT for bug or support-ticket triage, and NOT for meeting minutes.",
       "version": "0.2.0"
     },
@@ -115,7 +115,7 @@
     },
     {
       "name": "journeys-to-hypotheses",
-      "source": "./bundles/product-discovery/skills/journeys-to-hypotheses",
+      "source": "./bundles/product-management/skills/journeys-to-hypotheses",
       "description": "Convergence pass — read every user journey (maps, list, BDD) plus every existing hypothesis AND, where one is configured, the project's issue tracker, then classify each journey's scope as COVERED (by which epic/hypothesis), GAP (no artifact yet), or OUT-OF-SCOPE (different surface/persona/phase); regenerate the journey-coverage board; and, on confirmation, author the missing problem statements + hypothesis stubs with house frontmatter and collision-free IDs. Use whenever journeys and the backlog need reconciling — \"turn my journeys into hypotheses\", \"map the journeys to the backlog\", \"what do my journeys cover\", \"convergence pass\", \"where are the gaps in the backlog\" — and proactively whenever new journey files exist that no hypothesis or epic references. NOT for authoring journeys themselves, NOT for promoting hypotheses, and NOT for breaking epics into stories.",
       "version": "0.2.0"
     },
@@ -145,7 +145,7 @@
     },
     {
       "name": "opportunity-tree",
-      "source": "./bundles/product-discovery/skills/opportunity-tree",
+      "source": "./bundles/product-management/skills/opportunity-tree",
       "description": "Maintain the opportunity–solution tree over existing Discovery artifacts — use when mapping opportunities under an outcome, asking where a hypothesis hangs, spotting solution-shaped \\\"problems\\\", or when a new Problem or Hypothesis has no parent. Adds only node_type:/parent: frontmatter to existing files and regenerates the derived docs/discovery/outcome-tree.md board — no new file silo. Applies the Torres gate (an opportunity that cannot spawn 3+ different solutions is a solution in disguise) and annotates opportunities with Olsen scores for prioritize-bets. Trigger phrases — \\\"map the opportunity tree\\\", \\\"where does this hypothesis hang\\\", \\\"is this an opportunity or a solution\\\", \\\"regenerate the outcome tree\\\". NOT for authoring outcome anchors (that is define-outcomes), NOT for ranking bets (prioritize-bets), and NOT for reconciling journeys against the backlog (journeys-to-hypotheses).",
       "version": "0.2.0"
     },
@@ -163,7 +163,7 @@
     },
     {
       "name": "prioritize-bets",
-      "source": "./bundles/product-discovery/skills/prioritize-bets",
+      "source": "./bundles/product-management/skills/prioritize-bets",
       "description": "Rank the incubating and promotion-ready bets against the active prioritization framework — use when deciding what to build next, when validated hypotheses outnumber the team's appetite, when a ranking feels stale, or when someone asks which bet comes first. Applies RICE by default (WSJF and ICE are config options); the confidence factor is DERIVED from each hypothesis's evidence-banded confidence block, never free-guessed; persists scores into hypothesis frontmatter so the ranking survives the session; warns — never blocks — when a bet is ranked on gut-band evidence; and rewrites the derived priority board at docs/discovery/priority.md. Trigger phrases — \"what should we build next\", \"rank the backlog\", \"prioritize the hypotheses\", \"which bet comes first\", \"the backlog is stale\". NOT for promotion-gate scoring, NOT for triaging raw incoming asks (intake-triage), and NOT for attacking the assumptions inside one hypothesis.",
       "version": "0.2.0"
     },
@@ -193,7 +193,7 @@
     },
     {
       "name": "stakeholder-interview",
-      "source": "./bundles/product-discovery/skills/stakeholder-interview",
+      "source": "./bundles/product-management/skills/stakeholder-interview",
       "description": "Prepare and synthesize stakeholder interviews — two modes. PREPARE: aggregate every open question, untested critical assumption, and unresolved escalation across the workspace into a themed, value-of-information-ordered guide, filtered to what THIS interviewee can answer. SYNTHESIZE: turn raw notes or a transcript into a durable evidence file and propagate the answers into the hypotheses they touch (evidence links, assumption verdicts, resolved questions). Use whenever a stakeholder conversation, customer meeting, or user session is being planned or has just happened — even if the user only says \\\"I'm meeting them Thursday\\\" or pastes raw notes. Trigger phrases — \\\"prep the interview\\\", \\\"what should I ask\\\", \\\"here are my notes\\\", \\\"synthesize this interview\\\", \\\"we talked to the customer\\\". NOT for triaging raw feature asks (intake-triage), NOT for team-internal meeting minutes, and NOT for fact-checking a document (deep-research factcheck mode).",
       "version": "0.2.0"
     },

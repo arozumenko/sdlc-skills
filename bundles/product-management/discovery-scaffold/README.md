@@ -1,7 +1,7 @@
 # Discovery Pipeline
 
 This is the seed layout for `docs/discovery/` — installed empty into a
-consumer project by the `product-discovery` bundle. It holds the working
+consumer project by the `product-management` bundle. It holds the working
 record for the Product Owner discovery loop: raw ask in, verified and
 prioritized hypothesis out, ready to hand off to engineering.
 

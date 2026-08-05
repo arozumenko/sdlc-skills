@@ -1,4 +1,4 @@
-# Product Discovery
+# Product Management
 
 A Product Owner discovery pipeline — take a raw ask (feature request,
 complaint, idea) all the way to a verified, prioritized hypothesis anchored to
@@ -9,7 +9,7 @@ see [`NOTICE.md`](NOTICE.md) for what was and wasn't ported.
 ## Install
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle product-discovery --target claude
+npx github:arozumenko/sdlc-skills init --bundle product-management --target claude
 ```
 
 Installs the 2 agents below into `.claude/agents/`, seeds the empty
@@ -42,7 +42,7 @@ Installs the 2 agents below into `.claude/agents/`, seeds the empty
 
 ```mermaid
 flowchart TD
-    install(["npx … init --bundle product-discovery"]) --> po
+    install(["npx … init --bundle product-management"]) --> po
 
     subgraph loop["product-owner (Priya) drives the loop"]
         po["product-owner"]
