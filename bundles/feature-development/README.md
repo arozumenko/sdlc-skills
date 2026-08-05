@@ -6,7 +6,7 @@ plan → build → verify → merge relay: **BA** shapes stories, **tech-lead**
 decomposes them, **PM** routes the work and owns the merge gate, **devs** build
 (TDD), and **QA** verifies. The shared core roles auto-tune to whatever
 platforms your selection spans (web JS/TS + Python, iOS Swift/SwiftUI,
-greenfield-Compose Android Kotlin).
+greenfield Android Kotlin/Compose).
 
 ## Install
 
