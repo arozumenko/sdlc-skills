@@ -36,6 +36,11 @@ inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
 - `test-reporter` — Turns run results into a Markdown report
 - `app-profiler` — Onboards a web app, writes the shared app profile
 
+**Product management (`product-management` bundle):**
+
+- `product-owner` (Priya) — Runs the discovery loop end to end: intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate
+- `discovery-researcher` (Sam) — Gathers and stress-tests evidence: stakeholder interviews, market/desk research, adversarial verification; dispatched by the product-owner
+
 **Standalone:**
 
 - `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
@@ -56,6 +61,16 @@ are capability definitions, not always-on context.
 | `vividus` | Vividus BDD framework — bootstrap a project, add plugins, author `.story` files, configure suites/profiles/environments, run via Gradle |
 | `test-case-analysis` | Executing a TMS case end-to-end and emitting an Automation-Friendly Spec (AFS) |
 | `test-automation-workflow` | Automating a TMS test case end-to-end — explore, specify, implement, review |
+| `intake-triage` | A raw ask / feature request / support theme arrives and needs a verdict before becoming a Problem (`product-management`) |
+| `define-personas` | Defining or updating persona cards referenced by discovery artifacts (`product-management`) |
+| `define-outcomes` | Drafting and ratifying a measurable outcome anchor a hypothesis is promoted against (`product-management`) |
+| `opportunity-tree` | Mapping opportunities under an outcome or checking where a hypothesis hangs (`product-management`) |
+| `journeys-to-hypotheses` | Reconciling user journeys against the backlog and authoring missing problem/hypothesis stubs (`product-management`) |
+| `prioritize-bets` | Ranking incubating/promotable hypotheses (RICE default) (`product-management`) |
+| `stakeholder-interview` | Preparing an interview guide or synthesizing raw notes into evidence (`product-management`) |
+| `grill-decision` | Socratically stress-testing a decision or hypothesis one question at a time (`product-management`) |
+| `capture-learning` | Recording a problem → outcome → lesson when a hypothesis closes (`product-management`) |
+| `discovery-status` | A read-only dashboard of where everything in the discovery pipeline stands (`product-management`) |
 | `code-review` | Reviewing a PR or diff |
 | `completing-a-task` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |

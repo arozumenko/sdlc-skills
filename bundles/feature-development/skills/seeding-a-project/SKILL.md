@@ -1,6 +1,6 @@
 ---
 name: seeding-a-project
-description: Generate AGENTS.md and .agents/ configuration files for a new project. Use when the user asks to "seed the project", "onboard this repo", "generate project config", "create AGENTS.md", or after the scout has explored the codebase.
+description: Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
 metadata:

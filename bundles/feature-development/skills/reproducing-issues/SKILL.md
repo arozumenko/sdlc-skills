@@ -1,6 +1,6 @@
 ---
 name: reproducing-issues
-description: Turn a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Reproduction and documentation only — does not fix code.
+description: Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Turns a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Reproduction and documentation only — does not fix code.
 license: Apache-2.0
 metadata:
   authors:

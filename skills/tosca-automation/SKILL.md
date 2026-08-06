@@ -1,6 +1,6 @@
 ---
 name: tosca-automation
-description: Tricentis TOSCA Cloud automation via the bundled tosca_cli.py — create/update/run TestCases, Modules, Reusable Blocks, Playlists, folders, and TSU import/export. Use when the user asks to create a TOSCA test case, run a playlist, organize cases, or any TOSCA Cloud REST/CLI operation.
+description: Use when the user asks to create a TOSCA test case, run a playlist, organize cases, or perform any TOSCA Cloud REST/CLI operation. Tricentis TOSCA Cloud automation via the bundled tosca_cli.py — create/update/run TestCases, Modules, Reusable Blocks, Playlists, folders, and TSU import/export.
 license: Apache-2.0
 metadata:
   authors:

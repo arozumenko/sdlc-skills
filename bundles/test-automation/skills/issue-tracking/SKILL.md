@@ -1,6 +1,6 @@
 ---
 name: issue-tracking
-description: Create, manage, and track issues in GitHub, Linear, or GitLab. Use when the user asks to "create an issue", "file a bug", "check issues", "update a ticket", "create an epic", or anything about issue/ticket management.
+description: Use when the user asks to 'create an issue', 'file a bug', 'check issues', 'update a ticket', 'create an epic', or anything about issue or ticket management. Creates, manages, and tracks issues in GitHub, Linear, or GitLab.
 license: Apache-2.0
 compatibility: Requires the tracker's CLI or MCP wired in — gh / glab / Atlassian MCP / Azure DevOps MCP / Linear CLI/MCP. Scout's Step 6.8 wires these per-agent on restrictive hosts.
 allowed-tools: Bash(gh:*) Bash(linear:*) Bash(glab:*)

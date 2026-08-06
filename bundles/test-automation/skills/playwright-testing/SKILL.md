@@ -1,6 +1,6 @@
 ---
 name: playwright-testing
-description: UI/E2E test automation with Playwright MCP. Use when the user asks to "test the UI", "automate browser tests", "check the page", "take a screenshot", "run Playwright", "write E2E tests", or anything about browser-based testing.
+description: Use when the user asks to 'test the UI', 'automate browser tests', 'check the page', 'take a screenshot', 'run Playwright', 'write E2E tests', or anything about browser-based testing. UI/E2E test automation with Playwright MCP.
 license: Apache-2.0
 compatibility: Requires Node.js 18+. MCP server installed via setup.yaml.
 metadata:

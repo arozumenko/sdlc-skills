@@ -196,6 +196,126 @@
       "source": "./skills/vividus",
       "description": "Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based .story files with 47+ plugins (web, REST, mobile, DB, messaging, AWS/Azure, visual, accessibility), BOM-pinned versions, suite/profile/environment configuration.",
       "version": "0.2.0"
+    },
+    {
+      "name": "app-profiler",
+      "source": "./bundles/manual-qa/agents/app-profiler",
+      "description": "Manual-QA onboarding agent — profiles a web app and writes the shared app_profile.md that every manual-qa agent reads.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-run-lead",
+      "source": "./bundles/manual-qa/agents/test-run-lead",
+      "description": "Manual-QA run orchestrator — assembles the suite, dispatches a runner per case, triggers the report.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-author",
+      "source": "./bundles/manual-qa/agents/test-author",
+      "description": "Manual-QA authoring agent — turns rough ideas, bug reports, or stories into formatted TC-NNN cases.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-sizer",
+      "source": "./bundles/manual-qa/agents/test-sizer",
+      "description": "Manual-QA sizing agent — rates case size/complexity (S/M/L) before authoring and flags Large ones to split.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-runner",
+      "source": "./bundles/manual-qa/agents/test-runner",
+      "description": "Manual-QA execution agent — runs one case against the running app via Playwright MCP and returns a structured JSON result.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "test-reporter",
+      "source": "./bundles/manual-qa/agents/test-reporter",
+      "description": "Manual-QA reporting agent — turns runner results into a Markdown run report.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "xlsx-reader",
+      "source": "./bundles/manual-qa/skills/xlsx-reader",
+      "description": "Read .xlsx/.xls spreadsheets (test cases, checklists, requirement matrices) into Markdown tables for agent ingestion.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "mobile-testing",
+      "source": "./bundles/manual-qa/skills/mobile-testing",
+      "description": "Manual mobile-app testing via Appium / device-farm sessions — native local plus Mobitru cloud real devices.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "product-owner",
+      "source": "./bundles/product-management/agents/product-owner",
+      "description": "Product Owner discovery-lead agent (Priya) — runs intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization; guards the promotion gate.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "discovery-researcher",
+      "source": "./bundles/product-management/agents/discovery-researcher",
+      "description": "Discovery research agent (Sam) — stakeholder interviews, market/desk research, and adversarial verification of hypotheses; dispatched by product-owner.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "intake-triage",
+      "source": "./bundles/product-management/skills/intake-triage",
+      "description": "Front door for raw asks — verdicts each Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "define-personas",
+      "source": "./bundles/product-management/skills/define-personas",
+      "description": "Author and maintain canonical persona cards (surface, goals, pains, JTBD, evidence) referenced by stable slug.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "define-outcomes",
+      "source": "./bundles/product-management/skills/define-outcomes",
+      "description": "Draft, stress-test, and ratify measurable outcome anchors (dated baseline + target + timeframe).",
+      "version": "0.2.0"
+    },
+    {
+      "name": "opportunity-tree",
+      "source": "./bundles/product-management/skills/opportunity-tree",
+      "description": "Maintain the opportunity–solution tree over existing artifacts — Torres gate + Olsen scoring, regenerates the outcome-tree board.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "journeys-to-hypotheses",
+      "source": "./bundles/product-management/skills/journeys-to-hypotheses",
+      "description": "Convergence pass — classify each journey COVERED / GAP / OUT-OF-SCOPE and author missing Problem + Hypothesis stubs.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "prioritize-bets",
+      "source": "./bundles/product-management/skills/prioritize-bets",
+      "description": "Rank incubating/promotable hypotheses (RICE default; WSJF/ICE options); confidence derived from each bet's evidence band.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "stakeholder-interview",
+      "source": "./bundles/product-management/skills/stakeholder-interview",
+      "description": "Prepare a value-of-information-ordered interview guide, or synthesize raw notes into evidence and propagate answers into hypotheses.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "grill-decision",
+      "source": "./bundles/product-management/skills/grill-decision",
+      "description": "Socratic one-question-at-a-time stress-test of a decision or hypothesis, capturing outcomes inline (DEC records, edits).",
+      "version": "0.2.0"
+    },
+    {
+      "name": "capture-learning",
+      "source": "./bundles/product-management/skills/capture-learning",
+      "description": "Record a problem → outcome → lesson when a hypothesis closes or an experiment concludes.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "discovery-status",
+      "source": "./bundles/product-management/skills/discovery-status",
+      "description": "Read-only discovery pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item.",
+      "version": "0.2.0"
     }
   ]
 }

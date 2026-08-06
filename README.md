@@ -119,10 +119,12 @@ want to be happy).
 > guide under [`docs/onboarding/`](docs/onboarding/) — start at the
 > [index](docs/onboarding/README.md) to pick yours:
 > [feature-development](docs/onboarding/feature-development.md) (dev team),
-> [manual-qa](docs/onboarding/manual-qa.md) (manual-QA team), or
+> [manual-qa](docs/onboarding/manual-qa.md) (manual-QA team),
 > [test-automation](docs/onboarding/test-automation.md) (TMS → merged-test
 > pipeline: install → MCP inventory → scout seed →
-> `.agents/test-automation.yaml` → single-case pilot → scale-up).
+> `.agents/test-automation.yaml` → single-case pilot → scale-up), or
+> [product-management](docs/onboarding/product-management.md) (PO discovery team:
+> raw ask → verified, prioritized hypothesis → engineering handoff).
 
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
 > Gemini CLI, Copilot CLI) only see skills present locally in this repo —
@@ -146,6 +148,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 npx github:arozumenko/sdlc-skills init --bundle feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev
 npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
+npx github:arozumenko/sdlc-skills init --bundle product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -168,7 +171,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Three
+files** into the project — one command instead of hand-listing roles. Four
 ship today:
 
 | Bundle | Roster | What it's for |
@@ -176,6 +179,7 @@ ship today:
 | `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI); core roles auto-tune per picked platforms. |
 | `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
+| `product-management` | 2 bundle-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 bundle-local skills and seeds an empty `docs/discovery/` scaffold. |
 
 See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
 author your own.
@@ -304,6 +308,8 @@ point directly at a `SKILL.md` directory.
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
 | `test-automation-lead` | Tal | Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and test-framework architecture (`test-automation` bundle) |
+| `product-owner` | Priya | Runs the discovery loop end to end — intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate (`product-management` bundle) |
+| `discovery-researcher` | Sam | Gathers and stress-tests evidence — stakeholder interviews, market/desk research, adversarial verification; dispatched by `product-owner` (`product-management` bundle) |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief (standalone orphan) |
 
 The **`manual-qa`** bundle ships a separate live-browser manual-QA team (functional
@@ -360,6 +366,21 @@ installable via bundles is listed below.
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
 | `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Owned by the `manual-qa` bundle |
+
+**Product management (10, bundle-owned by `product-management`):**
+
+| Skill | What it does |
+|---|---|
+| `intake-triage` | Front door for raw asks — verdicts each Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems |
+| `define-personas` | Author and maintain canonical persona cards (surface, goals, pains, JTBD, evidence) referenced by stable slug |
+| `define-outcomes` | Draft, stress-test, and ratify measurable outcome anchors (dated baseline + target + timeframe) in `outcomes.md` |
+| `opportunity-tree` | Maintain the opportunity–solution tree over existing artifacts — Torres gate + Olsen scoring, regenerates the outcome-tree board |
+| `journeys-to-hypotheses` | Convergence pass — classify each journey COVERED / GAP / OUT-OF-SCOPE and author missing Problem + Hypothesis stubs |
+| `prioritize-bets` | Rank incubating/promotable hypotheses (RICE default; WSJF/ICE options); confidence derived from each bet's evidence band |
+| `stakeholder-interview` | Prepare a VOI-ordered interview guide, or synthesize raw notes into evidence and propagate answers into hypotheses |
+| `grill-decision` | Socratic one-question-at-a-time stress-test of a decision or hypothesis, capturing outcomes inline (DEC records, edits) |
+| `capture-learning` | Record a problem → outcome → lesson when a hypothesis closes or an experiment concludes |
+| `discovery-status` | Read-only pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item |
 
 ### External skills (fetched by the installer)
 
@@ -447,7 +468,7 @@ sdlc-skills/
 │   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
 ├── bundles/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # feature-development, manual-qa, test-automation
+│   └── <bundle-id>/            # feature-development, manual-qa, test-automation, product-management
 │       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md

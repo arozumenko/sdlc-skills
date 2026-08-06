@@ -1,6 +1,6 @@
 ---
 name: root-cause-analysis
-description: Use after a bug is reproduced/confirmed and before proposing a fix, or when the user says "investigate issue", to trace a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.
+description: Use when a bug has been reproduced or confirmed and needs its exact cause traced before a fix is proposed, or when the user says 'investigate issue'. Traces a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.
 license: Apache-2.0
 metadata:
   authors:

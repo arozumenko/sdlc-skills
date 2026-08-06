@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review code for correctness, security, performance, and maintainability. Use when the user asks to "review this code", "check my changes", "review PR", "audit" — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted.
+description: Use when the user asks to 'review this code', 'check my changes', 'review PR', 'audit' — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted. Reviews code for correctness, security, performance, and maintainability.
 license: Apache-2.0
 compatibility: Requires git CLI. Optional gh CLI for PR reviews.
 metadata:

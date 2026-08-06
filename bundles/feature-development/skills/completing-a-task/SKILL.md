@@ -1,6 +1,6 @@
 ---
 name: completing-a-task
-description: Use after implementing a routed task, when working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.
+description: Use when a routed task has been implemented and the working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.
 license: Apache-2.0
 metadata:
   authors:

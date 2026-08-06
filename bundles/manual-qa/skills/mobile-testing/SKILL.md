@@ -1,6 +1,6 @@
 ---
 name: mobile-testing
-description: Mobile app testing for all manual-qa agents. Covers native iOS/Android via Appium MCP and Mobitru device farm, and PWA/hybrid via Playwright mobile viewport. Use when profiling a mobile app, authoring mobile TCs, sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report.
+description: Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.
 license: Apache-2.0
 compatibility: "Appium mode: Node.js 22+, JDK 8+, appium-mcp, Android SDK (Android) or macOS+Xcode (iOS). Device-farm mode: mobitru-mcp-server, DEVICE_FARM_API_KEY. Playwright mode: Node.js 18+, @playwright/mcp. Manual mode: no additional tooling."
 metadata:
