@@ -428,7 +428,7 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
 # scout (Kit) — maps the repo, no MCP needed
 tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
 
-# js-dev / python-dev / ios-dev — code, run tests, git
+# js-dev / python-dev / ios-dev / android-dev — code, run tests, git
 tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
 ```
 

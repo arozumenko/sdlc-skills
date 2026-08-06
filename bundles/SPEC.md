@@ -23,7 +23,7 @@ A bundle composes five things:
 Most agents are **stack-agnostic and adapt at runtime**. Scout detects the
 stack and tunes roles; `ba`, `project-manager`, and `personal-assistant`
 read `.agents/` context. The stack-specific agent *is* the dev role
-(`python-dev` vs `js-dev` vs `ios-dev`) — there is no "scout for iOS"
+(`python-dev` vs `js-dev` vs `ios-dev` vs `android-dev`) — there is no "scout for iOS"
 distinct from "scout for web", only one scout producing different output.
 
 A bundle owns a real copy of each agent it uses (see "Bundle-owned content"
@@ -254,7 +254,7 @@ machinery is in place; concrete hooks (format-on-edit, etc.) come later.
 
 | id | team | dev roles |
 |---|---|---|
-| `feature-development` | cross-platform (web + iOS) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`; core roles auto-tune |
+| `feature-development` | cross-platform (web + iOS + Android) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`, `android-dev` (greenfield Compose only); core roles auto-tune |
 | `manual-qa` | manual QA for web | 6 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter` |
 | `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |
 | `product-management` | PO discovery pipeline | 2 local agents: `product-owner`, `discovery-researcher`; 10 discovery skills; seeds `docs/discovery/` |

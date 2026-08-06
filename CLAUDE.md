@@ -18,7 +18,7 @@ standalone-only "orphan" content not belonging to any bundle: one agent
 (`personal-assistant`) and eight skills (`deep-research`, `gathering-context`,
 `verifying-outcomes`, `microsoft-365`, `obsidian-vault`, `tosca-automation`,
 `vividus`, `xray-testing`). `skills.json` registers those orphan monorepo skills
-plus the 21 external (`repo:`) skills fetched from upstream at install time.
+plus the 28 external (`repo:`) skills fetched from upstream at install time.
 
 Read `README.md` for the full catalog and install paths, `AGENTS.md` for the
 consumer-facing summary, and `bundles/SPEC.md` before touching bundles.
@@ -36,7 +36,7 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 node --test bin/lib/item-resolver.test.mjs
 
 # Exercise the installer against a throwaway dir
-node bin/init.mjs init --bundle feature-development --target claude --yes   # add --dry-run to preview
+node bin/init.mjs init --bundle feature-development --target claude --yes
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-bundles.mjs` and validates

@@ -79,7 +79,7 @@ if ! has_subagent_hook; then
     done
   fi
   roster="${roster%, }"
-  [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, qa-engineer, test-automation-engineer, test-automation-lead, personal-assistant, scout"
+  [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, android-dev, qa-engineer, test-automation-engineer, test-automation-lead, personal-assistant, scout"
   context="${context}"$'\n\n'"<role-memory-reminder>
 Each role in this project has persistent memory at .agents/memory/<role>/snapshot.md.
 When you act as one of these roles, invoke the \`memory\` skill to load your snapshot before starting work.
