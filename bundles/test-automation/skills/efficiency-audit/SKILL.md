@@ -1,6 +1,6 @@
 ---
 name: efficiency-audit
-description: Measure the token/cost/time efficiency of AI coding-agent work — per session, per role, per day, and per individual sub-agent — with every dollar metered by ccusage. Use when the user asks "what did this cost", cost per session/role/test case, which role/sub-agent burned the most, tool-call/skill/time breakdowns, "before vs after" cost comparisons, or wants to audit AI spend over time.
+description: Use when the user asks 'what did this cost', cost per session/role/test case, which role or sub-agent burned the most, tool-call/skill/time breakdowns, 'before vs after' cost comparisons, or wants to audit AI spend over time. Measures the token/cost/time efficiency of AI coding-agent work — per session, per role, per day, and per individual sub-agent — with every dollar metered by ccusage.
 license: Apache-2.0
 compatibility: Requires Node 18+ and the `ccusage` CLI (auto-run via `npx ccusage@latest`, or a local install). Reads local agent-CLI transcripts under `$CLAUDE_CONFIG_DIR/projects` when set, else ~/.claude/projects (falling back to ~/.config/claude/projects). Cost is Claude-host-native; other hosts (Copilot/Codex/Gemini) work only where ccusage supports them.
 metadata:
