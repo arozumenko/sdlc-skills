@@ -73,7 +73,7 @@ import {
 } from "./lib/bundle-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { homedir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -939,19 +939,24 @@ function cacheRoot() {
 }
 
 function shallowClone(repo, ref) {
+  if (!/^[a-zA-Z0-9._\-\/]+$/.test(ref)) {
+    console.error(`  ! Invalid ref: ${ref}`);
+    return null;
+  }
   const dest = join(cacheRoot(), repo.replace("/", "__"));
   try {
     if (existsSync(join(dest, ".git"))) {
-      execSync(`git -C "${dest}" fetch --quiet --depth 1 origin ${ref}`, {
+      execFileSync("git", ["-C", dest, "fetch", "--quiet", "--depth", "1", "origin", ref], {
         stdio: "ignore",
       });
-      execSync(`git -C "${dest}" checkout --quiet FETCH_HEAD`, {
+      execFileSync("git", ["-C", dest, "checkout", "--quiet", "FETCH_HEAD"], {
         stdio: "ignore",
       });
     } else {
       if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
-      execSync(
-        `git clone --quiet --depth 1 --branch ${ref} https://github.com/${repo} "${dest}"`,
+      execFileSync(
+        "git",
+        ["clone", "--quiet", "--depth", "1", "--branch", ref, `https://github.com/${repo}`, dest],
         { stdio: "ignore" }
       );
     }
