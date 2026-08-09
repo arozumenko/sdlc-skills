@@ -83,25 +83,18 @@
       "description": "Swift concurrency code review and authoring \u2014 actors, async/await, structured concurrency (by Paul Hudson)"
     },
     {
-      "id": "compose-state-hoisting",
+      "id": "compose-state-and-effects",
       "repo": "chrisbanes/skills",
       "ref": "main",
-      "subdir": "skills/compose-state-hoisting",
-      "description": "Review and refactor Jetpack Compose state hoisting \u2014 keep UI state at its lowest owner, extract state holders only when warranted (by Chris Banes, Apache-2.0)"
+      "subdir": "skills/compose-state-and-effects",
+      "description": "Jetpack Compose state ownership and effects \u2014 state hoisting to the lowest responsible owner, screen state holders, LaunchedEffect/DisposableEffect/SideEffect, Flow collection (by Chris Banes, Apache-2.0)"
     },
     {
-      "id": "kotlin-flow-state-event-modeling",
+      "id": "kotlin-concurrency-and-flow",
       "repo": "chrisbanes/skills",
       "ref": "main",
-      "subdir": "skills/kotlin-flow-state-event-modeling",
-      "description": "Pick the right Kotlin Flow primitive for state vs. events \u2014 StateFlow, SharedFlow, Channel, stateIn, SharingStarted (by Chris Banes, Apache-2.0)"
-    },
-    {
-      "id": "kotlin-coroutines-structured-concurrency",
-      "repo": "chrisbanes/skills",
-      "ref": "main",
-      "subdir": "skills/kotlin-coroutines-structured-concurrency",
-      "description": "Review Kotlin coroutine usage for structured concurrency \u2014 scope lifecycle, suspend APIs over stored CoroutineScope, error handling (by Chris Banes, Apache-2.0)"
+      "subdir": "skills/kotlin-concurrency-and-flow",
+      "description": "Kotlin coroutine scope ownership and Flow modelling \u2014 structured concurrency, cancellation, suspend APIs over a stored CoroutineScope, and StateFlow/SharedFlow/Channel for state vs. events (by Chris Banes, Apache-2.0)"
     },
     {
       "id": "compose-ui-testing-patterns",

@@ -105,9 +105,8 @@
       "skillOverlays": {
         "tech-lead": {
           "add": [
-            "compose-state-hoisting",
-            "kotlin-flow-state-event-modeling",
-            "kotlin-coroutines-structured-concurrency",
+            "compose-state-and-effects",
+            "kotlin-concurrency-and-flow",
             "testing-setup"
           ]
         },

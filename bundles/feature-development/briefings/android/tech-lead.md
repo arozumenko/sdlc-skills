@@ -28,7 +28,7 @@ drift, KSP vs KAPT inconsistency across modules, an unjustified new
 dependency). Decompose features into testable units with clear
 composable ↔ ViewModel ↔ repository seams. Review for structured-concurrency
 violations and correct Flow-primitive choice (the
-`kotlin-coroutines-structured-concurrency` and `kotlin-flow-state-event-modeling`
-skills are the reference, `compose-state-hoisting` for state placement). Keep
+`kotlin-concurrency-and-flow` skill is the reference for both,
+`compose-state-and-effects` for state placement and effect lifecycles). Keep
 an eye on build/release config — AGP version, minification, and Play
 `targetSdk` compliance are tech-lead concerns.
