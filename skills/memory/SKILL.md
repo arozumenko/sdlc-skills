@@ -15,6 +15,14 @@ write these files directly using your `Read`, `Write`, `Edit`, and `Glob`
 tools. No CLI, no script, no shell-path fragility. Works on any host, from
 any working directory.
 
+**Write it as a vault, not a pile of notes.** `.agents/memory/<role>/` opens
+directly in Obsidian, so entries carry frontmatter properties, aliases, tags
+and `[[wikilinks]]`. That is not decoration: aliases make an entry findable by
+the words you would actually search for, links turn isolated facts into a graph
+you can follow, and the `updated` property tells you what is due for
+re-verification. A human may edit this vault too — **tolerate keys you did not
+write; never strip them**.
+
 ## File layout
 
 Under `.agents/memory/<role>/` (where `<role>` matches your agent's
@@ -27,12 +35,13 @@ Under `.agents/memory/<role>/` (where `<role>` matches your agent's
 ├── project_briefing.md      ← seeded by scout at install time (type: project)
 ├── daily/
 │   └── YYYY-MM-DD.md        ← episodic daily logs, append-only
-└── snapshot.md              ← auto-generated on launch (may be absent)
+└── snapshot.md              ← host-generated convenience (often absent)
 ```
 
-Create directories with `mkdir -p` on first use. Do not touch
-`snapshot.md` — the host's launch hook owns it. If it's absent,
-that's fine: you read memory directly when you need it.
+Create directories with `mkdir -p` on first use. Do not write
+`snapshot.md` yourself — a host launch hook *may* generate it, but nothing
+regenerates it automatically on every host. If it's absent, that's normal:
+you read memory directly when you need it.
 
 `.agents/` is an IDE-neutral path so the same memory works whether this
 agent is running under Claude Code, Cursor, Gemini CLI, Windsurf, or
@@ -62,6 +71,26 @@ paths.
 
 **If unsure: log it.** You can promote to a curated entry later. Never the
 reverse.
+
+### Where does this go?
+
+```
+Is it mission/ticket state (status, assignee, acceptance criteria)?
+                                          → the work board, NOT memory
+Would ANOTHER ROLE need it, and is it verified + durable?
+                                          → .agents/knowledge/  (knowledge-curation skill)
+Is it durable for THIS role (>6 months useful)?
+                                          → curated entry here
+Would tomorrow's you want it, but not next quarter's?
+                                          → daily log
+Is it already stated in the repo (code, CLAUDE.md, git history)?
+                                          → nowhere; link to it instead
+```
+
+The middle branch is the one most often missed. A fact one role paid for that
+every role needs is worth **promoting**, not just filing — see the
+`knowledge-curation` skill. Memory that only its author can reach is memory
+nobody benefits from.
 
 ## Four curated types
 
@@ -106,18 +135,39 @@ and `<content>`:
    strip leading/trailing underscores. Example: `User Timezone` →
    `user_timezone`.
 2. **Target path**: `.agents/memory/<role>/<slug>.md`.
-3. **`Write`** the file with this exact frontmatter (`name`, `description`,
-   `type` are parsed by the snapshot generator — don't omit them, don't
-   add extra keys, keep each on one line):
+3. **`Write`** the file with this frontmatter. `name`, `description` and
+   `type` are **required**; the rest make the vault navigable in Obsidian.
+   Unknown keys are tolerated — never rewrite or strip a key a human added.
    ```markdown
    ---
    name: <name>
-   description: <description>
-   type: <type>
+   description: <one line — what a reader GAINS, not what the note is "about">
+   type: <user | feedback | project | reference>
+   aliases: [<words you would actually search for>]
+   tags: [<axis/value>, ...]
+   created: YYYY-MM-DD
+   updated: YYYY-MM-DD
    ---
 
+   ## <section>
+
    <content>
+
+   Related: [[other_entry]] · [[another_entry#Specific section]]
    ```
+
+   - **`aliases`** make `[[service token]]` resolve to `service_token_rotation.md`
+     and let search find the note by the words you'd type, not the slug.
+   - **`tags`** are for **cross-cutting filtering only**, as closed axes —
+     `type/`, `area/`, `status/`. A tag used once filters nothing; it is
+     decoration. Anything expressing a *relationship* is a link, not a tag.
+   - **`updated`** is when the FACT was last re-verified, not when the file
+     was touched.
+   - **`##` headings** make a note anchor-linkable: `[[note#Section]]` beats
+     `[[note]]` when you mean one part of it.
+   - **`Related:`** lines are what make the graph worth opening. An entry with
+     no links is one nobody rediscovers.
+
 4. **Update the index** at `.agents/memory/<role>/MEMORY.md`:
    - **If `MEMORY.md` doesn't exist**, `Write` it:
      ```markdown
@@ -132,11 +182,11 @@ and `<content>`:
 
 ### Read — recall memory on demand
 
-1. **If a snapshot was auto-imported** (the `@.agents/memory/<role>/snapshot.md`
-   line at the top of your AGENT.md), you already have curated memory and
-   recent daily logs in your context — don't re-read them.
-2. **If no snapshot loaded** (first session on a fresh project, or host
-   without a launch hook), read memory directly:
+1. **If snapshot content is already in your context** (some hosts inject
+   `.agents/memory/<role>/snapshot.md` at launch), you already have curated
+   memory and recent daily logs — don't re-read them.
+2. **Otherwise** (the common case — many hosts never generate a snapshot),
+   read memory directly:
    - `Read .agents/memory/<role>/MEMORY.md` for the curated index.
    - `Read .agents/memory/<role>/<slug>.md` for any entry the index
      points you at. Scout's `project_briefing.md` is usually the most
@@ -173,13 +223,42 @@ follow the spec above.
 
 ---
 
-## Snapshot.md — host launch hook concern, not yours
+## Keeping the vault honest
 
-`snapshot.md` is regenerated by the host's launch hook before each session.
-It inlines `MEMORY.md`, every curated entry body, and the last 3 days of
-daily logs into a single file that the agent's `AGENT.md` auto-imports via
-`@.agents/memory/<role>/snapshot.md`.
+- **Correct or delete a fact the moment it stops being true.** A stale entry is
+  worse than none, because it is trusted. Prefer deleting to hedging.
+- **Re-verify `project` entries before acting** — they decay fastest. If the
+  `updated` date is old and the claim matters, check it, then bump the date.
+- **One fact per entry.** If a title needs "and", it is probably two entries —
+  or one entry with two `##` sections so each can be linked separately.
+- **Link liberally.** `[[slug]]` resolves by filename or alias. A `[[link]]`
+  with no matching entry yet is fine: it marks something worth writing.
+- **Never store secrets** — tokens, credentials, customer data. Reference where
+  they live instead.
 
-You never write `snapshot.md` yourself. If it's missing, the `@import`
-becomes a no-op and you fall back to on-demand reads — no error, no
-interruption.
+### Quick audit
+
+```bash
+role=.agents/memory/<role>
+# entries missing from the index (invisible when recalling)
+for f in $role/*.md; do b=$(basename "$f"); [ "$b" = MEMORY.md ] && continue;
+  grep -q "($b)" $role/MEMORY.md || echo "UNINDEXED $b"; done
+# index lines pointing at deleted entries
+grep -o '](.*\.md)' $role/MEMORY.md | tr -d ']()' | while read -r t; do
+  [ -f "$role/$t" ] || echo "DEAD $t"; done
+```
+
+Run it after a rename or a big cleanup — an unindexed entry is one you will
+never recall, and a dead index line sends you looking for a file that is gone.
+
+## Snapshot.md — a host convenience that may be absent
+
+`snapshot.md` is an optional host artifact: a launch hook *may* generate it
+by inlining `MEMORY.md`, curated entry bodies, and recent daily logs into a
+single file it injects at startup. Nothing regenerates it automatically on
+every host, so expect it to be missing or stale.
+
+You never write `snapshot.md` yourself. When it isn't in your context, the
+`MEMORY.md` index is your map to the entry bodies: read
+`project_briefing.md` and the other entries it lists on demand — no error,
+no interruption.
