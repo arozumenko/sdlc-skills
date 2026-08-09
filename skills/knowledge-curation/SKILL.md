@@ -93,18 +93,13 @@ Do not sweep mission narrative, per-role preferences, or anything unverified.
 ### Audit the layer
 
 ```bash
-cd .agents/knowledge
-# notes present but absent from their folder index (invisible to readers)
-for d in */; do for f in "$d"*.md; do b=$(basename "$f"); [ "$b" = README.md ] && continue;
-  grep -q "($b)" "$d/README.md" || echo "UNINDEXED $f"; done; done
-# links pointing at files that no longer exist
-grep -rno '](\([^)h][^)]*\))' --include='*.md' . | while IFS=: read -r f _ l; do
-  t=$(echo "$l" | sed 's/.*](//;s/)//'); [ -e "$(dirname "$f")/$t" ] || echo "DEAD $f -> $t"; done
-# oldest verification dates first — what is due for a re-check
-grep -rn "^verified:" --include='*.md' . | sort -t: -k3
+python3 <skills>/knowledge-curation/scripts/vault.py lint .agents/knowledge --strict
 ```
 
-After any large refactor, also grep the layer for references to things that no longer exist. Notes
+Checks frontmatter, link and anchor resolution (by filename *or* alias), duplicate aliases,
+index/disk drift both ways, and notes overdue re-verification. Exit 1 on errors, so it works in CI.
+
+After any large refactor, also grep the layer for references to things that no longer exist — notes
 describing deleted code are the most common failure of a shared layer, and the most damaging: they
 mislead every role at once.
 
@@ -130,6 +125,46 @@ later.
 - Every relative link resolves; the note appears in its folder index.
 - Every claim has a stated verification method — no "should", no "presumably".
 - Nothing secret: no tokens, credentials, or customer data.
+
+
+## Tooling — `scripts/vault.py`
+
+Stdlib-only, Python 3.9+. **Optional**: authoring stays file-tool based, so everything works
+without it. Use it for the two jobs prompts do badly — finding the right note among many, and
+checking structure deterministically.
+
+```bash
+V=<skills>/knowledge-curation/scripts/vault.py
+
+# recall without reading every file
+python3 $V query .agents/knowledge --role qa-engineer
+python3 $V query .agents/knowledge --tag area/          # whole axis, prefix match
+python3 $V query .agents/memory/<role> --layer memory --text "ripgrep"
+python3 $V query .agents/knowledge --stale-days 180     # overdue re-verification
+
+# peek at one note (frontmatter + sections + first paragraph)
+python3 $V show .agents/knowledge "cold build"          # resolves by ALIAS too
+
+# graph traversal — what links here, what shares tags
+python3 $V links .agents/knowledge runtime-architecture-after-m10
+
+# structural checks (CI-friendly: exit 1 on errors)
+python3 $V lint .agents/knowledge --strict
+```
+
+`lint` catches what is tedious by hand: missing/invalid frontmatter, `name` not matching the
+filename, wikilinks that resolve by neither filename nor alias, `[[note#Anchor]]` pointing at a
+heading that does not exist, duplicate aliases (which make a link ambiguous), index/disk drift in
+both directions, and notes overdue re-verification.
+
+Resolve links **the way Obsidian does — filename OR alias**. A checker that only matches filenames
+reports false dead links; that mistake has already been made here once.
+
+## Obsidian Bases
+
+`templates/bases/*.base` are ready-made Obsidian dashboards — copy into the vault root and open
+in Obsidian: knowledge by area, notes overdue re-verification, live traps (`type/gotcha` minus
+`status/fixed`), and curated memory. They make the layer browsable by a human without any plugin.
 
 ## Related
 

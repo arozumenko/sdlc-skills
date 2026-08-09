@@ -1,0 +1,12 @@
+# Gotchas that are still live — excludes anything retired as status/fixed.
+# The list to skim before touching an unfamiliar area.
+filters:
+  and:
+    - file.hasTag("type/gotcha")
+    - '!file.hasTag("status/fixed")'
+views:
+  - type: cards
+    name: Live traps
+    order:
+      - file.name
+      - description

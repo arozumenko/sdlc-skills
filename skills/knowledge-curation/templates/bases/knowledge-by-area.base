@@ -1,0 +1,11 @@
+# Every shared note grouped by the area it touches.
+# Copy into .agents/knowledge/ and open in Obsidian.
+views:
+  - type: table
+    name: Knowledge by area
+    order:
+      - file.name
+      - description
+      - type
+      - applies_to
+      - verified

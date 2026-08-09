@@ -238,6 +238,17 @@ follow the spec above.
 
 ### Quick audit
 
+The `knowledge-curation` skill ships `scripts/vault.py`, which does this properly — it resolves
+links by filename **or alias** (as Obsidian does), checks anchors, and finds index drift:
+
+```bash
+python3 <skills>/knowledge-curation/scripts/vault.py lint .agents/memory/<role> --layer memory
+python3 <skills>/knowledge-curation/scripts/vault.py query .agents/memory/<role> --layer memory --text "flaky"
+```
+
+It is optional — memory works with your file tools alone. Reach for it when recalling from a large
+vault, or after a rename. Shell fallback if Python is unavailable:
+
 ```bash
 role=.agents/memory/<role>
 # entries missing from the index (invisible when recalling)
