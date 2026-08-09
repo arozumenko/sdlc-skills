@@ -939,7 +939,7 @@ function cacheRoot() {
 }
 
 function shallowClone(repo, ref) {
-  if (!/^[a-zA-Z0-9._\-\/]+$/.test(ref)) {
+  if (!/^[a-zA-Z0-9._\/]+$/.test(ref) || ref.startsWith('-')) {
     console.error(`  ! Invalid ref: ${ref}`);
     return null;
   }
