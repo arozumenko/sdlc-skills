@@ -238,13 +238,21 @@ follow the spec above.
 
 ### Quick audit
 
-The `knowledge-curation` skill ships `scripts/vault.py`, which does this properly — it resolves
-links by filename **or alias** (as Obsidian does), checks anchors, and finds index drift:
+This skill ships `scripts/vault.py`, which does it properly — it resolves links by filename **or
+alias** (as Obsidian does), checks anchors, and finds index drift. It also queries the vault as a
+graph, which matters once a role has more notes than you want to read:
 
 ```bash
-python3 <skills>/knowledge-curation/scripts/vault.py lint .agents/memory/<role> --layer memory
-python3 <skills>/knowledge-curation/scripts/vault.py query .agents/memory/<role> --layer memory --text "flaky"
+V=<skills>/memory/scripts/vault.py
+python3 $V lint  .agents/memory/<role> --layer memory
+python3 $V query .agents/memory/<role> --layer memory --text "flaky"
+python3 $V query .agents/memory/<role> --layer memory --type feedback
+python3 $V show  .agents/memory/<role> --layer memory "<alias or filename>"
+python3 $V links .agents/memory/<role> --layer memory <note>
 ```
+
+`templates/bases/memory-curated.base` is an Obsidian dashboard for the curated entries — copy it
+into the role directory and open the vault in Obsidian.
 
 It is optional — memory works with your file tools alone. Reach for it when recalling from a large
 vault, or after a rename. Shell fallback if Python is unavailable:
