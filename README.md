@@ -145,7 +145,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 ```bash
 # A team bundle — the whole team in one shot (agents, their skills,
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
-npx github:arozumenko/sdlc-skills init --bundle feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev
+npx github:arozumenko/sdlc-skills init --bundle feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev, android-dev
 npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 npx github:arozumenko/sdlc-skills init --bundle product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
@@ -155,7 +155,7 @@ npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically
 # (monorepo + external; externals are git-cloned then copied in — add --symlink to link instead)
-npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev
+npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev,android-dev
 
 # Specific skills (overrides the auto-resolve)
 npx github:arozumenko/sdlc-skills init --skills bugfix-workflow,code-review
@@ -176,7 +176,7 @@ ship today:
 
 | Bundle | Roster | What it's for |
 |---|---|---|
-| `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI); core roles auto-tune per picked platforms. |
+| `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI), `android-dev` (greenfield Kotlin/Compose); core roles auto-tune per picked platforms. |
 | `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 bundle-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 bundle-local skills and seeds an empty `docs/discovery/` scaffold. |
@@ -304,6 +304,7 @@ point directly at a `SKILL.md` directory.
 | `python-dev` | Py | Python implementation — owns its own repo clone and branch |
 | `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
 | `ios-dev` | Io | iOS/Swift implementation — SwiftUI, SwiftData, Swift Testing (no simulator) |
+| `android-dev` | Dan | Android/Kotlin implementation — **greenfield Compose only**, Room/DataStore, Hilt (no device or emulator) |
 | `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
@@ -389,11 +390,12 @@ installer clones each into `~/.cache/sdlc-skills/registry/` on first
 install and copies the subdir into your project's skills dir (or symlinks
 it with `--symlink`). Native
 IDE plugin paths do **not** fetch these — use the installer for the full
-catalog.
+catalog. Every entry currently tracks `ref: main` (a repo's default branch),
+so upstream content can change under an installed project between installs.
 
 | Skill | Source | Used by |
 |---|---|---|
-| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `skills/engineering/tdd/` | `python-dev`, `js-dev`, `ios-dev` |
+| `tdd` | [`mattpocock/skills`](https://github.com/mattpocock/skills) → `skills/engineering/tdd/` | `python-dev`, `js-dev`, `ios-dev`, `android-dev` |
 | `brainstorming` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/brainstorming/` | `ba` |
 | `systematic-debugging` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/systematic-debugging/` | devs + `qa-engineer` |
 | `verification-before-completion` | [`obra/superpowers`](https://github.com/obra/superpowers) → `skills/verification-before-completion/` | devs + `qa-engineer` |
@@ -407,13 +409,20 @@ catalog.
 | `swift-testing-pro` | [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill) | `ios-dev` |
 | `swift-concurrency-pro` | [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill) | `ios-dev` |
 | `playwright-cli` | [`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli) → `skills/playwright-cli/` | `qa-engineer`, `test-automation-engineer` |
-| `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) | `qa-engineer`, `test-automation-engineer`, `manual-qa` agents |
+| `playwright-best-practices` | [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) → `playwright-best-practices/` | `qa-engineer`, `test-automation-engineer`, `manual-qa` agents |
 | `fastapi` | [`fastapi/fastapi`](https://github.com/fastapi/fastapi) → `fastapi/.agents/skills/fastapi` | `feature-development` web overlay (`python-dev`, `tech-lead`) |
 | `fastmcp-server` | [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) | `feature-development` web overlay |
 | `vercel-react-best-practices` | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) → `skills/react-best-practices` | `feature-development` web overlay (`js-dev`, `tech-lead`) |
-| `environment-setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/environment-setup-xcuitest` | `feature-development` iOS overlay (`qa-engineer`) |
+| `setup-xcuitest` | [`appium/skills`](https://github.com/appium/skills) → `skills/setup-xcuitest` | `feature-development` iOS overlay (`qa-engineer`) |
 | `xcuitest-real-device-config` | [`appium/skills`](https://github.com/appium/skills) → `skills/xcuitest-real-device-config` | `feature-development` iOS overlay (`qa-engineer`) |
-| `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `feature-development` iOS overlay (`qa-engineer`) |
+| `appium-troubleshooting` | [`appium/skills`](https://github.com/appium/skills) → `skills/appium-troubleshooting` | `feature-development` iOS + Android overlays (`qa-engineer`) |
+| `setup-uiautomator2` | [`appium/skills`](https://github.com/appium/skills) → `skills/setup-uiautomator2` | `feature-development` Android overlay (`qa-engineer`) |
+| `compose-state-hoisting` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-state-hoisting` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
+| `kotlin-flow-state-event-modeling` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/kotlin-flow-state-event-modeling` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
+| `kotlin-coroutines-structured-concurrency` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/kotlin-coroutines-structured-concurrency` | `android-dev`, `feature-development` Android overlay (`tech-lead`) |
+| `compose-ui-testing-patterns` | [`chrisbanes/skills`](https://github.com/chrisbanes/skills) → `skills/compose-ui-testing-patterns` | `android-dev`, `feature-development` Android overlay (`qa-engineer`) |
+| `testing-setup` | [`android/skills`](https://github.com/android/skills) → `testing/testing-setup` | `android-dev`, `feature-development` Android overlay (`tech-lead`, `qa-engineer`) |
+| `android-cli` | [`android/skills`](https://github.com/android/skills) → `devtools/android-cli` | No agent or overlay — installs only via an explicit `--skills android-cli` |
 
 ## Using these agents and skills
 
@@ -517,7 +526,9 @@ re-distributes nothing, only catalogs and wires.
 - **Paul Hudson's Swift agent skills** — [`twostraws/SwiftUI-Agent-Skill`](https://github.com/twostraws/SwiftUI-Agent-Skill), [`twostraws/SwiftData-Agent-Skill`](https://github.com/twostraws/SwiftData-Agent-Skill), [`twostraws/Swift-Testing-Agent-Skill`](https://github.com/twostraws/Swift-Testing-Agent-Skill), [`twostraws/Swift-Concurrency-Agent-Skill`](https://github.com/twostraws/Swift-Concurrency-Agent-Skill). Powers the `ios-dev` agent. MIT.
 - **[`microsoft/playwright-cli`](https://github.com/microsoft/playwright-cli)** — Microsoft Playwright. `skills/playwright-cli/` (drive Playwright from the command line — browser launch, navigation, snapshot/locator interaction, tabs and storage, network mocking, tracing, test generation). Used by `qa-engineer` and `test-automation-engineer`. Apache-2.0.
 - **[`fastapi/fastapi`](https://github.com/fastapi/fastapi)** — Sebastián Ramírez. Official FastAPI agent skill. `feature-development` web/backend overlay. MIT.
-- **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest environment setup, real-device config, and troubleshooting. `feature-development` iOS QA overlay. Apache-2.0.
+- **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest and UiAutomator2 environment setup, real-device config, and troubleshooting. `feature-development` iOS + Android QA overlays. Apache-2.0.
+- **Chris Banes' Compose/Kotlin agent skills** — [`chrisbanes/skills`](https://github.com/chrisbanes/skills). `compose-state-hoisting`, `kotlin-flow-state-event-modeling`, `kotlin-coroutines-structured-concurrency`, `compose-ui-testing-patterns`. Powers the `android-dev` agent. Apache-2.0.
+- **[`android/skills`](https://github.com/android/skills)** — official Google Android skills. `testing-setup` — used by the `feature-development` Android overlay and `android-dev`; `android-cli` — in no agent or overlay, opt-in only via an explicit `--skills android-cli`. Apache-2.0.
 - **Bundle-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
 
 Thanks to all maintainers.

@@ -83,6 +83,48 @@
       "description": "Swift concurrency code review and authoring \u2014 actors, async/await, structured concurrency (by Paul Hudson)"
     },
     {
+      "id": "compose-state-hoisting",
+      "repo": "chrisbanes/skills",
+      "ref": "main",
+      "subdir": "skills/compose-state-hoisting",
+      "description": "Review and refactor Jetpack Compose state hoisting \u2014 keep UI state at its lowest owner, extract state holders only when warranted (by Chris Banes, Apache-2.0)"
+    },
+    {
+      "id": "kotlin-flow-state-event-modeling",
+      "repo": "chrisbanes/skills",
+      "ref": "main",
+      "subdir": "skills/kotlin-flow-state-event-modeling",
+      "description": "Pick the right Kotlin Flow primitive for state vs. events \u2014 StateFlow, SharedFlow, Channel, stateIn, SharingStarted (by Chris Banes, Apache-2.0)"
+    },
+    {
+      "id": "kotlin-coroutines-structured-concurrency",
+      "repo": "chrisbanes/skills",
+      "ref": "main",
+      "subdir": "skills/kotlin-coroutines-structured-concurrency",
+      "description": "Review Kotlin coroutine usage for structured concurrency \u2014 scope lifecycle, suspend APIs over stored CoroutineScope, error handling (by Chris Banes, Apache-2.0)"
+    },
+    {
+      "id": "compose-ui-testing-patterns",
+      "repo": "chrisbanes/skills",
+      "ref": "main",
+      "subdir": "skills/compose-ui-testing-patterns",
+      "description": "Write and review Jetpack Compose UI tests \u2014 plain state-driven tests, screenshot tests, semantics assertions, focus/keyboard input (by Chris Banes, Apache-2.0)"
+    },
+    {
+      "id": "testing-setup",
+      "repo": "android/skills",
+      "ref": "main",
+      "subdir": "testing/testing-setup",
+      "description": "Analyze and set up a native Android testing strategy \u2014 install test libraries, scaffold harnesses for unit, UI, screenshot, and end-to-end tests (official Google Android skills, Apache-2.0)"
+    },
+    {
+      "id": "android-cli",
+      "repo": "android/skills",
+      "ref": "main",
+      "subdir": "devtools/android-cli",
+      "description": "Install and use the `android` CLI \u2014 create projects, run apps, manage virtual devices (screenshots, UI inspection), manage SDK components, look up Android docs (official Google Android skills, Apache-2.0)"
+    },
+    {
       "id": "tdd",
       "repo": "mattpocock/skills",
       "ref": "main",
@@ -156,6 +198,7 @@
       "id": "playwright-best-practices",
       "repo": "currents-dev/playwright-best-practices-skill",
       "ref": "main",
+      "subdir": "playwright-best-practices",
       "description": "Playwright selector strategy, wait patterns, and auth/flaky-test guidance."
     },
     {
@@ -180,10 +223,10 @@
       "description": "React & Next.js performance + best-practices guidance from Vercel Engineering \u2014 writing, reviewing, refactoring components, data fetching, bundle optimization (by Vercel)"
     },
     {
-      "id": "environment-setup-xcuitest",
+      "id": "setup-xcuitest",
       "repo": "appium/skills",
       "ref": "main",
-      "subdir": "skills/environment-setup-xcuitest",
+      "subdir": "skills/setup-xcuitest",
       "description": "Set up and validate an XCUITest Appium environment on macOS for iOS UI automation (official Appium, Apache-2.0)"
     },
     {
@@ -199,6 +242,13 @@
       "ref": "main",
       "subdir": "skills/appium-troubleshooting",
       "description": "Diagnose Appium failures (XCUITest/UiAutomator2) \u2014 startup, driver readiness, WebDriverAgent, element lookup (official Appium)"
+    },
+    {
+      "id": "setup-uiautomator2",
+      "repo": "appium/skills",
+      "ref": "main",
+      "subdir": "skills/setup-uiautomator2",
+      "description": "Prepare and verify Appium UiAutomator2 \u2014 Node/Appium, Android SDK and Java prerequisites, driver install, doctor output, server smoke evidence (official Appium, Apache-2.0)"
     },
     {
       "id": "memory",

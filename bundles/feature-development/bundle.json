@@ -39,6 +39,11 @@
     "ios-dev": {
       "label": "iOS \u2014 Swift/SwiftUI",
       "platform": "ios"
+    },
+    "android-dev": {
+      "label": "Android \u2014 greenfield Kotlin/Compose",
+      "platform": "android",
+      "briefing": "briefings/roles/android-dev.md"
     }
   },
   "platforms": {
@@ -78,8 +83,39 @@
         "qa-engineer": {
           "add": [
             "swift-testing-pro",
-            "environment-setup-xcuitest",
+            "setup-xcuitest",
             "xcuitest-real-device-config",
+            "appium-troubleshooting"
+          ],
+          "remove": [
+            "playwright-testing",
+            "playwright-cli",
+            "browser-verify"
+          ]
+        }
+      }
+    },
+    "android": {
+      "label": "Android",
+      "briefings": {
+        "scout": "briefings/android/scout.md",
+        "tech-lead": "briefings/android/tech-lead.md",
+        "qa-engineer": "briefings/android/qa-engineer.md"
+      },
+      "skillOverlays": {
+        "tech-lead": {
+          "add": [
+            "compose-state-hoisting",
+            "kotlin-flow-state-event-modeling",
+            "kotlin-coroutines-structured-concurrency",
+            "testing-setup"
+          ]
+        },
+        "qa-engineer": {
+          "add": [
+            "testing-setup",
+            "compose-ui-testing-patterns",
+            "setup-uiautomator2",
             "appium-troubleshooting"
           ],
           "remove": [
@@ -117,7 +153,8 @@
     "python-dev",
     "js-dev",
     "test-automation-engineer",
-    "ios-dev"
+    "ios-dev",
+    "android-dev"
   ],
   "instructions": "instructions.md",
   "targets": [

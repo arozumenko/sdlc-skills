@@ -36,3 +36,16 @@ jobs:
             fi
           done
           exit $status
+
+  externals:
+    runs-on: ubuntu-latest
+    # 28 entries × (10s timeout + one retry) is ~9.5 min worst case if every
+    # request hangs. Cap the job so a wedged network fails fast and visibly.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate external (repo:) skill registry entries
+        run: node bin/validate-bundles.mjs --check-externals
