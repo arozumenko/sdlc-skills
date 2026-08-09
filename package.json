@@ -14,8 +14,9 @@
     "validate:bundles": "node bin/validate-bundles.mjs",
     "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
     "validate:externals": "node bin/validate-bundles.mjs --check-externals",
-    "validate": "npm run validate:bundles && npm run validate:marketplaces",
-    "gen:marketplaces": "node bin/gen-marketplaces.mjs"
+    "validate": "npm run validate:bundles && npm run validate:marketplaces && npm run validate:externals && npm run validate:dupes",
+    "gen:marketplaces": "node bin/gen-marketplaces.mjs",
+    "validate:dupes": "node bin/check-skill-dupes.mjs"
   },
   "repository": {
     "type": "git",

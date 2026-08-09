@@ -73,3 +73,25 @@ emptiness is a finding rather than an omission.** `project-manager`
 treats an unresolved `Not verified:` line as a routing obligation before merge,
 not as an FYI — the merge gate does not open on "I wrote the code" for Android
 any more than it does for the other stacks.
+
+## Agent memory — two layers
+
+**`.agents/knowledge/`** — distilled, cross-role, **verified** facts about this project. Committed
+and reviewed. Read its `README.md` before starting, plus the folder covering what you are touching.
+
+**`.agents/memory/<role>/`** — your own working notes and daily log. **Local only** (gitignored,
+never shared between machines), so anything another role needs is invisible there.
+
+When you learn something, choose the layer deliberately. Promote it to `.agents/knowledge/` only if
+**all four** hold — otherwise keep it in your role directory:
+
+1. **Cross-role** — useful to two or more roles, or architecture-level.
+2. **Verified** — you confirmed it against the running system, and the note says how, with a date.
+3. **Durable** — still true once this mission ends.
+4. **Costly to rediscover** — anything obvious from reading the code belongs in the code.
+
+Correct or delete a shared note the moment it stops being true: a stale one misleads every role at
+once. Never commit an unverified claim — it is worse than silence, because it is trusted. Mission
+state belongs on the work board, not in either memory layer.
+
+Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.

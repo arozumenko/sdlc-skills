@@ -22,7 +22,8 @@ project-root/
 ├── CLAUDE.md                     ← Auto-loaded by Claude Code: brief project context
 ├── AGENTS.md                     ← Full team reference: stack, commands, conventions
 └── .agents/                      ← IDE-neutral agent content (every agent reads)
-    ├── profile.md                ← Quick-reference project card
+    ├── knowledge/                ← shared, committed cross-role knowledge (Step 2.5)
+├── profile.md                ← Quick-reference project card
     ├── workflow.md               ← How the team actually works (PR sampling — Step 0.5)
     ├── team-comms.md             ← Who's on the team and how to route work (Step 6.5)
     ├── architecture.md           ← System design map (if complex enough)
@@ -179,6 +180,49 @@ CI/CD, environment.
   team's working agreements. Read existing `AGENTS.md` before
   regenerating; keep every bundle block intact (placement doesn't
   matter — keep it whole). Never edit or drop the marker lines.
+
+## Step 2.5 — Scaffold .agents/knowledge/ (shared knowledge layer)
+
+The **committed** counterpart to per-role memory. `.agents/memory/<role>/` is local and
+role-scoped, so a fact one role paid for is invisible to every other role — and to the same role
+on another machine. This layer is where cross-role facts live so they are actually reachable.
+
+Create the charter and folder scaffolding (skip any folder the project has no use for):
+
+```
+.agents/knowledge/
+├── README.md            ← charter: admission tests + start-here index
+├── architecture/        system shape, service boundaries, seams
+├── services/            per-service invariants and surprising contracts
+├── frontend/            client state, lifecycle, enforced UI rules
+├── integrations/        external systems the project depends on
+├── environment/         local setup and the dev loop
+├── practices/           how we work: verification, migration hazards, review
+├── testing/             suites and harness behaviour
+└── security/            credential, auth and egress invariants
+```
+
+Each folder gets a `README.md` stating **what belongs in it and what does not**, plus an index of
+its notes. Empty folders are fine — a named home makes it likelier a hard-won fact gets written
+down at all.
+
+**The charter must state the admission tests**, because a shared layer is only useful if it is
+trusted. A note is admitted only if it is **cross-role**, **verified** (with a stated method and
+date), **durable**, and **costly to rediscover**. Say plainly that an unverified claim here is
+worse than silence, since it is committed and therefore trusted.
+
+**Seed it** from what you verified during onboarding — the facts that took real effort to
+establish and that more than one role will need (how to run the stack, what `make dev` does *not*
+set up, which invariants fail silently). Do not pad it: three trustworthy notes beat twenty
+uncertain ones.
+
+**Record the contract in `CLAUDE.md` and `AGENTS.md`** (Steps 1 and 2) so agents know the layer
+exists and how to add to it — a knowledge layer nobody is told about is one nobody uses. In
+`AGENTS.md`, place it **outside** any `<!-- BUNDLE -->` markers so bundle regeneration cannot
+clobber it.
+
+Ongoing curation is the `knowledge-curation` skill's job; seeding just creates the structure and
+the first entries.
 
 ## Step 3 — Generate .agents/profile.md
 

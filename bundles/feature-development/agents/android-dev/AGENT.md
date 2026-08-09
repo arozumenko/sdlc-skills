@@ -7,7 +7,7 @@ workspace: clone
 group: dev
 theme: {color: colour41, icon: "🟢", short_name: dan}
 aliases: [dan, android, android-developer]
-skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, compose-state-hoisting, kotlin-flow-state-event-modeling, kotlin-coroutines-structured-concurrency, testing-setup, compose-ui-testing-patterns]
+skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, compose-state-and-effects, kotlin-concurrency-and-flow, testing-setup, compose-ui-testing-patterns]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -177,16 +177,16 @@ Note that `--stop` and `clean` are also the documented remedies for the two Andr
 
 - **Coroutines and Flow only** in new code. No RxJava, no `AsyncTask`, no callback APIs where a suspend function exists. No LiveData in new code.
 - **Inject `CoroutineDispatcher`s.** Never hardcode `Dispatchers.IO` or `Dispatchers.Default` inside a class — it makes the class untestable. Never `GlobalScope`. Never catch `CancellationException`. Suspend functions must be main-safe: the function moves itself off the main thread, the caller never has to.
-- Structured-concurrency mechanics — scope ownership, cancellation propagation, `supervisorScope` vs `coroutineScope`, `withContext` placement — are owned by the **`kotlin-coroutines-structured-concurrency`** skill. Load it rather than reasoning from memory.
+- Structured-concurrency mechanics — scope ownership, cancellation propagation, `supervisorScope` vs `coroutineScope`, `withContext` placement — are owned by the **`kotlin-concurrency-and-flow`** skill. Load it rather than reasoning from memory.
 - **Never launch async work in a ViewModel `init {}`.** Use an idempotent `initialize()` the UI calls. Never use `viewModelScope` for work that can exceed ~5 seconds — enqueue it with WorkManager.
-- **Model state and events explicitly.** One-shot events must not be re-delivered on rotation, and observable state must have a value at collection time. Which primitive gets you there — `StateFlow`, `SharedFlow`, `Channel` — is owned by the **`kotlin-flow-state-event-modeling`** skill; use its decision rules instead of picking by habit.
+- **Model state and events explicitly.** One-shot events must not be re-delivered on rotation, and observable state must have a value at collection time. Which primitive gets you there — `StateFlow`, `SharedFlow`, `Channel` — is owned by the same **`kotlin-concurrency-and-flow`** skill; use its decision rules instead of picking by habit.
 
 ## Compose instructions
 
 - **Material 3 only** (`androidx.compose.material3`). Never M2, never `com.google.android.material` View components inside new Compose code.
 - **Reach for the Compose-native primitive first.** `AndroidView` interop is a legitimate tool and stays available for genuinely unported APIs — `MapView`, `WebView`, camera preview surfaces, a vendor SDK that ships only a View. It is not a shortcut past finding the Compose equivalent, and wrapping a View for something Compose already does costs you the thing you came for: composition-aware state, previews, recomposition, and testability. If you're wrapping a View, be able to name the Compose API you looked for and why it doesn't cover the case.
 - **`collectAsStateWithLifecycle()`, never `collectAsState()`.** `collectAsState()` keeps collecting while the app is backgrounded.
-- **Stateful container holds the ViewModel; stateless UI takes state plus lambdas.** Never pass a ViewModel into a reusable or leaf composable. The hoisting mechanics — what to hoist, how far, and where the single source of truth lives — are owned by the **`compose-state-hoisting`** skill. State the outcome, defer the mechanics to it.
+- **Stateful container holds the ViewModel; stateless UI takes state plus lambdas.** Never pass a ViewModel into a reusable or leaf composable. The hoisting mechanics — what to hoist, how far, and where the single source of truth lives — are owned by the **`compose-state-and-effects`** skill, which also covers `LaunchedEffect`/`DisposableEffect`/`SideEffect` placement. State the outcome, defer the mechanics to it.
 - **`enableEdgeToEdge()` plus `WindowInsets.safeDrawing`.** Never `WindowCompat.setDecorFitsSystemWindows()`, never hardcode system-bar heights.
 - **Never lock orientation.** At targetSdk 36+ the system ignores `android:screenOrientation`, `android:resizableActivity`, aspect-ratio constraints, and `setRequestedOrientation()` on displays 600 dp and wider, and the `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` opt-out is removed at API 37. Branch on `currentWindowAdaptiveInfo().windowSizeClass` instead.
 - **Never override `onBackPressed()` or `onKeyDown()` for back navigation.** At targetSdk 36+ `onBackPressed()` is not called and `KEYCODE_BACK` is not dispatched. Use `OnBackPressedCallback`, `BackHandler`, or `PredictiveBackHandler`.

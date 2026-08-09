@@ -1,0 +1,12 @@
+# Notes whose `verified` date is getting old. A shared layer is only trusted if
+# someone re-checks it; this is the queue for that.
+filters:
+  and:
+    - verified < date(today) - "180d"
+views:
+  - type: table
+    name: Overdue re-verification
+    order:
+      - file.name
+      - verified
+      - applies_to

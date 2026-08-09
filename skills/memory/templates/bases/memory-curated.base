@@ -1,0 +1,13 @@
+# Per-role memory: curated entries only, newest re-verification last.
+# Drop into .agents/memory/<role>/. Daily logs are excluded — they are episodic.
+filters:
+  and:
+    - '!file.inFolder("daily")'
+views:
+  - type: table
+    name: Curated memory
+    order:
+      - file.name
+      - description
+      - type
+      - updated
