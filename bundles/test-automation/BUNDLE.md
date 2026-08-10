@@ -1,6 +1,6 @@
 ---
 name: Test Automation Team
-description: Automation team that turns TMS cases into merged, honest automated tests via an analyst → implementer → reviewer pipeline.
+description: Automation team that turns TMS cases into merged, honest automated tests via a serial batch pipeline — parallel analyst exploration, implement + static review per case, one N×-green hardening gate per batch.
 owner: Applied AI
 install_script: 'npx github:arozumenko/sdlc-skills init --bundle test-automation'
 install_script_unix: 'npx github:arozumenko/sdlc-skills init --bundle test-automation'

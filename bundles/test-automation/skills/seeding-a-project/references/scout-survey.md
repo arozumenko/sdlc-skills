@@ -321,3 +321,22 @@ Additional notes:        <verbatim from operator's ## Notes block, or none>
 Any "Unconfirmed" field — edit .agents/profile.md § Project systems
 before the first test-case-analysis run.
 ```
+
+---
+
+## Operator-interview questions
+
+Reference for scout's interactive Q&A during project-systems capture (Step 0.7).
+
+- **Batch cadence** — "How many cases do you typically hand over at once,
+  and how often?" → `.agents/testing.md § Batch pipeline → Batch size M`.
+- **Tracker visibility** — "Do stakeholders follow progress in the tracker
+  while automation is in flight, or is end-of-batch sync enough?" →
+  `§ Batch pipeline → Mid-batch tracker writes` (`per-dispatch` vs `batched`;
+  note that `per-dispatch` forces the sequential-dispatch path — a workflow
+  run has no mid-run writer, so it costs the Claude Code accelerant).
+- **Landing granularity** — "When a batch is proven green, should it go to
+  the base branch straight away, or should batches accumulate and land
+  together at the end of a campaign?" → `.agents/profile.md § Automation PR
+  policy → Landing granularity`. Ask it alongside the merge policy; a
+  protected release line usually implies `campaign-end`.

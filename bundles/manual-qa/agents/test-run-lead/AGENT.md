@@ -1,6 +1,6 @@
 ---
 name: test-run-lead
-description: Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url.
+description: "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url."
 model: sonnet
 group: qa
 color: green

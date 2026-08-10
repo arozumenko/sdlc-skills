@@ -104,7 +104,7 @@
     {
       "name": "test-automation-lead",
       "source": "./bundles/test-automation/agents/test-automation-lead",
-      "description": "Use when a TMS case or batch of cases needs to be automated, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the analyst → implementer → reviewer pipeline, owns the automation merge, owns test-framework architecture.",
+      "description": "Use when a TMS case or batch of cases needs to be automated, when technical suite work (tech-debt, migrations, improvements) needs planning and batching, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the batch pipeline (units one at a time on a batch trunk: analyse — or a tech-task brief for non-case units — implement, static review, merge back, then one hardening gate per batch), owns the automation merge, owns test-framework architecture.",
       "version": "0.2.0"
     },
     {
@@ -135,6 +135,12 @@
       "name": "atlassian-content",
       "source": "./bundles/test-automation/skills/atlassian-content",
       "description": "Use when the user says 'file a bug', 'comment on JIRA-123', 'write up a decision page', or authors any Atlassian content. Creates well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch plus repair.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "automation-scoping",
+      "source": "./bundles/test-automation/skills/automation-scoping",
+      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
       "version": "0.2.0"
     },
     {
@@ -324,6 +330,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "test-automation-implementation",
+      "source": "./bundles/test-automation/skills/test-automation-implementation",
+      "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test — the implementer slot of the test-automation pipeline. Six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the Run Report template. Analyst counterpart: test-case-analysis; orchestration: test-automation-workflow.",
+      "version": "0.2.0"
+    },
+    {
       "name": "test-automation-workflow",
       "source": "./bundles/feature-development/skills/test-automation-workflow",
       "description": "Use when a TMS test case needs to become an automated test, or when automating a regression batch — \"automate TC-NNN\", \"convert this case to Playwright\", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).",
@@ -333,6 +345,12 @@
       "name": "test-case-analysis",
       "source": "./bundles/feature-development/skills/test-case-analysis",
       "description": "Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — \"analyse SCRUM-T101\", \"run this case and emit an AFS\", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "tokenomics",
+      "source": "./bundles/test-automation/skills/tokenomics",
+      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
       "version": "0.2.0"
     },
     {

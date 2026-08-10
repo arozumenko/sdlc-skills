@@ -263,3 +263,23 @@ source of truth here; the reconciliation anchors to that.
   reports Copilot (via OpenTelemetry `~/.copilot/otel/*.jsonl`, which must be
   enabled *before* the sessions), Codex, Gemini, etc. as host-level *totals*
   only, with no sub-agent decomposition.
+
+## Attributing workflow units to pipeline SLOTS (per-slot economics)
+
+A batch-pipeline audit usually wants "what did the analysts cost vs the
+implementers vs the gate", but Workflow-dispatched sub-agents carry **empty
+`description` metadata** — the display label is not persisted. What IS
+reliable (worked recipe, field-verified 2026-08-05):
+
+1. The slot is named in the unit's **dispatch prompt** — the FIRST user
+   message of its transcript. The batch workflows open every dispatch with a
+   marker: match `\b(Analyst|Combined|Reviewer|Implementer|Triage|Merge-back|Gate) slot`.
+2. **Scope the match to that first message only.** Skill documents loaded
+   later in the same transcript contain phrases like "§ Analyst slot contract"
+   — a whole-file match misclassifies implementers as analysts.
+3. Case attribution comes free from each unit's `gitBranch` in the `--json`
+   ledger (`tests/<CASE>-…` / `tests/batch-<slug>`); dispatch prompts also
+   carry the case ids.
+4. Join slot → ledger `costUsd`/`durationMin` by unit id, then aggregate per
+   slot and per case branch. This is exactly the shape that answers "did the
+   combined slot pay off vs analyst+implementer".

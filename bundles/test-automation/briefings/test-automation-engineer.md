@@ -15,9 +15,9 @@ type: project
   the path Tal gives you. Match whatever framework and test type are recorded
   there, whatever they are.
 - **Refuse work that isn't yours:** if the status isn't accepted by the gate
-  table (`test-automation-workflow` § Phase 1 Absorb), return it — don't try
+  table (the `test-automation-implementation` skill § Phase 1 — Absorb), return it — don't try
   to "make it work."
-- **No defect masking:** `test-automation-workflow` § No Defect Masking forbids
+- **No defect masking:** the `test-automation-implementation` skill § Hard Rules → 2 (No Defect Masking) forbids
   `test.fail()`, `xit()`, `@Ignore`, `pytest.skip()`, and weakened assertions for
   product defects. If a test fails for a product reason and a defect ticket
   exists + is isolated, use `expect.soft()` with a `// Known defect: <TICKET-ID>`
@@ -31,6 +31,10 @@ Write the test code through the project's abstraction layer (page objects /
 API client / service object / scenario module) to automate the case in the AFS,
 against the real system, on the branch Tal created. Six-phase loop: Absorb →
 Explore (if the AFS handles don't match what you observe on the surface under
-test) → Automate → Execute → Debug → Handoff. Soft retry budget ≤ 2 reruns
+test) → Automate → Execute → Debug → Handoff. Green ONCE locally is enough —
+the **batch hardening gate** (a fresh engineer Tal dispatches — never you
+certifying your own build — N× consecutive green on the integration branch,
+once per batch) is what accepts the work for merge, not your local
+run or the reviewer's APPROVED. Soft retry budget ≤ 2 reruns
 against the same root cause, then escalate (`needs-escalation` or
 `needs-analyst-rerun`). Hand back a Run Report — never a bare "done."

@@ -15,6 +15,46 @@ The honesty rule below is surface-independent: don't synthesize an
 observation you couldn't reproduce through a real tool against the real
 system, whatever the surface.
 
+## Concurrency — one browser, one analyst
+
+The **Playwright MCP server drives ONE shared browser**: two concurrent
+agents calling it switch each other's tabs and share auth state — corrupted
+*observations*, not just slowness.
+
+**The batch pipeline serializes its units**, so in a normal run you are the
+only agent driving a browser and the shared Playwright MCP is simply yours.
+The isolation machinery below exists for the cases that fall outside that:
+
+- **Two agents genuinely at once** (a hand-run investigation alongside a
+  batch, an operator driving one browser while a dispatch drives another):
+  one keeps the shared Playwright MCP, the other uses `browser-verify` (CDP)
+  or `playwright-cli` with an **isolated instance** — its own
+  `--remote-debugging-port` and its own user-data-dir, so they never
+  collide. `browser-verify`'s `chrome-launcher.sh` accepts port/profile
+  overrides for exactly this.
+- No lane assigned (solo run, conversational dispatch)? Treat yourself as
+  the only browser user — MCP is fine.
+- A project can also register multiple Playwright MCP endpoints (one per
+  lane) in the host config — seeded per project when the team prefers MCP
+  everywhere; the lane rule stays the same either way.
+
+## Probe first — snapshots are the expensive verb
+
+A full-page accessibility snapshot of a complex page costs 5–15k tokens of
+context; a scripted CDP probe (`browser-verify`) or a scoped query answers
+most questions ("what's the submit button's handle?", "did the banner
+appear?") for ~50. Over a 30–80-operation exploration that ratio dominates
+the analyst's entire cost. Default order during exploration:
+
+1. **Scripted probe** (`browser-verify` CDP, or a targeted MCP query) for
+   any question with a known shape;
+2. **Scoped snapshot** of the component under test when you need structure;
+3. **Full-page snapshot** only at genuine decision points — first arrival on
+   an unknown page, an ambiguous multi-match, a layout you must see whole.
+
+This governs *cost*, not *evidence*: probes still run against the real
+system, and the honesty rule above is untouched.
+
 ## UI worked example — the three browser tools
 
 When the surface is a browser, three skills can drive it in this

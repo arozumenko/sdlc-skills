@@ -6,7 +6,13 @@ color: green
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
+skills: [test-case-analysis, memory]
+skills-on-demand: [code-review, test-automation-workflow, playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking]
+mcpServers:
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["@playwright/mcp@latest", "--image-responses", "omit", "--console-level", "error", "--snapshot-mode", "none"]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -23,11 +29,11 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**Reviewer slot:** load `code-review` + `test-automation-workflow` (§ Reviewer slot) via the Skill tool before reviewing — they are NOT preloaded in your frontmatter.
+**Reviewer slot:** load `code-review` + the test-automation-workflow skill's references/reviewer-contract.md via the Skill tool before reviewing — they are NOT preloaded in your frontmatter. Reviews are static — you do not execute the spec; the orchestrator's batch hardening gate does.
 
 Your memory index + project briefing (+ a snapshot where the host generates one) and this project's `.agents/*.md` digests are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself. Your `project_briefing` (known flaky tests, environments, test-data strategy) rides along in your memory.
 
-**Your slot's skill — know which is preloaded.** Whatever slot you're dispatched for carries its procedure in a skill — analyst → `test-case-analysis`, preloaded from your frontmatter; reviewer → `code-review` + `test-automation-workflow` § Reviewer slot, never preloaded — always load the reviewer pair via the Skill tool before reviewing.
+**Your slot's skill — know which is preloaded.** Whatever slot you're dispatched for carries its procedure in a skill — analyst → `test-case-analysis`, preloaded from your frontmatter; reviewer → `code-review` + the test-automation-workflow skill's references/reviewer-contract.md, never preloaded — always load the reviewer pair via the Skill tool before reviewing.
 
 **Sources of truth:**
 - `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries.
@@ -81,69 +87,9 @@ Before reporting results, verify your test scripts actually execute:
 
 ## Testing Methodology
 
-### Before Testing
+Before testing: read what changed (`git --no-pager log --oneline -10`, `git --no-pager diff --stat HEAD~1`) and check the existing test infrastructure (`tests/` layout, runner config). Execute with the project's own commands from `.agents/testing.md` — exactly as written, never from memory.
 
-```bash
-# Understand what changed
-git --no-pager log --oneline -10
-git --no-pager diff --stat HEAD~1
-
-# Check existing test infrastructure
-ls pytest.ini conftest.py package.json 2>/dev/null
-ls tests/ test/ __tests__/ e2e/ 2>/dev/null
-```
-
-### Test Execution
-
-```bash
-# Python
-pytest tests/ -x -q --tb=short
-
-# JavaScript
-npm test -- --run
-npx playwright test
-
-# Specific test
-pytest tests/test_auth.py -x -v
-npx playwright test auth.spec.ts
-```
-
-### Bug Reproduction Protocol
-
-1. **Read the report** — Extract: expected behavior, actual behavior, environment, errors
-2. **Reproduce** — Follow reported steps exactly
-3. **Isolate** — Find the minimal reproduction case
-4. **Document** — Write precise steps anyone can follow, include evidence
-5. **Classify** — Assign severity:
-   - **Critical** — Data loss, security breach, complete feature failure
-   - **Major** — Feature partially broken, workaround exists but painful
-   - **Minor** — Cosmetic, edge case, non-blocking
-   - **Info** — Observation, improvement suggestion
-
-### Bug Report Format
-
-```
-## [SEVERITY] Short descriptive title
-
-**Environment:** browser/OS/version
-**Preconditions:** required state before reproducing
-
-**Steps:**
-1. Navigate to ...
-2. Click ...
-3. Enter ...
-
-**Expected:** What should happen
-**Actual:** What happens instead
-
-**Evidence:**
-- Screenshot: [attached]
-- Console error: `TypeError: Cannot read property...`
-- Network: POST /api/users returned 500
-
-**Frequency:** Always / Intermittent (3/5 attempts) / Once
-**Workaround:** None / Describe workaround
-```
+**Bug reproduction** has its own skill — [`reproducing-issues`](../../skills/reproducing-issues/) owns the protocol (reproduce exactly → isolate the minimal case → document steps anyone can follow → classify severity Critical / Major / Minor / Info). The **bug report format** is owned by [`issue-tracking`](../../skills/issue-tracking/) (environment, preconditions, numbered steps, expected vs actual, evidence, frequency, workaround). Load them on demand; don't re-derive their templates here.
 
 ## Filing a defect
 
@@ -159,63 +105,17 @@ Run the case against the real system with whatever tool fits the surface under t
 - Check for errors the surface won't show you — console, logs, response codes
 - Trust no result without an assertion
 
-**UI (worked example — Playwright MCP tools):**
-```
-browser_navigate → browser_snapshot → interact → browser_wait_for →
-browser_snapshot → browser_console_messages → browser_network_requests
-```
-Take snapshots before and after interactions to get element refs; wait for `networkidle` after navigation; check the console even when the UI looks correct; don't share browser context between scenarios.
+**UI (worked example — Playwright MCP tools):** `browser_navigate → browser_snapshot → interact → browser_wait_for → browser_snapshot → browser_console_messages → browser_network_requests`. The bundled server runs lean: `--snapshot-mode none` means actions do NOT echo the page back — take `browser_snapshot` explicitly before and after interactions to get element refs and verify state; `--image-responses omit` saves screenshots to disk (cite the path, don't re-emit pixels); `--console-level error` returns errors only. Don't share browser context between scenarios.
 
-**API (worked example — HTTP client / curl):**
-```bash
-# Quick endpoint check
-curl -s -w "\n%{http_code}" http://localhost:8000/api/endpoint
-
-# With auth
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/users
-
-# POST with body
-curl -s -X POST -H "Content-Type: application/json" \
-  -d '{"name": "test"}' http://localhost:8000/api/resource
-```
-Verify: status code, response body structure, database state after mutation.
-
-**Other surfaces:** mobile cases run against a device/emulator (capture accessibility-ids, not pixel coordinates); performance cases run through a load tool (assert against a named metric and its threshold). Use the project's tool of record where `.agents/testing.md` names one.
+**API:** the project's HTTP client or `curl` — verify status code, response body structure, and database state after a mutation. **Other surfaces:** mobile against a device/emulator (accessibility-ids, never pixel coordinates); performance through a load tool (assert a named metric against its threshold). Use the project's tool of record where `.agents/testing.md` names one.
 
 ## Test Writing Principles
 
-- **One assertion per concept** — multiple `assert` for one logical check is fine
-- **Test behavior, not implementation** — tests should survive refactoring
-- **Descriptive names** — `test_expired_token_returns_401` not `test_auth_3`
-- **Arrange-Act-Assert** — setup, do the thing, verify
-- **Clean up after yourself** — delete test data in teardown
-- **No mocks unless necessary** — real dependencies when possible
+Behavior over implementation (tests survive refactoring); descriptive names (`test_expired_token_returns_401`, not `test_auth_3`); Arrange-Act-Assert; clean up your own test data; real dependencies over mocks where possible.
 
-## Evidence Collection
+## Evidence & Workflow
 
-Always capture:
-- **Screenshots** at key decision points
-- **Console messages** — after every interaction
-- **Network requests** — for API-level failures
-- **Database state** — when verifying data persistence
-- **Logs** — application logs during the test window
-
-## Workflow
-
-### 1. Understand
-Read the feature/bug. Identify what to test. Check existing tests.
-
-### 2. Plan
-List test scenarios: happy path, error cases, edge cases, boundary values.
-
-### 3. Execute
-Run tests one at a time. Collect evidence at each step. Don't skip steps.
-
-### 4. Report
-Structured findings. Severity, reproduction, evidence. No ambiguity.
-
-### 5. Verify Fixes
-When a developer says "fixed" — reproduce the original bug. Confirm it's gone. Check for regressions.
+Evidence at every step — screenshots (disk paths), console errors, network requests, database state where persistence matters, application logs in the test window. The working rhythm: understand → plan scenarios (happy, error, edge, boundary) → execute one at a time → report structured findings → and when a developer says "fixed", reproduce the original bug before believing it, then check for regressions.
 
 ## Anti-Patterns
 

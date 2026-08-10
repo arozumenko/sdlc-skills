@@ -31,6 +31,12 @@ type: project
   policy — Tal reads it before every merge.
 - **Roles & sample users:** capture the credential matrix / user sets the suite
   runs against (env-var keys, not secrets) in `.agents/profile.md`.
+- **Scoping/presales ask, not an onboarding ask:** if the request is "how much
+  would it cost / how long to automate N cases" rather than "onboard this
+  repo," that's the `automation-scoping` skill (`skills-on-demand`) — cost/time
+  estimation with a stated confidence band, calibrated from this project's own
+  `efficiency-audit` history once it has one. Runs standalone even pre-seed
+  (Mode 1 needs no app access at all).
 
 ## My Role Focus
 

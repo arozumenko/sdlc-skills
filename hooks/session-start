@@ -63,7 +63,13 @@ fi
 # if the instruction files weren't loaded this session (instr_present empty). The
 # orchestrator is a top-level agent, never a CLI sub-agent → cli_sub="". role may
 # be empty (no --agent launch / unresolved) → then just the read-list when needed.
-context="$(build_capped_context "$PROJECT_DIR" "$role" "$instr_present" "")"
+# The trailing blocks are assembled FIRST so their size can be subtracted from
+# the injection budget. Anything appended AFTER build_capped_context is outside
+# the cap it enforced, and the runtime drops an over-cap payload WHOLE — measured,
+# two small blocks took a 32,768-byte budget to 32,993 escaped bytes. Harmless
+# against the 48KB rejection floor that day; a longer roster or more over-budget
+# roles would not have been.
+tail_blocks=""
 
 # Per-role memory: runtimes whose per-agent start hook can inject context
 # (Claude Code, Codex, Copilot CLI) load it per dispatch via agent-start, so
@@ -80,12 +86,76 @@ if ! has_subagent_hook; then
   fi
   roster="${roster%, }"
   [ -n "$roster" ] || roster="ba, tech-lead, project-manager, python-dev, js-dev, ios-dev, android-dev, qa-engineer, test-automation-engineer, test-automation-lead, personal-assistant, scout"
-  context="${context}"$'\n\n'"<role-memory-reminder>
+  tail_blocks="${tail_blocks}"$'\n\n'"<role-memory-reminder>
 Each role in this project has persistent memory at .agents/memory/<role>/snapshot.md.
 When you act as one of these roles, invoke the \`memory\` skill to load your snapshot before starting work.
 Roles: ${roster}.
 </role-memory-reminder>"
 fi
+
+# NO unfinished-batch digest here, deliberately. An earlier revision scanned
+# `.agents/automation/` and injected the batches that had not reported yet. It
+# is wrong for this hook, for three reasons worth keeping written down so it
+# doesn't get re-added:
+#
+#   1. This hook is role- and task-blind. It fires for every session in the
+#      project — a dev fixing app code, a BA drafting a story — so automation
+#      state reaches sessions that did not ask for it.
+#   2. `.agents/` is shared, sessions are not. On a team, "intaken but no
+#      report" is indistinguishable from "a teammate is running it right now
+#      on their machine", and the digest confidently told the reader to resume
+#      it — work they cannot resume and must not duplicate. `/workflows`
+#      answers this locally and nothing answers it across machines.
+#   3. To be correct it would have to know which batch THIS session owns, which
+#      means the session writing its own state — which is the board the
+#      pipeline deliberately does not have.
+#
+# The recovery instruction lives where it is read by the role that needs it, at
+# the moment it needs it: the lead's RULES.md § STATE OUTLIVES YOUR CONTEXT, the
+# orchestration playbook § Interruption and resumption, and its pre-flight
+# checklist ("check the last report"). That is strictly better targeting than
+# injecting it into every session in the repository.
+
+# Memory budget: a role's MEMORY.md that outgrows the injection budget can no
+# longer reach a dispatched agent whole — agent-start caps it and hands over a
+# read-list, which is safe but silent. Nobody would ever notice: hook stderr
+# goes nowhere a human reads. THIS hook runs for the session a human is talking
+# to, so it is the one place the condition can surface. Checks every role, not
+# just this session's — the roles that break are the ones being dispatched.
+# Measured on disk (the cause), not on the payload (one symptom): one index
+# reached 124 KB and 302 of 302 dispatches silently ran on a 2 KB preview.
+mem_over=""
+# Host-aware threshold: Copilot's effective budget is ~10KB, not 32KB — a flat
+# 32768 default meant Copilot roles capping at 10KB were never flagged.
+mem_warn="${SDLC_MEM_WARN_BYTES:-$(default_ctx_cap)}"
+if [ -d "${AGENTS_DIR}/memory" ]; then
+  for mfile in "${AGENTS_DIR}"/memory/*/MEMORY.md; do
+    [ -f "$mfile" ] || continue
+    msize="$(wc -c < "$mfile" | tr -d ' ')"
+    [ "$msize" -gt "$mem_warn" ] || continue
+    mem_over="${mem_over}$(basename "$(dirname "$mfile")") ($((msize / 1024)) KB), "
+  done
+fi
+if [ -n "$mem_over" ]; then
+  tail_blocks="${tail_blocks}"$'\n\n'"<memory-budget>
+Over the ${mem_warn}-byte injection budget: ${mem_over%, }.
+These indexes no longer reach dispatched agents whole — they arrive capped, with
+the rest as a read-list. Tell the operator, and offer a compaction pass
+(session-retrospective § Compact the memory index): merge near-duplicates, move
+case-scoped entries to daily/, keep index lines to one hook each.
+</memory-budget>"
+fi
+
+# Now the budget is knowable: whatever the host allows, minus what we already
+# know we will append. SDLC_CTX_CAP is the documented override, so honour it as
+# the starting point rather than the host default.
+ctx_cap="${SDLC_CTX_CAP:-$(default_ctx_cap)}"
+if ! is_blank "$tail_blocks"; then
+  ctx_cap=$(( ctx_cap - $(esc_byte_len "$tail_blocks") ))
+  [ "$ctx_cap" -lt 1024 ] && ctx_cap=1024      # never starve memory to fit a notice
+fi
+context="$(SDLC_CTX_CAP="$ctx_cap" build_capped_context "$PROJECT_DIR" "$role" "$instr_present" "")"
+context="${context}${tail_blocks}"
 
 # Nothing to inject (unseeded project on Claude Code) — exit quietly.
 # is_blank, not ${context//…}: O(n²) substitution would hang the hook (see lib.sh).

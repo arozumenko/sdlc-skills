@@ -15,8 +15,17 @@ follow the links as you go.
 ## The pipeline, one picture
 
 ```
-User → test-automation-lead → analyst slot → AFS → implementer slot → reviewer slot → test-automation-lead merges
+User → test-automation-lead
+  1. Intake              — one TMS sweep, resolve the batch, snapshot case bodies
+  2. Analyst front       — parallel analysis (K) → AFS gate
+  3. Build loop per case — implementer (green once) → reviewer (static)
+  4. Hardening gate      — once per batch: N× consecutive green on
+                           integration branch `tests/batch-<slug>`
+  5. Merge + mirror sweep — merge, then one TMS/tracker sweep
 ```
+
+A batch of one degenerates to the old per-case flow (analyst →
+implementer → reviewer → merge), minus the duplicated runs.
 
 Role defaults (personas are assigned per `.agents/team-comms.md`):
 
@@ -25,7 +34,8 @@ Role defaults (personas are assigned per `.agents/team-comms.md`):
 | Orchestrator | `test-automation-lead` | `test-automation-workflow` (routing lives in the agent's AGENT.md) |
 | Analyst | `qa-engineer` | `test-case-analysis` |
 | Implementer | `test-automation-engineer` | `test-automation-workflow` (IC-facing six-phase loop) |
-| Reviewer | `qa-engineer` (fresh session) | `code-review` |
+| Reviewer | `qa-engineer` (fresh session) | `code-review` — static review, no execution |
+| Hardening gate | fresh `test-automation-engineer`, dispatched by the lead (never the implementer that built, never the lead itself — a lead-run gate was the measured bottleneck) | once per batch, on the integration branch — the merge signal; mechanics via `scripts/gate/gate-case.mjs` |
 
 `test-automation-lead` is a **top-level orchestrator launched directly
 by the user** — not a subagent of `project-manager`. The role owns slot
@@ -53,8 +63,113 @@ claude --agent test-automation-lead  # Phase 2+ — drive the automation pipelin
 ```
 
 Inside that session you just talk to the agent ("onboard this repo", "automate
-TC-1234") — it stays the orchestrator for the whole session. Other hosts
-(Copilot CLI, Cursor, Windsurf) launch their primary agent differently; see
+TC-1234") — it stays the orchestrator for the whole session.
+
+### GitHub Copilot
+
+The installer writes Copilot's agents to `.github/agents/<name>.agent.md`, and
+**the CLI discovers them from the workspace automatically** — no path flag, no
+registration step. Verified on Copilot CLI 1.0.63: pointing `--agent` at a name
+that doesn't exist lists the ones it found, and our four are there.
+
+```bash
+# Phase 1 — seed the repo (once). Interactive.
+copilot --agent scout
+
+# Phase 2+ — drive the pipeline. --yolo pre-approves tools/paths/URLs, which a
+# dispatching orchestrator needs or it stops at every subagent and shell call.
+copilot --agent test-automation-lead --yolo
+
+# Non-interactive (CI, a scripted batch): -p implies no prompts, so at minimum
+# --allow-all-tools is REQUIRED or the run dies at the first confirmation.
+copilot --agent test-automation-lead --allow-all-tools \
+  -p "Automate TC-1234, TC-1235, TC-1236."
+
+# Only when the project's MCP servers need auth headers the repo-root .mcp.json
+# can't carry (see below) — relocate the config dir to the repo-local one:
+COPILOT_HOME=./.copilot copilot --agent test-automation-lead --yolo
+```
+
+**MCP: the repo-root `.mcp.json` already works.** The CLI reads two sources —
+the repo-root `.mcp.json` as **workspace servers** (automatically, no flag) and
+its config dir's `mcp-config.json` as **user servers**. The config dir defaults
+to `~/.copilot` and also holds `agents/`, `skills/`, `hooks/`,
+`permissions-config.json` and session state
+([GitHub's config-dir reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference));
+`COPILOT_HOME` relocates it, and this installer writes a repo-local
+`.copilot/mcp-config.json` for the Copilot target. Measured on 1.0.63 with
+marker servers:
+
+```console
+$ copilot mcp list                          # repo-root .mcp.json — no flags needed
+Workspace servers:
+  marker-root-mcpjson (local)
+
+$ COPILOT_HOME=./.copilot copilot mcp list  # …plus the repo-local config dir
+User servers:
+  probe-marker-xyz (local)
+Workspace servers:
+  marker-root-mcpjson (local)
+```
+
+So on a repo that also has the Claude target installed, the `.mcp.json` written
+for Claude is picked up by Copilot CLI for free, and `COPILOT_HOME` is not
+needed for MCP at all. `.vscode/mcp.json` is **not** read by the CLI — that file
+serves the VS Code extension only.
+
+**One real gap, and it fails silently.** Claude's `.mcp.json` carries auth for
+secret-bearing HTTP/SSE servers in a `headersHelper` field — a shell command
+Claude Code runs at launch to build the header from `.env`, so no secret sits on
+disk. Copilot has no such mechanism: it parses the entry happily and **ignores
+the field**. Verified — all three shapes load without error:
+
+```console
+$ copilot mcp list
+Workspace servers:
+  stdio-ok (local)
+  http-plain (http)
+  http-claude-auth (sse)      ← listed, but with no Authorization header
+```
+
+`stdio` servers and unauthenticated HTTP servers therefore work as-is; a
+token-bearing server (OneTest, ELITEA) appears connected and returns 401s. For
+those, use the installer's `.copilot/mcp-config.json` (it writes a literal
+placeholder to fill in) via `COPILOT_HOME`, or add the header there. Being
+listed is not being authorized — check an actual call, not `mcp list`, before
+trusting the wiring.
+
+Repointing the config home does **not** affect agent discovery: `.github/agents/`
+is a workspace lookup, and the four agents were listed under both `COPILOT_HOME`
+and the default.
+
+Flags worth knowing, confirmed against 1.0.63:
+
+| Flag | What it does |
+|---|---|
+| `--yolo` / `--allow-all` | identical: `--allow-all-tools --allow-all-paths --allow-all-urls` |
+| `--allow-all-tools` | tools run without confirmation; **required for `-p`** (env: `COPILOT_ALLOW_ALL`) |
+| `--mode <interactive\|plan\|autopilot>` | initial agent mode; `--autopilot` is shorthand for the third |
+| `--add-dir <dir>` | widen file access beyond the workspace |
+| `--allow-tool` / `--deny-tool` | per-tool allow/deny when `--yolo` is too broad |
+| `--additional-mcp-config @<file>` | *augments* the config dir's `mcp-config.json` for one session |
+| `--config-dir <dir>` | legacy alias for `COPILOT_HOME`; still accepted, prints a deprecation warning |
+
+Two ways exist to reach a repo-local MCP config, and they are not equivalent:
+`COPILOT_HOME` **relocates** the whole config dir (so permissions, agents and
+skills come from there too), while `--additional-mcp-config @.copilot/mcp-config.json`
+only **adds** servers on top of the default home. Prefer `COPILOT_HOME`; reach
+for `--additional-mcp-config` when you want your personal `~/.copilot` settings
+kept and just need the project's servers added.
+
+**VS Code extension.** Launch the agent from the chat panel's agent picker
+(the same `.github/agents/` files back it). By default every tool call waits for
+your approval, which makes an orchestrator that dispatches subagents unusable —
+switch the session's permission mode to auto-approve / bypass before starting a
+batch. The exact control name has moved between Copilot Chat releases, so find
+it in your version's chat UI rather than trusting a settings key copied from a
+blog post.
+
+Cursor and Windsurf launch their primary agent differently again; see
 [README.md](../../README.md) for the per-host form.
 
 **Skipping scout?** If you launch `test-automation-lead` on a repo that was never
@@ -318,6 +433,15 @@ Scout writes `.agents/testing.md`, `.agents/architecture.md`,
 `.agents/test-automation.yaml`, `.agents/team-comms.md`. Full
 procedure: [`skills/seeding-a-project/SKILL.md`](../../bundles/test-automation/skills/seeding-a-project/SKILL.md).
 
+**Keep the seed as a committed file** — e.g. `SEED_PROMPT.md` at the repo
+root — and paste it to scout rather than retyping it. The team then evolves
+one shared seed instead of each engineer improvising their own, new members
+onboard their agents identically, and seed changes get reviewed like any other
+change. A seed can carry much more than the template above — real projects
+seed multi-repo layouts, long-lived integration branches, work boards with
+human-approval columns, and case-sourcing rules. Scout records whatever way
+of work you teach, and the pipeline follows exactly that — no more.
+
 **After scout completes, review `.agents/testing.md`.** If the
 framework name, version, run command, or CI command is wrong, fix
 by hand. test-automation-engineer's output quality is entirely downstream of this file
@@ -401,29 +525,128 @@ six-phase loop, AFS rules, no-defect-masking, run-report template) is in
 [`skills/test-automation-workflow/SKILL.md`](../../bundles/test-automation/skills/test-automation-workflow/SKILL.md).
 Shape:
 
-1. **Analyst (qa-engineer + `test-case-analysis`)** executes the
+1. **Intake (test-automation-lead)** resolves the case with one TMS
+   sweep and snapshots each case body to
+   `.agents/automation/<slug>/cases/<ID>.md` — every worker then
+   triangulates against the identical body (tracker/TMS are written at
+   intake and the close sweep, not per dispatch).
+2. **Analyst (qa-engineer + `test-case-analysis`)** executes the
    case, emits an AFS at
    `test-specs/<feature>/l<pri>_<slug>_<tms-id>.md`, returns a status.
-2. **Gate on status** — `ready-for-automation` and `extend-existing`
-   advance. Fix `blocked` / `defect-found` / `un-automatable` upstream.
-3. **Implementer (test-automation-engineer)** reads the AFS, writes
-   the test in the existing framework, runs it locally and in CI,
-   opens a PR, and verifies the TMS reporter wiring is in place.
-4. **Reviewer (qa-engineer, fresh session, + `code-review` skill)**
-   checks assertions, selectors, defect-masking, cleanup. Reports
-   with file:line refs.
-5. **test-automation-lead merges** per `.agents/profile.md` § Automation PR policy
-   (`auto-merge` / `human-approved` / `manual`), then back-writes the
-   TMS execution per the seed — the back-write is the orchestrator's
-   post-merge step, not the implementer's.
+3. **Gate on status** — `ready-for-automation` and `extend-existing`
+   advance. Fix `blocked` / `un-automatable` upstream. A defect the
+   analyst found doesn't stop a case: findings ride alongside the
+   outcome, so a case can be `automated` *and* have reported a bug.
+4. **Implementer (test-automation-engineer)** reads the AFS, writes
+   the test in the existing framework, and proves it green **once**
+   locally (determinism is the hardening gate's job, not repeated
+   local runs), then opens a PR.
+5. **Reviewer (qa-engineer, fresh session, + `code-review` skill)**
+   runs a **static** review — no execution — checking assertions,
+   selectors, defect-masking, cleanup. Reports with file:line refs.
+6. **Hardening gate (its own agent, once per batch)** — the merge
+   signal; neither the implementer's green-once nor the reviewer's
+   `APPROVED` substitutes, and it is deliberately never the agent that
+   wrote the code. The reviewed branches are merged onto integration
+   branch `tests/batch-<slug>`, then the batch's new/changed specs run
+   **together**, requiring **N** consecutive deterministic GREEN
+   (default 3) against the live env. It never merges, classifies a red,
+   or fixes anything.
+7. **One report** — `.agents/automation/<slug>/report.{json,md}`: one
+   row per case with its outcome (`automated` · `already-covered` ·
+   `out-of-scope` · `un-automatable` · `merged-sanctioned-red` —
+   merged while red *by design*, against a ticketed open defect ·
+   `blocked` · `not-started`) and any findings it produced along the
+   way. One more appears only when a run was interrupted:
+   `merged-ungated` — built, reviewed and merged, but the gate never
+   returned a verdict. It means "re-run the gate", never "failed".
+8. **test-automation-lead closes** — merges the `automated` cases per
+   `.agents/profile.md` § Automation PR policy (`auto-merge` /
+   `human-approved` / `manual`), routes the findings, then runs the one
+   close sweep: back-writes the TMS execution and transitions the
+   tracker for the batch, per the seed. Anything not `automated` is
+   simply the next batch's input.
+
+**Don't just wait for the report — watch the pilot.** It is your one cheap
+chance to catch mis-wiring before a batch multiplies it:
+
+- **The right tools get called** — TMS/tracker calls go through the MCP
+  servers you wired (no auth errors, no silent fallback you didn't ask for).
+- **The case is read correctly** — open the intake snapshot at
+  `.agents/automation/<slug>/cases/<ID>.md` and compare it with the source
+  system: steps, preconditions, and the custom fields you care about all
+  made it through.
+- **Sub-agents are really dispatched** — the lead hands work to the
+  analyst/implementer/reviewer as separate sub-agents (the active agent
+  switches; Ctrl+T lists running tasks), rather than narrating the work
+  itself in one session.
+- **Actions follow your seed** — bugs filed the way you specified, the PR
+  against the branch you chose, TMS back-write happening (or not) exactly
+  as seeded.
+
+If any of these look wrong, stop and fix the wiring (MCP config, the seed,
+`.agents/testing.md`) before scaling up. And steer: a run is a conversation,
+not a fire-and-forget script — interrupt, correct in plain words ("explore
+the live page before writing the AFS"), review the AFS / PR diff / report
+row, and ask for a redo when something isn't right. Fixing course mid-pilot
+is normal and cheap; that's what the pilot is for.
 
 ### 6. Scale up
 
-Once one case works end-to-end, batch is safe. Parallelism and
-serialization rules (page-object collisions, independent-surface
-parallelism, reviewer batching): [`skills/test-automation-workflow/references/orchestration-playbook.md` § Batching](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#batching) and
-[`skills/test-automation-workflow/references/commands.md`](../../bundles/test-automation/skills/test-automation-workflow/references/commands.md)
+The batch — not the case — is the unit of work: Intake resolves the
+whole work set, then **units run one at a time on a shared batch
+trunk**, each building on what the previous one merged, with **one**
+hardening gate over the batch at the end. Nothing overlaps, because one
+working tree has one state at a time. Once your pilot case (Step 5)
+proves the wiring, hand `test-automation-lead` a real batch instead of
+one case — batching is also markedly cheaper per delivered case than
+running cases one per session, since a session's context build-up and
+the gate are paid once for the whole batch instead of once each.
+
+Beyond one batch, batches compose into **campaigns** — waves, a
+foundation pass, and clusters of similar cases planned together:
+[`references/campaign-planning.md`](../../bundles/test-automation/skills/test-automation-workflow/references/campaign-planning.md).
+The loop itself, its defaults and its serialization rules:
+[`references/orchestration-playbook.md` § The loop: plan → run → close](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#the-loop-plan--run--close), plus
+[`references/commands.md`](../../bundles/test-automation/skills/test-automation-workflow/references/commands.md)
 for host-specific sub-agent spawning recipes.
+
+**Work that isn't a test case** — tech-debt, a migration, framework
+improvements, suite health — runs the *same* loop: a
+[tech-task brief](../../bundles/test-automation/skills/test-automation-workflow/references/tech-task-brief.md)
+takes the AFS's place as the unit contract (source, scope from the real
+code, out-of-scope, acceptance criteria, blast radius, verification),
+and build → static review → merge → one gate is unchanged. Ask the lead
+in plain words: _"finish the stable-handle migration"_, or point it at a
+tracker label to sweep.
+
+---
+
+## After the run — improve and measure
+
+**Improve (session retrospective).** Every correction you had to type during a
+run is a signal. Periodically launch `scout` and ask *"run a retrospective on
+our recent sessions"* — it mines the project's actual past agent sessions
+(Claude Code and Copilot alike), finds the corrections you kept repeating and
+the durable facts worth keeping, and proposes updates to the shared `.agents/`
+config and per-role memory. **Nothing is written without your explicit ack** —
+each change comes with the session evidence that motivated it. That loop is
+how the team stops needing the same prompt twice.
+
+**Measure (efficiency audit + tokenomics).** Ask *"what did this batch cost?"*
+— the `efficiency-audit` skill answers per session, per role, per day and per
+sub-agent from live transcripts, with every dollar metered. For the durable,
+automatic version, enable the `tokenomics` skill's capture hooks (opt-in:
+`node .claude/skills/tokenomics/scripts/install-hooks.mjs`): every finished
+session lands in a git-committed ledger, and each batch gets
+`.agents/automation/<slug>/cost.json` refreshed automatically — outcomes,
+cost per case (direct, measured), overhead shown once, and
+avg/median/min/max spreads. Human views:
+
+```bash
+node .claude/skills/tokenomics/scripts/team-report.mjs --batch <slug>              # markdown
+node .claude/skills/tokenomics/scripts/team-report.mjs --batch <slug> --html --out batch.html
+```
 
 ---
 
@@ -488,8 +711,9 @@ test-automation-lead's full framework-architecture contract lives in
   convention, run command); ask test-automation-engineer to re-derive
   the spec from the corrected file.
 - **TMS back-write silently fails** → look in `test-results/unsynced/`
-  for the queued payload. Retry manually or re-run the back-write
-  step through test-automation-engineer.
+  for the queued payload. Retry manually, or have test-automation-lead
+  re-run the close-sweep back-write for that case (playbook § 3. Close) — the implementer only performs it when run
+  standalone with no orchestrator.
 - **MCP auth errors** → token rotated / scope missing. Fix the MCP
   server config in the host (`~/.claude.json`, `.mcp.json`, Copilot
   settings). Never in the project repo. Restart the agent session.
@@ -500,6 +724,18 @@ test-automation-lead's full framework-architecture contract lives in
 ---
 
 ## Maintenance
+
+**Where to tune what — this decides whether you can keep updating.** The
+bundle is a kickstarter, not a locked product: everything it installs is plain
+files, and your copy is *expected* to drift from the original. But in the
+majority of cases the right place to tune is **not** the agent files — it's
+`.agents/`, the project knowledge every agent reads (`testing.md`,
+`profile.md`, `workflow.md`, per-role memory). Land changes there — via
+scout's retrospective, or by simply telling an agent to change how it works —
+and you can keep pulling newer bundle versions with `init --update` without
+losing anything. Edit the agents and skills *themselves* only when you intend
+to contribute the improvement back, or to deliberately maintain your own
+variant: a bundle edited in place stops being cleanly updatable.
 
 General update / sync notes live in [MAINTENANCE.md](../../MAINTENANCE.md). One
 flow specific to the test-automation roster matters often enough to put
@@ -530,6 +766,7 @@ context wiring for the new role.
 │   ├── testing.md / architecture.md  # scout-owned content docs
 │   ├── team-comms.md / profile.md / workflow.md
 │   ├── test-automation.yaml          # TMS + framework config (yours to edit)
+│   ├── automation/<slug>/            # intake case snapshots + the run's one report
 │   └── memory/<role>/                # per-role persistent memory
 ├── test-specs/                       # AFS files (analyst emits)
 │   └── <feature>/l<pri>_<slug>_<tms-id>.md

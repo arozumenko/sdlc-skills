@@ -4,14 +4,73 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  encodeProjectPath, dedupUsage, parseUnit, mergeUsage, cacheHitRate, outputShare,
+  encodeProjectPath, dedupUsage, parseUnit, mergeUsage, cacheHitRate, outputShare, splitCacheCreation, claudeProjectRoots,
   costWeight, indexCcusage, allocateCost, filterGroupsByDateRange,
   buildRollup, renderDiff, renderMarkdown, parseArgs, HELP, collectSessionGroups,
 } from './usage-rollup.mjs';
 
-test('encodeProjectPath replaces slashes and dots with dashes', () => {
+// A project can point CLAUDE_CONFIG_DIR at its own .claude/, putting every
+// transcript inside the repo. Searching only the global roots then reports "no
+// transcripts for this project" while they sit in the working directory the
+// command was run from — and that is indistinguishable from a project that
+// genuinely has none. Measured: this is why a live session could not be found.
+test('claudeProjectRoots finds the repo-local store, not just the global ones', () => {
+  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const repo = mkdtempSync(join(tmpdir(), 'repo-'));
+  try {
+    mkdirSync(join(repo, '.claude', 'projects'), { recursive: true });
+    const roots = claudeProjectRoots(repo, { HOME: home });
+    assert.ok(roots.includes(join(repo, '.claude', 'projects')), 'repo-local root found');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('claudeProjectRoots returns ALL existing roots, most specific first', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'repo-'));
+  const cfg = mkdtempSync(join(tmpdir(), 'cfg-'));
+  try {
+    mkdirSync(join(repo, '.claude', 'projects'), { recursive: true });
+    mkdirSync(join(cfg, 'projects'), { recursive: true });
+    const roots = claudeProjectRoots(repo, { CLAUDE_CONFIG_DIR: cfg });
+    // A project that moved to a local config dir keeps older sessions elsewhere;
+    // covering only the first root would silently audit half the history.
+    assert.equal(roots[0], join(cfg, 'projects'), 'explicit config dir wins');
+    assert.ok(roots.includes(join(repo, '.claude', 'projects')), 'repo-local still searched');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(cfg, { recursive: true, force: true });
+  }
+});
+
+test('claudeProjectRoots lists only roots that exist, and never duplicates', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'repo-'));
+  try {
+    // A configured-but-absent root is not claimed — listing it would send the
+    // resolver somewhere empty and report that as "no transcripts".
+    assert.ok(!claudeProjectRoots(repo, { CLAUDE_CONFIG_DIR: join(repo, 'nope') })
+      .includes(join(repo, 'nope', 'projects')));
+    // The repo-local root reachable BOTH as the config dir and as <cwd>/.claude
+    // must appear once, or every caller iterates it twice.
+    mkdirSync(join(repo, '.claude', 'projects'), { recursive: true });
+    const roots = claudeProjectRoots(repo, { CLAUDE_CONFIG_DIR: join(repo, '.claude') });
+    const local = roots.filter((r) => r === join(repo, '.claude', 'projects'));
+    assert.equal(local.length, 1, 'de-duplicated');
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('encodeProjectPath maps every separator Claude Code maps', () => {
   assert.equal(encodeProjectPath('/Users/a/dev/x'), '-Users-a-dev-x');
   assert.equal(encodeProjectPath('/U/x.y.z'), '-U-x-y-z');
+  // Underscores and spaces are dashes too. Missing them sent the resolver down
+  // its fallback path — which opens transcripts across every project dir — for
+  // 22 of 28 real projects on one machine, including this repo's own.
+  assert.equal(encodeProjectPath('/Users/Ada_Lovelace/dev'), '-Users-Ada-Lovelace-dev');
+  assert.equal(encodeProjectPath('/Users/a/AI baseline'), '-Users-a-AI-baseline');
+  // Windows: a path with no slash and no dot came through completely unchanged,
+  // so the fast path could never hit there.
+  assert.equal(encodeProjectPath('C:\\Users\\a\\dev'), 'C--Users-a-dev');
 });
 
 // The correctness linchpin: streaming writes the same message.id repeatedly
@@ -68,7 +127,10 @@ test('parseUnit: counts tool calls + errors, collects skill names, and records A
   const u = parseUnit(records);
   assert.equal(u.toolCalls, 4);
   assert.equal(u.toolErrors, 1);
-  assert.deepEqual([...u.skills].sort(), ['memory', 'test-automation-workflow']);
+  // `memory` was really invoked; `test-automation-workflow` is only the host's
+  // attribution stamp, which sub-agents inherit — separate channels, never one.
+  assert.deepEqual([...u.skills].sort(), ['memory']);
+  assert.deepEqual([...u.skillsAttributed].sort(), ['test-automation-workflow']);
   assert.deepEqual(u.dispatched, [
     { type: 'qa-engineer', description: 'Analyst: T532' },
     { type: 'unknown', description: 'stop the failing one' },
@@ -111,7 +173,10 @@ test('buildRollup: aggregates tool calls/errors, skills (union), Agent dispatche
     sessionId: 's1', projectDir: '/p', date: '2026-06-01',
     units: [
       { id: 's1', kind: 'session', parentId: null, role: 'lead', usage: { output: 10, input: 0, cacheRead: 0, cacheCreation: 0, models: new Set() }, date: '2026-06-01', durationMin: 5, turns: 3, projectDir: '/p', toolCalls: 20, toolErrors: 4, skills: new Set(['memory']), dispatched: [{ type: 'impl', description: 'a' }, { type: 'impl', description: 'b' }] },
-      { id: 'a', kind: 'subagent', parentId: 's1', role: 'impl', usage: { output: 30, input: 0, cacheRead: 0, cacheCreation: 0, models: new Set() }, date: '2026-06-01', durationMin: 9, turns: 8, projectDir: '/p', toolCalls: 50, toolErrors: 1, skills: new Set(['memory', 'test-automation-workflow']), dispatched: [] },
+      // The sub-agent really invoked `memory`; `test-automation-workflow` is
+      // only the attribution it INHERITED from the lead — the exact pair that
+      // used to be summed into one misleading "skills loaded" figure.
+      { id: 'a', kind: 'subagent', parentId: 's1', role: 'impl', usage: { output: 30, input: 0, cacheRead: 0, cacheCreation: 0, models: new Set() }, date: '2026-06-01', durationMin: 9, turns: 8, projectDir: '/p', toolCalls: 50, toolErrors: 1, skills: new Set(['memory']), skillsAttributed: new Set(['test-automation-workflow']), dispatched: [] },
     ],
   }];
   const r = buildRollup(groups, { meteredMap: new Map([['s1', 3], ['a', 7]]) });
@@ -119,12 +184,17 @@ test('buildRollup: aggregates tool calls/errors, skills (union), Agent dispatche
   assert.equal(r.totals.toolErrors, 5);
   assert.equal(r.totals.toolSuccess, 65);
   assert.equal(r.totals.subagentsDispatched, 2, 'only the lead dispatched (2 Agent calls)');
-  assert.deepEqual(r.totals.skills.sort(), ['memory', 'test-automation-workflow']);
+  // Invocation and attribution are separate channels: `memory` was really
+  // called via the Skill tool, `test-automation-workflow` was only the host's
+  // attribution stamp (which sub-agents inherit). Merging them reports skill
+  // loads that never happened.
+  assert.deepEqual(r.totals.skills.sort(), ['memory']);
+  assert.deepEqual(r.totals.skillsAttributed.sort(), ['test-automation-workflow']);
   assert.equal(r.byRole.lead.subagentsDispatched, 2);
   assert.equal(r.byRole.impl.subagentsDispatched, 0);
-  // bySkill: memory used by both units, workflow by one
+  // bySkill counts INVOCATIONS only — an inherited attribution earns no row.
   assert.equal(r.bySkill.memory.units, 2);
-  assert.equal(r.bySkill['test-automation-workflow'].units, 1);
+  assert.equal(r.bySkill['test-automation-workflow'], undefined);
   // ledger exposes skills as a JSON-safe array
   assert.ok(Array.isArray(JSON.parse(JSON.stringify(r.ledger))[0].skills));
 });
@@ -142,6 +212,42 @@ test('costWeight: cost-ratio by default, output/total modes on request', () => {
   assert.equal(costWeight(u), 50 * 5 + 100 * 1 + 100 * 1.25 + 300 * 0.1);
   assert.equal(costWeight(u, 'output'), 50);
   assert.equal(costWeight(u, 'total'), 550);
+});
+
+test('costWeight: a 1-hour cache write is priced at 2x, not 1.25x', () => {
+  const base = { input: 0, output: 0, cacheRead: 0, cacheCreation: 1000 };
+  assert.equal(costWeight(base), 1250, 'no TTL info -> the 5-minute rate');
+  assert.equal(costWeight({ ...base, cacheCreation1h: 1000 }), 2000, 'all 1h');
+  assert.equal(costWeight({ ...base, cacheCreation1h: 400 }), 600 * 1.25 + 400 * 2, 'mixed');
+  // cacheCreation stays the FLAT total, so the 1h slice can never exceed it —
+  // a schema change that broke that would otherwise double-count the overlap.
+  assert.equal(costWeight({ ...base, cacheCreation1h: 5000 }), 2000);
+});
+
+test('splitCacheCreation: itemized TTL buckets, with the flat field as fallback', () => {
+  assert.deepEqual(
+    splitCacheCreation({ cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 714 } }),
+    { total: 714, h1: 714 });
+  assert.deepEqual(
+    splitCacheCreation({ cache_creation: { ephemeral_5m_input_tokens: 300, ephemeral_1h_input_tokens: 700 } }),
+    { total: 1000, h1: 700 });
+  // Older transcripts carry only the flat field; an empty itemization must not
+  // zero out a real cache write.
+  assert.deepEqual(splitCacheCreation({ cache_creation_input_tokens: 900 }), { total: 900, h1: 0 });
+  assert.deepEqual(
+    splitCacheCreation({ cache_creation: {}, cache_creation_input_tokens: 900 }),
+    { total: 900, h1: 0 });
+  assert.deepEqual(splitCacheCreation({}), { total: 0, h1: 0 });
+});
+
+test('dedupUsage: carries the 1h cache slice through the max-per-message-id rule', () => {
+  const u = dedupUsage([
+    { message: { id: 'm1', usage: { output_tokens: 5, cache_creation: { ephemeral_1h_input_tokens: 800, ephemeral_5m_input_tokens: 0 } } } },
+    { message: { id: 'm1', usage: { output_tokens: 9, cache_creation: { ephemeral_1h_input_tokens: 800, ephemeral_5m_input_tokens: 0 } } } },
+  ]);
+  assert.equal(u.output, 9);
+  assert.equal(u.cacheCreation, 800);
+  assert.equal(u.cacheCreation1h, 800);
 });
 
 test('allocateCost (cost-weighted, default): a cache-heavy unit gets a fairer slice than output-only would give', () => {
@@ -185,14 +291,47 @@ test('allocateCost: METERED path wins — each unit takes its own per-file ccusa
   assert.ok(priced.every((u) => u.costSource === 'ccusage-metered'));
 });
 
-test('allocateCost: falls back to allocation when metered map lacks a unit', () => {
+// Metering is per unit. It must NOT be all-or-nothing: the allocation base is
+// ccusage's top-level session row, which prices the PARENT transcript only, so
+// dropping a whole group onto it discards every exact sub-agent dollar. One
+// 762-unit session metered at $1,488.63 was reported as $51.43 (29x under)
+// because a few sub-agents died before logging any usage.
+test('allocateCost: a partially-metered group keeps its exact per-file dollars', () => {
   const group = { sessionId: 's1', units: [
     { id: 's1', role: 'lead', usage: { output: 100 } },
     { id: 'agent-a', role: 'impl', usage: { output: 300 } },
   ] };
-  const meteredMap = new Map([['s1', 5.0]]); // missing agent-a -> can't meter the group
+  const meteredMap = new Map([['s1', 5.0]]); // agent-a has no metered row
   const sessionMap = new Map([['s1', { costUsd: 8.0 }]]);
   const priced = allocateCost(group, { meteredMap, sessionMap, weight: 'output' });
+  assert.equal(priced[0].costUsd, 5.0);
+  assert.equal(priced[0].costSource, 'ccusage-metered');
+  // agent-a logged usage but has no price: reported missing, never invented
+  // from the parent-only total.
+  assert.equal(priced[1].costUsd, null);
+  assert.equal(priced[1].costSource, 'unavailable');
+});
+
+test('allocateCost: an unmetered unit that logged no usage is a real $0, not a gap', () => {
+  const group = { sessionId: 's1', units: [
+    { id: 's1', role: 'lead', usage: { output: 100 } },
+    { id: 'agent-dead', role: 'impl', usage: {} }, // dispatched, died before billing
+  ] };
+  const priced = allocateCost(group, { meteredMap: new Map([['s1', 5.0]]), weight: 'output' });
+  assert.equal(priced[1].costUsd, 0);
+  assert.equal(priced[1].costSource, 'ccusage-metered');
+  // The group total stays exact rather than collapsing to a parent-only figure.
+  assert.equal(priced.reduce((a, u) => a + u.costUsd, 0), 5.0);
+});
+
+test('allocateCost: with nothing metered at all, the session total is still allocated', () => {
+  const group = { sessionId: 's1', units: [
+    { id: 's1', role: 'lead', usage: { output: 100 } },
+    { id: 'agent-a', role: 'impl', usage: { output: 300 } },
+  ] };
+  const priced = allocateCost(group, {
+    meteredMap: new Map(), sessionMap: new Map([['s1', { costUsd: 8.0 }]]), weight: 'output',
+  });
   assert.ok(priced.every((u) => u.costSource === 'ccusage-allocated'));
   assert.ok(Math.abs(priced.reduce((a, u) => a + u.costUsd, 0) - 8.0) < 1e-9);
 });
@@ -306,6 +445,16 @@ test('unpriced models: buildRollup carries them and renderMarkdown warns of the 
   assert.match(md, /UNDERCOUNTED/);
   assert.match(md, /claude-sonnet-5/);
   assert.match(md, /--online/);
+});
+
+test('renderMarkdown: a non-ccusage pricer is never labelled ccusage in the by-role method note', () => {
+  const groups = [{ sessionId: 's1', projectDir: '/p', date: '2026-06-01',
+    units: [{ id: 's1', kind: 'session', parentId: null, role: 'x', usage: { output: 10, input: 0, cacheRead: 0, cacheCreation: 0, models: new Set() }, date: '2026-06-01', durationMin: 1, turns: 1, projectDir: '/p' }] }];
+  const r = buildRollup(groups, { meteredMap: new Map([['s1', 1.5]]), meteredSource: 'copilot-nano-aiu' });
+  const md = renderMarkdown(r, { pricer: 'GitHub Copilot' });
+  const roleSection = md.slice(md.indexOf('## By role'), md.indexOf('## By day'));
+  assert.doesNotMatch(roleSection, /ccusage/, 'the method note names the actual pricer');
+  assert.match(roleSection, /GitHub Copilot/);
 });
 
 test('parseUnit: duplicate tool_result errors for one tool_use_id count ONCE — toolSuccess never negative', () => {

@@ -218,7 +218,12 @@ node "$SCRIPTS/cdp.mjs" get-meta
 ## Notes
 
 - Always start Chrome before running commands; stop when done
-- Screenshots saved as PNG — use Read tool to view them
+- Screenshots saved as PNG — cite the file path as evidence. **Do NOT Read
+  the PNG back into context by default**: a viewed screenshot rides along on
+  every remaining turn of your session. View pixels only when the verdict
+  genuinely needs visual judgment (layout/rendering checks); for
+  presence/state checks prefer `evaluate`/DOM queries, console, and network
+  capture — they're cheaper and more precise
 - All `click`/`type`/`hover` use real CDP Input events at element coordinates
 - Elements are automatically scrolled into view before interaction
 - `type --clear` uses Select All + Delete before typing (framework-safe)

@@ -343,7 +343,7 @@ framework's own docs and any neighbouring tests, then conform.
   an Xray results-import reporter), analytics, dashboards, notification hooks. A
   TMS-reporting integration is opt-in — add it only when the task explicitly
   requests it **or** `.agents/test-automation.yaml` declares the TMS sync, and
-  then gated + graceful per [`../SKILL.md`](../SKILL.md) § Phase 5. If an
+  then gated + graceful per the `test-automation-implementation` skill's [`references/reporters.md`](../../test-automation-implementation/references/reporters.md). If an
   integration seems genuinely needed, propose it to the orchestrator and wait —
   never silently wire it. (A silent reporter that fires on every local
   `npx playwright test`, makes per-test network calls, and spams/fails offline is

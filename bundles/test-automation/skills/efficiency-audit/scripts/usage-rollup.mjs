@@ -28,11 +28,13 @@
 import {
   readFileSync, readdirSync, existsSync, statSync, writeFileSync,
   mkdtempSync, mkdirSync, linkSync, copyFileSync, rmSync,
+  openSync, readSync, closeSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, basename, dirname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { renderDeliveryMarkdown } from './run-reports.mjs';
 
 // ccusage reads real files only (it does NOT follow symlinks). Hard-link each
 // staged transcript — a real directory entry sharing the source inode, so no
@@ -72,8 +74,26 @@ const localDate = (ms) => {
 // distill-sessions.mjs, so a project resolves identically for both skills).
 // ccusage reads the same store: ~/.claude/projects and ~/.config/claude/projects,
 // overridable via CLAUDE_CONFIG_DIR. -----------------------------------------
+// Every path separator and filename-awkward character becomes a dash. Measured
+// against 28 real project dirs this class resolves all 28; the earlier `[/.]`
+// resolved 6 — it missed underscores and spaces, and on Windows it missed
+// everything, since `C:\Users\x` holds neither a slash nor a dot. A miss falls
+// through to opening transcripts across every project dir to read their `cwd`.
+const PATH_SEPARATORS = /[/\\:._ ]/g;
+
 export function encodeProjectPath(cwd) {
-  return cwd.replace(/[/.]/g, '-');
+  return cwd.replace(PATH_SEPARATORS, '-');
+}
+
+// Windows mixes `\` and `/` and compares case-insensitively; an exact string
+// compare there misses the directory it is standing in.
+function sameCwd(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const n = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+  return process.platform === 'win32'
+    ? n(a).toLowerCase() === n(b).toLowerCase()
+    : n(a) === n(b);
 }
 
 function safeParse(line) {
@@ -91,10 +111,27 @@ export function readRecords(jsonlPath) {
   return out;
 }
 
+// `cwd` sits on the first records, so probe a bounded prefix. The fallback in
+// resolveProjectDir opens one transcript per project dir, and these files reach
+// hundreds of megabytes — reading them whole to learn one string near the top
+// is what made the scan the slowest part of a rollup.
+const CWD_PROBE_BYTES = 64 * 1024;
+
 function firstCwdOf(jsonlPath) {
+  let fd;
   try {
-    for (const rec of readRecords(jsonlPath)) if (rec.cwd) return rec.cwd;
+    fd = openSync(jsonlPath, 'r');
+    const buf = Buffer.alloc(CWD_PROBE_BYTES);
+    const n = readSync(fd, buf, 0, CWD_PROBE_BYTES, 0);
+    const lines = buf.subarray(0, n).toString('utf8').split('\n');
+    if (n === CWD_PROBE_BYTES) lines.pop(); // truncated tail line, not data
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const rec = safeParse(line);
+      if (rec?.cwd) return rec.cwd;
+    }
   } catch { /* ignore */ }
+  finally { if (fd !== undefined) try { closeSync(fd); } catch { /* ignore */ } }
   return null;
 }
 
@@ -107,14 +144,42 @@ export function resolveProjectDir(cwd, projectsRoot) {
     let jsonls;
     try { jsonls = readdirSync(dir).filter((f) => f.endsWith('.jsonl')); }
     catch { continue; }
-    for (const f of jsonls) if (firstCwdOf(join(dir, f)) === cwd) return dir;
+    for (const f of jsonls) if (sameCwd(firstCwdOf(join(dir, f)), cwd)) return dir;
   }
   return null;
 }
 
 // --- Token extraction (for SHARES/metrics only — never for dollars) ---------
 export function emptyUsage() {
-  return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, models: new Set() };
+  // `cacheCreation` stays the flattened total every consumer already reads.
+  // `cacheCreation1h` is the slice of it written at the 1-hour TTL, tracked
+  // separately because the two are priced differently — see COST_RATIO.
+  return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, cacheCreation1h: 0, models: new Set() };
+}
+
+/**
+ * Cache-write tokens, split by TTL. Anthropic prices a 5-minute cache write at
+ * 1.25x base input and a 1-hour write at 2x — a 60% difference that the
+ * flattened `cache_creation_input_tokens` field hides completely.
+ *
+ * This is not hypothetical on long sessions: sampling this machine's own
+ * transcripts, essentially every cache write is `ephemeral_1h`. When a session
+ * is uniformly one TTL the distinction cancels out of the split, but a session
+ * that changes TTL partway (the documented behaviour when an account enters
+ * usage overage) gets its cache-heavy units mis-weighted against its
+ * output-heavy ones, in the direction of under-crediting the sub-agent that
+ * paid to build the cache everyone else then read cheaply.
+ */
+export function splitCacheCreation(u) {
+  const cc = u?.cache_creation;
+  if (cc && typeof cc === 'object') {
+    const h1 = num(cc.ephemeral_1h_input_tokens);
+    const m5 = num(cc.ephemeral_5m_input_tokens);
+    // Trust the itemized fields only when they account for the flat total;
+    // otherwise the schema has moved and the flat number is the safer one.
+    if (h1 + m5 > 0) return { total: h1 + m5, h1 };
+  }
+  return { total: num(u?.cache_creation_input_tokens), h1: 0 };
 }
 
 /**
@@ -135,11 +200,13 @@ export function dedupUsage(records) {
     if (!u) continue;
     const id = rec.message?.id || `__anon_${anonKey++}`; // no id -> never merge
     const prev = byId.get(id);
+    const cc = splitCacheCreation(u);
     const cur = {
       input: num(u.input_tokens),
       output: num(u.output_tokens),
       cacheRead: num(u.cache_read_input_tokens),
-      cacheCreation: num(u.cache_creation_input_tokens),
+      cacheCreation: cc.total,
+      cacheCreation1h: cc.h1,
       model: rec.message?.model || null,
     };
     if (!prev) byId.set(id, cur);
@@ -149,6 +216,7 @@ export function dedupUsage(records) {
       prev.input = Math.max(prev.input, cur.input);
       prev.cacheRead = Math.max(prev.cacheRead, cur.cacheRead);
       prev.cacheCreation = Math.max(prev.cacheCreation, cur.cacheCreation);
+      prev.cacheCreation1h = Math.max(prev.cacheCreation1h, cur.cacheCreation1h);
       if (!prev.model && cur.model) prev.model = cur.model;
     }
   }
@@ -158,6 +226,7 @@ export function dedupUsage(records) {
     usage.output += v.output;
     usage.cacheRead += v.cacheRead;
     usage.cacheCreation += v.cacheCreation;
+    usage.cacheCreation1h += v.cacheCreation1h;
     if (v.model) usage.models.add(v.model);
   }
   return usage;
@@ -184,7 +253,8 @@ export function parseUnit(records, seen = { msg: new Set(), tool: new Set() }) {
   let turns = 0;
   let toolCalls = 0;
   let toolErrors = 0;
-  const skills = new Set();
+  const skills = new Set();            // REAL `Skill` tool calls — behaviour
+  const skillsAttributed = new Set();  // inherited host attribution — context, not behaviour
   const dispatched = [];
   const stamps = [];
   const usageRecs = [];         // usage-bearing records new to this unit (fed to dedupUsage)
@@ -196,7 +266,13 @@ export function parseUnit(records, seen = { msg: new Set(), tool: new Set() }) {
   for (const rec of records) {
     if (rec.type === 'agent-setting' && rec.agentSetting) agentSetting = rec.agentSetting;
     if (rec.gitBranch) gitBranch = rec.gitBranch;
-    if (rec.attributionSkill) skills.add(rec.attributionSkill);
+    // ATTRIBUTION IS NOT INVOCATION. `attributionSkill` is stamped on records
+    // by the host and sub-agents INHERIT the parent's active skill, so folding
+    // it into `skills` reports loads that never happened: one campaign showed
+    // 4,313 inherited `sync-base-branches` attributions and ZERO real calls,
+    // which read as 94 sub-agents each re-running a 3-repo sync. Kept, because
+    // it answers "under which skill did this run", but never as a Skill call.
+    if (rec.attributionSkill) skillsAttributed.add(rec.attributionSkill);
     if (rec.timestamp) {
       const t = Date.parse(rec.timestamp);
       if (!Number.isNaN(t)) stamps.push(t);
@@ -256,7 +332,7 @@ export function parseUnit(records, seen = { msg: new Set(), tool: new Set() }) {
   }
   const durationMin = Math.round(activeMs / 60000);
   const date = firstTs != null ? localDate(firstTs) : '?';
-  return { usage, agentSetting, gitBranch, date, durationMin, turns, toolCalls, toolErrors, skills, dispatched, startTs: firstTs, endTs: lastTs };
+  return { usage, agentSetting, gitBranch, date, durationMin, turns, toolCalls, toolErrors, skills, skillsAttributed, dispatched, startTs: firstTs, endTs: lastTs };
 }
 
 export function mergeUsage(list) {
@@ -267,6 +343,7 @@ export function mergeUsage(list) {
     out.output += num(u.output);
     out.cacheRead += num(u.cacheRead);
     out.cacheCreation += num(u.cacheCreation);
+    out.cacheCreation1h += num(u.cacheCreation1h);
     for (const m of u.models || []) out.models.add(m);
   }
   return out;
@@ -290,7 +367,11 @@ export function outputShare(usage) {
 // sonnet 3/15/3.75/0.3, haiku 1/5/1.25/0.1 → all reduce to 1 : 5 : 1.25 : 0.1).
 // This is a stable RATIO, not a price table: it never goes stale and is only
 // used to PROPORTION a ccusage-metered dollar, never to compute one.
-export const COST_RATIO = { input: 1, output: 5, cacheCreation: 1.25, cacheRead: 0.1 };
+// `cacheCreation` is the 5-minute write (1.25x); `cacheCreation1h` is the
+// 1-hour one (2x). Both ratios hold across Opus/Sonnet/Haiku the same way the
+// others do, and they are applied to the 1h SLICE of cache_creation, never to
+// the whole — see splitCacheCreation.
+export const COST_RATIO = { input: 1, output: 5, cacheCreation: 1.25, cacheCreation1h: 2, cacheRead: 0.1 };
 
 /**
  * Weight used to split one session's real ccusage cost across its parent +
@@ -308,9 +389,12 @@ export function costWeight(usage, mode = 'cost') {
     return num(usage.input) + num(usage.output) + num(usage.cacheRead) + num(usage.cacheCreation);
   }
   if (mode === 'output') return num(usage.output);
+  const h1 = Math.min(num(usage.cacheCreation1h), num(usage.cacheCreation));
+  const m5 = num(usage.cacheCreation) - h1;
   return num(usage.output) * COST_RATIO.output +
     num(usage.input) * COST_RATIO.input +
-    num(usage.cacheCreation) * COST_RATIO.cacheCreation +
+    m5 * COST_RATIO.cacheCreation +
+    h1 * COST_RATIO.cacheCreation1h +
     num(usage.cacheRead) * COST_RATIO.cacheRead;
 }
 
@@ -523,7 +607,7 @@ export function collectSessionGroups(projectDirs, { excludeSession, tags = {} } 
       id: c.id, kind: c.kind, parentId: c.parentId, role, usage: p.usage,
       gitBranch: p.gitBranch, date: p.date, durationMin: p.durationMin, turns: p.turns,
       description: c.kind === 'session' ? '(orchestrator/session)' : c.description, projectDir: c.projectDir,
-      toolCalls: p.toolCalls, toolErrors: p.toolErrors, skills: p.skills, dispatched: p.dispatched,
+      toolCalls: p.toolCalls, toolErrors: p.toolErrors, skills: p.skills, skillsAttributed: p.skillsAttributed, dispatched: p.dispatched,
       startTs: p.startTs, endTs: p.endTs, sessionId: c.sessionId,
     });
   }
@@ -547,22 +631,50 @@ export function collectSessionGroups(projectDirs, { excludeSession, tags = {} } 
 /**
  * Give every unit in a group a dollar figure. Preference order, most honest
  * first:
- *   1. METERED — if `meteredMap` has a per-file cost for every unit id (from
- *      meterFiles), use those directly. Source 'ccusage-metered'. Exact.
- *   2. ALLOCATED — else if `sessionMap` has the parent-session total, split it
- *      across units by cost-weighted token share. Source 'ccusage-allocated'.
- *   3. UNAVAILABLE — else null (ccusage had nothing for this session).
+ *   1. METERED — per-file costs from meterFiles, used directly wherever they
+ *      exist. Source 'ccusage-metered'. Exact.
+ *   2. ALLOCATED — when NOTHING in the group metered, split the parent-session
+ *      total by cost-weighted token share. Source 'ccusage-allocated'.
+ *   3. UNAVAILABLE — else null (nothing to derive a figure from).
  * A single-unit group with a session total takes it directly ('ccusage').
+ *
+ * Metering is per unit, NOT all-or-nothing. It used to require a metered row
+ * for EVERY unit (`units.every(...)`) and otherwise dropped the whole group to
+ * allocation — but the allocation base is ccusage's top-level session row,
+ * which covers the PARENT transcript only, never its sub-agents. So a single
+ * unmetered unit collapsed the entire group onto the parent's dollars.
+ *
+ * Observed: one 762-unit session metered at $1,488.63 reported as $51.43, a
+ * 29x undercount, because a handful of sub-agents produced no usage records at
+ * all (dispatches that died mid-run — 33 of 446 in one workflow alone). The
+ * failure mode ran backwards: the more a campaign crashed, the cheaper it
+ * looked. A unit with no usage records had nothing billed, so it is $0 — not a
+ * reason to discard everything that DID meter.
  */
-export function allocateCost(group, { meteredMap, sessionMap, weight = 'cost' } = {}) {
+// `meteredSource` names who produced the per-unit dollars, because provenance
+// is half the value of a cost audit. Claude's path meters with ccusage; the
+// Copilot path uses Copilot's own billed figure, and mislabelling that as
+// ccusage would send a later reader to the wrong tool to verify it.
+export function allocateCost(group, { meteredMap, sessionMap, weight = 'cost', meteredSource = 'ccusage-metered' } = {}) {
   const units = group.units;
+  const metered = (u) => (meteredMap ? meteredMap.get(u.id) : undefined);
 
-  // 1. Metered per file — the primary path.
-  if (meteredMap && units.every((u) => typeof meteredMap.get(u.id) === 'number')) {
-    return units.map((u) => ({ ...u, costUsd: meteredMap.get(u.id), costSource: 'ccusage-metered' }));
+  // 1. Metered per file — the primary path, applied unit by unit.
+  if (meteredMap && units.some((u) => typeof metered(u) === 'number')) {
+    return units.map((u) => {
+      const exact = metered(u);
+      if (typeof exact === 'number') return { ...u, costUsd: exact, costSource: meteredSource };
+      // No metered row. If the unit logged no billable usage either, that is a
+      // real $0 (a dispatch that died before producing anything), not a gap.
+      if (costWeight(u.usage, weight) === 0) return { ...u, costUsd: 0, costSource: meteredSource };
+      // Usage but no price: don't invent one from a parent-only total — that is
+      // exactly the undercount above. Report it missing and let the
+      // reconciliation surface it.
+      return { ...u, costUsd: null, costSource: 'unavailable' };
+    });
   }
 
-  // 2/3. Fall back to the parent-session total + allocation.
+  // 2/3. Nothing metered at all — fall back to the parent-session total.
   const rec = sessionMap?.get(group.sessionId);
   const total = rec && typeof rec.costUsd === 'number' ? rec.costUsd : null;
   if (total == null) return units.map((u) => ({ ...u, costUsd: null, costSource: 'unavailable' }));
@@ -594,7 +706,7 @@ function newBucket() {
   return {
     usage: emptyUsage(), costUsd: 0, hasCost: false, costSource: new Set(),
     durationMin: 0, turns: 0, count: 0,
-    toolCalls: 0, toolErrors: 0, skills: new Set(), dispatched: 0,
+    toolCalls: 0, toolErrors: 0, skills: new Set(), skillsAttributed: new Set(), dispatched: 0,
     minStart: null, maxEnd: null,
   };
 }
@@ -608,6 +720,7 @@ function addToBucket(b, unit) {
   b.toolCalls += unit.toolCalls || 0;
   b.toolErrors += unit.toolErrors || 0;
   for (const s of unit.skills || []) b.skills.add(s);
+  for (const s of unit.skillsAttributed || []) b.skillsAttributed.add(s);
   b.dispatched += (unit.dispatched ? unit.dispatched.length : 0);
   if (typeof unit.startTs === 'number' && (b.minStart === null || unit.startTs < b.minStart)) b.minStart = unit.startTs;
   if (typeof unit.endTs === 'number' && (b.maxEnd === null || unit.endTs > b.maxEnd)) b.maxEnd = unit.endTs;
@@ -617,7 +730,7 @@ function addToBucket(b, unit) {
 // earliest unit start to the latest end — the real "how long did it take".
 const wallClockMin = (b) => (b.minStart !== null && b.maxEnd !== null ? Math.round((b.maxEnd - b.minStart) / 60000) : 0);
 
-export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', unpricedModels = [] } = {}) {
+export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', unpricedModels = [], meteredSource } = {}) {
   const byRole = new Map();
   const byDay = new Map();
   const byProject = new Map();
@@ -627,7 +740,7 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
   const totals = newBucket();
 
   for (const group of groups) {
-    const priced = allocateCost(group, { meteredMap, sessionMap, weight });
+    const priced = allocateCost(group, { meteredMap, sessionMap, weight, ...(meteredSource ? { meteredSource } : {}) });
     for (const unit of priced) {
       // Ledger entry must be JSON-safe: Sets serialize to {}, so expose model(s)
       // and skill(s) as arrays. Cost is already model-correct (metered per file
@@ -636,6 +749,7 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
         ...unit,
         models: [...(unit.usage.models || [])],
         skills: [...(unit.skills || [])],
+        skillsAttributed: [...(unit.skillsAttributed || [])],
         startedAt: typeof unit.startTs === 'number' ? new Date(unit.startTs).toISOString() : null,
         endedAt: typeof unit.endTs === 'number' ? new Date(unit.endTs).toISOString() : null,
         usage: { ...unit.usage, models: [...(unit.usage.models || [])] },
@@ -671,6 +785,7 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
     toolErrors: b.toolErrors,
     toolSuccess: b.toolCalls - b.toolErrors,
     skills: [...b.skills],
+    skillsAttributed: [...b.skillsAttributed],
     subagentsDispatched: b.dispatched,
   });
 
@@ -683,7 +798,7 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
       wallClockMin: wallClockMin(b),
       turns: b.turns,
       count: b.count,
-      tokens: { input: b.usage.input, output: b.usage.output, cacheRead: b.usage.cacheRead, cacheCreation: b.usage.cacheCreation },
+      tokens: { input: b.usage.input, output: b.usage.output, cacheRead: b.usage.cacheRead, cacheCreation: b.usage.cacheCreation, cacheCreation1h: b.usage.cacheCreation1h },
       cacheHitRate: cacheHitRate(b.usage),
       outputShare: outputShare(b.usage),
       ...metricsOf(b),
@@ -695,15 +810,18 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
     costSource: [...b.costSource],
     models: [...b.usage.models],
     agentMinutes: b.durationMin, wallClockMin: wallClockMin(b), turns: b.turns, count: b.count,
-    tokens: { input: b.usage.input, output: b.usage.output, cacheRead: b.usage.cacheRead, cacheCreation: b.usage.cacheCreation },
+    tokens: { input: b.usage.input, output: b.usage.output, cacheRead: b.usage.cacheRead, cacheCreation: b.usage.cacheCreation, cacheCreation1h: b.usage.cacheCreation1h },
     cacheHitRate: cacheHitRate(b.usage), outputShare: outputShare(b.usage),
     ...metricsOf(b),
   });
 
   // 'unavailable' units are genuinely unpriceable sessions (ccusage has no cost
   // for them) — they don't make an otherwise-metered run "mixed". Only a true
-  // metered+allocated blend is 'mixed'.
-  const hasMetered = totals.costSource.has('ccusage-metered');
+  // metered+allocated blend is 'mixed'. The metered label follows the
+  // configured meteredSource (the Copilot path prices units as
+  // 'copilot-nano-aiu'; matching only the ccusage label reported every fully
+  // priced Copilot rollup as method: unavailable).
+  const hasMetered = totals.costSource.has(meteredSource ?? 'ccusage-metered');
   const hasAllocated = totals.costSource.has('ccusage-allocated') || totals.costSource.has('ccusage');
   const costMethod = hasMetered && hasAllocated ? 'mixed'
     : hasMetered ? 'metered'
@@ -763,7 +881,10 @@ export function buildRollup(groups, { meteredMap, sessionMap, weight = 'cost', u
 const fmtUsd = (n) => (typeof n === 'number' ? `$${n.toFixed(2)}` : 'n/a');
 const fmtPct = (n) => `${(n * 100).toFixed(0)}%`;
 
-export function renderMarkdown(rollup, { resolved, label, weight } = {}) {
+// `pricer` names who produced the dollars. Default: ccusage (the Claude path).
+// The Copilot path passes its own, because a report that says "ccusage" about a
+// number ccusage never saw sends the reader to the wrong tool to check it.
+export function renderMarkdown(rollup, { resolved, label, weight, pricer = 'ccusage', delivery } = {}) {
   const out = [`# Efficiency audit${label ? ` — ${label}` : ''}`, '', `Generated: ${new Date().toISOString()}`, ''];
   if (!rollup.ccusageAvailable) {
     out.push('> ⚠️ ccusage returned no data (not installed, offline without cached pricing, or nothing in range). Dollar columns are blank; token/role structure is still shown from transcripts.', '');
@@ -771,11 +892,15 @@ export function renderMarkdown(rollup, { resolved, label, weight } = {}) {
   if (rollup.unpricedModels && rollup.unpricedModels.length) {
     out.push(`> ⚠️ **Cost is UNDERCOUNTED.** These models have usage but no price in the current pricing DB — their tokens counted as $0: **${rollup.unpricedModels.join(', ')}**. Re-run with \`--online\` to fetch current LiteLLM pricing.`, '');
   }
+  // The note names the ACTUAL pricer — saying "ccusage" about Copilot's billed
+  // nano-AIU figure sent readers to the wrong tool to verify it (seen live).
   const methodNote = {
-    metered: 'per-file metered by ccusage (exact — each sub-agent priced individually)',
-    allocated: `allocated: each session's real ccusage $ split across sub-agents by ${weight || 'cost'}-weighted tokens`,
+    metered: pricer === 'ccusage'
+      ? 'per-file metered by ccusage (exact — each sub-agent priced individually)'
+      : `priced from ${pricer}'s own billed figure, split across units by token share`,
+    allocated: `allocated: each session's real ${pricer} $ split across sub-agents by ${weight || 'cost'}-weighted tokens`,
     mixed: 'mixed — some sessions metered per file, some allocated (see per-row source)',
-    unavailable: 'no ccusage cost available',
+    unavailable: `no ${pricer} cost available`,
   }[rollup.costMethod] || '';
 
   const t = rollup.totals;
@@ -784,14 +909,24 @@ export function renderMarkdown(rollup, { resolved, label, weight } = {}) {
   const nSub = (rollup.ledger || []).filter((u) => u.kind === 'subagent').length;
   out.push('## Totals', '');
   out.push(`- Units: ${t.count} (${nSessions} sessions + ${nSub} sub-agents)  ·  Agent-tool dispatches: ${t.subagentsDispatched}`);
-  out.push(`- Cost (ccusage): ${fmtUsd(t.costUsd)}  ·  method: ${rollup.costMethod}`);
+  out.push(`- Cost (${pricer}): ${fmtUsd(t.costUsd)}  ·  method: ${rollup.costMethod}`);
   out.push(`- Tokens: in ${t.tokens.input}, out ${t.tokens.output}, cache-read ${t.tokens.cacheRead}, cache-write ${t.tokens.cacheCreation}`);
   out.push(`- Cache-hit rate: ${fmtPct(t.cacheHitRate)}  ·  Output-token share: ${fmtPct(t.outputShare)}`);
   out.push(`- Tool calls: ${t.toolCalls}  (${t.toolSuccess} ok / ${t.toolErrors} err, ${fmtPct(1 - errRate)} success)`);
-  out.push(`- Skills loaded: ${t.skills.length}${t.skills.length ? ` — ${t.skills.join(', ')}` : ''}`);
+  // Two lines, never one: the first is behaviour you can act on, the second is
+  // only which skill the host had active. Merged, the inherited names swamp the
+  // real ones and read as waste that never happened.
+  out.push(`- Skills invoked (real \`Skill\` calls): ${t.skills.length}${t.skills.length ? ` — ${t.skills.join(', ')}` : ''}`);
+  if (t.skillsAttributed?.length) {
+    out.push(`- Skills attributed (host context, INHERITED by sub-agents — not invocations): ${t.skillsAttributed.length} — ${t.skillsAttributed.join(', ')}`);
+  }
   out.push(`- Time: ${t.agentMinutes} agent-min (sum of unit spans; sub-agents run in parallel)  ·  ${t.wallClockMin} min wall-clock span`);
-  if (resolved) out.push(`- Cost per resolved unit (${resolved} given): ${fmtUsd((t.costUsd || 0) / resolved)}`);
+  if (resolved && !delivery) out.push(`- Cost per resolved unit (${resolved} given): ${fmtUsd((t.costUsd || 0) / resolved)}`);
   out.push('');
+  // Measured delivery replaces the single hand-fed ratio with its own section:
+  // two denominators, the outcome breakdown behind them, and what the join
+  // could not tie to these batches.
+  if (delivery) out.push(renderDeliveryMarkdown(delivery));
 
   const shortModels = (ms) => (ms || []).map((m) => m.replace(/^claude-/, '')).join(', ') || '—';
   out.push(`## By role  *(${methodNote})*`, '',
@@ -807,7 +942,9 @@ export function renderMarkdown(rollup, { resolved, label, weight } = {}) {
 
   const skillRows = Object.entries(rollup.bySkill || {});
   if (skillRows.length) {
-    out.push('## Skills loaded', '', '| skill | units | turns |', '|---|---|---|');
+    out.push('## Skills invoked', '',
+      '_Real `Skill` tool calls only. Host attribution inherited by sub-agents is NOT counted here — it inflated this table by three orders of magnitude when the two were merged._', '',
+      '| skill | units | turns |', '|---|---|---|');
     for (const [name, s] of skillRows) out.push(`| ${name} | ${s.units} | ${s.turns} |`);
     out.push('');
   }
@@ -858,11 +995,23 @@ export function renderDiff(current, prior) {
 // --- CLI ---------------------------------------------------------------------
 export const HELP = `usage: usage-rollup.mjs [flags]
 
+  --host claude|copilot     Which agent CLI's local logs to read (default claude).
+                            copilot: session-state JSONL under ~/.copilot, priced
+                            in nano-AIU credits from Copilot's own billed figure.
+                            The ccusage flags (--weight/--mode/--no-meter/
+                            --no-ccusage/--online/--offline/--agent/--ccusage-bin)
+                            do not apply there and are reported as ignored
   --project-dir <dir>       Transcript dir to audit (repeatable; default: resolve from cwd)
   --all-projects            Audit every project under the Claude projects root
   --since <YYYY-MM-DD>      Start of date window (inclusive, local calendar day)
   --until <YYYY-MM-DD>      End of date window (inclusive, local calendar day)
   --resolved <N>            Divide total cost by N for a $/resolved-unit figure
+  --resolved-from [path]    Take the count from the pipeline's own run reports
+                            instead (a report.json, a batch dir, or the
+                            automation root; default .agents/automation).
+                            Reports cost per spec DELIVERED and per case
+                            EXAMINED, plus how much of the spend it could tie
+                            to these batches by branch. Overrides --resolved.
   --weight <mode>           Fallback-allocation weight: cost|output|total (default cost)
   --tag <sessionId=role>    Manually label a role-less session (repeatable)
   --exclude-session <id>    Skip one session id (e.g. the session running the audit)
@@ -882,10 +1031,13 @@ export const HELP = `usage: usage-rollup.mjs [flags]
 `;
 
 const VALUE_FLAGS = new Set([
-  'project-dir', 'tag', 'since', 'until', 'resolved', 'weight', 'exclude-session',
-  'mode', 'agent', 'ccusage-bin', 'bundle', 'out', 'snapshot', 'diff',
+  'project-dir', 'tag', 'since', 'until', 'resolved', 'resolved-from', 'weight', 'exclude-session',
+  'mode', 'agent', 'ccusage-bin', 'bundle', 'out', 'snapshot', 'diff', 'host',
 ]);
 const BOOL_FLAGS = new Set(['all-projects', 'json', 'online', 'offline', 'no-meter', 'no-ccusage', 'help']);
+// `--resolved-from` works with or without a path, so it is in both sets: bare,
+// it defaults to .agents/automation; with a value, that value wins.
+const OPTIONAL_VALUE_FLAGS = new Set(['resolved-from']);
 
 /** Returns the options bag, `{ help: true }`, or `{ error: <message> }`. */
 export function parseArgs(argv) {
@@ -898,6 +1050,7 @@ export function parseArgs(argv) {
     if (BOOL_FLAGS.has(key)) { a[key] = true; continue; }
     if (!VALUE_FLAGS.has(key)) return { error: `unknown flag --${key}, see --help` };
     const next = argv[i + 1];
+    if ((next === undefined || next.startsWith('--')) && OPTIONAL_VALUE_FLAGS.has(key)) { a[key] = true; continue; }
     if (next === undefined || next.startsWith('--')) return { error: `flag --${key} requires a value, see --help` };
     const val = argv[++i];
     if (key === 'project-dir') a.projectDir.push(val);
@@ -910,32 +1063,73 @@ export function parseArgs(argv) {
 // The transcript store root: $CLAUDE_CONFIG_DIR/projects when set, else the
 // first of ~/.claude/projects, ~/.config/claude/projects that exists — the
 // same lookup ccusage uses.
-function defaultProjectsRoot() {
-  if (process.env.CLAUDE_CONFIG_DIR) return join(process.env.CLAUDE_CONFIG_DIR, 'projects');
-  const candidates = [join(homedir(), '.claude', 'projects'), join(homedir(), '.config', 'claude', 'projects')];
-  return candidates.find((p) => existsSync(p)) || candidates[0];
+/**
+ * Every place Claude Code may keep this project's transcripts, in priority
+ * order, filtered to the ones that exist.
+ *
+ * The repo-local root is the one that keeps getting missed. A project can point
+ * `CLAUDE_CONFIG_DIR` at its own `.claude/`, and then every transcript lives
+ * inside the repo rather than under `$HOME`. Searching only the global roots
+ * reports "no transcripts for this project" while they sit in the working
+ * directory the command was run from — and that answer is indistinguishable
+ * from a project that genuinely has none. `copilotRoots()` has searched a
+ * repo-local root from the start; the Claude side never caught up.
+ *
+ * Returns ALL matching roots, not the first: a project that moved to a local
+ * config dir partway keeps its earlier sessions under $HOME, and an audit that
+ * silently covered half the history would be worse than one that found nothing.
+ */
+export function claudeProjectRoots(cwd = process.cwd(), env = process.env) {
+  const seen = new Set();
+  const out = [];
+  for (const p of [
+    env.CLAUDE_CONFIG_DIR && join(env.CLAUDE_CONFIG_DIR, 'projects'),
+    join(cwd, '.claude', 'projects'),
+    join(homedir(), '.claude', 'projects'),
+    join(homedir(), '.config', 'claude', 'projects'),
+  ]) {
+    if (p && !seen.has(p) && existsSync(p)) { seen.add(p); out.push(p); }
+  }
+  return out;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.error) { process.stderr.write(`${args.error}\n`); process.exit(2); }
   if (args.help) { process.stdout.write(HELP); return; }
   const cwd = process.cwd();
-  const projectsRoot = defaultProjectsRoot();
+  const roots = claudeProjectRoots(cwd);
+  // Staging/metering still needs ONE root to hand ccusage; the first is the
+  // most specific (an explicit CLAUDE_CONFIG_DIR, else the repo-local one).
+  const projectsRoot = roots[0] ?? join(homedir(), '.claude', 'projects');
+
+  // GitHub Copilot keeps its own accounting: `session.shutdown.modelMetrics`
+  // carries the exact per-model token breakdown and `subagent.completed` carries
+  // per-sub-agent totals — the JOIN this script does for Claude is already done
+  // there, and ccusage is not needed for tokens. See copilot-usage.mjs.
+  if (args.host === 'copilot') return runCopilot(cwd, args);
 
   let projectDirs = args.projectDir;
   if (!projectDirs.length) {
     if (args['all-projects']) {
-      projectDirs = existsSync(projectsRoot)
-        ? readdirSync(projectsRoot).map((n) => join(projectsRoot, n)).filter((p) => { try { return statSync(p).isDirectory(); } catch { return false; } })
-        : [];
+      // Across every root — a machine with both a repo-local and a global store
+      // has real projects in each.
+      projectDirs = roots.flatMap((root) => readdirSync(root)
+        .map((n) => join(root, n))
+        .filter((p) => { try { return statSync(p).isDirectory(); } catch { return false; } }));
     } else {
-      const resolved = resolveProjectDir(cwd, projectsRoot);
-      if (!resolved) {
-        process.stderr.write('No Claude Code transcripts found for this project.\nefficiency-audit reads local agent-CLI transcripts; run it from the project root, or pass --project-dir.\n');
+      // ALL matching roots, per claudeProjectRoots' own contract — a project
+      // that moved stores mid-history has transcripts in more than one, and
+      // metering only the first silently under-reports total spend.
+      const resolved = roots.map((r) => resolveProjectDir(cwd, r)).filter(Boolean);
+      if (!resolved.length) {
+        process.stderr.write(
+          'No Claude Code transcripts found for this project.\n'
+          + `Looked in: ${roots.join(', ') || '(no Claude projects directory exists)'}\n`
+          + 'efficiency-audit reads local agent-CLI transcripts; run it from the project root, or pass --project-dir.\n');
         process.exit(3);
       }
-      projectDirs = [resolved];
+      projectDirs = resolved;
     }
   }
 
@@ -990,22 +1184,180 @@ function main() {
   if (staging) staging.cleanup();
 
   const rollup = buildRollup(groups, { meteredMap, sessionMap, weight, unpricedModels });
-  const resolved = args.resolved ? Number(args.resolved) : undefined;
+  const delivery = await loadDelivery(args, rollup);
+  // A measured count beats a remembered one. `--resolved N` stays supported for
+  // work the pipeline never reported on, but when both are given the reports
+  // win and the disagreement is printed — a mismatch is itself a finding, and
+  // silently preferring either one hides it.
+  let resolved = args.resolved ? Number(args.resolved) : undefined;
+  if (delivery) {
+    if (resolved != null && resolved !== delivery.delivered) {
+      process.stderr.write(`--resolved ${resolved} disagrees with the run reports (${delivery.delivered} automated); using the reports\n`);
+    }
+    resolved = delivery.delivered;
+  }
 
   if (args.diff) {
     const prior = JSON.parse(readFileSync(args.diff, 'utf8'));
     process.stdout.write(renderDiff({ ...rollup, resolved }, prior.rollup ? { ...prior.rollup, resolved: prior.resolved } : prior) + '\n');
     return;
   }
+  const snapshot = () => JSON.stringify({
+    generatedAt: new Date().toISOString(), resolved, weight, rollup,
+    ...(delivery ? { delivery } : {}),
+  }, null, 2);
   if (args.json) {
-    process.stdout.write(JSON.stringify({ generatedAt: new Date().toISOString(), resolved, weight, rollup }, null, 2) + '\n');
+    process.stdout.write(snapshot() + '\n');
   } else {
-    const md = renderMarkdown(rollup, { resolved, label: args.bundle, weight });
+    const md = renderMarkdown(rollup, { resolved, label: args.bundle, weight, delivery });
     if (args.out) writeFileSync(args.out, md);
     else process.stdout.write(md + '\n');
   }
   if (args.snapshot) {
-    writeFileSync(args.snapshot, JSON.stringify({ generatedAt: new Date().toISOString(), resolved, weight, rollup }, null, 2));
+    writeFileSync(args.snapshot, snapshot());
+    process.stderr.write(`Snapshot written to ${args.snapshot}\n`);
+  }
+}
+
+/**
+ * Resolve `--resolved-from` into the delivery block the report renders. Returns
+ * undefined when the flag is absent; exits non-zero when it was given and found
+ * nothing, because a caller that asked for measured counts must not silently
+ * fall back to a hand-typed one.
+ */
+async function loadDelivery(args, rollup) {
+  const from = args['resolved-from'];
+  if (!from) return undefined;
+  const R = await import('./run-reports.mjs');
+  // Bare `--resolved-from` means "wherever this project keeps them".
+  const target = from === true ? join('.agents', 'automation') : String(from);
+  const paths = R.findReports(target);
+  if (!paths.length) {
+    process.stderr.write(`--resolved-from: no report.json found under ${target}\n`);
+    process.exit(3);
+  }
+  const delivery = R.readRunReports(paths);
+  const coverage = R.branchCoverage(rollup.ledger || [], delivery.branches);
+  const summary = R.summarizeDelivery(delivery, rollup.totals?.costUsd, {
+    rollupDays: Object.keys(rollup.byDay || {}),
+    coverage,
+  });
+  return { ...delivery, coverage, ...summary };
+}
+
+/**
+ * The Copilot path: no ccusage, no staging, no metering round-trip — Copilot
+ * already reports exact per-model tokens per session and per-sub-agent totals.
+ *
+ * Dollars are DELIBERATELY absent unless `ccusage copilot` has data, which
+ * needs the OpenTelemetry file export enabled before the session ran and is not
+ * retroactive. This script never invents a rate (see its header), so the
+ * Copilot report leads with tokens and Copilot's own billing unit — premium
+ * requests — and says so rather than printing a confident $0.00.
+ */
+async function runCopilot(cwd, args) {
+  const C = await import('./copilot-usage.mjs');
+  const roots = C.copilotRoots(cwd);
+  if (!roots.length) {
+    process.stderr.write(
+      'No GitHub Copilot sessions found.\n' +
+      'Looked for <cwd>/.copilot/session-state, $COPILOT_HOME/session-state and ~/.copilot/session-state.\n');
+    process.exit(3);
+  }
+  const tags = {};
+  for (const t of args.tag) {
+    const idx = t.indexOf('=');
+    if (idx > 0) tags[t.slice(0, idx)] = t.slice(idx + 1);
+  }
+  let groups = C.collectCopilotGroups(cwd, { roots, excludeSession: args['exclude-session'], tags });
+  if (args.since || args.until) {
+    const { kept } = filterGroupsByDateRange(groups, args.since, args.until);
+    groups = kept;
+  }
+  if (!groups.length) {
+    process.stderr.write(`No Copilot sessions for this project in ${roots.join(', ')}\n`);
+    process.exit(3);
+  }
+  C.priceGroups(groups);
+  // Feed Copilot's own per-unit dollars in as the metered map, labelled with
+  // their real provenance — `ccusage-metered` would send a later reader to the
+  // wrong tool to verify a number ccusage never produced.
+  const meteredMap = new Map();
+  for (const g of groups) for (const u of g.units) if (typeof u.cost === 'number') meteredMap.set(u.id, u.cost);
+
+  const rollup = buildRollup(groups, {
+    meteredMap: meteredMap.size ? meteredMap : null,
+    sessionMap: new Map(), weight: 'total', meteredSource: 'copilot-nano-aiu',
+  });
+  const parents = groups.map((g) => g.units.find((u) => u.kind === 'session')).filter(Boolean);
+  const credits = parents.reduce((n, u) => n + (u.credits ?? 0), 0);
+  const usd = parents.reduce((n, u) => n + (u.usd ?? 0), 0);
+  const priced = parents.filter((u) => u.usd != null).length;
+  const premium = parents.reduce((n, u) => n + (u.premiumRequests ?? 0), 0);
+
+  // The delivery join is host-neutral by construction: it reads the pipeline's
+  // report.json, which the lead writes the same way on every host (on a runner
+  // with no workflow the lead writes it by hand at close — see the playbook's
+  // "Without a workflow, git carries it"). Skipping it here would have made
+  // --resolved-from silently do nothing on Copilot, which is worse than not
+  // supporting it: the operator gets a report with no per-case figures and no
+  // reason given.
+  const delivery = await loadDelivery(args, rollup);
+  const resolved = delivery ? delivery.delivered : (args.resolved ? Number(args.resolved) : undefined);
+
+  // Flags that mean something only on the ccusage-priced Claude path. Silence
+  // was the wrong answer: `--weight output` on a Copilot run looked accepted
+  // and changed nothing about a split that is Copilot's own billed figure.
+  const inapplicable = ['weight', 'mode', 'no-meter', 'no-ccusage', 'online', 'offline', 'ccusage-bin', 'agent']
+    .filter((f) => args[f] !== undefined && args[f] !== false);
+  if (inapplicable.length) {
+    process.stderr.write(
+      `Ignored on --host copilot: ${inapplicable.map((f) => `--${f}`).join(', ')}. `
+      + 'Copilot reports its own billed credits per session; there is no ccusage metering or allocation weight to tune.\n');
+  }
+
+  const snapshot = () => JSON.stringify({
+    generatedAt: new Date().toISOString(), host: 'copilot', roots,
+    aiCredits: credits, usd, usdPerCredit: C.USD_PER_CREDIT,
+    sessionsPriced: priced, sessionsTotal: parents.length,
+    legacyPremiumRequests: premium, resolved, rollup,
+    ...(delivery ? { delivery } : {}),
+  }, null, 2);
+
+  if (args.diff) {
+    const prior = JSON.parse(readFileSync(args.diff, 'utf8'));
+    process.stdout.write(renderDiff({ ...rollup, resolved },
+      prior.rollup ? { ...prior.rollup, resolved: prior.resolved } : prior) + '\n');
+    return;
+  }
+  if (args.json) {
+    process.stdout.write(snapshot() + '\n');
+    if (args.snapshot) { writeFileSync(args.snapshot, snapshot()); process.stderr.write(`Snapshot written to ${args.snapshot}\n`); }
+    return;
+  }
+  const unpriced = parents.length - priced;
+  const md = renderMarkdown(rollup, { label: args.bundle, weight: 'total', pricer: 'GitHub Copilot', resolved, delivery }) +
+    `\n\n## GitHub Copilot notes\n\n` +
+    `- Roots read: ${roots.map((r) => `\`${r}\``).join(', ')}\n` +
+    `- **AI credits: ${credits.toFixed(3)} ≈ $${usd.toFixed(2)}** ` +
+    `(1 credit = $${C.USD_PER_CREDIT}). Reported by Copilot itself as ` +
+    `\`session.shutdown.totalNanoAiu\` — this is the billed figure, not an estimate of ours.\n` +
+    (unpriced
+      ? `- ${unpriced} of ${parents.length} session(s) predate usage-based billing (2026-06-01) and carry no credit figure; ` +
+        `their tokens are counted, their cost is \`n/a\`. Retroactive pricing is not possible — ` +
+        (premium ? `they were billed as ${premium} legacy premium request(s).\n` : `they were billed as legacy premium requests.\n`)
+      : '') +
+    `- Per-session credits are split across the session's units by token share: Copilot reports cost per SESSION, ` +
+    `not per sub-agent, so a sub-agent's dollar figure is derived while the session's is exact.\n` +
+    `- Sub-agent rows carry a **token total only** (no input/output/cache split per sub-agent); ` +
+    `the split on session rows is exact. Session rows are net of their sub-agents so the two do not double-count.\n` +
+    `- \`ccusage copilot\` is an independent second opinion, but needs the OpenTelemetry file export enabled ` +
+    `BEFORE a session runs (\`COPILOT_OTEL_ENABLED=true\`, \`COPILOT_OTEL_EXPORTER_TYPE=file\`, ` +
+    `\`COPILOT_OTEL_FILE_EXPORTER_PATH=…\`) and is likewise not retroactive.\n`;
+  if (args.out) writeFileSync(args.out, md);
+  else process.stdout.write(md + '\n');
+  if (args.snapshot) {
+    writeFileSync(args.snapshot, snapshot());
     process.stderr.write(`Snapshot written to ${args.snapshot}\n`);
   }
 }

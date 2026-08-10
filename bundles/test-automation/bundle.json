@@ -1,7 +1,7 @@
 {
   "id": "test-automation",
   "title": "Test Automation Team",
-  "description": "Automation-focused team that turns TMS cases into merged, honest automated tests \u2014 Tal leads the analyst \u2192 implementer \u2192 reviewer pipeline and owns framework architecture and the automation merge gate.",
+  "description": "Automation-focused team that turns TMS cases into merged, honest automated tests — Tal runs the batch pipeline and owns framework architecture and the automation merge gate.",
   "agents": [],
   "localAgents": [
     "scout",
@@ -10,11 +10,13 @@
     "test-automation-lead"
   ],
   "skills": [
-    "memory",
-    "knowledge-curation"
+    "atlassian-content",
+    "knowledge-curation",
+    "memory"
   ],
   "localSkills": [
     "atlassian-content",
+    "automation-scoping",
     "browser-verify",
     "bugfix-workflow",
     "code-review",
@@ -27,8 +29,10 @@
     "reproducing-issues",
     "seeding-a-project",
     "session-retrospective",
+    "test-automation-implementation",
     "test-automation-workflow",
-    "test-case-analysis"
+    "test-case-analysis",
+    "tokenomics"
   ],
   "briefings": {
     "scout": "briefings/scout.md",
@@ -36,6 +40,7 @@
     "qa-engineer": "briefings/qa-engineer.md",
     "test-automation-lead": "briefings/test-automation-lead.md"
   },
+  "hooks": "hooks/hooks.json",
   "instructions": "instructions.md",
   "targets": [
     "claude"

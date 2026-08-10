@@ -288,7 +288,7 @@ skip it silently — it's not part of this project's way of work._
 - **File tickets for defects**: governed by **§ Bug filing** above (`none` there
   = don't file).
 - **Gating**: result back-write runs only in CI / under an opt-in flag, never on
-  a local dev run (see `test-automation-workflow` § Phase 5).
+  a local dev run (see the `test-automation-implementation` skill, references/reporters.md).
 
 ### Automation PR policy
 
@@ -316,6 +316,18 @@ orchestrator (merge gate) and the implementer (branch base)._
 - **Squash / rebase / merge commit**: <squash | rebase | merge>
   — optional; defaults to `squash`. Override when the project's
   branch-protection rules require a different strategy.
+- **Landing granularity**: <per-batch | campaign-end>
+  - `per-batch` *(default)* — each batch lands to base as soon as its gate is
+    green, so value arrives early, base drift stays small, and a red gate
+    blocks only its own batch. The next batch then cuts its trunk from an
+    updated base.
+  - `campaign-end` — gated batch branches accumulate and land together in one
+    PR. Right when base is a protected release line or PR ceremony is
+    expensive; the cost is that nothing ships until the campaign finishes and
+    base drifts underneath the whole run.
+  - Either way the gate is per batch — nothing reaches base ungated, and a
+    campaign runs one final check of everything it delivered (see
+    `test-automation-workflow` campaign-planning.md).
 
 ### Additional notes
 
@@ -603,6 +615,10 @@ docs rather than restating them.
   like `data/sit1/`, factories vs JSON, …)
 
 ## Hooks, fixtures, and run-mode policy
+- **Auth fast-path for exploration** — how an agent gets an authenticated
+  browser WITHOUT manual login: storage-state file path + the command that
+  refreshes it, or the login helper/fixture to run. Analysts use this to
+  fast-reach areas under test; scout captures it once for everyone.
 - **Auto-applied hooks** the framework wires in (authed session,
   base URL, browser context …) — name + where they live
   <!-- UI suites only — browser-context/viewport/headless framing; omit for API / perf / mobile projects -->
@@ -645,6 +661,48 @@ docs rather than restating them.
 - **Trigger:** on push / PR / both
 - **Timeout & retry policy:** [X min; project-default retry count]
 - **Coverage threshold:** [X% or N/A]
+
+## Merge gate
+- **Gate N**: <number> — consecutive deterministic green runs the
+  orchestrator requires at the batch hardening gate before merge.
+  Default: 3.
+- **Reviewer live re-run**: <off | on> — `off` *(default)*: the reviewer
+  slot reviews statically (the hardening gate is the only independent
+  execution). `on`: the reviewer also executes the spec once — belt-and-
+  braces for teams that want a second runtime environment before the gate.
+
+## Batch pipeline
+- **Batch size M**: <number> — default cases per batch; `1` degenerates to
+  the per-case flow. Default: 5. Raise toward 8–12 once the pipeline is
+  trusted: intake, the gate (N runs regardless of size), and the mirror
+  sweep are ~fixed per batch, so per-case overhead falls as M grows.
+- **Clustering** — the throughput lever, since units run one at a time and
+  the number of UNITS is the wall clock. A cluster is one analyst session over
+  ≤5 same-surface flow variants; note here any surface where clustering is
+  known to work well or badly. (There is no concurrency knob: a batch never
+  runs two writers against the one working tree.)
+- **Run artifacts**: `.agents/automation/<slug>/` — the case snapshots the
+  lead writes at intake (`cases/<ID>.md`) and the run's report
+  (`report.json` + `report.md`). Fixed convention; created on demand. There
+  is no progress board: the run reports once at close, and an interrupted
+  one is rebuilt from git + the run journal.
+- **Mid-batch tracker writes**: <batched | per-dispatch> — `batched`
+  *(default)*: tracker/TMS are written at intake and the close sweep only.
+  `per-dispatch`: also mirror each slot transition (for teams whose
+  stakeholders watch the tracker live). **`per-dispatch` forces the
+  sequential-dispatch path** — a workflow run has no mid-run writer, so on
+  Claude Code this trades the accelerant for tracker liveness; the lead
+  writes between dispatches.
+- **Campaign mode**: for backlogs ≳ 2×M, compose waves + a foundation pass
+  + clusters of similar cases per the `test-automation-workflow` skill's
+  `campaign-planning.md` (plan proposed by a dispatched planner; foundation
+  mini-gate = its smoke spec × Gate N green before base merge).
+
+## TMS case-gate
+- **Excluded author statuses**: <list — e.g. Out of Scope, Untested,
+  Draft> — cases whose TMS author-status is listed here are skipped at
+  batch intake. Probe the status field directly (JQL-style queries on TMS
+  custom fields are unreliable across adapters). Empty = fetch all.
 
 ## Conventions to follow when adding tests
 > Bullets — short, observed-from-repo. Aspirational rules go in the
