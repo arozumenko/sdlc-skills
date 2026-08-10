@@ -186,6 +186,91 @@ function renderTokenBar(t) {
   </section>`;
 }
 
+// Zooms into just the orchestrator's own token composition (real work vs
+// cache) — the session-wide bar in renderTokenBar() already splits
+// input/output/cache_create/cache_read across EVERYONE, but it doesn't
+// answer "of the orchestrator's own big number, how much is cache?" which
+// is exactly what makes a high orchestrator_cost_pct look scarier than it
+// usually is (see build-run-metrics.mjs's own comment on that field: a
+// token-based proxy, not a true per-dispatch cost split). Finds the
+// tokens_by_agent entry with dispatches:null — that's always the computed
+// remainder (test-run-lead / orchestrator), never a directly-dispatched
+// agent.
+//
+// Verified against two real runs (2026-08-10): a botched non-interactive
+// (`claude -p`) session where test-runner/test-reporter never captured
+// their own input/output/cache split (benchmark-tc-hook.mjs's tr.usage came
+// back empty for them, though the hook itself is capable of recording it —
+// root cause still open, but correlates with incomplete/non-interactive
+// session termination, not a permanent Agent-tool limitation: a clean
+// interactive re-run of the same suite typed every agent correctly) vs a
+// clean interactive run where it did. The isolatedFromOthers check below
+// exists precisely to tell those two cases apart in the label.
+function renderOrchestratorSection(t) {
+  const agents = t.tokens_by_agent ?? {};
+  const orchEntry = Object.entries(agents).find(([, v]) => v.dispatches == null);
+  if (!orchEntry) return '';
+  const [name, v] = orchEntry;
+
+  const real = (v.input_tokens ?? 0) + (v.output_tokens ?? 0);
+  const cacheCreate = v.cache_creation_input_tokens ?? 0;
+  const cacheRead = v.cache_read_input_tokens ?? 0;
+  // Sum of the three components below — NOT v.tokens. v.tokens is computed
+  // upstream (build-run-metrics.mjs) as "session total minus every
+  // dispatched agent's own lump total", while input/output/cache_* here are
+  // each computed as "session total for that TYPE minus every dispatched
+  // agent's own total for that type" — a different subtraction whenever a
+  // dispatched agent's per-type breakdown is 0/null (its usage wasn't
+  // captured) but its lump total isn't. The two bases can legitimately
+  // disagree; always use THIS sum as the bar's 100%, never v.tokens, or the
+  // segments won't add up.
+  const composedTotal = real + cacheCreate + cacheRead;
+  const cacheSharePct = composedTotal ? ((cacheCreate + cacheRead) / composedTotal) * 100 : 0;
+  // True only when every OTHER dispatched agent (test-runner, test-reporter,
+  // ...) contributed nothing to this sum — i.e. the remainder subtraction
+  // removed nothing, so what's shown below is actually the FULL SESSION's
+  // composition, not the orchestrator's alone (their own tr.usage wasn't
+  // captured that run — see the header comment). Still worth showing (it's
+  // the best breakdown the data supports), just labelled honestly instead
+  // of silently passing whole-session numbers off as orchestrator-only.
+  const isolatedFromOthers = Object.entries(agents).every(([n, e]) =>
+    e === v || ((e.input_tokens ?? 0) + (e.output_tokens ?? 0) + (e.cache_creation_input_tokens ?? 0) + (e.cache_read_input_tokens ?? 0)) === 0);
+
+  const segments = [
+    { label: 'Real (input + output)', value: real, slot: 1 },
+    { label: 'Cache create', value: cacheCreate, slot: 3 },
+    { label: 'Cache read', value: cacheRead, slot: 4 },
+  ];
+  const bar = segments.map(s => {
+    const pct = composedTotal ? (s.value / composedTotal) * 100 : 0;
+    return `<div class="bar-seg" style="flex:${Math.max(pct, 0.4)} 0 0;background:var(--series-${s.slot});" title="${esc(s.label)}: ${fmtInt(s.value)} (${fmtPct(pct)})"></div>`;
+  }).join('');
+  const legend = segments.map(s => {
+    const pct = composedTotal ? (s.value / composedTotal) * 100 : 0;
+    return `<div class="legend-item">
+      <span class="legend-swatch" style="background:var(--series-${s.slot});"></span>
+      <span class="legend-label">${esc(s.label)}</span>
+      <span class="legend-value">${fmtInt(s.value)} <span class="legend-pct">(${fmtPct(pct)})</span></span>
+    </div>`;
+  }).join('');
+
+  // isolatedFromOthers true -> nothing was subtracted -> this is really the
+  // whole session's composition, not the orchestrator's alone. False ->
+  // real subtraction happened -> genuinely isolated to the orchestrator.
+  const scopeNote = isolatedFromOthers
+    ? `session-wide — the other dispatched agents in this run didn't capture their own input/output/cache split (only a lump total), so this composition can't be isolated to ${esc(name)} alone yet; shown as the best available breakdown`
+    : `of ${esc(name)}'s own tokens`;
+
+  return `
+  <section class="panel">
+    <h2>Orchestrator composition</h2>
+    <p class="panel-sub">${esc(name)} accounts for <strong>${fmtPct(t.orchestrator_cost_pct)}</strong> of this session's tokens — a computed remainder (total minus every directly-dispatched agent), not a direct measurement. Composition below is ${scopeNote}:</p>
+    <div class="stacked-bar">${bar}</div>
+    <div class="legend legend-grid-4">${legend}</div>
+    <div class="kpi-callout">${fmtPct(cacheSharePct)} of this is cache (create + read) — mostly re-read context (project files, prior turns), not new work. Cache is also priced far cheaper per token than fresh input, so this share overstates its actual cost — see the session-wide "Cache-read cost share" stat above for the dollar-weighted version.</div>
+  </section>`;
+}
+
 function renderModelTable(t) {
   const models = t.tokens_by_model ?? {};
   const entries = Object.entries(models).map(([name, v]) => {
@@ -575,6 +660,7 @@ function buildHtml(runId, t, m, sourceTokenomicsName, metricsPath, hasMetrics) {
 ${renderHeader(runId, t, m)}
 ${renderKpiRow(t, m)}
 ${renderTokenBar(t)}
+${renderOrchestratorSection(t)}
 ${renderModelTable(t)}
 ${renderAgentSection(t)}
 ${renderTimelineAndTable(m)}
