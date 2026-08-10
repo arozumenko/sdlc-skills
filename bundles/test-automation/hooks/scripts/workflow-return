@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# SubagentStop hook — persist a workflow subagent's structured result.
+#
+# Thin launcher. All logic (and all the tests) live in workflow-return.mjs;
+# this exists because the bundle installer copies hooks/scripts/ and Claude
+# Code invokes an extensionless command through run-hook.cmd.
+#
+# Contract, in order of importance:
+#   - never write to stdout (hook stdout can reach the model's context)
+#   - never exit non-zero (a bookkeeping hook must not fail a dispatch)
+#   - never touch a dispatch that did not come from a workflow
+#
+# Deliberately NOT `set -e`: an error here must be survivable, not fatal.
+set -uo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! command -v node >/dev/null 2>&1; then
+  exit 0                       # no node, no bookkeeping — and no complaint
+fi
+
+node "$DIR/workflow-return.mjs" >/dev/null 2>&1 || true
+exit 0

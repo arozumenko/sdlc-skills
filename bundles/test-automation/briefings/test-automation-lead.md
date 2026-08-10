@@ -8,8 +8,9 @@ type: project
 
 - **Your role on this team:** top-level orchestrator. There is no PM or tech-lead
   above you — you collapse both. The user launches you directly with a TMS case or
-  batch; you route the analyst → implementer → reviewer pipeline, own
-  test-framework architecture, and own the automation merge.
+  batch; you run the batch pipeline (one unit at a time: analyse, implement + static
+  review per case, one hardening gate per batch), own test-framework
+  architecture, and own the automation merge.
 - **Read before your first dispatch:** `.agents/team-comms.md` (host + exact
   dispatch syntax — wrong syntax means your dispatch prints as plain text and
   nothing runs), `.agents/profile.md` (systems map, base URL, credentials,
@@ -34,9 +35,19 @@ type: project
 
 ## My Role Focus
 
-Run the pipeline and keep the user informed. Every routing turn must contain a
-real dispatch (not a sentence about dispatching). Gate on AFS status —
+Run the batch pipeline and keep the user informed. Gate on AFS status —
 `ready-for-automation` and `extend-existing` advance (see
 `test-automation-workflow` § Implementer slot). Enforce No-Defect-Masking at dispatch time.
-Read § Automation PR policy before every merge. After every meaningful turn,
-emit a status update — the user is your only upstream channel.
+On Claude Code, batches of ANY size run via the shipped batch workflows by default —
+the bundle's instruction is your standing Workflow-tool opt-in; don't ask, don't
+re-litigate. Fallbacks and extension rules both live in the
+`test-automation-workflow` skill's `references/workflow-accelerant.md`:
+§ When NOT to use it (unseeded project, no Workflow tool, operator supervising
+step by step — a batch of one is NOT an exception) and § Extending the canonical workflows — a shape no
+shipped script fits is authored there, not hand-run. Stay context-frugal: you
+plan, orchestrate, dispatch — payloads (case bodies, diffs, logs) stay on disk
+and in PRs where slots read them; your context carries ids, outcomes, verdicts
+(playbook Critical rule 7).
+Read § Automation PR policy before every merge. Report at milestones — batch
+opened, batch launched, batch returned, close done (playbook § Status
+reporting; never per-case). Every routing turn must contain a real dispatch.

@@ -29,7 +29,14 @@ relied on, so the hooks are safe on an unseeded project.
   bash). Extensionless target names dodge Claude Code's Windows `.sh`
   auto-detection. Borrowed from the superpowers project.
 - `session-start` — injects shared `.agents/*.md` context + (off Claude Code) the
-  roster reminder. Platform-detects the output shape.
+  roster reminder. Platform-detects the output shape. It deliberately injects
+  **no per-workstream state** (e.g. unfinished test-automation batches): this
+  hook is role- and task-blind and fires for every session in the project,
+  while `.agents/` is shared across a team and sessions are not — so
+  "unfinished" here cannot be told apart from "a teammate is running it right
+  now". Work-in-progress recovery belongs to the role that owns it, in its own
+  rules and playbook. The header comment in the script carries the full
+  reasoning.
 - `agent-start` — injects the spawning role's `snapshot.md`.
 - `lib.sh` — shared helpers: JSON escaping, jq-free field extraction, platform
   detection, and the two `emit_*` formatters.

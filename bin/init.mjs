@@ -23,7 +23,7 @@
  *      GitHub Copilot CLI target (--target copilot) flattens agents to
  *      `.github/agents/<name>.agent.md` (not a directory) with SOUL.md
  *      appended as a `## Persona` section, and rewrites `model: sonnet`
- *      → `model: Claude Sonnet 4.6` (Copilot's picker display name). The
+ *      → `model: Claude Sonnet 5` (Copilot's picker display name). The
  *      Codex target assigns each role a concrete Codex (GPT) model by name.
  *      Other targets keep the directory layout and the authored model.
  *
@@ -89,12 +89,12 @@ const TARGETS = [
 ];
 
 // GitHub Copilot's model picker lists Claude models by display name
-// ("Claude Sonnet 4.6"), not by a dashed provider id. Copilot agent frontmatter
+// ("Claude Sonnet 5"), not by a dashed provider id. Copilot agent frontmatter
 // must match that display name, so the Copilot flatten path maps each authored
 // `model:` alias through this table.
 const COPILOT_MODEL_NAMES = {
-  sonnet: "Claude Sonnet 4.6",
-  opus: "Claude Opus 4.7",
+  sonnet: "Claude Sonnet 5",
+  opus: "Claude Opus 5",
   haiku: "Claude Haiku 4.5",
 };
 
@@ -1083,16 +1083,10 @@ function parseAgentSkillDeps(agentName, agentsRoot = join(PKG_ROOT, "agents")) {
   } catch {
     return [];
   }
-  // Match the first `---` frontmatter block. Naive but sufficient — the
-  // frontmatter is authored by humans and always single-line `skills: [...]`.
-  const fm = text.match(/^---\s*\n([\s\S]*?)\n---/m);
-  if (!fm) return [];
-  const line = fm[1].match(/^skills:\s*\[([^\]]*)\]/m);
-  if (!line) return [];
-  return line[1]
-    .split(",")
-    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-    .filter(Boolean);
+  // Install-time dependency resolution wants the UNION: `skills:` (preloaded
+  // on Claude) plus `skills-on-demand:` (installed, never preloaded) — both
+  // must land on disk for the agent to function.
+  return parseSkillsFromFrontmatter(text);
 }
 
 function partitionSkillIds(ids, availableSkills, registry, index) {
@@ -1247,9 +1241,11 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // but only for hosts that don't preload the `skills:` frontmatter
   // field. Claude Code preloads each listed SKILL.md into subagent
   // context at startup, so a body list would duplicate what's already
-  // in context. Cursor and Windsurf have no documented preload
-  // mechanism and get the body list so agents can discover declared
-  // skills. Copilot runs through flattenAgentForCopilot() above.
+  // in context. Cursor and Windsurf have no preload mechanism and get
+  // the `skills:` list as a body inventory. `skills-on-demand:` entries
+  // are installed only — never expanded into any body (the agent prose
+  // names them where they apply). Copilot runs through
+  // flattenAgentForCopilot() above.
   if (
     kind === "agents" &&
     registry &&
@@ -1278,6 +1274,9 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
 //   - Cursor / Windsurf: no documented preload mechanism; treated like
 //                   Copilot — inject the body list so the agent can
 //                   discover declared skills and load SKILL.md by path.
+// In ALL cases the inventory covers the `skills:` list only —
+// `skills-on-demand:` entries are installed on disk and nothing more; the
+// agent body's own prose names each one at the moment it applies.
 // Source files in the repo stay untouched; this is install-time output
 // scoped to the non-Claude targets.
 // ---------------------------------------------------------------------------
@@ -1306,35 +1305,60 @@ function buildSkillsSection(skills, registry) {
   );
 }
 
-function parseSkillsFromFrontmatter(agentText) {
+// An agent's skills split across two frontmatter keys:
+//   skills:           [a, b]   — installed AND part of the agent's standing
+//                                context (Claude preloads each SKILL.md at
+//                                dispatch; other hosts list them in the
+//                                injected inventory / Codex TOML). Keep this
+//                                to what the role uses every single run —
+//                                each entry rides along on every turn.
+//   skills-on-demand: [c, d]   — installed identically but NOTHING more: no
+//                                preload, no body inventory, no TOML entry.
+//                                The agent body's prose names each one at the
+//                                moment it applies and the agent loads it
+//                                (Skill tool on Claude, by path elsewhere).
+// Both keys are single-line inline lists; `skills:` also accepts the legacy
+// block form.
+export function parseAgentSkillSplit(agentText) {
   const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---/m);
-  if (!fm) return [];
+  if (!fm) return { preload: [], onDemand: [] };
 
-  // Inline form: `skills: [a, b, c]`
-  const inline = fm[1].match(/^skills:\s*\[([^\]]*)\]/m);
-  if (inline) {
-    return inline[1]
+  const inlineList = (key) => {
+    const m = fm[1].match(new RegExp(`^${key}:\\s*\\[([^\\]]*)\\]`, "m"));
+    if (!m) return null;
+    return m[1]
       .split(",")
       .map((s) => s.trim().replace(/^["']|["']$/g, ""))
       .filter(Boolean);
+  };
+
+  let preload = inlineList("skills");
+  if (preload === null) {
+    // Block form:
+    //   skills:
+    //     - a
+    //     - b
+    const block = fm[1].match(/^skills:\s*\n((?:[ \t]*-[ \t]*[^\n]+\n?)+)/m);
+    preload = block
+      ? block[1]
+          .split("\n")
+          .map((l) => l.replace(/^[ \t]*-[ \t]*/, "").trim().replace(/^["']|["']$/g, ""))
+          .filter(Boolean)
+      : [];
   }
 
-  // Block form:
-  //   skills:
-  //     - a
-  //     - b
-  const block = fm[1].match(/^skills:\s*\n((?:[ \t]*-[ \t]*[^\n]+\n?)+)/m);
-  if (block) {
-    return block[1]
-      .split("\n")
-      .map((l) => l.replace(/^[ \t]*-[ \t]*/, "").trim().replace(/^["']|["']$/g, ""))
-      .filter(Boolean);
-  }
-
-  return [];
+  return { preload, onDemand: inlineList("skills-on-demand") || [] };
 }
 
-function injectSkillsSection(agentText, name, registry) {
+// Union of both lists — what the installer resolves and installs, what the
+// non-Claude inventory advertises, and what Codex enables. The preload/on-demand
+// distinction matters only to Claude's native frontmatter preload.
+export function parseSkillsFromFrontmatter(agentText) {
+  const { preload, onDemand } = parseAgentSkillSplit(agentText);
+  return [...new Set([...preload, ...onDemand])];
+}
+
+export function injectSkillsSection(agentText, name, registry) {
   if (!registry) return agentText;
 
   // 1. Strip any existing SKILLS-INJECTED block (idempotence on re-run).
@@ -1344,8 +1368,13 @@ function injectSkillsSection(agentText, name, registry) {
   );
   const stripped = agentText.replace(stripPattern, "\n\n");
 
-  // 2. Parse declared skills from frontmatter.
-  const skills = parseSkillsFromFrontmatter(stripped);
+  // 2. Parse declared skills from frontmatter — the `skills:` list only.
+  //    `skills-on-demand:` entries are deliberately NOT advertised here:
+  //    they are installed on disk and nothing more — the agent body's own
+  //    prose names each one at the moment it applies ("load X via the
+  //    Skill tool before reviewing"), which beats a generic list. (Claude
+  //    never gets this section at all — see the install-loop guard.)
+  const skills = parseAgentSkillSplit(stripped).preload;
   const section = buildSkillsSection(skills, registry);
   if (!section) return stripped;
 
@@ -1396,20 +1425,59 @@ function injectSkillsIntoCopiedAgent(destDir, name, registry) {
   if (rewritten !== text) writeFileSync(agentFile, rewritten);
 }
 
+// Pure text transform behind overlays and interactive trims: apply
+// {add, remove} across BOTH skill lines of an installed agent file.
+// Removes drop from `skills:` and `skills-on-demand:` alike; adds land on
+// the on-demand line when the agent has one (cheap by default — an overlay
+// add shouldn't silently grow every dispatch's preload), else on `skills:`
+// (legacy single-line agents keep their old behavior). Returns the rewritten
+// text, or null when there is no inline `skills:` line to rewrite.
+export function applySkillOverlayToText(text, overlay) {
+  const skillsRe = /^skills:\s*\[([^\]]*)\]/m;
+  const odRe = /^skills-on-demand:\s*\[([^\]]*)\]/m;
+  const parse = (re) => {
+    const m = text.match(re);
+    if (!m) return null;
+    return m[1]
+      .split(",")
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
+  };
+  const skills = parse(skillsRe);
+  if (!skills) return null; // no inline skills line — nothing to rewrite
+  const onDemand = parse(odRe);
+
+  const remove = new Set(overlay.remove || []);
+  const keptSkills = skills.filter((s) => !remove.has(s));
+  const keptOnDemand = onDemand ? onDemand.filter((s) => !remove.has(s)) : null;
+
+  const present = new Set([...keptSkills, ...(keptOnDemand || [])]);
+  for (const a of overlay.add || []) {
+    if (present.has(a)) continue;
+    (keptOnDemand || keptSkills).push(a);
+    present.add(a);
+  }
+
+  let out = text.replace(skillsRe, `skills: [${keptSkills.join(", ")}]`);
+  if (onDemand) out = out.replace(odRe, `skills-on-demand: [${keptOnDemand.join(", ")}]`);
+  return out;
+}
+
 // Apply a bundle's per-role skill overlay to an already-installed agent:
-// rewrite its inline `skills: [...]` frontmatter to the effective set. On
-// Claude this is the preload list; on Cursor/Windsurf we also regenerate the
-// injected skills-inventory body so it matches. Returns true if rewritten.
-function applySkillOverlay(target, name, effectiveSkills, registry) {
+// rewrite its skill lines to the effective set. On Claude the `skills:` line
+// is the preload list (on-demand entries are installed only); on
+// Cursor/Windsurf we also regenerate the injected `skills:` inventory so it
+// matches. Returns true if rewritten.
+function applySkillOverlay(target, name, overlay, registry) {
   const agentFile =
     target.id === "copilot"
       ? join(CWD, target.dir, "agents", `${name}.agent.md`)
       : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(agentFile)) return false;
   const text = readFileSync(agentFile, "utf8");
-  const re = /^skills:\s*\[[^\]]*\]/m;
-  if (!re.test(text)) return false; // no inline skills line — nothing to rewrite
-  writeFileSync(agentFile, text.replace(re, `skills: [${effectiveSkills.join(", ")}]`));
+  const rewritten = applySkillOverlayToText(text, overlay);
+  if (rewritten === null) return false;
+  writeFileSync(agentFile, rewritten);
   if (target.id !== "claude" && target.id !== "copilot") {
     // dir-based non-Claude targets carry a body inventory — regenerate it.
     injectSkillsIntoCopiedAgent(join(CWD, target.dir, "agents", name), name, registry);
@@ -1519,7 +1587,7 @@ function transformAgentForCopilot(
   );
 
   if (normalizeModel) {
-    // Copilot's model picker keys off display names ("Claude Sonnet 4.6"),
+    // Copilot's model picker keys off display names ("Claude Sonnet 5"),
     // not the dashed provider id — shipping `model: sonnet` leaves it unable
     // to resolve. Map the alias to Copilot's display name (COPILOT_MODEL_NAMES).
     agent = agent.replace(
@@ -1640,7 +1708,10 @@ function transformAgentForCodex(agentText, soulText, name) {
   if (model) lines.push(`model = ${tomlBasicString(model)}`);
   lines.push("", `developer_instructions = ${tomlMultiline(body.trim())}`);
 
-  const skills = parseSkillsFromFrontmatter(agentText).filter((id) =>
+  // Enable only the `skills:` list — the standing-context set. On-demand
+  // skills are installed under .codex/skills/ but not enabled here; the
+  // agent body's prose points at them when they apply.
+  const skills = parseAgentSkillSplit(agentText).preload.filter((id) =>
     existsSync(join(PKG_ROOT, "skills", id))
   );
   for (const id of skills) {
@@ -1892,7 +1963,7 @@ function printFixCopilotHelp() {
                   reference to \`<name>.soul.md\`
 
     --no-normalize-model    Keep 'model: sonnet' as-is (default: rewrite
-                            to 'model: Claude Sonnet 4.6' — Copilot's
+                            to 'model: Claude Sonnet 5' — Copilot's
                             model-picker display name)
     -h, --help              Show this help
 `);
@@ -2273,18 +2344,17 @@ function writeMcpSelections(targets, ids) {
   console.log(`      ${"ℹ"}  MCP configs use placeholder tokens / secret prompts — fill them and gitignore real secrets`);
 }
 
-// Re-write an installed agent's `skills:` line, dropping `removeSet`. Composes
-// on top of any bundle overlay already applied (reads the installed copy).
+// Re-write an installed agent's skill lines (`skills:` AND `skills-on-demand:`),
+// dropping `removeSet`. Composes on top of any bundle overlay already applied
+// (reads the installed copy).
 function trimInstalledAgentSkills(target, name, removeSet) {
   const f = target.id === "copilot"
     ? join(CWD, target.dir, "agents", `${name}.agent.md`)
     : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(f)) return;
   const text = readFileSync(f, "utf8");
-  const m = text.match(/^skills:\s*\[([^\]]*)\]/m);
-  if (!m) return;
-  const kept = m[1].split(",").map((s) => s.trim()).filter(Boolean).filter((s) => !removeSet.has(s));
-  writeFileSync(f, text.replace(/^skills:\s*\[[^\]]*\]/m, `skills: [${kept.join(", ")}]`));
+  const rewritten = applySkillOverlayToText(text, { remove: [...removeSet] });
+  if (rewritten !== null && rewritten !== text) writeFileSync(f, rewritten);
 }
 
 // QA/test bundles that get the interactive MCP-server picker even without the
@@ -2486,9 +2556,17 @@ async function main() {
       }
     }
     // Apply per-role skill overlays to the installed agents (capability tuning).
+    // Adds are limited to the ones that resolved into the effective set at plan
+    // time (pending adds — skills that don't exist yet — never reach the file).
     if (bundlePlan && bundlePlan.overlays) {
       for (const role of Object.keys(bundlePlan.overlays)) {
-        if (applySkillOverlay(t, role, bundlePlan.effectiveByAgent[role] || [], catalog.registry)) {
+        const planOv = bundlePlan.overlays[role] || {};
+        const eff = new Set(bundlePlan.effectiveByAgent[role] || []);
+        const overlay = {
+          remove: planOv.remove || [],
+          add: (planOv.add || []).filter((s) => eff.has(s)),
+        };
+        if (applySkillOverlay(t, role, overlay, catalog.registry)) {
           const ov = bundlePlan.overlays[role];
           const bits = [];
           if (ov.add && ov.add.length) bits.push(`+${ov.add.join(",")}`);

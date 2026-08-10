@@ -27,8 +27,10 @@ Six steps, with the exact files and fields at each one.
 ### 1. Where the data lives
 Every Claude session is a JSONL transcript on disk, under
 `~/.claude/projects/<encoded-cwd>/` — where `<encoded-cwd>` is your project's
-absolute path with every `/` and `.` turned into `-`
-(e.g. `/Users/me/dev/app` → `-Users-me-dev-app`). Inside that folder:
+absolute path with every separator and filename-awkward character (`/ \ : . _`
+and space) turned into `-` (e.g. `/Users/me/dev/app` → `-Users-me-dev-app`,
+`/Users/Ada_Lovelace/AI baseline` → `-Users-Ada-Lovelace-AI-baseline`). Inside
+that folder:
 
 ```
 <encoded-cwd>/
@@ -115,6 +117,36 @@ only decide *which file belongs to whom* and add the piles up. If per-file
 metering isn't available, it falls back to ccusage's session total split by
 cost-weighted tokens (labelled `ccusage-allocated`), so the headline dollars stay
 ccusage's either way.
+
+### 7. Divide by what shipped (`--resolved-from`)
+
+The dollars are only half of "what did a case cost". The other half is already on
+disk: the batch pipeline writes `.agents/automation/<slug>/report.json`, one row
+per input case with the outcome it reached. `--resolved-from` reads those and
+divides — so the denominator is measured, not typed in.
+
+It reports **two** numbers, because there are two honest questions:
+
+| | |
+|---|---|
+| **$ / spec delivered** | what a shipped test cost. Denominator: cases that reached `automated`. |
+| **$ / case examined** | what putting a case through this pipeline costs. Denominator: every case that entered — a case that ended `out-of-scope` still consumed analysis. |
+
+Three things it checks rather than assumes: a case that appears in two batches is
+**one** case at its latest outcome (otherwise a retry makes the pipeline look
+cheaper); run reports that closed **outside** the metered window did not get paid
+for by this spend; and it measures how much of the window's spend sits on
+branches these batches name — a floor, since analysts never touch git, and
+therefore a dilution check rather than an attribution. If nothing matches, it
+says the ratios aren't usable instead of printing them plain. That check needs
+branches on both sides and stands down when either is missing, saying which.
+
+**It reads a file, so it is not a workflow feature.** The batch workflow writes
+`report.json` on Claude Code; a lead on a runner with no workflow writes the same
+file by hand at close, rebuilding it from receipts + journal + git evidence
+alone. The contract is `cases[]` with an `id` and an `outcome` per row — the rest
+is optional and its absence is reported rather than assumed away. Works on
+`--host copilot` the same way.
 
 ---
 

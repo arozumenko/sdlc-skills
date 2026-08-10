@@ -31,20 +31,24 @@ goto collect_args
 :args_done
 
 REM Try Git for Windows bash in standard locations
+REM Bare `exit /b` (no argument), NOT `exit /b %ERRORLEVEL%`: inside a
+REM parenthesized block %ERRORLEVEL% expands at PARSE time, before bash has
+REM run, so the explicit form always returns the stale pre-block value. A hook
+REM that blocks by exit code (exit 2) would silently not block on Windows.
 if exist "C:\Program Files\Git\bin\bash.exe" (
     "C:\Program Files\Git\bin\bash.exe" "%HOOK_DIR%%SCRIPT%" %ARGS%
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 if exist "C:\Program Files (x86)\Git\bin\bash.exe" (
     "C:\Program Files (x86)\Git\bin\bash.exe" "%HOOK_DIR%%SCRIPT%" %ARGS%
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 
 REM Try bash on PATH (e.g. user-installed Git Bash, MSYS2, Cygwin)
 where bash >nul 2>nul
 if %ERRORLEVEL% equ 0 (
     bash "%HOOK_DIR%%SCRIPT%" %ARGS%
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 
 REM No bash found - exit silently rather than error

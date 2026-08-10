@@ -104,7 +104,13 @@ human will install elsewhere — not code that executes in this repo.
 
 - Agents are **self-describing**: all metadata lives in `AGENT.md` frontmatter
   (`name`, `description`, `model`, `color`, `group`, `theme`, `aliases`,
-  `skills`). No separate agent registry.
+  `skills`, `skills-on-demand`, optional `mcpServers`). No separate agent
+  registry. Both skill lists
+  install; only `skills:` enters standing context (Claude preload, non-Claude
+  injected inventory, Codex TOML). `skills-on-demand:` entries are installed
+  on disk and nothing more — the agent body's prose names each one at the
+  moment it applies, and the agent loads it then (Skill tool on Claude, by
+  path elsewhere).
 - This is **single host-native mode** — there is no dual-mode/octobots framing,
   no markers/taskbox/relay. Don't reintroduce it.
 - The installer is plain ESM Node (`.mjs`), stdlib only, no dependencies. Keep it

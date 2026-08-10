@@ -3,6 +3,8 @@
 ## Contents
 
 - [When this step actually writes anything](#when-this-step-actually-writes-anything)
+- [Claude Code — `mcpServers:` scoping (context weight, not permissions)](#claude-code--mcpservers-scoping-context-weight-not-permissions)
+- [When a worker NEEDS a server: inherit, or attach it yourself](#when-a-worker-needs-a-server-inherit-or-attach-it-yourself)
 - [Inputs scout reads (all evidence-based, no operator prompts)](#inputs-scout-reads-all-evidence-based-no-operator-prompts)
 - [Scout self-service — probe MCP, write per-agent `tools:`](#scout-self-service--probe-mcp-write-per-agent-tools)
 - [When scout pauses (rare)](#when-scout-pauses-rare)
@@ -33,13 +35,148 @@ permissions foot-gun at worst.
 | Host | Frontmatter default | Action |
 |---|---|---|
 | **GitHub Copilot CLI** | No `tools:` = agent gets `['agent']` only (near-useless) | **Write `tools:`** — this is the whole point of the step |
-| **Claude Code** | No `tools:` = inherit all tools (full access) | **Skip** — permissive default is correct for sdlc-skills agents; tool restrictions happen via the permission model, not per-agent frontmatter |
+| **Claude Code** | No `tools:` = inherit all tools (full access) | **Skip `tools:`** (permissive default is correct; restrictions happen via the permission model) — but **write `mcpServers:` scoping** per § Claude Code — `mcpServers:` scoping below: every configured MCP server's tool schemas otherwise load into EVERY worker dispatch |
 | **Cursor** | Host-dependent; check the target version | Write only when Cursor's default is restrictive for the version in use |
 | **Windsurf** | Host-dependent | Same as Cursor |
 
 Scout detects the host from `.agents/team-comms.md` (authoritative) or
 by inspecting install directories (`.github/agents/` vs.
 `.claude/agents/` etc.) and acts accordingly.
+
+## Claude Code — `mcpServers:` scoping (context weight, not permissions)
+
+On Claude Code an agent with no `mcpServers:` key inherits **every**
+configured MCP server on the paths where servers attach — and which
+paths those are has **changed with host versions**. Field timeline, one
+project, same `.mcp.json` throughout: on Claude Code **2.1.218**
+workflow-spawned agents had full `mcp__*` toolsets (455 uses across
+three runs in one evening); on **2.1.220** the same project's workflow
+agents get none — in-agent ToolSearch returns "No matching deferred
+tools found" (29 probes across four runs) — while **direct dispatches
+and standalone `--agent` runs kept their servers the whole time** (127
+direct-dispatch transcripts using `mcp__*` tools). Workflow-worker MCP
+is therefore a **host-version lottery**, which is the strongest reason
+to write the scoping: make each role's MCP access explicit and
+deterministic on every path. The lottery's field-observed cost: when
+the tools vanished, analysts burned discovery turns before pivoting to
+a raw `sync_playwright` script (a curated memory note now
+institutionalizes the pivot).
+
+`mcpServers:` (camelCase, YAML list of server names as they appear in
+`.mcp.json`) scopes which servers an agent gets. Scout writes it on the
+**installed** agent copies using the same decision heuristics as the
+`tools:` sections below (§ + browser / Playwright MCP, § + TMS MCP
+tools):
+
+Derive each list from what the role **actually calls in this project**
+(`grep` the role's past transcripts, or reason from the seeded way of
+work). For calibration, one mature project's measured usage across
+~1,900 transcripts:
+
+| Role | playwright | TMS adapter | tracker (github) |
+|---|---|---|---|
+| `qa-engineer` (analyst) | **6,210** | 18 | 5 |
+| `test-automation-engineer` | **462** | 5 | — |
+| lead (main session) | 99 | 19 | **71** |
+| built-in `general-purpose` (intake sweeps) | 3 | **298** | — |
+
+- **`qa-engineer` and `test-automation-engineer`** → both ship an
+  **inline** browser-server definition from the bundle (subagent-scoped
+  — connects at dispatch start, disconnects at finish; affordable
+  because the serial pipeline runs one worker, hence one browser, at a
+  time). The measured usage justifies both: the analyst's live
+  execution is the heaviest MCP consumer by an order of magnitude, and
+  the implementer's live verification (injecting testids into a UI
+  repo, confirming a handle resolves against the running app) is real
+  work, not a hypothetical. **Scout tunes both per project**: an
+  API-only project strips the browser server; a project on
+  `browser-verify` (CDP over Bash) may prefer that route — the same
+  field project ran 3,280 `cdp.mjs` calls inside workflows against 455
+  MCP calls, so CDP is proven at scale; and qa-engineer additionally
+  gets the TMS adapter (`mcpServers: [playwright, onetest-tms]`-style)
+  when standalone analysis fetches its own cases. When scout's intent
+  for a role is "no MCP at all", it writes `mcpServers: []` **and** —
+  because empty-list semantics are not documented on every host
+  version — the documented fallback on the same file:
+  `disallowedTools: [mcp__<server>, …]` for each server in `.mcp.json`
+  (a `mcp__<name>` entry removes that server's whole tool set). Either
+  way scout VERIFIES the frontmatter survived install.
+- **`test-automation-lead` and `scout`** → **unscoped.** The lead really
+  does use all three (tracker writes at close, TMS mirroring, the
+  occasional live look); scout probes everything by design.
+- **Built-in agents (`general-purpose`, `Explore`) cannot be scoped** —
+  they have no agent file. That is fine, and useful: per
+  [#13898](https://github.com/anthropics/claude-code/issues/13898)
+  built-ins reach project-scoped servers where custom agents may not,
+  which is exactly why TMS intake sweeps dispatched to
+  `general-purpose` keep working (298 calls above).
+
+### When a worker NEEDS a server: inherit, or attach it yourself
+
+A bare name in `mcpServers:` is a **reference** — it reuses a server the
+parent session already connected, and that inheritance is exactly what
+breaks (workflow path on 2.1.220; and per
+[anthropics/claude-code#13898](https://github.com/anthropics/claude-code/issues/13898),
+custom agents historically could not reach **project-scoped**
+`.mcp.json` servers at all while **user-scoped** ones worked). Two
+wirings survive that, in order of preference:
+
+1. **Inline the definition** in the agent's `mcpServers:` — a
+   subagent-scoped server that **connects when the subagent starts and
+   disconnects when it finishes**, so it depends on nothing the parent
+   did:
+
+   ```yaml
+   mcpServers:
+     - playwright:
+         type: stdio
+         command: npx
+         args: ["@playwright/mcp@latest", "--image-responses", "omit", "--console-level", "error", "--snapshot-mode", "none"]
+   ```
+
+   Affordable **because this pipeline is strictly serial** — one worker
+   runs at a time, so this is one browser process at a time, not one
+   per case. Never inline a server into a slot that could fan out.
+
+   The flags are the lean defaults, chosen from 6,675 measured tool
+   calls on one live campaign: `--image-responses omit` keeps
+   screenshot pixels out of context (saved to the output dir, the agent
+   gets a path — kills the measured ~150k-char base64 bombs
+   structurally); `--console-level error` returns only error-level
+   console messages; `--snapshot-mode none` stops every click/type
+   response embedding a full page snapshot — **actions no longer show
+   the page; the agent calls `browser_snapshot` explicitly when it
+   needs to read it.** Tune per project at seeding when a stack needs
+   otherwise (e.g. restore `--snapshot-mode full` for a heavily
+   exploratory analyst on a fast-changing UI).
+2. **Move the server to user scope** (`claude mcp add --scope user …`,
+   or `~/.claude.json`) — the documented workaround in #13898 for
+   custom agents that can't see project-scoped servers. Cheaper to try,
+   but it makes the server global to every project on the machine, so
+   prefer it only for genuinely machine-wide tooling.
+
+Do **not** paper over a missing server with a workaround inside the
+agent's own reasoning — that is the evasion the denial doctrine
+forbids. Either wire the access or let the slot proceed without it and
+say so in findings (the field-proven route: an analyst drove the live
+UI with a raw `sync_playwright` script through the project's own
+`api/config/pages` modules and recorded that it did).
+
+Two caveats scout records in `.agents/team-comms.md` when it writes
+this:
+
+1. `mcpServers` is documented for Agent-tool and `--agent` contexts;
+   the docs are silent on Workflow-dispatched agents — and in the field
+   their MCP access has flipped with host builds (present on 2.1.218,
+   absent on 2.1.220). Whether workflow-worker entry context moves when
+   this is written therefore depends on the build in use: guaranteed
+   win on direct dispatches and standalone runs; on the workflow path
+   it binds only when the build attaches session MCP to workflow
+   agents. Verify per build, and don't let a workflow-only measurement
+   convince you the key is inert.
+2. Names must match `.mcp.json` keys exactly; behavior for a name that
+   doesn't exist is undocumented — never list a server the project
+   doesn't have.
 
 ## Inputs scout reads (all evidence-based, no operator prompts)
 
@@ -55,7 +192,7 @@ when they conflict.
      mcp:
        - name: playwright
          command: npx
-         args: ["@playwright/mcp@latest"]
+         args: ["@playwright/mcp@latest", "--image-responses", "omit", "--console-level", "error", "--snapshot-mode", "none"]
    ```
 
    This says: any agent with `playwright-testing` in its `skills:`
@@ -348,7 +485,9 @@ role, the routing agents also get the read slice.
 Concretely:
 
 - **`test-automation-lead`** — always gets the base set plus
-  `execute` (he runs the live-run merge gate himself). Whenever any
+  `execute` (the merge and close sweep are the lead's, and a lead may re-run
+  a spec to verify a claim; the hardening gate itself is a dispatched
+  engineer). Whenever any
   other installed agent gets TMS MCP tools, he is given the read
   slice (`get_*` / `list_*` / `search_*`) regardless of his own
   skill list. Same for the tracker (`search_using_jql`, `getIssue` /
@@ -358,8 +497,9 @@ Concretely:
 - **TMS execution-write verbs** (`create_*` / `update_*` / `sync_*`
   on executions) — added to `test-automation-lead` **only when**
   `.agents/profile.md` § Status reporting assigns the TMS execution
-  back-write to the orchestrator: he runs the live-run gate and the
-  merge himself, so the post-merge back-write is his to perform.
+  back-write to the orchestrator: the lead owns the merge (the gate
+  itself is a dispatched engineer), so the post-merge back-write is
+  the lead's to perform.
   Otherwise the write verbs stay scoped to the implementer.
 
 Inheritance is read-only by default. Write/create/update/delete
@@ -410,7 +550,7 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
         'elitea_dev/JiraIntegration_search_using_jql']
 
 # test-automation-lead (Tal) — routes, gates AFS quality, runs the
-# live-run merge gate, merges. Base set + execute; read-only TMS + Jira
+# hardening gate, merges. Base set + execute; read-only TMS + Jira
 # inherited from the worker roster (see § Orchestrator inheritance).
 # Execution-write verbs included here because profile.md § Status
 # reporting assigns the post-merge TMS back-write to the orchestrator.
@@ -505,8 +645,9 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
    - Add the TMS execution-write verbs (`create_*` / `update_*` /
      `sync_*` on executions) only when `.agents/profile.md`
      § Status reporting assigns the TMS back-write to the
-     orchestrator — in this bundle he runs the live-run gate and
-     the merge himself, so the post-merge back-write is his.
+     orchestrator — in this bundle the lead owns the merge (the
+     gate is a dispatched engineer), so the post-merge back-write
+     is the lead's.
 
 8. **Validate.** Re-read each modified agent, confirm `tools:` is
    valid YAML and every MCP tool name actually appears in the live

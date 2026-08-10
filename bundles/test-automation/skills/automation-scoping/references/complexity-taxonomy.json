@@ -1,0 +1,112 @@
+{
+  "$schema_note": "Machine-readable source of truth for score-cases.mjs / calibrate.mjs. references/complexity-taxonomy.md explains the reasoning behind these numbers in prose — keep the two in sync by hand when this file changes.",
+  "version": "0.4.0",
+  "unit": "active_minutes",
+  "calibrated_from": [
+    {
+      "project": "seed-project-1 (anonymized — a client Playwright/pytest UI test-automation engagement, Python/pytest)",
+      "date": "2026-08-05",
+      "n_cases": 80,
+      "source": "internal efficiency-audit + build-training-set.mjs output, redacted",
+      "note": "Widened from the original n=19 seed to n=80 by pulling in that same project's earlier delivered batches. Same project, not yet a second independent one — see seed-project-2 below for that."
+    },
+    {
+      "project": "seed-project-2 (anonymized — a different client engagement, TypeScript/Playwright)",
+      "date": "2026-08-05",
+      "n_cases": 38,
+      "source": "internal efficiency-audit + build-training-set.mjs output, redacted",
+      "note": "First genuinely independent cross-check: different codebase, different stack (TS/Playwright vs. seed-project-1's Python/pytest), different pipeline instance. Used to confirm/correct seed-project-1-only assumptions in v0.1.0 — see the async-realtime correction below and calibration-log.md's v0.2.0 entry for the full reasoning."
+    },
+    {
+      "project": "seed-project-3 (anonymized — a third client engagement, TypeScript/Playwright, same stack as seed-project-2 but a different codebase/repo history)",
+      "date": "2026-08-05",
+      "n_cases": 5,
+      "source": "hand-cross-checked against merged-PR history, redacted — build-training-set.mjs's automated branch-join only recovered 1/7 here because the batch's report.json snapshot predated the real merges (see calibration-methodology.md § When the automated join comes up mostly empty)",
+      "note": "Small (n=5) but 100% one interaction tier (async-realtime — chat/conversation cases), so it lands entirely on the one tier still most in need of confirmation."
+    },
+    {
+      "project": "REPROCESSING NOTE, not a new project",
+      "date": "2026-08-05",
+      "n_cases": null,
+      "source": "n/a",
+      "note": "v0.4.0: re-ran seed-project-1 AND seed-project-2 through build-training-set.mjs after fixing 3 tool bugs (cluster cost double-counted; ~24% of seed-project-1's cases silently mis-priced via a missing-branch-field fallback; case snapshots in a nested campaign folder never found, corrupting step counts for ~half of seed-project-1's rows). Every multiplier above reflects the RE-RUN, not the original v0.1.0-v0.3.0 numbers. Full bug-hunt narrative: calibration-log.md's v0.4.0 entry — read it before trusting any pre-v0.4.0 revision_note's specific numbers at face value."
+    }
+  ],
+
+  "base_minutes_by_step_bucket": [
+    { "max_steps": 5, "base_min": 22 },
+    { "max_steps": 10, "base_min": 42 },
+    { "max_steps": 999999, "base_min": 68 }
+  ],
+  "base_minutes_note": "Step count alone is a WEAK predictor (measured r≈0.37-0.41 against cost/time on seed-project-1's initial n=19 sample) — this table sets the floor, interaction_tiers do most of the work. A case's own step table/bullet count only; don't count preconditions or expected-result columns as extra steps. Not yet recomputed against the wider n=80/n=38 calibration sets — a good candidate for the next revision.",
+
+  "interaction_tiers": [
+    {
+      "id": "async-realtime",
+      "label": "Async / realtime (websocket, AI response wait, polling, live notification)",
+      "keywords": ["chat", "websocket", "predict", "streaming", "ai response", "notification arrives", "polling", "real-time", "realtime", "async"],
+      "multiplier": 0.87,
+      "priority": 1,
+      "revision_note": "v0.1.0's 1.45 (analogy, no evidence) -> v0.2.0's 1.05 -> v0.3.0's 0.85 (both built on seed-project-1 numbers later found to be wrong — see v0.4.0's calibration-log entry: a tool bug in build-training-set.mjs silently mis-priced ~40% of seed-project-1's cases). v0.4.0 RE-RAN the join after fixing that bug and landed at implied 0.87x pooled across all three projects (n=59) — a +2.4% delta from 0.85, i.e. the earlier value survives, but now for the RIGHT reason (real corrected data) rather than by partial cancellation of two compounding bugs. Don't read the stability across v0.2.0->v0.4.0 as evidence of robustness — most of that path was built on bad inputs; only the v0.4.0 number should be trusted."
+    },
+    {
+      "id": "rich-widget",
+      "label": "Rich/complex widget (canvas, node-graph, drag-drop, code/rich-text editor, file upload)",
+      "keywords": ["drag", "canvas", "node", "edge wiring", "graph", "flow editor", "yaml editor", "code editor", "rich text", "mermaid", "upload", "drag-and-drop", "drag and drop"],
+      "multiplier": 1.42,
+      "priority": 2,
+      "revision_note": "REVISED DOWN in v0.4.0 from 1.75 to 1.42 (-18.9% implied delta) after fixing the build-training-set.mjs bugs described in calibration-log.md's v0.4.0 entry — this tier's n grew from 12 to 17 as previously-missed case snapshots (a nested-campaign-folder bug) were found and correctly classified/step-counted. Still mostly one project's evidence (seed-project-1), still a real premium over crud-form, just a smaller one than v0.2.0/v0.3.0 claimed."
+    },
+    {
+      "id": "multi-step-flow",
+      "label": "Multi-step flow / wizard / guided tour / multi-page navigation",
+      "keywords": ["wizard", "tour", "walkthrough", "step-by-step", "onboarding", "multi-page", "multi-step"],
+      "multiplier": 1.15,
+      "priority": 3,
+      "revision_note": "STILL UNCHANGED, still zero direct evidence as of v0.3.0 — zero matching cases across all three calibration projects now. Purely a structural guess (between crud-form and rich-widget). Highest-priority tier to get real data for next."
+    },
+    {
+      "id": "crud-form",
+      "label": "CRUD / form / table (create, edit, delete, filter, paginate)",
+      "keywords": ["create", "edit", "delete", "submit", "validation", "checkbox", "filter", "table", "list view", "pagination", "form", "dropdown", "toggle"],
+      "multiplier": 1.0,
+      "priority": 4
+    },
+    {
+      "id": "static-display",
+      "label": "Static / read-only display (layout, presence, page load)",
+      "keywords": ["loads", "displays", "layout", "renders correctly", "shows", "visible", "page load"],
+      "multiplier": 0.87,
+      "priority": 5,
+      "revision_note": "UNCHANGED in v0.2.0/v0.3.0 despite a contradicting signal from seed-project-2 alone (n=3, still the ONLY source of data for this tier — that hasn't changed). v0.4.0's bug fixes moved the pooled implied value to 0.87x (+2.4%, no longer a meaningful contradiction) — nudged from 0.85 to 0.87 to match. Still n=3, still one project, still the least-confirmed non-zero-evidence tier after multi-step-flow."
+    }
+  ],
+  "interaction_tiers_note": "Matching is priority-order, first hit wins (lower priority number = checked first) — a case that mentions both a form AND a canvas is classified by the canvas, because the pricier interaction dominated cost in every seed-project case that mixed patterns. Default tier when nothing matches: crud-form (1.0).",
+
+  "novelty_multiplier": {
+    "novel_surface_no_existing_coverage": 1.45,
+    "established_surface": 1.0,
+    "unknown_no_app_access": 1.0,
+    "note": "Cold (Mode 1/2, no app access) always uses 'unknown' = 1.0 — don't guess novelty blind, widen the confidence band instead. Mode 3 (app-informed) is what resolves this by checking whether the surface already has page-object/API-client/testid coverage."
+  },
+
+  "rework_risk_note": "Rework (extra fix/review rounds) correlated with cost at r≈0.48 on the seed project but is NOT applied as a mean multiplier here — it's a tail-risk, not a typical-case cost, and folding it into every estimate would systematically overstate the median case. It widens the confidence interval instead (see calibration-methodology.md § Why rework isn't a multiplier) and should be called out as a named risk in the scoping report for any case flagged novel-surface or known-defect-area.",
+
+  "default_dollar_per_minute": {
+    "value": 0.248,
+    "as_of": "2026-08-05",
+    "source": "seed-project-1, n=80 cases, claude-sonnet-5 pricing at that date",
+    "caveat": "This is a CROSS-PROJECT FALLBACK ONLY, and it is a function of model pricing + this pipeline's token efficiency at one point in time — both drift, and vary project to project even at the same moment. Measured evidence of that variance: seed-project-2, priced the same week, came out at $0.160/active-min — 35% lower, same model family, different stack/pipeline. Always prefer a live rate: run the efficiency-audit skill on the target project (`total_cost / total_active_minutes` from its rollup) and pass it via --rate. Recompute this fallback whenever the bundle's default model changes."
+  },
+
+  "confidence_bands": {
+    "cold_no_history": { "low_mult": 0.5, "high_mult": 2.0, "label": "ROM (rough order of magnitude) — no project history" },
+    "bucket_n_lt_5": { "low_mult": 0.65, "high_mult": 1.6, "label": "budgetary — thin sample in this tier" },
+    "bucket_n_ge_5": { "low_mult": 0.8, "high_mult": 1.3, "label": "calibrated — adequate sample in this tier" },
+    "empirical": { "label": "uses bucket_stats mean ± 1 stdev directly, no fixed multiplier" }
+  },
+
+  "bucket_stats": {
+    "_note": "Populated per-project by calibrate.mjs from real .agents/efficiency/ + .agents/automation/ data, written to the PROJECT's own .agents/estimation/complexity-taxonomy.json copy (never back into this bundled file). Empty in the shipped default — score-cases.mjs falls back to base_minutes x multiplier when a tier has no entry here."
+  }
+}

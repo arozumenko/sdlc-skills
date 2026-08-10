@@ -1,0 +1,32 @@
+{
+  "_comment": "Identity header for the cross-factory tokenomics dataset. Copy to .agents/telemetry/factory-profile.json in YOUR project and fill the <angle-bracket> placeholders — hand-authored once, never regenerated, and never shipped by the bundle. The non-placeholder defaults hold for a stock test-automation install; override only where your setup actually differs.",
+  "schema_version": "1.0",
+  "factory_id": "<your-project-slug>-test-automation",
+  "factory_name": "<Your Project / App Under Test> — Test Automation (agentic TMS-to-merged-tests pipeline)",
+  "stop": "testing",
+  "owner_group": "QA",
+  "work_item_level": "batch",
+  "factory_type": "qa",
+  "factory_domain": null,
+  "agent_tool": "<claude-code 2.x | copilot-cli 1.x>",
+  "default_method": "metered",
+  "scope": {
+    "includes_subagents": true,
+    "includes_retries": true,
+    "includes_abandoned_runs": false
+  },
+  "currency": "USD",
+  "efficiency_techniques": [
+    "prompt-cache-warming",
+    "structured-run-artifacts",
+    "other:sequential-unit-isolation (units run one at a time on a batch trunk; one hardening gate per batch)"
+  ],
+  "pipeline": [
+    "scout",
+    "test-automation-lead",
+    "qa-engineer",
+    "test-automation-engineer"
+  ],
+  "submitted_by": null,
+  "submitted_date": null
+}

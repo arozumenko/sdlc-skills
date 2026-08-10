@@ -13,7 +13,7 @@ A bundle composes five things:
 | Layer | Where it comes from |
 |---|---|
 | **Agents** | owned by the bundle under `bundles/<id>/agents/` |
-| **Skills** | auto-pulled from each agent's `skills:` frontmatter, plus any team-wide extras the bundle declares; bundle-local skills live under `bundles/<id>/skills/` |
+| **Skills** | auto-pulled from each agent's `skills:` + `skills-on-demand:` frontmatter (both install; only `skills:` enters standing context — on-demand entries are installed on disk only and loaded when the agent's prose calls for one), plus any team-wide extras the bundle declares; bundle-local skills live under `bundles/<id>/skills/` |
 | **Instructions** | a team-level guidance file the bundle ships |
 | **Briefings** | per-role *stack overlays* the bundle seeds into each role's memory |
 | **Hooks** | IDE automation (Claude `settings.json`), v1 Claude-only |
@@ -144,7 +144,7 @@ The descriptor carries no install config.
   "title": "Feature Development",           // human label
   "description": "...",                      // one-line summary
   "agents": ["scout", "ba", "..."],          // agents to install (resolved from this bundle's agents/ dir or the orphan top-level)
-  "skills": [],                              // team-wide extra skills beyond what agents pull
+  "skills": [],                              // team-wide extra skills beyond what agents pull (global catalog OR this bundle's localSkills — use for a bundle-local skill that should install without being in any agent's roster, loaded on demand)
   "briefings": {                             // role → briefing file (behavior overlay)
     "qa-engineer": "briefings/qa-engineer.md"
   },
@@ -180,7 +180,10 @@ The descriptor carries no install config.
    cwd is the project root). Example:
    `"seed": { "knowledge": ".agents/manual-qa/knowledge" }`.
 2b. **Skill overlays** — for each `skillOverlays[<role>]`, rewrite the
-   *installed* agent's `skills:` frontmatter to `(declared − remove) + add`.
+   *installed* agent's skill frontmatter to `(declared − remove) + add`.
+   `remove` drops from both `skills:` and `skills-on-demand:`; `add` lands on
+   the `skills-on-demand:` line when the agent has one (so an overlay never
+   silently grows the Claude preload), else on `skills:`.
    The install union is recomputed from the effective sets: a `remove`d skill
    no remaining agent needs isn't installed; `add`ed skills that resolve are
    installed; `add`s not yet in the catalog are reported as **pending content**

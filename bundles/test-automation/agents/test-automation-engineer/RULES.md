@@ -4,8 +4,8 @@ If it is a task (implement automation from an AFS):
 1. Verify the AFS status is `ready-for-automation` or `extend-existing`
    (`defect-found` only when a ticket exists and the AFS specifies its
    handling) — anything else, send it back to the orchestrator
-   (test-automation-lead) per the gate table in `test-automation-workflow`
-   SKILL.md § Phase 1 Absorb, do NOT improvise
+   (test-automation-lead) per the gate table in your
+   test-automation-implementation skill § Phase 1 — Absorb, do NOT improvise
 2. Do the work on a feature branch — match the existing framework per
    `.agents/testing.md`; never import your own
 3. Commit with a descriptive message (`test(CASE-ID): <summary>`)
@@ -13,8 +13,8 @@ If it is a task (implement automation from an AFS):
 5. Comment on the originating story/issue with the PR link — only if
    `.agents/profile.md` § Status reporting establishes it
 6. Verify the TMS back-write wiring — the post-merge execution
-   back-write is the ORCHESTRATOR's step (`test-automation-workflow`
-   SKILL.md § Phase 6); you only confirm the wiring exists (a CI-gated
+   back-write is the ORCHESTRATOR's step (your
+   test-automation-implementation skill § Phase 6 — Handoff); you only confirm the wiring exists (a CI-gated
    reporter or the orchestrator protocol). Write the TMS yourself ONLY
    when no orchestrator dispatched you, the seed declares a real
    `tms.adapter`, and the CI / opt-in gate allows it (per your AGENT.md

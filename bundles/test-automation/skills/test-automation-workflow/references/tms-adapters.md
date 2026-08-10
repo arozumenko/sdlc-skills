@@ -267,8 +267,8 @@ host, or an auth redirect log once and continue, never a per-test error,
 never a failed run. And it **validates the base URL** before posting (no
 redirect loop — `redirect count exceeded` repeated per test is the
 classic wrong-base-URL / login-redirect symptom). The full rule lives in
-[`SKILL.md`](../SKILL.md) § Phase 5 — Debug → "TMS / result-reporting
-reporters — gate them".
+[the `test-automation-implementation` skill's `references/reporters.md`](../../test-automation-implementation/references/reporters.md) →
+"TMS / result-reporting reporters — gate them".
 
 ## Writing a new adapter
 

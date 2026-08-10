@@ -157,8 +157,9 @@ function main() {
     }
 
     // Per-bundle skill universe = global catalog + this bundle's localSkills.
-    // `b.skills` (team-wide extras) is global-only by spec; overlay adds may
-    // reference a localSkill.
+    // `b.skills` (team-wide extras) and overlay adds may both reference a
+    // localSkill — the installer resolves extras bundle-locally, so a bundle
+    // can ship a skill installed-but-unrostered (loaded on demand).
     const localSkills = Array.isArray(b.localSkills) ? b.localSkills : [];
     if (b.localSkills !== undefined && !Array.isArray(b.localSkills))
       err(id, "`localSkills` must be an array");
@@ -211,7 +212,7 @@ function main() {
     }
 
     for (const s of b.skills || [])
-      if (!skillIds.has(s)) err(id, `skill "${s}" not in skills.json or skills/`);
+      if (!effectiveSkillIds.has(s)) err(id, `skill "${s}" not in skills.json, skills/, or this bundle's localSkills`);
 
     if (b.instructions && !existsSync(join(dir, b.instructions)))
       err(id, `instructions file missing: ${b.instructions}`);

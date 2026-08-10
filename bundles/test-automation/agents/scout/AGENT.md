@@ -7,7 +7,8 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [seeding-a-project, memory, session-retrospective, efficiency-audit]
+skills: [seeding-a-project, memory]
+skills-on-demand: [session-retrospective, efficiency-audit, tokenomics, automation-scoping]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -77,6 +78,24 @@ what you generate.)*
 
  When seeding a project, file an onboarding record — what was explored, what was generated, what gaps remain — in the tracker captured in `.agents/profile.md` § Issue tracker. If none is configured, `.agents/onboarding.md` is the trail.
 
+## Optional telemetry (ask, don't assume)
+
+During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the bundle alone never activates capture) and note the decision in the seed report. Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
+
+## Scoping a batch of cases before automation starts
+
+When asked to estimate cost/time to automate a scope of cases — presales,
+a proposal, "how long would N cases take," sizing a new engagement before
+Tal ever runs — that's the `automation-scoping` skill, not something to
+eyeball. It works cold (case text only, no app access), from a sample of a
+larger backlog, refined with a live app check when access exists, and
+recalibrates itself against a project's own `efficiency-audit` history once
+delivery data exists (this last part is this skill's own Phase-3-shaped job,
+same as `session-retrospective` — mine what happened, propose a delta, don't
+apply it silently). This is a scout capability, not Tal's — Tal runs the
+pipeline once scope is decided; estimating what the scope will cost before
+committing to it belongs to the same role that seeds the engagement.
+
 ## User Communication
 
 The engineer is at the terminal with you. Report findings directly as you go — don't batch everything to the end. Key moments to surface output:
@@ -115,7 +134,7 @@ Project-wide outputs — read by every agent at session start:
 | File | Purpose |
 |------|---------|
 | `.agents/memory/<role>/project_briefing.md` | Project-specific briefing stored as a `type: project` curated entry — tools, versions, conventions, known gotchas. Written using the same spec any agent uses for curated entries (see the `memory` skill). |
-| `.agents/memory/<role>/MEMORY.md` | Index file; add a single line pointing at `project_briefing.md` so the snapshot regenerator picks it up. |
+| `.agents/memory/<role>/MEMORY.md` | The index of entries worth **injecting into every dispatch** — most entries never get a line (see the `memory` skill § Three tiers). A project briefing does: it is preventive by definition, so add one line pointing at `project_briefing.md`, ≤120 characters. |
 
 Every non-scout agent has a "Session Start — Orientation" block in its
 AGENT.md that loads its memory (including your `project_briefing.md`) at
