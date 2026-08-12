@@ -115,7 +115,7 @@ elif [ -f "$SESSION_PRE_FILE" ]; then
 else
   # No session_id and no session-start snapshot at all -- nothing to
   # retry-match against, one immediate snapshot as last resort.
-  ccusage session --json > "$PRE_FILE" 2>/dev/null \
+  ccusage_session_json > "$PRE_FILE" 2>/dev/null \
     || printf '{}' > "$PRE_FILE"
 fi
 
