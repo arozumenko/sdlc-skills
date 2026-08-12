@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildBatchCost, classify, matchIds, lineMatchesBatch, updateBatchCosts } from './batch-cost.mjs';
+import { buildBatchCost, classify, matchIds, lineMatchesBatch, updateBatchCosts, loadReceipts } from './batch-cost.mjs';
 
 const sub = (label, tokens, { costUsd, activeMin = 1, role = 'test-automation-engineer' } = {}) => ({
   role, label, n: 1,
@@ -115,6 +115,66 @@ test('lineMatchesBatch: matches by slug, receipt id, or branch — and rejects u
   assert.ok(lineMatchesBatch(line('b', [], { branch: 'tests/batch-b1' }), scope));
   assert.ok(lineMatchesBatch(line('c', [], { cases: ['TC-101'] }), scope));
   assert.ok(!lineMatchesBatch(line('d', [sub('implement:OTHER-9', 1)], { branch: 'main' }), scope));
+});
+
+// A workflow dispatch's prompt opens with boilerplate; when the case id sits
+// past the label's 160-char window, the capture's transcript-mined ids (the
+// entry's `cases`) are the fallback — measured at 11.6% of real dispatches.
+test('classify: transcript-mined ids rescue a dispatch whose label missed the id', () => {
+  const ids = ['TC-101', 'TC-102'];
+  // label carries no id; the transcript did
+  assert.deepEqual(classify('stabilize workflow. If your role memory / project briefing …', ids, ['TC-101']),
+    { kind: 'direct', ids: ['TC-101'] });
+  // named overhead stage stays overhead even when its transcript names ids
+  assert.equal(classify('Hardening gate for batch b1', ids, ['TC-101', 'TC-102']).kind, 'overhead');
+  // mined ids outside the receipt never attribute — still receipt-driven
+  assert.equal(classify('stabilize workflow round', ids, ['OTHER-9']).kind, 'overhead');
+  // label match wins over the fallback (no double counting, label is primary)
+  assert.deepEqual(classify('implement:TC-102', ids, ['TC-101']).ids, ['TC-102']);
+});
+
+// Campaigns nest wave receipts at <batch>/<wave>/report.json — a one-level
+// scan silently skipped them (the same under-count efficiency-audit's
+// run-reports.mjs was field-flagged for, twice, before its own fix).
+test('loadReceipts: discovers nested wave receipts; --batch selects a campaign by top slug', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc3-'));
+  const auto = join(repo, '.agents', 'automation');
+  const mk = (rel, receipt) => {
+    const d = join(auto, ...rel.split('/'));
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, 'report.json'), JSON.stringify(receipt));
+  };
+  mk('top10', { batch: 'top10', cases: [{ id: 'TC-1', outcome: 'automated' }] });
+  mk('camp/heads', { batch: 'camp', cases: [{ id: 'TC-2', outcome: 'blocked' }] });
+  mk('camp/wave-01', { batch: 'camp', cases: [{ id: 'TC-3', outcome: 'automated' }] });
+  // non-receipt JSON in the tree is ignored (e.g. _returns receipts)
+  mkdirSync(join(auto, '_returns', 'wf_x'), { recursive: true });
+  writeFileSync(join(auto, '_returns', 'wf_x', 'a1.json'), '{"result":{}}');
+
+  const all = loadReceipts(repo);
+  assert.deepEqual(all.map((r) => r.slug), ['camp/heads', 'camp/wave-01', 'top10']);
+  assert.deepEqual(loadReceipts(repo, { batch: 'camp' }).map((r) => r.slug), ['camp/heads', 'camp/wave-01']);
+  assert.deepEqual(loadReceipts(repo, { batch: 'camp/wave-01' }).map((r) => r.slug), ['camp/wave-01']);
+  assert.deepEqual(loadReceipts(repo, { batch: 'top10' }).map((r) => r.slug), ['top10']);
+});
+
+// A nested wave's path slug never appears in a branch name — the receipt's own
+// `batch` field must also anchor session membership.
+test('lineMatchesBatch: accepts a slug list (nested wave path + receipt batch name)', () => {
+  const l = line('s1', [sub('implement:something', 1)], { branch: 'tests/batch-camp-w1' });
+  assert.ok(!lineMatchesBatch(l, { slug: ['camp/wave-01'], ids: [], branches: [] }));
+  assert.ok(lineMatchesBatch(l, { slug: ['camp/wave-01', 'camp'], ids: [], branches: [] }));
+  // and a line whose only naming surface is a sub-agent's mined cases
+  const l2 = line('s2', [{ ...sub('stabilize workflow …', 1), cases: ['TC-101'] }]);
+  assert.ok(lineMatchesBatch(l2, { slug: 'b1', ids: ['TC-101'], branches: [] }));
+});
+
+// End-to-end: the fallback attributes dollars to the case the label missed.
+test('buildBatchCost: sub-agent `cases` fallback attributes work the label window lost', () => {
+  const stabilize = { ...sub('stabilize workflow. If your role memory …', 40_000, { costUsd: 0.40, activeMin: 4 }), cases: ['TC-101'] };
+  const c = buildBatchCost('b1', RECEIPT, [line('s1', [stabilize], { costUsd: 1.00 })]);
+  assert.equal(c.cases.find((x) => x.id === 'TC-101').direct.costUsd, 0.40);
+  assert.ok(!c.coverage.casesUnattributed.includes('TC-101'));
 });
 
 // The whole file is a pure derivation: same inputs → same output (modulo

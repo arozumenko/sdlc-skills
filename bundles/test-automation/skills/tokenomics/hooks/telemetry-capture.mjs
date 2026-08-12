@@ -279,7 +279,12 @@ export function parseClaudeTranscript(records, { capturePrompts = false, sidecha
     }
   }
   const { tokens, models } = dedupUsage(records);
-  const caseIds = extractCaseIds(branch, ...caseTexts);
+  // firstText is included explicitly: on a SUB-AGENT transcript every record is
+  // sidechain-marked, so promptText() skips them all and caseTexts never sees
+  // the dispatch prompt — the one surface that names the unit's case ids when
+  // the label window missed them. On a parent transcript it duplicates a
+  // caseText; extractCaseIds dedupes.
+  const caseIds = extractCaseIds(branch, firstText, ...caseTexts);
   return { role, branch, firstText, turns, toolCalls, toolErrors, skills, dispatched, prompts, caseIds, tokens, models, ...timeStats(stamps) };
 }
 
@@ -424,10 +429,14 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
     // One record PER DISPATCH (n:1), not a role roll-up: the label + per-file
     // costUsd are what lets batch-cost attribute work to individual cases.
     // Aggregating consumers (team-report byRole) sum records the same either way.
+    // `cases` = ids mined from the dispatch's OWN transcript — batch-cost's
+    // fallback when the label's 160-char window missed the id (ids only, so
+    // this is always on, same rule as the session-level cases[]).
     subagents: subs.map((s) => ({
       role: s.role, label: s.label, n: 1,
       tokens: s.tokens, activeMin: s.activeMin,
       toolCalls: s.toolCalls, toolErrors: s.toolErrors,
+      ...(s.caseIds?.length ? { cases: s.caseIds } : {}),
       ...(s.costUsd != null ? { costUsd: s.costUsd } : {}),
     })),
     skills: [...p.skills].sort(), dispatches: p.dispatched.length,

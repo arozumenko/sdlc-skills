@@ -31,7 +31,7 @@
 //
 // STDLIB ONLY. Read-only except the cost.json writes.
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadLines, dedupLines } from './team-report.mjs';
 
@@ -44,18 +44,28 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 export function loadReceipts(repo, { batch } = {}) {
   const root = join(repo, '.agents', 'automation');
   if (!existsSync(root)) return [];
+  // Walk the WHOLE tree: campaigns nest wave receipts at
+  // <batch>/<wave>/report.json (the campaign workflow's own reportDir), so a
+  // one-level scan silently skips them — same fix efficiency-audit's
+  // run-reports.mjs carries. slug = the receipt dir's automation-root-relative
+  // path ('approved-next50/wave-01-…'), so `--batch` selects a whole campaign
+  // by its top slug or one wave by full path.
   const out = [];
-  let slugs;
-  try { slugs = readdirSync(root); } catch { return []; }
-  for (const slug of slugs) {
-    if (batch && slug !== batch) continue;
-    const path = join(root, slug, 'report.json');
-    if (!existsSync(path)) continue;
-    const receipt = safeParse(readFileSync(path, 'utf8'));
-    if (!receipt || !Array.isArray(receipt.cases)) continue;
-    out.push({ slug, dir: join(root, slug), receipt });
-  }
-  return out;
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name === 'report.json') {
+        const receipt = safeParse(readFileSync(p, 'utf8'));
+        if (!receipt || !Array.isArray(receipt.cases)) continue;
+        out.push({ slug: relative(root, dir).split(sep).join('/'), dir, receipt });
+      }
+    }
+  };
+  walk(root);
+  return batch ? out.filter(({ slug }) => slug === batch || slug.startsWith(`${batch}/`)) : out;
 }
 
 // --- classification ----------------------------------------------------------
@@ -72,19 +82,29 @@ export function matchIds(label, ids) {
   return ids.filter((id) => id && l.includes(String(id).toLowerCase()));
 }
 
-export function classify(label, ids) {
+export function classify(label, ids, declared = []) {
   if (OVERHEAD_STAGE.test(String(label || ''))) return { kind: 'overhead', ids: [] };
   const matched = matchIds(label, ids);
   if (matched.length) return { kind: 'direct', ids: matched };
+  // Fallback: ids the capture mined from the dispatch's own transcript (the
+  // ledger entry's `cases`). Rescues dispatches whose case id sits past the
+  // label's 160-char window — measured at 11.6% of 2,493 real workflow
+  // dispatches (the "stabilize workflow…" prompt shape). Still receipt-driven:
+  // only ids the receipt names count, and named overhead stages never get here.
+  const fromDeclared = declared.filter((d) => d && ids.some((id) => String(id).toLowerCase() === String(d).toLowerCase()));
+  if (fromDeclared.length) return { kind: 'direct', ids: fromDeclared };
   return { kind: 'overhead', ids: [] };
 }
 
 // --- the join ----------------------------------------------------------------
-/** Does this ledger line belong to this batch at all? */
+/** Does this ledger line belong to this batch at all? `slug` may be a string
+ * or a list (a nested wave passes its path slug + the receipt's batch name). */
 export function lineMatchesBatch(line, { slug, ids, branches }) {
-  const texts = [line.branch || '', ...(line.cases || []), ...(line.subagents || []).map((s) => s.label || '')]
+  const texts = [line.branch || '', ...(line.cases || []),
+    ...(line.subagents || []).map((s) => s.label || ''),
+    ...(line.subagents || []).flatMap((s) => s.cases || [])]
     .join('\n').toLowerCase();
-  if (slug && texts.includes(String(slug).toLowerCase())) return true;
+  for (const s of [].concat(slug || [])) if (s && texts.includes(String(s).toLowerCase())) return true;
   for (const id of ids) if (id && texts.includes(String(id).toLowerCase())) return true;
   for (const b of branches) if (b && texts.includes(String(b).toLowerCase())) return true;
   return false;
@@ -116,7 +136,7 @@ const rounded = (s) => s && { avg: Math.round(s.avg), median: Math.round(s.media
 export function buildBatchCost(slug, receipt, allLines) {
   const ids = receipt.cases.map((c) => c.id).filter(Boolean);
   const branches = [receipt.integration_branch, ...receipt.cases.map((c) => c.branch)].filter(Boolean);
-  const lines = dedupLines(allLines).filter((l) => lineMatchesBatch(l, { slug, ids, branches }));
+  const lines = dedupLines(allLines).filter((l) => lineMatchesBatch(l, { slug: [slug, receipt.batch].filter(Boolean), ids, branches }));
 
   const perCase = new Map(ids.map((id) => [id, { ...emptyBucket(), fixRounds: 0 }]));
   const overhead = { lead: emptyBucket(), stage: emptyBucket() };
@@ -150,7 +170,7 @@ export function buildBatchCost(slug, receipt, allLines) {
       totals.dispatches++;
       roleAdd(s.role || 'unknown', { costUsd: typeof s.costUsd === 'number' ? s.costUsd : null, tokens: subTokens(s), activeMin: num(s.activeMin) });
       if (typeof s.costUsd === 'number') subCost += s.costUsd;
-      const { kind, ids: matched } = classify(s.label, ids);
+      const { kind, ids: matched } = classify(s.label, ids, s.cases || []);
       const measure = { costUsd: typeof s.costUsd === 'number' ? s.costUsd : null, tokens: subTokens(s), activeMin: num(s.activeMin) };
       if (kind === 'direct') {
         if (typeof s.costUsd === 'number') pricedDirect = true;

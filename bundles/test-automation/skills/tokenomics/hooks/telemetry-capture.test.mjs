@@ -122,6 +122,35 @@ test('captureClaudeSession: one line — parent tokens, per-dispatch sub-agent r
   assert.deepEqual(line.cases, ['TC-101'], 'case ids mined from prompt + dispatch label, ungated');
 });
 
+// A workflow dispatch has no description; its prompt opens with boilerplate and
+// the case id can sit past the 160-char label window. The per-dispatch record
+// must still carry the ids mined from the dispatch's own transcript (`cases`),
+// or batch-cost mislabels the work as batch overhead.
+test('captureClaudeSession: sub-agent record carries transcript-mined case ids', () => {
+  const repo = tmp(); const proj = tmp();
+  const transcript = writeClaudeFixture(proj, 'sess-ids', { withSub: false });
+  const subDir = join(proj, 'sess-ids', 'subagents');
+  mkdirSync(subDir, { recursive: true });
+  // No description in meta (workflow dispatch); prompt is sidechain-marked with
+  // the id beyond where the label slice ends.
+  writeFileSync(join(subDir, 'agent-wf1.meta.json'), JSON.stringify({ agentType: 'test-automation-engineer' }));
+  writeFileSync(join(subDir, 'agent-wf1.jsonl'), jsonl([
+    {
+      type: 'user', isSidechain: true, timestamp: '2026-07-30T10:05:00Z',
+      message: { role: 'user', content: `stabilize workflow. ${'x'.repeat(200)} target case TC-909 on branch tests/909` },
+    },
+    {
+      type: 'assistant', timestamp: '2026-07-30T10:06:00Z',
+      message: { id: 'w1', model: 'claude-sonnet-5', usage: { input_tokens: 10, output_tokens: 5 }, content: [] },
+    },
+  ]));
+  const line = captureClaudeSession(repo, transcript, 'sess-ids', { config: CFG, user: 'tester' });
+  const wf = line.subagents.find((s) => s.role === 'test-automation-engineer');
+  assert.deepEqual(wf.cases, ['TC-909']);
+  assert.ok(!wf.label.includes('TC-909'), 'the label window itself missed the id — that is the point');
+  assert.ok(line.cases.includes('TC-909'), 'session-level cases picks it up too');
+});
+
 test('captureClaudeSession: empty transcript yields no line', () => {
   const repo = tmp(); const proj = tmp();
   mkdirSync(proj, { recursive: true });

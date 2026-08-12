@@ -114,15 +114,23 @@ export function isoWeek(iso) {
 function findReports(target) {
   if (!target || !existsSync(target)) return [];
   if (statSync(target).isFile()) return [target];
-  const direct = join(target, 'report.json');
-  if (existsSync(direct)) return [direct];
+  // Walk the WHOLE tree under the target: campaigns nest wave receipts in
+  // sub-folders (.agents/automation/<batch>/<wave>/report.json — the campaign
+  // workflow's own reportDir), so a one-level scan silently under-counts any
+  // campaign that uses them. Same fix efficiency-audit's run-reports.mjs
+  // carries (field-flagged twice, 2026-08-04 and 2026-08-06, before landing
+  // there). Dirent.isDirectory() does not follow symlinks, so no link cycles.
   const out = [];
-  let names;
-  try { names = readdirSync(target).sort(); } catch { return out; }
-  for (const name of names) {
-    const p = join(target, name, 'report.json');
-    if (existsSync(p)) out.push(p);
-  }
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name === 'report.json') out.push(p);
+    }
+  };
+  walk(target);
   return out;
 }
 

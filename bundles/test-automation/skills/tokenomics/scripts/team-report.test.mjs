@@ -98,6 +98,22 @@ test('loadCases: latest receipt wins per case, delivered = automated', () => {
   assert.deepEqual(cases.outcomes, { automated: 2, 'not-started': 1 });
 });
 
+// Campaign waves live at <batch>/<wave>/report.json — the receipt walk must
+// find them, or every campaign silently under-counts (same fix run-reports.mjs
+// already carries in efficiency-audit).
+test('loadCases: discovers nested campaign-wave receipts', () => {
+  const repo = tmp();
+  const wave = join(repo, '.agents', 'automation', 'camp', 'wave-01');
+  mkdirSync(wave, { recursive: true });
+  writeFileSync(join(wave, 'report.json'), JSON.stringify({
+    batch: 'camp', cases: [{ id: 'W-1', outcome: 'automated' }, { id: 'W-2', outcome: 'blocked' }],
+  }));
+  const cases = loadCases([join(repo, '.agents', 'automation')]);
+  assert.equal(cases.examined, 2);
+  assert.equal(cases.delivered, 1);
+  assert.equal(cases.reports, 1);
+});
+
 test('buildReport: totals, honest dollars, role grain includes sub-agent roles', () => {
   const repo = seedRepo();
   const lines = dedupLines(loadLines([repo]));
