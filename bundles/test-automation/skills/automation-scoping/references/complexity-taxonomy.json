@@ -1,6 +1,6 @@
 {
   "$schema_note": "Machine-readable source of truth for score-cases.mjs / calibrate.mjs. references/complexity-taxonomy.md explains the reasoning behind these numbers in prose — keep the two in sync by hand when this file changes.",
-  "version": "0.4.0",
+  "version": "0.6.4",
   "unit": "active_minutes",
   "calibrated_from": [
     {
@@ -32,19 +32,47 @@
       "note": "v0.4.0: re-ran seed-project-1 AND seed-project-2 through build-training-set.mjs after fixing 3 tool bugs (cluster cost double-counted; ~24% of seed-project-1's cases silently mis-priced via a missing-branch-field fallback; case snapshots in a nested campaign folder never found, corrupting step counts for ~half of seed-project-1's rows). Every multiplier above reflects the RE-RUN, not the original v0.1.0-v0.3.0 numbers. Full bug-hunt narrative: calibration-log.md's v0.4.0 entry — read it before trusting any pre-v0.4.0 revision_note's specific numbers at face value."
     }
   ],
-
   "base_minutes_by_step_bucket": [
-    { "max_steps": 5, "base_min": 22 },
-    { "max_steps": 10, "base_min": 42 },
-    { "max_steps": 999999, "base_min": 68 }
+    {
+      "max_steps": 5,
+      "base_min": 13
+    },
+    {
+      "max_steps": 10,
+      "base_min": 25
+    },
+    {
+      "max_steps": 999999,
+      "base_min": 41
+    }
   ],
-  "base_minutes_note": "Step count alone is a WEAK predictor (measured r≈0.37-0.41 against cost/time on seed-project-1's initial n=19 sample) — this table sets the floor, interaction_tiers do most of the work. A case's own step table/bullet count only; don't count preconditions or expected-result columns as extra steps. Not yet recomputed against the wider n=80/n=38 calibration sets — a good candidate for the next revision.",
-
+  "base_minutes_note": "RECALIBRATED in v0.6.0 (was 22/42/68). These minutes are PURE CASE-BUILD work — the implement+review dispatches on the case's own branch — NOT fully-loaded pipeline cost. That ambiguity was the single largest error in v0.5.0: the old table happened to land near fully-loaded cost by accident, making every per-case number read ~1.7x hot against the layer it claimed to measure. The middle bucket (25 min) is set directly from seed-project-1's measured pure-case-work figure of 22.5 min/case examined / 25.0 min/case delivered across 60 cases; the outer buckets keep the old table's shape scaled to match. Cross-checked on a 26-case blind holdout where the rescaled table lands at 0.99x actual branch-attributed cost (vs 1.66x before). Step count alone remains a WEAK predictor — measured r≈0.37-0.41 on seed-project-1's n=19, and only r≈+0.05 on the n=26 holdout — so this table is a floor, not a driver. Add fully_loaded_multiplier for pipeline-level cost.",
+  "fully_loaded_multiplier": {
+    "value": 1.79,
+    "note": "Per-case build cost -> fully-loaded pipeline cost. Measured on seed-project-1's 60-case campaign: case-branch work $5.94/case, + batch-trunk overhead (N=3 gate, merge-back, closure records, TMS write) $2.95, + orchestrator share (intake, dispatch, routing) $1.73 = $10.62/case fully loaded. base x tier x novelty estimates the FIRST layer only; the report must state which it is quoting and show both. This multiplier assumes batched delivery — single-case operation pushes the orchestration layer far higher (see batch_shape).",
+    "layers": {
+      "case_branch_pct": 56,
+      "batch_trunk_pct": 28,
+      "orchestrator_pct": 16
+    },
+    "source": "seed-project-1 2026-08-04 per-case efficiency audit, n=60"
+  },
   "interaction_tiers": [
     {
       "id": "async-realtime",
       "label": "Async / realtime (websocket, AI response wait, polling, live notification)",
-      "keywords": ["chat", "websocket", "predict", "streaming", "ai response", "notification arrives", "polling", "real-time", "realtime", "async"],
+      "keywords": [
+        "chat",
+        "websocket",
+        "predict",
+        "streaming",
+        "ai response",
+        "notification arrives",
+        "polling",
+        "real-time",
+        "realtime",
+        "async"
+      ],
       "multiplier": 0.87,
       "priority": 1,
       "revision_note": "v0.1.0's 1.45 (analogy, no evidence) -> v0.2.0's 1.05 -> v0.3.0's 0.85 (both built on seed-project-1 numbers later found to be wrong — see v0.4.0's calibration-log entry: a tool bug in build-training-set.mjs silently mis-priced ~40% of seed-project-1's cases). v0.4.0 RE-RAN the join after fixing that bug and landed at implied 0.87x pooled across all three projects (n=59) — a +2.4% delta from 0.85, i.e. the earlier value survives, but now for the RIGHT reason (real corrected data) rather than by partial cancellation of two compounding bugs. Don't read the stability across v0.2.0->v0.4.0 as evidence of robustness — most of that path was built on bad inputs; only the v0.4.0 number should be trusted."
@@ -52,7 +80,21 @@
     {
       "id": "rich-widget",
       "label": "Rich/complex widget (canvas, node-graph, drag-drop, code/rich-text editor, file upload)",
-      "keywords": ["drag", "canvas", "node", "edge wiring", "graph", "flow editor", "yaml editor", "code editor", "rich text", "mermaid", "upload", "drag-and-drop", "drag and drop"],
+      "keywords": [
+        "drag",
+        "canvas",
+        "node",
+        "edge wiring",
+        "graph",
+        "flow editor",
+        "yaml editor",
+        "code editor",
+        "rich text",
+        "mermaid",
+        "upload",
+        "drag-and-drop",
+        "drag and drop"
+      ],
       "multiplier": 1.42,
       "priority": 2,
       "revision_note": "REVISED DOWN in v0.4.0 from 1.75 to 1.42 (-18.9% implied delta) after fixing the build-training-set.mjs bugs described in calibration-log.md's v0.4.0 entry — this tier's n grew from 12 to 17 as previously-missed case snapshots (a nested-campaign-folder bug) were found and correctly classified/step-counted. Still mostly one project's evidence (seed-project-1), still a real premium over crud-form, just a smaller one than v0.2.0/v0.3.0 claimed."
@@ -60,7 +102,15 @@
     {
       "id": "multi-step-flow",
       "label": "Multi-step flow / wizard / guided tour / multi-page navigation",
-      "keywords": ["wizard", "tour", "walkthrough", "step-by-step", "onboarding", "multi-page", "multi-step"],
+      "keywords": [
+        "wizard",
+        "tour",
+        "walkthrough",
+        "step-by-step",
+        "onboarding",
+        "multi-page",
+        "multi-step"
+      ],
       "multiplier": 1.15,
       "priority": 3,
       "revision_note": "STILL UNCHANGED, still zero direct evidence as of v0.3.0 — zero matching cases across all three calibration projects now. Purely a structural guess (between crud-form and rich-widget). Highest-priority tier to get real data for next."
@@ -68,45 +118,319 @@
     {
       "id": "crud-form",
       "label": "CRUD / form / table (create, edit, delete, filter, paginate)",
-      "keywords": ["create", "edit", "delete", "submit", "validation", "checkbox", "filter", "table", "list view", "pagination", "form", "dropdown", "toggle"],
+      "keywords": [
+        "create",
+        "edit",
+        "delete",
+        "submit",
+        "validation",
+        "checkbox",
+        "filter",
+        "table",
+        "list view",
+        "pagination",
+        "form",
+        "dropdown",
+        "toggle"
+      ],
       "multiplier": 1.0,
       "priority": 4
     },
     {
       "id": "static-display",
       "label": "Static / read-only display (layout, presence, page load)",
-      "keywords": ["loads", "displays", "layout", "renders correctly", "shows", "visible", "page load"],
+      "keywords": [
+        "loads",
+        "displays",
+        "layout",
+        "renders correctly",
+        "shows",
+        "visible",
+        "page load"
+      ],
       "multiplier": 0.87,
       "priority": 5,
       "revision_note": "UNCHANGED in v0.2.0/v0.3.0 despite a contradicting signal from seed-project-2 alone (n=3, still the ONLY source of data for this tier — that hasn't changed). v0.4.0's bug fixes moved the pooled implied value to 0.87x (+2.4%, no longer a meaningful contradiction) — nudged from 0.85 to 0.87 to match. Still n=3, still one project, still the least-confirmed non-zero-evidence tier after multi-step-flow."
     }
   ],
   "interaction_tiers_note": "Matching is priority-order, first hit wins (lower priority number = checked first) — a case that mentions both a form AND a canvas is classified by the canvas, because the pricier interaction dominated cost in every seed-project case that mixed patterns. Default tier when nothing matches: crud-form (1.0).",
-
+  "size_scale": {
+    "_note": "The SECOND currency (see references/sizing-rubric.md). base x tier x novelty prices what the AGENT burns; this prices the same work in conventional-engineer effort, so a scope can be quoted, tracked and compared against a manual baseline. Both are reported — neither replaces the other.",
+    "unit": "service_points",
+    "hours_per_point": 1,
+    "points": {
+      "XS": 1,
+      "S": 2,
+      "M": 4,
+      "L": 8,
+      "XL": 16
+    },
+    "source": "Client POC tracker 'SP Reference' sheet (UI test automation, Playwright/qavajs engagement, 2026-06/07). 1 SP = 1 hour of conventional (non-AI) engineer effort; the XS=1/S=2/M=4/L=8/XL=16 doubling scale and its worked anchors are that tracker's, adopted unchanged so estimates produced here drop straight into it.",
+    "blended_rate_note": "SP -> money needs an engagement blended rate ($/hr) which this file deliberately does NOT default: it is commercial, varies per engagement, and a stale baked-in rate silently misquotes. Observed for reference: $45/hr (the automation tracker above), $35/hr (a manual-QA tracker from the same programme). Pass --blended-rate to enable the conventional-cost column; without it the report quotes SP only."
+  },
+  "size_rubric": {
+    "_note": "Derives an XS/S/M/L/XL size from drivers the verdict pass already collects. A reader's explicit verdict.size always wins — this is the fallback, same discipline as keyword-vs-verdict tier classification. Reasoning, worked examples and known misfits: references/sizing-rubric.md.",
+    "drivers": {
+      "surfaces": [
+        {
+          "max": 1,
+          "points": 0
+        },
+        {
+          "max": 2,
+          "points": 1
+        },
+        {
+          "max": 4,
+          "points": 2
+        },
+        {
+          "max": 999999,
+          "points": 3
+        }
+      ],
+      "steps": [
+        {
+          "max": 5,
+          "points": 0
+        },
+        {
+          "max": 10,
+          "points": 1
+        },
+        {
+          "max": 999999,
+          "points": 2
+        }
+      ],
+      "new_abstractions": [
+        {
+          "max": 0,
+          "points": 0
+        },
+        {
+          "max": 2,
+          "points": 1
+        },
+        {
+          "max": 999999,
+          "points": 2
+        }
+      ]
+    },
+    "drivers_note": "WEIGHTS INVERTED in v0.6.0 on holdout evidence. 'surfaces' (distinct screens/endpoints/views the case touches) is now the HEAVIEST driver at up to 3 points: on a 26-case blind holdout it was the strongest estimate-time predictor of actual cost found anywhere in this model (Pearson r=+0.522) — stronger than the composite estimate itself (+0.166) and stronger than every other knowable-in-advance signal. 'new_abstractions' (page objects / service clients / screen objects that do NOT yet exist) was the heaviest driver in v0.5.0 on the strength of the source tracker's hand-assigned sizes; measured against real cost it scores only r=+0.169, so it is demoted to a max of 2 and is now a refinement, not a core driver. 'steps' is demoted to max 2 (r≈+0.05 on the same holdout) — it is a floor, not a driver. Portability was a second reason to prefer surfaces: 'distinct screen or endpoint' means something on every stack, while 'page object' is a UI-web-specific artifact that does not transfer to API/mobile/perf scopes. Both surfaces and new_abstractions are OPTIONAL verdict fields: when absent they score 0 and the size is marked 'derived-partial', which systematically UNDER-sizes — never quote a partial size without saying so.",
+    "expensive_tier_bonus": {
+      "min_multiplier": 1.4,
+      "points": 1,
+      "note": "Only tiers at or above this multiplier (rich-widget in the shipped default) add a point. multi-step-flow deliberately does NOT: multi-page-ness is already counted by the 'surfaces' driver, and double-counting it would inflate every wizard case."
+    },
+    "size_by_total_points": [
+      {
+        "max_points": 1,
+        "size": "S"
+      },
+      {
+        "max_points": 3,
+        "size": "M"
+      },
+      {
+        "max_points": 6,
+        "size": "L"
+      },
+      {
+        "max_points": 999999,
+        "size": "XL"
+      }
+    ],
+    "split_recommended_note": "REMOVED in v0.6.1: split_recommended used to force the case to XL. It no longer changes the size at all. 'Too big to estimate' is not the same as 'big' — a case bundling three unrelated checks is MESSY, not expensive, and splitting it yields three small cases rather than one huge one. Measured on a 26-case blind holdout, split-flagged cases came in at a median 0.46x their estimate while unflagged cases came in at 0.79x, i.e. forcing XL was making an already-high estimate roughly twice as wrong. The flag now marks the row unquotable and widens its band; the size derives from the drivers like any other case. n=8: directional, not a calibration.",
+    "xs_note": "XS is NEVER derived for a test case. It is the maintenance/foundation scale (locator fix, assertion update, extending an existing abstraction by 1-2 actions) and only ever arrives via an explicit verdict.size or a foundation-catalog item."
+  },
   "novelty_multiplier": {
     "novel_surface_no_existing_coverage": 1.45,
     "established_surface": 1.0,
     "unknown_no_app_access": 1.0,
     "note": "Cold (Mode 1/2, no app access) always uses 'unknown' = 1.0 — don't guess novelty blind, widen the confidence band instead. Mode 3 (app-informed) is what resolves this by checking whether the surface already has page-object/API-client/testid coverage."
   },
-
+  "risk_flags": {
+    "_note": "Band-wideners, NOT multipliers — same discipline as quality_flags. A case carrying any of these keeps its point estimate and is priced at the widest band regardless of calibration state, and the report names it as a top risk. Added in v0.6.0 because the single most expensive case in EACH of two independent blind-holdout batches was driven by a factor with no term anywhere in base x tier x novelty.",
+    "nondeterministic-oracle": {
+      "definition": "The case's central assertion is not deterministically checkable as written — it depends on a model/LLM choosing to do something, on generated content matching an unspecified shape, or names no concrete string/field/schema to assert against.",
+      "evidence": "ELITEA-1951 ($26.52, most expensive in an 11-case holdout batch): 'the parent model must choose to call the sub-agent, and the sub-agent must choose to call the tool, so a healthy app can fail and a broken one can pass.' ELITEA-2045 ($18.18, most expensive in its 55-case campaign window): 'non-deterministic oracle + live model credentials; the input payload is never specified.' Both were correctly identified by blind readers as the priciest case in their set; both were then priced BELOW baseline by the formula, because both wait on a model and async-realtime carries 0.87."
+    },
+    "external-dependency": {
+      "definition": "The case needs a system outside the app under test that the case text assumes into existence — a credentialed third-party service, an MCP/tool server, a real API token, a second tenant or user session.",
+      "evidence": "Same two cases, plus ELITEA-1976 (needs a second authenticated project member that no step provisions) and ELITEA-1979 (gated on a real GitHub PAT as a CI secret)."
+    },
+    "low-confidence-verdict": {
+      "definition": "Set automatically when the reader's own verdict confidence is 'low' — the reader is telling you the estimate for this line is unreliable.",
+      "evidence": "Both priciest holdout cases were rated low confidence by their readers and flagged split_recommended. In v0.5.0 both signals rode along as decoration and moved nothing."
+    },
+    "not_a_multiplier_because": "n=2 clear anecdotes across two batches is a real signal and not a measured premium. Inventing a multiplier from it is exactly the guessed-from-first-principles number this taxonomy exists to avoid. It is the #1 candidate factor for the next calibration that has training rows carrying these flags."
+  },
+  "clustering": {
+    "_note": "A SCOPE-level assumption the report must state, never a per-case multiplier. Clustering is a delivery-time choice the lead makes AFTER the estimate exists, so a per-case estimate structurally cannot see it — but it is the largest single source of per-case error measured so far.",
+    "measured_effect": "Solo cases averaged $12.36, clustered cases $8.32 on seed-project-1 (corr(clusterSize, cost) = -0.402, holding across tiers and step counts) — roughly 1.5x. On a 26-case blind holdout the estimate ran 1.30x hot against solo cases but 2.84x hot against clustered ones, i.e. clustering accounted for a ~2.2x error swing.",
+    "confound_unresolved": "Cases that get clustered are CHOSEN because they look similar/related, so the discount may be selection rather than causation. Still not in the formula for that reason.",
+    "report_requirement": "State the assumed delivery shape: 'assumes cases delivered in clusters of ~N; solo delivery prices materially higher per case on measured data.' A scope of near-identical sibling cases will cluster and should be flagged as likely to come in under a per-case estimate."
+  },
+  "batch_shape": {
+    "_note": "REWRITTEN in v0.6.0. The v0.5.0 story was 'batched vs single-case, +87%, batch by default' and implied bigger is better. Four audits now show dispatch MECHANISM matters at least as much as size, and that the largest batch was not the cheapest.",
+    "measured": [
+      {
+        "mode": "single-case (batch of 1)",
+        "n_cases": 44,
+        "usd_per_delivered": 22.1,
+        "delivery_rate": 0.8,
+        "orchestration_tax_pct": 22.2
+      },
+      {
+        "mode": "single-case (batch of 1)",
+        "n_cases": 10,
+        "usd_per_delivered": 21.59,
+        "delivery_rate": 0.9,
+        "orchestration_tax_pct": 27.9
+      },
+      {
+        "mode": "batched, 10-11 cases",
+        "n_cases": 21,
+        "usd_per_delivered": 9.35,
+        "delivery_rate": 1.0,
+        "orchestration_tax_pct": 11.1
+      },
+      {
+        "mode": "batched, 11 cases",
+        "n_cases": 11,
+        "usd_per_delivered": 10.76,
+        "delivery_rate": 1.0,
+        "orchestration_tax_pct": 11.1
+      },
+      {
+        "mode": "batched, 13 cases, sequential dispatch",
+        "n_cases": 13,
+        "usd_per_delivered": 7.03,
+        "delivery_rate": 0.92,
+        "orchestration_tax_pct": 16.1
+      },
+      {
+        "mode": "batched, 39 cases",
+        "n_cases": 39,
+        "usd_per_delivered": 13.36,
+        "delivery_rate": 0.85,
+        "orchestration_tax_pct": null
+      },
+      {
+        "mode": "campaign, 55 cases in 7 waves, Workflow tool",
+        "n_cases": 55,
+        "usd_per_delivered": 11.44,
+        "delivery_rate": 0.91,
+        "orchestration_tax_pct": 12.9
+      },
+      {
+        "mode": "batched, 14 cases (lean repo)",
+        "n_cases": 14,
+        "usd_per_delivered": 9.46,
+        "delivery_rate": 1.0,
+        "orchestration_tax_pct": 21.7
+      },
+      {
+        "mode": "single-case, batch of one (lean repo)",
+        "n_cases": 1,
+        "usd_per_delivered": 5.41,
+        "delivery_rate": 1.0,
+        "orchestration_tax_pct": null
+      }
+    ],
+    "reading": "Batching roughly halves per-case cost against single-case operation — that finding is robust across four audits. But the cheapest run was a 13-case SEQUENTIAL batch ($7.03), while a 39-case batch ($13.36) and a 55-case Workflow campaign ($11.44) both cost more. Do not model this as 'bigger batch = cheaper'. State the assumed batch size AND dispatch mechanism; treat anything above ~15 cases in one batch as unvalidated rather than better. The 39-case batch's own audit attributes its cost to more individual gate/merge passes plus 6 blocked cases that burned full analyst time before landing.",
+    "blocked_case_premium": 1.85,
+    "blocked_case_note": "A blocked case costs ~1.85x the median delivered one — it burns the full analyse+build+review+gate loop and then does not land. This is why the report quotes both $/case-examined and $/spec-delivered and states the assumed delivery rate (measured 80-100%).",
+    "orchestration_tax_note": "Observed 11.1-27.9% across audits. A 14-case wave measured 21.7% on 2026-08-12 — ABOVE the 11-16% earlier revisions implied for batched work. Treat 'batched keeps the tax near 11%' as the best case, not the expectation.",
+    "single_case_premium_caveat": "THE SINGLE-CASE PREMIUM IS NOT UNIVERSAL (v0.6.4). The $19-22/delivered single-case figures come from ONE context-heavy repo. On a lean fork measured 2026-08-12, a genuine batch-of-one delivered at $5.41 — CHEAPER than that project's own 14-case wave average of $9.46/case. The premium is a function of how much context each fresh session must re-read (see project_rate.what_actually_drives_it), so it scales with the project's seed-doc weight, not with batching per se. On a lean repo the orchestration tax a batch amortizes is small enough that batching buys little. Do not quote +87% or 2.8x as a general law."
+  },
   "rework_risk_note": "Rework (extra fix/review rounds) correlated with cost at r≈0.48 on the seed project but is NOT applied as a mean multiplier here — it's a tail-risk, not a typical-case cost, and folding it into every estimate would systematically overstate the median case. It widens the confidence interval instead (see calibration-methodology.md § Why rework isn't a multiplier) and should be called out as a named risk in the scoping report for any case flagged novel-surface or known-defect-area.",
-
   "default_dollar_per_minute": {
     "value": 0.248,
     "as_of": "2026-08-05",
     "source": "seed-project-1, n=80 cases, claude-sonnet-5 pricing at that date",
     "caveat": "This is a CROSS-PROJECT FALLBACK ONLY, and it is a function of model pricing + this pipeline's token efficiency at one point in time — both drift, and vary project to project even at the same moment. Measured evidence of that variance: seed-project-2, priced the same week, came out at $0.160/active-min — 35% lower, same model family, different stack/pipeline. Always prefer a live rate: run the efficiency-audit skill on the target project (`total_cost / total_active_minutes` from its rollup) and pass it via --rate. Recompute this fallback whenever the bundle's default model changes."
   },
-
   "confidence_bands": {
-    "cold_no_history": { "low_mult": 0.5, "high_mult": 2.0, "label": "ROM (rough order of magnitude) — no project history" },
-    "bucket_n_lt_5": { "low_mult": 0.65, "high_mult": 1.6, "label": "budgetary — thin sample in this tier" },
-    "bucket_n_ge_5": { "low_mult": 0.8, "high_mult": 1.3, "label": "calibrated — adequate sample in this tier" },
-    "empirical": { "label": "uses bucket_stats mean ± 1 stdev directly, no fixed multiplier" }
+    "cold_no_history": {
+      "low_mult": 0.5,
+      "high_mult": 2.0,
+      "label": "ROM (rough order of magnitude) — no project history"
+    },
+    "skewed_high": {
+      "low_mult": 0.8,
+      "high_mult": 3.0,
+      "label": "skewed high — flagged as likely to overrun",
+      "applies_to": [
+        "low-confidence-verdict",
+        "nondeterministic-oracle",
+        "external-dependency"
+      ],
+      "note": "ASYMMETRIC on purpose (v0.6.1). A symmetric band says 'could be half, could be double, equally likely'. Measured on a 26-case blind holdout, cases the reader rated low confidence came in at a median 1.59x their estimate while everything else came in at 0.73x — they overrun, they do not undershoot. Same point estimate, but the uncertainty now points the way it actually goes. In practice the band is the UNION of every applicable band, so on a cold estimate the low end still comes from cold_no_history (0.5x — with no project history a case genuinely can come in cheaper); what this adds is UPSIDE REACH. On a calibrated project the effect is starker, because the base band is narrow and this one is not. n=4 for low-confidence, n=2 for the oracle/dependency flags: directional, not a calibration."
+    },
+    "skewed_low": {
+      "low_mult": 0.4,
+      "high_mult": 1.2,
+      "label": "skewed low — splitting will probably reduce this",
+      "applies_to": [
+        "split-recommended"
+      ],
+      "note": "The mirror of skewed_high, and the reason split candidates are NOT excluded from the total (v0.6.2 correction). Measured, split-flagged cases came in at a median 0.46x their estimate vs 0.79x unflagged: a case that bundles three unrelated checks splits into three SMALL cases, so the pre-split estimate over-states it. The v0.6.1 treatment — dropping those rows from the quotable total — was worse than the problem it solved: the work is real, so excluding it produces a systematic UNDER-quote, and a reader who needs a number will either drop the cases or invent one. Zero is the only value known to be wrong. Keep the case in the total, skew its band down, and say plainly that splitting will refine it downward. n=8: directional, not a calibration."
+    },
+    "bucket_n_lt_5": {
+      "low_mult": 0.65,
+      "high_mult": 1.6,
+      "label": "budgetary — thin sample in this tier"
+    },
+    "bucket_n_ge_5": {
+      "low_mult": 0.8,
+      "high_mult": 1.3,
+      "label": "calibrated — adequate sample in this tier"
+    },
+    "empirical": {
+      "label": "uses bucket_stats mean ± 1 stdev directly, no fixed multiplier"
+    }
   },
-
   "bucket_stats": {
     "_note": "Populated per-project by calibrate.mjs from real .agents/efficiency/ + .agents/automation/ data, written to the PROJECT's own .agents/estimation/complexity-taxonomy.json copy (never back into this bundled file). Empty in the shipped default — score-cases.mjs falls back to base_minutes x multiplier when a tier has no entry here."
+  },
+  "project_rate": {
+    "_note": "THE SINGLE LARGEST SOURCE OF ERROR IN THIS MODEL (v0.6.4). $/active-min varies 2.7x across the four projects measured so far. Everything base x tier x novelty computes is in MINUTES; the rate turns minutes into money, so getting it wrong scales the whole estimate. On a 15-case holdout, using the bundled default instead of the project's own measured rate turned a 0.79x result into a 2.01x overshoot — the model was fine, the rate was not.",
+    "observed": [
+      {
+        "usd_per_active_min": 0.097,
+        "project": "lean TS/Playwright fork, 15 cases, fresh repo",
+        "measured": "2026-08-12, ccusage-metered"
+      },
+      {
+        "usd_per_active_min": 0.16,
+        "project": "seed-project-2, TS/Playwright, different codebase",
+        "measured": "2026-08-05"
+      },
+      {
+        "usd_per_active_min": 0.248,
+        "project": "seed-project-1 — THE BUNDLED DEFAULT",
+        "measured": "2026-08-05"
+      },
+      {
+        "usd_per_active_min": 0.266,
+        "project": "seed-project-1, 19 single-case runs",
+        "measured": "2026-08-05"
+      }
+    ],
+    "spread": "2.7x",
+    "what_actually_drives_it": "Cache read is 97-98% of every token billed on these pipelines, so cost tracks CONTEXT SIZE x TURN COUNT, not reasoning. seed-project-1's own week-audit names the mechanism: its CLAUDE.md imports eight .agents/* files in full into every session AND every dispatched sub-agent — 'the largest single fixed cost per turn in the system'. The cheap project is the LEAN one; the expensive one is the CONTEXT-HEAVY one. This is a property of the REPO'S OWN CONVENTIONS (seed docs, hook payloads, how much gets injected per dispatch), not of the application under test.",
+    "how_to_get_it": "Run the efficiency-audit skill on the target project and divide total_cost by total_active_minutes from its rollup, then pass --rate. If the project has never run, use the nearest comparable project's measured rate and SAY SO — do not reach for the bundled default just because it is there.",
+    "if_you_cannot_measure_it": "Quote the estimate in ACTIVE-MINUTES only, or give the dollar figure as a range across the observed rate span (x0.4 to x1.1 of the bundled default). A minutes figure is honest; a dollar figure at an unverified rate is a 2.7x lottery.",
+    "candidate_project_factors": {
+      "_note": "Plausible project-level drivers, NONE of them yet measured as a multiplier. Listed so a future calibration can test them rather than re-inventing them — and so nobody adds one on intuition. Each names how it would be tested.",
+      "context_weight": "EVIDENCED, not yet quantified. Bytes of seed/convention docs injected per session and per sub-agent dispatch. Test: correlate each project's injected-context size against its measured $/active-min. This is the one with a named mechanism and a named culprit already.",
+      "app_complexity": "CAUTION — already priced per case by interaction_tier (canvas/node-graph measured at +55% cost vs forms). A project-level app-complexity factor would DOUBLE-COUNT it. Only worth adding if a project-level effect survives controlling for tier mix.",
+      "framework_complexity": "UNTESTED. BDD/qavajs layering vs plain Playwright, depth of the page-object hierarchy, custom DSLs. Test: compare $/active-min across projects with similar tier mixes but different framework layering.",
+      "test_approach": "UNTESTED. Whether the pipeline writes specs first (AFS) vs codes directly, how many review rounds are mandated, gate strictness (N=3 vs N=1). Test: these are policy choices visible in each project's own testing.md — correlate against turn count per case, which is the proximate cost driver.",
+      "suite_maturity": "PARTLY EVIDENCED as the wave-01 effect (~2x for the first wave on a new surface) — see novelty. Whether a project-wide maturity term adds anything beyond that is untested."
+    }
   }
 }

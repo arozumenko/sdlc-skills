@@ -420,3 +420,375 @@ taxonomy factor.
 discount" section both stated the v0.3.1 conclusion as settled fact — both
 corrected in the same pass as this entry to reflect the above, rather than
 left standing as a now-known-wrong claim.
+
+---
+
+## 2026-08-12 — v0.5.0 — the work-size axis and the foundation catalog
+
+**What changed**: two ADDITIONS, no revisions. `complexity-taxonomy.json`
+gains `size_scale` (XS/S/M/L/XL → Service Points, 1 SP = 1 hour of
+conventional engineer effort) and `size_rubric` (the driver → points →
+size derivation). A new `foundation-catalog.json` prices the one-time,
+non-per-case work. **No existing multiplier, band, tier or rate moved** —
+`base × tier × novelty` produces exactly the numbers it produced at v0.4.0,
+and the existing tests still pass unchanged.
+
+**Source**: two client POC trackers from the same programme, supplied as
+xlsx and read directly:
+
+- A **UI test-automation engagement** (qavajs/Playwright, 3 weeks part-time,
+  2 portals, 32 tests / 16 E2E scenarios, framework + CI/CD + report-portal
+  integration). 35 logged activities, 159 SP, $439.41 AI token cost, 29.7
+  human hours, $45/hr blended. Its "SP Reference" sheet is the origin of the
+  XS=1/S=2/M=4/L=8/XL=16 scale and its worked anchors; its Activity Log is
+  the only per-activity size-and-cost data behind the numbers below.
+- A **pre-AI manual baseline** of a separate 2-month Playwright engagement
+  (10 TCs, 211 tracked hours) from the same programme — used only for the
+  independent foundation-share cross-check.
+
+**What the data actually supports**:
+
+- **Foundation share of total SP: 21% (manual engagement) and 26% (AI
+  engagement)** — two independent sources, close agreement. Shipped as a
+  sanity *band*, explicitly not a rule.
+- **Foundation is SP-heavy and agent-cheap**: 25.8% of delivered SP against
+  5.9% of token cost ($26.13 of $439.41) — ~$0.64/SP against ~$3.07/SP for
+  test development, a ~4.8× gap (n=7 foundation activities). This is the
+  finding that justifies the second currency existing at all, and the reason
+  foundation's agent cost is left unpriced rather than derived from the
+  per-case rate.
+- **`new_abstractions` as the dominant size driver**: 15 of the engagement's
+  19 new page objects sat in L-sized rows. This is the countable form of the
+  existing binary `novelty_multiplier`, which is why it was cheap to add —
+  the verdict pass already had to answer the question.
+- **Orchestration overhead, noted but not folded in**: unattributable parent
+  sessions were 16.8% of token cost for 2.5% of SP — the per-batch
+  orchestration tax `complexity-taxonomy.md` § Batch shape already prices.
+  Deliberately kept out of the foundation catalog.
+
+**What the data does NOT support, stated because it constrains use**:
+
+- **Size predicts agent cost only coarsely.** Median AI cost by logged size
+  (n=16 test-development rows, one $145.53 documented-failure row excluded):
+  S $6.12, M $5.55, L $15.00, XL $17.22. **S and M do not separate.** This is
+  why the size axis is reported beside the agent-cost model and never
+  derived from it or into it.
+- **The rubric is validated against noisy labels.** Replaying it against the
+  engagement's hand-assigned sizes reproduces most and misses some — and at
+  least one row was re-sized M→XL between two versions of the same tracker,
+  so the ground truth is a human judgement that changed its mind. n≈16, one
+  engagement. A derived size is a defensible default a reader overrides
+  (`verdict.size`), not a measurement.
+- **Several catalog items are sized by analogy, not measurement** —
+  `auth-bootstrap` and `ci-advanced` in particular had no directly
+  corresponding logged activity. Each item's `evidence` field says which are
+  measured and which are inferred; `ci-advanced` is the least-evidenced item
+  shipped.
+- **One programme, one stack family.** Both trackers come from the same
+  organisation and a Playwright-shaped world. The scale and the catalog
+  shape should generalize; the specific item list is a UI-web starting
+  point, same caveat as the interaction tiers.
+
+**Blended rate deliberately not defaulted.** Observed $45/hr (automation)
+and $35/hr (manual) in the two trackers. SP → money is commercial and
+per-engagement; a baked-in default would silently misquote, so the reports
+quote SP alone unless `--blended-rate` is passed.
+
+---
+
+## 2026-08-12 — v0.6.0 — first blind-holdout validation, and the corrections it forced
+
+**This is the first entry driven by an out-of-sample test rather than by
+re-reading the calibration data.** It is also the least flattering. Read the
+"what failed" section before trusting any per-case number this skill emits.
+
+### Method
+
+Six sub-agents blind-read **89 pre-automation case snapshots** from
+`seed-project-1`'s own `.agents/automation/<batch>/cases/` directories, under an
+enforced fence: no finished specs, no test code, no efficiency audits, no
+`report.json`, no memory, no git history, no live app. All six confirmed
+compliance; the snapshots were independently verified to contain no testids,
+selectors or environment details. Their verdicts were priced by
+`score-cases.mjs` at the project's **measured** rate ($0.266/active-min, from 19
+single-case runs) and compared against five metered efficiency audits.
+
+**Holdout discipline**: the taxonomy's calibration is dated 2026-08-05. Three of
+the four batches (11 + 13 + 55 = 79 of the 89 cases) post-date it and are
+genuine holdouts; the fourth (10 cases) is in-sample and was reported separately.
+26 cases had individual branch-attributed actuals; 7 waves and 4 batches had
+aggregate actuals.
+
+### What failed
+
+- **Per-case dollars carry no signal.** Spearman rank correlation between
+  estimate and actual per-case cost: **0.015**. Pearson +0.166. The model was
+  presenting per-case point estimates that do not rank.
+- **Systematic over-estimate of 1.66×** (median 2.30×) against branch-attributed
+  actuals — traced to `base_minutes` measuring an ambiguous layer.
+- **Wave-level anti-correlation, Spearman −0.214.** A 55-case campaign's cost
+  was dominated by *position in the delivery sequence* (wave-01 built the
+  surface, waves 3–7 spent it); a blind per-case estimate cannot see that and
+  ranked the two cheapest waves as the most expensive.
+- **The formula discarded the readers' best judgements.** On both holdout
+  batches the readers' prose correctly named the priciest case; the arithmetic
+  then priced those cases *below baseline*, because both wait on a model and
+  `async-realtime` carries 0.87. A 30-step case the reader called "a cheap
+  parametrized loop" was estimated at 5.4× its actual cost.
+
+### What changed as a result
+
+1. **`base_minutes` 22/42/68 → 13/25/41**, and the layer is now stated
+   explicitly: these are **pure case-build** minutes. The middle bucket is set
+   from the measured 22.5 min/case-examined / 25.0 min/case-delivered figure
+   (n=60). New `fully_loaded_multiplier: 1.79` carries build → pipeline cost,
+   with the measured 56/28/16% layer split. **Result: per-case total ratio
+   1.66× → 0.99×, median 2.30× → 1.37×, MAE $7.16 → $4.50.** The holdout batch
+   lands at 0.95× fully-loaded.
+2. **Size-rubric weights inverted.** `surfaces` → heaviest (3 pts, r=+0.522, the
+   strongest estimate-time predictor found anywhere in this model);
+   `new_abstractions` demoted to a refinement (2 pts, r=+0.169);  `steps` to a
+   floor (2 pts, r=+0.051). v0.5.0 had weighted `new_abstractions` hardest on the
+   strength of the source tracker's *hand-assigned sizes* — circular reasoning
+   that validated the rubric against other size labels, never against money.
+   Portability pointed the same way: "page object" doesn't exist on API/mobile
+   scopes; "distinct endpoint or screen" does.
+3. **New `risk_flags` vocabulary** — `nondeterministic-oracle`,
+   `external-dependency`, plus `low-confidence-verdict` and `split-recommended`
+   promoted automatically from the reader's own fields. Band-wideners, not
+   multipliers (n=2, and inventing a coefficient from two anecdotes is the
+   failure mode this file exists to prevent). Documented residual: even the
+   widest band does not cover the worst such case, so the correct treatment is
+   to report it **unquotable** rather than to quote it wide.
+4. **Clustering promoted to a required stated scope assumption.** Measured on
+   the holdout: 1.30× hot on solo cases, **2.84× hot on clustered** — a ~2.2×
+   error swing, the largest single source of per-case error. Still not a
+   multiplier (the selection-effect confound is unresolved), but no longer
+   silent.
+5. **§ Batch shape rewritten.** Four audits now show **dispatch mechanism
+   matters at least as much as size**, and that bigger is not better: cheapest
+   was a 13-case *sequential* batch ($7.03); a 39-case batch ($13.36) and a
+   55-case Workflow campaign ($11.44) both cost more per case than batches of
+   10–13. The prior text implied a monotonic batch-size benefit.
+6. **Novelty guidance corrected.** The wave data implies ~2× for a first wave on
+   a new surface, and raising `novelty_multiplier` toward 2.0 **was tested and
+   made every batch worse** (2.07× / 3.02× / 4.58× over). Resolving novelty by
+   first-touch-per-abstraction also failed — it flagged 39 of 55 campaign cases
+   novel when the cost concentrated in wave-01's 8. The effect is
+   per-surface-per-wave and belongs in the foundation line, not in per-case
+   novelty. `novelty_multiplier` is **unchanged at 1.45**.
+7. **Reporting discipline**: the report now leads with a cost-layer table, tells
+   the reader to quote batch totals rather than per-case dollars, and carries a
+   risk-flag section and a clustering assumption. `--match` was added because a
+   bare directory scan had silently scored `README.md` files as cases.
+
+### What held up
+
+- **Step count is weak** — claimed r≈0.37–0.41, measured **+0.051** on the
+  holdout. The claim was directionally right and generous.
+- **Interaction tier is real and slightly conservative** — audits measure
+  canvas/node-graph at +55% cost / +43% time against form cases at near-identical
+  step counts (9.3 vs 8.7); shipped `rich-widget` is 1.42 (+42%). **Unchanged.**
+- **Rework stays out of the mean.** Sub-agent count (its proxy) is the strongest
+  correlate found (+0.373) and is only knowable after the fact. Unchanged.
+- **The double denominator earned its keep.** Against branch-attributed the old
+  model ran 1.45–3.16× hot; against fully-loaded, 0.89–1.83×. Quoting one number
+  would have hidden a ~2× swing — which is exactly what happened, and is
+  finding #1 above.
+
+### Caveats on this validation
+
+n=26 cases with individual actuals, 11 of them cluster-averaged. Per-case
+actuals are branch-attributed *groupings* of exact metering, not per-case
+metering — 29% of window spend sits on trunk and can never be case-matched. One
+project, one stack. Readers were Claude sub-agents, not human estimators, so this
+measures *this pipeline's* blind-estimate quality, not estimation in general. The
+campaign's delivery order was known to the scoring step, which slightly flatters
+it. Rank correlation is **not** improved by any change in this revision —
+rescaling fixes magnitude, not ordering, and the ordering problem is structural.
+
+---
+
+## 2026-08-12 — v0.6.1 — two directional corrections from the same holdout
+
+Follow-up to v0.6.0, from the same 26-case blind holdout, prompted by a fair
+challenge: *why don't any of these flags move the price?*
+
+The v0.6.0 answer was procedural — "no measured premium exists yet." Measuring
+it produced a better answer, and two changes.
+
+### The measurement
+
+Median **actual ÷ estimate** by signal (below 1.0 = estimate already too high):
+
+| Signal | Flagged | Unflagged |
+|---|---|---|
+| `split_recommended` | **0.46×** (n=8) | 0.79× |
+| `heavy-teardown` | 0.45× (n=4) | 0.79× |
+| `complex-preconditions` | 0.70× (n=11) | 0.83× |
+| any modifier | 0.70× (n=17) | 0.83× |
+| **`confidence: low`** | **1.59×** (n=4) | 0.73× |
+
+**Three of the four "looks like more work" signals predict the case coming in
+cheaper.** That is a stronger reason to leave modifiers unpriced than the
+absence of evidence was: pricing them would have pushed every flagged case the
+wrong way, permanently. Recorded here so a future calibration doesn't
+"discover" the intuition and re-add them.
+
+### Change 1 — `split_recommended` no longer forces XL
+
+It used to stamp the case at the top of the scale. Measured, split-flagged
+cases came in at 0.46× — forcing XL made an already-high estimate roughly twice
+as wrong. *"Too big to estimate"* describes **messiness**, not magnitude: a case
+bundling three unrelated checks splits into three small cases.
+
+Now: the size derives from the drivers like any other case; the flag marks the
+row **unquotable** and excludes it from the quotable total, with the case listed
+for splitting. Same treatment an unspecified oracle gets — report it, don't
+quote it.
+
+### Change 2 — `confidence: low` gets an asymmetric band
+
+New `confidence_bands.low_confidence_verdict` = **0.8×–3.0×** against the
+symmetric cold 0.5×–2.0×. It is the only signal measured pointing *up*
+(1.59× vs 0.73×). The point estimate is untouched; the band is the union of all
+applicable bands, so on a cold estimate the low end still comes from
+`cold_no_history` (with no history a case genuinely can come in cheaper) and
+what low confidence adds is **upside reach**. On a calibrated project, where the
+base band is narrow, the skew is much more visible.
+
+### The shape this exposes, still unfixed
+
+Median case runs **1.37× hot**; the total across 26 lands at **0.99×**. The
+model **over-estimates the typical case and under-estimates the tail**. Neither
+change here fixes that — they make the uncertainty honest about direction. The
+tail problem is structural (the formula cannot consume what readers actually
+observe) and is why unspecified-oracle cases are reported unquotable rather than
+banded.
+
+### Caveats
+
+Subgroups as small as n=4; 11 of the 26 cases are cluster-averaged; one project.
+**Directional corrections, not a calibration.** Neither change moves any point
+estimate, so the blast radius if they are wrong is confined to band width and to
+which rows are excluded from a quotable total.
+
+---
+
+## 2026-08-12 — v0.6.2 — reverting the "unquotable" idea from v0.6.1
+
+**v0.6.1 was wrong and this entry undoes half of it.** It kept split-flagged
+cases out of the "quotable total". The objection that killed it: **the work is
+real, so excluding it produces a systematic under-quote** — and a presales
+reader who needs a number will either drop those cases (under-selling the
+engagement) or invent their own figure (worse than ours). **Zero is the only
+value we know is wrong.**
+
+### What replaces it
+
+Nothing is withheld. Every case stays in the total. Instead, the two measured
+directions get **asymmetric bands**, and the report says which way each line is
+likely to move:
+
+| Band | Multipliers | Applied by | Measured |
+|---|---|---|---|
+| `skewed_high` | 0.8×–3.0× | `low-confidence-verdict`, `nondeterministic-oracle`, `external-dependency` | median 1.59× actual/est (n=4) |
+| `skewed_low` | 0.4×–1.2× | `split-recommended` | median 0.46× actual/est (n=8) |
+| `cold_no_history` | 0.5×–2.0× | any flag with no measured direction | — |
+
+The report now carries a **"where the total is most likely to move"** table:
+how many cases and how many dollars sit on each direction, with the case ids.
+That gives a presales reader the thing withholding a number never could — a
+total they can quote *and* a stated direction of travel.
+
+### One implementation note worth recording
+
+Directional bands **replace** the base band rather than widening it. The
+original union-with-min/max could only ever widen, which silently erased the
+downward skew entirely (a split candidate's high end stayed pinned at the cold
+band's 2.0×). If a band is going to express direction, it has to be able to pull
+the far end *in*.
+
+### Standing
+
+v0.6.1's other change survives unaltered: `split_recommended` no longer forces
+XL. That was the part supported by the measurement. The exclusion-from-total was
+an inference layered on top of it, and it did not hold up.
+
+n=8 and n=4 subgroups, one project, 11 of 26 cases cluster-averaged. Directional,
+not a calibration. No point estimate moves under any of this — only band shape
+and report framing.
+
+---
+
+## 2026-08-12 — v0.6.4 — second holdout: the rate was doing the damage
+
+A second, cleaner validation than v0.6.0's. The 15 cases this skill had already
+estimated (a smoke suite + an agents suite) were subsequently automated and
+ccusage-metered by their own pipeline, giving a **direct estimate-vs-actual on
+the identical case set**, not a proxy.
+
+### Result
+
+| | Estimate | Actual | Ratio |
+|---|---|---|---|
+| At the bundled $0.248/min default | $277.04 | $137.89 | **2.01×** |
+| At the project's own **$0.097/min** | $108.76 | $137.89 | **0.79×** |
+
+**The model was roughly right; the rate was wrong.** That project runs 2.5×
+cheaper per active-minute than the seed the default was calibrated on. The
+`default_dollar_per_minute` caveat has always said "CROSS-PROJECT FALLBACK ONLY
+… always prefer a live rate" — this is the first measurement of what ignoring it
+costs.
+
+### What this changed
+
+1. **New `project_rate` block**, naming the rate as the largest single error
+   source in the model: four measured projects spanning **$0.097–$0.266/min, a
+   2.7× spread**. Documents the mechanism (cache read is 97–98% of billed
+   tokens, so cost tracks context size × turn count — the expensive project is
+   the one whose `CLAUDE.md` injects eight `.agents/*` files into every session
+   *and* every sub-agent dispatch), how to measure it, and what to do when you
+   can't: **quote active-minutes, not dollars.**
+2. **The report now prints a loud warning** whenever the bundled default is
+   used, with the 2.01×→0.79× number attached.
+3. **`candidate_project_factors`** — project complexity, framework layering,
+   test approach and suite maturity recorded as *hypotheses with named tests*,
+   explicitly NOT multipliers. One carries a warning: **app complexity is
+   already priced per case by `interaction_tier`**, so a project-level version
+   would double-count it.
+
+### Two shipped claims this holdout contradicted
+
+- **Orchestration tax.** The 14-case wave measured **21.7%**, above the 11–16%
+  earlier revisions implied for batched work. Corrected to "11.1–27.9%
+  observed; near-11% is the best case, not the expectation."
+- **The single-case premium is not universal.** A genuine batch-of-one delivered
+  at **$5.41 — cheaper than that same project's 14-case wave at $9.46/case** —
+  against a shipped claim that single-case runs cost $19–22 (2.8×). The premium
+  scales with how much context a fresh session must re-read, so on a lean repo
+  batching buys little. "+87%" and "2.8×" are no longer stated as general laws.
+
+### What held up
+
+- **Foundation pricing, the best result in the exercise.** Their measured
+  "foundation setup" bucket (page objects + shared auth/data helpers) was
+  **$9.54**; the comparable catalog items estimated **$6.88** — **0.72×**, well
+  inside the band. The activity-type split added in v0.6.3 works.
+- **Batch shape.** A 14-case wave at $9.46/case landed squarely inside the
+  predicted 10–13-case cluster ($7.03–$10.76).
+
+### What did not — again
+
+**Rank correlation −0.079** (fully-loaded) / **+0.154** (direct), consistent
+with v0.6.0's 0.015. Rescaling and re-rating fix totals; ordering has never
+improved and remains structural. **Clustering remains the largest per-case
+error**: solo cases 2.76× over, clustered 4.85× — the three grouped PRs landed
+at $1.78–$2.50/case.
+
+### Caveats
+
+15 cases, one project, one wave; 7 of the 15 are cluster-split figures rather
+than individually metered. The rate was derived from summed agent-minutes across
+direct and shared buckets, which is the report's own accounting, not an
+independent measurement. Directional.

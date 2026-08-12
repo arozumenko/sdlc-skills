@@ -1,0 +1,220 @@
+{
+  "$schema_note": "Machine-readable catalog of FOUNDATION work — the one-time, non-per-case effort an automation engagement needs before (and alongside) the cases themselves. Read by score-cases.mjs --foundation. references/sizing-rubric.md § Foundation explains the reasoning; keep the two in sync by hand.",
+  "version": "0.1.0",
+  "unit": "service_points",
+  "sourced_from": [
+    {
+      "source": "Client POC tracker 'SP Reference' sheet + Activity Log (UI test automation engagement, qavajs/Playwright, 3 weeks, 2026-06/07)",
+      "note": "Item list and default sizes are that tracker's Framework/Infrastructure rows, generalized off its specific tool names. Its 7 actually-logged foundation activities came to 41 SP — see sizing-rubric.md § What foundation actually cost."
+    },
+    {
+      "source": "Pre-AI manual baseline of a separate 2-month Playwright engagement (same programme, 10 TCs, 211 h tracked)",
+      "note": "Independent corroboration of the foundation share: 45 h of 211 h (21%) went to framework/infra. Used only as the sanity band, not to set individual item sizes."
+    }
+  ],
+  "foundation_share_sanity_band": {
+    "low_pct": 20,
+    "high_pct": 26,
+    "note": "Foundation as a share of TOTAL engagement SP when a framework is built from scratch: 21% measured on the manual baseline engagement, 26% on the AI-delivered one — two independent sources, close agreement. If a selected foundation set lands far outside 20-26% of the scope total, that is a prompt to re-check the selection (too many items included? scope too small to carry a full framework build?), NOT a rule to force the number into the band. A small scope legitimately blows past 26% — which is itself the finding worth reporting, see sizing-rubric.md § Amortization.",
+    "n": 2,
+    "confidence": "two projects, one programme, one stack family — indicative, not calibrated"
+  },
+  "agent_cost_note": "Foundation work is SP-heavy but AGENT-cheap, and the gap is large: on the source tracker foundation was 25.8% of delivered SP but only 5.9% of AI token cost ($26.13 of $439.41) — roughly $0.64/SP against $3.07/SP for test-development work, a ~4.8x difference (n=7 foundation activities, one project). Two consequences the report must not blur: pricing foundation in agent-$ makes a quarter of the engagement look like a rounding error, and pricing it in SP alone hides that it is the cheapest SP the pipeline delivers. Quote both.",
+  "agent_cost_per_sp": {
+    "_note": "Added in v0.6.3 — foundation used to be reported as 'unpriced', which was unhelpful: the work IS done by agents, it WAS metered, and leaving it blank invites the reader to assume zero. Priced by ACTIVITY TYPE, not one blended rate: the per-item spread on the source data is 14.6x, so a single rate would be wrong per item by up to ~4x either way. The split is not arbitrary — exploring a live app costs tokens (browser snapshots, trial and error, re-reading state) while generating scaffolding from a known pattern is cheap. Note how close 'discovery' sits to the $3.07/SP test-development rate: both are dominated by exploration, which is the real cost driver in this pipeline.",
+    "ATTRIBUTION_WARNING": "The rates below are ATTRIBUTION-ADJUSTED, because the raw labelled-row figures are a FLOOR, not a measurement. Three independent reasons the source tracker under-counts foundation's token cost: (1) $73.79 — 16.8% of ALL token spend — sits in an 'Other' bucket of unattributable parent-session orchestration across four periods; that work is real and some of it is framework debugging, planning and CI iteration. (2) The 'framework bootstrap' row is logged XL (16 SP) at $2.65 while its own note says '~1h AI' — at that project's ~$0.27/active-min an hour is ~$16, so that single row may be under-logged ~6x. (3) Framework fixing that happens inside a test-development session is attributed to the CASE, never to foundation — a systematic leak the tracker cannot see. The adjustment applied here is the conservative one: redistribute the 'Other' bucket pro-rata by SP, giving foundation 25.8% of $73.79 = $19.03, so $26.13 -> $45.16 over 41 SP = $1.10/SP, a 1.73x uplift. It does NOT correct (2) or (3), so even these rates remain likely-low.",
+    "by_category": {
+      "discovery": {
+        "usd_per_sp": 4.03,
+        "labelled_only_usd_per_sp": 2.33,
+        "n": 1,
+        "basis": "app profiling: portal login + 3 SPAs, selectors, routes, test accounts — 4 SP, $9.34 labelled"
+      },
+      "integration": {
+        "usd_per_sp": 1.52,
+        "labelled_only_usd_per_sp": 0.88,
+        "n": 3,
+        "basis": "CI/CD pipeline ($0.96/SP), report-portal setup ($0.70/SP), screenshots+video ($0.74/SP) — 12 SP, $10.53 labelled"
+      },
+      "scaffolding": {
+        "usd_per_sp": 0.43,
+        "labelled_only_usd_per_sp": 0.25,
+        "n": 2,
+        "basis": "framework bootstrap ($0.17/SP — see ATTRIBUTION_WARNING (2), likely badly under-logged), API-first hook dev+review ($0.43/SP) — 24 SP, $6.10 labelled"
+      },
+      "config": {
+        "usd_per_sp": 0.28,
+        "labelled_only_usd_per_sp": 0.16,
+        "n": 1,
+        "basis": "project init + memory config — 1 SP, $0.16 labelled"
+      }
+    },
+    "attribution_uplift": 1.73,
+    "blended_usd_per_sp": 1.1,
+    "blended_labelled_only_usd_per_sp": 0.64,
+    "blended_note": "41 SP; $26.13 labelled, $45.16 attribution-adjusted. Use the blended rate ONLY when an item has no cost_category, and say that you did.",
+    "band": {
+      "low_mult": 0.6,
+      "high_mult": 3.5
+    },
+    "band_note": "SKEWED HIGH on purpose. The low end (0.6x) lands almost exactly on the raw labelled-rows figure — that is the floor, the case where all the unattributable overhead really did belong elsewhere. The high end (3.5x) covers the under-logging in ATTRIBUTION_WARNING (2) and (3), which this adjustment does not correct. With n=1 in two of four categories, treat any single figure as ORDER-OF-MAGNITUDE.",
+    "sanity_check": "Foundation's share of TOTAL engagement cost (tokens + human hours at the blended rate) was 24.5% against 25.8% of SP — i.e. proportional. It only looks cheap when you count tokens alone, because foundation is HUMAN-heavy: 0.222 human-h/SP against test development's 0.167, ~33% more supervision per SP. On the source engagement, human supervision of foundation cost ~16x its token spend ($410 vs $26). If a foundation estimate ever looks trivially cheap, that is the missing half.",
+    "caveats": "One project, one stack, 7 activities, at that project's model/token rates 2026-06/07. Scale by the ratio of your project's own measured $/active-min if you have one. Excludes the human hours foundation consumed — that is the SP column's job."
+  },
+  "items": [
+    {
+      "id": "app-profiling",
+      "label": "App / surface reconnaissance: routes, auth, key screens, stable-handle conventions, test accounts",
+      "category": "Discovery",
+      "default_size": "M",
+      "applies_when": "No app profile or surface digest exists for the target app (.agents/manual-qa/app_profile.md, .agents/estimation/surface_recon.md, or per-surface _surface.md files).",
+      "skip_when": "A current profile exists and the scope's surfaces are covered by it.",
+      "evidence": "Logged at M (4 SP) on the source tracker: portal login + 3 SPAs, selectors, routes, test accounts; 2 sessions, 4 sub-agents, 11 screenshots.",
+      "cost_category": "discovery"
+    },
+    {
+      "id": "framework-core",
+      "label": "Framework core setup: project scaffolding, base test class, runner/driver config, first green run",
+      "category": "Framework",
+      "default_size": "L",
+      "applies_when": "No runnable test framework exists in the target repo.",
+      "skip_when": "A framework exists and the scope's cases can be added to it as-is.",
+      "supersedes": [],
+      "evidence": "Source tracker logged its equivalent ('framework bootstrap: planning + scaffolding, PO architecture, CI config') at XL because it bundled CI/CD and the PO architecture into one activity. Split here so the pieces can be selected independently; select framework-full-greenfield instead when they genuinely land as one push.",
+      "cost_category": "scaffolding"
+    },
+    {
+      "id": "framework-full-greenfield",
+      "label": "Full framework from scratch: project + base classes + abstraction architecture + CI + first suite green",
+      "category": "Framework",
+      "default_size": "XL",
+      "applies_when": "Greenfield automation AND CI is in scope AND the work will be delivered as one continuous push rather than separable steps.",
+      "skip_when": "Any part of the framework, abstraction layer or pipeline already exists — select the individual items instead.",
+      "supersedes": [
+        "framework-core",
+        "base-abstractions",
+        "ci-pipeline"
+      ],
+      "evidence": "Source tracker's 'framework bootstrap' row, logged XL (16 SP), $2.65 agent cost, 12 files, config + pipeline in one activity.",
+      "cost_category": "scaffolding"
+    },
+    {
+      "id": "base-abstractions",
+      "label": "Base abstraction architecture: base page/service object, locator or handle strategy, shared step library",
+      "category": "Framework",
+      "default_size": "M",
+      "applies_when": "New framework, or the project has no documented stable-handle convention for the surface under test.",
+      "skip_when": "Convention is documented (.agents/testing.md / role-overrides.md) and the base classes exist.",
+      "evidence": "Source tracker's SP Reference lists 'Base PO architecture (base class, locator strategy)' at M (4 SP).",
+      "cost_category": "scaffolding"
+    },
+    {
+      "id": "auth-bootstrap",
+      "label": "Auth / session bootstrap: stored session state, role-based logins, token or dev-mode bypass",
+      "category": "Framework",
+      "default_size": "M",
+      "applies_when": "The scope spans more than one role, or auth is non-trivial (SSO, MFA, short-lived tokens).",
+      "skip_when": "Single role with a plain form login already handled by an existing fixture.",
+      "escalate_to": {
+        "size": "L",
+        "when": "SSO/MFA, or per-test fresh-account provisioning is required"
+      },
+      "evidence": "Not a separate row on the source tracker (it was folded into framework bootstrap), but every multi-portal engagement in the programme paid it. Sized by analogy to base-abstractions — flag as an assumption, not a measurement.",
+      "cost_category": "scaffolding",
+      "cost_category_note": "scaffolding, but SSO/MFA discovery can push this toward the discovery rate; say which you assumed."
+    },
+    {
+      "id": "test-data-layer",
+      "label": "Test data / fixtures layer: seeding and teardown, data factories, unique-value generation",
+      "category": "Framework",
+      "default_size": "M",
+      "applies_when": "Cases need seeded state, unique per-run data, or cleanup that the UI cannot do.",
+      "skip_when": "Cases run entirely against static, pre-existing data.",
+      "escalate_to": {
+        "size": "L",
+        "when": "Seeding requires API/DB plumbing that does not exist yet"
+      },
+      "evidence": "SP Reference: 'Test data / fixtures layer' M (4 SP); 'Test data seeding layer with API/DB setup + teardown' L (8 SP). Strongly correlated with the rich-test-data / complex-preconditions / heavy-teardown case modifiers — if many cases carry those, this item is not optional.",
+      "cost_category": "scaffolding"
+    },
+    {
+      "id": "ci-pipeline",
+      "label": "CI/CD pipeline: test job config, artifact collection, results publishing",
+      "category": "CI/CD",
+      "default_size": "L",
+      "applies_when": "The suite must run in CI rather than only on a developer machine.",
+      "skip_when": "An existing pipeline already runs this suite and only needs a job added.",
+      "evidence": "Logged at L (8 SP) on the source tracker ('CI/CD pipeline setup + feature file split + locator fixes', ~3h, 8 commits). SP Reference agrees: 'CI/CD pipeline setup (test job, reporting, artifacts)' L.",
+      "cost_category": "integration"
+    },
+    {
+      "id": "ci-advanced",
+      "label": "CI/CD with device farm, parallel execution and a reporting dashboard",
+      "category": "CI/CD",
+      "default_size": "XL",
+      "applies_when": "Mobile/device-farm coverage, cross-browser matrix, or parallel-at-scale is contractually in scope.",
+      "skip_when": "A single-runner pipeline satisfies the engagement.",
+      "supersedes": [
+        "ci-pipeline"
+      ],
+      "evidence": "SP Reference: 'CI/CD + device farm + parallel execution' XL (16 SP). No direct measurement in the source tracker's own log — it did not need a device farm; treat as the catalog's least-evidenced item.",
+      "cost_category": "integration"
+    },
+    {
+      "id": "env-config",
+      "label": "Environment configuration: per-env settings, secrets handling, test accounts",
+      "category": "Infrastructure",
+      "default_size": "S",
+      "applies_when": "More than one target environment, or credentials need managed handling.",
+      "skip_when": "One environment, credentials already provisioned and injectable.",
+      "evidence": "Manual-baseline engagement tracked 'Environment config (git, accounts)' at 5 h of 211 h. S (2 SP) is the closest scale point.",
+      "cost_category": "config"
+    },
+    {
+      "id": "driver-device-config",
+      "label": "Driver / device / browser matrix configuration",
+      "category": "Infrastructure",
+      "default_size": "M",
+      "applies_when": "Mobile automation, or a cross-browser matrix is in scope.",
+      "skip_when": "Single browser, default driver config.",
+      "evidence": "SP Reference: 'Driver / device configuration (emulator profiles, parallel config)' M (4 SP).",
+      "cost_category": "integration"
+    },
+    {
+      "id": "reporting-integration",
+      "label": "Reporting integration: report portal / Allure hookup, screenshots and video on failure",
+      "category": "Reporting",
+      "default_size": "S",
+      "applies_when": "The client wants results in a reporting portal rather than raw CI output.",
+      "skip_when": "CI's native test output is the agreed deliverable.",
+      "escalate_to": {
+        "size": "M",
+        "when": "Portal hookup plus screenshots, video and run history are all required"
+      },
+      "evidence": "Measured twice on the source tracker as two S (2 SP) activities: portal integration ($1.40) then screenshots+video ($1.48). Selecting this at S covers one of those; escalate to M when both are in scope.",
+      "cost_category": "integration"
+    },
+    {
+      "id": "custom-harness",
+      "label": "Custom wait / retry strategy, custom reporter, or domain-specific interaction helpers",
+      "category": "Framework",
+      "default_size": "M",
+      "applies_when": "The app has a known-hostile surface needing workarounds — Flutter/canvas rendering, third-party payment iframes, heavy async, non-standard components.",
+      "skip_when": "Standard DOM, standard component library, framework defaults suffice.",
+      "evidence": "The source tracker's most expensive cases were exactly these surfaces (a payment-iframe case and a Flutter-workaround case were its two priciest per-case rows). The harness item exists so that cost lands in foundation once instead of being smeared across every case that touches the surface.",
+      "cost_category": "discovery",
+      "cost_category_note": "discovery, not scaffolding: the cost is working out HOW to drive a hostile surface (Flutter/canvas/iframe), which is exploration — the helpers themselves are small."
+    },
+    {
+      "id": "kt-handover",
+      "label": "Knowledge transfer sessions, framework documentation, handover",
+      "category": "Handover",
+      "default_size": "M",
+      "applies_when": "The client team takes over running or extending the suite.",
+      "skip_when": "The delivery team retains the suite.",
+      "evidence": "Manual-baseline engagement tracked 'KT sessions + preparation' 10 h and 'Documentation' 8 h of 211 h — together ~M-to-L. Defaulted to M; escalate when the handover is contractual with sign-off.",
+      "cost_category": "config",
+      "cost_category_note": "no measured basis — documentation writing is assumed cheap like config. Least-evidenced cost category in the catalog."
+    }
+  ]
+}

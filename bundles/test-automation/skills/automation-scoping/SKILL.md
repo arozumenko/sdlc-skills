@@ -1,6 +1,6 @@
 ---
 name: automation-scoping
-description: Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, "how long/much to automate these N cases", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.
+description: Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs sizing or a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, "how long/much to automate these N cases", "size these cases S/M/L/XL", estimating the framework/CI/foundation work an engagement needs on top of its cases, sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.
 license: Apache-2.0
 metadata:
   authors:
@@ -30,6 +30,17 @@ Every output is a range with a named confidence tier
 (`references/scoping-report-format.md` § Confidence statement). A presales
 number without its band is the anti-pattern this whole skill exists to
 replace.
+
+**Two currencies, reported side by side, never reconciled into one.** Agent
+cost (active-minutes → $, the `base × tier × novelty` model) answers *what
+will this burn*. Work size (XS/S/M/L/XL → Service Points, 1 SP = 1 hour of
+conventional engineer effort) answers *how big is this* and *what would it
+cost the old way*. They diverge on purpose, and the gap is the engagement's
+value story. The sharp edge is foundation work — framework, CI, abstraction
+layer, data layer — which on the source engagement was **25.8% of delivered
+SP but only 5.9% of token cost**: price it in agent-dollars and a quarter of
+the engagement vanishes into rounding. Full reasoning and the measured
+numbers: [`references/sizing-rubric.md`](references/sizing-rubric.md).
 
 ## What this is built on, so it isn't guessed from scratch
 
@@ -118,8 +129,13 @@ dispatches. Verdicts land in
   "tier": "rich-widget",
   "tier_rationale": "the 'report' being edited is a drag-drop builder (step 4)",
   "steps": 9,
+  "surfaces": 3,
+  "new_abstractions": 2,
+  "size": "L",
+  "size_rationale": "3 screens + 2 page objects that don't exist + drag-drop",
   "modifiers": ["rich-test-data", "heavy-teardown"],
   "quality_flags": ["vague-steps", "missing-expected"],
+  "risk_flags": ["nondeterministic-oracle"],
   "signals": ["needs seeded multi-user test data"],
   "split_recommended": false,
   "confidence": "high" }
@@ -146,11 +162,51 @@ section and future calibration hypotheses instead of being lost.
 `split_recommended: true` — with the reason in `signals` — flags a case so
 large or multi-flow that its estimate is unreliable and the honest presales
 line is "split before automating" (test-sizer's L-split advice, carried
-over). Two cross-checks while reading: a frontmatter `size:` (test-sizer ran
-here) that clashes with your judgement — an `L` landing in a cheap tier with
-no modifiers — deserves a second look and a `signals` note; and modifiers
-don't change the price (see below), so record them even when they feel
-minor.
+over); it forces the case to XL and marks the row. Two cross-checks while
+reading: a frontmatter `size:` (test-sizer ran here) that clashes with your
+judgement — an `L` landing in a cheap tier with no modifiers — deserves a
+second look and a `signals` note; and modifiers don't change the price (see
+below), so record them even when they feel minor.
+
+**The three sizing fields.** `surfaces` (distinct screens/endpoints/views the
+case touches) is the **most important field in the whole verdict** — measured
+against real per-case cost it is the strongest estimate-time predictor in the
+model (r=+0.522, beating the composite estimate itself). Count it carefully.
+`new_abstractions` (page objects / service clients / screen objects the case
+needs that **do not yet exist**) is a secondary refinement — it correlates only
+weakly with cost (r=+0.169) and was over-weighted before v0.6.0. Both are
+technically optional; omitting them scores them 0, which **systematically
+under-sizes** and marks the row `derived-partial`.
+
+**`risk_flags` — the field most likely to save a bad quote.** Two values, both
+judged from the case text: **`nondeterministic-oracle`** (the central assertion
+isn't deterministically checkable as written — it depends on a model choosing to
+do something, or names no concrete string/field/schema) and
+**`external-dependency`** (needs a system outside the app under test that the
+case assumes into existence — a credentialed third-party service, a tool
+server, a real API token, a second tenant/user session). On two independent
+holdout batches the **single most expensive case in each** carried both, was
+correctly spotted by the reader, and was then priced *below baseline* by the
+formula. Flag them. They don't move the number — they force the widest band and
+put the case in the report's risks section, where a reader can see that this
+line isn't safely quotable.
+
+Your `confidence` and `split_recommended` now also carry weight: a `low`
+confidence or a split recommendation is promoted to a risk flag automatically.
+Rate confidence honestly rather than defaulting to `medium`.
+
+**Use a shared abstraction vocabulary when readers are fanned out.** Give every
+reader the same naming convention up front — `<Screen>Page`, `<Thing>Dialog` /
+`<Thing>Menu` / `<Thing>Panel`, `<Concern>Helper` — and seed it from the scope's
+own route/endpoint inventory where you have one. Without this, parallel readers
+reliably invent three names for the same helper and cross-chunk dedup becomes
+hand work; it happened on a 6-reader run and had to be reconciled manually. Answer `new_abstractions` honestly *cold* too: in Mode 1/2
+you're estimating how many abstractions the case would need, not counting
+what a repo scan found — say `signals: ["abstraction count is a cold guess"]`
+when that's what it is. `size` itself is optional and **overrides the derived
+size entirely** — set it when you've read the case and the rubric's answer is
+wrong, and put why in `size_rationale`. The rubric is a defensible default a
+reader overrides, not a measurement (`sizing-rubric.md` § How well it fits).
 
 Then price it: `score-cases.mjs <cases> --verdicts <verdicts.json>`. Judged
 tier/steps override the keyword guess (each row's provenance is marked), and
@@ -163,6 +219,76 @@ rows and the report's risks section as named, comparable observations
 (`complexity-taxonomy.md` § Modifiers) — candidate factors a future
 calibration can price, not arithmetic today.
 
+## Foundation — the work that isn't attached to any case
+
+Cases are not the whole engagement. Framework scaffolding, CI, the
+abstraction layer, the test-data layer, reporting, handover — one-time work
+that no per-case model prices, and on the source engagement a quarter of
+everything delivered. **Every mode runs this step**; what changes by mode is
+how much of it is measured versus assumed.
+
+Each item in [`references/foundation-catalog.json`](references/foundation-catalog.json)
+carries a `default_size`, an `applies_when` and a `skip_when`. Your job is
+the gate — *does this project already have it?* — which is a question Mode 3
+answers directly (the repo-grep reuse check and live spot-check establish
+what exists) and Mode 1/2 can only assume.
+
+Write a selection file, then pass it:
+
+```json
+{ "blended_rate_usd_per_hour": 45,
+  "items": [
+    { "id": "framework-core", "reason": "empty repo, no runner config (checked)", "confidence": "measured" },
+    { "id": "ci-pipeline", "size": "XL", "reason": "GitLab + parallel shards", "confidence": "estimated" },
+    { "id": "ci-advanced", "include": false, "reason": "single browser, no device farm in scope" } ] }
+```
+
+```
+node {skill}/scripts/score-cases.mjs <cases> --verdicts <verdicts.json> \
+  --foundation <foundation.json>
+```
+
+Four rules that make the output honest rather than merely large:
+
+1. **Gate every item; never include the whole catalog.** An engagement
+   adding cases to a mature suite may legitimately select nothing. Including
+   items "to be safe" is padding wearing a checklist's clothes.
+2. **Record what you excluded**, with the reason (`"include": false`). The
+   excluded list shows what was checked, and it is the difference between a
+   scoped estimate and an optimistic one. The script prints it.
+3. **Mark per-item confidence** — `measured` (you looked at the repo/app) /
+   `estimated` / `assumption`, the same H/M/L discipline the source
+   trackers' baseline sheets use. In Mode 1/2 most items are honestly
+   `assumption`; say so rather than dressing a guess as a finding.
+4. **A blended rate is never defaulted.** SP → money needs the engagement's
+   own $/hr; without it the report quotes SP only, which is the correct
+   behaviour, not a degraded one. Ask for the rate or leave it out.
+
+The script drops superseded items (selecting `framework-full-greenfield`
+absorbs `framework-core` + `base-abstractions` + `ci-pipeline`) and checks
+the foundation share against the 20–26% band measured on two comparable
+engagements. **The band is a prompt, not a rule** — a small scope
+legitimately lands above it, and that ratio is itself the finding worth
+reporting (it is the argument for widening scope or reusing a framework).
+Never edit a selection just to land inside the band.
+
+## Sizing without costing
+
+"Size these cases S/M/L/XL" is a smaller ask than a scoping report and
+deserves a smaller answer. Run the verdict pass (readers still read the
+cases — the drivers `surfaces` and `new_abstractions` are judgements, not
+greppable facts), then:
+
+```
+node {skill}/scripts/score-cases.mjs <cases> --verdicts <verdicts.json> --sizes-only
+```
+
+That emits the per-case size, SP, and the driver breakdown that produced it
+— the "with some explanation" part, so a reader can disagree with a specific
+driver rather than with a letter. No cost model, no report, no rate needed.
+Escalate to a full report when the question turns into "and what will it
+cost".
+
 ## Mode 1 — Blind (no app access, no project history)
 
 1. Gather the case inputs: TMS case files, a requirements doc, or plain
@@ -172,8 +298,13 @@ calibration can price, not arithmetic today.
    (≲10 cases; reading them is still mandatory, only the fan-out is not).
 3. Price it:
    ```
-   node {skill}/scripts/score-cases.mjs <cases> --verdicts <verdicts.json>
+   node {skill}/scripts/score-cases.mjs <cases> --verdicts <verdicts.json> \
+     --match '^(TC|ELITEA|CASE)-'
    ```
+   **Always pass `--match` when the input is a directory.** A bare scan takes
+   every `.md` it finds — on a real run it silently scored `README.md` and a
+   test-data status doc as cases, inflating the scope by 4. The script reports
+   what it filtered out.
    It reads `.agents/estimation/complexity-taxonomy.json` if the target
    project already has one (a prior Mode 4 calibration), else falls back to
    the bundled `references/complexity-taxonomy.json` default — always the
@@ -181,7 +312,11 @@ calibration can price, not arithmetic today.
 4. Every case gets `novelty = unknown (1.0)` — don't guess reuse blind (see
    `references/complexity-taxonomy.md` § novelty_multiplier). This is *why*
    Mode 1 alone always reports the `cold_no_history` confidence band.
-5. Write the scoping report (`references/scoping-report-format.md`).
+5. Select foundation items (§ Foundation above) — blind, so nearly every
+   item is `confidence: "assumption"`. Say that plainly; a foundation set
+   nobody could verify is the widest part of a Mode 1 estimate, not a
+   detail.
+6. Write the scoping report (`references/scoping-report-format.md`).
 
 **Cases don't need to exist as files yet.** If the user describes scope in
 prose ("about 40 requirements across checkout, account settings, and a
@@ -318,6 +453,17 @@ exploring the others.
    `--known-surfaces` keyword list, which remains the quick path when no
    verdicts file exists). This is how a live correction actually reaches the
    number.
+
+   **Two things Mode 3 resolves that Mode 1/2 can only assume**, and both
+   move the total more than a tier correction does. First, `new_abstractions`
+   stops being a guess: you can now count which page objects / service
+   clients / screen objects the case actually needs and which already exist,
+   which is the dominant size driver. Second, **the foundation gate** —
+   this is the mode that turns foundation items from `assumption` into
+   `measured`. Walk the catalog's `applies_when` list against the repo and
+   the live app, then rewrite the selection's `confidence` fields to match
+   what you actually checked. A foundation set that stays all-`assumption`
+   after a Mode 3 pass means the pass didn't finish.
 6. Write (or refresh) `.agents/estimation/surface_recon.md` — one entry per
    surface checked, whichever step resolved it (grep-only, or grep +
    live-corrected), including stable-handle-presence notes from step 4. This
@@ -346,14 +492,36 @@ something a batch triggers automatically on its own completion.
 
 Every mode writes `.agents/estimation/<scope-slug>-scoping-report.md` per
 [`references/scoping-report-format.md`](references/scoping-report-format.md)
-— range + confidence tier + methodology paragraph + risks, always. Two
-scope-level assumptions are part of every report because they move the total
-more than any per-case factor: the **operating shape** (batched vs
-single-case delivery — measured +87% per delivered spec when batching
-stopped) and the **delivery rate** (blocked cases cost ~1.85× a delivered
-one) — `complexity-taxonomy.md` § Batch shape & delivery rate. Tell the
-user the path and read the headline back to them; don't just leave it on
-disk.
+— range + confidence tier + methodology paragraph + risks, always, in **both
+currencies** (agent cost and SP, with the conventional-cost column whenever a
+blended rate was supplied). Three scope-level assumptions are part of every
+report because they move the total more than any per-case factor: the
+**operating shape** (batch size *and* dispatch mechanism — single-case runs
+measured $19–$22/delivered vs $7–$11 batched, but bigger batches are not
+cheaper: a 13-case sequential batch beat both a 39-case batch and a 55-case
+Workflow campaign), the **delivery rate** (blocked cases cost ~1.85× a
+delivered one), and the **clustering shape** (clustered cases came in ~2.2×
+cheaper relative to estimate than solo ones) — `complexity-taxonomy.md`
+§ Batch shape & delivery rate, § Repetition/clustering. Tell the user the path
+and read the headline back to them; don't just leave it on disk.
+
+**Quote the batch total, not per-case dollars — and say which cost layer.**
+Validated against 89 blind-read cases on a project with metered actuals:
+per-case dollar figures had **~zero rank correlation** with what cases actually
+cost (Spearman 0.015), while **batch totals landed within 0.89–1.83×**. The
+per-case table is for sizing and sequencing; the money is only meaningful in
+aggregate, and a reader must not be able to lift one row. Separately, always
+name the layer: `base × tier × novelty` prices **per-case build**, and
+fully-loaded pipeline cost is **~1.79×** that (batch trunk + orchestrator share
+— `complexity-taxonomy.json` § `fully_loaded_multiplier`).
+
+**Quote all-in $/case with its scope count attached.** Foundation is paid
+once and amortizes, so per-case economics are a function of how many cases
+there are — the manual-baseline engagement ran 11.1 h/TC for case work but
+21.1 h/TC all-in across a 10-case scope. A pilot's all-in per-case figure
+compared against a programme's is a comparison of two different questions,
+and the report should make that hard to do by accident
+(`sizing-rubric.md` § Amortization).
 
 ## Anti-patterns
 
@@ -395,12 +563,57 @@ disk.
   project-local `.agents/estimation/complexity-taxonomy.json` is *that
   project's* posterior; a different stack/pipeline starts from the bundled
   prior, not another project's calibration.
+- **Quoting a scope with no foundation line at all.** Unless you checked and
+  the project genuinely has everything, an estimate of cases-only is an
+  estimate of ~74% of the engagement (measured share, § Foundation). Say
+  "foundation: none required, verified" — or price it.
+- **Pricing foundation in agent-dollars.** It ran ~4.8× cheaper per SP than
+  case work on the source engagement (5.9% of token cost for 25.8% of SP).
+  The agent-cost model is a per-case model; pointing it at framework work
+  produces a number that is wrong in the direction that loses money.
+- **Treating a derived size as a measurement.** The rubric reproduces the
+  source tracker's hand sizes on most rows and misses on some — and those
+  hand sizes were themselves revised between tracker versions. A derived
+  size is a prompt to agree or disagree; record the disagreement in
+  `verdict.size` rather than shipping a letter nobody read the case for.
+- **Quoting a `derived-partial` size without saying so.** Omitted `surfaces`
+  / `new_abstractions` score zero, which under-sizes in one direction only.
+  The script marks those rows; the report must keep the mark.
+- **Reconciling the two currencies.** SP is not agent-minutes converted, and
+  the agent estimate is not SP priced differently. Size predicts agent cost
+  only coarsely (S and M were indistinguishable in the source data; L/XL ran
+  ~2.5–3×). Report both columns and let them disagree.
+- **Forcing the foundation share into the 20–26% band.** The band is a
+  prompt to re-check a selection, not a target. On a small scope a high
+  share is the honest finding and belongs in the report.
+- **Handing over a per-case dollar figure as if it were reliable.** Measured
+  Spearman 0.015 against real per-case cost. Quote batch totals; use per-case
+  output for size and sequencing (§ Output).
+- **Quoting a number without naming its cost layer.** Build-only and
+  fully-loaded differ by ~1.79×. This was the largest single error in v0.5.0.
+- **Pricing a case whose oracle is unspecified.** A
+  `nondeterministic-oracle` / `external-dependency` case was the most
+  expensive in *each* of two holdout batches, and even the widest band missed
+  the worst of them. Report it as unquotable until specified — don't dress a
+  guess in a band.
+- **Letting a scope's clustering shape go unstated.** Clustered cases came in
+  ~2.2× cheaper relative to estimate than solo ones. The report must say which
+  shape it assumes.
+- **Scanning a directory without `--match`.** A bare `.md` sweep scores
+  READMEs and status docs as cases.
+- **Raising `novelty_multiplier` toward the 2× the wave-01 data seems to
+  imply.** Tested on 89 cases; it made every batch worse. The 2× is
+  per-surface-per-wave, not per-case (`complexity-taxonomy.md` § Novelty is
+  per-SURFACE-per-WAVE).
 
 ## References
 
 - [`references/complexity-taxonomy.md`](references/complexity-taxonomy.md) +
   [`references/complexity-taxonomy.json`](references/complexity-taxonomy.json) —
-  the scoring model and the data it reads.
+  the agent-cost scoring model and the data it reads.
+- [`references/sizing-rubric.md`](references/sizing-rubric.md) +
+  [`references/foundation-catalog.json`](references/foundation-catalog.json) —
+  the XS/S/M/L/XL work-size scale, its drivers, and the foundation catalog.
 - [`references/sampling-methodology.md`](references/sampling-methodology.md) —
   Mode 2 extrapolation mechanics.
 - [`references/calibration-methodology.md`](references/calibration-methodology.md) —

@@ -20,7 +20,7 @@
     {
       "name": "automation-scoping",
       "source": "./bundles/test-automation/skills/automation-scoping",
-      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
+      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs sizing or a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", \"size these cases S/M/L/XL\", estimating the framework/CI/foundation work an engagement needs on top of its cases, sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
       "version": "0.2.0"
     },
     {
