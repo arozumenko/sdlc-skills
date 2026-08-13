@@ -50,11 +50,12 @@ flowchart TD
         po["product-owner"]
         intake["intake-triage —<br/>raw ask → Problem"]
         personas["define-personas /<br/>journeys"]
-        tree["opportunity-tree —<br/>map under outcome"]
-        hyp["journeys-to-hypotheses /<br/>define-outcomes"]
-        grill["grill-decision —<br/>stress-test"]
+        hyp["journeys-to-hypotheses —<br/>journeys → hypothesis stubs"]
+        anchor["define-outcomes —<br/>ratify the anchor"]
+        tree["opportunity-tree —<br/>map under the ratified outcome"]
+        grill["grill-decision —<br/>stress-test, earn the evidence class"]
         rank["prioritize-bets"]
-        po --> intake --> personas --> tree --> hyp --> grill --> rank
+        po --> intake --> personas --> hyp --> anchor --> tree --> grill --> rank
     end
 
     subgraph research["discovery-researcher (Sam) — dispatched for evidence"]
@@ -62,10 +63,10 @@ flowchart TD
         deep["deep-research /<br/>verifying-outcomes"]
     end
 
-    hyp -->|"claim needs grounding"| research
+    grill -->|"claim needs grounding"| research
     research -->|"evidence"| po
 
-    rank --> learn["capture-learning<br/>(on close, win or lose)"]
+    rank --> learn["capture-learning<br/>(when a bet concludes, win or lose)"]
     po -.->|"anytime"| status["discovery-status —<br/>read-only dashboard"]
 
     rank -->|"promoted + ratified outcome"| ba(["hand off to ba"])
