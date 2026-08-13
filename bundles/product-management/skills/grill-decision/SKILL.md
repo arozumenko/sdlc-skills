@@ -107,6 +107,7 @@ five fields (this beats loose "challenge notes"):
 | **Evidence to get this week** | the cheapest signal that moves belief |
 | **Kill criterion** | what result would make you abandon the idea |
 | **Cheapest test** | the smallest experiment that produces that signal |
+| **Risk** | `risk: critical` if the bet dies when this is wrong, else `risk: normal` — `stakeholder-interview` sweeps for the critical ones to build its interview guide, so an assumption with no risk flag is invisible to that sweep |
 
 Name the **Elephant** too: the unspoken concern nobody is validating. Grilling circles these;
 your job is to name them out loud and, if they matter, turn them into a kill-assumption row or
@@ -185,7 +186,11 @@ engine, pointed at the bet:
   scoring inputs get written. As the walk resolves each of the four Cagan risks, set the matching
   `confidence:` dimension (`value`, `usability`, `feasibility`, `viability`, each 0–10) on the
   Hypothesis, and set `appetite:` once the bet's size is clear. Write only the dimensions the
-  round actually settled — leave the rest unset rather than filling them to look complete, since
+  round actually settled — leave the rest unset rather than filling them to look complete. Anchor
+  each number to the evidence band it represents rather than to a feeling: 0–2 a hunch, 3–4
+  reasoned with some qualitative signal, 5–7 quantified evidence behind it, 8–10 validated by a
+  real experiment (the same scale `prioritize-bets` bands on). Say in one clause what evidence
+  put it in that band, since
   `prioritize-bets` derives its confidence factor from the mean of what is set and treats an
   all-unset block as unscoreable. This is the "verification/challenge pass to earn a confidence"
   that [`prioritize-bets`](../prioritize-bets/references/frameworks.md) routes unscoreable bets to.

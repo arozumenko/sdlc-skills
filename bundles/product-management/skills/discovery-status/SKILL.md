@@ -76,10 +76,13 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
    No file, or only an unlinked assertion in the body text, is a ❌. Disconfirming evidence
    that was weighed and led to a revision is a legitimate ✅ — the point is that it was
    weighed, not that it was favorable.
-3. **Prioritized** — the hypothesis carries a `priority:` block (score, framework, and an
-   `evidence_note` naming the confidence derivation) AND a matching `DEC-NNN` row in
-   `docs/discovery/decisions.md` recording the ranking call. A score with no `DEC-NNN` row
-   (or vice versa) is a ⚠️ — the two must agree.
+3. **Prioritized** — the hypothesis carries a `priority:` block: score, framework, and an
+   `evidence_note`. For RICE and ICE that note names the confidence derivation; WSJF has no
+   confidence factor, so its note says so instead — don't read a missing derivation as a gap.
+   A `DEC-NNN` row in `docs/discovery/decisions.md` is expected only where the ranking was a
+   real call (something was consciously deferred, or the order was contested); a routine
+   ordering needs no decision record. A `DEC-NNN` row that references a score which no longer
+   matches the block is a ⚠️ — where both exist they must agree.
 4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
    and answered on this hypothesis: look for a `DEC-NNN` row, an evidence file, or a note in
    `docs/discovery/decisions.md` naming the hypothesis id and either `tech-lead` or, where

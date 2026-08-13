@@ -95,8 +95,8 @@ installer's normal resolution, which differs per skill:
 
 - `deep-research`, `verifying-outcomes` — orphan entries in the top-level
   `skills.json`. `deep-research` backs `discovery-researcher`'s desk research and
-  fact-checking; `verifying-outcomes` is a delivery check for confirming a shipped
-  bet moved its metric, not a hypothesis check.
+  fact-checking; `verifying-outcomes` supplies the goal-backward method — its worked
+  examples are code-shaped, so it is carried across rather than applied as-is.
 - `brainstorming` — a `repo:` entry in `skills.json`, fetched from upstream
   at install time. Used by `product-owner`'s framing work.
 - `memory`, `knowledge-curation` — orphan entries in the top-level

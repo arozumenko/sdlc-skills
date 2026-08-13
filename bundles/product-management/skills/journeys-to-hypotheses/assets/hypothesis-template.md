@@ -15,7 +15,7 @@ confidence:                # 0–10 per Cagan risk — earned via `grill-decisio
   usability:
   feasibility:
   viability:
-appetite:                  # effort / job-size input, in weeks (2 / 4 / 8) — set by `grill-decision`
+appetite:                  # effort / job-size input — `2-weeks` | `4-weeks` | `8-weeks`, set by `grill-decision`
 priority: {}               # born empty — `prioritize-bets` replaces this with a scored block
 node_type: solution
 parent: docs/discovery/problems/<PRB-NNN-slug>.md

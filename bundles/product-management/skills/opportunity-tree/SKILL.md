@@ -68,6 +68,9 @@ genuinely different ways to address this need? (Torres's own test asks only for 
 three is this bundle's stricter bar — treat exactly two as borderline, not an automatic fail.)
 
 - **Passes** (three-plus distinct approaches exist) → it is a real opportunity; classify it.
+- **Borderline** (exactly two) → classify it as an opportunity, and say in your report that it
+  cleared Torres's test but not the stricter bar, so the PO can narrow or split it later. Two
+  genuinely different solutions is not a masquerade — don't withhold classification for it.
 - **Fails** (it names one specific implementation) → flag it **solution-masquerade**, name the
   underlying opportunity it might serve, and **leave the call to the PO**. Do not silently write
   `node_type: opportunity` onto a solution-shaped ask.
