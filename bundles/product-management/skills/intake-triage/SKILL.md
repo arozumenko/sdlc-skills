@@ -104,7 +104,11 @@ For each **Act Now** / **Plan Next** ask, write a Problem to
 
 - `type: problem`, a zero-padded `id` following `PRB-NNN` — scan `docs/discovery/problems/` for
   the highest existing `PRB-NNN` and use the next number — a one-sentence problem `title` (a
-  customer **need**, not a feature), `status: active`.
+  customer **need**, not a feature), `status: active`. Before writing each id, **re-check for a
+  collision**: grep the folder for the number you are about to use and, if it already exists (a
+  concurrent session minted it first), **stop and report it** before writing anything new. This
+  matters more here than elsewhere because a single batch confirm can mint several Problems in a
+  row, and `journeys-to-hypotheses` mints into the same folder.
 - **`discovered_from:`** = the path of the batch record from step 6 — the provenance edge. A
   Problem minted here that cannot point back at its record is a broken chain.
 - Leave `node_type:` / `parent:` unset — placing the Problem in the opportunity tree is

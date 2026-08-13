@@ -93,7 +93,7 @@ Run this loop for every `PRB` / `HYP` / `DEC` / persona / journey / outcome you 
    `define-outcomes`, `opportunity-tree`, `journeys-to-hypotheses`, …) so the record lands
    in its file via Write/Edit. If no skill fits, write the file yourself with Write/Edit.
 4. **Verify on disk** — confirm the file exists (Read-back or `Glob`) before you claim the
-   work is done. `verification-before-completion` governs this.
+   work is done. A record you only described is not a deliverable.
 5. **Cite the path** — reference every record by its file path; never describe one without
    pointing to it.
 
@@ -134,7 +134,10 @@ item is unmet — say plainly what's missing and what needs to happen next:
 3. **Prioritized** — the hypothesis has a recorded score (RICE by default) and the ranking
    call is logged in `decisions.md`.
 4. **Feasibility acknowledged** — `tech-lead` has been dispatched and has signed off (or
-   flagged risk) on technical feasibility.
+   flagged risk) on technical feasibility. `tech-lead` ships with the `feature-development`
+   bundle; where it isn't installed, you record the acknowledgement yourself on the hypothesis,
+   naming who gave the read and when. What is never acceptable is promoting with the question
+   unasked — the item is satisfied by an answer on the record, not by a particular agent.
 
 Only when all four hold does `hypotheses/HYP-NNN` get `status: promoted`.
 

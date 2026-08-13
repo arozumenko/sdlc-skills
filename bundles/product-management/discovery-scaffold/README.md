@@ -112,3 +112,15 @@ unredacted interview scratch) that should never be committed. It is
 gitignored. There is no hook enforcing this — before promoting anything out
 of `_inbox/` into a committed record, redact names and refer to people by
 role instead.
+
+The directory is **not** seeded — being gitignored, it cannot be shipped empty.
+Create `docs/discovery/_inbox/` the first time you have raw material to put
+there.
+
+Know what this convention is and is not. It keeps names out of *commits*; it
+does not protect the material itself. The un-redacted source still sits in your
+working tree beside the redacted record, so anyone with repo or filesystem
+access can re-link a role label back to a person, and `git add -f` will happily
+commit it. Backups and cloud-sync folders copy it like any other file. For
+anything genuinely sensitive, keep the raw source outside the repo entirely and
+bring in only the redacted record.

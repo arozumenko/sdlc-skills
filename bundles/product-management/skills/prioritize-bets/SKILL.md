@@ -145,6 +145,14 @@ gate-ready bet → move it toward drafting a spec/PRD; a fresh ordering that cha
 outcome → `define-outcomes` before it can be trusted in the order. **Never `git commit` or `git
 push`** — committing is a human-confirmed action.
 
+**Offer the ranking as a decision.** The promotion gate's "Prioritized" item wants two things: a
+`priority:` block *and* a matching `DEC-NNN` row in `docs/discovery/decisions.md` recording the
+ranking call — `discovery-status` flags a score with no row (or a row with no score) as a
+mismatch. This skill writes the score, never the row. So when the ordering represents a real
+call — a bet moved ahead of another and something was consciously deferred — offer a DEC via
+`grill-decision` before treating the item as satisfied, and say so in the report if the operator
+declines. A ranking nobody recorded a reason for is the one most likely to be relitigated.
+
 ## Rules
 
 - **Confidence is derived, never typed.** A `priority:` block whose `confidence` did not come

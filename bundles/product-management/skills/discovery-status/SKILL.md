@@ -80,11 +80,12 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
    `evidence_note` naming the confidence derivation) AND a matching `DEC-NNN` row in
    `docs/discovery/decisions.md` recording the ranking call. A score with no `DEC-NNN` row
    (or vice versa) is a ⚠️ — the two must agree.
-4. **Feasibility acknowledged** — a record that `tech-lead` was dispatched and signed off
-   (or flagged risk) on this hypothesis: look for a `DEC-NNN` row, an evidence file, or a
-   note in `docs/discovery/decisions.md` naming the hypothesis id and `tech-lead`. Nothing
-   on disk (even if role memory logged a dispatch) is a ❌ — a claim that never lands in a
-   committed record is still open.
+4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
+   and answered on this hypothesis: look for a `DEC-NNN` row, an evidence file, or a note in
+   `docs/discovery/decisions.md` naming the hypothesis id and either `tech-lead` or, where
+   that agent isn't installed, the person who gave the read. Nothing on disk (even if role
+   memory logged a dispatch) is a ❌ — a claim that never lands in a committed record is
+   still open.
 
 Also check, from the hypothesis body itself: **testability** — both "We'll know we're right
 when…" and "We'll know we're wrong when…" are filled in, not placeholder text, plus at least

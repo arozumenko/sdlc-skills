@@ -38,7 +38,9 @@ You → product-owner (Priya) runs the loop end to end
 workspace at install; `product-owner` orients from it plus whatever
 `.agents/*.md` and `docs/` your repo already has. Feasibility sign-off isn't a
 skill — when a bet needs an "is this buildable?" check, `product-owner`
-dispatches `tech-lead` (install `feature-development` too, or skip the check).
+dispatches `tech-lead` (install `feature-development` too, or record the
+acknowledgement yourself on the hypothesis — see Troubleshooting). The gate item
+is never skipped; it is satisfied by an answer on the record.
 
 ### The pipeline, stage by stage
 

@@ -98,9 +98,12 @@ installer's normal resolution, which differs per skill:
   work.
 - `brainstorming` — a `repo:` entry in `skills.json`, fetched from upstream
   at install time. Used by `product-owner`'s framing work.
-- `memory` — not in `skills.json`; resolves cross-bundle to the
-  alphabetical-first bundle that owns it (`feature-development`'s copy).
-  Used by both agents for role memory and checkpointing.
+- `memory`, `knowledge-curation` — orphan entries in the top-level
+  `skills.json` too, same tier as `deep-research`/`verifying-outcomes`, backed
+  by `skills/memory/` and `skills/knowledge-curation/`. `memory` is on both
+  agents' rosters for role memory and checkpointing; `knowledge-curation` is
+  installed via `bundle.json`'s team-wide `skills` list and loaded on demand
+  for the shared `.agents/knowledge/` layer.
 
 ## What this bundle adds
 

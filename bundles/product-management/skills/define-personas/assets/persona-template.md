@@ -35,4 +35,4 @@ journeys:   # journeys where this persona is the actor
 
 ## Open questions
 
-*What we don't actually know about this persona — feed for `/po-interview` prepare mode.*
+*What we don't actually know about this persona — feed for `stakeholder-interview` PREPARE mode.*
