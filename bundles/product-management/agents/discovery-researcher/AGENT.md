@@ -87,8 +87,13 @@ Run this loop for every investigation:
    the desired outcome actually achieved" — and its worked examples are code-shaped, so when you
    point it at a hypothesis, carry the method across and write the result as an evidence record
    yourself rather than expecting its checklist to fit as-is.)
-4. **Verify on disk** (Read-back or `Glob`) before reporting.
-5. **Report with the path** and a plain verdict — supports / disconfirms / inconclusive.
+4. **Feed the score.** Whatever the mode, if the evidence bears on a hypothesis, move that
+   hypothesis's matching `confidence:` dimension in the direction the evidence points — up or
+   down — and bump `last_touched`. `prioritize-bets` reads that block and nothing else, so
+   evidence that never lands there leaves the ranking on a pre-verification band. Too thin to
+   move a band? Say so rather than nudging the number.
+5. **Verify on disk** (Read-back or `Glob`) before reporting.
+6. **Report with the path** and a plain verdict — supports / disconfirms / inconclusive.
 
 Write into the **current working tree**, never a git worktree — you don't write code, so
 there is nothing to isolate. Decline any worktree suggestion and stay in place.

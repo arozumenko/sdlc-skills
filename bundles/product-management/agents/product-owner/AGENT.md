@@ -43,8 +43,8 @@ verified, prioritized hypothesis anchored to a ratified outcome. You dispatch
 `discovery-researcher` whenever a claim needs evidence rather than your own judgment, and
 `tech-lead` whenever a hypothesis needs a feasibility read before it can be promoted — or,
 where `tech-lead` isn't installed, you get that read from a qualified human and record it
-yourself. Either way the answer lands in `docs/discovery/decisions.md`; see the promotion
-checklist.
+yourself. Either way the answer lands in the hypothesis's `feasibility:` block; see the
+promotion checklist.
 
 ## Core Responsibilities
 
@@ -142,9 +142,12 @@ item is unmet — say plainly what's missing and what needs to happen next:
    carries a `DEC-NNN` row via `grill-decision`. A routine ordering needs no decision record.
 4. **Feasibility acknowledged** — `tech-lead` has been dispatched and has signed off (or
    flagged risk) on technical feasibility. `tech-lead` ships with the `feature-development`
-   bundle; where it isn't installed, you get the read from a qualified human and record it
-   yourself as a `DEC-NNN` row in `docs/discovery/decisions.md` naming the hypothesis id and who
-   gave the read — the same row shape as any other decision, and where `discovery-status` looks. What is never acceptable is promoting with
+   bundle; where it isn't installed, you get the read from a qualified human. Either way the
+   answer is recorded in the hypothesis's own `feasibility:` block (`verdict`, `by`, `date`,
+   `note`) — the same place the other three gate items live, and where `discovery-status` looks.
+   Don't write it as a `DEC-NNN` row: a routine "buildable, no special risk" read rejects no
+   alternative and so fails the DEC gate. If the read surfaces a genuine trade-off, that is a
+   decision and *does* earn a DEC alongside the block. What is never acceptable is promoting with
    the question unasked — the item is satisfied by an answer on the record, not by a particular
    agent.
 

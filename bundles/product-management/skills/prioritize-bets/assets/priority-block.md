@@ -3,7 +3,8 @@
   hypothesis, on the PO's explicit confirm. It replaces the born-empty `priority: {}`.
 
   ONE shape per framework — write only the block matching the active framework (from
-  `.agents/profile.md`'s `prioritization:` note, or RICE if that note is absent). Every shape
+  `.agents/profile.md`'s `prioritization:` note, or RICE if that note is absent). RICE and ICE
+  carry a DERIVED confidence; WSJF has no confidence term and carries none. Every shape
   carries: framework, its inputs, the DERIVED confidence, score, scored_on (today), rank, and
   evidence_note (the derivation, verbatim).
 

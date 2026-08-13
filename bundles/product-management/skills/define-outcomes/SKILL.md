@@ -126,21 +126,15 @@ On an explicit ratification act (and only if gates 1 and 3 are clear):
   `outcomes.md#tbd` sentinel, and ratification is the only moment a real anchor exists to replace
   it with — leave it and the bet can never clear promotion-gate item 1.
 
-  Read every file in `docs/discovery/hypotheses/` and collect the ones whose `outcome:` is
-  **unanchored**: the `#tbd` sentinel in any serialization (quoted or bare), empty, absent, or
-  pointing at a row that is not `status: active`. Match on the resolved value, not on one exact
-  string — imported or hand-authored bets rarely use the minting skill's spelling.
+  Collect every hypothesis whose `outcome:` is **unanchored** — the `#tbd` sentinel in any
+  spelling, empty, absent, or pointing at a row that is not `status: active`. Match on the
+  resolved value, not one exact string; imported bets rarely use the minting skill's spelling.
 
-  Then **present that list to the product owner and ask which belong to this anchor.** Nothing in
-  the register maps an anchor to the problems it serves (`why::` may mention one, in prose), so
-  there is no field to infer this from — propose a grouping from `parent_problem:` and the
-  anchor's `why::` if you can, but the PO confirms it. On confirmation, rewrite `outcome:` to
-  `docs/discovery/outcomes.md#<anchor-id>` and bump `last_touched` for each. A bet silently
-  pointed at the wrong anchor scores against the wrong metric, which is worse than one left
-  unanchored — so when in doubt, leave it and say so.
-
-  Report which hypotheses you repointed and which you left unanchored, so nothing is stranded
-  invisibly by a later ratification pass.
+  **Present that list to the product owner and ask which belong to this anchor.** Nothing maps an
+  anchor to the problems it serves, so there is no field to infer it from — propose a grouping
+  from `parent_problem:` if you can, but the PO confirms. On confirmation rewrite `outcome:` to
+  `docs/discovery/outcomes.md#<anchor-id>` and bump `last_touched`. A bet pointed at the wrong
+  anchor scores against the wrong metric, so when in doubt leave it unanchored and report it.
 - **Checkpoint the write:** this write is irreversible — invoke the `memory` skill's **Log**
   op noting which anchor was just ratified, so work resumes cleanly if the session breaks here,
   before proposing the next step.

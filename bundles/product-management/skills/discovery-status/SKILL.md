@@ -79,14 +79,14 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
 3. **Prioritized** — the hypothesis carries a `priority:` block: score, framework, and an
    `evidence_note`. For RICE and ICE that note names the confidence derivation; WSJF has no
    confidence factor, so its note says so instead — don't read a missing derivation as a gap.
-   A `DEC-NNN` row in `docs/discovery/decisions.md` is expected only where the ranking was a
-   real call (something was consciously deferred, or the order was contested); a routine
-   ordering needs no decision record. A `DEC-NNN` row that references a score which no longer
+   A `DEC-NNN` row in `docs/discovery/decisions.md` is expected only where the ranking clears
+   `grill-decision`'s three-criteria gate (hard to reverse, surprising, a real alternative
+   rejected) — a routine ordering needs no decision record, and its absence is not a gap. A `DEC-NNN` row that references a score which no longer
    matches the block is a ⚠️ — where both exist they must agree.
 4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
-   and answered on this hypothesis: a `DEC-NNN` row in `docs/discovery/decisions.md` naming the
-   hypothesis id and who gave the read — `tech-lead`, or the qualified human who stood in for it
-   where that agent isn't installed. An evidence file carrying the same facts also counts. Nothing on disk (even if role
+   and answered on this hypothesis: a populated `feasibility:` block in its frontmatter carrying
+   a `verdict`, who gave the read (`tech-lead`, or the role of the human who stood in where that
+   agent isn't installed) and a date. An empty or absent block is a ❌. Nothing on disk (even if role
    memory logged a dispatch) is a ❌ — a claim that never lands in a committed record is
    still open.
 

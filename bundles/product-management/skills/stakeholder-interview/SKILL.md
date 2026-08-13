@@ -89,11 +89,10 @@ skip it if no learnings exist yet.
 5. Propagate — inline, as each mapping crystallizes (don't batch to the end):
    - Add the interview file to the `evidence:` list of every hypothesis it touches in
      `docs/discovery/hypotheses/`; bump `last_touched`.
-   - Raise the matching `confidence:` dimension where the evidence actually earns it — quantified
-     answers move a bet into the data-backed band, a single anecdote does not. This is the step
-     that makes verification show up in the score: `prioritize-bets` reads only the
-     `confidence:` block, so evidence that never lands there leaves the ranking on a stale
-     pre-verification band. Leave the dimension alone rather than nudging it on thin signal.
+   - **Move the matching `confidence:` dimension the way the evidence points** — up when it
+     earns it (quantified answers reach the data-backed band; one anecdote does not), down when
+     the answer disconfirms what the band assumed. A dimension that only ever rises is not a
+     measurement. Note what moved it; leave it alone on thin signal.
    - Where an answer **confirms** an assumption: note it on the assumption bullet (`—
      validated: evidence/interviews/<file>`).
    - Where an answer **breaks** an assumption: edit the hypothesis to say so, and offer

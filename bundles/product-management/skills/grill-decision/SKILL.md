@@ -189,8 +189,10 @@ engine, pointed at the bet:
   round actually settled — leave the rest unset rather than filling them to look complete. Anchor
   each number to the evidence band it represents rather than to a feeling: 0–2 a hunch, 3–4
   reasoned with some qualitative signal, 5–7 quantified evidence behind it, 8–10 validated by a
-  real experiment (the same scale `prioritize-bets` bands on). Say in one clause what evidence
-  put it in that band, since
+  real experiment (the same scale `prioritize-bets` bands on). **Write the band's midpoint — 1, 4, 6 or 9 —
+  unless you can say why this case sits off it.** RICE consumes the band, but ICE consumes the
+  rounded mean of the raw numbers, so choosing freely inside a band silently moves an ICE rank.
+  Say in one clause what evidence put it in that band, since
   `prioritize-bets` derives its confidence factor from the mean of what is set and treats an
   all-unset block as unscoreable. This is the "verification/challenge pass to earn a confidence"
   that [`prioritize-bets`](../prioritize-bets/references/frameworks.md) routes unscoreable bets to.

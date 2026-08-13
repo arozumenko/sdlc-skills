@@ -18,7 +18,7 @@ tells you *in what order*. When more bets clear the gate than the team's appetit
 this skill turns the backlog into a defensible ordered list and writes the ranks where they
 survive the session.
 
-**The load-bearing rule: a score cannot exist without its evidence class.** RICE's (and ICE's)
+**The load-bearing rule: a RICE or ICE score cannot exist without its evidence class.** RICE's (and ICE's)
 *confidence* factor is not a number the PO types in — it is **derived** from the hypothesis's
 own evidence-banded `confidence:` block. Prioritization therefore consumes the validation
 pipeline instead of vibes: a bet nobody has validated cannot borrow a high confidence to jump
@@ -128,8 +128,7 @@ proceed knowingly.
 ### 6. Persist — only on the PO's explicit confirm
 On an explicit go-ahead ("write them", "persist the ranking", "confirmed"):
 
-- **On each scored hypothesis's frontmatter** (the derived confidence applies to RICE and ICE;
-  WSJF carries none), write the `priority:` block from
+- **On each scored hypothesis's frontmatter**, write the `priority:` block from
   [`assets/priority-block.md`](assets/priority-block.md) — `framework`, the inputs, the derived
   `confidence`, `score`, `scored_on: <today>`, `rank`, and the `evidence_note`. This replaces the
   born-empty `priority: {}`. Bump `last_touched`.
@@ -146,13 +145,12 @@ gate-ready bet → move it toward drafting a spec/PRD; a fresh ordering that cha
 outcome → `define-outcomes` before it can be trusted in the order. **Never `git commit` or `git
 push`** — committing is a human-confirmed action.
 
-**Offer the ranking as a decision.** The promotion gate's "Prioritized" item wants two things: a
-`priority:` block *and* a matching `DEC-NNN` row in `docs/discovery/decisions.md` recording the
-ranking call — `discovery-status` flags a score with no row (or a row with no score) as a
-mismatch. This skill writes the score, never the row. So when the ordering represents a real
-call — a bet moved ahead of another and something was consciously deferred — offer a DEC via
-`grill-decision` before treating the item as satisfied, and say so in the report if the operator
-declines. A ranking nobody recorded a reason for is the one most likely to be relitigated.
+**Offer the ranking as a decision — when it is one.** This skill writes the score, never a
+decision row. Most orderings need none: the gate expects one only where the ranking clears
+`grill-decision`'s three-criteria test (hard to reverse, surprising, a real alternative
+rejected). A bet deliberately deferred behind another usually clears it; a routine re-sort does
+not, and `grill-decision` is required to refuse the row if it doesn't. When it clears, offer the
+DEC there before treating the item as satisfied.
 
 ## Rules
 

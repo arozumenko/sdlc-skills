@@ -152,8 +152,8 @@ hypothesis leaves this team only when the gate is clear:
 - its outcome anchor is **ratified** with a dated baseline,
 - its risky assumptions are **verified**,
 - it's been **prioritized**, and
-- feasibility is **acknowledged** — by `tech-lead`, or, where it isn't installed, recorded in
-  `decisions.md` by whoever gave the read.
+- feasibility is **acknowledged** — a `feasibility:` block on the hypothesis, filled by
+  `tech-lead` or by whoever gave the read where that agent isn't installed.
 
 Priya narrates that checklist and **refuses handoff** when any item is unmet.
 
@@ -175,9 +175,13 @@ to reconcile them into a coherent, prioritized set of bets.
    named in `.agents/profile.md`, it cross-checks the epic board too.
 4. **Anchor** — `define-outcomes` gives the orphaned bets a metric to move, and
    repoints them off the `#tbd` sentinel.
-5. **Verify, then prioritize** — under RICE and ICE a bet needs an evidence band
-   before it can be scored at all (WSJF is the exception — it has no confidence
-   term), so run the verification pass first; `prioritize-bets` then ranks
+5. **Map and sharpen** — `opportunity-tree` hangs each problem under its now-ratified
+   anchor and regenerates `outcome-tree.md`; `grill-decision` stress-tests the imported
+   bets and fills the `confidence:` dimensions and `appetite:` they arrived without.
+   Imported bets skip nothing here — a hypothesis you wrote by hand still has no
+   evidence class until it is grilled.
+6. **Verify, then prioritize** — a bet needs an evidence band before it can be
+   scored, so run the verification pass first; `prioritize-bets` then ranks
    the incubating set (RICE by default; WSJF/ICE are config options) with confidence
    **derived from each bet's evidence band**, never guessed.
 
@@ -256,8 +260,8 @@ Three rules the team obeys (full detail in the bundle README and
   tracker there (and `gh`/`glab` on PATH) to enable the cross-check.
 - **Feasibility check asks for `tech-lead` and it isn't installed** → install the
   `feature-development` bundle (which ships `tech-lead`), or get the read from a
-  qualified human and record it yourself as a note in `docs/discovery/decisions.md`
-  naming the hypothesis id — that is where `discovery-status` looks for it.
+  qualified human. Either way it is recorded in the hypothesis's own `feasibility:`
+  block — that is where `discovery-status` looks for it.
 - **Priya prioritizes on a gut-band bet** → `prioritize-bets` **warns, never
   blocks** — the ranking stands but is flagged; run a verification pass
   (`stakeholder-interview` / `deep-research`) to raise the evidence band.

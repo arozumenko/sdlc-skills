@@ -42,7 +42,7 @@ stands against the gate. It is read-only.
 Two of those orderings are load-bearing, not stylistic. **Outcome before map**,
 because the tree's roots are ratified anchors. And **verify before
 prioritize**, because the ranking's confidence factor is derived from banded
-evidence — a bet with none is unscoreable.
+evidence — a bet with none has nothing to derive it from.
 
 ## Folders
 

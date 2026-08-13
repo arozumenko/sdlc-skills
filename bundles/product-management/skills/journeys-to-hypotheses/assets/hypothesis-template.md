@@ -17,6 +17,11 @@ confidence:                # 0–10 per Cagan risk — earned via `grill-decisio
   viability:
 appetite:                  # effort / job-size input — `2-weeks` | `4-weeks` | `8-weeks`, set by `grill-decision`
 priority: {}               # born empty — `prioritize-bets` replaces this with a scored block
+feasibility:               # gate item 4 — unset until someone gives the "is this buildable?" read
+  verdict:                 # buildable | buildable-with-risk | not-yet
+  by:                      # `tech-lead`, or the role of the human who gave the read
+  date:
+  note:                    # any flagged risk, in one line
 node_type: solution
 parent: docs/discovery/problems/<PRB-NNN-slug>.md
 ---
