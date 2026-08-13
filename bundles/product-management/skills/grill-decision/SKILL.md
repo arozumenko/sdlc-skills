@@ -98,7 +98,7 @@ it.
 ## The kill-assumption contract (the shape of every adversarial capture)
 
 When grilling surfaces a load-bearing assumption, don't leave it as a vague worry — pin it in
-five fields (this beats loose "challenge notes"):
+six fields (this beats loose "challenge notes"):
 
 | Field | What it captures |
 |---|---|

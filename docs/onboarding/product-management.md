@@ -54,7 +54,7 @@ Each stage is a skill Priya (or Sam) invokes; you don't call them by hand.
 | 4. Anchor | `define-outcomes` | Ratified, measurable outcome anchors in `outcomes.md` |
 | 5. Map | `opportunity-tree` | `node_type:`/`parent:` overlay + the `outcome-tree.md` board |
 | 6. Sharpen | `grill-decision`, `brainstorming` | Decisions (`decisions.md`), sharpened hypotheses |
-| 7. Verify | `stakeholder-interview`, `deep-research` | Evidence under `evidence/*`, verdicts on assumptions (`verifying-outcomes` is a delivery check for after a bet ships, not a hypothesis check) |
+| 7. Verify | `stakeholder-interview`, `deep-research` | Evidence under `evidence/*`, verdicts on assumptions (`verifying-outcomes` supplies the goal-backward method; its worked examples are code-shaped, so it is carried across) |
 | 8. Prioritize | `prioritize-bets` | RICE-ranked bets + the `priority.md` board |
 | 9. Learn | `capture-learning` | `evidence/learnings/` when a bet closes |
 | — Status | `discovery-status` | A read-only dashboard, at any point |
@@ -175,8 +175,9 @@ to reconcile them into a coherent, prioritized set of bets.
    named in `.agents/profile.md`, it cross-checks the epic board too.
 4. **Anchor** — `define-outcomes` gives the orphaned bets a metric to move, and
    repoints them off the `#tbd` sentinel.
-5. **Verify, then prioritize** — the bets need an evidence band before they can be
-   scored at all, so run the verification pass first; `prioritize-bets` then ranks
+5. **Verify, then prioritize** — under RICE and ICE a bet needs an evidence band
+   before it can be scored at all (WSJF is the exception — it has no confidence
+   term), so run the verification pass first; `prioritize-bets` then ranks
    the incubating set (RICE by default; WSJF/ICE are config options) with confidence
    **derived from each bet's evidence band**, never guessed.
 

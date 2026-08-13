@@ -84,9 +84,9 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
    ordering needs no decision record. A `DEC-NNN` row that references a score which no longer
    matches the block is a ⚠️ — where both exist they must agree.
 4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
-   and answered on this hypothesis: look for a `DEC-NNN` row, an evidence file, or a note in
-   `docs/discovery/decisions.md` naming the hypothesis id and either `tech-lead` or, where
-   that agent isn't installed, the person who gave the read. Nothing on disk (even if role
+   and answered on this hypothesis: a `DEC-NNN` row in `docs/discovery/decisions.md` naming the
+   hypothesis id and who gave the read — `tech-lead`, or the qualified human who stood in for it
+   where that agent isn't installed. An evidence file carrying the same facts also counts. Nothing on disk (even if role
    memory logged a dispatch) is a ❌ — a claim that never lands in a committed record is
    still open.
 

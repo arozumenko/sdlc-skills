@@ -32,7 +32,9 @@ Run `discovery-status` first when you're not sure where the pipeline currently s
 ## Role in the Team
 
 ```
-User → You (Product Owner) → discovery-researcher (evidence) → ba (Alex) → tech-lead
+User → You (Product Owner) → discovery-researcher (evidence)
+                           → tech-lead (feasibility read, before promotion)
+                           → ba (Alex), once the gate is clear
 ```
 
 You sit between a raw ask and a groomed backlog. You receive an unstructured idea,
@@ -135,13 +137,14 @@ item is unmet — say plainly what's missing and what needs to happen next:
 2. **Hypothesis verified** — `discovery-researcher` has produced (or you've reviewed)
    evidence in `evidence/verifications/` supporting the hypothesis; disconfirming evidence
    has been weighed, not ignored.
-3. **Prioritized** — the hypothesis has a recorded score (RICE by default) and the ranking
-   call is logged in `decisions.md`.
+3. **Prioritized** — the hypothesis has a recorded score (RICE by default). Where the ranking
+   was a real call — something was consciously deferred, or the order was contested — it also
+   carries a `DEC-NNN` row via `grill-decision`. A routine ordering needs no decision record.
 4. **Feasibility acknowledged** — `tech-lead` has been dispatched and has signed off (or
    flagged risk) on technical feasibility. `tech-lead` ships with the `feature-development`
-   bundle; where it isn't installed, you record the acknowledgement yourself on the hypothesis,
-   recording it as a note in `docs/discovery/decisions.md` naming the hypothesis id and who gave
-   the read, which is where `discovery-status` looks. What is never acceptable is promoting with
+   bundle; where it isn't installed, you get the read from a qualified human and record it
+   yourself as a `DEC-NNN` row in `docs/discovery/decisions.md` naming the hypothesis id and who
+   gave the read — the same row shape as any other decision, and where `discovery-status` looks. What is never acceptable is promoting with
    the question unasked — the item is satisfied by an answer on the record, not by a particular
    agent.
 

@@ -55,7 +55,7 @@ flowchart TD
         tree["opportunity-tree —<br/>map under the ratified outcome"]
         grill["grill-decision —<br/>stress-test, earn the evidence class"]
         rank["prioritize-bets"]
-        po --> intake --> personas --> hyp --> anchor --> tree --> grill --> rank
+        po --> intake --> personas --> hyp --> anchor --> tree --> grill
     end
 
     subgraph research["discovery-researcher (Sam) — dispatched for evidence"]
@@ -63,8 +63,8 @@ flowchart TD
         deep["deep-research /<br/>verifying-outcomes"]
     end
 
-    grill -->|"claim needs grounding"| research
-    research -->|"evidence"| po
+    grill -->|"assumptions need grounding"| research
+    research -->|"evidence, banded"| rank
 
     rank --> learn["capture-learning<br/>(when a bet concludes, win or lose)"]
     po -.->|"anytime"| status["discovery-status —<br/>read-only dashboard"]
@@ -89,9 +89,10 @@ layout, ID conventions, and hypothesis lifecycle.
 
 ## Reused skills
 
-These skills are **not** owned by this bundle — there's no duplicate copy
-here. They're pulled in through each agent's `skills:` frontmatter via the
-installer's normal resolution, which differs per skill:
+These skills are **not** owned by this bundle — there's no duplicate copy here.
+They're pulled in via the installer's normal resolution: most through an agent's
+`skills:` frontmatter, and `knowledge-curation` through `bundle.json`'s team-wide
+`skills` list. The resolution differs per skill:
 
 - `deep-research`, `verifying-outcomes` — orphan entries in the top-level
   `skills.json`. `deep-research` backs `discovery-researcher`'s desk research and

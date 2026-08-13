@@ -128,7 +128,8 @@ proceed knowingly.
 ### 6. Persist — only on the PO's explicit confirm
 On an explicit go-ahead ("write them", "persist the ranking", "confirmed"):
 
-- **On each scored hypothesis's frontmatter**, write the `priority:` block from
+- **On each scored hypothesis's frontmatter** (the derived confidence applies to RICE and ICE;
+  WSJF carries none), write the `priority:` block from
   [`assets/priority-block.md`](assets/priority-block.md) — `framework`, the inputs, the derived
   `confidence`, `score`, `scored_on: <today>`, `rank`, and the `evidence_note`. This replaces the
   born-empty `priority: {}`. Bump `last_touched`.

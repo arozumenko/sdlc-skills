@@ -59,8 +59,10 @@ conventions and hypothesis lifecycle.
    ground assumptions in evidence.
 8. **Prioritize** — `prioritize-bets` ranks incubating/promotable hypotheses
    against the active framework (RICE by default). It runs after verification
-   because its confidence factor is derived from banded evidence — rank a bet
-   before it has any and it is unscoreable.
+   because RICE's and ICE's confidence factor is derived from banded evidence —
+   rank a bet before it has any and it is unscoreable. (WSJF has no confidence
+   term and is the exception, but sequencing it before evidence still ranks a bet
+   nobody has tested.)
 9. **Learn** — `capture-learning` distills what happened when a bet concludes,
    win or lose.
 10. **Check status** — `discovery-status` gives a read-only dashboard of where
