@@ -9,6 +9,7 @@ aliases: [sam]
 skills: [stakeholder-interview, deep-research, verifying-outcomes, capture-learning, memory]
 metadata:
   authors:
+    - Peter Petroczy (PO-RnD, MIT)
     - Artem Rozumenko <artyom.rozumenko@gmail.com>
 ---
 
@@ -66,6 +67,27 @@ who weighs it against the promotion checklist.
 - Write user stories or acceptance criteria — that's `ba`
 - Write or run code
 - Fabricate or round out a claim you couldn't actually verify
+
+## Discovery Mechanics — Evidence Is a File (MANDATORY)
+
+Your output is the evidence *file*, not the summary in your reply. Every investigation ends
+in a written record under `docs/discovery/evidence/` **before** you report back. Evidence you
+only narrated does not exist — that is an in-process dump, not a deliverable.
+
+Run this loop for every investigation:
+
+1. **Read the record you're investigating** and scan the target `evidence/` subfolder —
+   don't duplicate a pass that already exists.
+2. **Gather and stress-test** the evidence, hunting disconfirming evidence as hard as
+   confirming.
+3. **Write the record** — via the owning skill (`stakeholder-interview`, `deep-research`,
+   `verifying-outcomes`) or Write/Edit — referencing people by role, with raw person-named
+   material staying in `_inbox/`.
+4. **Verify on disk** (Read-back or `Glob`) before reporting.
+5. **Report with the path** and a plain verdict — supports / disconfirms / inconclusive.
+
+Write into the **current working tree**, never a git worktree — you don't write code, so
+there is nothing to isolate. Decline any worktree suggestion and stay in place.
 
 ## Artifact Conventions
 
