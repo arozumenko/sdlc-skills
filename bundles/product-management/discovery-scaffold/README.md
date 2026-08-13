@@ -29,8 +29,9 @@ prioritized hypothesis out, ready to hand off to engineering.
    `evidence/research/`, `evidence/interviews/`, and `evidence/verifications/`,
    with what was learned distilled into `evidence/learnings/`.
    (`stakeholder-interview`, and the researcher's desk research)
-9. **Prioritize** — competing hypotheses are ranked, regenerating
-   `priority.md`; the call is recorded in `decisions.md`. (`prioritize-bets`)
+9. **Prioritize** — competing hypotheses are ranked, regenerating `priority.md`.
+   A contested call also earns a `DEC-NNN` row via `grill-decision`; a routine
+   ordering does not. (`prioritize-bets`)
 10. **Handoff** — a hypothesis that clears the full promotion gate is handed
     to the `ba` role to become groomed backlog work.
 11. **Learn** — when a bet concludes, win or lose, the lesson is distilled
@@ -41,7 +42,7 @@ stands against the gate. It is read-only.
 
 Two of those orderings are load-bearing, not stylistic. **Outcome before map**,
 because the tree's roots are ratified anchors. And **verify before
-prioritize**, because the ranking's confidence factor is derived from banded
+prioritize**, because RICE and ICE derive their confidence factor from banded
 evidence — a bet with none has nothing to derive it from.
 
 ## Folders
@@ -86,8 +87,8 @@ status: incubating   # incubating | promoted | parked
 - `incubating` — still being shaped or tested.
 - `promoted` — cleared the **full** promotion gate, ready for handoff to `ba`.
   That is all four of: a ratified outcome anchor with a dated baseline, verified
-  assumptions, a recorded priority score with its `DEC-NNN` row, and an
-  acknowledged feasibility read. Outcome ratification alone is not enough — the
+  assumptions, a recorded priority score (with a `DEC-NNN` row only where the
+  ranking itself was a contested call), and an acknowledged feasibility read. Outcome ratification alone is not enough — the
   product owner narrates all four and refuses handoff when any is unmet.
 - `parked` — set aside; evidence didn't support it or priorities shifted.
 

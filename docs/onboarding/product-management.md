@@ -182,7 +182,7 @@ to reconcile them into a coherent, prioritized set of bets.
    evidence class until it is grilled.
 6. **Verify, then prioritize** — a bet needs an evidence band before it can be
    scored, so run the verification pass first; `prioritize-bets` then ranks
-   the incubating set (RICE by default; WSJF/ICE are config options) with confidence
+   the incubating set (RICE by default; WSJF/ICE are config options) with RICE and ICE confidence
    **derived from each bet's evidence band**, never guessed.
 
 From here it's the same verify → gate → handoff flow as greenfield.

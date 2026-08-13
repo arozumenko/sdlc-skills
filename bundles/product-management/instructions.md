@@ -59,8 +59,8 @@ conventions and hypothesis lifecycle.
    ground assumptions in evidence.
 8. **Prioritize** — `prioritize-bets` ranks incubating/promotable hypotheses
    against the active framework (RICE by default). It runs after verification
-   because the confidence factor is derived from banded evidence — rank a bet
-   before it has any and the score is a guess wearing a number.
+   because RICE and ICE derive their confidence factor from banded evidence —
+   rank a bet before it has any and the score is a guess wearing a number.
 9. **Learn** — `capture-learning` distills what happened when a bet concludes,
    win or lose.
 10. **Check status** — `discovery-status` gives a read-only dashboard of where
@@ -68,8 +68,8 @@ conventions and hypothesis lifecycle.
 
 Two orderings in that list are load-bearing rather than stylistic: **anchor
 before map**, because `opportunity-tree` hangs problems under an already-ratified
-outcome; and **verify before prioritize**, because the score is derived from banded
-evidence, and a bet nobody has tested has none to derive from.
+outcome; and **verify before prioritize**, because RICE and ICE derive their score
+from banded evidence, and a bet nobody has tested has none to derive from.
 
 ## Handoff to `ba`
 

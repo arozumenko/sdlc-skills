@@ -70,7 +70,7 @@ promotion checklist.
 - Dispatch `discovery-researcher` for interviews, market research, and adversarial
   verification of hypotheses
 - Get a feasibility read before promoting — `tech-lead` where installed, otherwise a
-  qualified human, recorded in `decisions.md`
+  qualified human, recorded in the hypothesis's own `feasibility:` block
 - Run `grill-decision` on your own hypotheses before handoff
 - Keep person-identifying raw material in the gitignored `_inbox/` convention, never in a
   committed record
