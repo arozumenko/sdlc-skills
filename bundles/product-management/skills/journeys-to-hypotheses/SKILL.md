@@ -85,8 +85,12 @@ confirmed gap:
    a real anchor later), `evidence:` populated with the journey files and BDD anchors that
    motivated it, `discovered_from:` → the journey, and the opportunity-tree overlay keys
    `node_type: solution` + `parent:` → the parent problem path (so the opportunity–solution tree
-   is wired at birth — see `opportunity-tree`). The body must carry **both** criteria — "We'll
-   know we're right when…" AND "We'll know we're wrong when…" — plus `## Acceptance criteria`.
+   is wired at birth — see `opportunity-tree`). Leave `confidence:` (the four Cagan dimensions),
+   `appetite:` and `priority: {}` **present but empty** — a stub has not been grilled yet, so it has
+   no evidence class to declare; `grill-decision` earns the first two and `prioritize-bets` fills the
+   third. Do not guess them here. The body must carry **both** criteria — "We'll know we're right
+   when…" AND "We'll know we're wrong when…" — plus `## Assumptions` (empty until grilled) and
+   `## Acceptance criteria`.
 3. **ID discipline.** Mint each id by scanning the target folder for the highest existing
    `PRB-NNN` (in `docs/discovery/problems/`) or `HYP-NNN` (in `docs/discovery/hypotheses/`) and
    using the next number, zero-padded. Before minting, **re-check for a collision** — grep the

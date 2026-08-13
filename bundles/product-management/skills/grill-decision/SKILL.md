@@ -181,6 +181,14 @@ engine, pointed at the bet:
   we're wrong when…".
 - Sharpen terms against established usage as you go (correct them inline, in the Hypothesis, as
   you go).
+- **Earn the evidence class.** Grilling is where a bet stops being a hunch, so it is where the
+  scoring inputs get written. As the walk resolves each of the four Cagan risks, set the matching
+  `confidence:` dimension (`value`, `usability`, `feasibility`, `viability`, each 0–10) on the
+  Hypothesis, and set `appetite:` once the bet's size is clear. Write only the dimensions the
+  round actually settled — leave the rest unset rather than filling them to look complete, since
+  `prioritize-bets` derives its confidence factor from the mean of what is set and treats an
+  all-unset block as unscoreable. This is the "verification/challenge pass to earn a confidence"
+  that [`prioritize-bets`](../prioritize-bets/references/frameworks.md) routes unscoreable bets to.
 - **Edit the Hypothesis in place** when a question forces a change; bump `last_touched`. If the
   round was a genuine adversarial pass, you may set `last_challenged: <today>` — but a dedicated
   pre-promotion challenge pass belongs to whatever verification skill the project runs before
