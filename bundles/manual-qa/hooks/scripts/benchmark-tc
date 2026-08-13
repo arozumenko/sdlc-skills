@@ -18,6 +18,11 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 # next to this script, not at <project>/scripts/ — resolve self-relatively so
 # this works regardless of cwd (run-hook.cmd always sets $0 to the full path).
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Sourced for ccusage_session_json() — resolves `ccusage` on PATH, else
+# `npx -y ccusage`. Without it this hook's snapshot is empty on any machine
+# where ccusage isn't globally installed.
+# shellcheck source=ccusage-wait.sh
+. "${HOOK_DIR}/ccusage-wait.sh"
 STATE_DIR="${PROJECT_DIR}/.claude"
 
 payload="$(cat 2>/dev/null || true)"
@@ -46,7 +51,7 @@ if [ ! -f "$STATE_FILE" ]; then
   if [ -f "$SESSION_PRE_FILE" ]; then
     cp "$SESSION_PRE_FILE" "$PRE_FILE"
   else
-    ccusage session --json > "$PRE_FILE" 2>/dev/null \
+    ccusage_session_json > "$PRE_FILE" 2>/dev/null \
       || printf '{}' > "$PRE_FILE"
   fi
   printf '{"first_dispatch_at":"%s","pre_file":"%s","trace_file":"%s"}\n' \

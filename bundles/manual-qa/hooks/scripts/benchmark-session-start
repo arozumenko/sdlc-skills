@@ -71,7 +71,7 @@ if [ ! -f "$TS_FILE" ]; then
     # No session_id on this payload at all (older Claude Code / unusual
     # invocation) -- nothing to retry-match against, take one snapshot as
     # before rather than burning the full retry window for nothing.
-    ccusage session --json > "$SESSION_PRE_FILE" 2>/dev/null \
+    ccusage_session_json > "$SESSION_PRE_FILE" 2>/dev/null \
       || printf '{}' > "$SESSION_PRE_FILE"
   fi
 

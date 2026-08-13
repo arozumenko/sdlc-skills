@@ -58,6 +58,98 @@
 # snapshot is still useful, build-run-metrics.mjs's own unscoped fallback
 # path handles it).
 
+# ---------------------------------------------------------------------------
+# ccusage invocation resolver — added 2026-08-12.
+#
+# WHY: `ccusage` ships on npm and is frequently NOT installed globally. On a
+# machine without it, every `ccusage session --json` call in this pipeline
+# returned nothing, the `|| printf '{}'` fallbacks wrote empty snapshots, and
+# every run silently degraded to `tokens_coverage: "subagents_only"` with null
+# token counts. Nothing errored — the graceful-degradation design worked
+# exactly as intended — so the only symptom was an empty metrics JSON that
+# looked like a data problem rather than a missing dependency. Confirmed on
+# this box: `command -v ccusage` → not found, while RUN-2026-08-12-002's
+# metrics came back with every per-case value null.
+#
+# FIX: prefer a real binary on PATH; fall back to `npx -y ccusage`, which
+# resolves the package on demand. If neither is available, return non-zero and
+# let each caller's existing `{}` fallback take over — same never-block,
+# never-fail-the-hook philosophy as the rest of the pipeline.
+#
+# Resolution is cached in _CCUSAGE_MODE for the life of the shell, so the
+# 60s poll loop below doesn't re-probe PATH on every iteration.
+#
+# The mode is a flag dispatched through a `case`, NOT an argv string expanded
+# unquoted. An earlier draft stored "npx -y ccusage" in a variable and relied
+# on word-splitting at the call site; that works under bash (these hooks all
+# have a bash shebang) but silently breaks under zsh, which does not split
+# unquoted expansions — the whole string is looked up as one command name and
+# the call exits 127 with empty stderr, which looks exactly like "ccusage is
+# missing". Caught while validating this very fix from a zsh prompt.
+#
+# TIMING CAVEAT: a PATH binary answers in ~100ms; `npx` pays node startup
+# plus, on the very first call before npm's _npx cache is warm, a package
+# download. That matters to wait_for_scoped_ccusage, whose budget is real
+# wall-clock — under npx it will make far fewer attempts within the same 60s
+# (possibly only one). That is a deliberate trade: a slow snapshot still
+# beats no snapshot, and the unscoped fallback path already handles a miss.
+# CCUSAGE_TIMEOUT_S bounds a single call so a hung npx (no network, private
+# registry) can't wedge a hook; `timeout` is not present by default on macOS,
+# so it is used only when available.
+# Runs "$@", bounded by a timeout wrapper when the platform genuinely has one.
+#
+# Per-platform reality this has to survive:
+#   Linux   — `timeout` is coreutils, wraps a command. Works.
+#   macOS   — ships NEITHER `timeout` nor `gtimeout` unless the user installed
+#             coreutils via brew. Unbounded is the normal path here.
+#   Windows — `command -v timeout` finds C:\Windows\System32\timeout.exe under
+#             Git Bash, which is an ENTIRELY DIFFERENT command: it pauses for N
+#             seconds and takes `/t`, it does not wrap anything. Dispatching to
+#             it would corrupt every call (and it errors outright when stdin is
+#             redirected, which it is here).
+#
+# So presence on PATH is not evidence of the right command — probe behaviour
+# instead. `timeout 1 true` succeeds only for the coreutils wrapper form;
+# Windows' timeout.exe rejects it. Result cached for the life of the shell.
+_ccusage_run() {
+  if [ -z "${_CCUSAGE_TIMEOUT_MODE:-}" ]; then
+    _CCUSAGE_TIMEOUT_MODE="none"
+    if command -v timeout >/dev/null 2>&1 && timeout 1 true >/dev/null 2>&1; then
+      _CCUSAGE_TIMEOUT_MODE="timeout"
+    elif command -v gtimeout >/dev/null 2>&1 && gtimeout 1 true >/dev/null 2>&1; then
+      _CCUSAGE_TIMEOUT_MODE="gtimeout"
+    fi
+  fi
+
+  case "$_CCUSAGE_TIMEOUT_MODE" in
+    timeout)  timeout  "${CCUSAGE_TIMEOUT_S:-60}" "$@" 2>/dev/null ;;
+    gtimeout) gtimeout "${CCUSAGE_TIMEOUT_S:-60}" "$@" 2>/dev/null ;;
+    *)        "$@" 2>/dev/null ;;
+  esac
+}
+
+ccusage_session_json() {
+  if [ -z "${_CCUSAGE_MODE:-}" ]; then
+    if command -v ccusage >/dev/null 2>&1; then
+      _CCUSAGE_MODE="bin"
+    elif command -v npx >/dev/null 2>&1; then
+      _CCUSAGE_MODE="npx"
+    elif command -v npx.cmd >/dev/null 2>&1; then
+      # Windows: some shells surface only the .cmd shim on PATH.
+      _CCUSAGE_MODE="npxcmd"
+    else
+      _CCUSAGE_MODE="none"
+    fi
+  fi
+
+  case "$_CCUSAGE_MODE" in
+    bin)    _ccusage_run ccusage session --json ;;
+    npx)    _ccusage_run npx -y ccusage session --json ;;
+    npxcmd) _ccusage_run npx.cmd -y ccusage session --json ;;
+    *)      return 1 ;;
+  esac
+}
+
 wait_for_scoped_ccusage() {
   local sid="$1" out_file="$2" debug_log="${3:-}" label="${4:-ccusage-wait}"
   local total_budget_s=60
@@ -68,7 +160,7 @@ wait_for_scoped_ccusage() {
 
   while :; do
     attempt=$((attempt + 1))
-    snapshot="$(ccusage session --json 2>/dev/null || true)"
+    snapshot="$(ccusage_session_json || true)"
     elapsed_s=$(( $(date -u +%s) - start_epoch ))
 
     if printf '%s' "$snapshot" | node -e "
