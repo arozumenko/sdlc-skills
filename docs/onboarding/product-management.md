@@ -39,7 +39,7 @@ workspace at install; `product-owner` orients from it plus whatever
 `.agents/*.md` and `docs/` your repo already has. Feasibility sign-off isn't a
 skill — when a bet needs an "is this buildable?" check, `product-owner`
 dispatches `tech-lead` (install `feature-development` too, or record the
-acknowledgement yourself in `decisions.md` — see Troubleshooting). The gate item
+acknowledgement yourself on the hypothesis — see Troubleshooting). The gate item
 is never skipped; it is satisfied by an answer on the record.
 
 ### The pipeline, stage by stage
@@ -152,7 +152,7 @@ hypothesis leaves this team only when the gate is clear:
 - its outcome anchor is **ratified** with a dated baseline,
 - its risky assumptions are **verified**,
 - it's been **prioritized**, and
-- feasibility is **acknowledged** — a `feasibility:` block on the hypothesis, filled by
+- feasibility is **acknowledged** — a `feasibility_read:` block on the hypothesis, filled by
   `tech-lead` or by whoever gave the read where that agent isn't installed.
 
 Priya narrates that checklist and **refuses handoff** when any item is unmet.
@@ -260,7 +260,7 @@ Three rules the team obeys (full detail in the bundle README and
   tracker there (and `gh`/`glab` on PATH) to enable the cross-check.
 - **Feasibility check asks for `tech-lead` and it isn't installed** → install the
   `feature-development` bundle (which ships `tech-lead`), or get the read from a
-  qualified human. Either way it is recorded in the hypothesis's own `feasibility:`
+  qualified human. Either way it is recorded in the hypothesis's own `feasibility_read:`
   block — that is where `discovery-status` looks for it.
 - **Priya prioritizes on a gut-band bet** → `prioritize-bets` **warns, never
   blocks** — the ranking stands but is flagged; run a verification pass

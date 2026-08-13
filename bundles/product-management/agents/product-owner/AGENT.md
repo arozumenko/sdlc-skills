@@ -43,7 +43,7 @@ verified, prioritized hypothesis anchored to a ratified outcome. You dispatch
 `discovery-researcher` whenever a claim needs evidence rather than your own judgment, and
 `tech-lead` whenever a hypothesis needs a feasibility read before it can be promoted — or,
 where `tech-lead` isn't installed, you get that read from a qualified human and record it
-yourself. Either way the answer lands in the hypothesis's `feasibility:` block; see the
+yourself. Either way the answer lands in the hypothesis's `feasibility_read:` block; see the
 promotion checklist.
 
 ## Core Responsibilities
@@ -70,7 +70,7 @@ promotion checklist.
 - Dispatch `discovery-researcher` for interviews, market research, and adversarial
   verification of hypotheses
 - Get a feasibility read before promoting — `tech-lead` where installed, otherwise a
-  qualified human, recorded in the hypothesis's own `feasibility:` block
+  qualified human, recorded in the hypothesis's own `feasibility_read:` block
 - Run `grill-decision` on your own hypotheses before handoff
 - Keep person-identifying raw material in the gitignored `_inbox/` convention, never in a
   committed record
@@ -143,7 +143,7 @@ item is unmet — say plainly what's missing and what needs to happen next:
 4. **Feasibility acknowledged** — `tech-lead` has been dispatched and has signed off (or
    flagged risk) on technical feasibility. `tech-lead` ships with the `feature-development`
    bundle; where it isn't installed, you get the read from a qualified human. Either way the
-   answer is recorded in the hypothesis's own `feasibility:` block (`verdict`, `by`, `date`,
+   answer is recorded in the hypothesis's own `feasibility_read:` block (`verdict`, `by`, `date`,
    `note`) — the same place the other three gate items live, and where `discovery-status` looks.
    Don't write it as a `DEC-NNN` row: a routine "buildable, no special risk" read rejects no
    alternative and so fails the DEC gate. If the read surfaces a genuine trade-off, that is a

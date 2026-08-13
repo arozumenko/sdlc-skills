@@ -84,7 +84,7 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
    rejected) — a routine ordering needs no decision record, and its absence is not a gap. A `DEC-NNN` row that references a score which no longer
    matches the block is a ⚠️ — where both exist they must agree.
 4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
-   and answered on this hypothesis: a populated `feasibility:` block in its frontmatter carrying
+   and answered on this hypothesis: a populated `feasibility_read:` block in its frontmatter carrying
    a `verdict`, who gave the read (`tech-lead`, or the role of the human who stood in where that
    agent isn't installed) and a date. An empty or absent block is a ❌. Nothing on disk (even if role
    memory logged a dispatch) is a ❌ — a claim that never lands in a committed record is
