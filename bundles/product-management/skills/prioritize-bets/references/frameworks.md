@@ -8,6 +8,20 @@ are what's in effect.
 
 All examples use a neutral product (a generic B2B tool) — the numbers are illustrative only.
 
+## Where this deviates from the canonical sources
+
+These formulas are the published ones, but two inputs are deliberately re-scaled to fit this
+bundle's appetite-based sizing. Stated up front so nobody has to reverse-engineer it from a score:
+
+| | Here | Canonical | Consequence |
+|---|---|---|---|
+| RICE `effort`, WSJF `job_size` | appetite in weeks | RICE: person-months (Intercom). WSJF: the same relative Fibonacci as the numerator (SAFe) | Duration, not cost. Two 4-week bets rank identically whether one needs five engineers or one — if staffing differs materially between bets, say so in `evidence_note`, because the score will not show it. |
+| RICE `confidence` | adds a 0.2 "gut" band | 100 / 80 / 50% (Intercom) | McBride's scale stops at 50% and leaves anything below it as an unquantified "total moonshot". The 0.2 band lets an unvalidated bet still be ranked rather than dropped — deliberate, but it is this bundle's extension, not RICE. |
+
+Using weeks consistently across all three frameworks keeps rankings internally comparable, which
+is what matters for ordering a single backlog. Scores are not comparable with a team using
+canonical RICE.
+
 ---
 
 ## The derived confidence factor (used by RICE and ICE)
@@ -66,7 +80,7 @@ score = (reach × impact × confidence) / effort
 | `reach` | PO estimate or evidence | a raw number in the `reach_unit` (e.g. users affected per quarter). Say whether it is measured or estimated. |
 | `impact` | `impact_scale` in config | map the PO's judgement onto `massive:3 high:2 medium:1 low:0.5 minimal:0.25`. |
 | `confidence` | **derived** (above) | 0.2 / 0.5 / 0.8 / 1.0. Never typed. |
-| `effort` | `appetite` in weeks | `2-weeks → 2`, `4-weeks → 4`, `8-weeks → 8`. |
+| `effort` | `appetite` in weeks | `2-weeks → 2`, `4-weeks → 4`, `8-weeks → 8`. Duration, not person-months — see the deviation note above. |
 
 **Worked example.** A bet reaching ~200 users/quarter, high impact, confidence block averaging
 6.0 (data-backed), 4-week appetite:
@@ -94,9 +108,10 @@ cost_of_delay = user_business_value + time_criticality + risk_reduction_opportun
 score         = cost_of_delay / job_size
 ```
 
-- Each cost-of-delay component is scored on the config scale (default **Fibonacci 1..13**:
-  1, 2, 3, 5, 8, 13). Higher = more delay cost.
-- `job_size` = `appetite` in weeks (`2-weeks → 2`, etc.).
+- Each cost-of-delay component is scored on the config scale (default **modified Fibonacci
+  1..20**: 1, 2, 3, 5, 8, 13, 20 — SAFe's canonical sequence). Higher = more delay cost.
+- `job_size` = `appetite` in weeks (`2-weeks → 2`, etc.) — see the deviation note above; SAFe
+  scores job size on the same relative Fibonacci scale as the numerator.
 
 **Worked example.** `user_business_value 8`, `time_criticality 5`, `risk_reduction_opportunity 3`,
 4-week appetite:
@@ -106,9 +121,9 @@ cost_of_delay = 8 + 5 + 3 = 16
 score = 16 / 4 = 4.0
 ```
 
-**Why it ships.** WSJF/Cost-of-Delay is verified absent in the market-leading PM skill library.
-It is the one framework here that makes **time-criticality** a first-class term — a bet that is
-merely valuable ranks below one that is valuable *and* decays if delayed. Offer it when the PO's
+**Why it ships.** WSJF/Cost-of-Delay is the one framework here that makes **time-criticality** a
+first-class term — a bet that is merely valuable ranks below one that is valuable *and* decays if
+delayed. Offer it when the PO's
 real question is sequencing under a deadline. (WSJF has no confidence factor; it does not consume
 the evidence band — call that out if the PO wants confidence reflected, and prefer RICE/ICE then.)
 

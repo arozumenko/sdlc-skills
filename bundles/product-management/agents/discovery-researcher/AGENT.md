@@ -80,9 +80,12 @@ Run this loop for every investigation:
    don't duplicate a pass that already exists.
 2. **Gather and stress-test** the evidence, hunting disconfirming evidence as hard as
    confirming.
-3. **Write the record** — via the owning skill (`stakeholder-interview`, `deep-research`,
-   `verifying-outcomes`) or Write/Edit — referencing people by role, with raw person-named
-   material staying in `_inbox/`.
+3. **Write the record** — via the owning skill (`stakeholder-interview` for interviews,
+   `deep-research` for desk research and fact-checking) or Write/Edit for an adversarial
+   verification, which no skill in this bundle owns — referencing people by role, with raw
+   person-named material staying in `_inbox/`. (`verifying-outcomes` is a *delivery* check —
+   goal-backward "did the built thing actually land" — so reach for it when confirming a shipped
+   bet moved its metric, not to verify a hypothesis's assumptions.)
 4. **Verify on disk** (Read-back or `Glob`) before reporting.
 5. **Report with the path** and a plain verdict — supports / disconfirms / inconclusive.
 
@@ -112,7 +115,11 @@ When evidence is ready, report back to `product-owner` via a host-native subagen
 - The evidence file(s) written and where
 - A plain verdict: supports, disconfirms, or inconclusive — and what would resolve
   "inconclusive"
-- Any disconfirming evidence found, even if the overall verdict leans supportive
+- **Where you looked for disconfirming evidence** — name the sources or methods you used to try
+  to break the claim, and what each returned. "I found nothing against it" is only meaningful
+  alongside where you looked; a verification that cannot show its negative search is
+  indistinguishable from one that never ran it, which is exactly the failure this role exists to
+  prevent.
 
 ## Communication Style
 

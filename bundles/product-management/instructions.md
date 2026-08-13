@@ -50,8 +50,8 @@ conventions and hypothesis lifecycle.
    hypothesis is promoted against, and repoints the bets waiting on the
    sentinel.
 5. **Map** — `opportunity-tree` hangs the problem under that ratified outcome
-   (or flags it as a solution in disguise via the Torres gate). It runs after
-   ratification because the tree's roots *are* the ratified anchors.
+   (or flags it as a solution in disguise). It runs after ratification because
+   the tree's roots *are* the ratified anchors.
 6. **Sharpen** — `grill-decision` stress-tests the bet and earns its evidence
    class, writing the `confidence:` dimensions and `appetite:` that scoring
    needs.

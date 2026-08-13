@@ -1,14 +1,26 @@
-# OST method — the Torres gate, the Olsen score, and the derived-file format
+# OST method — the disguise test, the Olsen score, and the derived-file format
 
 The three deterministic pieces of `opportunity-tree`. Adapted from phuryn/pm-skills (MIT,
 © Pawel Huryn) for the Olsen score and OST framing, and shinpr/claude-code-discover (MIT) for the
-3+-solutions phrasing of the Torres gate. The overlay-persistence design is house-authored.
+3+-solutions phrasing of the disguise test. The overlay-persistence design is house-authored.
 
-## 1. The Torres gate (the 3+-solutions test)
+## 1. The disguise test (the 3+-solutions gate)
 
-Before a Problem is classified `node_type: opportunity`, it must clear one test:
+Before a Problem is classified `node_type: opportunity`, it must clear one test. Torres states the
+underlying idea qualitatively — an opportunity that admits only one possible solution *is* that
+solution, wearing an opportunity's clothing:
+
+> **Is there more than one way to address this?**
+
+This bundle applies a deliberately stricter working threshold:
 
 > **If an opportunity cannot generate 3+ different solutions, it may be a solution in disguise.**
+
+Three, rather than Torres's two, is the phrasing from shinpr/claude-code-discover; it catches
+near-misses a two-solution test lets through. Treat a node that yields exactly two as borderline —
+worth the PO's attention, not an automatic masquerade. (Torres separately recommends comparing at
+least three *solutions* once an opportunity is already valid. That is a decision-quality practice
+about choosing between options, not a test of the opportunity — don't conflate the two.)
 
 Apply it concretely — try to name three *genuinely different* ways to address the need:
 

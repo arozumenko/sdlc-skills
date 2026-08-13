@@ -47,7 +47,7 @@ assumption nobody has flagged a risk level on has not been grilled yet.>
 
 - **<The assumption, stated as a falsifiable proposition>** — `risk: critical`
   - Fails if: <the concrete condition under which it is false>
-  - Evidence to get: <the cheapest signal that moves belief>
+  - Evidence to get this week: <the cheapest signal that moves belief>
   - Kill criterion: <what result would make you abandon the bet>
   - Cheapest test: <the smallest experiment that produces that signal>
 

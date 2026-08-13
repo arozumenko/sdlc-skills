@@ -32,12 +32,12 @@ Installs the 2 agents below into `.claude/agents/`, seeds the empty
 | `intake-triage` | Front door for raw asks — verdicts Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems |
 | `define-personas` | Creates and maintains canonical persona cards under `docs/discovery/personas/` |
 | `define-outcomes` | Drafts, stress-tests, and records ratification of outcome anchors in `outcomes.md` |
-| `opportunity-tree` | Maintains the opportunity–solution tree as an overlay on existing artifacts; regenerates `outcome-tree.md`; applies the Torres 3+-solutions gate and Olsen scoring |
+| `opportunity-tree` | Maintains the opportunity–solution tree as an overlay on existing artifacts; regenerates `outcome-tree.md`; applies the 3+-solutions disguise test and Olsen scoring |
 | `journeys-to-hypotheses` | Classifies journey coverage against existing hypotheses/tracker and authors missing problem + hypothesis stubs |
 | `prioritize-bets` | Ranks incubating and promotion-ready bets (RICE by default, WSJF/ICE configurable) |
 | `stakeholder-interview` | Prepares interview guides and synthesizes raw notes/transcripts into evidence, propagated into the hypotheses they touch |
 | `grill-decision` | Socratic, one-question-at-a-time stress test of a decision, plan, or hypothesis |
-| `capture-learning` | Captures a problem → outcome → lesson into `evidence/learnings/` when a hypothesis closes |
+| `capture-learning` | Captures a problem → outcome → lesson into `evidence/learnings/` when a bet concludes, win or lose |
 | `discovery-status` | Read-only dashboard of where the whole pipeline stands and the next action per item |
 
 ## How the loop works
@@ -69,7 +69,7 @@ flowchart TD
     rank --> learn["capture-learning<br/>(when a bet concludes, win or lose)"]
     po -.->|"anytime"| status["discovery-status —<br/>read-only dashboard"]
 
-    rank -->|"promoted + ratified outcome"| ba(["hand off to ba"])
+    rank -->|"clears the promotion gate"| ba(["hand off to ba"])
 ```
 
 `product-owner` is the entry point and stays the active agent throughout;
@@ -94,8 +94,9 @@ here. They're pulled in through each agent's `skills:` frontmatter via the
 installer's normal resolution, which differs per skill:
 
 - `deep-research`, `verifying-outcomes` — orphan entries in the top-level
-  `skills.json`. Used by `discovery-researcher`'s evidence and verification
-  work.
+  `skills.json`. `deep-research` backs `discovery-researcher`'s desk research and
+  fact-checking; `verifying-outcomes` is a delivery check for confirming a shipped
+  bet moved its metric, not a hypothesis check.
 - `brainstorming` — a `repo:` entry in `skills.json`, fetched from upstream
   at install time. Used by `product-owner`'s framing work.
 - `memory`, `knowledge-curation` — orphan entries in the top-level

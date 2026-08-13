@@ -26,7 +26,7 @@ priority:
 # WSJF — replace `priority: {}` with:
 priority:
   framework: WSJF
-  user_business_value: 8           # config scale (default Fibonacci 1..13)
+  user_business_value: 8           # config scale (default modified Fibonacci 1..20)
   time_criticality: 5
   risk_reduction_opportunity: 3
   cost_of_delay: 16                # = the three components summed

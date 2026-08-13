@@ -54,7 +54,7 @@ Each stage is a skill Priya (or Sam) invokes; you don't call them by hand.
 | 4. Anchor | `define-outcomes` | Ratified, measurable outcome anchors in `outcomes.md` |
 | 5. Map | `opportunity-tree` | `node_type:`/`parent:` overlay + the `outcome-tree.md` board |
 | 6. Sharpen | `grill-decision`, `brainstorming` | Decisions (`decisions.md`), sharpened hypotheses |
-| 7. Verify | `stakeholder-interview`, `deep-research`, `verifying-outcomes` | Evidence under `evidence/*`, verdicts on assumptions |
+| 7. Verify | `stakeholder-interview`, `deep-research` | Evidence under `evidence/*`, verdicts on assumptions (`verifying-outcomes` is a delivery check for after a bet ships, not a hypothesis check) |
 | 8. Prioritize | `prioritize-bets` | RICE-ranked bets + the `priority.md` board |
 | 9. Learn | `capture-learning` | `evidence/learnings/` when a bet closes |
 | — Status | `discovery-status` | A read-only dashboard, at any point |
@@ -151,7 +151,7 @@ hypothesis leaves this team only when the gate is clear:
 - its outcome anchor is **ratified** with a dated baseline,
 - its risky assumptions are **verified**,
 - it's been **prioritized**, and
-- `tech-lead` has **acknowledged feasibility**.
+- feasibility is **acknowledged** — by `tech-lead`, or, where it isn't installed, recorded on the hypothesis by whoever gave the read.
 
 Priya narrates that checklist and **refuses handoff** when any item is unmet.
 
