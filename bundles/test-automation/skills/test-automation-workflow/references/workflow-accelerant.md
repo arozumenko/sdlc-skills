@@ -46,6 +46,9 @@ Workflow({
     // quotaResume: false                   — set true ONLY when resuming after an account-ceiling halt
     // fixRounds: 8                         — runaway backstop for the review/fix loop, not the control
     // mergeModel / reporterModel: "haiku"  — the two deliberate cheap-tier slots
+    // gateModel: null                      — gate agent tier; the script does the mechanics
+    //                                        (run, time, record), so haiku is viable — but the
+    //                                        blast-radius diff read is judgment, so default inherits
     // gateN: 3                             — consecutive deterministic greens the gate demands
     // gateCmd: null                        — suite command; null → the gate agent resolves it from .agents/testing.md
     // integrationBranch: "tests/batch-<slug>"

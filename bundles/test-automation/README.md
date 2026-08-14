@@ -158,7 +158,7 @@ per role, per day and per sub-agent, then joins it to the run's own report for
 **cost per case delivered** and **per case examined**. The `tokenomics` skill
 ships with the bundle too: once its capture hooks are enabled (opt-in),
 session hooks record each finished session into a git-committed ledger
-(`.agents/telemetry/`) — surviving transcript expiry, across Claude Code,
+(`.agents/automation/telemetry/`) — surviving transcript expiry, across Claude Code,
 Copilot CLI and the VS Code sidebar — and every batch gets an automatic
 `.agents/automation/<slug>/cost.json`: outcomes, cost per case (direct,
 measured), overhead shown once, avg/median/min/max spreads, with markdown and

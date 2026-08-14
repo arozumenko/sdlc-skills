@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildBatchCost, classify, matchIds, lineMatchesBatch, updateBatchCosts, loadReceipts } from './batch-cost.mjs';
+import { buildBatchCost, classify, matchIds, lineMatchesBatch, updateBatchCosts, loadReceipts, loadGateRuns, foldGateRuns, declaredOutcomesFor, crossCheck } from './batch-cost.mjs';
 
 const sub = (label, tokens, { costUsd, activeMin = 1, role = 'test-automation-engineer' } = {}) => ({
   role, label, n: 1,
@@ -48,6 +48,23 @@ test('classify: stage classification precedes id matching', () => {
   assert.equal(classify('sync base branches', ['TC-101']).kind, 'overhead'); // unmatched, not a stage
 });
 
+// FIELD BUG: every reviewer prompt says "(do not execute the spec; the
+// hardening gate does that)", so matching stage words anywhere in the label
+// booked all six reviewers of a real batch as GATE overhead — $4.31 moved off
+// the cases. A dispatch's own stage is always at the FRONT of its label
+// (deriveLabel slices from it); the rest merely mentions other stages.
+test('classify: a stage MENTIONED later in the label is not the dispatch stage', () => {
+  const ids = ['TC-004'];
+  const reviewer = "Reviewer slot — STATIC review of TC-004 per the test-automation-workflow skill's references/reviewer-contract.md (do not execute the spec; the hardening gate do";
+  assert.deepEqual(classify(reviewer, ids), { kind: 'direct', ids: ['TC-004'] }, 'reviewer work belongs to its case');
+  // the real gate still reads as overhead
+  assert.equal(classify('Hardening gate for batch smoke-remaining. You did not write this code', ids).kind, 'overhead');
+  assert.equal(classify('Triage slot — a READ-ONLY routing decision: no git, no browser', ids).kind, 'overhead');
+  assert.equal(classify('report writer — the single disk write of this run.', ids).kind, 'overhead');
+  // an implementer that merely mentions the gate stays with its case
+  assert.deepEqual(classify('Implementer slot — implement TC-004; the hardening gate proves it later', ids).ids, ['TC-004']);
+});
+
 test('buildBatchCost: direct per case, cluster split, overhead separated, stats over measured values', () => {
   const lines = [
     line('s1', [
@@ -75,6 +92,12 @@ test('buildBatchCost: direct per case, cluster split, overhead separated, stats 
   assert.equal(c.overhead.stages.costUsd, 0.90);
   assert.equal(c.overhead.costUsd, 2.90);
   assert.equal(c.totals.costUsd, 8.20);
+
+  // Fully loaded = direct + even overhead share (2.90 / 3 cases ≈ 0.97 each) —
+  // an allocation, labelled; the unattributed case carries only its share.
+  assert.equal(tc101.loaded.costUsd, 4.27);                    // 3.30 + 0.9667
+  assert.equal(c.cases.find((x) => x.id === 'CASE_9').loaded.costUsd, 0.97);
+  assert.equal(c.stats.loadedCostUsd.n, 3, 'loaded stats run over ALL cases, not just attributed');
 
   // delivered = automated only here (no sanctioned-red): 2
   assert.equal(c.delivered, 2);
@@ -177,6 +200,225 @@ test('buildBatchCost: sub-agent `cases` fallback attributes work the label windo
   assert.ok(!c.coverage.casesUnattributed.includes('TC-101'));
 });
 
+// A lead session serving SEVERAL batches (a campaign running waves in one
+// session) must not be double-counted: each batch excludes the other's
+// dispatches and takes an even share of the session-level figures. Without
+// `others` every batch used to claim the WHOLE session.
+test('multi-batch session: foreign dispatches excluded, session-level figures split', () => {
+  const receiptA = { batch: 'wA', integration_branch: 'tests/batch-wA', cases: [{ id: 'A-1', outcome: 'automated', branch: 'tests/A-1-x' }] };
+  const receiptB = { batch: 'wB', integration_branch: 'tests/batch-wB', cases: [{ id: 'B-1', outcome: 'automated', branch: 'tests/B-1-y' }] };
+  const sharedLine = line('s-camp', [
+    sub('implement:A-1', 100_000, { costUsd: 2.00, activeMin: 20 }),
+    sub('implement:B-1', 100_000, { costUsd: 3.00, activeMin: 30 }),
+    sub('Hardening gate for batch wA', 50_000, { costUsd: 0.50, activeMin: 5 }),
+    sub('Hardening gate for batch wB', 50_000, { costUsd: 0.70, activeMin: 7 }),
+    sub('sync base branches', 10_000, { costUsd: 0.20, activeMin: 2 }), // neutral — split evenly
+  ], { costUsd: 8.40, branch: 'tests/batch-wA' }); // parent remainder = 8.40 − 6.40 = 2.00
+  const idOf = (r, slug) => ({ keys: [slug, r.batch], ids: r.cases.map((c) => c.id), branches: [r.integration_branch, ...r.cases.map((c) => c.branch)].filter(Boolean) });
+
+  const a = buildBatchCost('wA', receiptA, [sharedLine], { others: [idOf(receiptB, 'wB')] });
+  const b = buildBatchCost('wB', receiptB, [sharedLine], { others: [idOf(receiptA, 'wA')] });
+
+  // A: its implement 2.00 + its gate 0.50 + neutral/2 0.10 + parent/2 1.00 = 3.60
+  assert.equal(a.totals.costUsd, 3.60);
+  // B: 3.00 + 0.70 + 0.10 + 1.00 = 4.80
+  assert.equal(b.totals.costUsd, 4.80);
+  // together they cover the session exactly once — no double count
+  assert.equal(round2(a.totals.costUsd + b.totals.costUsd), 8.40);
+  // the other batch's work never lands in my overhead
+  assert.equal(a.sources.foreignDispatchesExcluded, 2, 'B implement + B gate excluded from A');
+  assert.equal(a.sources.sharedSessions, 1);
+  assert.equal(a.cases[0].direct.costUsd, 2.00, 'per-case direct unchanged');
+  assert.equal(b.cases[0].direct.costUsd, 3.00);
+  // and without `others` the old inflation is visible (documents the fix)
+  const naive = buildBatchCost('wA', receiptA, [sharedLine]);
+  assert.equal(naive.totals.costUsd, 8.40, 'no others info → whole session counted (single-batch behavior)');
+});
+const round2 = (v) => Math.round(v * 100) / 100;
+
+// Telemetry rides every layer now: totals, roles, per-case, stage split, rework.
+test('telemetry + stage split + rework land in cost.json', () => {
+  const lines = [line('s1', [
+    sub('Triage the batch: TC-101 TC-102', 10_000, { costUsd: 0.10, activeMin: 2 }),
+    sub('implement:TC-101', 200_000, { costUsd: 2.00, activeMin: 20 }),
+    sub('fix:TC-101:1 round', 30_000, { costUsd: 0.30, activeMin: 16 }),
+    sub('Hardening gate for batch b1', 80_000, { costUsd: 0.80, activeMin: 8 }),
+    sub('report:b1 write the report', 5_000, { costUsd: 0.05, activeMin: 1 }),
+  ], { costUsd: 4.25 })];
+  const c = buildBatchCost('b1', RECEIPT, lines);
+  assert.ok(c.totals.toolCalls > 0);
+  assert.equal(c.totals.turns, 5, 'parent turns counted');
+  assert.deepEqual(Object.keys(c.overhead.byStage).sort(), ['gate', 'report', 'triage']);
+  assert.equal(c.overhead.byStage.gate.costUsd, 0.80);
+  assert.equal(c.rework.costUsd, 0.30, 'fix-round spend surfaced as its own lever');
+  assert.equal(c.rework.dispatches, 1);
+  const tc101 = c.cases.find((x) => x.id === 'TC-101');
+  assert.ok(tc101.direct.toolCalls > 0, 'per-case tool calls');
+  assert.ok(c.byRole['test-automation-engineer'].toolCalls > 0, 'role tool calls');
+});
+
+// Live batch view without ledger bloat: the per-dispatch deltas are stored,
+// the session snapshot is REBUILT from them on demand — so cost.json is
+// current mid-run while the ledger still gets exactly one line per session.
+test('loadLiveLines: rebuilds a provisional session line from the dispatch deltas', async () => {
+  const { loadLiveLines } = await import('./batch-cost.mjs');
+  const repo = mkdtempSync(join(tmpdir(), 'bc-live-'));
+  const dir = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  mkdirSync(dir, { recursive: true });
+  const rec = (agentId, costUsd, cases, bytes) => JSON.stringify({
+    v: 1, session: 'run-1', agentId, role: 'qa-engineer', label: `analyse ${cases[0]}`,
+    cases, tokens: { input: 0, output: 0, cacheRead: 1000, cacheWrite: 0 },
+    activeMin: 5, toolCalls: 7, toolErrors: 0, costUsd, endedAt: '2026-08-14T10:00:00Z', bytes,
+  });
+  writeFileSync(join(dir, 'run-1.jsonl'), [
+    rec('a1', 1.5, ['TC-101'], 10),
+    rec('a2', 2.5, ['TC-102'], 10),
+    rec('a1', 1.75, ['TC-101'], 20),        // a1 grew — superseding delta
+  ].join('\n') + '\n');
+
+  const [line] = loadLiveLines(repo);
+  assert.equal(line.live, true);
+  assert.equal(line.id, 'run-1');
+  assert.equal(line.subagents.length, 2, 'latest delta per dispatch, not one row per append');
+  assert.equal(line.costUsd, 4.25, 'sum of the CURRENT dispatch dollars (1.75 + 2.50)');
+  assert.deepEqual(line.cases, ['TC-101', 'TC-102']);
+  assert.deepEqual(line.tokens, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, 'the lead thread is NOT claimed — it has not been measured');
+});
+
+test('updateBatchCosts: a running session shows up as provisional, and the real line always wins', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc-live2-'));
+  const dir = join(repo, '.agents', 'automation', 'b1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
+  const live = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  mkdirSync(live, { recursive: true });
+  writeFileSync(join(live, 'run-1.jsonl'),
+    `${JSON.stringify({ v: 1, session: 'run-1', agentId: 'a1', role: 'test-automation-engineer', label: 'implement:TC-101', cases: ['TC-101'], tokens: { input: 0, output: 0, cacheRead: 9000, cacheWrite: 0 }, activeMin: 4, toolCalls: 6, toolErrors: 0, costUsd: 1.25, bytes: 9 })}\n`);
+
+  const [mid] = updateBatchCosts(repo, { write: false });
+  assert.equal(mid.sources.liveSessions, 1);
+  assert.match(mid.sources.liveNote, /PROVISIONAL/);
+  assert.equal(mid.cases.find((c) => c.id === 'TC-101').direct.costUsd, 1.25, 'mid-run per-case cost is real');
+
+  // the session ends: its ledger line (with the lead thread) must win outright
+  const tele = join(repo, '.agents', 'automation', 'telemetry');
+  writeFileSync(join(tele, 'usage-u1.jsonl'),
+    `${JSON.stringify(line('run-1', [sub('implement:TC-101', 9000, { costUsd: 1.25 })], { costUsd: 3.0 }))}\n`);
+  const [after] = updateBatchCosts(repo, { write: false });
+  assert.ok(!after.sources.liveSessions, 'no longer provisional');
+  assert.equal(after.totals.costUsd, 3.0, 'the full session total, incl. the lead thread');
+});
+
+// A period rollup's totals come straight from the ledger, so its batch/case
+// tables must not mix in provisional rows — one document, one basis.
+test('updateBatchCosts: live:false excludes running sessions (the period-rollup basis)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc-live3-'));
+  const dir = join(repo, '.agents', 'automation', 'b1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
+  const live = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  mkdirSync(live, { recursive: true });
+  writeFileSync(join(live, 'run-9.jsonl'),
+    `${JSON.stringify({ v: 1, session: 'run-9', agentId: 'a1', role: 'qa-engineer', label: 'implement:TC-101', cases: ['TC-101'], tokens: { input: 0, output: 0, cacheRead: 500, cacheWrite: 0 }, activeMin: 2, toolCalls: 3, toolErrors: 0, costUsd: 0.9, bytes: 5 })}\n`);
+  assert.equal(updateBatchCosts(repo, { write: false })[0].sources.liveSessions, 1, 'batch view: live');
+  const rollup = updateBatchCosts(repo, { write: false, live: false })[0];
+  assert.ok(!rollup.sources.liveSessions, 'period rollup: ledger-only');
+  assert.equal(rollup.totals.costUsd, null, 'nothing measured yet from the ledger alone');
+});
+
+// The records layer: script-authored gate verdicts + declared outcomes are
+// cross-checked against the receipt. Drift is the write-back failure class
+// made visible (measured: 38/69 delivered cases scored unproven because a
+// recovered gate's verdict never reached report.json).
+test('crossCheck: gate drift and outcome drift vs the receipt; records never overwrite', () => {
+  const receipt = {
+    batch: 'b1', gate: { verdict: 'not-run' },
+    cases: [{ id: 'TC-101', outcome: 'merged-ungated' }, { id: 'TC-102', outcome: 'automated' }],
+  };
+  const gateRuns = [
+    { at: '2026-08-12T10:00:00Z', verdict: 'red', consecutiveGreen: 1 },
+    { at: '2026-08-12T11:00:00Z', verdict: 'green', consecutiveGreen: 3 },
+  ];
+  const declared = { 'TC-101': 'automated', 'TC-102': 'automated' };
+  const { gateDrift, outcomeDrift } = crossCheck(receipt, gateRuns, declared);
+  assert.deepEqual(gateDrift, { receipt: 'not-run', recorded: 'green', at: '2026-08-12T11:00:00Z' }, 'latest record wins');
+  assert.deepEqual(outcomeDrift, [{ id: 'TC-101', receipt: 'merged-ungated', declared: 'automated' }], 'agreeing cases are not drift');
+  // receipt and records agreeing → silence
+  const clean = crossCheck({ batch: 'b1', gate: { verdict: 'green' }, cases: [{ id: 'TC-102', outcome: 'automated' }] },
+    [gateRuns[1]], { 'TC-102': 'automated' });
+  assert.equal(clean.gateDrift, null);
+  assert.deepEqual(clean.outcomeDrift, []);
+});
+
+test('declaredOutcomesFor: matches scopes by batch name or case overlap, latest updatedAt wins', () => {
+  const receipt = { batch: 'b1', cases: [{ id: 'TC-101' }, { id: 'TC-102' }] };
+  const scopes = [
+    { session: 's1', batch: 'b1', cases: ['TC-101'], updatedAt: '2026-08-12T10:00:00Z', outcomes: { 'TC-101': { outcome: 'blocked' } } },
+    { session: 's2', cases: ['TC-101'], updatedAt: '2026-08-12T12:00:00Z', outcomes: { 'TC-101': { outcome: 'automated' } } }, // matched by case overlap
+    { session: 's3', batch: 'other', cases: ['ZZZ-9'], updatedAt: '2026-08-12T13:00:00Z', outcomes: { 'TC-102': { outcome: 'blocked' } } }, // unrelated scope — no match surface
+  ];
+  const out = declaredOutcomesFor(receipt, 'b1', scopes);
+  assert.deepEqual(out, { 'TC-101': 'automated' }, 'later declaration wins; unrelated scope ignored');
+  // nested wave slug matches by its last segment
+  assert.deepEqual(declaredOutcomesFor({ batch: 'camp', cases: [{ id: 'TC-9' }] }, 'camp/wave-01',
+    [{ session: 'w', batch: 'wave-01', cases: [], updatedAt: 'x', outcomes: { 'TC-9': { outcome: 'automated' } } }]),
+    { 'TC-9': 'automated' });
+});
+
+test('updateBatchCosts: gate-runs + scopes land in cost.json as records with drift flags', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc4-'));
+  const dir = join(repo, '.agents', 'automation', 'b1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'report.json'), JSON.stringify({
+    ...RECEIPT, gate: { verdict: 'not-run' },
+    cases: RECEIPT.cases.map((c) => (c.id === 'TC-101' ? { ...c, outcome: 'merged-ungated' } : c)),
+  }));
+  writeFileSync(join(dir, 'gate-runs.jsonl'),
+    `${JSON.stringify({ at: '2026-08-12T11:00:00Z', branch: 'tests/batch-b1', base: 'main', n: 3, verdict: 'green', consecutiveGreen: 3, seconds: [1, 1, 1] })}\n`);
+  const scopesDir = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  mkdirSync(scopesDir, { recursive: true });
+  writeFileSync(join(scopesDir, 'sess-1.json'), JSON.stringify({
+    v: 1, session: 'sess-1', intent: 'automation', batch: 'b1', cases: ['TC-101'],
+    declaredAt: 'x', updatedAt: 'y', outcomes: { 'TC-101': { outcome: 'automated', at: 'y' } },
+  }));
+  mkdirSync(join(repo, '.agents', 'automation', 'telemetry'), { recursive: true });
+  writeFileSync(join(repo, '.agents', 'automation', 'telemetry', 'usage-u1.jsonl'),
+    `${JSON.stringify(line('s1', [sub('implement:TC-101', 9000, { costUsd: 1.0 })], { costUsd: 2.0 }))}\n`);
+
+  const [c] = updateBatchCosts(repo);
+  assert.equal(c.records.gateRuns.latest.verdict, 'green');
+  assert.deepEqual(c.records.gateDrift, { receipt: 'not-run', recorded: 'green', at: '2026-08-12T11:00:00Z' });
+  assert.deepEqual(c.records.outcomeDrift, [{ id: 'TC-101', receipt: 'merged-ungated', declared: 'automated' }]);
+  assert.deepEqual(c.records.declaredOutcomes, { 'TC-101': 'automated' });
+  const onDisk = JSON.parse(readFileSync(join(dir, 'cost.json'), 'utf8'));
+  assert.ok(onDisk.records.gateDrift, 'drift persisted for the next reader');
+  // loadGateRuns tolerates absence
+  assert.deepEqual(loadGateRuns(join(repo, 'nowhere')), []);
+});
+
+// Mid-run verdicts land on the telemetry side (they must not dirty the main
+// tree); close folds them into the batch dir. The reader sees ONE merged,
+// deduplicated, chronological record wherever each line currently lives.
+test('loadGateRuns reads both homes and dedups; foldGateRuns moves telemetry lines into the batch dir', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc-fold-'));
+  const dir = join(repo, '.agents', 'automation', 'b1');
+  const telRuns = join(repo, '.agents', 'automation', 'telemetry', 'gate-runs');
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(telRuns, { recursive: true });
+  const r1 = JSON.stringify({ at: '2026-08-14T10:00:00Z', branch: 'tests/batch-b1', verdict: 'red' });
+  const r2 = JSON.stringify({ at: '2026-08-14T11:00:00Z', branch: 'tests/batch-b1', verdict: 'green' });
+  writeFileSync(join(dir, 'gate-runs.jsonl'), `${r1}\n`);
+  writeFileSync(join(telRuns, 'b1.jsonl'), `${r1}\n${r2}\n`); // r1 duplicated on both sides
+  const runs = loadGateRuns(dir, { repo, slug: 'b1' });
+  assert.deepEqual(runs.map((r) => r.verdict), ['red', 'green'], 'deduped, chronological');
+  assert.equal(foldGateRuns(repo, 'b1', dir), 1, 'only the missing line folds');
+  assert.ok(!existsSync(join(telRuns, 'b1.jsonl')), 'telemetry side cleared after fold');
+  const after = readFileSync(join(dir, 'gate-runs.jsonl'), 'utf8').trim().split('\n');
+  assert.deepEqual(after, [r1, r2]);
+  // idempotent: nothing left to fold
+  assert.equal(foldGateRuns(repo, 'b1', dir), 0);
+});
+
 // The whole file is a pure derivation: same inputs → same output (modulo
 // generatedAt), so the hook can recompute on every session end, latest-wins.
 test('updateBatchCosts: writes cost.json next to the receipt, idempotent recompute', () => {
@@ -184,7 +426,7 @@ test('updateBatchCosts: writes cost.json next to the receipt, idempotent recompu
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const tele = join(repo, '.agents', 'telemetry');
+  const tele = join(repo, '.agents', 'automation', 'telemetry');
   mkdirSync(tele, { recursive: true });
   writeFileSync(join(tele, 'usage-u1.jsonl'), `${JSON.stringify(line('s1', [sub('implement:TC-101', 9000, { costUsd: 1.25 })], { costUsd: 2.0 }))}\n`);
 
@@ -203,7 +445,7 @@ test('team-report --batch renders the cost view end-to-end', async () => {
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const tele = join(repo, '.agents', 'telemetry');
+  const tele = join(repo, '.agents', 'automation', 'telemetry');
   mkdirSync(tele, { recursive: true });
   writeFileSync(join(tele, 'usage-u1.jsonl'), `${JSON.stringify(line('s1', [
     sub('analyst:TC-101', 50_000, { costUsd: 0.60, activeMin: 6, role: 'qa-engineer' }),

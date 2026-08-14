@@ -4,7 +4,7 @@
 // WHY THIS EXISTS. The efficiency-audit skill answers "what did this cost" by
 // reading live transcripts — but transcripts expire (~30 days) and live on each
 // engineer's machine. This hook captures each session's grounded numbers AT THE
-// MOMENT THEY EXIST into a git-committed ledger (.agents/telemetry/*.jsonl), so
+// MOMENT THEY EXIST into a git-committed ledger (.agents/automation/telemetry/*.jsonl), so
 // the team's usage survives transcript cleanup and accumulates through git.
 //
 // Invocation modes:
@@ -30,12 +30,12 @@
 import {
   readFileSync, readdirSync, existsSync, statSync, appendFileSync, mkdirSync,
   openSync, readSync, closeSync, linkSync, copyFileSync, rmSync, mkdtempSync,
+  writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { join, basename, dirname, sep } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { updateBatchCosts } from '../scripts/batch-cost.mjs';
 
 const LEDGER_VERSION = 1;
 const IDLE_GAP_MS = 30 * 60 * 1000;   // same active-time rule as efficiency-audit
@@ -65,7 +65,7 @@ export function loadConfig(repo) {
     vscodeUserDataDirs: [], // extra VS Code user-data or workspaceStorage dirs (portable mode, --user-data-dir)
     otel: null,             // { enabled: true, endpoint: 'http://localhost:4318' } — see install-hooks --otel
   };
-  const p = join(repo, '.agents', 'telemetry', 'config.json');
+  const p = join(repo, '.agents', 'automation', 'telemetry', 'config.json');
   if (!existsSync(p)) return defaults;
   const cfg = safeParse(readFileSync(p, 'utf8'));
   return cfg && typeof cfg === 'object' ? { ...defaults, ...cfg } : defaults;
@@ -88,12 +88,12 @@ export function whoAmI(repo) {
 
 /** Per-user ledger file — one appender per file means git merges never conflict. */
 export function ledgerPath(repo, slug) {
-  return join(repo, '.agents', 'telemetry', `usage-${slug}.jsonl`);
+  return join(repo, '.agents', 'automation', 'telemetry', `usage-${slug}.jsonl`);
 }
 
 /** Every `${host}:${id}` → latest endedAt already in ANY user's ledger file. */
 export function knownSessions(repo) {
-  const dir = join(repo, '.agents', 'telemetry');
+  const dir = join(repo, '.agents', 'automation', 'telemetry');
   const known = new Map();
   let files;
   try { files = readdirSync(dir).filter((f) => /^usage-.*\.jsonl$/.test(f) || f === 'usage.jsonl'); }
@@ -110,7 +110,7 @@ export function knownSessions(repo) {
 }
 
 export function appendLine(repo, slug, line) {
-  const dir = join(repo, '.agents', 'telemetry');
+  const dir = join(repo, '.agents', 'automation', 'telemetry');
   mkdirSync(dir, { recursive: true });
   appendFileSync(ledgerPath(repo, slug), `${JSON.stringify(line)}\n`);
 }
@@ -310,6 +310,152 @@ export function findSubagents(projectDir, sessionId) {
   return out;
 }
 
+// --- live dispatch log (SubagentStop) ---------------------------------------
+// Measurements update AS SUB-AGENTS FINISH, not only at session end: each stop
+// meters THAT ONE transcript (1 file, ~1s, async) and appends ONE line per
+// dispatch here. Deliberately NOT the ledger: appending a whole-session line
+// per stop would put ~N near-identical rows for one session into the
+// git-committed ledger, all but the last superseded. This file is per-session,
+// one line per dispatch, and is deleted once the session's real ledger line
+// lands — so the ledger keeps its honest one-line-per-session grain while
+// `work-scope status`, and anything else that wants live numbers, reads
+// already-priced dispatches without re-metering anything.
+export function dispatchLogPath(repo, sessionId) {
+  return join(repo, '.agents', 'automation', 'telemetry', 'live', `${String(sessionId).replace(/[^A-Za-z0-9._-]/g, '')}.jsonl`);
+}
+
+/** agentId → latest record (a grown dispatch appends a superseding line). */
+export function readDispatchLog(path) {
+  const out = new Map();
+  if (!existsSync(path)) return out;                 // no dispatch has finished yet
+  for (const r of readRecords(path)) if (r?.agentId) out.set(r.agentId, r);
+  return out;
+}
+
+/**
+ * Record every finished dispatch not yet in the log. `agentId` (from the stop
+ * event) narrows it to the one that just finished; without it every unrecorded
+ * transcript is swept, which also self-heals a stop we missed. A dispatch whose
+ * transcript GREW since its record (a resumed agent) is re-recorded.
+ */
+export function captureDispatches(repo, sessionId, { projectDir, config, env = process.env, agentId = null } = {}) {
+  const cfg = config ?? loadConfig(repo);
+  const proj = projectDir
+    ?? claudeProjectDirs(repo, env).find((d) => existsSync(join(d, `${sessionId}.jsonl`)) || existsSync(join(d, sessionId)));
+  if (!proj) return captureCopilotDispatches(repo, sessionId, { env });
+  const want = agentId ? String(agentId).replace(/^agent-/, '') : null;
+  const path = dispatchLogPath(repo, sessionId);
+  const known = readDispatchLog(path);
+  let n = 0;
+  for (const meta of findSubagents(proj, sessionId)) {
+    if (want && !meta.id.endsWith(want)) continue;
+    let bytes = 0;
+    try { bytes = statSync(meta.path).size; } catch { continue; }
+    const prev = known.get(meta.id);
+    if (prev && num(prev.bytes) >= bytes) continue;          // nothing new since we recorded it
+    const sp = parseClaudeTranscript(readRecords(meta.path), { sidechain: true });
+    if (!sp.turns && !sp.tokens.output) continue;            // nothing measurable yet
+    const priced = cfg.priceAtCapture === false ? null : meterSession([meta.path], { env });
+    const rec = {
+      v: LEDGER_VERSION, session: sessionId, agentId: meta.id, role: meta.role,
+      label: deriveLabel(meta.description, sp.firstText), cases: sp.caseIds,
+      tokens: sp.tokens, activeMin: sp.activeMin, toolCalls: sp.toolCalls, toolErrors: sp.toolErrors,
+      ...(priced?.totalUsd != null ? { costUsd: priced.totalUsd } : {}),
+      endedAt: sp.endTs ? new Date(sp.endTs).toISOString() : null,
+      bytes, at: new Date().toISOString(),
+    };
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      appendFileSync(path, `${JSON.stringify(rec)}\n`);
+      n++;
+    } catch { /* bookkeeping must never break the host */ }
+  }
+  return n;
+}
+
+/**
+ * FOLD the live dispatch log into the session's line before it is appended.
+ *
+ * The session line is re-derived from the transcripts, so it normally already
+ * contains every dispatch the live log recorded — this exists for the case
+ * where it CANNOT: a sub-agent transcript deleted, expired or unreadable by
+ * the time the session ends. Those dispatches were measured while they were
+ * alive, and the fold is what keeps them (with their dollars) instead of
+ * silently dropping them. Nothing is double-counted: only ids the line does
+ * not already carry are added.
+ */
+export function foldDispatchLog(repo, line) {
+  const log = readDispatchLog(dispatchLogPath(repo, line.id));
+  if (!log.size) return line;
+  const have = new Set((line.subagents ?? []).map((s) => s.id).filter(Boolean));
+  const missing = [...log.values()].filter((r) => r.agentId && !have.has(r.agentId));
+  if (!missing.length) return line;
+  line.subagents = [...(line.subagents ?? []), ...missing.map((r) => ({
+    id: r.agentId, role: r.role, label: r.label, n: 1,
+    tokens: r.tokens, activeMin: num(r.activeMin),
+    toolCalls: num(r.toolCalls), toolErrors: num(r.toolErrors),
+    ...(r.cases?.length ? { cases: r.cases } : {}),
+    ...(typeof r.costUsd === 'number' ? { costUsd: r.costUsd } : {}),
+  }))];
+  line.dispatches = Math.max(num(line.dispatches), line.subagents.length);
+  line.activeMin = num(line.activeMin) + missing.reduce((n, r) => n + num(r.activeMin), 0);
+  line.cases = [...new Set([...(line.cases ?? []), ...missing.flatMap((r) => r.cases ?? [])])].sort();
+  if (typeof line.costUsd === 'number') {
+    line.costUsd += missing.reduce((n, r) => n + (typeof r.costUsd === 'number' ? r.costUsd : 0), 0);
+  }
+  line.foldedFromLive = missing.length;   // say it on the line, never silently
+  return line;
+}
+
+/**
+ * Copilot's sub-agents have no transcript files — they are events INSIDE the
+ * session's own `events.jsonl`, so a finished dispatch is read from there
+ * instead. Two honest differences from the Claude path, both structural:
+ * there are **no per-dispatch dollars** on this host (Copilot bills one figure
+ * per session, at shutdown), and its `input` field carries the sub-agent's
+ * cache-inclusive TOTAL tokens (same convention the session capture uses).
+ * Dedup is by the dispatch's own id — a completed sub-agent never changes.
+ */
+export function captureCopilotDispatches(repo, sessionId, { env = process.env } = {}) {
+  for (const root of copilotRoots(repo, env)) {
+    const eventsPath = join(root, sessionId, 'events.jsonl');
+    if (!existsSync(eventsPath)) continue;
+    const path = dispatchLogPath(repo, sessionId);
+    const known = readDispatchLog(path);
+    const started = new Map(); const described = new Map();
+    let n = 0;
+    for (const ev of readRecords(eventsPath)) {
+      const d = ev.data ?? {};
+      if (ev.type === 'subagent.started') {
+        started.set(d.toolCallId, d.agentName ?? 'unknown');
+        if (typeof d.agentDescription === 'string') described.set(d.toolCallId, d.agentDescription);
+      }
+      if (ev.type !== 'subagent.completed') continue;
+      const id = d.toolCallId;
+      if (!id || known.has(id)) continue;
+      const description = described.get(id) ?? '';
+      const rec = {
+        v: LEDGER_VERSION, session: sessionId, agentId: id,
+        role: d.agentName ?? started.get(id) ?? 'unknown',
+        label: deriveLabel(description, ''), cases: extractCaseIds(description),
+        tokens: { input: num(d.totalTokens), output: 0, cacheRead: 0, cacheWrite: 0 },
+        activeMin: d.durationMs ? Math.round(d.durationMs / 60000) : 0,
+        toolCalls: num(d.totalToolCalls), toolErrors: 0,
+        endedAt: ev.timestamp ?? null, at: new Date().toISOString(),
+        // no costUsd: this host prices the session once, at shutdown
+      };
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        appendFileSync(path, `${JSON.stringify(rec)}\n`);
+        known.set(id, rec);
+        n++;
+      } catch { /* bookkeeping must never break the host */ }
+    }
+    return n;
+  }
+  return 0;
+}
+
 // --- ccusage metering at capture time (Claude dollars, best-effort) ----------
 function linkOrCopy(src, dest) {
   try { linkSync(src, dest); } catch { copyFileSync(src, dest); }
@@ -335,7 +481,13 @@ export function meterSession(files, { env = process.env } = {}) {
       mkdirSync(proj, { recursive: true });
       linkOrCopy(f, join(proj, basename(f)));
     }
-    const out = execFileSync('npx', ['--yes', 'ccusage@latest', 'claude', 'session', '--json', '--offline'], {
+    // TOKENOMICS_CCUSAGE_BIN: an explicit binary (a ccusage on PATH, or a test
+    // double). Default stays the npx fetch, so nothing needs installing.
+    const bin = env.TOKENOMICS_CCUSAGE_BIN || 'npx';
+    const args = bin === 'npx'
+      ? ['--yes', 'ccusage@latest', 'claude', 'session', '--json', '--offline']
+      : ['claude', 'session', '--json', '--offline'];
+    const out = execFileSync(bin, args, {
       env: { ...env, CLAUDE_CONFIG_DIR: stage },
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 45000, maxBuffer: 64 * 1024 * 1024,
@@ -343,12 +495,21 @@ export function meterSession(files, { env = process.env } = {}) {
     const parsed = safeParse(out);
     const list = parsed?.session || parsed?.sessions || parsed?.data || [];
     const perFileUsd = files.map(() => null);
+    // ccusage keys each row by the FILE STEM (`agent-abc123`, `<session-id>`),
+    // not by the staged folder — the per-folder staging only keeps the rows
+    // SEPARATE (files sharing a folder fold into one row). Matching the folder
+    // name matched nothing, so every per-dispatch dollar came back null and
+    // per-case attribution silently degraded to tokens-only (found on a live
+    // workflow session). efficiency-audit's meterFiles always joined by stem.
+    const byStem = new Map(files.map((f, i) => [basename(f, '.jsonl'), i]));
     let total = 0, priced = 0;
     for (const s of list) {
       if (typeof s.totalCost !== 'number') continue;
       total += s.totalCost; priced++;
-      const m = /^f(\d+)$/.exec(String(s.period || s.session || s.sessionId || ''));
-      if (m) { const i = Number(m[1]); if (i < perFileUsd.length) perFileUsd[i] = s.totalCost; }
+      const key = String(s.sessionId ?? s.period ?? s.session ?? '');
+      let i = byStem.get(key);
+      if (i === undefined) { const m = /^f(\d+)$/.exec(key); if (m) i = Number(m[1]); } // older/other shapes
+      if (i !== undefined && i < perFileUsd.length) perFileUsd[i] = s.totalCost;
     }
     return priced ? { totalUsd: total, perFileUsd } : unpriced;
   } catch {
@@ -376,8 +537,52 @@ export function deriveLabel(description, firstText) {
   return t.slice(0, 160).replace(/\s+/g, ' ').trim();
 }
 
+// --- work-scope join (scripts/work-scope.mjs records) ------------------------
+/**
+ * The session's declared scope, if any. Exact match first
+ * (.agents/automation/telemetry/scopes/<sessionId>.json — Claude, where the announce hook
+ * injects the id). Else claim a PENDING record (`open --session auto` — hosts
+ * whose agent cannot know its session id, e.g. Copilot): the pending scope
+ * whose declaredAt falls inside the session's window, closest to its start,
+ * is renamed to the real id so the claim is permanent and single-use.
+ */
+export function sessionScope(repo, sessionId, { startTs = null, endTs = null } = {}) {
+  const dir = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  const exact = join(dir, `${sessionId}.json`);
+  if (existsSync(exact)) return safeParse(readFileSync(exact, 'utf8'));
+  if (!startTs || !existsSync(dir)) return null;
+  const lo = startTs - 5 * 60 * 1000;
+  const hi = (endTs ?? Date.now()) + 5 * 60 * 1000;
+  let best = null;
+  for (const name of readdirSync(dir)) {
+    if (!name.startsWith('pending-') || !name.endsWith('.json')) continue;
+    const s = safeParse(readFileSync(join(dir, name), 'utf8'));
+    const at = s?.declaredAt ? Date.parse(s.declaredAt) : NaN;
+    if (Number.isNaN(at) || at < lo || at > hi) continue;
+    if (!best || Math.abs(at - startTs) < Math.abs(best.at - startTs)) best = { name, s, at };
+  }
+  if (!best) return null;
+  const claimed = { ...best.s, session: sessionId, claimedFrom: best.s.session };
+  try {
+    writeFileSync(exact, `${JSON.stringify(claimed, null, 2)}\n`);
+    rmSync(join(dir, best.name));
+  } catch { return null; } // raced with a concurrent capture — the winner keeps it
+  return claimed;
+}
+
+/** The compact form a ledger line carries (never the timestamps — dedup noise). */
+function scopeForLine(scope) {
+  if (!scope) return null;
+  return {
+    intent: scope.intent ?? 'undeclared',
+    ...(scope.batch ? { batch: scope.batch } : {}),
+    cases: scope.cases ?? [],
+    ...(scope.outcomes ? { outcomes: Object.fromEntries(Object.entries(scope.outcomes).map(([id, o]) => [id, o?.outcome ?? o])) } : {}),
+  };
+}
+
 /** One ledger line for a Claude session (parent transcript + sub-agents). */
-export function captureClaudeSession(repo, transcriptPath, sessionId, { config, user, price = true } = {}) {
+export function captureClaudeSession(repo, transcriptPath, sessionId, { config, user, price = true, env = process.env } = {}) {
   const cfg = config ?? loadConfig(repo);
   const records = readRecords(transcriptPath);
   const p = parseClaudeTranscript(records, { capturePrompts: cfg.capturePrompts });
@@ -392,7 +597,7 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
         // The label is the attribution key downstream (batch-cost matches
         // receipt case ids against it). Task dispatches carry a description;
         // Workflow sub-agents don't, so derive from their first user message.
-        return { meta, sub: { ...sp, role: meta.role, label: deriveLabel(meta.description, sp.firstText) } };
+        return { meta, sub: { ...sp, id: meta.id, role: meta.role, label: deriveLabel(meta.description, sp.firstText) } };
       } catch { return null; }
     })
     .filter(Boolean);
@@ -402,18 +607,52 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
   for (const s of subs) for (const m of s.models) models.add(m);
   let costUsd = null;
   if (price && cfg.priceAtCapture) {
-    const metered = meterSession([transcriptPath, ...pairs.map((x) => x.meta.path)]);
-    costUsd = metered.totalUsd;
-    // perFileUsd[0] is the parent; [1..] align with `pairs` in order.
-    subs.forEach((s, i) => { s.costUsd = metered.perFileUsd[i + 1] ?? null; });
+    // REUSE what the SubagentStop hook already priced. A dispatch whose live
+    // record matches its transcript byte-for-byte cannot have changed, so
+    // re-metering it would buy nothing — this turns a capture from "stage and
+    // price N+1 transcripts" into "price the parent and whatever finished
+    // unmeasured", which is what makes capturing mid-run (at close, or as
+    // often as you like) cheap instead of quadratic.
+    const log = readDispatchLog(dispatchLogPath(repo, sessionId));
+    const toMeter = [transcriptPath];
+    const meterIdx = [];
+    let reused = 0;
+    pairs.forEach((x, i) => {
+      let bytes = 0;
+      try { bytes = statSync(x.meta.path).size; } catch { /* unreadable — meter it */ }
+      const rec = log.get(x.meta.id);
+      if (bytes && rec && typeof rec.costUsd === 'number' && num(rec.bytes) === bytes) {
+        subs[i].costUsd = rec.costUsd;
+        reused += rec.costUsd;
+      } else {
+        toMeter.push(x.meta.path);
+        meterIdx.push(i);
+      }
+    });
+    const metered = meterSession(toMeter, { env });
+    if (metered.totalUsd != null) {
+      // perFileUsd[0] is the parent; [1..] align with the files we metered.
+      meterIdx.forEach((i, k) => { subs[i].costUsd = metered.perFileUsd[k + 1] ?? null; });
+      costUsd = metered.totalUsd + reused;
+    }
+    // metering unavailable → costUsd stays null (never a partial total), while
+    // any dispatch dollars already recorded remain on their entries.
   }
   // Case ids from every naming surface: branch, prompts/dispatch labels, the
   // sub-agents' .meta.json dispatch descriptions, and the sub-agents' own text.
-  const cases = extractCaseIds(
-    ...p.caseIds, ...subMeta.map((s) => s.description),
-    ...subs.flatMap((s) => s.caseIds ?? []),
-  );
-  return {
+  // The session's DECLARED scope (work-scope.mjs) joins here too: declared ids
+  // are authoritative and ride the same field; the full scope is stamped below.
+  const scope = sessionScope(repo, sessionId, { startTs: p.startTs, endTs: p.endTs });
+  const cases = [...new Set([
+    ...extractCaseIds(
+      ...p.caseIds, ...subMeta.map((s) => s.description),
+      ...subs.flatMap((s) => s.caseIds ?? []),
+    ),
+    ...(scope?.cases ?? []),
+  ])].sort();
+  // foldDispatchLog: keeps any dispatch the live log measured but the
+  // transcripts can no longer produce (deleted/expired sub-agent file).
+  return foldDispatchLog(repo, {
     v: LEDGER_VERSION, host: 'claude', id: sessionId,
     user: user ?? whoAmI(repo).slug,
     capturedAt: new Date().toISOString(),
@@ -426,6 +665,7 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
     tokens: p.tokens, // parent only — sub-agent tokens live in subagents[]
     costUsd, costSource: costUsd != null ? 'ccusage-metered' : 'none',
     cases,
+    ...(scope ? { scope: scopeForLine(scope) } : {}),
     // One record PER DISPATCH (n:1), not a role roll-up: the label + per-file
     // costUsd are what lets batch-cost attribute work to individual cases.
     // Aggregating consumers (team-report byRole) sum records the same either way.
@@ -433,15 +673,49 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
     // fallback when the label's 160-char window missed the id (ids only, so
     // this is always on, same rule as the session-level cases[]).
     subagents: subs.map((s) => ({
-      role: s.role, label: s.label, n: 1,
+      // `id` is the dispatch's transcript id — the join key to the live
+      // dispatch log (SubagentStop records) and to _returns receipts.
+      ...(s.id ? { id: s.id } : {}), role: s.role, label: s.label, n: 1,
       tokens: s.tokens, activeMin: s.activeMin,
       toolCalls: s.toolCalls, toolErrors: s.toolErrors,
       ...(s.caseIds?.length ? { cases: s.caseIds } : {}),
       ...(s.costUsd != null ? { costUsd: s.costUsd } : {}),
     })),
-    skills: [...p.skills].sort(), dispatches: p.dispatched.length,
+    skills: [...p.skills].sort(),
+    // Count the sub-agents actually found, not the Agent-tool calls: a Workflow
+    // run spawns its agents through the workflow runtime, so `p.dispatched`
+    // (Agent tool_use blocks) reads 0 for a whole batch. Verified on a live
+    // workflow session: 3 sub-agent transcripts, 0 Agent-tool calls.
+    dispatches: Math.max(p.dispatched.length, subs.length),
     ...(cfg.capturePrompts ? { prompts: p.prompts, dispatched: p.dispatched } : {}),
-  };
+  });
+}
+
+/**
+ * Capture a session INTO THE LEDGER right now, without waiting for its end.
+ *
+ * The batch report is generated by the lead AT CLOSE — which happens INSIDE
+ * the still-running session, so that session has no ledger line yet and the
+ * report would omit the very work it describes (measured: a close from inside
+ * the session reported $0 for a batch that cost real money). This is the same
+ * append the SessionEnd hook performs, just earlier; the session's real end
+ * appends a superseding line, and every reader dedupes latest-endedAt-wins, so
+ * closing early costs nothing and double-counts nothing.
+ */
+export function captureSessionNow(repo, sessionId, { config, user, env = process.env, price = true } = {}) {
+  const cfg = config ?? loadConfig(repo);
+  const me = user ?? whoAmI(repo).slug;
+  for (const dir of claudeProjectDirs(repo, env)) {
+    const path = join(dir, `${sessionId}.jsonl`);
+    if (!existsSync(path)) continue;
+    const line = captureClaudeSession(repo, path, sessionId, { config: cfg, user: me, price });
+    if (!line) return null;
+    const prevEnd = knownSessions(repo).get(`claude:${sessionId}`);
+    const thisEnd = line.endedAt ? Date.parse(line.endedAt) : 0;
+    if (prevEnd === undefined || thisEnd > prevEnd) appendLine(repo, me, line);
+    return line;
+  }
+  return null;
 }
 
 // --- Claude sweep (missed sessions — hard kills, other machines' pulls) ------
@@ -587,6 +861,9 @@ export function captureCopilotSession(repo, eventsPath, sessionId, { config, use
   tokens.input = Math.max(0, tokens.input - subTotal);
   const t = timeStats(stamps);
   const usd = nanoAiu === null ? null : (nanoAiu / 1e9) * USD_PER_CREDIT;
+  // Copilot's agent cannot know its session id, so its declared scopes arrive
+  // as `open --session auto` pendings — claimed here by time window.
+  const scope = sessionScope(repo, sessionId, { startTs: t.startTs, endTs: t.endTs });
   return {
     v: LEDGER_VERSION, host: 'copilot', id: sessionId,
     user: user ?? whoAmI(repo).slug,
@@ -599,7 +876,8 @@ export function captureCopilotSession(repo, eventsPath, sessionId, { config, use
     turns, toolCalls, toolErrors,
     tokens,
     costUsd: usd, costSource: usd != null ? 'copilot-nano-aiu' : 'none',
-    cases: extractCaseIds(branch, ...caseTexts),
+    cases: [...new Set([...extractCaseIds(branch, ...caseTexts), ...(scope?.cases ?? [])])].sort(),
+    ...(scope ? { scope: scopeForLine(scope) } : {}),
     subagents: subs, // per-dispatch (n:1) with label — same shape as the Claude path
     skills: [...skills].sort(), dispatches: dispatched.length,
     ...(cfg.capturePrompts ? { prompts } : {}),
@@ -772,6 +1050,11 @@ export function captureVsCodeSession(repo, filePath, sessionId, { config, user }
   const p = parseVsCodeChatSession(readFileSync(filePath, 'utf8'), { capturePrompts: cfg.capturePrompts });
   if (!p) return null;
   const usd = p.credits === null ? null : p.credits * USD_PER_CREDIT;
+  // The sidebar has no hooks, so a declared scope ALWAYS arrives as a pending
+  // record (`open --session auto`) — the same time-window claim the other two
+  // hosts use is the only join there is. Without it every sidebar session
+  // reports as undeclared no matter what the user declared.
+  const scope = sessionScope(repo, sessionId, { startTs: p.startTs, endTs: p.endTs });
   return {
     v: LEDGER_VERSION, host: 'copilot-vscode', id: sessionId,
     user: user ?? whoAmI(repo).slug,
@@ -785,9 +1068,11 @@ export function captureVsCodeSession(repo, filePath, sessionId, { config, user }
     turns: p.requests, toolCalls: 0, toolErrors: p.toolErrors,
     tokens: p.tokens,
     costUsd: usd, costSource: usd != null ? 'copilot-credits' : 'none',
-    title: p.title, cases: p.cases,
+    title: p.title,
+    cases: [...new Set([...p.cases, ...(scope?.cases ?? [])])].sort(),
     subagents: [],
     skills: [], dispatches: 0,
+    ...(scope ? { scope: scopeForLine(scope) } : {}),
     ...(cfg.capturePrompts ? { prompts: p.prompts } : {}),
   };
 }
@@ -935,7 +1220,7 @@ function readStdinJson() {
   } catch { return null; }
 }
 
-export function main(argv = process.argv.slice(2), env = process.env) {
+export async function main(argv = process.argv.slice(2), env = process.env) {
   const arg = (name) => {
     const i = argv.indexOf(name);
     return i >= 0 && argv[i + 1] ? argv[i + 1] : null;
@@ -948,21 +1233,47 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   // OTel opted in with a localhost endpoint → make sure the sink is up.
   if (cfg.otel?.enabled && env.TOKENOMICS_NO_SINK !== '1') ensureSink(cfg.otel, env);
 
-  // After any append, refresh the per-batch cost.json files: a pure recompute
-  // joining the ledger to the pipeline's receipts (batch-cost.mjs). Never
-  // fatal — cost.json is a derivation and can always be rebuilt on demand.
-  const refreshBatchCosts = () => {
-    if (env.TOKENOMICS_NO_BATCH_COST === '1') return;
-    try {
-      const n = updateBatchCosts(repo).length;
-      if (n) process.stderr.write(`tokenomics: refreshed cost.json for ${n} batch(es)\n`);
-    } catch { /* receipts absent or malformed — nothing to refresh */ }
-  };
+  // cost.json is deliberately NOT refreshed here. It is a committed record in
+  // the MAIN tree, and rewriting a tracked file on every session end dirtied
+  // the tree at arbitrary moments (gate refusals, checkout conflicts — field
+  // incidents). It is a pure derivation with no data of its own: the live view
+  // (work-scope status, team-report --batch) recomputes it on the fly, and the
+  // on-disk record is written once, at close, in the same breath as the commit.
+
+  // SubagentStop: measure the dispatch that just finished (one transcript,
+  // one meter) and append it to the session's live dispatch log. Cheap by
+  // construction — it never touches the other transcripts or the ledger.
+  if (argv.includes('--dispatch')) {
+    const hook = readStdinJson() ?? {};
+    const sid = arg('--session') || hook.session_id || hook.sessionId;
+    if (!sid) return 0;
+    // SubagentStop's transcript_path names the PARENT transcript (field lesson
+    // in workflow-return.mjs), so its dirname IS the Claude project dir.
+    const tp = arg('--transcript') || hook.transcript_path || hook.transcriptPath;
+    const n = captureDispatches(repo, sid, {
+      projectDir: tp ? dirname(tp) : undefined,
+      config: cfg, env,
+      agentId: arg('--agent') || hook.agent_id || hook.agentId || null,
+    });
+    if (n) {
+      process.stderr.write(`tokenomics: recorded ${n} finished dispatch(es) for ${sid}\n`);
+      await renderLiveReport(repo, sid, env); // the live batch page tracks every landing
+    }
+    return 0;
+  }
 
   if (argv.includes('--sweep')) {
     const r = sweep(repo, { config: cfg, user: me, all: argv.includes('--all'), env });
     process.stderr.write(`tokenomics: swept ${r.captured} session(s)${r.skipped ? `, ${r.skipped} deferred (bounded — rerun or use --all)` : ''}\n`);
-    if (r.captured) refreshBatchCosts();
+    if (r.captured) {
+      // Copilot's sessionEnd runs THIS path (no transcript flags), so the
+      // live page's final overwrite — now with the session's billed credits —
+      // happens here; render before sync so the page rides the same commit.
+      const hook = readStdinJson() ?? {};
+      const sid = arg('--session') || hook.session_id || hook.sessionId;
+      if (sid) await renderLiveReport(repo, sid, env);
+      syncTelemetry(repo, env);
+    }
     return 0;
   }
 
@@ -984,19 +1295,92 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       const prevEnd = known.get(`claude:${id}`);
       const thisEnd = line.endedAt ? Date.parse(line.endedAt) : 0;
       if (prevEnd === undefined || thisEnd > prevEnd) { appendLine(repo, me, line); captured++; }
+      // The real ledger line supersedes the live dispatch log — drop it so the
+      // transient file never outlives the session it described.
+      try { rmSync(dispatchLogPath(repo, id), { force: true }); } catch { /* fine */ }
     }
   }
   // Every capture moment is also a harvest moment (Copilot sessions, hard-killed
   // Claude ones) — bounded, so the hook stays quick.
   const r = sweep(repo, { config: cfg, user: me, env });
-  process.stderr.write(`tokenomics: captured ${captured + r.captured} session(s) → .agents/telemetry/usage-${me}.jsonl\n`);
-  if (captured + r.captured) refreshBatchCosts();
+  process.stderr.write(`tokenomics: captured ${captured + r.captured} session(s) → .agents/automation/telemetry/usage-${me}.jsonl\n`);
+  if (sessionId) await renderLiveReport(repo, sessionId, env); // final overwrite from the completed ledger line
+  if (captured + r.captured) syncTelemetry(repo, env);
   return 0;
+}
+
+/**
+ * The LIVE batch page: telemetry/reports/<batch>.html, overwritten in place on
+ * every finished dispatch and at session end. Same renderer as the close-time
+ * report, fed by ledger + live-log lines (no metering here — the dispatch
+ * capture already priced what it could), so mid-run it reads LIVE/PROVISIONAL
+ * and converges to the close-time figures. Lives on the telemetry side: a
+ * mid-run write into the batch dir would dirty the main tree.
+ * TOKENOMICS_NO_BATCH_COST=1 disables (hermetic tests, cost-averse hooks).
+ */
+export async function renderLiveReport(repo, sessionId, env = process.env) {
+  if (env.TOKENOMICS_NO_BATCH_COST === '1') return null;
+  try {
+    const scope = sessionScope(repo, sessionId);
+    if (!scope?.batch) return null;
+    const { updateBatchCosts } = await import('../scripts/batch-cost.mjs');
+    const { renderBatchHtml } = await import('../scripts/team-report.mjs');
+    // Same three-way resolve as close: top slug, nested full path, bare wave name.
+    let costs = updateBatchCosts(repo, { batch: scope.batch, write: false });
+    if (!costs.length) {
+      costs = updateBatchCosts(repo, { write: false })
+        .filter((c) => c.batch === scope.batch || c.batch.endsWith(`/${scope.batch}`));
+    }
+    if (!costs.length) return null;
+    const dir = join(repo, '.agents', 'automation', 'telemetry', 'reports');
+    mkdirSync(dir, { recursive: true });
+    const out = [];
+    for (const c of costs) {
+      const p = join(dir, `${String(c.batch).replace(/\//g, '-')}.html`);
+      writeFileSync(p, `${renderBatchHtml(c)}\n`);
+      out.push(p);
+    }
+    return out;
+  } catch { return null; }
+}
+
+/**
+ * Share what was just captured: commit + push INSIDE the telemetry submodule.
+ * Its own branch — the main tree never moves. Best-effort by design: no
+ * submodule (plain-dir fallback), no git, no network — silently skip; the
+ * next capture moment catches up. TOKENOMICS_NO_SYNC=1 disables.
+ */
+export function syncTelemetry(repo, env = process.env) {
+  if (env.TOKENOMICS_NO_SYNC === '1') return false;
+  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  if (!existsSync(join(dir, '.git'))) return false;   // not a submodule — nothing to sync
+  const git = (args, timeout = 15000) =>
+    execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout });
+  try {
+    git(['add', '-A']);
+    const dirty = git(['status', '--porcelain']).trim();
+    if (dirty) git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
+    // A freshly-cloned submodule sits DETACHED at the recorded pointer — the
+    // commit above would be stranded there. Pin the branch to wherever we
+    // are NOW (always safe: the tree is clean right after the commit), then
+    // converge with the remote below as usual.
+    if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
+    try { git(['push', 'origin', 'HEAD:telemetry'], 20000); } catch {
+      // non-fast-forward (a teammate pushed) → converge and retry once.
+      // Per-user/per-session files make the merge conflict-free by design.
+      try {
+        git(['fetch', 'origin', 'telemetry'], 20000);
+        git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+        git(['push', 'origin', 'HEAD:telemetry'], 20000);
+      } catch { /* offline or a real race — the next capture moment retries */ }
+    }
+    return true;
+  } catch { return false; }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   let code = 0;
-  try { code = main(); }
+  try { code = await main(); }
   catch (err) { process.stderr.write(`tokenomics: capture failed (session unaffected): ${err?.message || err}\n`); }
   process.exit(code); // never non-zero — a telemetry hook must not break the host session
 }

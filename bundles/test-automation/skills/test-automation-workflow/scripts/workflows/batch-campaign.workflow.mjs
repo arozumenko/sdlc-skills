@@ -208,11 +208,11 @@ if (!plan) {
 
 // ---- validated plan present ------------------------------------------------
 if (!plan.campaign || !plan.batch || !plan.base || !Array.isArray(plan.waves) || plan.waves.length === 0) {
-  throw new Error('plan malformed: { campaign, batch, base, heads?, foundation|null, waves: [{slug, caseIds, clusters?}, …], policy? } required')
+  throw new Error('plan malformed: { campaign, batch, base, heads?, foundation|null, waves: [{slug, caseIds, clusters?}, …], casePaths?: {id: repoRelPath}, policy? } required')
 }
 const POLICY = plan.policy ?? {}
 const F = plan.foundation ?? null
-const policyArgs = ['workerModel', 'workerEffort', 'reviewerModel', 'extendImplementerModel', 'agentTypes', 'reviewPanel', 'breakerThreshold', 'budgetReserve', 'fixRounds', 'gateN', 'gateCmd', 'extendRateThreshold']
+const policyArgs = ['workerModel', 'workerEffort', 'reviewerModel', 'extendImplementerModel', 'gateModel', 'agentTypes', 'reviewPanel', 'breakerThreshold', 'budgetReserve', 'fixRounds', 'gateN', 'gateCmd', 'extendRateThreshold']
   .reduce((o, k) => (POLICY[k] != null ? { ...o, [k]: POLICY[k] } : o), {})
 const common = { ...(ROOT ? { root: ROOT } : {}) }
 
@@ -224,7 +224,8 @@ if (F && A.foundationMerged !== true) {
     const headsRun = await workflow({ scriptPath: BUILD }, {
       slug: plan.batch,
       base: plan.base,                          // batch-build requires it even for analyzeOnly
-      cases: plan.heads.map((id) => ({ id })),
+      // casePaths: in-repo case sources (no snapshot copy) — see batch-build's SRC
+      cases: plan.heads.map((id) => ({ id, ...(plan.casePaths?.[id] ? { path: plan.casePaths[id] } : {}) })),
       analyzeOnly: true,
       // Own report location: waves share the batch slug (and its snapshot
       // dir) — without this the heads report and every wave's report would
@@ -453,7 +454,7 @@ for (const w of pending) {
     const report = await workflow({ scriptPath: BUILD }, {
       slug: plan.batch,
       base: plan.base,
-      cases: w.caseIds.map((id) => ({ id })),
+      cases: w.caseIds.map((id) => ({ id, ...(plan.casePaths?.[id] ? { path: plan.casePaths[id] } : {}) })),
       integrationBranch: `tests/batch-${w.slug}`,
       // Per-wave report dir: the snapshot dir is shared via the batch slug by
       // design, but each wave must keep its own report.json — the conductor's
@@ -519,7 +520,7 @@ for (const w of pending) {
           return `Wave '${w.slug}' FAILED (${quote(thisWave.detail ?? '', 120)}) — there is NOTHING to land. Diagnose it (its report/journal), then re-invoke with { plan, foundationMerged: true, headsAnalyzed, landedWaves: ${JSON.stringify(landedWaves)} } to retry the wave (resume replays completed units from cache), or drop it from plan.waves to move on.`
         }
         if (thisWave?.status === 'ungated') {
-          return `Wave '${w.slug}' merged units but its gate NEVER RAN (interrupted or dropped) — they are merged-ungated: unproven, NOT blocked, and there is nothing to classify yet. Re-run the wave gate on ${thisWave?.integration_branch ?? 'its trunk'} first (resuming the build with resumeFromRunId replays merges from cache)${thisWave?.report_written ? '' : '; its report.json was never written — derive state from .agents/automation/_returns/ and git (playbook § Interruption)'}. Land only on green, then re-invoke with { plan, foundationMerged: true, headsAnalyzed, landedWaves: ${JSON.stringify(landedWaves)} } to continue.`
+          return `Wave '${w.slug}' merged units but its gate NEVER RAN (interrupted or dropped) — they are merged-ungated: unproven, NOT blocked, and there is nothing to classify yet. Re-run the wave gate on ${thisWave?.integration_branch ?? 'its trunk'} first (resuming the build with resumeFromRunId replays merges from cache)${thisWave?.report_written ? '' : '; its report.json was never written — derive state from .agents/automation/telemetry/returns/ (legacy _returns/) and git (playbook § Interruption)'}. Land only on green, then re-invoke with { plan, foundationMerged: true, headsAnalyzed, landedWaves: ${JSON.stringify(landedWaves)} } to continue.`
         }
         return `Wave '${w.slug}' ended '${thisWave?.status}' — do NOT land it yet: classify its report first (flake/test-code red → batch-stabilize on its trunk; product defect → tracker). Land only when its trunk is worth landing, then re-invoke with { plan, foundationMerged: true, headsAnalyzed, landedWaves: ${JSON.stringify([...landedWaves, w.slug])} }; to skip it instead, re-invoke without adding it to landedWaves.`
       })(),
@@ -547,7 +548,7 @@ return {
   goal: GOAL,
   landing: LANDING,
   landed_waves: landedWaves,
-  next: `Lead: each wave already gated itself and its trunk is ready to land. Land per .agents/profile.md § Automation PR policy — landing granularity is '${LANDING}'${LANDING === 'per-batch' ? ' (land each gated wave before the next starts, so the next cuts its trunk from an updated base)' : ' (accumulate the gated wave branches and land them together at campaign end)'}. Under auto-merge this can be a dispatched closer rather than your own turns: it merges, reads back the merge, mirrors the TMS, transitions the tracker, and returns the EVIDENCE (merge shas + the read-back diff), never just a claim. Then mirror per plan.policy.mirror ('${POLICY.mirror ?? 'campaign-end'}'). A wave that is not 'gated-green': classify its blocked cases from its report (product defect → tracker; flake/test-code → batch-stabilize on that wave's branch; architectural → § Framework architecture) — EXCEPT a wave 'ungated' (gate never ran): its merged-ungated units are unproven, not blocked — re-run its gate before classifying anything, and if report_written is false the report.json on disk is missing: derive its state from .agents/automation/_returns/ and git (playbook § Interruption), never from this summary alone. Investigate quality_flags and extend_divergence (blind-audit sampled extends) before trusting a wave's coverage. ` +
+  next: `Lead: each wave already gated itself and its trunk is ready to land. Land per .agents/profile.md § Automation PR policy — landing granularity is '${LANDING}'${LANDING === 'per-batch' ? ' (land each gated wave before the next starts, so the next cuts its trunk from an updated base)' : ' (accumulate the gated wave branches and land them together at campaign end)'}. Under auto-merge this can be a dispatched closer rather than your own turns: it merges, reads back the merge, mirrors the TMS, transitions the tracker, and returns the EVIDENCE (merge shas + the read-back diff), never just a claim. Then mirror per plan.policy.mirror ('${POLICY.mirror ?? 'campaign-end'}'). A wave that is not 'gated-green': classify its blocked cases from its report (product defect → tracker; flake/test-code → batch-stabilize on that wave's branch; architectural → § Framework architecture) — EXCEPT a wave 'ungated' (gate never ran): its merged-ungated units are unproven, not blocked — re-run its gate before classifying anything, and if report_written is false the report.json on disk is missing: derive its state from .agents/automation/telemetry/returns/ (legacy _returns/) and git (playbook § Interruption), never from this summary alone. Investigate quality_flags and extend_divergence (blind-audit sampled extends) before trusting a wave's coverage. ` +
     (GOAL
       ? `AFTER each wave's merges land, RE-MEASURE THE GOAL — run \`${GOAL.command}\` and log the number on the campaign card under § Goal (metric: ${GOAL.metric}; baseline: ${GOAL.baseline}). A wave gate that passes without a fresh number leaves the campaign blind from there on. `
       : '') +

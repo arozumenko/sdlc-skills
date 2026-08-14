@@ -30,10 +30,11 @@
 //   * stats (avg/median/min/max) run over measured values only.
 //
 // STDLIB ONLY. Read-only except the cost.json writes.
-import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadLines, dedupLines } from './team-report.mjs';
+import { listScopes } from './work-scope.mjs';
 
 const COST_VERSION = 1;
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -55,6 +56,10 @@ export function loadReceipts(repo, { batch } = {}) {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      // Non-batch residents of automation/: the telemetry submodule and the
+      // underscore-prefixed working dirs (_returns, _gates) hold no receipts —
+      // descending into them is waste (and, for telemetry, a whole git checkout).
+      if (entry.name === 'telemetry' || entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
       else if (entry.name === 'report.json') {
@@ -68,12 +73,157 @@ export function loadReceipts(repo, { batch } = {}) {
   return batch ? out.filter(({ slug }) => slug === batch || slug.startsWith(`${batch}/`)) : out;
 }
 
+// --- live (running sessions) -------------------------------------------------
+/**
+ * Rebuild a PROVISIONAL session line for each still-running session from its
+ * live dispatch log (`.agents/automation/telemetry/live/<session>.jsonl` — one small line
+ * per finished dispatch, written by the SubagentStop hook).
+ *
+ * This is what makes the batch report current DURING a run without the ledger
+ * growing: the deltas are stored, the snapshot is rebuilt on demand. A live
+ * line is used ONLY while its session has no ledger line at all (see the
+ * caller) — the real line always wins.
+ *
+ * `costUsd` here is the sum of the dispatches measured so far, so it is a
+ * FLOOR, not the session total — the lead's own thread is not in it until the
+ * session is captured. The line is marked `live: true` so consumers can say so.
+ */
+export function loadLiveLines(repo) {
+  const dir = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  if (!existsSync(dir)) return [];
+  const out = [];
+  let names;
+  try { names = readdirSync(dir).sort(); } catch { return out; }
+  for (const name of names) {
+    if (!name.endsWith('.jsonl')) continue;
+    const byId = new Map();
+    for (const line of readFileSync(join(dir, name), 'utf8').split('\n')) {
+      const r = line.trim() && safeParse(line);
+      if (r?.agentId) byId.set(r.agentId, r);      // latest record per dispatch
+    }
+    const recs = [...byId.values()];
+    if (!recs.length) continue;
+    const priced = recs.filter((r) => typeof r.costUsd === 'number');
+    out.push({
+      v: COST_VERSION, host: 'claude', live: true, id: name.replace(/\.jsonl$/, ''),
+      user: 'live', repo: '', branch: '', role: null,
+      startedAt: null, endedAt: recs.map((r) => r.endedAt).filter(Boolean).sort().pop() ?? null,
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },   // parent not measured yet
+      activeMin: 0, turns: 0, toolCalls: 0, toolErrors: 0,
+      ...(priced.length ? { costUsd: priced.reduce((n, r) => n + r.costUsd, 0), costSource: 'ccusage-metered' } : {}),
+      cases: [...new Set(recs.flatMap((r) => r.cases ?? []))].sort(),
+      subagents: recs.map((r) => ({
+        id: r.agentId, role: r.role, label: r.label, n: 1,
+        tokens: r.tokens, activeMin: num(r.activeMin),
+        toolCalls: num(r.toolCalls), toolErrors: num(r.toolErrors),
+        ...(r.cases?.length ? { cases: r.cases } : {}),
+        ...(typeof r.costUsd === 'number' ? { costUsd: r.costUsd } : {}),
+      })),
+      skills: [], dispatches: recs.length,
+    });
+  }
+  return out;
+}
+
+// --- records (script gate verdicts + declared session outcomes) --------------
+/**
+ * gate-case.mjs appends one line per verdict — chronological by construction.
+ * Two locations: the batch dir (legacy + post-fold home) and the telemetry
+ * write-side (`telemetry/gate-runs/<slug>.jsonl`, where mid-run appends land
+ * so they never dirty the main tree). Read both, dedup exact lines (a fold
+ * copies, it doesn't move atomically), keep chronological order by `at`.
+ */
+export function loadGateRuns(dir, { repo = null, slug = null } = {}) {
+  const files = [dir && join(dir, 'gate-runs.jsonl')];
+  if (repo && slug) files.push(join(repo, '.agents', 'automation', 'telemetry', 'gate-runs', `${slug}.jsonl`));
+  const seen = new Set();
+  const out = [];
+  for (const p of files) {
+    if (!p || !existsSync(p)) continue;
+    for (const line of readFileSync(p, 'utf8').split('\n').filter(Boolean)) {
+      if (seen.has(line)) continue;
+      seen.add(line);
+      const rec = safeParse(line);
+      if (rec) out.push(rec);
+    }
+  }
+  return out.sort((a, z) => String(a.at ?? '').localeCompare(String(z.at ?? '')));
+}
+
+/**
+ * At close, the telemetry-side verdicts move home: appended into the batch
+ * dir's gate-runs.jsonl (skipping lines already there), telemetry file
+ * removed. After this the record ships WITH the batch — one committed file,
+ * no second source. Safe to call when there is nothing to fold.
+ */
+export function foldGateRuns(repo, slug, dir) {
+  const src = join(repo, '.agents', 'automation', 'telemetry', 'gate-runs', `${slug}.jsonl`);
+  if (!existsSync(src)) return 0;
+  const dst = join(dir, 'gate-runs.jsonl');
+  const have = new Set(existsSync(dst) ? readFileSync(dst, 'utf8').split('\n').filter(Boolean) : []);
+  const fresh = readFileSync(src, 'utf8').split('\n').filter(Boolean).filter((l) => !have.has(l));
+  if (fresh.length) {
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(dst, `${fresh.join('\n')}\n`);
+  }
+  rmSync(src, { force: true });
+  return fresh.length;
+}
+
+/** Latest declared outcome per receipt case id, across the batch's scopes. */
+export function declaredOutcomesFor(receipt, slug, scopes) {
+  const ids = new Set((receipt.cases ?? []).map((c) => c.id).filter(Boolean));
+  const names = new Set([receipt.batch, slug, String(slug).split('/').pop()].filter(Boolean).map((s) => s.toLowerCase()));
+  const matching = scopes
+    .filter((s) => (s.batch && names.has(String(s.batch).toLowerCase())) || (s.cases ?? []).some((id) => ids.has(id)))
+    .sort((a, z) => String(a.updatedAt ?? '').localeCompare(String(z.updatedAt ?? '')));
+  const out = {};
+  for (const s of matching) {
+    for (const [id, o] of Object.entries(s.outcomes ?? {})) {
+      if (ids.has(id)) out[id] = o?.outcome ?? o; // latest updatedAt wins
+    }
+  }
+  return out;
+}
+
+/**
+ * The receipt vs the records. Drift is THE signal the write-back failure class
+ * produces: a gate re-run green whose verdict never reached report.json
+ * (measured: 38/69 delivered cases scored unproven), or a session that
+ * declared a case automated while the receipt still says blocked/not-run.
+ * The records never overwrite the receipt — they make the gap visible.
+ */
+export function crossCheck(receipt, gateRuns, declared) {
+  const latest = gateRuns.length ? gateRuns[gateRuns.length - 1] : null;
+  const receiptVerdict = receipt.gate?.verdict ?? null;
+  const gateDrift = latest && latest.verdict !== receiptVerdict
+    ? { receipt: receiptVerdict, recorded: latest.verdict, at: latest.at ?? null }
+    : null;
+  const outcomeDrift = [];
+  for (const c of receipt.cases ?? []) {
+    const d = declared[c.id];
+    if (d && d !== (c.outcome ?? null)) outcomeDrift.push({ id: c.id, receipt: c.outcome ?? null, declared: d });
+  }
+  return { gateDrift, outcomeDrift };
+}
+
 // --- classification ----------------------------------------------------------
 // Batch-level stages: work that serves the WHOLE batch. Everything else that
 // names a case id is that case's own work (analyst/combined/implement/review/
 // fix/carve/merge are all per-unit stages in the pipeline).
 const OVERHEAD_STAGE = /\btriage\b|hardening gate|mini-gate|gate for batch|^gate[:\s]|report writer|write the report|^report[:\s]|diagnostician|stabiliz\w+ (?:diagnos|round)/i;
 const FIX_STAGE = /^fix[:\s]|fix round/i;
+/**
+ * Stage words are matched against the label's HEAD, never the whole thing.
+ * `deriveLabel` slices from the dispatch's own stage marker, so its stage is
+ * always at the front — while the rest of the text routinely MENTIONS other
+ * stages. Field case: every reviewer prompt says "(do not execute the spec;
+ * the hardening gate does that)", so matching anywhere booked all six
+ * reviewers as gate overhead — $4.31 taken off the cases and added to the
+ * gate, in a real batch report.
+ */
+const STAGE_HEAD = 48;
+const stageHead = (label) => String(label || '').slice(0, STAGE_HEAD);
 
 /** Which of `ids` a dispatch label names. Case-insensitive, id-shape-agnostic. */
 export function matchIds(label, ids) {
@@ -83,7 +233,7 @@ export function matchIds(label, ids) {
 }
 
 export function classify(label, ids, declared = []) {
-  if (OVERHEAD_STAGE.test(String(label || ''))) return { kind: 'overhead', ids: [] };
+  if (OVERHEAD_STAGE.test(stageHead(label))) return { kind: 'overhead', ids: [] };
   const matched = matchIds(label, ids);
   if (matched.length) return { kind: 'direct', ids: matched };
   // Fallback: ids the capture mined from the dispatch's own transcript (the
@@ -98,9 +248,12 @@ export function classify(label, ids, declared = []) {
 
 // --- the join ----------------------------------------------------------------
 /** Does this ledger line belong to this batch at all? `slug` may be a string
- * or a list (a nested wave passes its path slug + the receipt's batch name). */
+ * or a list (a nested wave passes its path slug + the receipt's batch name).
+ * A DECLARED scope (work-scope.mjs, stamped by capture) is the strongest
+ * surface — its batch and cases join the same match, no guessing needed. */
 export function lineMatchesBatch(line, { slug, ids, branches }) {
   const texts = [line.branch || '', ...(line.cases || []),
+    line.scope?.batch || '', ...(line.scope?.cases || []),
     ...(line.subagents || []).map((s) => s.label || ''),
     ...(line.subagents || []).flatMap((s) => s.cases || [])]
     .join('\n').toLowerCase();
@@ -110,12 +263,14 @@ export function lineMatchesBatch(line, { slug, ids, branches }) {
   return false;
 }
 
-const emptyBucket = () => ({ costUsd: null, tokens: 0, activeMin: 0, dispatches: 0 });
-function addTo(b, { costUsd, tokens, activeMin }, share = 1) {
+const emptyBucket = () => ({ costUsd: null, tokens: 0, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
+function addTo(b, { costUsd, tokens, activeMin, toolCalls = 0, toolErrors = 0 }, share = 1) {
   if (typeof costUsd === 'number') b.costUsd = num(b.costUsd) + costUsd * share;
   b.tokens += tokens * share;
   b.activeMin += activeMin * share;
   b.dispatches += share;
+  b.toolCalls += toolCalls * share;
+  b.toolErrors += toolErrors * share;
 }
 const subTokens = (s) => num(s.tokens?.input) + num(s.tokens?.output) + num(s.tokens?.cacheRead) + num(s.tokens?.cacheWrite);
 
@@ -132,68 +287,121 @@ function stats(values) {
 const money = (s) => s && { avg: round2(s.avg), median: round2(s.median), min: round2(s.min), max: round2(s.max), n: s.n };
 const rounded = (s) => s && { avg: Math.round(s.avg), median: Math.round(s.median), min: Math.round(s.min), max: Math.round(s.max), n: s.n };
 
-/** Build one batch's cost.json object from the receipt + ALL ledger lines. */
-export function buildBatchCost(slug, receipt, allLines) {
+// Overhead stage kinds — the split a lead actually asks about ("what did the
+// gate cost"). `other` catches unnamed stage work.
+const STAGE_KIND = [
+  ['triage', /\btriage\b/i],
+  ['gate', /hardening gate|mini-gate|gate for batch|^gate[:\s]/i],
+  ['report', /report writer|write the report|^report[:\s]/i],
+];
+const stageKindOf = (label) => (STAGE_KIND.find(([, re]) => re.test(stageHead(label)))?.[0] ?? 'other');
+
+/** Build one batch's cost.json object from the receipt + ALL ledger lines.
+ * `records`: the batch dir (for gate-runs.jsonl) + the repo's scope records.
+ * `others`: the OTHER receipts' identities ({keys, ids, branches}) — a session
+ * serving several batches must not be double-counted: its dispatches that name
+ * another batch's ids/slug are EXCLUDED here, and its session-level figures
+ * (lead thread, unnamed work) are split EVENLY across the batches it matched.
+ * All optional, so pure-ledger callers and old tests stay valid. */
+export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [], others = [], repo = null } = {}) {
   const ids = receipt.cases.map((c) => c.id).filter(Boolean);
   const branches = [receipt.integration_branch, ...receipt.cases.map((c) => c.branch)].filter(Boolean);
   const lines = dedupLines(allLines).filter((l) => lineMatchesBatch(l, { slug: [slug, receipt.batch].filter(Boolean), ids, branches }));
 
+  const myKeys = [slug, receipt.batch].filter(Boolean).map((s) => String(s).toLowerCase());
+  const foreignIds = new Set(others.flatMap((o) => o?.ids ?? []).filter((id) => !ids.includes(id)));
+  const foreignKeys = new Set(others.flatMap((o) => o?.keys ?? []).map((s) => String(s).toLowerCase()).filter((k) => !myKeys.includes(k)));
+  const mentionsKey = (label, keys) => {
+    const l = String(label || '').toLowerCase();
+    for (const k of keys) if (k && l.includes(k)) return true;
+    return false;
+  };
+
   const perCase = new Map(ids.map((id) => [id, { ...emptyBucket(), fixRounds: 0 }]));
   const overhead = { lead: emptyBucket(), stage: emptyBucket() };
-  const totals = { ...emptyBucket(), sessions: lines.length };
+  const byStage = { triage: emptyBucket(), gate: emptyBucket(), report: emptyBucket(), other: emptyBucket() };
+  const rework = emptyBucket();
+  const totals = { ...emptyBucket(), sessions: lines.length, turns: 0 };
   const tokensSplit = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  const byRole = new Map(); // role → {tokens, costUsd, activeMin, dispatches} — feeds the cross-factory export's tokens_by_agent
-  const hosts = new Set(); const users = new Set(); const costSources = new Set(); const models = new Set();
-  let pricedDirect = false;
+  const byRole = new Map(); // role → bucket — feeds the cross-factory export's tokens_by_agent
+  const hosts = new Set(); const users = new Set(); const costSources = new Set(); const models = new Set(); const skills = new Set();
+  let pricedDirect = false; let sharedSessions = 0; let foreignExcluded = 0;
 
-  const addSplit = (t) => { for (const k of Object.keys(tokensSplit)) tokensSplit[k] += num(t?.[k]); };
-  const roleAdd = (role, { costUsd, tokens, activeMin }, dispatches = 1) => {
-    if (!byRole.has(role)) byRole.set(role, { tokens: 0, costUsd: null, activeMin: 0, dispatches: 0 });
+  const addSplit = (t, f = 1) => { for (const k of Object.keys(tokensSplit)) tokensSplit[k] += num(t?.[k]) * f; };
+  const roleAdd = (role, m, dispatches = 1) => {
+    if (!byRole.has(role)) byRole.set(role, { tokens: 0, costUsd: null, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
     const b = byRole.get(role);
-    b.tokens += tokens; b.activeMin += activeMin; b.dispatches += dispatches;
-    if (typeof costUsd === 'number') b.costUsd = num(b.costUsd) + costUsd;
+    b.tokens += m.tokens; b.activeMin += m.activeMin; b.dispatches += dispatches;
+    b.toolCalls += num(m.toolCalls); b.toolErrors += num(m.toolErrors);
+    if (typeof m.costUsd === 'number') b.costUsd = num(b.costUsd) + m.costUsd;
   };
 
   for (const line of lines) {
     hosts.add(line.host); users.add(line.user);
     for (const m of line.models || []) models.add(m);
+    for (const s of line.skills || []) skills.add(s);
     if (line.costSource && line.costSource !== 'none') costSources.add(line.costSource);
-    // Session totals: the line's own costUsd covers parent + subs where priced.
-    if (typeof line.costUsd === 'number') totals.costUsd = num(totals.costUsd) + line.costUsd;
-    totals.activeMin += num(line.activeMin);
-    totals.tokens += subTokens({ tokens: line.tokens }) + (line.subagents || []).reduce((n, s) => n + subTokens(s), 0);
-    addSplit(line.tokens);
-    for (const s of line.subagents || []) addSplit(s.tokens);
 
-    let subCost = 0;
+    // How many batches did this session serve? Its session-level figures split
+    // evenly across them; a single-batch session divides by 1 (unchanged).
+    const div = 1 + others.filter((o) => o && lineMatchesBatch(line, { slug: o.keys ?? [], ids: o.ids ?? [], branches: o.branches ?? [] })).length;
+    if (div > 1) sharedSessions++;
+
+    // Partition dispatches: mine (named this batch's ids/slug) at full weight,
+    // FOREIGN (named another batch's, not mine) excluded entirely, neutral
+    // (named neither) split evenly across the matched batches.
+    let subCostAll = 0; let subMinAll = 0;
+    const included = [];
     for (const s of line.subagents || []) {
-      totals.dispatches++;
-      roleAdd(s.role || 'unknown', { costUsd: typeof s.costUsd === 'number' ? s.costUsd : null, tokens: subTokens(s), activeMin: num(s.activeMin) });
-      if (typeof s.costUsd === 'number') subCost += s.costUsd;
+      if (typeof s.costUsd === 'number') subCostAll += s.costUsd;
+      subMinAll += num(s.activeMin);
+      const mine = matchIds(s.label, ids).length > 0 || (s.cases ?? []).some((c) => ids.includes(c)) || mentionsKey(s.label, myKeys);
+      const foreign = !mine && (matchIds(s.label, [...foreignIds]).length > 0 || (s.cases ?? []).some((c) => foreignIds.has(c)) || mentionsKey(s.label, [...foreignKeys]));
+      if (foreign) { foreignExcluded++; continue; }
+      included.push({ s, w: mine ? 1 : 1 / div });
+    }
+
+    // The lead's own thread = the session minus ALL its dispatches (foreign
+    // ones included — they are not the parent's), then this batch's even share.
+    const parent = {
+      costUsd: typeof line.costUsd === 'number' ? Math.max(0, line.costUsd - subCostAll) / div : null,
+      tokens: subTokens({ tokens: line.tokens }) / div,
+      activeMin: Math.max(0, num(line.activeMin) - subMinAll) / div,
+      toolCalls: num(line.toolCalls) / div,
+      toolErrors: num(line.toolErrors) / div,
+    };
+    totals.turns += num(line.turns) / div;
+    addTo(totals, parent); totals.dispatches--; // phantom dispatch for the parent
+    addSplit(line.tokens, 1 / div);
+    addTo(overhead.lead, parent);
+    overhead.lead.dispatches--; // ditto
+    roleAdd(line.role || 'session', parent, 0);
+
+    for (const { s, w } of included) {
+      const m = {
+        costUsd: typeof s.costUsd === 'number' ? s.costUsd : null,
+        tokens: subTokens(s), activeMin: num(s.activeMin),
+        toolCalls: num(s.toolCalls), toolErrors: num(s.toolErrors),
+      };
+      addTo(totals, m, w);
+      addSplit(s.tokens, w);
+      roleAdd(s.role || 'unknown', { ...m, costUsd: typeof m.costUsd === 'number' ? m.costUsd * w : null, tokens: m.tokens * w, activeMin: m.activeMin * w, toolCalls: m.toolCalls * w, toolErrors: m.toolErrors * w }, w);
       const { kind, ids: matched } = classify(s.label, ids, s.cases || []);
-      const measure = { costUsd: typeof s.costUsd === 'number' ? s.costUsd : null, tokens: subTokens(s), activeMin: num(s.activeMin) };
       if (kind === 'direct') {
         if (typeof s.costUsd === 'number') pricedDirect = true;
-        const share = 1 / matched.length; // even split across the cluster, any size
+        const isFix = FIX_STAGE.test(stageHead(s.label));
+        if (isFix) addTo(rework, m, w);
+        const share = w / matched.length; // even split across the cluster, any size
         for (const id of matched) {
           const row = perCase.get(id);
-          addTo(row, measure, share);
-          if (FIX_STAGE.test(String(s.label || ''))) row.fixRounds += share;
+          addTo(row, m, share);
+          if (isFix) row.fixRounds += share;
         }
       } else {
-        addTo(overhead.stage, measure);
+        addTo(overhead.stage, m, w);
+        addTo(byStage[stageKindOf(s.label)], m, w);
       }
     }
-    // The lead's own thread = the session minus its dispatches. Tokens are
-    // already parent-only on the line; dollars are total minus sub dollars.
-    const leadShare = {
-      costUsd: typeof line.costUsd === 'number' ? Math.max(0, line.costUsd - subCost) : null,
-      tokens: subTokens({ tokens: line.tokens }),
-      activeMin: Math.max(0, num(line.activeMin) - (line.subagents || []).reduce((n, s) => n + num(s.activeMin), 0)),
-    };
-    addTo(overhead.lead, leadShare);
-    overhead.lead.dispatches--; // addTo counted a phantom dispatch for the parent
-    roleAdd(line.role || 'session', leadShare, 0);
   }
 
   const cases = receipt.cases.map((c) => {
@@ -205,6 +413,7 @@ export function buildBatchCost(slug, receipt, allLines) {
         costUsd: typeof d.costUsd === 'number' ? round2(d.costUsd) : null,
         tokens: Math.round(d.tokens), activeMin: Math.round(d.activeMin),
         dispatches: Math.round(d.dispatches * 100) / 100, fixRounds: Math.round(d.fixRounds * 100) / 100,
+        toolCalls: Math.round(d.toolCalls), toolErrors: Math.round(d.toolErrors),
       },
     };
   });
@@ -216,33 +425,88 @@ export function buildBatchCost(slug, receipt, allLines) {
   const ohCost = num(overhead.lead.costUsd) + num(overhead.stage.costUsd);
   const ohPriced = typeof overhead.lead.costUsd === 'number' || typeof overhead.stage.costUsd === 'number';
 
+  // Records vs receipt: script-authored gate verdicts + declared outcomes.
+  const gateRuns = loadGateRuns(dir, { repo, slug });
+  const declared = declaredOutcomesFor(receipt, slug, scopes);
+  const { gateDrift, outcomeDrift } = crossCheck(receipt, gateRuns, declared);
+  const latestGate = gateRuns.length ? gateRuns[gateRuns.length - 1] : null;
+
+  // FULLY LOADED per case: direct + an EVEN share of batch overhead. This is
+  // an ALLOCATION, clearly labelled — the doctrine still shows overhead once
+  // at batch level and never claims to have measured a per-case split — but
+  // "what did this case really cost the batch" is the figure cross-batch
+  // comparisons want. Even split across EVERY receipt case: overhead (triage,
+  // gate, lead, report) served examined cases too, not only delivered ones.
+  const ohMin = overhead.lead.activeMin + overhead.stage.activeMin;
+  const ohTok = overhead.lead.tokens + overhead.stage.tokens;
+  const nCases = cases.length || 1;
+  const casesOut = cases.map((c) => ({
+    ...c,
+    loaded: {
+      costUsd: ohPriced || typeof c.direct.costUsd === 'number'
+        ? round2(num(c.direct.costUsd) + (ohPriced ? ohCost / nCases : 0))
+        : null,
+      tokens: Math.round(c.direct.tokens + ohTok / nCases),
+      activeMin: Math.round(c.direct.activeMin + ohMin / nCases),
+    },
+  }));
+
+  const bucketOut = (b) => ({
+    costUsd: typeof b.costUsd === 'number' ? round2(b.costUsd) : null,
+    tokens: Math.round(b.tokens), activeMin: Math.round(b.activeMin),
+    dispatches: Math.round(b.dispatches * 100) / 100,
+    toolCalls: Math.round(b.toolCalls), toolErrors: Math.round(b.toolErrors),
+  });
   return {
     v: COST_VERSION, batch: slug, generatedAt: new Date().toISOString(),
-    sources: { sessions: lines.length, hosts: [...hosts].sort(), users: [...users].sort(), costSources: [...costSources].sort(), models: [...models].sort() },
+    sources: {
+      sessions: lines.length, hosts: [...hosts].sort(), users: [...users].sort(), costSources: [...costSources].sort(), models: [...models].sort(),
+      ...(lines.some((l) => l.live) ? {
+        liveSessions: lines.filter((l) => l.live).length,
+        liveNote: 'PROVISIONAL — a session is still running: its finished dispatches are counted, its own lead thread is not yet measured, so these totals are a floor. Re-run once it ends.',
+      } : {}),
+      ...(sharedSessions ? { sharedSessions, note: 'session-level figures of shared sessions are split evenly across the batches they served' } : {}),
+      ...(foreignExcluded ? { foreignDispatchesExcluded: foreignExcluded } : {}),
+    },
     totals: {
       costUsd: typeof totals.costUsd === 'number' ? round2(totals.costUsd) : null,
-      tokens: Math.round(totals.tokens), tokensSplit, activeMin: Math.round(totals.activeMin),
-      dispatches: totals.dispatches, sessions: totals.sessions,
+      tokens: Math.round(totals.tokens), tokensSplit: Object.fromEntries(Object.entries(tokensSplit).map(([k, v]) => [k, Math.round(v)])),
+      activeMin: Math.round(totals.activeMin),
+      dispatches: Math.round(totals.dispatches * 100) / 100, sessions: totals.sessions,
+      turns: Math.round(totals.turns), toolCalls: Math.round(totals.toolCalls), toolErrors: Math.round(totals.toolErrors),
+      skills: [...skills].sort(),
     },
-    byRole: Object.fromEntries([...byRole.entries()].sort().map(([r, b]) => [r, {
-      tokens: Math.round(b.tokens), costUsd: typeof b.costUsd === 'number' ? round2(b.costUsd) : null,
-      activeMin: Math.round(b.activeMin), dispatches: b.dispatches,
-    }])),
+    byRole: Object.fromEntries([...byRole.entries()].sort().map(([r, b]) => [r, bucketOut(b)])),
     overhead: {
       note: 'batch-level work (lead thread, triage, gate, report) — shown once, never smeared into per-case rows',
       costUsd: ohPriced ? round2(ohCost) : null,
       sharePct: ohPriced && totals.costUsd ? Math.round((ohCost / totals.costUsd) * 100) : null,
-      lead: { costUsd: typeof overhead.lead.costUsd === 'number' ? round2(overhead.lead.costUsd) : null, tokens: Math.round(overhead.lead.tokens), activeMin: Math.round(overhead.lead.activeMin) },
-      stages: { costUsd: typeof overhead.stage.costUsd === 'number' ? round2(overhead.stage.costUsd) : null, tokens: Math.round(overhead.stage.tokens), activeMin: Math.round(overhead.stage.activeMin), dispatches: overhead.stage.dispatches },
+      lead: bucketOut(overhead.lead),
+      stages: bucketOut(overhead.stage),
+      byStage: Object.fromEntries(Object.entries(byStage).filter(([, b]) => b.dispatches > 0).map(([k, b]) => [k, bucketOut(b)])),
     },
+    ...(rework.dispatches > 0 ? {
+      rework: { ...bucketOut(rework), note: 'fix-round dispatches — the batch\'s rework bill (already inside per-case direct; shown here as its own lever)' },
+    } : {}),
     outcomes, delivered,
     gate: receipt.gate ?? null,
-    cases,
+    ...(gateRuns.length || Object.keys(declared).length ? {
+      records: {
+        note: 'script-authored gate verdicts (gate-runs.jsonl) + declared session outcomes (work-scope) vs the receipt — drift means report.json needs a write-back, records never overwrite it',
+        ...(latestGate ? { gateRuns: { count: gateRuns.length, latest: { verdict: latestGate.verdict, at: latestGate.at ?? null, consecutiveGreen: latestGate.consecutiveGreen ?? 0 } } } : {}),
+        ...(Object.keys(declared).length ? { declaredOutcomes: declared } : {}),
+        ...(gateDrift ? { gateDrift } : {}),
+        ...(outcomeDrift.length ? { outcomeDrift } : {}),
+      },
+    } : {}),
+    cases: casesOut,
     stats: {
-      note: 'over per-case DIRECT values, measured only — dollars present only where per-dispatch metering exists (Claude)',
+      note: 'direct = per-case measured values only; loaded = direct + even overhead share (allocation, not measurement)',
       directCostUsd: pricedDirect ? money(stats(attributed.map((c) => c.direct.costUsd))) : null,
       directTokens: rounded(stats(attributed.map((c) => c.direct.tokens))),
       directActiveMin: rounded(stats(attributed.map((c) => c.direct.activeMin))),
+      loadedCostUsd: (ohPriced || pricedDirect) ? money(stats(casesOut.map((c) => c.loaded.costUsd))) : null,
+      loadedActiveMin: rounded(stats(casesOut.map((c) => c.loaded.activeMin))),
     },
     averages: {
       totalPerDelivered: delivered > 0 && typeof totals.costUsd === 'number'
@@ -257,14 +521,39 @@ export function buildBatchCost(slug, receipt, allLines) {
   };
 }
 
-/** Recompute cost.json for every batch (or one) this repo's ledger can see. */
-export function updateBatchCosts(repo, { batch, write = true } = {}) {
+/** A receipt's identity for the cross-batch exclusion (see buildBatchCost). */
+const receiptIdentity = ({ slug, receipt }) => ({
+  keys: [slug, receipt.batch].filter(Boolean),
+  ids: receipt.cases.map((c) => c.id).filter(Boolean),
+  branches: [receipt.integration_branch, ...receipt.cases.map((c) => c.branch)].filter(Boolean),
+});
+
+/** Recompute cost.json for every batch (or one) this repo's ledger can see.
+ * `live` (default on) also counts sessions that are STILL RUNNING, rebuilt
+ * from their dispatch deltas — what makes a batch view current mid-run. Turn
+ * it off for a period rollup, whose own totals are ledger-only: mixing the two
+ * would show provisional batch rows beside final totals in one document. */
+export function updateBatchCosts(repo, { batch, write = true, live = true } = {}) {
   const receipts = loadReceipts(repo, { batch });
   if (!receipts.length) return [];
-  const allLines = loadLines([repo]);
+  // `others` must come from EVERY receipt in the repo, not the filtered set —
+  // a --batch build still has to exclude the other batches' dispatches.
+  const all = batch ? loadReceipts(repo) : receipts;
+  // Ledger lines + provisional lines for sessions that have NO ledger line yet.
+  // The real line always wins outright — not by timestamp: after a mid-run
+  // close the ledger line is complete (it includes the lead's own thread)
+  // while a fresh live file may hold only the dispatches that finished after
+  // it, so ranking them by recency would swap a full line for a thinner one.
+  const ledger = loadLines([repo]);
+  const known = new Set(ledger.map((l) => `${l.host}:${l.id}`));
+  const allLines = live
+    ? [...ledger, ...loadLiveLines(repo).filter((l) => !known.has(`${l.host}:${l.id}`))]
+    : ledger;
+  const scopes = listScopes(repo);
   const out = [];
   for (const { slug, dir, receipt } of receipts) {
-    const cost = buildBatchCost(slug, receipt, allLines);
+    const others = all.filter((r) => r.slug !== slug).map(receiptIdentity);
+    const cost = buildBatchCost(slug, receipt, allLines, { dir, scopes, others, repo });
     if (write) writeFileSync(join(dir, 'cost.json'), `${JSON.stringify(cost, null, 1)}\n`);
     out.push(cost);
   }

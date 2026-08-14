@@ -26,7 +26,7 @@ const line = (over = {}) => ({
 
 function seedRepo() {
   const repo = tmp();
-  const dir = join(repo, '.agents', 'telemetry');
+  const dir = join(repo, '.agents', 'automation', 'telemetry');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'usage-alice.jsonl'), jsonl([
     line({ endedAt: '2026-07-30T10:30:00Z', capturedAt: '2026-07-30T10:30:01Z', costUsd: 1.0 }), // earlier capture of same session
@@ -148,4 +148,21 @@ test('main: end-to-end over a repo root with --out', () => {
   const md = readFileSync(out, 'utf8');
   assert.match(md, /Tokenomics — team usage report/);
   assert.match(md, /delivered \(automated\): 2/);
+  // cross-batch per-case rollup: every batch's cost.json rows, loaded labelled
+  assert.match(md, /## Per case — every batch's cost\.json rows/);
+  assert.match(md, /loaded = direct measured work \+ an even share of the batch overhead/);
+});
+
+// The team page mirrors the markdown's discipline: real dollars only,
+// tokens-only flagged, receipts join shown when present. Self-contained HTML —
+// same rhythm as the manual-qa bundle's tokenomics HTML report.
+test('main: --html renders the self-contained team page', () => {
+  const repo = seedRepo();
+  const out = join(tmp(), 'report.html');
+  assert.equal(main([repo, '--html', '--out', out]), 0);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, /<title>Tokenomics — team report<\/title>/);
+  assert.match(html, /delivered \/ examined/);
+  assert.match(html, /By person/);
+  assert.ok(!html.includes('http'), 'no external assets — self-contained page');
 });

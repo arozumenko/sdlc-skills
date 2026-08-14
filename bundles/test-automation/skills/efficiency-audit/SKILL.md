@@ -69,7 +69,21 @@ sessions — which is the `tokenomics` skill's ledger.
 ## Step 0 — clarify the scope first
 
 The hard part of an audit is *which sessions to count*, and that's a
-conversation, not an assumption. Before running, pin down with the user:
+conversation, not an assumption. **Offer options, don't interrogate**: when
+the ask is open-ended ("audit this", "what did we spend?"), put ONE question
+to the user with the standard audits as suggested options — on a host with a
+question tool (AskUserQuestion), use it; otherwise list them inline:
+
+1. **Period rollup** *(recommended default)* — this repo, a named window,
+   receipts join (`--since … --resolved-from`) → totals, by-role, $/case.
+2. **This batch's cost** — window aligned to one batch, `--resolved-from
+   .agents/automation/<slug>`.
+3. **Before/after** — a prior snapshot (or earlier window) vs now, both
+   deltas (§ Snapshots).
+4. **One session, deep** — a single session's sub-agent breakdown from the
+   `--json` ledger.
+
+What each needs pinned before running:
 
 - **Which project(s)?** This repo (default, from cwd), a specific transcript
   dir, or all projects (`--all-projects`).
@@ -104,8 +118,13 @@ Concretely, where the shipped path runs out:
 **What must survive whichever route you take** — these are the reason the skill
 is trusted, and they do not bend:
 
-1. **Never compute a price.** Every dollar comes from the host's own meter. If
-   you cannot get one, the answer is "unavailable", never a plausible number.
+1. **Never compute a price yourself.** Every dollar comes from the host's own
+   meter — ccusage pricing each request *record* (exact model + cache split),
+   or Copilot's billed credits at the published conversion. Those are metered
+   and billed figures, and they're fine. What's forbidden is DERIVING dollars
+   from aggregate token counts with an assumed model/cache mix when no record
+   or billed figure exists — that guess looks plausible and silently corrupts
+   every comparison it enters. No record → "unavailable", never a number.
 2. **`n/a` is not `0`.** An unpriced unit, an unreadable git repo, an unknown
    count — report the ignorance. A zero claims something.
 3. **Two denominators, never one.** Any cost-per-case figure says which cases
@@ -192,8 +211,11 @@ ccusage's session figure.
 5. **Report honestly.** Every headline dollar is ccusage-metered. Flag the
    method, any fallback rows, and the caveats below.
 
-6. **For a page someone else will read** — a lead reviewing the release, a
-   manager asking what the pipeline costs — render the snapshot:
+6. **The page is part of the default deliverable, not an extra.** Unless the
+   user asked for one quick figure inline, finish the audit by rendering the
+   HTML report and handing over BOTH artifacts — the markdown rollup (the
+   working answer) and the page (what gets shown to a lead, attached to a
+   ticket, kept). An audit that ends as terminal scrollback wasn't delivered:
 
    ```
    node {skill}/scripts/usage-rollup.mjs --resolved-from .agents/automation --json > rollup.json

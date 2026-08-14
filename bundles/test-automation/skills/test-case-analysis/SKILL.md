@@ -259,6 +259,36 @@ them. After your run, create or update the digest with what you confirmed
 this batch skip re-deriving handles, the implementer enters Phase 2 with
 them pre-confirmed, and the next batch on this app starts warm.
 
+**When the digest outgrows one file — split it into an index.** A surface
+batches keep returning to accumulates handles for screens a given case never
+touches, and every reader pays for all of it. When `_surface.md` stops being
+a comfortable single read (~150 lines is the smell, not a rule), split it —
+you are its writer, so the split is yours to make: `_surface.md` stays the
+ENTRY POINT and becomes the index — how to reach the area (auth, transit),
+the waits and quirks that hold area-wide, and a table of subareas (one line
+of scope each) linking to `test-specs/<feature>/_surface/<subarea>.md`,
+where that subarea's handle tables, waits and quirks move. Readers then load
+the index plus only the subarea(s) their case touches; the single-writer
+rule applies per file, and implementers append to the subarea file the index
+points at. Never split pre-emptively: most surfaces stay comfortably in one
+file, and an index over three lines of content is pure ceremony.
+
+**A manual-qa knowledge base is a warm start — reuse it before re-deriving.**
+If the project runs the manual-qa team, its knowledge base lives under
+`.agents/manual-qa/` — `app_profile.md` is its entry point (module table +
+a knowledge map saying what to read when), with the detail in
+`knowledge/modules/<module>.md`, `knowledge/selectors.md`,
+`knowledge/ui-patterns.md`, and `knowledge/fragile-areas.md`. Before live
+exploration, read `app_profile.md` and the module file covering your case's
+area: their selectors are candidate handles, their ui-patterns are candidate
+waits, and `fragile-areas.md` is a pre-built quirk list — a known bug with a
+ticket there is a red-by-design candidate to hand the implementer rather
+than a surprise mid-run. Same discipline as the digest: it is a hint cache
+from a *different team's* live runs — verify everything as you use it — and
+it is READ-ONLY for you: the manual team owns those files, so drift you
+observe goes into your findings[] and your own digest, never as an edit to
+theirs.
+
 **Cluster dispatches — one session, every case executed.** When your dispatch
 names several similar cases (a plan-declared cluster), run them in ONE live
 session: pay login/navigation/discovery once, then execute **each case's

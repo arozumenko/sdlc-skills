@@ -80,7 +80,7 @@ what you generate.)*
 
 ## Optional telemetry (ask, don't assume)
 
-During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the bundle alone never activates capture) and note the decision in the seed report. Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
+During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the bundle alone never activates capture) and note the decision in the seed report. Enabling it also activates the **work-scope contract** (tokenomics SKILL.md § Session scope): each work session declares what it's for at start and records case outcomes as they land — hooks announce the session id and gate-check the declaration on Claude and current Copilot CLIs; the lead's obligations live in the orchestration playbook (§ Intake, § Close). Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
 
 ## Scoping a batch of cases before automation starts
 

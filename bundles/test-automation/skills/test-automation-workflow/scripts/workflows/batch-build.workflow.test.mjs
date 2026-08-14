@@ -237,6 +237,18 @@ test('cost levers: snapshot-first, digest, breaker, arg-only overrides, tiering'
   // Reviewer model comes from args or the AGENT.md frontmatter — no literal floor.
   assert.match(text, /A\.reviewerModel \?\? A\.workerModel\) \? \{ model:/);
   assert.match(text, /extendImplementerModel/);
+  // Gate agent tier is arg-only too — the script does the mechanics, so a
+  // cheap tier is viable, but nothing hardcodes it.
+  assert.match(text, /A\.gateModel \? \{ model: A\.gateModel \}/);
+});
+
+// An in-repo case body (manual-qa TC files, committed md) is never copied into
+// cases/ — its path rides cases[].path and every prompt's SRC() resolves to it.
+// Git supplies the version-of-record the snapshot copy existed for.
+test('in-repo case sources: cases[].path replaces the snapshot copy in every prompt', () => {
+  assert.match(text, /CASE_PATH = new Map\(CASES\.map/);
+  assert.match(text, /\{id, title\?, path\?\}/, 'the args contract names path');
+  assert.match(text, /source file IS the\n?\s*\/\/ snapshot/);
 });
 
 // Only the build chain runs git. Analysts run in PARALLEL with a build that owns

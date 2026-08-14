@@ -329,7 +329,25 @@ orchestrator (merge gate) and the implementer (branch base)._
     campaign runs one final check of everything it delivered (see
     `test-automation-workflow` campaign-planning.md).
 
-### Additional notes
+### Reporting policy
+
+_Where the batch report goes at close. Read by the orchestrator's close
+step. The report itself is ALWAYS assembled by script
+(`work-scope.mjs close` renders `.agents/automation/<slug>/batch-report.md`
++ `.html` where the tokenomics scope contract is active) — this policy only
+decides whether and where a copy is DELIVERED._
+
+- **Publish batch report to**: <none | tracker-item | pr-comment | ASK>
+  - `none` *(default when absent — and the close flags the gap)* — the
+    report stays in the repo as files; nothing is posted anywhere.
+  - `tracker-item` — a dispatched cheap-tier publisher posts the report
+    (or its summary + link) as a comment on the batch's tracker item —
+    name the tracker and item convention here (e.g. "the GitHub issue the
+    batch was planned on", a Jira epic key pattern).
+  - `pr-comment` — posted on the batch's landing PR.
+- **Format**: <full-body | summary-with-link> — optional; defaults to
+  `summary-with-link` (totals + delivered list + drift flags, linking the
+  in-repo file) so tracker items stay readable.
 
 _Free-form way-of-work context that doesn't fit a structured field above —
 exceptions, timing constraints, who to loop in, tribal knowledge. Carried

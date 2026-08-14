@@ -38,8 +38,15 @@
 // overrides, and a repo with none gates what is on disk and says so.
 //
 // exit codes: 0 = N consecutive green · 1 = red / conflict · 2 = usage
+//
+// Every verdict is ALSO appended to .agents/automation/<slug>/gate-runs.jsonl
+// the moment it exists — script-authored, so the record of "the gate ran and
+// went green" never depends on anyone remembering to write a report back.
+// Measured cost of not having this: 38 of 69 delivered cases (55%) scored as
+// unproven in a rollup because a recovered gate's verdict was never recorded.
 import { execFileSync, execSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { appendFileSync, mkdirSync, existsSync } from 'node:fs';
+import { resolve, join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { resolveRemote } from '../git-env.mjs';
 // Tiny local argv helpers — this script is standalone (the board library they
@@ -81,6 +88,45 @@ export function summarize(runs, n) {
     verdict: streak >= n ? 'green' : 'red',
     seconds,
   };
+}
+
+// tests/batch-<slug> → <slug>; anything else is not a batch trunk.
+export function batchSlugOfBranch(branch) {
+  const m = /^tests\/batch-(.+)$/.exec(String(branch || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * Append the verdict record. Never fatal — a gate that ran green must not
+ * turn red over bookkeeping. `--batch` overrides the slug when the gated
+ * branch is not a batch trunk (a per-case branch, a stabilize round);
+ * otherwise unassignable verdicts land under `_gates` rather than vanishing.
+ */
+export function appendGateRecord(repo, result, { batch = null, now = new Date().toISOString() } = {}) {
+  try {
+    const slug = batch ?? batchSlugOfBranch(result.branch) ?? '_gates';
+    // Write-side goes to the telemetry area when it exists: a record appended
+    // into the batch dir between run 1 and run 2 is a COMMITTED-file
+    // modification once the batch has closed, and `git checkout` then refuses
+    // the very branch switch the gate needs. Telemetry rides its own branch
+    // (or is gitignored in the plain-dir phase), so writes there never touch
+    // the main tree. Close folds these lines back into the batch dir.
+    const telDir = join(repo, '.agents', 'automation', 'telemetry');
+    const file = existsSync(telDir)
+      ? join(telDir, 'gate-runs', `${slug}.jsonl`)
+      : join(repo, '.agents', 'automation', slug, 'gate-runs.jsonl');
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, `${JSON.stringify({
+      at: now, branch: result.branch, base: result.base,
+      ...(result.baseRef ? { baseRef: result.baseRef } : {}),
+      ...(result.spec ? { spec: result.spec } : {}),
+      n: result.n, verdict: result.verdict,
+      consecutiveGreen: result.consecutiveGreen ?? 0,
+      seconds: result.seconds ?? [],
+      ...(result.conflictFiles?.length ? { conflictFiles: result.conflictFiles } : {}),
+    })}\n`);
+    return file;
+  } catch { return null; }
 }
 
 // The exact --note text the lead pastes into the PR / run report, so the
@@ -156,6 +202,7 @@ function main() {
     console.error('usage: gate-case.mjs --branch <ref> --base <ref> --cmd \'<cmd with {spec}>\' [--spec <node-id>]');
     console.error('       [--n 3] [--timeout <seconds per run — a hung run is killed and counts red>]');
     console.error('       [--remote <name>] [--repo .] [--json]   (remote: discovered from `git remote` by default)');
+    console.error('       [--batch <slug>]  (verdict-record slug when the branch is not tests/batch-<slug>)');
     process.exit(2);
   }
   const result = { branch, base, spec, n, verdict: 'error', notes: '' };
@@ -169,8 +216,30 @@ function main() {
     // local branch reported "git setup failed" instead of running.
     if (remote) { try { git(repo, ['fetch', remote, '--quiet']); } catch { result.fetched = false; } }
     else result.fetched = false;                     // no remote at all — local-only repo
-    const dirty = git(repo, ['status', '--porcelain']);
-    if (dirty) {
+    // -uall lists untracked FILES (not collapsed dirs) so the legitimate
+    // exceptions are filterable. TWO of them, both pure bookkeeping that is
+    // never part of what is gated:
+    //   * this script's own gate-runs.jsonl records, written between the
+    //     one-run-per-call invocations — refusing on those would deadlock the
+    //     N-run loop on any project that does not gitignore .agents/automation;
+    //   * UNTRACKED files under .agents/automation/telemetry/ — scope records and the
+    //     live dispatch log, written by hooks WHILE the run happens. A project
+    //     that commits its telemetry (the point of team-wide reporting) would
+    //     otherwise have every gate refused by its own measurement layer.
+    //     Untracked only, deliberately: a MODIFIED TRACKED file is a different
+    //     animal — checkout/merge legitimately refuses to overwrite local
+    //     changes, so tolerating it here would turn a clear git error into a
+    //     confusing gate failure. Commit telemetry at close, not mid-run.
+    // Everything else still refuses, same as always.
+    const TOLERATED = [
+      /^\?\? "?\.agents\/automation\/.*gate-runs\.jsonl"?$/,
+      /^\?\? "?\.agents\/automation\/telemetry\//,
+    ];
+    const dirty = git(repo, ['status', '--porcelain', '-uall'])
+      .split('\n').filter((s) => s.trim())
+      .filter((l) => !TOLERATED.some((re) => re.test(l)))
+      .map((s) => s.trim());
+    if (dirty.length) {
       result.notes = 'working tree is dirty — commit your own paths, or stash BY PATH (git stash push -- <paths>); NEVER stash or clean the whole tree (untracked receipts/AFS/memory vanish silently). Gating checks branches out in this tree.';
       return fail(result, json);
     }
@@ -217,6 +286,7 @@ function main() {
       'branch conflicts with the current base — NOT gated (the half-merge was aborted; the tree is clean, detached at the branch tip). ' +
       'Resolve on the case branch (mechanical unions only; ' +
       'a semantic collision goes back to the implementer as a fix-only dispatch), then re-run the gate.';
+    appendGateRecord(repo, result, { batch: argValue(argv, '--batch') ?? null });
     return fail(result, json);
   }
 
@@ -238,6 +308,9 @@ function main() {
     result.localOnly ? `gated LOCAL branch '${branch}' — not on ${remote ?? 'any remote'}, so this proves your checkout, not what is pushed` : '',
   ].filter(Boolean).join('; ');
   result.note = gateNote(result, context);
+  // The verdict record lands BEFORE anything reads or acts on it — the whole
+  // point is that a crash after this line can no longer lose the verdict.
+  appendGateRecord(repo, result, { batch: argValue(argv, '--batch') ?? null });
   print(result, json);
   process.exit(result.verdict === 'green' ? 0 : 1);
 }

@@ -98,9 +98,9 @@ export const meta = {
 const A = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 if (!A.slug || !A.base || !Array.isArray(A.cases) || A.cases.length === 0 || A.cases.some((c) => !c?.id)) {
   throw new Error(
-    'args required: { slug, base, cases: [{id, title?}, …] (every case needs an id), clusters?: [[id,…],…], ' +
+    'args required: { slug, base, cases: [{id, title?, path?}, …] (every case needs an id; path = repo-relative source file when the body already lives in this repo — no snapshot copy), clusters?: [[id,…],…], ' +
     'analyzeOnly?, preAnalyzed?: [{id, afs_path, surface_key}], quotaResume?, root?, reportDir?, ' +
-    'agentTypes?, workerModel?, workerEffort?, reviewerModel?, mergeModel?, reporterModel?, triageModel?, ' +
+    'agentTypes?, workerModel?, workerEffort?, reviewerModel?, mergeModel?, reporterModel?, triageModel?, gateModel?, ' +
     'extendImplementerModel?, fixRounds?, gateN?, gateCmd?, integrationBranch?, skipGate?, ' +
     "tiering?: 'auto'|'off', reviewPanel?, breakerThreshold?, extendRateThreshold?, budgetReserve? }"
   )
@@ -203,8 +203,17 @@ const GATE_CMD = A.gateCmd ?? null          // project's suite command; null →
 const TRUNK = A.integrationBranch ?? `tests/batch-${SLUG}`
 const SKIP_GATE = A.skipGate === true
 // Intake writes each case body here (fetch-once-to-disk); workers read the
-// snapshot instead of re-fetching the TMS.
-const SRC = (id) => `${ROOT}.agents/automation/${SLUG}/cases/${id}.md`
+// snapshot instead of re-fetching the TMS. EXCEPTION — a case whose body
+// already lives IN THIS REPO (cases[].path: e.g. manual-qa-authored TC files,
+// or bodies someone committed as md) is never copied: the source file IS the
+// snapshot. One body, no duplicate; the version-of-record the copy existed
+// for comes from git instead (both slots read identical bytes in the same
+// tree, and a mid-batch edit shows as `git log` drift, not silent skew).
+const CASE_PATH = new Map(CASES.map((c) => [c.id, typeof c.path === 'string' && c.path ? c.path : null]))
+const SRC = (id) => {
+  const p = CASE_PATH.get(id)
+  return p ? `${ROOT}${p}` : `${ROOT}.agents/automation/${SLUG}/cases/${id}.md`
+}
 // reportDir: the campaign conductor gives every wave (and the heads pass) its
 // own dir — waves share this SLUG for the snapshot dir, and without a distinct
 // report location each wave's report.json would overwrite the previous one's.
@@ -516,11 +525,12 @@ const REVIEW_SCHEMA = {
 // inflated one field batch's report-writer prompt to 74k chars, then rode into
 // every downstream context that touched the report. The full text is not lost:
 // each worker's complete return sits in its receipt under
-// `.agents/automation/_returns/` (SubagentStop hook) and in the run journal.
+// `.agents/automation/telemetry/returns/` (SubagentStop hook; legacy
+// `_returns/`) and in the run journal.
 const CLIP = 400
 const clip = (s) => {
   const t = String(s ?? '')
-  return t.length <= CLIP ? t : `${t.slice(0, CLIP)}… [clipped; full text in the unit's receipt under .agents/automation/_returns/]`
+  return t.length <= CLIP ? t : `${t.slice(0, CLIP)}… [clipped; full text in the unit's receipt under .agents/automation/telemetry/returns/ (legacy _returns/)]`
 }
 const OUTCOME = {}                          // id -> row
 for (const c of CASES) OUTCOME[c.id] = { id: c.id, outcome: 'not-started', note: '', findings: [] }
@@ -1320,7 +1330,11 @@ if (!ANALYZE_ONLY && !SKIP_GATE && merged.length) {
     'Do NOT merge anything. Do NOT classify the failure (product defect vs flake vs architectural — that is the lead\'s call). Do NOT fix. ' +
     FOREGROUND_RULE +
     'Return verdict=green only if you observed ' + GATE_N + ' consecutive green runs.',
-    { label: `gate:${SLUG}`, phase: 'Gate', agentType: TYPES.gate, ...WORKER, schema: GATE_SCHEMA }
+    // gateModel: the script does the mechanics (run, time, record), so the
+    // wrapping agent's job is loop + count + report honestly — tier-able like
+    // merge-back/reporter. Measured ~$10-12/gate on the session model. Default
+    // stays inherit: blast-radius scoping still reads a diff with judgment.
+    { label: `gate:${SLUG}`, phase: 'Gate', agentType: TYPES.gate, ...WORKER, ...(A.gateModel ? { model: A.gateModel } : {}), schema: GATE_SCHEMA }
   )
   if (gate) addFindings(merged.flatMap((r) => r.ids), gate.findings ?? [])
   // The gate proves the TRUNK, so it speaks for exactly the units on it.
@@ -1447,7 +1461,7 @@ return {
     : gate?.verdict === 'green'
       // ONE PR takes the whole trunk to base — the units already merged into it,
       // so what was gated and what lands are the same object.
-      ? `Gate green on ${gateBranch}. LAND IT: one PR from ${gateBranch} to ${BASE} per .agents/profile.md § Automation PR policy (auto-merge / human-approved / manual decides who presses it), then mirror to the TMS and run the close sweep. Replan anything not 'automated'.`
+      ? `Gate green on ${gateBranch}. LAND IT: one PR from ${gateBranch} to ${BASE} per .agents/profile.md § Automation PR policy (auto-merge / human-approved / manual decides who presses it), then mirror to the TMS and run the close sweep. Replan anything not 'automated'. Where the tokenomics scope contract is active (a session-start line named your session id): record outcomes as they land (work-scope.mjs outcome <ID>=automated …), then work-scope.mjs close — it renders ${REPORT_DIR}/batch-report.md+.html and flags receipt DRIFT — and publish per .agents/profile.md § Reporting policy (dispatch the cheap publisher; no policy → the files ARE the report, flag the gap).`
       : merged.length && (!gate || gate.verdict === 'not-run' || gate.verdict === 'incomplete')
         // THE RECEIPT IS THE DELIVERABLE. Measured across two audits: leads
         // recover a failed gate flawlessly and then never correct report.json,
@@ -1455,6 +1469,6 @@ return {
         // in the next rollup. Playbook prose did not fix it — this text is what
         // the lead actually reads at the moment it happens, so the obligation
         // lives here, next to the instruction that creates it.
-        ? `${gate?.verdict === 'incomplete' ? `GATE CUT OFF MID-RUN (${gate.runs ?? 0}/${GATE_N} banked)` : 'GATE NEVER RAN'} — ${gateBranch} holds ${merged.length} merged unit(s) that are UNPROVEN, not blocked (outcome merged-ungated). Re-run the gate first (re-invoke with resumeFromRunId — completed units replay from cache — or dispatch the gate alone on ${gateBranch}) and classify nothing until a verdict exists. An interrupted run's own totals are a claim, not evidence: verify against .agents/automation/_returns/ and git (playbook § Interruption). THEN, THE MOMENT YOU HAVE A VERDICT, WRITE IT BACK INTO ${REPORT_DIR}/report.json — gate.verdict, gate.runs, gate.seconds, and each case's real outcome ('automated' on green; 'merged-sanctioned-red' for a ticketed red-by-design). This file is the receipt every audit, every --resolved-from and the next batch's plan divide by: a gate you re-ran green but never wrote back scores as ZERO delivered, and the specs read as unproven forever.`
-        : `Classify each blocked case (product defect → tracker; flake/test-code bug → batch-stabilize on ${gateBranch}; architectural → § Framework architecture), then replan the remainder. ${gateBranch} is NOT landed — nothing reaches ${BASE} until it is green.`,
+        ? `${gate?.verdict === 'incomplete' ? `GATE CUT OFF MID-RUN (${gate.runs ?? 0}/${GATE_N} banked)` : 'GATE NEVER RAN'} — ${gateBranch} holds ${merged.length} merged unit(s) that are UNPROVEN, not blocked (outcome merged-ungated). Re-run the gate first (re-invoke with resumeFromRunId — completed units replay from cache — or dispatch the gate alone on ${gateBranch}) and classify nothing until a verdict exists. An interrupted run's own totals are a claim, not evidence: verify against .agents/automation/telemetry/returns/ (legacy _returns/) and git (playbook § Interruption). THEN, THE MOMENT YOU HAVE A VERDICT, WRITE IT BACK INTO ${REPORT_DIR}/report.json — gate.verdict, gate.runs, gate.seconds, and each case's real outcome ('automated' on green; 'merged-sanctioned-red' for a ticketed red-by-design). This file is the receipt every audit, every --resolved-from and the next batch's plan divide by: a gate you re-ran green but never wrote back scores as ZERO delivered, and the specs read as unproven forever. The scope contract, where active, backs this up: work-scope.mjs outcome + close after the write-back — the close render cross-checks report.json against the recorded gate verdict and prints DRIFT if the write-back was missed.`
+        : `Classify each blocked case (product defect → tracker; flake/test-code bug → batch-stabilize on ${gateBranch}; architectural → § Framework architecture), then replan the remainder. ${gateBranch} is NOT landed — nothing reaches ${BASE} until it is green. Record classifications as they land (work-scope.mjs outcome <ID>=blocked, where the scope contract is active) — the ledger stays honest even if this session dies before a close.`,
 }

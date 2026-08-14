@@ -40,6 +40,17 @@ Then **ONE** TMS sweep: fetch every case and probe each author's metadata direct
 
 **Fetch once, to disk:** write each surviving case's full body to `.agents/automation/<slug>/cases/<ID>.md` — the batch-scoped snapshot the analyst and reviewer read (they re-fetch only if it's missing); keep only id + title + status in your own context. One TMS fetch per case per batch, and both slots triangulate against the identical snapshot — a mid-batch author edit can't silently skew the review.
 
+**Already in the repo? Don't copy.** When the task source IS this repository —
+manual-qa-authored TC files, or case bodies someone already committed as md —
+the source file *is* the snapshot: pass its repo-relative path per case
+(`cases: [{id, path}]` to the workflow; campaigns via `plan.casePaths`; name
+the path in hand dispatches) and skip the `cases/` copy entirely. Git supplies
+everything the copy existed for: the version-of-record is pinned by the intake
+commit, both slots read identical bytes in the same tree, and the drift check
+becomes `git log -- <path>` over the batch window instead of a TMS re-fetch.
+Status gates read the files' frontmatter where present. `cases/` stays for
+bodies fetched from an EXTERNAL system — one body per case, never two.
+
 If `.agents/testing.md` names a known blocking modal (session-expired, forced-password-change, MFA, cookie banner), inject its dismissal snippet into *every* dispatch this batch — not after the first hang. Chunk to batch size **M** (§ Batch pipeline, default 5). If the seeded tracker policy requires visible WIP, create all sub-tasks in one batched write; else the tracker waits for the close sweep.
 
 **Cut and push the batch trunk.** `git checkout -B tests/batch-<slug> <base> && git push -u origin tests/batch-<slug>`. Case branches live under it and their PRs target it; the gate proves it; one PR takes it to base. Push it now, not later: the gate checks out `origin/tests/batch-<slug>`, and a trunk that only exists locally fails the gate for an infrastructure reason that reads as a red case. (On Claude Code the shipped workflow's first build does this for you.) **A batch of one skips the trunk** — the case branch targets base directly.
@@ -47,8 +58,9 @@ If `.agents/testing.md` names a known blocking modal (session-expired, forced-pa
 **Cluster the batch — by DISPATCHING one pass, never by reading the cases yourself.** Grouping similar cases needs their bodies, and your context is the batch's scarcest resource (Critical rule 7), so this is the one Intake step you delegate: dispatch a single agent over the snapshots you just wrote, and take back only the grouping.
 
 ```
-Clustering pass — read the case snapshots at .agents/automation/{SLUG}/cases/*.md
-and group the ones a single analyst could explore in ONE live session: same
+Clustering pass — read each case's body (the intake snapshots at
+.agents/automation/{SLUG}/cases/*.md, or the in-repo source paths where intake
+skipped the copy) and group the ones a single analyst could explore in ONE live session: same
 surface, same flow family (field-validation variants, CRUD permutations on one
 entity). Every case's own steps still get executed individually inside that
 session, so group only what shares a setup path — when in doubt, leave it solo.
@@ -56,6 +68,17 @@ Return clusters: [[id, …], …] plus one line of rationale per cluster. Nothin
 ```
 
 Pass the result as `args.clusters`. **Do not `cat` the case files.** Field-measured on a live lead session: clustering by hand pulled **14 case bodies — 40,865 bytes, ~10K tokens — into the orchestrator's context**, more than its entire startup injection, before a single case was dispatched. The rule was written down, but in [`campaign-planning.md`](campaign-planning.md) § Clustering, which a flat batch never opens; that is why it is restated here, where Intake actually happens.
+
+**Declare the session's work scope — now, while the work set is fresh.** Where
+the `tokenomics` capture hooks are enabled (a session-start line names your
+session id and the exact command), one call records what this session is for:
+`node <tokenomics skill>/scripts/work-scope.mjs open --session <id> --intent
+automation --batch <slug> --cases <the ids you just resolved>`. This is the
+durable record every cost/delivery report joins on — declared before the first
+dispatch, it survives a killed session; reconstructed afterwards, it is a
+guess. On a host without the session-start line (older Copilot CLI), use
+`--session auto`. A batch that grows mid-session: re-run `open` with the new
+ids — it merges, never drops.
 
 ### 2. Run — one workflow, one unit at a time (not yours)
 
@@ -151,7 +174,34 @@ Why one and not N: gating the trunk and then merging case PRs individually **pro
 
 The report is the machine-readable receipt every audit, `--resolved-from`, and the next batch's plan divides by. **This is the single most-repeated miss in the pipeline, and prose has already failed to fix it twice.** Measured on an 11-case batch: a lead-run gate went 3/3 green and merged 11 cases while the report still said `not-run` / `merged-ungated` — zero delivered in the next rollup, 11 proven specs recorded as unproven. Measured again three days later, *with this paragraph already installed*: it recurred three more times in one campaign, and **38 of 69 delivered cases (55%)** were misrecorded or had no receipt at all. So treat it as a hard step with a verification, exactly like the close sweep's read-back: after writing, re-read the file and confirm the totals match what you merged. Recovering the gate without correcting the receipt is half the recovery — and the half nobody can see.
 
-**Then ONE close sweep:** back-write the TMS execution and transition the tracker for every merged and parked case (while there, compare each case's live TMS body against its intake snapshot — an author edit mid-batch is a drift flag for the next batch, not a silent skew you absorbed), then **ONE** read-back — this batch mutation across >1 tracker item must be followed by an explicit read-back: re-fetch every affected item, diff against the expected-state map you wrote *before* the mutation, report mismatches. Only then claim "complete" (load `verification-before-completion`).
+Two records back this step up — use them, don't rely on them replacing it:
+`gate-case.mjs` already appended every verdict to
+`.agents/automation/<slug>/gate-runs.jsonl` the moment it existed (script-
+authored — check it when reconstructing what actually ran), and where the
+`tokenomics` scope contract is active, **record each case's outcome the moment
+it becomes true**, not at "the end": `work-scope.mjs outcome --session <id>
+<ID>=automated` after the write-back, `<ID>=blocked` when you classify a
+blocker, then `work-scope.mjs close --session <id>` after the close sweep.
+**Close generates the batch report** — it recomputes `cost.json` and renders
+`.agents/automation/<slug>/batch-report.md` + `.html` (delivered, per-case
+cost, overhead), cross-checking receipt vs records and printing a **DRIFT**
+warning when they disagree. Drift at close is the miss detector for this
+exact paragraph: fix report.json and re-run `close` — the render is
+idempotent.
+
+**Then publish it — per policy, by dispatch, never by hand.** Read
+`.agents/profile.md` § Reporting policy: absent or `none` → the files in the
+repo ARE the report, flag the missing policy in your closure note and move
+on. A named destination (`tracker-item` / `pr-comment`) → dispatch the
+**publisher** (§ Canonical dispatch templates) — a cheap-tier agent that
+reads the ALREADY-ASSEMBLED `batch-report.md`, posts per the policy's format,
+and returns the URL as evidence. Two rules keep this lean: the publisher
+never assembles or recomputes anything (the script did — an agent re-deriving
+numbers is spend without trust), and you never paste report contents into
+your own context to post them (that is the exact inflation the dispatch
+exists to avoid).
+
+**Then ONE close sweep:** back-write the TMS execution and transition the tracker for every merged and parked case (while there, compare each case's live TMS body against its intake snapshot — in-repo sources: `git log -- <path>` since intake — an author edit mid-batch is a drift flag for the next batch, not a silent skew you absorbed), then **ONE** read-back — this batch mutation across >1 tracker item must be followed by an explicit read-back: re-fetch every affected item, diff against the expected-state map you wrote *before* the mutation, report mismatches. Only then claim "complete" (load `verification-before-completion`).
 
 **Then close-out cleanup.** You decide what merged; the script only refuses. Ask the host in `.agents/workflow.md` § Host (`gh pr list --state merged`, `glab`, `az repos`, the API), then hand the answer in — `--merged` is required and has no fallback probe, because a script that guesses the host guesses silently:
 
@@ -165,7 +215,7 @@ Nothing is deleted without a merged claim naming it, the checked-out branch is n
 
 **Then replan the remainder.** Everything not `automated` is next batch's input. That is the whole recovery mechanism — there is nothing to reconcile first.
 
-**What the batch cost.** The report is also the denominator: `efficiency-audit`'s `usage-rollup.mjs --resolved-from .agents/automation` reads these same `report.json` files and divides metered spend by them, so cost per case is measured rather than remembered. Scope it to the run (`--since`/`--until`) — it reports how much of the window's spend it can tie to this batch's branches, and a window holding a quarter of unrelated work will say so rather than quietly inflating the figure. Two numbers come back and both are worth carrying release over release: **per spec delivered** and **per case examined**. A batch where six of twenty cases automated spent real analysis on the other fourteen, and only the second number admits it. Where the `tokenomics` skill's capture hooks are enabled, the same spend also lands in the git-committed ledger (`.agents/telemetry/`) as each session ends — its `team-report.mjs` joins that ledger to these receipts, so the per-case figure stays answerable after transcripts expire and across the whole team.
+**What the batch cost.** The report is also the denominator: `efficiency-audit`'s `usage-rollup.mjs --resolved-from .agents/automation` reads these same `report.json` files and divides metered spend by them, so cost per case is measured rather than remembered. Scope it to the run (`--since`/`--until`) — it reports how much of the window's spend it can tie to this batch's branches, and a window holding a quarter of unrelated work will say so rather than quietly inflating the figure. Two numbers come back and both are worth carrying release over release: **per spec delivered** and **per case examined**. A batch where six of twenty cases automated spent real analysis on the other fourteen, and only the second number admits it. Where the `tokenomics` skill's capture hooks are enabled, the same spend also lands in the git-committed ledger (`.agents/automation/telemetry/`) as each session ends — its `team-report.mjs` joins that ledger to these receipts, so the per-case figure stays answerable after transcripts expire and across the whole team.
 
 ### The same loop runs work that isn't a case
 
@@ -239,7 +289,7 @@ An interrupted run — crash, kill, API limit, context death — loses nothing, 
 
 **If it cannot resume, recovery is READING, not archaeology.** There is no recovery script, and deliberately so: reconstructing a batch means knowing this project's branch naming, its case-id shape and which system holds "did it merge" — conventions a script can only hardcode and get wrong. (One did: it matched case ids with a fixed `UPPERCASE-digits` regex, so a project numbering cases `12345` or `tc-050` got a confident, empty answer.) You read the seed; you already know. Work the four sources in order — each is cheaper than the next, and the last is the one that cannot lie.
 
-**1. Receipts — the structured returns, already on disk.** On Claude Code this bundle's `SubagentStop` hook writes every workflow agent's structured return to `.agents/automation/_returns/<run-id>/<agent-id>.json` as it completes, free, with no dispatch. That IS the inter-stage state the run was passing along, persisted:
+**1. Receipts — the structured returns, already on disk.** On Claude Code this bundle's `SubagentStop` hook writes every workflow agent's structured return to `.agents/automation/telemetry/returns/<run-id>/<agent-id>.json` as it completes, free, with no dispatch (legacy `_returns/` in repos without the telemetry area — check both). That IS the inter-stage state the run was passing along, persisted:
 
 ```json
 { "run_id": "wf_…", "agent_id": "a1b2c3", "agent_type": "qa-engineer",
@@ -470,6 +520,29 @@ Per-case parameters:
 
 Stage by exact path, never `git add -A` / `git add .`. Leave the tree on your
 branch when you finish; I merge it into the trunk next.
+```
+
+### Publisher dispatch (cheap tier — model haiku or the project's cheapest)
+
+Fires only when `.agents/profile.md` § Reporting policy names a destination.
+Delivery only — the report is already assembled by script; an agent
+re-deriving numbers is spend without trust.
+
+```
+Publish the batch report for {SLUG}. Deliver, do not assemble.
+
+1. Read .agents/automation/{SLUG}/batch-report.md — it is complete; change
+   NOTHING about its numbers or claims.
+2. Post it per .agents/profile.md § Reporting policy: destination
+   {tracker-item | pr-comment}, format {summary-with-link | full-body}.
+   summary-with-link = the "What happened" + "What it cost" sections and any
+   DRIFT warnings, plus the repo path of the full file.
+3. Use the project's own tools for the destination (gh / glab / the tracker
+   MCP named in .agents/profile.md). Wrong item is worse than no post — if
+   the policy's item convention doesn't resolve to exactly one target, STOP
+   and return that instead of guessing.
+4. Return the posted URL (or the precise reason nothing was posted). The URL
+   is the evidence; a claim without it is not done.
 ```
 
 ### Merge-back dispatch (test-automation-engineer)
