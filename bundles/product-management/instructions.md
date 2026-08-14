@@ -43,19 +43,33 @@ conventions and hypothesis lifecycle.
    it and mints in-scope items as Problems.
 2. **Frame** — `define-personas` and journeys capture who and what a problem
    touches.
-3. **Map** — `opportunity-tree` hangs the problem under a ratified outcome
-   (or flags it as a solution in disguise via the Torres gate).
-4. **Hypothesize** — `journeys-to-hypotheses` converts covered journeys into
-   hypothesis stubs; `define-outcomes` drafts and ratifies the outcome anchor
-   a hypothesis is promoted against.
-5. **Verify** — `stakeholder-interview` and `discovery-researcher`'s research
-   ground assumptions in evidence; `grill-decision` stress-tests the call.
-6. **Prioritize** — `prioritize-bets` ranks incubating/promotable hypotheses
-   against the active framework (RICE by default).
-7. **Learn** — `capture-learning` distills what happened when a hypothesis
-   closes, win or lose.
-8. **Check status** — `discovery-status` gives a read-only dashboard of where
-   everything in the pipeline stands, at any point.
+3. **Hypothesize** — `journeys-to-hypotheses` converts covered journeys into
+   hypothesis stubs, each pointing at the `outcomes.md#tbd` sentinel until an
+   anchor exists.
+4. **Anchor** — `define-outcomes` drafts and ratifies the outcome anchor a
+   hypothesis is promoted against, and repoints the bets waiting on the
+   sentinel.
+5. **Map** — `opportunity-tree` hangs the problem under that ratified outcome
+   (or flags it as a solution in disguise). It runs after ratification because
+   the tree's roots *are* the ratified anchors.
+6. **Sharpen** — `grill-decision` stress-tests the bet and earns its evidence
+   class, writing the `confidence:` dimensions and `appetite:` that scoring
+   needs.
+7. **Verify** — `stakeholder-interview` and `discovery-researcher`'s research
+   ground assumptions in evidence.
+8. **Prioritize** — `prioritize-bets` ranks incubating/promotable hypotheses
+   against the active framework (RICE by default). It runs after verification
+   because RICE and ICE derive their confidence factor from banded evidence —
+   rank a bet before it has any and the score is a guess wearing a number.
+9. **Learn** — `capture-learning` distills what happened when a bet concludes,
+   win or lose.
+10. **Check status** — `discovery-status` gives a read-only dashboard of where
+    everything in the pipeline stands, at any point.
+
+Two orderings in that list are load-bearing rather than stylistic: **anchor
+before map**, because `opportunity-tree` hangs problems under an already-ratified
+outcome; and **verify before prioritize**, because RICE and ICE derive their score
+from banded evidence, and a bet nobody has tested has none to derive from.
 
 ## Handoff to `ba`
 

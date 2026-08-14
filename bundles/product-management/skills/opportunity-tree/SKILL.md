@@ -1,6 +1,6 @@
 ---
 name: opportunity-tree
-description: Use when mapping opportunities under an outcome, asking where a hypothesis hangs, spotting solution-shaped 'problems', or when a new Problem or Hypothesis has no parent. Maintains the opportunity–solution tree over existing Discovery artifacts by adding only node_type / parent frontmatter to existing files and regenerating the derived docs/discovery/outcome-tree.md board (no new file silo); applies the Torres gate (an opportunity that cannot spawn 3+ different solutions is a solution in disguise) and annotates opportunities with Olsen scores for prioritize-bets. Trigger phrases — 'map the opportunity tree', 'where does this hypothesis hang', 'is this an opportunity or a solution', 'regenerate the outcome tree'. NOT for authoring outcome anchors (define-outcomes), NOT for ranking bets (prioritize-bets), and NOT for reconciling journeys against the backlog (journeys-to-hypotheses).
+description: Use when mapping opportunities under an outcome, asking where a hypothesis hangs, spotting solution-shaped 'problems', or when a new Problem or Hypothesis has no parent. Maintains the opportunity–solution tree over existing Discovery artifacts by adding only node_type / parent frontmatter to existing files and regenerating the derived docs/discovery/outcome-tree.md board (no new file silo); applies the disguise test (an opportunity that cannot spawn 3+ different solutions may be a solution in disguise) and annotates opportunities with Olsen scores for prioritize-bets. Trigger phrases — 'map the opportunity tree', 'where does this hypothesis hang', 'is this an opportunity or a solution', 'regenerate the outcome tree'. NOT for authoring outcome anchors (define-outcomes), NOT for ranking bets (prioritize-bets), and NOT for reconciling journeys against the backlog (journeys-to-hypotheses).
 license: MIT
 allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:
@@ -60,13 +60,17 @@ memory: outcome → opportunities → solutions → assumption-tests. Note anyth
 does not resolve to a node in the tree — those are **orphans** (rendered in their own section,
 never dropped).
 
-### 2. Classify a node — the Torres gate
+### 2. Classify a node — the disguise test
 Before writing `node_type: opportunity` on a Problem, run the **3+-solutions test** from
 [`references/tree-method.md`](references/tree-method.md): *"if an opportunity cannot generate 3+
 different solutions, it may be a solution in disguise."* Ask it out loud — can you name three
-genuinely different ways to address this need?
+genuinely different ways to address this need? (Torres's own test asks only for *more than one*;
+three is this bundle's stricter bar — treat exactly two as borderline, not an automatic fail.)
 
 - **Passes** (three-plus distinct approaches exist) → it is a real opportunity; classify it.
+- **Borderline** (exactly two) → classify it as an opportunity, and say in your report that it
+  cleared Torres's test but not the stricter bar, so the PO can narrow or split it later. Two
+  genuinely different solutions is not a masquerade — don't withhold classification for it.
 - **Fails** (it names one specific implementation) → flag it **solution-masquerade**, name the
   underlying opportunity it might serve, and **leave the call to the PO**. Do not silently write
   `node_type: opportunity` onto a solution-shaped ask.
@@ -118,7 +122,7 @@ or `git push`.**
 - **Overlay only — no new silo.** The tree is `node_type:` / `parent:` on existing files plus the
   derived `docs/discovery/outcome-tree.md`. This skill authors no new artifact type.
 - **Roots are ratified outcomes only.** A draft or superseded row is not a legal tree root.
-- **The Torres gate is a flag, not a veto.** Solution-masquerades are surfaced for the PO to
+- **The disguise test is a flag, not a veto.** Solution-masquerades are surfaced for the PO to
   decide; the skill never silently classifies one as an opportunity.
 - **`parent` == `parent_problem` on every solution.** Discrepancies are surfaced, never
   overwritten into agreement.
@@ -137,4 +141,4 @@ or `git push`.**
 
 ---
 
-> Provenance: house-authored for this product (© Peter Petroczy). The Olsen Opportunity Score (Importance × (1 − Satisfaction)) and the opportunity-solution-tree framing are adapted from phuryn/pm-skills@18468a95b427e70e258b51389796367c6f684e7d (MIT, © Pawel Huryn); the "3+ different solutions or it is a solution in disguise" Torres-gate test is adapted from shinpr/claude-code-discover@1cde7db8e638fe22a805191b50638151b66cd431 (MIT). The frontmatter-overlay persistence (no new file silo) is house-authored. See NOTICE.md.
+> Provenance: house-authored for this product (© Peter Petroczy). The Olsen Opportunity Score (Importance × (1 − Satisfaction)) and the opportunity-solution-tree framing are adapted from phuryn/pm-skills@18468a95b427e70e258b51389796367c6f684e7d (MIT, © Pawel Huryn); the "3+ different solutions or it is a solution in disguise" phrasing of the disguise test is adapted from shinpr/claude-code-discover@1cde7db8e638fe22a805191b50638151b66cd431 (MIT). The frontmatter-overlay persistence (no new file silo) is house-authored. See NOTICE.md.

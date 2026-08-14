@@ -18,7 +18,7 @@ tells you *in what order*. When more bets clear the gate than the team's appetit
 this skill turns the backlog into a defensible ordered list and writes the ranks where they
 survive the session.
 
-**The load-bearing rule: a score cannot exist without its evidence class.** RICE's (and ICE's)
+**The load-bearing rule: a RICE or ICE score cannot exist without its evidence class.** RICE's (and ICE's)
 *confidence* factor is not a number the PO types in — it is **derived** from the hypothesis's
 own evidence-banded `confidence:` block. Prioritization therefore consumes the validation
 pipeline instead of vibes: a bet nobody has validated cannot borrow a high confidence to jump
@@ -144,6 +144,13 @@ gate-ready bet → move it toward drafting a spec/PRD; a fresh ordering that cha
 "next" means → update whatever roadmap view the team keeps; any bet still on an unratified
 outcome → `define-outcomes` before it can be trusted in the order. **Never `git commit` or `git
 push`** — committing is a human-confirmed action.
+
+**Offer the ranking as a decision — when it is one.** This skill writes the score, never a
+decision row. Most orderings need none: the gate expects one only where the ranking clears
+`grill-decision`'s three-criteria test (hard to reverse, surprising, a real alternative
+rejected). A bet deliberately deferred behind another usually clears it; a routine re-sort does
+not, and `grill-decision` is required to refuse the row if it doesn't. When it clears, offer the
+DEC there before treating the item as satisfied.
 
 ## Rules
 

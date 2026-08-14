@@ -32,12 +32,12 @@ Installs the 2 agents below into `.claude/agents/`, seeds the empty
 | `intake-triage` | Front door for raw asks — verdicts Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems |
 | `define-personas` | Creates and maintains canonical persona cards under `docs/discovery/personas/` |
 | `define-outcomes` | Drafts, stress-tests, and records ratification of outcome anchors in `outcomes.md` |
-| `opportunity-tree` | Maintains the opportunity–solution tree as an overlay on existing artifacts; regenerates `outcome-tree.md`; applies the Torres 3+-solutions gate and Olsen scoring |
+| `opportunity-tree` | Maintains the opportunity–solution tree as an overlay on existing artifacts; regenerates `outcome-tree.md`; applies the 3+-solutions disguise test and Olsen scoring |
 | `journeys-to-hypotheses` | Classifies journey coverage against existing hypotheses/tracker and authors missing problem + hypothesis stubs |
 | `prioritize-bets` | Ranks incubating and promotion-ready bets (RICE by default, WSJF/ICE configurable) |
 | `stakeholder-interview` | Prepares interview guides and synthesizes raw notes/transcripts into evidence, propagated into the hypotheses they touch |
 | `grill-decision` | Socratic, one-question-at-a-time stress test of a decision, plan, or hypothesis |
-| `capture-learning` | Captures a problem → outcome → lesson into `evidence/learnings/` when a hypothesis closes |
+| `capture-learning` | Captures a problem → outcome → lesson into `evidence/learnings/` when a bet concludes, win or lose |
 | `discovery-status` | Read-only dashboard of where the whole pipeline stands and the next action per item |
 
 ## How the loop works
@@ -50,11 +50,12 @@ flowchart TD
         po["product-owner"]
         intake["intake-triage —<br/>raw ask → Problem"]
         personas["define-personas /<br/>journeys"]
-        tree["opportunity-tree —<br/>map under outcome"]
-        hyp["journeys-to-hypotheses /<br/>define-outcomes"]
-        grill["grill-decision —<br/>stress-test"]
+        hyp["journeys-to-hypotheses —<br/>journeys → hypothesis stubs"]
+        anchor["define-outcomes —<br/>ratify the anchor"]
+        tree["opportunity-tree —<br/>map under the ratified outcome"]
+        grill["grill-decision —<br/>stress-test, earn the evidence class"]
         rank["prioritize-bets"]
-        po --> intake --> personas --> tree --> hyp --> grill --> rank
+        po --> intake --> personas --> hyp --> anchor --> tree --> grill
     end
 
     subgraph research["discovery-researcher (Sam) — dispatched for evidence"]
@@ -62,13 +63,13 @@ flowchart TD
         deep["deep-research /<br/>verifying-outcomes"]
     end
 
-    hyp -->|"claim needs grounding"| research
-    research -->|"evidence"| po
+    grill -->|"assumptions need grounding"| research
+    research -->|"evidence, banded"| rank
 
-    rank --> learn["capture-learning<br/>(on close, win or lose)"]
+    rank --> learn["capture-learning<br/>(when a bet concludes, win or lose)"]
     po -.->|"anytime"| status["discovery-status —<br/>read-only dashboard"]
 
-    rank -->|"promoted + ratified outcome"| ba(["hand off to ba"])
+    rank -->|"clears the promotion gate"| ba(["hand off to ba"])
 ```
 
 `product-owner` is the entry point and stays the active agent throughout;
@@ -88,18 +89,23 @@ layout, ID conventions, and hypothesis lifecycle.
 
 ## Reused skills
 
-These skills are **not** owned by this bundle — there's no duplicate copy
-here. They're pulled in through each agent's `skills:` frontmatter via the
-installer's normal resolution, which differs per skill:
+These skills are **not** owned by this bundle — there's no duplicate copy here.
+They're pulled in via the installer's normal resolution: most through an agent's
+`skills:` frontmatter, and `knowledge-curation` through `bundle.json`'s team-wide
+`skills` list. The resolution differs per skill:
 
 - `deep-research`, `verifying-outcomes` — orphan entries in the top-level
-  `skills.json`. Used by `discovery-researcher`'s evidence and verification
-  work.
+  `skills.json`. `deep-research` backs `discovery-researcher`'s desk research and
+  fact-checking; `verifying-outcomes` supplies the goal-backward method — its worked
+  examples are code-shaped, so it is carried across rather than applied as-is.
 - `brainstorming` — a `repo:` entry in `skills.json`, fetched from upstream
   at install time. Used by `product-owner`'s framing work.
-- `memory` — not in `skills.json`; resolves cross-bundle to the
-  alphabetical-first bundle that owns it (`feature-development`'s copy).
-  Used by both agents for role memory and checkpointing.
+- `memory`, `knowledge-curation` — orphan entries in the top-level
+  `skills.json` too, same tier as `deep-research`/`verifying-outcomes`, backed
+  by `skills/memory/` and `skills/knowledge-curation/`. `memory` is on both
+  agents' rosters for role memory and checkpointing; `knowledge-curation` is
+  installed via `bundle.json`'s team-wide `skills` list and loaded on demand
+  for the shared `.agents/knowledge/` layer.
 
 ## What this bundle adds
 

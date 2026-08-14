@@ -2,7 +2,7 @@
 name: discovery-status
 description: Use when starting a work session, when the PO is unsure what to do next, or when promotion, gates, blockers, what's-stuck, where-am-I, or am-I-ready-for-review come up — even without the word 'status'. Reports the whole discovery pipeline as one navigable dashboard — where every hypothesis stands against the promotion gate, what is blocked and on whom, the tracker board versus what docs/discovery/ says, and the exact next action (naming the exact skill) for each item; read-only, reading the docs/discovery/ tree and the product-owner's role memory directly and re-deriving gate state from the promotion checklist in prose (no vault, no validator script). NOT for code or CI status, PR-review state, deployment health, or git status — those are different tools.
 license: MIT
-allowed-tools: Read, Grep, Glob, Bash(gh *), Bash(glab *)
+allowed-tools: Read, Grep, Glob, Bash(gh issue list *), Bash(gh issue view *), Bash(glab issue list *), Bash(glab issue view *)
 metadata:
   authors:
     - Peter Petroczy (PO-RnD, MIT)
@@ -76,15 +76,19 @@ four-item checklist the product-owner narrates before a handoff to `ba`, and mar
    No file, or only an unlinked assertion in the body text, is a ❌. Disconfirming evidence
    that was weighed and led to a revision is a legitimate ✅ — the point is that it was
    weighed, not that it was favorable.
-3. **Prioritized** — the hypothesis carries a `priority:` block (score, framework, and an
-   `evidence_note` naming the confidence derivation) AND a matching `DEC-NNN` row in
-   `docs/discovery/decisions.md` recording the ranking call. A score with no `DEC-NNN` row
-   (or vice versa) is a ⚠️ — the two must agree.
-4. **Feasibility acknowledged** — a record that `tech-lead` was dispatched and signed off
-   (or flagged risk) on this hypothesis: look for a `DEC-NNN` row, an evidence file, or a
-   note in `docs/discovery/decisions.md` naming the hypothesis id and `tech-lead`. Nothing
-   on disk (even if role memory logged a dispatch) is a ❌ — a claim that never lands in a
-   committed record is still open.
+3. **Prioritized** — the hypothesis carries a `priority:` block: score, framework, and an
+   `evidence_note`. For RICE and ICE that note names the confidence derivation; WSJF has no
+   confidence factor, so its note says so instead — don't read a missing derivation as a gap.
+   A `DEC-NNN` row in `docs/discovery/decisions.md` is expected only where the ranking clears
+   `grill-decision`'s three-criteria gate (hard to reverse, surprising, a real alternative
+   rejected) — a routine ordering needs no decision record, and its absence is not a gap. A `DEC-NNN` row that references a score which no longer
+   matches the block is a ⚠️ — where both exist they must agree.
+4. **Feasibility acknowledged** — a record that the "is this buildable?" question was asked
+   and answered on this hypothesis: a populated `feasibility_read:` block in its frontmatter carrying
+   a `verdict`, who gave the read (`tech-lead`, or the role of the human who stood in where that
+   agent isn't installed) and a date. An empty or absent block is a ❌. Nothing on disk (even if role
+   memory logged a dispatch) is a ❌ — a claim that never lands in a committed record is
+   still open.
 
 Also check, from the hypothesis body itself: **testability** — both "We'll know we're right
 when…" and "We'll know we're wrong when…" are filled in, not placeholder text, plus at least

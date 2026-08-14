@@ -284,7 +284,7 @@
     {
       "name": "opportunity-tree",
       "source": "./bundles/product-management/skills/opportunity-tree",
-      "description": "Maintain the opportunity–solution tree over existing artifacts — Torres gate + Olsen scoring, regenerates the outcome-tree board.",
+      "description": "Maintain the opportunity–solution tree over existing artifacts — the disguise test + Olsen scoring, regenerates the outcome-tree board.",
       "version": "0.2.0"
     },
     {

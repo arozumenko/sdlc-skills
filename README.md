@@ -375,7 +375,7 @@ installable via bundles is listed below.
 | `intake-triage` | Front door for raw asks — verdicts each Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems |
 | `define-personas` | Author and maintain canonical persona cards (surface, goals, pains, JTBD, evidence) referenced by stable slug |
 | `define-outcomes` | Draft, stress-test, and ratify measurable outcome anchors (dated baseline + target + timeframe) in `outcomes.md` |
-| `opportunity-tree` | Maintain the opportunity–solution tree over existing artifacts — Torres gate + Olsen scoring, regenerates the outcome-tree board |
+| `opportunity-tree` | Maintain the opportunity–solution tree over existing artifacts — the disguise test + Olsen scoring, regenerates the outcome-tree board |
 | `journeys-to-hypotheses` | Convergence pass — classify each journey COVERED / GAP / OUT-OF-SCOPE and author missing Problem + Hypothesis stubs |
 | `prioritize-bets` | Rank incubating/promotable hypotheses (RICE default; WSJF/ICE options); confidence derived from each bet's evidence band |
 | `stakeholder-interview` | Prepare a VOI-ordered interview guide, or synthesize raw notes into evidence and propagate answers into hypotheses |

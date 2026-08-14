@@ -38,7 +38,9 @@ You → product-owner (Priya) runs the loop end to end
 workspace at install; `product-owner` orients from it plus whatever
 `.agents/*.md` and `docs/` your repo already has. Feasibility sign-off isn't a
 skill — when a bet needs an "is this buildable?" check, `product-owner`
-dispatches `tech-lead` (install `feature-development` too, or skip the check).
+dispatches `tech-lead` (install `feature-development` too, or record the
+acknowledgement yourself on the hypothesis — see Troubleshooting). The gate item
+is never skipped; it is satisfied by an answer on the record.
 
 ### The pipeline, stage by stage
 
@@ -52,7 +54,7 @@ Each stage is a skill Priya (or Sam) invokes; you don't call them by hand.
 | 4. Anchor | `define-outcomes` | Ratified, measurable outcome anchors in `outcomes.md` |
 | 5. Map | `opportunity-tree` | `node_type:`/`parent:` overlay + the `outcome-tree.md` board |
 | 6. Sharpen | `grill-decision`, `brainstorming` | Decisions (`decisions.md`), sharpened hypotheses |
-| 7. Verify | `stakeholder-interview`, `deep-research`, `verifying-outcomes` | Evidence under `evidence/*`, verdicts on assumptions |
+| 7. Verify | `stakeholder-interview`, `deep-research` | Evidence under `evidence/*`, verdicts on assumptions (`verifying-outcomes` supplies the goal-backward method; its worked examples are code-shaped, so it is carried across) |
 | 8. Prioritize | `prioritize-bets` | RICE-ranked bets + the `priority.md` board |
 | 9. Learn | `capture-learning` | `evidence/learnings/` when a bet closes |
 | — Status | `discovery-status` | A read-only dashboard, at any point |
@@ -94,7 +96,7 @@ npx github:arozumenko/sdlc-skills init --bundle product-management
 
 This installs the 2 agents into `.claude/agents/`, their 10 discovery skills
 (plus the reused `deep-research`, `brainstorming`, `verifying-outcomes`,
-`memory`), seeds the empty `docs/discovery/` scaffold, wires the context hooks,
+`memory` and `knowledge-curation`), seeds the empty `docs/discovery/` scaffold, wires the context hooks,
 and splices the team conventions into `AGENTS.md` / `CLAUDE.md` under
 `<!-- BUNDLE:product-management -->`.
 
@@ -123,10 +125,11 @@ the gitignored `docs/discovery/_inbox/`; committed records refer to people by
 
 ### 3. Let the loop run
 
-From a Problem, Priya walks the pipeline — framing personas and journeys,
-drafting a **ratified outcome** (a measurable metric with a dated baseline —
-only *you*, in chat, ratify it), turning journeys into hypotheses, and mapping
-them onto the opportunity tree. When a claim needs evidence rather than judgment,
+From a Problem, Priya walks the pipeline in the order above — framing personas
+and journeys, turning journeys into hypothesis stubs, then drafting the
+**ratified outcome** those stubs anchor to (a measurable metric with a dated
+baseline — only *you*, in chat, ratify it), and finally mapping them onto the
+opportunity tree, whose roots are the ratified anchors. When a claim needs evidence rather than judgment,
 she dispatches **`discovery-researcher`**:
 
 > (Priya, mid-loop) Dispatching discovery-researcher to verify the "board decks
@@ -149,7 +152,8 @@ hypothesis leaves this team only when the gate is clear:
 - its outcome anchor is **ratified** with a dated baseline,
 - its risky assumptions are **verified**,
 - it's been **prioritized**, and
-- `tech-lead` has **acknowledged feasibility**.
+- feasibility is **acknowledged** — a `feasibility_read:` block on the hypothesis, filled by
+  `tech-lead` or by whoever gave the read where that agent isn't installed.
 
 Priya narrates that checklist and **refuses handoff** when any item is unmet.
 
@@ -169,10 +173,17 @@ to reconcile them into a coherent, prioritized set of bets.
    yet), or **OUT-OF-SCOPE**, regenerates `journey-coverage.md`, and authors the
    missing Problem + Hypothesis stubs with collision-free IDs. If your tracker is
    named in `.agents/profile.md`, it cross-checks the epic board too.
-4. **Anchor and prioritize** — `define-outcomes` gives the orphaned bets a metric
-   to move; `prioritize-bets` ranks the incubating set (RICE by default; WSJF/ICE
-   are config options) with confidence **derived from each bet's evidence band**,
-   never guessed.
+4. **Anchor** — `define-outcomes` gives the orphaned bets a metric to move, and
+   repoints them off the `#tbd` sentinel.
+5. **Map and sharpen** — `opportunity-tree` hangs each problem under its now-ratified
+   anchor and regenerates `outcome-tree.md`; `grill-decision` stress-tests the imported
+   bets and fills the `confidence:` dimensions and `appetite:` they arrived without.
+   Imported bets skip nothing here — a hypothesis you wrote by hand still has no
+   evidence class until it is grilled.
+6. **Verify, then prioritize** — a bet needs an evidence band before it can be
+   scored, so run the verification pass first; `prioritize-bets` then ranks
+   the incubating set (RICE by default; WSJF/ICE are config options) with RICE and ICE confidence
+   **derived from each bet's evidence band**, never guessed.
 
 From here it's the same verify → gate → handoff flow as greenfield.
 
@@ -248,8 +259,9 @@ Three rules the team obeys (full detail in the bundle README and
   configured in `.agents/profile.md`, so it degrades gracefully to n/a. Add your
   tracker there (and `gh`/`glab` on PATH) to enable the cross-check.
 - **Feasibility check asks for `tech-lead` and it isn't installed** → install the
-  `feature-development` bundle (which ships `tech-lead`), or record the
-  feasibility acknowledgement yourself and note it on the hypothesis.
+  `feature-development` bundle (which ships `tech-lead`), or get the read from a
+  qualified human. Either way it is recorded in the hypothesis's own `feasibility_read:`
+  block — that is where `discovery-status` looks for it.
 - **Priya prioritizes on a gut-band bet** → `prioritize-bets` **warns, never
   blocks** — the ranking stands but is flagged; run a verification pass
   (`stakeholder-interview` / `deep-research`) to raise the evidence band.

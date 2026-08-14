@@ -98,7 +98,7 @@ it.
 ## The kill-assumption contract (the shape of every adversarial capture)
 
 When grilling surfaces a load-bearing assumption, don't leave it as a vague worry — pin it in
-five fields (this beats loose "challenge notes"):
+six fields (this beats loose "challenge notes"):
 
 | Field | What it captures |
 |---|---|
@@ -107,6 +107,7 @@ five fields (this beats loose "challenge notes"):
 | **Evidence to get this week** | the cheapest signal that moves belief |
 | **Kill criterion** | what result would make you abandon the idea |
 | **Cheapest test** | the smallest experiment that produces that signal |
+| **Risk** | `risk: critical` if the bet dies when this is wrong, else `risk: normal` — `stakeholder-interview` sweeps for the critical ones to build its interview guide, so an assumption with no risk flag is invisible to that sweep |
 
 Name the **Elephant** too: the unspoken concern nobody is validating. Grilling circles these;
 your job is to name them out loud and, if they matter, turn them into a kill-assumption row or
@@ -181,6 +182,20 @@ engine, pointed at the bet:
   we're wrong when…".
 - Sharpen terms against established usage as you go (correct them inline, in the Hypothesis, as
   you go).
+- **Earn the evidence class.** Grilling is where a bet stops being a hunch, so it is where the
+  scoring inputs get written. As the walk resolves each of the four Cagan risks, set the matching
+  `confidence:` dimension (`value`, `usability`, `feasibility`, `viability`, each 0–10) on the
+  Hypothesis, and set `appetite:` once the bet's size is clear. Write only the dimensions the
+  round actually settled — leave the rest unset rather than filling them to look complete. Anchor
+  each number to the evidence band it represents rather than to a feeling: 0–2 a hunch, 3–4
+  reasoned with some qualitative signal, 5–7 quantified evidence behind it, 8–10 validated by a
+  real experiment (the same scale `prioritize-bets` bands on). **Write the band's midpoint — 1, 4, 6 or 9 —
+  unless you can say why this case sits off it.** RICE consumes the band, but ICE consumes the
+  rounded mean of the raw numbers, so choosing freely inside a band silently moves an ICE rank.
+  Say in one clause what evidence put it in that band, since
+  `prioritize-bets` derives its confidence factor from the mean of what is set and treats an
+  all-unset block as unscoreable. This is the "verification/challenge pass to earn a confidence"
+  that [`prioritize-bets`](../prioritize-bets/references/frameworks.md) routes unscoreable bets to.
 - **Edit the Hypothesis in place** when a question forces a change; bump `last_touched`. If the
   round was a genuine adversarial pass, you may set `last_challenged: <today>` — but a dedicated
   pre-promotion challenge pass belongs to whatever verification skill the project runs before

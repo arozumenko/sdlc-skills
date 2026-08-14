@@ -9,7 +9,7 @@ last_confirmed: YYYY-MM-DD         # ONLY new evidence re-confirming the lesson 
 status: active                    # active | stale | superseded
 confidence: 0.7                   # author's 0–1 estimate of transferability; a freshness sweep may lower it
 tags: [keyword-1, keyword-2]      # ≥1 required — what makes the lesson findable: what overlap-scoring greps AND what readers' Step-0 by-tag pulls grep
-discovered_from: specs/done/NNNN-slug/spec.md   # provenance edge — MUST resolve; null only if there is genuinely none
+discovered_from: docs/discovery/hypotheses/HYP-NNN-slug.md   # provenance edge — MUST resolve; null only if there is genuinely none
 evidence:                         # supporting episodic records, by path (core typed edge) — each MUST resolve
   - docs/discovery/evidence/verifications/YYYY-MM-DD_slug.md
 supersedes: null                  # L-NNN when this Replaces a contradicted lesson (invalidate-don't-delete)

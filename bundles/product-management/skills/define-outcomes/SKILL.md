@@ -49,7 +49,8 @@ From `.agents/profile.md` and the project's `docs/` — read for:
 
 And these `docs/discovery/` locations: `outcomes.md` (the target — its ratification-gate
 design is authoritative; do not soften the rules stated in its header), `problems/` (the pain
-a candidate serves), and `evidence/learnings/` (Step 0, below).
+a candidate serves), `hypotheses/` (bets still pointing at the `#tbd` sentinel, repointed on
+ratification — Step 7), and `evidence/learnings/` (Step 0, below).
 
 ## Step 0 — consult relevant lessons (by tag)
 
@@ -121,6 +122,19 @@ On an explicit ratification act (and only if gates 1 and 3 are clear):
   block.
 - Stamp `ratified:: <today> by <product owner name>` (copied verbatim from `.agents/profile.md`)
   in the detail block.
+- **Resolve the waiting hypotheses.** Every hypothesis is minted pointing at the
+  `outcomes.md#tbd` sentinel, and ratification is the only moment a real anchor exists to replace
+  it with — leave it and the bet can never clear promotion-gate item 1.
+
+  Collect every hypothesis whose `outcome:` is **unanchored** — the `#tbd` sentinel in any
+  spelling, empty, absent, or pointing at a row that is not `status: active`. Match on the
+  resolved value, not one exact string; imported bets rarely use the minting skill's spelling.
+
+  **Present that list to the product owner and ask which belong to this anchor.** Nothing maps an
+  anchor to the problems it serves, so there is no field to infer it from — propose a grouping
+  from `parent_problem:` if you can, but the PO confirms. On confirmation rewrite `outcome:` to
+  `docs/discovery/outcomes.md#<anchor-id>` and bump `last_touched`. A bet pointed at the wrong
+  anchor scores against the wrong metric, so when in doubt leave it unanchored and report it.
 - **Checkpoint the write:** this write is irreversible — invoke the `memory` skill's **Log**
   op noting which anchor was just ratified, so work resumes cleanly if the session breaks here,
   before proposing the next step.
