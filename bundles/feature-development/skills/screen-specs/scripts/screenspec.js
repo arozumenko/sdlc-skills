@@ -1090,6 +1090,13 @@ function annotations(screen, stateName) {
     .filter(Boolean);
 }
 
+function readCall(c){
+  c = c || {};
+  var chose = c.chose === 'md3' ? 'a' : c.chose === 'ios' ? 'b' : c.chose;
+  return { topic: c.topic, a: c.a != null ? c.a : c.md3, b: c.b != null ? c.b : c.ios,
+           chose: chose, why: c.why };
+}
+
 var API = {
   css: CSS,
   tokens: tokens,
@@ -1101,6 +1108,7 @@ var API = {
   applyState: applyState,
   DEVICES: DEVICES,
   deviceOf: deviceOf,
+  readCall: readCall,
   mockWeb: null,
   webCss: '',
   version: '1.0.0'
