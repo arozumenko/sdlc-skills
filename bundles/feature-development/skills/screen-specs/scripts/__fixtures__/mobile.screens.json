@@ -1,0 +1,30 @@
+{
+  "screens": [
+    {
+      "id": "S-001-0",
+      "title": "Stays near you",
+      "nav": { "kind": "root", "title": "Stays near you" },
+      "tab": "search",
+      "regions": [
+        { "type": "appbar", "label": "Header", "content": "Stays near you" },
+        {
+          "type": "list",
+          "label": "Nearby stays",
+          "content": [
+            ["Harbor View Inn", "12 min walk · 4.6", "$142/night"],
+            ["Bayside Suites", "8 min walk · 4.8", "$168/night"]
+          ]
+        },
+        { "type": "cta", "label": "Book now", "content": "Book Now" }
+      ],
+      "states": [
+        {
+          "name": "Loading",
+          "changes": [
+            { "region": "Nearby stays", "hidden": true }
+          ]
+        }
+      ]
+    }
+  ]
+}
