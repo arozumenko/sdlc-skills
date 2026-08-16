@@ -259,8 +259,8 @@
     },
     {
       "name": "visual-testing",
-      "source": "./bundles/feature-development/skills/visual-testing",
-      "description": "Use when a designer's generated HTML needs visual regression checking — \"did the design change\", \"visual test\", \"screenshot diff\", \"check the mocks didn't drift\", \"compare against the baseline\", or before promoting a redesign. Screenshots the self-contained pages a designer produces (screen-specs device/web mocks and user-flow-maps posters), diffs each against a committed baseline with reg-cli (MIT, no cloud), and reports what changed as an HTML report plus a pass/fail summary. Capture is agent-driven through whatever browser tool is available — no headless engine is installed. NOT a pixel-perfect design tool, NOT for testing a live production app (that is E2E), and NOT a replacement for reading the spec — a diff proves a picture changed, not that it is correct.",
+      "source": "./skills/visual-testing",
+      "description": "Use when rendered UI needs visual regression checking — \"did the UI change\", \"visual test\", \"screenshot diff\", \"compare against the baseline\", \"catch layout regressions\", or a visual assertion in a test run. Works on any HTML you can render — a generated static page (design mock, report, flow-map poster) opened from disk, or a running app driven by your existing browser/device automation. Screenshots each screen, diffs it against a committed baseline with reg-cli (MIT, no cloud), and reports what changed as an HTML report plus a pass/fail summary. Capture rides on whatever browser or device tool you already have — no separate headless engine is installed. NOT a functional or correctness check (a diff proves pixels moved, not that anything is right), and a red diff is a prompt to look, not an automatic verdict.",
       "version": "0.2.0"
     },
     {

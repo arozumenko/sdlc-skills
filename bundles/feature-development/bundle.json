@@ -144,8 +144,7 @@
     "session-retrospective",
     "test-automation-workflow",
     "test-case-analysis",
-    "user-flow-maps",
-    "visual-testing"
+    "user-flow-maps"
   ],
   "localAgents": [
     "scout",
