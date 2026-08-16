@@ -15,10 +15,14 @@
  *   ScreenSpec.css                     -> stylesheet the markup expects
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.ScreenSpec = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  var Styles = (typeof module === 'object' && module.exports) ? require('./styles.js') : root.ScreenStyles;
+  if (typeof module === 'object' && module.exports) module.exports = factory(Styles);
+  else root.ScreenSpec = factory(Styles);
+}(typeof self !== 'undefined' ? self : this, function (Styles) {
 'use strict';
+
+/* --------------------------------------------------------------- frameKind */
+function frameKind(ds) { return ((ds && ds.target) || 'mobile') === 'web' ? 'web' : 'mobile'; }
 
 /* ------------------------------------------------------------------ tokens */
 function tokens(ds) {
@@ -46,7 +50,8 @@ function tokens(ds) {
   var sp = (ds.spacing || {}).scale || ds.spacing || {};
   var spaceVars = Object.keys(sp).filter(function (k) { return typeof sp[k] === 'number'; })
     .map(function (k) { return '  --space-' + kebab(k) + ':' + sp[k] + 'px;'; }).join('\n');
-  return ':root{\n' + vars(L) + '\n' + shapeVars + '\n' + typeVars + '\n' + spaceVars + '\n}\n' +
+  var styleCss = (frameKind(ds) === 'web' && Styles && Styles.styleVars) ? Styles.styleVars(ds.style) + '\n' : '';
+  return ':root{\n' + styleCss + vars(L) + '\n' + shapeVars + '\n' + typeVars + '\n' + spaceVars + '\n}\n' +
     '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){\n' + vars(D) + '\n}}\n' +
     ':root[data-theme="dark"]{\n' + vars(D) + '\n}\n';
 }
@@ -1047,6 +1052,7 @@ function annotations(screen, stateName) {
 return {
   css: CSS,
   tokens: tokens,
+  frameKind: frameKind,
   annotations: annotations,
   mock: mock,
   spec: spec,
