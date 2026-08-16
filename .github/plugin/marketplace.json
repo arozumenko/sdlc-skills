@@ -192,6 +192,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "screen-specs",
+      "source": "./bundles/feature-development/skills/screen-specs",
+      "description": "Use when screens need designing or documenting as reference a developer or agent can build from — \"design the screens\", \"screen specs\", \"what should this screen look like\", \"turn the flows into designs\", \"document the UI\", or when a flow map's nodes need to become actual screens. Produces standalone HTML pages showing each screen as a device-framed mock beside its spec — regions with Material component and token names, every state the criteria demand, the MD3-vs-platform calls, accessibility notes, and traceability back to a flow node and acceptance criterion. Mock and spec are generated from one source so they cannot drift. NOT for flow/journey diagrams (use user-flow-maps), NOT a design tool replacement, and NOT for writing the screens' production code.",
+      "version": "0.2.0"
+    },
+    {
       "name": "seeding-a-project",
       "source": "./bundles/feature-development/skills/seeding-a-project",
       "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
@@ -237,6 +243,12 @@
       "name": "tosca-automation",
       "source": "./skills/tosca-automation",
       "description": "Use when the user asks to create a TOSCA test case, run a playlist, organize cases, or perform any TOSCA Cloud REST/CLI operation. Tricentis TOSCA Cloud automation via the bundled tosca_cli.py — create/update/run TestCases, Modules, Reusable Blocks, Playlists, folders, and TSU import/export.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "user-flow-maps",
+      "source": "./bundles/feature-development/skills/user-flow-maps",
+      "description": "Use when a user flow, journey, or screen-to-screen behaviour needs to become a visual flow map — \"draw the flow\", \"make a flow map\", \"user flow diagram\", \"map the screens\", \"turn these journeys into diagrams\", or when acceptance criteria need a picture reviewers can sign off on. Renders a spec of screens, decisions and transitions into standalone HTML posters — numbered screen wireframes, decision diamonds, Start/End markers naming where a flow hands off, orthogonal connectors routed from the data, and an authoritative edge table. Layout, routing and label collision are handled by the bundled flowmap.js; you supply data, never coordinates. NOT for architecture or sequence diagrams, NOT for visual/UI design of the screens themselves (that is a design role's job), and NOT a mermaid replacement — the source diagram stays canonical.",
       "version": "0.2.0"
     },
     {

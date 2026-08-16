@@ -6,6 +6,7 @@
   "coreAgents": [
     "scout",
     "ba",
+    "designer",
     "project-manager",
     "tech-lead",
     "qa-engineer"
@@ -138,14 +139,17 @@
     "playwright-testing",
     "reproducing-issues",
     "root-cause-analysis",
+    "screen-specs",
     "seeding-a-project",
     "session-retrospective",
     "test-automation-workflow",
-    "test-case-analysis"
+    "test-case-analysis",
+    "user-flow-maps"
   ],
   "localAgents": [
     "scout",
     "ba",
+    "designer",
     "project-manager",
     "tech-lead",
     "qa-engineer",
