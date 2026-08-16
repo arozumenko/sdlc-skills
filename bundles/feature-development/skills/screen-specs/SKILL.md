@@ -24,7 +24,10 @@ disagree.
    roles (light and dark), the M3 type scale mapped to real platform text
    styles, shape, elevation, spacing, a component inventory covering every
    region type, and the **standing platform calls** — the conflicts decided
-   app-wide so no screen re-litigates them.
+   app-wide so no screen re-litigates them. Choose the `target` (`mobile` or
+   `web`), the `style` for web (`material` / `neo-flat` / `minimal-neutral` /
+   `fluent`), and the `device` for mobile (`iphone` / `iphone-max` /
+   `android` / `iphone-se`) here too.
 2. **Author one flow's specs as the pattern**, then fan the rest out against it.
    Getting the system right on the hardest flow is what makes parallel work
    safe.
@@ -47,23 +50,15 @@ Full contract: `references/schema.md`.
 
 ## Presentation drives the chrome
 
-`nav.kind` decides how a mock is framed, and getting this right is most of what
-makes a mock read as a screen rather than a stack of boxes:
+How `nav.kind` and the surrounding chrome render depends on the `target`:
 
-| kind | What renders |
-|---|---|
-| `root` | Large title, tab bar pinned at the bottom |
-| `push` | Nav bar with back chevron, title, trailing affordances as icons |
-| `sheet` | The parent screen dimmed behind, sheet rising from the bottom with a grabber |
-| `dialog` / `alert` | Dimmed parent, centred alert with divided actions |
-| `fullscreen` | Nav bar with a close affordance |
-
-Beyond that, the renderer follows platform conventions the specs shouldn't have
-to restate: a trailing `cta` (with its `price`, if present) is lifted out of the
-scroll flow into a **pinned action bar**, consecutive `row` regions collapse into
-one **inset group** with hairline separators, a leading `hero` or `gallery`
-**bleeds to the edges**, and content past the fold gets a **scroll-edge fade**
-rather than a hard cut.
+- **mobile** — device frame, tab bars, nav bars, sheets, and the
+  MD3-vs-platform calls. See `references/targets/mobile.md` for the full
+  `nav.kind` table and the device library.
+- **web** — responsive breakpoints (mobile-web / tablet / desktop), the app
+  shell (top bar, side nav, dialogs), and the four selectable styles
+  (Material UI, Neo-Flat, Minimal-Neutral, Fluent). See
+  `references/targets/web.md`.
 
 Describe nav affordances plainly — `"share, favorite"` — and they render as
 icons. Prose asides in parentheses are stripped, because a mock that prints
@@ -109,7 +104,9 @@ every mock in the set follows. Light and dark are both generated.
 
 | Path | What it is |
 |---|---|
-| `scripts/screenspec.js` | Renderer: tokens, region renderers, device mock, state resolution. Browser and Node. |
+| `scripts/screenspec.js` | Mobile renderer: tokens, region renderers, device mock, state resolution. Browser and Node. |
+| `scripts/screenspec.web.js` | Web renderer: responsive breakpoints, app shell, region renderers for the web target. Browser and Node. |
+| `scripts/styles.js` | The four selectable web styles (Material UI, Neo-Flat, Minimal-Neutral, Fluent) — palette and token overrides per style. |
 | `scripts/build-screens.mjs` | CLI: design system + specs → linked HTML pages, one per flow, plus a design-system index. |
 | `references/schema.md` | The spec contract, field by field. |
 | `references/verifying.md` | What to check before calling the set done. |

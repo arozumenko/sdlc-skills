@@ -32,7 +32,7 @@
     {
       "name": "designer",
       "source": "./bundles/feature-development/agents/designer",
-      "description": "Use when a user flow needs to become a reviewable flow map, or when screens need designing and documenting as build-ready specs — \"draw the user flow\", \"map the screens\", \"design the screens\", \"screen specs\", \"turn the flows into designs\", \"document the UI\", \"what should this screen look like\". Remy — product/UX designer who turns agreed behaviour into buildable design — flow-map posters from journeys and acceptance criteria, then device-framed screen specs a developer implements from, every screen traced to a flow node and a criterion. NOT for writing production UI code (that's the platform devs), NOT for requirements or user stories (that's the BA). Screen specs are mobile-only today (fixed phone frame, MD3-vs-iOS) — flow maps are platform-agnostic.",
+      "description": "Use when a user flow needs to become a reviewable flow map, or when screens need designing and documenting as build-ready specs — \"draw the user flow\", \"map the screens\", \"design the screens\", \"screen specs\", \"turn the flows into designs\", \"document the UI\", \"what should this screen look like\". Remy — product/UX designer who turns agreed behaviour into buildable design — flow-map posters from journeys and acceptance criteria, then device-framed (mobile) or responsive (web) screen specs a developer implements from, every screen traced to a flow node and a criterion. NOT for writing production UI code (that's the platform devs), NOT for requirements or user stories (that's the BA).",
       "version": "0.2.0"
     },
     {
