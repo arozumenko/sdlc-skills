@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { buildRegArgs, summarize } from './visual-diff.mjs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildRegArgs, summarize, runVisualDiff } from './visual-diff.mjs';
 
 test('buildRegArgs: npx bin prepends --yes reg-cli@latest', () => {
   const args = buildRegArgs({ bin: 'npx', current: 'cur', baseline: 'base', diff: 'diff' });
   assert.deepStrictEqual(args.slice(0, 5), ['--yes', 'reg-cli@latest', 'cur', 'base', 'diff']);
-  assert.ok(args.includes('-E'), 'antialias-aware flag present');
+  assert.ok(args.includes('-A'), 'antialias-tolerant flag present');
 });
 
 test('buildRegArgs: local bin omits the npx prefix', () => {
@@ -52,6 +55,30 @@ test('summarize: update mode is always ok even with changes', () => {
 
 test('summarize: tolerates missing arrays', () => {
   const s = summarize({});
+  assert.strictEqual(s.ok, true);
+  assert.deepStrictEqual(s.counts, { failed: 0, new: 0, deleted: 0, passed: 0 });
+});
+
+test('runVisualDiff: reads the report and swallows reg-cli\'s non-zero exit', () => {
+  const diff = mkdtempSync(join(tmpdir(), 'vt-'));
+  // Simulate reg-cli on a changed run: write the JSON report, then throw (as
+  // execFileSync does on a non-zero exit). runVisualDiff must NOT propagate.
+  const runner = (bin, args) => {
+    const jsonPath = args[args.indexOf('-J') + 1];
+    writeFileSync(jsonPath, JSON.stringify({
+      failedItems: ['a.png'], newItems: [], deletedItems: [], passedItems: ['b.png'],
+    }));
+    throw new Error('reg-cli exited 1 (images differ)');
+  };
+  const s = runVisualDiff({ bin: 'reg-cli', current: 'c', baseline: 'b', diff }, runner);
+  assert.strictEqual(s.ok, false);
+  assert.strictEqual(s.counts.failed, 1);
+  assert.strictEqual(s.counts.passed, 1);
+});
+
+test('runVisualDiff: missing report resolves to an ok (no-op) summary', () => {
+  const diff = mkdtempSync(join(tmpdir(), 'vt-'));
+  const s = runVisualDiff({ bin: 'reg-cli', current: 'c', baseline: 'b', diff }, () => {});
   assert.strictEqual(s.ok, true);
   assert.deepStrictEqual(s.counts, { failed: 0, new: 0, deleted: 0, passed: 0 });
 });

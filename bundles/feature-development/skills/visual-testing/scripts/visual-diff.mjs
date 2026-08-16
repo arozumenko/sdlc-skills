@@ -24,7 +24,7 @@ export function buildRegArgs({ bin = 'npx', current, baseline, diff, report, jso
   const args = [...base, current, baseline, diff];
   if (report) args.push('-R', report);
   if (json) args.push('-J', json);
-  args.push('-E'); // anti-aliasing-aware comparison
+  args.push('-A'); // --enableAntialias: tolerate font/sub-pixel rasterization noise
   if (update) args.push('-U');
   return args;
 }
@@ -65,18 +65,19 @@ export function runVisualDiff(opts, runner = defaultRunner) {
   const report = opts.report || join(opts.diff, 'report.html');
   mkdirSync(opts.diff, { recursive: true });
   const args = buildRegArgs({ ...opts, bin, json, report });
-  runner(bin, args); // reg-cli exits non-zero on change; we read the JSON regardless
+  try {
+    runner(bin, args);
+  } catch {
+    // reg-cli returns a non-zero exit code when images differ; that is not an
+    // error for us — the JSON report below is the source of truth. Swallow it
+    // here (not in the runner) so an injected runner gets the same guarantee.
+  }
   const parsed = existsSync(json) ? JSON.parse(readFileSync(json, 'utf8')) : {};
   return summarize(parsed, { update: !!opts.update });
 }
 
 function defaultRunner(bin, args) {
-  try {
-    execFileSync(bin, args, { stdio: ['ignore', 'inherit', 'inherit'] });
-  } catch {
-    // reg-cli returns a non-zero exit code when images differ; that is not an
-    // error for us — the JSON report is the source of truth. Swallow and read it.
-  }
+  execFileSync(bin, args, { stdio: ['ignore', 'inherit', 'inherit'] });
 }
 
 function parseCli(argv) {
