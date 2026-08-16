@@ -24,6 +24,19 @@
 /* --------------------------------------------------------------- frameKind */
 function frameKind(ds) { return ((ds && ds.target) || 'mobile') === 'web' ? 'web' : 'mobile'; }
 
+/* ----------------------------------------------------------------- DEVICES
+   The mobile frame used to be hardcoded (390pt iPhone geometry, dynamic
+   island, home indicator). `deviceOf(ds)` resolves a preset from `ds.device`,
+   falling back to `iphone` (today's exact geometry) for an absent or unknown
+   id — so specs that never opt in keep rendering the frame they always did. */
+var DEVICES = {
+  'iphone':    { id:'iphone',    w:390, h:788, radius:52, chrome:'ios',      island:true,  homebar:true  },
+  'iphone-max':{ id:'iphone-max',w:430, h:868, radius:56, chrome:'ios',      island:true,  homebar:true  },
+  'android':   { id:'android',   w:412, h:824, radius:40, chrome:'android',  island:false, homebar:false },
+  'iphone-se': { id:'iphone-se', w:375, h:667, radius:34, chrome:'ios-home', island:false, homebar:false }
+};
+function deviceOf(ds) { return DEVICES[(ds && ds.device)] || DEVICES.iphone; }
+
 /* ------------------------------------------------------------------ tokens */
 function tokens(ds) {
   var L = ((ds.color || {}).roles || {}).light || {};
@@ -276,7 +289,21 @@ var CSS = [
 '  font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25)}',
 '.footm{font-size:10.5px;line-height:15px;color:var(--m-on-surface-variant);opacity:.9}',
 '.sheetm{margin-top:auto;background:var(--m-surface-container-low);border-radius:22px 22px 0 0;padding:10px 14px 16px;',
-'  display:flex;flex-direction:column;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.14)}'
+'  display:flex;flex-direction:column;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.14)}',
+/* per-device chrome — additive [data-device="…"] overrides only; the bare
+   .device/.glass rules above stay the untouched iphone default */
+'.device[data-device="iphone-max"]{border-radius:56px}',
+'.device[data-device="iphone-max"] .glass{border-radius:45px}',
+'.device[data-device="android"]{border-radius:40px}',
+'.device[data-device="android"] .glass{border-radius:30px}',
+'.device[data-device="iphone-se"]{border-radius:34px}',
+'.device[data-device="iphone-se"] .glass{border-radius:24px}',
+'.device[data-device="android"] .andstat{height:28px;flex:none;display:flex;align-items:center;',
+'  justify-content:flex-end;padding:0 14px;z-index:8}',
+'.device[data-device="android"] .andgest{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);',
+'  width:100px;height:4px;border-radius:2px;background:var(--m-on-surface);opacity:.6;z-index:9}',
+'.device[data-device="iphone-se"] .homebtn{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);',
+'  width:46px;height:46px;border-radius:50%;border:2px solid var(--m-on-surface);opacity:.55;z-index:9}'
 ].join('\n');
 
 /* --------------------------------------------------------------- helpers */
@@ -891,9 +918,17 @@ function mock(host, screen, ds, stateName, base) {
     return API.mockWeb(host, screen, ds, stateName, base);
   var kind = String((screen.nav || {}).kind || 'push').toLowerCase();
   var regions = applyState(screen, stateName);
+  var dv = deviceOf(ds);
   var dev = h('div', 'device');
   var glass = h('div', 'glass');
-  glass.appendChild(h('div', 'dyn'));
+  if (ds && ds.device) {
+    dev.setAttribute('data-device', dv.id);
+    dev.style.width = dv.w + 'px';
+    dev.style.borderRadius = dv.radius + 'px';
+    glass.style.height = dv.h + 'px';
+  }
+  if (dv.island) glass.appendChild(h('div', 'dyn'));
+  else if (dv.chrome === 'android') glass.appendChild(h('div', 'andstat'));
   glass.appendChild(statusBar());
 
   var isOverlay = /sheet|dialog|alert/.test(kind);
@@ -944,7 +979,9 @@ function mock(host, screen, ds, stateName, base) {
       sp.bar.forEach(function (r) { sh.appendChild((R[r.type] || R.cta)(r, ds, base)); });
       glass.appendChild(sh);
     }
-    glass.appendChild(h('div', 'homeind'));
+    if (dv.homebar) glass.appendChild(h('div', 'homeind'));
+    else if (dv.chrome === 'android') glass.appendChild(h('div', 'andgest'));
+    else if (dv.chrome === 'ios-home') glass.appendChild(h('div', 'homebtn'));
     dev.appendChild(glass); host.appendChild(dev); return dev;
   }
 
@@ -1012,7 +1049,9 @@ function mock(host, screen, ds, stateName, base) {
     var tab = screen.tab || (/-00[56]-/.test(id) ? 'bookings' : /-008-/.test(id) ? 'account' : 'search');
     glass.appendChild(tabBar(String(tab).toLowerCase()));
   }
-  glass.appendChild(h('div', 'homeind'));
+  if (dv.homebar) glass.appendChild(h('div', 'homeind'));
+  else if (dv.chrome === 'android') glass.appendChild(h('div', 'andgest'));
+  else if (dv.chrome === 'ios-home') glass.appendChild(h('div', 'homebtn'));
 
   dev.appendChild(glass);
   host.appendChild(dev);
@@ -1060,6 +1099,8 @@ var API = {
   spec: spec,
   regionTypes: Object.keys(R),
   applyState: applyState,
+  DEVICES: DEVICES,
+  deviceOf: deviceOf,
   mockWeb: null,
   webCss: '',
   version: '1.0.0'
