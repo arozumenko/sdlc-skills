@@ -80,11 +80,73 @@
     return side;
   }
 
+  function lines(v) { return v == null ? [] : (Array.isArray(v) ? v : [v]); }
+
+  /* Web-specific region renderers, keyed by region `type`. Checked BEFORE the
+     core's `renderRegion` fallback in `renderBody` below — anything not
+     listed here keeps using the shared per-type renderer the mobile mock
+     uses, so the two targets stay in sync everywhere except the handful of
+     region kinds that genuinely read as browser chrome, not phone chrome. */
+  var WR = {
+    breadcrumb: function (r) {
+      var n = el('div', 'r breadcrumb');
+      var parts = lines(r.content).filter(Boolean);
+      n.textContent = parts.join(' / ');
+      return n;
+    },
+    topnav: function (r) {
+      var n = el('div', 'r topnav-region');
+      var list = el('nav', 'navitems');
+      lines(r.content).filter(Boolean).forEach(function (label) {
+        list.appendChild(text('span', 'navitem', label));
+      });
+      n.appendChild(list);
+      return n;
+    },
+    sidebar: function (r) {
+      var n = el('div', 'r sidebar-region');
+      var list = el('nav', 'navitems');
+      lines(r.content).filter(Boolean).forEach(function (label) {
+        list.appendChild(text('span', 'navitem', label));
+      });
+      n.appendChild(list);
+      return n;
+    },
+    datatable: function (r, ds, base, screen) {
+      var n = el('div', 'r datatable');
+      var headers = lines(r.content).filter(Boolean);
+      var table = el('table', 'dtable');
+      var thead = el('thead');
+      var htr = el('tr');
+      headers.forEach(function (h) { htr.appendChild(text('th', null, h)); });
+      thead.appendChild(htr);
+      table.appendChild(thead);
+
+      var tbody = el('tbody');
+      var srcRows = Array.isArray((screen || {}).content) ? screen.content : [];
+      for (var i = 0; i < 2; i++) {
+        var tr = el('tr');
+        var rowSrc = srcRows[i];
+        headers.forEach(function (h, ci) {
+          var cell = Array.isArray(rowSrc) ? rowSrc[ci]
+            : (rowSrc && typeof rowSrc === 'object') ? rowSrc[h]
+            : undefined;
+          tr.appendChild(text('td', null, cell != null ? String(cell) : '—'));
+        });
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      n.appendChild(table);
+      return n;
+    }
+  };
+
   function renderBody(screen, ds, stateName, base) {
     var content = el('div', 'webcontent');
     var regions = S.applyState(screen, stateName).filter(function (r) { return r.type !== 'appbar'; });
     regions.forEach(function (r) {
-      var node = S.renderRegion(r, ds, base);
+      var fn = WR[r.type];
+      var node = fn ? fn(r, ds, base, screen) : S.renderRegion(r, ds, base);
       if (node) content.appendChild(node);
     });
     return content;
@@ -149,6 +211,14 @@
     '  display:flex;flex-direction:column;gap:16px;box-sizing:border-box}',
     '.webframe[data-nav="split"] .webcontent{margin:0}',
     '.webframe :focus-visible{outline:3px solid var(--m-primary);outline-offset:2px}',
+    '.r.breadcrumb{font-size:12px;color:var(--m-on-surface-variant)}',
+    '.r.topnav-region .navitems,.r.sidebar-region .navitems{display:flex;gap:16px}',
+    '.r.sidebar-region .navitems{flex-direction:column;gap:10px}',
+    '.r.topnav-region .navitem,.r.sidebar-region .navitem{font-size:13px;color:var(--m-on-surface-variant)}',
+    '.r.datatable .dtable{width:100%;border-collapse:collapse;font-size:13px}',
+    '.r.datatable th,.r.datatable td{text-align:left;padding:8px 12px;',
+    '  border-bottom:1px solid var(--m-outline-variant)}',
+    '.r.datatable th{color:var(--m-on-surface-variant);font-weight:600}',
     '@media (prefers-reduced-motion:reduce){.webframe *{transition:none!important;animation:none!important}}'
   ].join('\n');
 

@@ -64,7 +64,14 @@ function tokens(ds) {
   var spaceVars = Object.keys(sp).filter(function (k) { return typeof sp[k] === 'number'; })
     .map(function (k) { return '  --space-' + kebab(k) + ':' + sp[k] + 'px;'; }).join('\n');
   var styleCss = (frameKind(ds) === 'web' && Styles && Styles.styleVars) ? Styles.styleVars(ds.style) + '\n' : '';
-  return ':root{\n' + styleCss + vars(L) + '\n' + shapeVars + '\n' + typeVars + '\n' + spaceVars + '\n}\n' +
+  /* `ds.type.fonts` is optional on both targets — only emit --font-* vars when
+     it names a face, so the mobile golden fixture (no `type.fonts`) renders a
+     byte-identical :root{} block whether or not this seam exists. */
+  var fonts = (ds.type || {}).fonts || {};
+  var fontVars = ['display', 'body', 'mono'].filter(function (k) { return fonts[k]; })
+    .map(function (k) { return '  --font-' + k + ':' + fonts[k] + ';'; }).join('\n');
+  return ':root{\n' + styleCss + vars(L) + '\n' + shapeVars + '\n' + typeVars + '\n' + spaceVars +
+    (fontVars ? '\n' + fontVars : '') + '\n}\n' +
     '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){\n' + vars(D) + '\n}}\n' +
     ':root[data-theme="dark"]{\n' + vars(D) + '\n}\n';
 }
