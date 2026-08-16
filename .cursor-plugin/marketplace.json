@@ -384,6 +384,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "visual-testing",
+      "source": "./bundles/feature-development/skills/visual-testing",
+      "description": "Use when a designer's generated HTML needs visual regression checking — \"did the design change\", \"visual test\", \"screenshot diff\", \"check the mocks didn't drift\", \"compare against the baseline\", or before promoting a redesign. Screenshots the self-contained pages a designer produces (screen-specs device/web mocks and user-flow-maps posters), diffs each against a committed baseline with reg-cli (MIT, no cloud), and reports what changed as an HTML report plus a pass/fail summary. Capture is agent-driven through whatever browser tool is available — no headless engine is installed. NOT a pixel-perfect design tool, NOT for testing a live production app (that is E2E), and NOT a replacement for reading the spec — a diff proves a picture changed, not that it is correct.",
+      "version": "0.2.0"
+    },
+    {
       "name": "vividus",
       "source": "./skills/vividus",
       "description": "Use when the user mentions Vividus, .story files, vividus-bom/-starter, backtick-parameter BDD, or ./gradlew runStories. Bootstrap, configure, and author tests for the Vividus BDD framework — JBehave-based, config-first .story files spanning web/REST/mobile/DB via 47+ plugins.",
