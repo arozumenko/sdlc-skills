@@ -16,6 +16,24 @@ to an acceptance criterion. They are not mood boards.
 }
 ```
 
+## design-system.json (top level)
+
+One design system per app; every screen in the set renders through it. The
+fields below pick the **target** (which renderer draws the set) and, for web,
+the **style** (which structural base it draws with). No per-screen override —
+target and style are app-wide, decided once.
+
+| Field | Type | Notes |
+|---|---|---|
+| `target` | `"mobile"` \| `"web"` | Default `mobile`. Absent ⇒ mobile, unchanged from before this field existed. |
+| `device` | `"iphone"` \| `"iphone-max"` \| `"android"` \| `"iphone-se"` | Mobile only. Default `iphone` — today's 390pt frame. Geometry, not style; see `targets/mobile.md`. |
+| `style` | `"material"` \| `"neo-flat"` \| `"minimal-neutral"` \| `"fluent"` | Web only, consulted only when `target: web`. Default `material`. A **structural base** (shadow/border/radius/motion) to override with the project's real palette and type — never a final identity. See `targets/web.md`. |
+| `type.fonts` | object | `{ display, body, mono }` — CSS font-family strings. Optional on both targets; emitted as `--font-*` vars only when present, so a spec that never sets it renders exactly as before. |
+
+Target-specific vocabulary — nav-kind values, device/breakpoint tables,
+platform-vs-style calls, region types — lives in the two target references,
+not here: `targets/mobile.md` and `targets/web.md`.
+
 ## Screen
 
 | Field | Type | Notes |
@@ -25,10 +43,10 @@ to an acceptance criterion. They are not mood boards.
 | `title` | string | Screen name. Match the flow node label so the two read as one system. |
 | `purpose` | string | One sentence: what the person is doing here. |
 | `ac` | string[] | Criterion ids this screen satisfies. **Required.** If empty, say why in `notes`. |
-| `nav` | object | `{ kind, title, leading, trailing, a11yIds }` — `kind` is `push`, `root`, `sheet`, `dialog`, `fullscreen`. Nav-bar affordances are real controls a test must tap, so name them: `"a11yIds": { "favouriteButton": "roomDetail.favouriteButton", "shareButton": "roomDetail.shareButton" }`. Without this a nav-bar action is unreachable — it is described in prose and has nowhere to carry an identifier. |
+| `nav` | object | `{ kind, title, leading, trailing, a11yIds }` — `kind`'s vocabulary is **target-specific**: mobile's is `push`/`root`/`sheet`/`dialog`/`fullscreen` (`targets/mobile.md`); web's is `page`/`split`/`modal`/`drawer`/`panel`, with a fallback map from the mobile kinds for a spec that mixes vocabularies (`targets/web.md`). Nav-bar affordances are real controls a test must tap, so name them: `"a11yIds": { "favouriteButton": "roomDetail.favouriteButton", "shareButton": "roomDetail.shareButton" }`. Without this a nav-bar action is unreachable — it is described in prose and has nowhere to carry an identifier. |
 | `regions` | Region[] | Ordered top to bottom. The structure of the screen. |
 | `states` | State[] | Every state the criteria demand — loading, empty, error, disabled, success. |
-| `platform` | Call[] | Where MD3 and iOS conflicted, and which won. Per DEC-018. |
+| `platform` | Call[] | Where the target's native behaviour and its visual system conflicted, and which won. Per DEC-018. |
 | `content` | object | Real seeded values used in the mock. Never lorem. |
 | `a11y` | object | `{ dynamicType, voiceOver, targets, contrast }`. |
 | `swiftui` | object | `{ view, navigation, state, notes[] }` — implementation hints, not code. |
@@ -129,15 +147,27 @@ notes has stopped showing the screen.
 
 ## Call (platform decision)
 
-`{ topic, md3, ios, chose, why }` — e.g.
+`{ topic, a, b, chose, why }` — two options weighed, one chosen, e.g.
 
 ```json
 { "topic": "Date range entry",
-  "md3": "Material date-range picker in a modal",
-  "ios": "Native .datePicker in a sheet with the system range UI",
-  "chose": "ios",
+  "a": "Material date-range picker in a modal",
+  "b": "Native .datePicker in a sheet with the system range UI",
+  "chose": "b",
   "why": "DEC-018: behaviour follows the platform. A Material picker on iOS breaks the drag-to-extend gesture people already know." }
 ```
+
+`a`/`b` is the shared, target-neutral shape. `md3`/`ios` are accepted as
+**legacy aliases** — a Call written before the web target existed still reads:
+the reader resolves `a ← a || md3`, `b ← b || ios`, and `chose` accepts either
+`a`/`b` or the legacy `md3`/`ios` (`md3` maps to `a`, `ios` maps to `b`). Write
+new Calls with `a`/`b`; don't bother migrating old ones.
+
+**Label text is decided by target, not by the spec.** The renderer prints
+"MD3 / iOS" for a mobile design system and "`<style>` / native" for a web one
+(e.g. "Fluent / Native") — the same `{a, b}` data, read differently depending
+on what's rendering it. Don't hardcode a platform name into `topic` or `why`
+that would read wrong under the other target.
 
 Every non-obvious conflict gets one. An unstated blend is what produces
 visible seams.
@@ -160,7 +190,8 @@ nobody anything.
 
 1. **Every screen traces to a node and a criterion.** No orphan screens.
 2. **Real content only.** The seed set exists so mocks can be honest.
-3. **State the platform call** wherever MD3 and iOS disagree.
+3. **State the platform call** wherever the target's native behaviour and its
+   visual system disagree — MD3-vs-iOS on mobile, style-vs-native on web.
 4. **Name Material tokens exactly** — `surfaceContainerHigh`, not "light grey".
    The developer maps tokens to a palette; adjectives don't map.
 5. **Structure, not pixels.** No coordinates, no widths in px. The renderer
@@ -171,3 +202,10 @@ nobody anything.
    here is the selector the test will use on arrival. An element without one can
    only be found by visible text or position, which is how a suite becomes flaky
    and then abandoned.
+
+## See also
+
+- `targets/mobile.md` — device library, mobile `nav.kind`, MD3-vs-iOS calls,
+  SF Symbols, tab bar.
+- `targets/web.md` — breakpoints, web `nav.kind`, the four styles, web regions,
+  working with `frontend-design`.

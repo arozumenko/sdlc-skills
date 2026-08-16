@@ -142,6 +142,39 @@ Note the trap that hid it: a blunt "no mock may overflow" rule flagged 15 mocks,
 14 of them innocent long screens, so the one that mattered read as more noise.
 A check that cries wolf is how a real defect ships.
 
+## Web-only checks
+
+A `target: web` set needs everything above (rebuild-and-diff, the audit, the
+buried-message check, both themes) plus these — mobile's frame has no
+breakpoints, no keyboard focus rings baked in by default, and no style preset,
+so these have no mobile analogue.
+
+- **No sideways scroll, at each breakpoint.** Toggle Mobile-web / Tablet /
+  Desktop and re-run the `pageOverflow` measurement (or eyeball it) at every
+  one, not just the default (Desktop). A layout that's clean at 1280px and
+  overflows at 400px is a real defect the default-breakpoint audit alone will
+  never see, because the toggle rebuilds the mock rather than reflowing it.
+- **`:focus-visible` is actually visible.** Tab through a built page's
+  interactive regions by keyboard. Every one should show the 3px primary-color
+  outline (`.webframe :focus-visible`). A region marked `interactive: true` in
+  the spec but unreachable by Tab, or reachable but silent, is an a11y-floor
+  regression, not a style nit.
+- **`prefers-reduced-motion` is respected.** Flip the OS/browser
+  reduced-motion setting (or `Rendering` → `Emulate CSS media feature
+  prefers-reduced-motion` in devtools) and confirm transitions/animations stop
+  — including the breakpoint toggle's own chrome swap.
+- **The chosen style is actually applied — spot-check, don't assume.** Inspect
+  one card or button and confirm `--shadow-1`/`--border-w`/`--radius-scale`
+  match the `style` in `design-system.json` (`targets/web.md` has the value
+  table). A build that silently fell back to `material` because `style` was
+  misspelled looks fine at a glance and wrong on close reading.
+- **Nav chrome matches `nav.kind`.** A `split` screen shows the sidebar at
+  every breakpoint (it does not collapse to a hamburger — see
+  `targets/web.md`); every other kind shows a top-nav bar at Tablet/Desktop
+  and a hamburger strip at Mobile-web. A mismatch usually means the kind was
+  misspelled or left off, and the renderer's `page` fallback silently
+  absorbed it.
+
 ## Coverage runs in both directions
 
 Node→screen is only half the check: a screen can also point at a node that was
