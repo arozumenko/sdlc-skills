@@ -19,8 +19,18 @@ import { createRequire } from 'node:module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
+// screenspec.js is the core renderer; screenspec.web.js mutates the SAME
+// cached module object to attach mockWeb/webCss (see its own header comment).
+// Requiring both, in this order, gives Node a single ScreenSpec with both
+// mobile and web capability.
 const ScreenSpec = require(join(__dirname, 'screenspec.js'));
-const LIB = readFileSync(join(__dirname, 'screenspec.js'), 'utf8');
+require(join(__dirname, 'screenspec.web.js'));
+// The page's inlined <script> runs in a browser, not Node, so it needs the
+// three UMD sources concatenated (styles first, then core, then web) rather
+// than the `require`d objects above — those only serve Node-side rendering.
+const LIB = ['styles.js', 'screenspec.js', 'screenspec.web.js']
+  .map(f => readFileSync(join(__dirname, f), 'utf8'))
+  .join('\n;\n');
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -41,6 +51,28 @@ if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const slugOf = s => String(s.flow || s.title || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+/* -------------------------------------------------------- target-aware chrome
+   One design system renders one target throughout a build, so these labels
+   are computed once and threaded into every page's glue rather than resolved
+   per-call in the browser. Mobile keeps its original MD3/iOS wording exactly;
+   web reframes the same "two options were weighed" panel around the chosen
+   visual style versus the platform's native behaviour. */
+const isWebDS = ScreenSpec.frameKind(ds) === 'web';
+const styleLabel = isWebDS
+  ? String(ds.style || 'material').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  : 'MD3';
+const CALL_TITLE = isWebDS ? `Where ${styleLabel} and native differ` : 'Where MD3 and iOS disagreed';
+const CALL_A_LABEL = isWebDS ? styleLabel : 'MD3';
+const CALL_B_LABEL = isWebDS ? 'Native' : 'iOS';
+const CALL_A_WINS = isWebDS ? `${styleLabel} wins` : 'MD3 wins';
+const CALL_B_WINS = 'platform wins';
+// Duplicated in miniature from screenspec.web.js's own `webNav` map (kept
+// intentionally small and literal here — it only feeds an index-page
+// reference table, not rendering, so it doesn't need the shared source).
+const WEBNAV = { sheet: 'drawer', push: 'page', root: 'page', dialog: 'modal', fullscreen: 'page',
+  page: 'page', split: 'split', modal: 'modal', drawer: 'drawer', panel: 'panel' };
+const BREAKPOINTS = [['mobile-web', 'Mobile-web', 400], ['tablet', 'Tablet', 768], ['desktop', 'Desktop', 1280]];
 
 /* ------------------------------------------------------------ page chrome */
 const CHROME = `
@@ -68,6 +100,11 @@ h2{font-size:23px;line-height:30px;font-weight:500;margin:0}
   border:1px solid var(--m-outline-variant);background:var(--m-surface-container-low);
   color:var(--m-on-surface-variant);font-size:13.5px;font-weight:500}
 .chip.on{background:var(--m-secondary-container);color:var(--m-on-secondary-container);border-color:transparent}
+#bptoggle{display:flex;gap:8px;margin-top:10px}
+.bpbtn{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--m-outline-variant);background:var(--m-surface-container-low);
+  color:var(--m-on-surface-variant);font-size:13px;font-weight:500;font-family:inherit}
+.bpbtn.on{background:var(--m-secondary-container);color:var(--m-on-secondary-container);border-color:transparent}
 .screen{margin-top:44px;border-top:1px solid var(--m-outline-variant);padding-top:28px}
 .screen h2 .id{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--m-primary);margin-right:10px}
 .purpose{margin:8px 0 0;font-size:15px;line-height:23px;color:var(--m-on-surface-variant);max-width:74ch}
@@ -130,7 +167,7 @@ function page({ title, body, data, glue }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<style>${ScreenSpec.tokens(ds)}${CHROME}${ScreenSpec.css}</style>
+<style>${ScreenSpec.tokens(ds)}${CHROME}${ScreenSpec.css}${ScreenSpec.frameKind(ds) === 'web' ? ScreenSpec.webCss : ''}</style>
 </head>
 <body>
 <div class="wrap">
@@ -179,6 +216,7 @@ for (const { data } of specs) {
   <h1>${esc(data.title || data.flow)}</h1>
   <p class="lede">Each screen below is shown as it should look, beside the spec to build it from. Both are generated from one source, so the mock and the contract cannot drift apart.</p>
   <div class="meta" id="meta"></div>
+  ${isWebDS ? '<div class="meta" id="bptoggle"></div>' : ''}
 </header>
 <div id="screens"></div>
 <footer><p>Mocks render the spec's own <code>regions</code> through the tokens in <code>design-system.json</code>. They show structure, hierarchy and real seeded content — not final visual polish. Where a spec records an open question, it is reproduced verbatim rather than resolved.</p></footer>`;
@@ -194,6 +232,11 @@ for (const { data } of specs) {
     .forEach(([t,on])=>{const c=el('div','chip'+(on?' on':''));c.textContent=t;m.appendChild(c);});
 
   const host=document.getElementById('screens');
+  // Rebuildable: a web page's breakpoint toggle re-invokes this for every
+  // case on the page rather than patching a live tree, so \`DATA.system.__bp\`
+  // is always the single source of truth a fresh render reads from.
+  function renderScreens(){
+  host.innerHTML='';
   scr.forEach(s=>{
     const sec=el('section','screen'); sec.id=s.id;
     const h2=el('h2'); const id=el('span','id'); id.textContent=s.id; h2.appendChild(id);
@@ -314,13 +357,14 @@ for (const { data } of specs) {
     }
 
     if((s.platform||[]).length){
-      const p=panel('Where MD3 and iOS disagreed');
+      const p=panel(${JSON.stringify(CALL_TITLE)});
       s.platform.forEach(c=>{
+        const rc=ScreenSpec.readCall(c);
         const d=el('div','call');
-        const h4=el('h4',null,c.topic||'');
-        const pk=el('span','pick'); pk.textContent=(c.chose||'')==='ios'?'platform wins':'MD3 wins';
+        const h4=el('h4',null,rc.topic||'');
+        const pk=el('span','pick'); pk.textContent=rc.chose==='b'?${JSON.stringify(CALL_B_WINS)}:${JSON.stringify(CALL_A_WINS)};
         h4.appendChild(pk); d.appendChild(h4);
-        d.appendChild(el('p',null,[c.md3&&('MD3: '+c.md3),c.ios&&('iOS: '+c.ios),c.why].filter(Boolean).join(' — ')));
+        d.appendChild(el('p',null,[rc.a&&(${JSON.stringify(CALL_A_LABEL + ': ')}+rc.a),rc.b&&(${JSON.stringify(CALL_B_LABEL + ': ')}+rc.b),rc.why].filter(Boolean).join(' — ')));
         p.appendChild(d);
       });
     }
@@ -353,6 +397,32 @@ for (const { data } of specs) {
 
     lay.appendChild(panels); sec.appendChild(lay); host.appendChild(sec);
   });
+  }
+  renderScreens();
+
+  ${isWebDS ? `
+  // Web target: a breakpoint toggle rebuilds every mock on the page against
+  // DATA.system.__bp — the same object every mockWeb() call reads from — so
+  // switching breakpoints re-renders the whole page's cases in one step
+  // rather than resizing frames in place.
+  (function(){
+    DATA.system.__bp = DATA.system.__bp || 'desktop';
+    const tog = document.getElementById('bptoggle');
+    const bps = ${JSON.stringify(BREAKPOINTS.map(([v, label]) => [v, label]))};
+    function paintToggle(){
+      tog.innerHTML='';
+      bps.forEach(([v,label])=>{
+        const b=el('button','bpbtn'+(DATA.system.__bp===v?' on':''));
+        b.type='button'; b.textContent=label; b.setAttribute('data-bp',v);
+        b.addEventListener('click',function(){
+          DATA.system.__bp=v; renderScreens(); paintToggle();
+        });
+        tog.appendChild(b);
+      });
+    }
+    paintToggle();
+  })();
+  ` : ''}
 })();
 `;
   writeFileSync(join(outDir, slug + '.html'),
@@ -381,8 +451,14 @@ const indexBody = `${navBar('index')}
 <section style="margin-top:44px"><h2>Components</h2>
   <p class="lede" style="margin-top:8px">Every region type a spec may use, its Material component, and the SwiftUI view to reach for.</p>
   <div class="tw" style="margin-top:16px" id="comp"></div></section>
+${isWebDS ? `<section style="margin-top:44px"><h2>Web presentation</h2>
+  <p class="lede" style="margin-top:8px">Style, viewport breakpoints, and how a screen's presentation kind maps to browser chrome.</p>
+  <div class="panel" style="margin-top:16px" id="webkv"></div>
+  <div class="tw" style="margin-top:16px" id="webnav"></div></section>` : ''}
 <section style="margin-top:44px"><h2>Standing platform calls</h2>
-  <p class="lede" style="margin-top:8px">Decided once, app-wide, so no screen re-litigates them. Per DEC-018: structure and interaction follow the platform, surface and styling follow Material.</p>
+  <p class="lede" style="margin-top:8px">${esc(CALL_TITLE)}. ${isWebDS
+    ? `Decided once, app-wide, so no screen re-litigates them. Per DEC-018: structure and interaction follow native browser behaviour, surface and styling follow ${esc(styleLabel)}.`
+    : 'Decided once, app-wide, so no screen re-litigates them. Per DEC-018: structure and interaction follow the platform, surface and styling follow Material.'}</p>
   <div class="panel" style="margin-top:16px" id="calls"></div></section>
 <footer><p>Generated from <code>design-system.json</code>. Change a token there and every mock in this set follows.</p></footer>`;
 
@@ -421,13 +497,30 @@ const indexGlue = `
   mkTable(document.getElementById('comp'),['Region type','Material component','iOS realisation','SwiftUI'],
     (ds.component_inventory||[]).map(c=>[c.region_type,c.m3_component,c.ios_realization,c.swiftui||c.swiftui_view||'']));
 
+  ${isWebDS ? `
+  const webkv=document.getElementById('webkv');
+  const dl=el('dl','kv');
+  const kv=(k,v)=>{dl.appendChild(el('dt',null,k));dl.appendChild(el('dd',null,v));};
+  kv('Style',${JSON.stringify(styleLabel)});
+  kv('Breakpoints',${JSON.stringify(BREAKPOINTS.map(([, label, w]) => `${label} (${w}px)`).join(' · '))});
+  webkv.appendChild(dl);
+
+  const WEBNAV=${JSON.stringify(WEBNAV)};
+  const navKinds=${JSON.stringify([...new Set(
+    specs.flatMap(s => (s.data.screens || []).map(scr => (scr.nav || {}).kind)).filter(Boolean)
+  )].sort())};
+  mkTable(document.getElementById('webnav'),['Screen nav kind','Web presentation'],
+    navKinds.map(k=>[k,WEBNAV[k]||'page']));
+  ` : ''}
+
   const calls=document.getElementById('calls');
   (ds.standing_platform_calls||[]).forEach(c=>{
+    const rc=ScreenSpec.readCall(c);
     const d=el('div','call');
-    const h4=el('h4',null,c.topic||c.title||'');
-    const pk=el('span','pick'); pk.textContent=(c.chose||'')==='ios'?'platform wins':((c.chose||'')==='md3'?'MD3 wins':'decided');
+    const h4=el('h4',null,rc.topic||c.title||'');
+    const pk=el('span','pick'); pk.textContent=rc.chose==='b'?${JSON.stringify(CALL_B_WINS)}:(rc.chose==='a'?${JSON.stringify(CALL_A_WINS)}:'decided');
     h4.appendChild(pk); d.appendChild(h4);
-    d.appendChild(el('p',null,[c.md3&&('MD3: '+c.md3),c.ios&&('iOS: '+c.ios),c.decision,c.why].filter(Boolean).join(' — ')));
+    d.appendChild(el('p',null,[rc.a&&(${JSON.stringify(CALL_A_LABEL + ': ')}+rc.a),rc.b&&(${JSON.stringify(CALL_B_LABEL + ': ')}+rc.b),c.decision,rc.why].filter(Boolean).join(' — ')));
     calls.appendChild(d);
   });
 })();
