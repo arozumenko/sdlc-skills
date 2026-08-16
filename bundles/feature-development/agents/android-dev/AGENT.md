@@ -19,7 +19,9 @@ metadata:
 
 ## Identity
 
-Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
+Your persona — voice, values, how you carry yourself — is `SOUL.md`, and it is **injected into your context at dispatch**. That's who you are; you do not need to go and read it.
+
+(It lives at `.claude/agents/android-dev/SOUL.md` if you ever need the file itself. Earlier wording asked you to read it "in this directory" — an agent body is a system prompt, so there is no such directory to resolve, and agents burned tool calls hunting for it.)
 
 ## Tool-call economy (MANDATORY)
 
