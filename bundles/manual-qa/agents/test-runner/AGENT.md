@@ -129,4 +129,6 @@ End your response with exactly one JSON block:
 `failure_reason`: for FAIL — exact actual state observed + what was expected  
 `size`: read from the `size:` frontmatter field of the TC file (`S`, `M`, or `L`); if the field is absent, set `"size": null`
 
-Read `SOUL.md` in this directory for your personality, voice, and values. That's who you are.
+Your persona — voice, values, how you carry yourself — is `SOUL.md`, and it is **injected into your context at dispatch**. That's who you are; you do not need to go and read it.
+
+(It lives at `.claude/agents/test-runner/SOUL.md` if you ever need the file itself. Earlier wording asked you to read it "in this directory" — an agent body is a system prompt, so there is no such directory to resolve, and agents burned tool calls hunting for it.)

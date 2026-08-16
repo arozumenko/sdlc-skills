@@ -144,18 +144,22 @@ collect_shared_context() {
   printf '%s' "$out"
 }
 
-# Concatenate a role's startup memory — the persona (SOUL.md, injected only for
-# VS Code / Copilot CLI, which reference it softly and don't expand @-imports;
-# Claude expands it natively and Codex inlines it) plus the memory snapshot/index
+# Concatenate a role's startup memory — the persona (SOUL.md) plus the memory snapshot/index
 # (snapshot.md is the generic name, MEMORY.md is the index `init` seeds). Echoes
 # the combined string (empty if the role has no memory dir / no files).
 # $1 = project dir, $2 = role name. Shared by agent-start (subagent dispatch) and
 # session-start (Copilot CLI orchestrator, resolved from session-state).
 # The role-memory file names injected from .agents/memory/<role>/ — a CURATED,
 # configurable list (hook config → $SDLC_ROLE_MEMORY_FILES, space-separated; default
-# below). SOUL.md (the persona) is honored only under Copilot — Claude/Codex receive
-# it via the agent body's @-import, so injecting it here too would duplicate it.
-# Echoes one name per line (after the SOUL gate). Shared by collect_role_memory,
+# below). SOUL.md is injected on EVERY host. It used to be gated to Copilot on the premise
+# that "Claude/Codex receive it via the agent body's @-import" — but no agent has ever
+# contained such an import: all 23 say only "Read `SOUL.md` in this directory", and an agent
+# body is a system prompt, so "this directory" resolves to nothing an agent can act on.
+# The persona therefore reached Claude/Codex through NO channel at all. Measured across two
+# real boards before the fix: 0 of 290 dispatched subagents opened SOUL.md, and 2 of 86 — the
+# one that managed it burned three tool calls hunting the file with `find`.
+# This is the same failure already recorded for RULES.md below, with the same fix: deliver it.
+# Echoes one name per line. Shared by collect_role_memory,
 # build_capped_context's inline memory loop, and list_role_memory_files so all agree.
 # RULES.md sits second on purpose. ORDER IS THE PRIORITY: the inline loop takes
 # files while they still fit the cap and spills the rest to a read-list, so what
@@ -167,9 +171,6 @@ SDLC_ROLE_MEMORY_FILES_DEFAULT="SOUL.md RULES.md snapshot.md MEMORY.md project_b
 role_memory_files() {
   local mf
   for mf in ${SDLC_ROLE_MEMORY_FILES:-$SDLC_ROLE_MEMORY_FILES_DEFAULT}; do
-    if [ "$mf" = "SOUL.md" ] && [ -z "${SDLC_VSCODE:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
-      continue                          # persona arrives via @-import on Claude/Codex
-    fi
     printf '%s\n' "$mf"
   done
 }

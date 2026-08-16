@@ -153,3 +153,41 @@ test('session-start stays quiet when every index is within budget', () => {
     assert.doesNotMatch(runSession(dir).out, /memory-budget/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── SOUL.md reaches every host ────────────────────────────────────────────────────────────────
+// Regression guard. SOUL.md used to be gated to Copilot on the premise that Claude and Codex got
+// it via an @-import in the agent body. No agent ever contained one — all 23 said only "Read
+// `SOUL.md` in this directory", and an agent body is a system prompt, so that resolves to nothing.
+// The persona reached Claude/Codex through no channel at all: measured across two real boards,
+// 0 of 290 dispatched subagents opened it, and the single one that managed it (of 86 on the other)
+// spent three tool calls hunting the file with `find`.
+
+test('SOUL.md is injected on Claude, not only under Copilot', () => {
+  const dir = project({ role: 'tech-lead', memory: { 'SOUL.md': 'I am Rio, and I block on flaws.' } });
+  try {
+    const out = run(dir, 'tech-lead'); // no SDLC_VSCODE / COPILOT_CLI → the Claude path
+    assert.match(out, /I am Rio, and I block on flaws\./,
+      'the persona must be delivered on the default (Claude) host');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('SOUL.md is still injected under Copilot', () => {
+  const dir = project({ role: 'tech-lead', memory: { 'SOUL.md': 'I am Rio, and I block on flaws.' } });
+  try {
+    const out = run(dir, 'tech-lead', { SDLC_VSCODE: '1' });
+    assert.match(out, /I am Rio, and I block on flaws\./);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('SOUL.md is found in the agent directory, not just the memory dir', () => {
+  // On Claude the file ships inside .claude/agents/<role>/, which is where resolve_role_file must
+  // look — a memory-dir-only lookup is exactly how this went unnoticed.
+  const dir = project({ role: 'tech-lead' });
+  try {
+    const agentDir = join(dir, '.claude', 'agents', 'tech-lead');
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(join(agentDir, 'SOUL.md'), 'persona from the agent dir');
+    const out = run(dir, 'tech-lead');
+    assert.match(out, /persona from the agent dir/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
