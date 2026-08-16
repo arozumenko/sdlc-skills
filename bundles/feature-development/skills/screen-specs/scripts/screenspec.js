@@ -1090,6 +1090,14 @@ function annotations(screen, stateName) {
     .filter(Boolean);
 }
 
+/* A thin wrapper over the internal per-type region renderer table, so a target
+   module (e.g. screenspec.web.js) can render one region the same way `mock()`
+   does without reaching into `R` or duplicating its fallback-on-error logic. */
+function renderRegion(r, ds, base) {
+  var fn = R[r.type] || R.text;
+  try { return fn(r, ds, base); } catch (e) { return R.text(r); }
+}
+
 function readCall(c){
   c = c || {};
   var chose = c.chose === 'md3' ? 'a' : c.chose === 'ios' ? 'b' : c.chose;
@@ -1105,6 +1113,7 @@ var API = {
   mock: mock,
   spec: spec,
   regionTypes: Object.keys(R),
+  renderRegion: renderRegion,
   applyState: applyState,
   DEVICES: DEVICES,
   deviceOf: deviceOf,
