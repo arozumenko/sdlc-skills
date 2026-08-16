@@ -1,0 +1,87 @@
+{
+  "name": "Harborline Web (Fluent)",
+  "target": "web",
+  "style": "fluent",
+  "north_star": "Bookings feel effortless in a browser tab. Nothing else matters as much.",
+  "color": {
+    "seed": {
+      "why": "A calm harbor blue reads as trustworthy without feeling corporate."
+    },
+    "roles": {
+      "light": {
+        "surface": "#ffffff",
+        "onSurface": "#1a1c1e",
+        "primary": "#2f6690",
+        "outlineVariant": "#c4c7c5",
+        "surfaceContainerLow": "#f4f4f4",
+        "onSurfaceVariant": "#42474a"
+      },
+      "dark": {
+        "surface": "#111318",
+        "onSurface": "#e2e2e6",
+        "primary": "#9fcaef",
+        "outlineVariant": "#43474a",
+        "surfaceContainerLow": "#1a1c1e",
+        "onSurfaceVariant": "#c2c7cb"
+      }
+    }
+  },
+  "type": {
+    "principle": "One scale, used consistently.",
+    "scale": [
+      {
+        "m3_role": "title-large",
+        "m3_size_pt": 22,
+        "ios_text_style": "title2",
+        "ios_default_pt": 17,
+        "weight": "semibold",
+        "usage": "Page headings"
+      },
+      {
+        "m3_role": "body-medium",
+        "m3_size_pt": 14,
+        "ios_text_style": "body",
+        "ios_default_pt": 13,
+        "weight": "regular",
+        "usage": "Body copy"
+      }
+    ]
+  },
+  "shape": {
+    "scale": [
+      {
+        "m3_role": "medium",
+        "radius_pt": 12,
+        "usage": "Cards"
+      },
+      {
+        "m3_role": "large",
+        "radius_pt": 16,
+        "usage": "Sheets"
+      }
+    ]
+  },
+  "component_inventory": [
+    {
+      "region_type": "datatable",
+      "m3_component": "DataTable",
+      "ios_realization": "List",
+      "swiftui": "List"
+    },
+    {
+      "region_type": "breadcrumb",
+      "m3_component": "Breadcrumb",
+      "ios_realization": "n/a",
+      "swiftui": "n/a"
+    }
+  ],
+  "standing_platform_calls": [
+    {
+      "topic": "Confirmation timing",
+      "a": "Inline toast, style-drawn",
+      "b": "Native OS notification",
+      "chose": "a",
+      "why": "Keeps the guest on the page they were already on."
+    }
+  ]
+}

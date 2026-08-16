@@ -1,0 +1,45 @@
+{
+  "flow": "flow",
+  "title": "Bookings dashboard",
+  "screens": [
+    {
+      "id": "W-001-0",
+      "title": "Bookings",
+      "purpose": "Staff review every upcoming stay at a glance.",
+      "nav": { "kind": "split", "title": "Bookings", "trailing": "Reports, Settings" },
+      "regions": [
+        { "type": "appbar", "label": "Header", "content": "Bookings" },
+        { "type": "breadcrumb", "content": ["Home", "Bookings"] },
+        {
+          "type": "datatable",
+          "label": "Upcoming bookings",
+          "content": ["Guest", "Check-in", "Status"]
+        },
+        { "type": "cta", "label": "New booking", "content": "New Booking" }
+      ],
+      "states": [
+        {
+          "name": "Loading",
+          "trigger": "Page loads before data resolves",
+          "changes": [
+            { "region": "Upcoming bookings", "hidden": true }
+          ]
+        }
+      ],
+      "platform": [
+        { "topic": "Confirmation timing", "a": "Inline toast, style-drawn", "b": "Native OS notification", "chose": "a", "why": "Keeps the guest on the page they were already on." }
+      ]
+    },
+    {
+      "id": "W-002-0",
+      "title": "Booking detail",
+      "purpose": "One booking, every detail a front-desk agent needs.",
+      "nav": { "kind": "page", "title": "Booking detail", "trailing": "Print, Cancel" },
+      "regions": [
+        { "type": "appbar", "label": "Header", "content": "Booking detail" },
+        { "type": "text", "label": "Guest", "content": "Jordan Miles" },
+        { "type": "cta", "label": "Check in", "content": "Check In" }
+      ]
+    }
+  ]
+}

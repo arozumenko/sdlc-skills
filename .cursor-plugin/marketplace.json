@@ -30,6 +30,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "designer",
+      "source": "./bundles/feature-development/agents/designer",
+      "description": "Use when a user flow needs to become a reviewable flow map, or when screens need designing and documenting as build-ready specs — \"draw the user flow\", \"map the screens\", \"design the screens\", \"screen specs\", \"turn the flows into designs\", \"document the UI\", \"what should this screen look like\". Remy — product/UX designer who turns agreed behaviour into buildable design — flow-map posters from journeys and acceptance criteria, then device-framed (mobile) or responsive (web) screen specs a developer implements from, every screen traced to a flow node and a criterion. NOT for writing production UI code (that's the platform devs), NOT for requirements or user stories (that's the BA).",
+      "version": "0.2.0"
+    },
+    {
       "name": "discovery-researcher",
       "source": "./bundles/product-management/agents/discovery-researcher",
       "description": "Use when a discovery hypothesis or product claim needs evidence — stakeholder interviews, market/vendor research, or adversarial verification before a bet is promoted. Sam — skeptical researcher who grounds every claim in a source.",
@@ -312,6 +318,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "screen-specs",
+      "source": "./bundles/feature-development/skills/screen-specs",
+      "description": "Use when screens need designing or documenting as reference a developer or agent can build from — \"design the screens\", \"screen specs\", \"what should this screen look like\", \"turn the flows into designs\", \"document the UI\", or when a flow map's nodes need to become actual screens. Produces standalone HTML pages showing each screen as a device-framed mock beside its spec — regions with Material component and token names, every state the criteria demand, the MD3-vs-platform calls, accessibility notes, and traceability back to a flow node and acceptance criterion. Mock and spec are generated from one source so they cannot drift. NOT for flow/journey diagrams (use user-flow-maps), NOT a design tool replacement, and NOT for writing the screens' production code.",
+      "version": "0.2.0"
+    },
+    {
       "name": "seeding-a-project",
       "source": "./bundles/feature-development/skills/seeding-a-project",
       "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
@@ -360,9 +372,21 @@
       "version": "0.2.0"
     },
     {
+      "name": "user-flow-maps",
+      "source": "./bundles/feature-development/skills/user-flow-maps",
+      "description": "Use when a user flow, journey, or screen-to-screen behaviour needs to become a visual flow map — \"draw the flow\", \"make a flow map\", \"user flow diagram\", \"map the screens\", \"turn these journeys into diagrams\", or when acceptance criteria need a picture reviewers can sign off on. Renders a spec of screens, decisions and transitions into standalone HTML posters — numbered screen wireframes, decision diamonds, Start/End markers naming where a flow hands off, orthogonal connectors routed from the data, and an authoritative edge table. Layout, routing and label collision are handled by the bundled flowmap.js; you supply data, never coordinates. NOT for architecture or sequence diagrams, NOT for visual/UI design of the screens themselves (that is a design role's job), and NOT a mermaid replacement — the source diagram stays canonical.",
+      "version": "0.2.0"
+    },
+    {
       "name": "verifying-outcomes",
       "source": "./skills/verifying-outcomes",
       "description": "Use when the user asks to 'verify', 'did this actually work', 'is X really done' — or before you claim a task is complete and before closing an issue or merging a PR. Goal-backward verification — checks whether the desired outcome was achieved, not whether tasks were marked done.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "visual-testing",
+      "source": "./skills/visual-testing",
+      "description": "Use when rendered UI needs visual regression checking — \"did the UI change\", \"visual test\", \"screenshot diff\", \"compare against the baseline\", \"catch layout regressions\", or a visual assertion in a test run. Works on any HTML you can render — a generated static page (design mock, report, flow-map poster) opened from disk, or a running app driven by your existing browser/device automation. Screenshots each screen, diffs it against a committed baseline with reg-cli (MIT, no cloud), and reports what changed as an HTML report plus a pass/fail summary. Capture rides on whatever browser or device tool you already have — no separate headless engine is installed. NOT a functional or correctness check (a diff proves pixels moved, not that anything is right), and a red diff is a prompt to look, not an automatic verdict.",
       "version": "0.2.0"
     },
     {

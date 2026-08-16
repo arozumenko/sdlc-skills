@@ -1,0 +1,1750 @@
+{
+ "title": "HotelBooking flow maps",
+ "lede": "One page per promoted hypothesis. Each maps every screen, branch and failure path, with every transition tagged by the acceptance criterion it satisfies.",
+ "flows": [
+  {
+   "key": "HYP-001",
+   "title": "Flow map \u2014 HYP-001: Native search & discovery",
+   "file": "HYP-001-native-search-discovery.flow.md",
+   "nodes": [
+    {
+     "id": "0",
+     "label": "Search Entry",
+     "archetype": "form",
+     "regions": [
+      "destination text field",
+      "date-range field",
+      "per-room occupancy stepper (adults / children / child ages), Add Room / Remove",
+      "Search button"
+     ],
+     "transitions": [
+      {
+       "target": "0.1",
+       "trigger": "guest types in destination field",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-4.3"
+      },
+      {
+       "target": "1",
+       "trigger": "guest sets dates + occupancy, taps Search",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-4.1"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "0.1",
+     "label": "2+ chars typed?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "fewer than 2 characters",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-4.3"
+      },
+      {
+       "target": "0.2",
+       "trigger": "2+ characters typed",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-4.3"
+      }
+     ],
+     "decision": {
+      "question": "Has the guest typed enough of a destination to search?",
+      "outcomes": [
+       {
+        "label": "No (< 2 chars)",
+        "target": "0"
+       },
+       {
+        "label": "Yes",
+        "target": "0.2"
+       }
+      ]
+     }
+    },
+    {
+     "id": "0.2",
+     "label": "Destination Suggestions",
+     "archetype": "list",
+     "regions": [
+      "echo of typed query",
+      "matching destination/hotel suggestions \u00d7N",
+      "no-match inline message (conditional, AC-4.5)"
+     ],
+     "transitions": [
+      {
+       "target": "0.3",
+       "trigger": "suggestions rendered",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-4.3"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "0.3",
+     "label": "Any suggestion matches?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest selects a suggestion",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-4.3"
+      },
+      {
+       "target": "0.2",
+       "trigger": "no suggestions match the typed text",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-4.5"
+      }
+     ],
+     "decision": {
+      "question": "Does at least one suggestion match the typed text?",
+      "outcomes": [
+       {
+        "label": "Yes \u2014 guest selects one",
+        "target": "0"
+       },
+       {
+        "label": "No",
+        "target": "0.2"
+       }
+      ]
+     }
+    },
+    {
+     "id": "1",
+     "label": "Search submitted \u2014 any matches?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "2",
+       "trigger": "at least one hotel matches",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-4.1"
+      },
+      {
+       "target": "2.1",
+       "trigger": "zero hotels match",
+       "kind": "conditional",
+       "nav": "push",
+       "ac": "AC-4.4"
+      }
+     ],
+     "decision": {
+      "question": "Does the seeded catalog return at least one hotel for these criteria?",
+      "outcomes": [
+       {
+        "label": "Yes",
+        "target": "2"
+       },
+       {
+        "label": "No",
+        "target": "2.1"
+       }
+      ]
+     }
+    },
+    {
+     "id": "2",
+     "label": "Search Results",
+     "archetype": "split",
+     "regions": [
+      "destination/dates/occupancy summary bar (editable)",
+      "list / map toggle control",
+      "result cards \u00d7N (list mode) \u2014 image, price, availability badge, Book Now",
+      "hotel pins (map mode) \u2014 same underlying result set",
+      "filter/sort chip row"
+     ],
+     "transitions": [
+      {
+       "target": "2.2",
+       "trigger": "guest applies or changes a filter/sort chip",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "journey step 6 (inherited reference capability \u2014 not its own HYP-001 AC; see \u00a7 3 Findings)"
+      },
+      {
+       "target": "3",
+       "trigger": "guest taps a result card",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-4.2 (hands off to HYP-002 node 0)"
+      },
+      {
+       "target": "3.1",
+       "trigger": "guest taps Book Now on a result card",
+       "kind": "primary",
+       "nav": "sheet",
+       "ac": "AC-1.9 [HYP-002] (hands off to HYP-002 node 9)"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "2.1",
+     "label": "No Results",
+     "archetype": "empty-state",
+     "regions": [
+      "empty illustration/message (zero-results, distinct copy from a data-load failure)",
+      "Edit Search CTA"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest taps Edit Search",
+       "kind": "primary",
+       "nav": "pop",
+       "ac": "no evidenced AC \u2014 see \u00a7 3 Findings"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "2.2",
+     "label": "Any results after filter?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "2",
+       "trigger": "at least one result remains",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-4.4"
+      },
+      {
+       "target": "2.1",
+       "trigger": "filter/sort leaves zero results",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-4.4"
+      }
+     ],
+     "decision": {
+      "question": "After the filter/sort change, does at least one result remain?",
+      "outcomes": [
+       {
+        "label": "Yes",
+        "target": "2"
+       },
+       {
+        "label": "No",
+        "target": "2.1"
+       }
+      ]
+     }
+    },
+    {
+     "id": "3",
+     "label": "[Handoff] Room Detail",
+     "archetype": "handoff",
+     "regions": [],
+     "transitions": [],
+     "decision": null,
+     "note": "Continues in HYP-002 flow map, node 0."
+    },
+    {
+     "id": "3.1",
+     "label": "[Handoff] Inline Book-Now check",
+     "archetype": "handoff",
+     "regions": [],
+     "transitions": [],
+     "decision": null,
+     "note": "Continues in HYP-002 flow map, node 9 (AC-1.9)."
+    }
+   ],
+   "hypothesis": "docs/discovery/hypotheses/HYP-001-native-search-discovery.md",
+   "journey": "docs/discovery/journeys/discover-and-search-hotels.md",
+   "entered_from": [
+    "app launch (default tab)",
+    "HYP-003 node 8, Continue Browsing (pop to root)",
+    "HYP-003 node 2.1 / node 0.1, empty-cart or cart-conflict-cancel (pop to root)",
+    "HYP-005 node 2, zero-bookings empty state (tab switch)"
+   ],
+   "hands_off_to": [
+    "docs/discovery/flows/HYP-002-live-room-detail-availability.flow.md"
+   ],
+   "tab": "Search",
+   "stack": "root",
+   "names": {
+    "HYP-001": "Search",
+    "HYP-002": "Room Detail",
+    "HYP-003": "Checkout",
+    "HYP-005": "Bookings",
+    "HYP-006": "Cancellation"
+   },
+   "outs": [
+    {
+     "flow": "HYP-002",
+     "note": "",
+     "raw": "docs/discovery/flows/HYP-002-live-room-detail-availability.flow.md"
+    }
+   ],
+   "keys": {
+    "search": "HYP-001",
+    "discovery": "HYP-001",
+    "room": "HYP-002",
+    "detail": "HYP-002",
+    "checkout": "HYP-003",
+    "cart": "HYP-003",
+    "payment": "HYP-003",
+    "booking": "HYP-005",
+    "cancel": "HYP-006",
+    "refund": "HYP-006"
+   },
+   "trigger": "Leisure Booker opens the app wanting to find a room for specific dates and a party size \u2014 no destination yet decided, or one in mind.",
+   "persona": "leisure-booker, returning-guest",
+   "bet": "A native destination/date/occupancy search with a map+list results toggle increases search-to-room-detail conversion vs. a transliterated web search widget",
+   "journeys": [
+    "discover-and-search-hotels"
+   ],
+   "notes": [
+    "Behavior only, per DEC-019: every screen-to-screen transition, decision, branch, error and empty state, cross-referenced to the acceptance criterion it satisfies. No layout, component choice, or MD3 styling \u2014 that's ios-dev's under DEC-018, from docs/design/."
+   ],
+   "page_title": "HYP-001 Search Flow"
+  },
+  {
+   "key": "HYP-002",
+   "title": "Flow map \u2014 HYP-002: Live room-detail re-price & availability",
+   "file": "HYP-002-live-room-detail-availability.flow.md",
+   "nodes": [
+    {
+     "id": "0",
+     "label": "Room Detail",
+     "archetype": "detail",
+     "regions": [
+      "image gallery",
+      "flat info stack (description, occupancy limits, amenities, hotel policies)",
+      "booking form: date-range field, per-room occupancy stepper",
+      "extras/add-ons section (conditional \u2014 omitted entirely if none configured, AC-1.12)",
+      "price/availability area (loading / error / normal states layer here \u2014 see nodes 3, 5, 6)",
+      "Book Now / Add to Cart CTA (disabled while unavailable or invalid)"
+     ],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "guest edits occupancy",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.3"
+      },
+      {
+       "target": "2",
+       "trigger": "guest edits dates",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.6 (picker itself restricts selectable dates to the hotel's booking window \u2014 see \u00a7 3 note)"
+      },
+      {
+       "target": "7",
+       "trigger": "guest taps Book Now / Add to Cart (enabled only when available)",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-1.1/1.2 happy path, hands off to HYP-003"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "1",
+     "label": "Occupancy within limits?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "exceeds max_adults/max_children/max_guests",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.3"
+      },
+      {
+       "target": "2",
+       "trigger": "within all three limits",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.3"
+      }
+     ],
+     "decision": {
+      "question": "Does the edited occupancy stay within max_adults / max_children / max_guests?",
+      "outcomes": [
+       {
+        "label": "No",
+        "target": "0",
+        "note": "inline validation error naming which limit was exceeded; CTA disabled; no recomputation fired (client-side, no network round-trip, AC-1.3)"
+       },
+       {
+        "label": "Yes",
+        "target": "2"
+       }
+      ]
+     }
+    },
+    {
+     "id": "2",
+     "label": "min_los satisfied?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "3",
+       "trigger": "range satisfies min_los",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.5"
+      },
+      {
+       "target": "3",
+       "trigger": "OPEN CHOICE (a): auto-extend checkout date, inform guest",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.5 \u2014 tech-lead to pick (a) or (b), not both"
+      },
+      {
+       "target": "0",
+       "trigger": "OPEN CHOICE (b): block, inline minimum-nights message",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.5 \u2014 tech-lead to pick (a) or (b), not both"
+      }
+     ],
+     "decision": {
+      "question": "Does the guest's selected date range satisfy the room type's min_los?",
+      "outcomes": [
+       {
+        "label": "Yes",
+        "target": "3"
+       },
+       {
+        "label": "No \u2014 (a) auto-extend",
+        "target": "3"
+       },
+       {
+        "label": "No \u2014 (b) block",
+        "target": "0"
+       }
+      ]
+     }
+    },
+    {
+     "id": "3",
+     "label": "Debounced Recomputation",
+     "archetype": "loading-state",
+     "archetype_note": "Not in the given archetype vocabulary (list/detail/form/dialog/confirmation/empty-state/error-state/map/gallery/split) \u2014 added because AC-1.1 makes a visible in-progress state an explicit requirement distinct from the resting screen. Flagging the addition.",
+     "regions": [
+      "price/availability area shows a loading indicator",
+      "rest of the screen (gallery, info stack) unchanged"
+     ],
+     "transitions": [
+      {
+       "target": "3.1",
+       "trigger": "recomputation resolves",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.1/AC-1.2"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "3.1",
+     "label": "Still the latest request?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "3",
+       "trigger": "a newer recomputation is already in flight or already completed",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.11",
+       "note": "discard silently \u2014 no UI change, the newer result governs what's displayed"
+      },
+      {
+       "target": "4",
+       "trigger": "this is the most recent request",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.11"
+      }
+     ],
+     "decision": {
+      "question": "Is this recomputation still the most recent one requested?",
+      "outcomes": [
+       {
+        "label": "No (superseded)",
+        "target": "3",
+        "note": "result discarded"
+       },
+       {
+        "label": "Yes",
+        "target": "4"
+       }
+      ]
+     }
+    },
+    {
+     "id": "4",
+     "label": "Recomputation result?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "available & priced",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.1/AC-1.2"
+      },
+      {
+       "target": "5",
+       "trigger": "zero availability for current dates/occupancy",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.7"
+      },
+      {
+       "target": "6",
+       "trigger": "requested quantity exceeds available quantity",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.8"
+      }
+     ],
+     "decision": {
+      "question": "What does the local AvailabilityEngine/PricingEngine return?",
+      "outcomes": [
+       {
+        "label": "Available & priced",
+        "target": "0"
+       },
+       {
+        "label": "Zero availability",
+        "target": "5"
+       },
+       {
+        "label": "Insufficient quantity",
+        "target": "6"
+       }
+      ]
+     }
+    },
+    {
+     "id": "5",
+     "label": "Not Available",
+     "archetype": "empty-state",
+     "regions": [
+      "price area replaced by 'not available for these dates' message",
+      "Book Now / Add to Cart CTA disabled"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest changes dates/occupancy",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.7"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "6",
+     "label": "Only M Left",
+     "archetype": "notice",
+     "archetype_note": "Not in the given vocabulary \u2014 added because AC-1.8 requires this to read as visually and behaviorally distinct from node 5's full unavailability, per this task's explicit instruction to preserve that distinction. 'notice' rather than 'error-state' because it's an actionable nudge (reduce quantity), not a failure.",
+     "regions": [
+      "'only M left' message (M = avail_rooms)",
+      "Reduce to M action"
+     ],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "guest taps Reduce to M",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.8"
+      },
+      {
+       "target": "0",
+       "trigger": "guest changes dates instead",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.8"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "7",
+     "label": "[Handoff] Cart / DEC-008 check",
+     "archetype": "handoff",
+     "regions": [],
+     "transitions": [],
+     "decision": null,
+     "note": "Continues in HYP-003 flow map, node 0 \u2014 including the single-hotel-cart conflict check (AC-2.11)."
+    },
+    {
+     "id": "8",
+     "label": "Inline Book-Now Check",
+     "archetype": "dialog",
+     "regions": [
+      "selected room/dates/occupancy summary",
+      "live-recomputed price",
+      "Confirm Add to Cart action",
+      "Cancel / dismiss"
+     ],
+     "transitions": [
+      {
+       "target": "8.1",
+       "trigger": "sheet finishes its live recomputation",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-1.9"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "8.1",
+     "label": "Inline check result?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "7",
+       "trigger": "available",
+       "kind": "primary",
+       "nav": "sheet-dismiss-then-push",
+       "ac": "AC-1.9"
+      },
+      {
+       "target": "8.2",
+       "trigger": "zero availability",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.9 + AC-1.7 (inferred \u2014 see \u00a7 3 Findings)"
+      },
+      {
+       "target": "8.3",
+       "trigger": "insufficient quantity",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-1.9 + AC-1.8 (inferred \u2014 see \u00a7 3 Findings)"
+      }
+     ],
+     "decision": {
+      "question": "What does the inline live check return?",
+      "outcomes": [
+       {
+        "label": "Available",
+        "target": "7"
+       },
+       {
+        "label": "Zero availability",
+        "target": "8.2"
+       },
+       {
+        "label": "Insufficient quantity",
+        "target": "8.3"
+       }
+      ]
+     }
+    },
+    {
+     "id": "8.2",
+     "label": "Sheet: Not Available",
+     "archetype": "empty-state",
+     "regions": [
+      "sheet shows 'not available for these dates'",
+      "Open Room Detail action"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest opens the full detail screen",
+       "kind": "primary",
+       "nav": "sheet-dismiss-then-push",
+       "ac": "inferred from AC-1.7 \u2014 see \u00a7 3 Findings"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "8.3",
+     "label": "Sheet: Only M Left",
+     "archetype": "notice",
+     "regions": [
+      "sheet shows 'only M left'",
+      "Open Room Detail action (to adjust quantity/dates)"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest opens the full detail screen to adjust",
+       "kind": "primary",
+       "nav": "sheet-dismiss-then-push",
+       "ac": "inferred from AC-1.8 \u2014 see \u00a7 3 Findings"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "N/A",
+     "label": "[N/A UNDER DEC-010] Network failure during re-price",
+     "archetype": "error-state",
+     "regions": [
+      "retry-capable error state on the price/availability area (preserved spec, not built)"
+     ],
+     "transitions": [],
+     "decision": null,
+     "note": "AC-1.10, preserved not deleted per the coordinator's original instruction. Not reachable in the current local-only architecture \u2014 kept here as a disconnected/orphan node exactly as ba-requirements-review.md marks it, not wired into any live transition."
+    }
+   ],
+   "hypothesis": "docs/discovery/hypotheses/HYP-002-live-room-detail-and-availability.md",
+   "journey": "docs/discovery/journeys/select-room-dates-occupancy.md",
+   "entered_from": [
+    "docs/discovery/flows/HYP-001-native-search-discovery.flow.md#node-3 (tap result card)",
+    "docs/discovery/flows/HYP-001-native-search-discovery.flow.md#node-3-1 (tap Book Now)"
+   ],
+   "hands_off_to": [
+    "docs/discovery/flows/HYP-003-checkout-simulated-payment.flow.md"
+   ],
+   "tab": "Search",
+   "stack": "push, depth 2 (over HYP-001)",
+   "names": {
+    "HYP-001": "Search",
+    "HYP-002": "Room Detail",
+    "HYP-003": "Checkout",
+    "HYP-005": "Bookings",
+    "HYP-006": "Cancellation"
+   },
+   "outs": [
+    {
+     "flow": "HYP-003",
+     "note": "",
+     "raw": "docs/discovery/flows/HYP-003-checkout-simulated-payment.flow.md"
+    }
+   ],
+   "keys": {
+    "search": "HYP-001",
+    "discovery": "HYP-001",
+    "room": "HYP-002",
+    "detail": "HYP-002",
+    "checkout": "HYP-003",
+    "cart": "HYP-003",
+    "payment": "HYP-003",
+    "booking": "HYP-005",
+    "cancel": "HYP-006",
+    "refund": "HYP-006"
+   },
+   "trigger": "Leisure Booker taps into a specific room type from search results (or \"Book Now\" bypasses this entirely \u2014 see the discovery journey).",
+   "persona": "leisure-booker, returning-guest",
+   "bet": "A live, native room-detail screen with instant re-price on date/occupancy change reduces late-stage 'unavailable' surprises and increases add-to-cart completion",
+   "journeys": [
+    "select-room-dates-occupancy"
+   ],
+   "notes": [
+    "Behavior only, per DEC-019. AC ids below (AC-1.x) are the Given/When/Then criteria already sharpened in reviews/ba-requirements-review.md \u00a7 3.1 \u2014 this flow does not rewrite them, only sequences them."
+   ],
+   "page_title": "HYP-002 Room Detail Flow"
+  },
+  {
+   "key": "HYP-003",
+   "title": "Flow map \u2014 HYP-003: Flat checkout + guest policy + simulated payment",
+   "file": "HYP-003-checkout-simulated-payment.flow.md",
+   "nodes": [
+    {
+     "id": "0",
+     "label": "Cart conflict check",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0.1",
+       "trigger": "cart already holds a room from a different hotel",
+       "kind": "conditional",
+       "nav": "sheet",
+       "ac": "AC-2.11"
+      },
+      {
+       "target": "1",
+       "trigger": "no conflict \u2014 cart is empty or already single-hotel",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-2.11"
+      }
+     ],
+     "decision": {
+      "question": "Does the cart already contain a room from a hotel other than the one being added?",
+      "outcomes": [
+       {
+        "label": "Yes",
+        "target": "0.1"
+       },
+       {
+        "label": "No",
+        "target": "1"
+       }
+      ]
+     }
+    },
+    {
+     "id": "0.1",
+     "label": "Cart Conflict dialog",
+     "archetype": "dialog",
+     "regions": [
+      "\"Your cart already has rooms from [Hotel A]. This version books one hotel at a time \u2014 clear your cart to search a different hotel?\"",
+      "Clear cart and add this instead (primary action)",
+      "Cancel (dismiss)"
+     ],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "guest taps 'Clear cart and add this instead'",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.11"
+      },
+      {
+       "target": "exit-origin",
+       "trigger": "guest cancels/dismisses",
+       "kind": "conditional",
+       "nav": "dismiss",
+       "ac": "AC-2.11"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "1",
+     "label": "Cart",
+     "archetype": "list",
+     "regions": [
+      "per-booking cards (check-in/out, occupancy, price)",
+      "standalone service-product line items",
+      "due-amount / partial-payment total block (seeded, conditional)",
+      "Checkout CTA",
+      "Continue Shopping link"
+     ],
+     "transitions": [
+      {
+       "target": "2",
+       "trigger": "guest taps Checkout",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-2.1 (entry)"
+      },
+      {
+       "target": "exit-search-b",
+       "trigger": "guest taps Continue Shopping",
+       "kind": "conditional",
+       "nav": "pop",
+       "ac": "no evidenced AC \u2014 plain navigation"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "2",
+     "label": "Cart empty at checkout entry?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "2.1",
+       "trigger": "zero items in cart (deep link, expired session, or every line rejected at 3)",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-2.3"
+      },
+      {
+       "target": "3",
+       "trigger": "at least one item",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.3"
+      }
+     ],
+     "decision": {
+      "question": "Is the cart empty when checkout is entered?",
+      "outcomes": [
+       {
+        "label": "Yes",
+        "target": "2.1"
+       },
+       {
+        "label": "No",
+        "target": "3"
+       }
+      ]
+     }
+    },
+    {
+     "id": "2.1",
+     "label": "Empty Cart",
+     "archetype": "empty-state",
+     "regions": [
+      "empty-cart message",
+      "back-to-search CTA"
+     ],
+     "transitions": [
+      {
+       "target": "exit-search-c",
+       "trigger": "guest taps back to search",
+       "kind": "primary",
+       "nav": "pop",
+       "ac": "AC-2.3"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "3",
+     "label": "Any cart line changed since added?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "4",
+       "trigger": "no price/availability change",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.2"
+      },
+      {
+       "target": "3.1",
+       "trigger": "a line's price changed or availability dropped",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-2.2"
+      }
+     ],
+     "decision": {
+      "question": "Does re-validating every cart line against the local AvailabilityEngine/PricingEngine find any change since the line was added?",
+      "outcomes": [
+       {
+        "label": "No change",
+        "target": "4"
+       },
+       {
+        "label": "Changed",
+        "target": "3.1"
+       }
+      ]
+     }
+    },
+    {
+     "id": "3.1",
+     "label": "Price/Availability Changed",
+     "archetype": "notice",
+     "regions": [
+      "per-line old vs. new price, or \"no longer available\"",
+      "acknowledge & continue action",
+      "remove line action"
+     ],
+     "transitions": [
+      {
+       "target": "4",
+       "trigger": "guest acknowledges, continues",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.2"
+      },
+      {
+       "target": "2.1",
+       "trigger": "guest removes the now-unavailable line and the cart is now empty",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-2.2 + AC-2.3"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "4",
+     "label": "Checkout Screen",
+     "archetype": "form",
+     "regions": [
+      "guest/account info fields (name, email, phone \u2014 no address fields)",
+      "\"sign in instead\" link (see \u00a7 3 Finding \u2014 destination undefined)",
+      "payment section \u2014 revealed only once a guest/account identity exists (AC-2.6)",
+      "within payment section once revealed: no card-shaped input fields, persistent \"DEMO PAYMENT \u2014 NO REAL CHARGE\" banner (non-dismissible), Simulate Payment action (AC-2.8)",
+      "sticky price summary: total booking value / due now / due later, shown distinctly (AC-2.7)"
+     ],
+     "transitions": [
+      {
+       "target": "5",
+       "trigger": "guest submits guest-info fields",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.4"
+      },
+      {
+       "target": "7",
+       "trigger": "guest taps Simulate Payment (only reachable once identity exists)",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.6, AC-2.9"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "5",
+     "label": "Guest-info fields valid?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "4",
+       "trigger": "missing required field or invalid email format",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-2.4"
+      },
+      {
+       "target": "6",
+       "trigger": "valid",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.4"
+      }
+     ],
+     "decision": {
+      "question": "Are all required guest-info fields present and valid?",
+      "outcomes": [
+       {
+        "label": "No",
+        "target": "4",
+        "note": "inline field-level errors; payment not reachable until resolved"
+       },
+       {
+        "label": "Yes",
+        "target": "6"
+       }
+      ]
+     }
+    },
+    {
+     "id": "6",
+     "label": "Guest path chosen?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "4",
+       "trigger": "proceeds as guest \u2014 local guest identity row created, payment section reveals",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-2.5, AC-2.6"
+      },
+      {
+       "target": "6.1",
+       "trigger": "taps 'Sign in instead'",
+       "kind": "conditional",
+       "nav": "unknown",
+       "ac": "AC-2.5 names this option but does not define its destination \u2014 see \u00a7 3 Finding"
+      }
+     ],
+     "decision": {
+      "question": "Does the guest proceed with guest info alone, or choose to sign in instead?",
+      "outcomes": [
+       {
+        "label": "Guest",
+        "target": "4"
+       },
+       {
+        "label": "Sign in instead",
+        "target": "6.1"
+       }
+      ]
+     }
+    },
+    {
+     "id": "6.1",
+     "label": "Sign In [FLOW GAP]",
+     "archetype": null,
+     "regions": [],
+     "transitions": [],
+     "decision": null,
+     "note": "Not modeled further \u2014 see \u00a7 3 Findings. AC-2.5 preserves 'a sign in instead option remains available but is never forced' verbatim from the pre-DEC-010 spec, but no artifact defines what signing in means or does under a fully local, single-device, no-backend architecture with no defined login mechanism. Drawn as a labeled dead end, not invented."
+    },
+    {
+     "id": "7",
+     "label": "Simulating Payment",
+     "archetype": "loading-state",
+     "regions": [
+      "brief artificial delay + spinner"
+     ],
+     "transitions": [
+      {
+       "target": "8",
+       "trigger": "always resolves to success (DEC-011)",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-2.9, AC-2.10"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "8",
+     "label": "Booking Confirmation",
+     "archetype": "confirmation",
+     "regions": [
+      "booking reference",
+      "per-room booking cards",
+      "\"Additional Facilities\" section",
+      "View My Bookings action",
+      "Continue Browsing action"
+     ],
+     "transitions": [
+      {
+       "target": "exit-bookings",
+       "trigger": "guest taps View My Bookings",
+       "kind": "primary",
+       "nav": "tab-switch",
+       "ac": "AC-2.10, hands off to HYP-005"
+      },
+      {
+       "target": "exit-search-a",
+       "trigger": "guest taps Continue Browsing",
+       "kind": "conditional",
+       "nav": "tab-switch",
+       "ac": "AC-2.10"
+      }
+     ],
+     "decision": null,
+     "note": "Cart is cleared on entry to this node (AC-2.10). A local notification fires here per DEC-013/booking-confirmation.md, replacing the reference's email confirmation \u2014 not modeled as a separate node since it's a system side-effect, not a screen."
+    },
+    {
+     "id": "N/A-1",
+     "label": "[N/A UNDER DEC-011] Payment failure",
+     "archetype": "error-state",
+     "regions": [
+      "retry-capable decline/error state (preserved spec, not built)"
+     ],
+     "transitions": [],
+     "decision": null,
+     "note": "Original AC-2.8, retired \u2014 SimulatedPaymentProvider always succeeds by construction; there is no gateway to decline. Kept as an orphan node, not deleted."
+    },
+    {
+     "id": "N/A-2",
+     "label": "[N/A UNDER DEC-010] Network failure at order submission",
+     "archetype": "error-state",
+     "regions": [
+      "no-false-success / no-duplicate-order guarantee on reconnect (preserved spec, not built)"
+     ],
+     "transitions": [],
+     "decision": null,
+     "note": "Original AC-2.9, retired \u2014 order creation is a local SwiftData write with no network round-trip. What replaces it (atomic local write of Booking+PaymentRecord) is a general SwiftData-correctness concern, not a booking-flow branch \u2014 not modeled here."
+    }
+   ],
+   "hypothesis": "docs/discovery/hypotheses/HYP-003-flat-checkout-deliberate-guest-decision.md",
+   "journey": "docs/discovery/journeys/cart-and-checkout.md, docs/discovery/journeys/booking-confirmation.md",
+   "entered_from": [
+    "docs/discovery/flows/HYP-002-live-room-detail-availability.flow.md#node-7"
+   ],
+   "hands_off_to": [
+    "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md (from Confirmation, \"View My Bookings\")",
+    "docs/discovery/flows/HYP-001-native-search-discovery.flow.md (from Confirmation/Cart, \"Continue Browsing\"/\"Continue Shopping\")"
+   ],
+   "tab": "Search",
+   "stack": "push, depth 3+ (over HYP-002; also reachable directly from the inline Book-Now sheet at depth 2)",
+   "names": {
+    "HYP-001": "Search",
+    "HYP-002": "Room Detail",
+    "HYP-003": "Checkout",
+    "HYP-005": "Bookings",
+    "HYP-006": "Cancellation"
+   },
+   "outs": [
+    {
+     "flow": "HYP-005",
+     "note": "from Confirmation, \"View My Bookings\"",
+     "raw": "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md (from Confirmation, \"View My Bookings\")"
+    },
+    {
+     "flow": "HYP-001",
+     "note": "from Confirmation/Cart, \"Continue Browsing\"/\"Continue Shopping\"",
+     "raw": "docs/discovery/flows/HYP-001-native-search-discovery.flow.md (from Confirmation/Cart, \"Continue Browsing\"/\"Continue Shopping\")"
+    }
+   ],
+   "keys": {
+    "search": "HYP-001",
+    "discovery": "HYP-001",
+    "room": "HYP-002",
+    "detail": "HYP-002",
+    "checkout": "HYP-003",
+    "cart": "HYP-003",
+    "payment": "HYP-003",
+    "booking": "HYP-005",
+    "cancel": "HYP-006",
+    "refund": "HYP-006"
+   },
+   "trigger": "Leisure Booker (or Guest-Checkout Booker) taps \"Book Now\" from the detail page or results list. Payment (or free/offline order) completes.",
+   "persona": "leisure-booker, returning-guest, guest-checkout-booker",
+   "bet": "A flat, single-screen native checkout with a deliberately-chosen (not silently-inherited) guest-vs-account policy increases completed-booking rate",
+   "journeys": [
+    "cart-and-checkout",
+    "booking-confirmation"
+   ],
+   "notes": [
+    "Behavior only, per DEC-019. AC ids (AC-2.x) are the Given/When/Then criteria sharpened in reviews/ba-requirements-review.md \u00a7 3.2, plus one new AC (AC-2.11) authored in this pass to give the single-hotel-cart conflict interaction (DEC-008) a citable id \u2014 it had concrete, decision-backed UX copy but had never been numbered as an acceptance criterion (\u00a7 4 Findings)."
+   ],
+   "page_title": "HYP-003 Checkout Flow"
+  },
+  {
+   "key": "HYP-005",
+   "title": "Flow map \u2014 HYP-005: Primary Bookings tab",
+   "file": "HYP-005-primary-bookings-tab.flow.md",
+   "nodes": [
+    {
+     "id": "0",
+     "label": "Local fetch result?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "fetch succeeds, at least one booking",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-3.1"
+      },
+      {
+       "target": "2",
+       "trigger": "fetch succeeds, zero bookings",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-3.5"
+      },
+      {
+       "target": "3",
+       "trigger": "fetch fails (corrupted store, schema-migration fault)",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-3.7"
+      }
+     ],
+     "decision": {
+      "question": "What does the local SwiftData fetch for this guest's bookings return?",
+      "outcomes": [
+       {
+        "label": "Has bookings",
+        "target": "1"
+       },
+       {
+        "label": "Zero bookings",
+        "target": "2"
+       },
+       {
+        "label": "Fetch failure",
+        "target": "3"
+       }
+      ]
+     }
+    },
+    {
+     "id": "1",
+     "label": "Bookings List",
+     "archetype": "list",
+     "regions": [
+      "Upcoming section \u2014 check-out date >= today, sorted soonest check-in first",
+      "Past section \u2014 check-out date < today, sorted most recent stay first",
+      "due-amount indicator inline per row (not detail-only)",
+      "pull-to-refresh affordance"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest pulls to refresh",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-3.8"
+      },
+      {
+       "target": "4",
+       "trigger": "guest taps a row",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-3.4"
+      }
+     ],
+     "decision": null,
+     "note": "Segmentation into Upcoming/Past (AC-3.2) is a BA recommendation, not a reference-derived fact \u2014 flagged as such in ba-requirements-review.md \u00a7 3.3 and repeated here since it's the one AC in this flow that's a proposal, not a settled requirement."
+    },
+    {
+     "id": "2",
+     "label": "Empty Bookings",
+     "archetype": "empty-state",
+     "regions": [
+      "explicit zero-bookings message (not a blank screen, not a perpetual spinner)",
+      "path back to search"
+     ],
+     "transitions": [
+      {
+       "target": "exit-search",
+       "trigger": "guest taps back to search",
+       "kind": "primary",
+       "nav": "tab-switch",
+       "ac": "AC-3.5"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "3",
+     "label": "Data-Load Failure",
+     "archetype": "error-state",
+     "regions": [
+      "retry-capable error message, visually/textually distinct from node 2's zero-bookings message",
+      "Retry action"
+     ],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "guest taps Retry",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-3.7"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "4",
+     "label": "Reservation Detail",
+     "archetype": "detail",
+     "regions": [
+      "rooms",
+      "service/add-on lines",
+      "payment status, including due amount",
+      "guest details",
+      "applicable hotel refund/cancellation policy text",
+      "Request Cancellation action"
+     ],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "guest taps back",
+       "kind": "primary",
+       "nav": "pop",
+       "ac": "AC-3.4"
+      },
+      {
+       "target": "exit-cancel",
+       "trigger": "guest taps Request Cancellation",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-3.4, hands off to HYP-006"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "N/A",
+     "label": "[N/A UNDER DEC-010] Offline/cached viewing",
+     "archetype": null,
+     "regions": [],
+     "transitions": [],
+     "decision": null,
+     "note": "AC-3.6, preserved not deleted. Not reachable \u2014 reservation detail is always a direct local SwiftData read, always current by definition; there is no cache/staleness distinction to surface. Shown as a disconnected/orphan node, exactly as ba-requirements-review.md marks it."
+    }
+   ],
+   "hypothesis": "docs/discovery/hypotheses/HYP-005-primary-bookings-tab.md",
+   "journey": "docs/discovery/journeys/manage-reservations-registered.md",
+   "entered_from": [
+    "app launch / tab bar (Bookings tab, always present)",
+    "docs/discovery/flows/HYP-003-checkout-simulated-payment.flow.md#node-8 (View My Bookings)"
+   ],
+   "hands_off_to": [
+    "docs/discovery/flows/HYP-006-cancellation-refund-estimate.flow.md (from Reservation Detail, \"Request Cancellation\")",
+    "docs/discovery/flows/HYP-001-native-search-discovery.flow.md (from the zero-bookings empty state)"
+   ],
+   "tab": "Bookings",
+   "stack": "root",
+   "names": {
+    "HYP-001": "Search",
+    "HYP-002": "Room Detail",
+    "HYP-003": "Checkout",
+    "HYP-005": "Bookings",
+    "HYP-006": "Cancellation"
+   },
+   "outs": [
+    {
+     "flow": "HYP-006",
+     "note": "from Reservation Detail, \"Request Cancellation\"",
+     "raw": "docs/discovery/flows/HYP-006-cancellation-refund-estimate.flow.md (from Reservation Detail, \"Request Cancellation\")"
+    },
+    {
+     "flow": "HYP-001",
+     "note": "from the zero-bookings empty state",
+     "raw": "docs/discovery/flows/HYP-001-native-search-discovery.flow.md (from the zero-bookings empty state)"
+    }
+   ],
+   "keys": {
+    "search": "HYP-001",
+    "discovery": "HYP-001",
+    "room": "HYP-002",
+    "detail": "HYP-002",
+    "checkout": "HYP-003",
+    "cart": "HYP-003",
+    "payment": "HYP-003",
+    "booking": "HYP-005",
+    "cancel": "HYP-006",
+    "refund": "HYP-006"
+   },
+   "trigger": "A registered guest opens the app to check on an upcoming stay or review a past one.",
+   "persona": "returning-guest",
+   "bet": "A primary 'Bookings' tab (not a tile-grid account dashboard) reduces time-to-find-next-trip and increases repeat app opens",
+   "journeys": [
+    "manage-reservations-registered"
+   ],
+   "notes": [
+    "Behavior only, per DEC-019. AC ids (AC-3.x) are the Given/When/Then criteria sharpened in reviews/ba-requirements-review.md \u00a7 3.3. This is the smallest of the five flows."
+   ],
+   "page_title": "HYP-005 Bookings Flow"
+  },
+  {
+   "key": "HYP-006",
+   "title": "Flow map \u2014 HYP-006: Per-room cancellation with refund estimate",
+   "file": "HYP-006-cancellation-refund-estimate.flow.md",
+   "nodes": [
+    {
+     "id": "0",
+     "label": "Cancellation Request",
+     "archetype": "form",
+     "regions": [
+      "per-room/line list, scoped to this booking \u2014 lines already checked-in/out or carrying an existing pending request are shown disabled with a reason (ineligible), the rest selectable (AC-5.1)",
+      "applicable hotel refund-policy text (AC-5.2)",
+      "computed refund estimate, recalculated as line selection changes (AC-5.3)",
+      "cancellation-reason field (required, AC-5.4)",
+      "Submit action"
+     ],
+     "transitions": [
+      {
+       "target": "1",
+       "trigger": "guest selects at least one eligible line and taps Submit",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-5.1, AC-5.4"
+      }
+     ],
+     "decision": null,
+     "note": "Reachable identically regardless of persona (returning-guest or guest-checkout-booker) \u2014 no persona-based gate exists here, which is itself the requirement (AC-5.6, DEC-007 as collapsed by DEC-010). Drawn as a single entry arrow rather than two converging arrows, because showing a fork-then-merge would visually imply a distinction that the AC specifically says does not exist."
+    },
+    {
+     "id": "1",
+     "label": "Reason provided?",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "0",
+       "trigger": "reason field empty",
+       "kind": "conditional",
+       "nav": "same-screen",
+       "ac": "AC-5.4"
+      },
+      {
+       "target": "2",
+       "trigger": "reason provided",
+       "kind": "primary",
+       "nav": "same-screen",
+       "ac": "AC-5.4"
+      }
+     ],
+     "decision": {
+      "question": "Did the guest provide a required cancellation reason?",
+      "outcomes": [
+       {
+        "label": "No",
+        "target": "0",
+        "note": "inline required-field error"
+       },
+       {
+        "label": "Yes",
+        "target": "2"
+       }
+      ]
+     }
+    },
+    {
+     "id": "2",
+     "label": "Cancellation Submitted",
+     "archetype": "confirmation",
+     "regions": [
+      "\"Cancellation request submitted \u2014 status: Pending\" \u2014 copy must never imply an instant cancellation or an instant refund (AC-5.7, cross-cutting copy requirement, see \u00a7 3 Findings)",
+      "Done / back to Reservation Detail action"
+     ],
+     "transitions": [
+      {
+       "target": "exit-detail",
+       "trigger": "guest taps Done / back",
+       "kind": "primary",
+       "nav": "pop",
+       "ac": "AC-5.5 (part 1 \u2014 a CancellationRequest is created, status pending)"
+      },
+      {
+       "target": "3",
+       "trigger": "(system, no user action)",
+       "kind": "primary",
+       "nav": "none",
+       "ac": "AC-5.5 (part 2)"
+      }
+     ],
+     "decision": null
+    },
+    {
+     "id": "3",
+     "label": "Status resolves",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "4",
+       "trigger": "the local CancellationRequest state transitions from pending to resolved",
+       "kind": "primary",
+       "nav": "none",
+       "ac": "AC-5.5"
+      }
+     ],
+     "decision": null,
+     "note": "Not a screen \u2014 a local state transition, timed independently of guest interaction (the demo's equivalent of the reference's staff-processed resolution). No UI is owned by this node; it exists to anchor the notification trigger."
+    },
+    {
+     "id": "4",
+     "label": "Local Notification fires",
+     "archetype": null,
+     "regions": [],
+     "transitions": [
+      {
+       "target": "exit-detail",
+       "trigger": "guest taps the notification",
+       "kind": "primary",
+       "nav": "push",
+       "ac": "AC-5.5"
+      }
+     ],
+     "decision": null,
+     "note": "A locally-scheduled UNUserNotificationCenter notification (DEC-013), not an app screen \u2014 no archetype/regions apply. Tapping it deep-links to the Reservation Detail screen (HYP-005 node 4) showing the resolved status."
+    }
+   ],
+   "hypothesis": "docs/discovery/hypotheses/HYP-006-per-room-cancellation-with-push-status.md",
+   "journey": "docs/discovery/journeys/cancel-or-request-refund.md",
+   "entered_from": [
+    "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md#node-4 (Request Cancellation)"
+   ],
+   "hands_off_to": [
+    "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md (back to Reservation Detail)"
+   ],
+   "tab": "Bookings",
+   "stack": "push, depth 2 (over HYP-005)",
+   "names": {
+    "HYP-001": "Search",
+    "HYP-002": "Room Detail",
+    "HYP-003": "Checkout",
+    "HYP-005": "Bookings",
+    "HYP-006": "Cancellation"
+   },
+   "outs": [
+    {
+     "flow": "HYP-005",
+     "note": "back to Reservation Detail",
+     "raw": "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md (back to Reservation Detail)"
+    }
+   ],
+   "keys": {
+    "search": "HYP-001",
+    "discovery": "HYP-001",
+    "room": "HYP-002",
+    "detail": "HYP-002",
+    "checkout": "HYP-003",
+    "cart": "HYP-003",
+    "payment": "HYP-003",
+    "booking": "HYP-005",
+    "cancel": "HYP-006",
+    "refund": "HYP-006"
+   },
+   "trigger": "A registered guest, viewing a reservation, needs to cancel a room or a service line. As of DEC-007 (2026-08-13), this journey also serves a guest-checkout booker \u2014 the same submission mechanism below applies to both, unconditionally, with no channel distinction (DEC-007's original \"on-device vs. cross-device\" split collapsed under DEC-010's fully-local scope \u2014 see journeys/manage-reservations-guest.md). Only the entry point differs cosmetically (account dashboard vs. Bookings tab row), not the mechanism or the guest's capability.",
+   "persona": "returning-guest, guest-checkout-booker",
+   "bet": "Per-room cancellation requests with push-notified status updates and upfront policy display reduce cancellation-related support contact and guest anxiety",
+   "journeys": [
+    "cancel-or-request-refund"
+   ],
+   "notes": [
+    "Behavior only, per DEC-019."
+   ],
+   "page_title": "HYP-006 Cancellation Flow"
+  }
+ ],
+ "composition": {
+  "title": "Flow map \u2014 App composition: how the five flows join into one app",
+  "flows": [
+   {
+    "id": "HYP-001",
+    "label": "Native Search & Discovery",
+    "file": "docs/discovery/flows/HYP-001-native-search-discovery.flow.md",
+    "tab": "Search",
+    "stack_position": "root",
+    "entry_points": [
+     "app launch (default tab)",
+     "HYP-003 node 8, Continue Browsing (pop to root)",
+     "HYP-003 node 2.1 / node 0.1, empty-cart or cart-conflict-cancel (pop to root)",
+     "HYP-005 node 2, zero-bookings empty state (tab switch)"
+    ],
+    "exit_points": [
+     "-> HYP-002 node 0, tap result card (push)",
+     "-> HYP-002 node 8 (inline sheet), tap Book Now on a result card (sheet)"
+    ]
+   },
+   {
+    "id": "HYP-002",
+    "label": "Live Room Detail & Availability",
+    "file": "docs/discovery/flows/HYP-002-live-room-detail-availability.flow.md",
+    "tab": "Search",
+    "stack_position": "push, depth 2 (over HYP-001)",
+    "entry_points": [
+     "HYP-001 node 2, tap result card (push)",
+     "HYP-002 node 8.2/8.3 (sheet), guest opens full detail to resolve an unavailable/insufficient inline check (push)",
+     "HYP-003 node 0.1, Cart Conflict dialog cancelled (dismiss, returns to whichever screen triggered add-to-cart)"
+    ],
+    "exit_points": [
+     "-> HYP-003 node 0, Add to Cart (push)",
+     "-> HYP-001, back-swipe/back button (pop)"
+    ]
+   },
+   {
+    "id": "HYP-003",
+    "label": "Checkout & Simulated Payment",
+    "file": "docs/discovery/flows/HYP-003-checkout-simulated-payment.flow.md",
+    "tab": "Search",
+    "stack_position": "push, depth 3+ (over HYP-002; also reachable directly from the inline Book-Now sheet at depth 2)",
+    "entry_points": [
+     "HYP-002 node 7, Add to Cart (push)",
+     "HYP-002 node 8.1, inline Book-Now check resolves available (push, skips Room Detail)"
+    ],
+    "exit_points": [
+     "-> HYP-005 node 0, Confirmation 'View My Bookings' (tab switch, Search stack reset to root)",
+     "-> HYP-001 node 0, Confirmation 'Continue Browsing' or empty-cart 'back to search' (pop to root)",
+     "-> HYP-001 node 2, Cart 'Continue Shopping' (pop one level)"
+    ]
+   },
+   {
+    "id": "HYP-005",
+    "label": "Primary Bookings Tab",
+    "file": "docs/discovery/flows/HYP-005-primary-bookings-tab.flow.md",
+    "tab": "Bookings",
+    "stack_position": "root",
+    "entry_points": [
+     "app launch / tab bar tap (always present, AC-3.1)",
+     "HYP-003 node 8, Confirmation 'View My Bookings' (tab switch)",
+     "HYP-006 node 4, local notification tapped (tab switch if needed, deep-link push to Reservation Detail)"
+    ],
+    "exit_points": [
+     "-> HYP-006 node 0, Reservation Detail 'Request Cancellation' (push)",
+     "-> HYP-001 node 0, zero-bookings empty state 'back to search' (tab switch)"
+    ]
+   },
+   {
+    "id": "HYP-006",
+    "label": "Cancellation & Refund Estimate",
+    "file": "docs/discovery/flows/HYP-006-cancellation-refund-estimate.flow.md",
+    "tab": "Bookings",
+    "stack_position": "push, depth 2 (over HYP-005)",
+    "entry_points": [
+     "HYP-005 node 4, Reservation Detail 'Request Cancellation' (push) \u2014 identical entry for returning-guest and guest-checkout-booker, AC-5.6"
+    ],
+    "exit_points": [
+     "-> HYP-005 node 4, Done / back (pop)",
+     "-> HYP-005 node 4, local notification tapped (deep-link push, may include a tab switch if the guest was elsewhere)"
+    ]
+   }
+  ],
+  "tabs": null,
+  "sheets": null,
+  "scope": [
+   "Behavior only, per DEC-019: tab structure, what's a push vs. a sheet, where each flow is entered and exited, and where they hand off to each other. This is the piece the screen designs (ios-dev, docs/design/) hang on \u2014 no layout, no MD3 tokens, no visual hierarchy. Per DEC-018, native structural conventions (tab bar, nav stack, sheets) are platform-owned regardless of the MD3 surface styling ios-dev applies on top."
+  ],
+  "hypothesis": null,
+  "journey": null,
+  "entered_from": [],
+  "hands_off_to": []
+ },
+ "composition_note": "Two tabs, no more \u2014 nothing in the promoted set covers an account or profile surface, so inventing one would be designing past the requirements.",
+ "findings": [
+  {
+   "group": "Criteria with no node",
+   "title": "HYP-003 AC-2.5 \u2014 \u201cSign in instead\u201d",
+   "tone": "",
+   "body": "Names an option with no destination anywhere in the backlog. No authentication surface is in scope, so the control leads nowhere. Confirmed twice \u2014 once against the flow, once against the composition map."
+  },
+  {
+   "group": "Criteria with no node",
+   "title": "HYP-001 success metric",
+   "tone": "warn",
+   "body": "A cross-session usage statistic. Real, but not a behaviour with a screen \u2014 nothing to draw."
+  },
+  {
+   "group": "Criteria with no node",
+   "title": "HYP-006 AC-5.7 \u2014 refund copy",
+   "tone": "warn",
+   "body": "A cross-cutting wording requirement, not a branch. Applies across the cancellation flow rather than at any one node."
+  },
+  {
+   "group": "Criteria with no node",
+   "title": "Reference auto-refund branch",
+   "tone": "warn",
+   "body": "QloApps refunds automatically when nothing was collected. Never carried into HYP-006\u2019s criteria, and unclear whether it is reachable when payment always succeeds by construction (DEC-011)."
+  },
+  {
+   "group": "Gaps the drawing closed",
+   "title": "Notification deep-link needs a tab switch",
+   "tone": "ok",
+   "body": "Tapping a cancellation notification may have to switch tabs before it can deep-link. Invisible from inside either HYP-005 or HYP-006 alone \u2014 only the composition map surfaced it."
+  },
+  {
+   "group": "Gaps the drawing closed",
+   "title": "Cart conflict had copy but no criterion",
+   "tone": "ok",
+   "body": "DEC-008\u2019s \u201cclear cart and add this instead?\u201d interaction was specified in prose and never given an id. Now AC-2.11."
+  },
+  {
+   "group": "Gaps the drawing closed",
+   "title": "HYP-001 and HYP-006 were never sharpened",
+   "tone": "ok",
+   "body": "Both sat as prose bullets until this pass. They now carry explicit criteria \u2014 AC-4.1\u20134.5 and AC-5.1\u20135.7."
+  },
+  {
+   "group": "Gaps the drawing closed",
+   "title": "AC-1.9 left a state undefined",
+   "tone": "",
+   "body": "The inline Book Now check never said how it treats zero availability versus insufficient quantity. Extended by inference from AC-1.7/1.8, and flagged as inference rather than asserted."
+  },
+  {
+   "group": "Gaps the drawing closed",
+   "title": "AC-1.5 minimum stay stays open",
+   "tone": "warn",
+   "body": "Drawn as two live branches rather than resolved. Choosing between them is a tech-lead call."
+  }
+ ]
+}

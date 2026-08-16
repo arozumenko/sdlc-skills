@@ -1,0 +1,34 @@
+{
+  "color": {
+    "roles": {
+      "light": {
+        "surface": "#ffffff",
+        "onSurface": "#1a1c1e",
+        "primary": "#2f6690",
+        "outlineVariant": "#c4c7c5",
+        "surfaceContainerLow": "#f4f4f4",
+        "onSurfaceVariant": "#42474a"
+      },
+      "dark": {
+        "surface": "#111318",
+        "onSurface": "#e2e2e6",
+        "primary": "#9fcaef",
+        "outlineVariant": "#43474a",
+        "surfaceContainerLow": "#1a1c1e",
+        "onSurfaceVariant": "#c2c7cb"
+      }
+    }
+  },
+  "type": {
+    "scale": [
+      { "m3_role": "title-large", "m3_size_pt": 22, "ios_default_pt": 17, "weight": "semibold" },
+      { "m3_role": "body-medium", "m3_size_pt": 14, "ios_default_pt": 13, "weight": "regular" }
+    ]
+  },
+  "shape": {
+    "scale": [
+      { "m3_role": "medium", "radius_pt": 12 },
+      { "m3_role": "large", "radius_pt": 16 }
+    ]
+  }
+}

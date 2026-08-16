@@ -7,6 +7,7 @@ group: qa
 theme: {color: colour196, icon: "▶️", short_name: runner}
 aliases: [test-runner, runner]
 skills: [playwright-testing, playwright-best-practices, verification-before-completion, systematic-debugging, mobile-testing]
+skills-on-demand: [visual-testing]
 metadata:
   authors:
     - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
@@ -91,6 +92,23 @@ Prefer in order: `data-testid` → ARIA role → visible text → `name` attribu
    - Confirm the Expected Final State described in the test case is actually present in the snapshot
    - Only if confirmed → report PASS
 7. **Screenshot**: always take a final screenshot to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png`
+
+## Visual regression (optional — via `visual-testing`)
+
+When the test case calls for a **visual** check — a screen whose layout/styling must
+not drift, or a "compare against the baseline" step — load the `visual-testing` skill
+(`skills-on-demand`) and follow it. You already drive the app and take screenshots via
+Playwright MCP; visual-testing adds the diff-against-baseline layer:
+
+1. Capture the screen under test into a `current/` dir with a stable, variant-specific
+   name (see the skill's naming scheme) — first taming the noise the skill lists
+   (clocks, dynamic data, animations), or the diff is flaky.
+2. Run `scripts/visual-diff.mjs --current <current/> --baseline <baselines/> --diff <out/>`.
+3. Record the visual verdict **alongside** the functional one — a red diff on an
+   otherwise-green case is a real finding. Attach the diff image path for `test-reporter`.
+
+A green diff is not a passing test — it only says the screen is unchanged since the
+baseline. It never replaces the snapshot-based functional verification below.
 
 ## Failure Protocol (systematic-debugging)
 
