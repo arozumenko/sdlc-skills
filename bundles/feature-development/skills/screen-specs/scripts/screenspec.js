@@ -887,6 +887,8 @@ function renderRegions(host, regions, ds, base, opts) {
 }
 
 function mock(host, screen, ds, stateName, base) {
+  if (frameKind(ds) === 'web' && API && typeof API.mockWeb === 'function')
+    return API.mockWeb(host, screen, ds, stateName, base);
   var kind = String((screen.nav || {}).kind || 'push').toLowerCase();
   var regions = applyState(screen, stateName);
   var dev = h('div', 'device');
@@ -1049,7 +1051,7 @@ function annotations(screen, stateName) {
     .filter(Boolean);
 }
 
-return {
+var API = {
   css: CSS,
   tokens: tokens,
   frameKind: frameKind,
@@ -1058,6 +1060,9 @@ return {
   spec: spec,
   regionTypes: Object.keys(R),
   applyState: applyState,
+  mockWeb: null,
+  webCss: '',
   version: '1.0.0'
 };
+return API;
 }));

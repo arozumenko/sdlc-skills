@@ -18,3 +18,10 @@ test('web tokens include style vars; project color overrides preset', () => {
 test('mobile tokens carry no style vars', () => {
   assert.doesNotMatch(S.tokens(mobDs), /--shadow-1:/);
 });
+test('mock dispatches to registered mockWeb on web target', () => {
+  let called=false; const prev=S.mockWeb;
+  S.mockWeb=(h)=>{ called=true; return h; };
+  S.mock({appendChild(){}}, {regions:[]}, {target:'web'}, null, '');
+  S.mockWeb=prev;
+  assert.ok(called);
+});
