@@ -260,6 +260,13 @@
       "monorepo": "sdlc-skills",
       "name": "visual-testing",
       "description": "Screenshot rendered UI (a generated static page or a running app driven by existing browser/device automation) and diff each screen against a committed baseline with reg-cli (MIT, no cloud). Agent-driven capture, no bundled headless engine; HTML report plus a pass/fail summary."
+    },
+    {
+      "id": "impeccable",
+      "repo": "pbakaus/impeccable",
+      "ref": "main",
+      "subdir": ".claude/skills/impeccable",
+      "description": "Design critique + a deterministic anti-pattern detector (59 non-LLM rules over rendered UI) + live-browser iteration for AI-generated frontends — audit/polish/harden/animate/colorize/typeset playbooks. Apache-2.0, by Paul Bakaus. Used by the designer as a quality gate beside visual-testing."
     }
   ]
 }

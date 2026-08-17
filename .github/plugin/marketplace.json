@@ -330,6 +330,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "impeccable",
+      "source": "./skills/impeccable",
+      "description": "Design critique + a deterministic anti-pattern detector (59 non-LLM rules over rendered UI) + live-browser iteration for AI-generated frontends — audit/polish/harden/animate/colorize/typeset playbooks. Apache-2.0, by Paul Bakaus. Used by the designer as a quality gate beside visual-testing.",
+      "version": "0.2.0"
+    },
+    {
       "name": "kotlin-concurrency-and-flow",
       "source": "./skills/kotlin-concurrency-and-flow",
       "description": "Kotlin coroutine scope ownership and Flow modelling — structured concurrency, cancellation, suspend APIs over a stored CoroutineScope, and StateFlow/SharedFlow/Channel for state vs. events (by Chris Banes, Apache-2.0)",

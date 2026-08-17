@@ -25,6 +25,12 @@ const require = createRequire(import.meta.url);
 // mobile and web capability.
 const ScreenSpec = require(join(__dirname, 'screenspec.js'));
 require(join(__dirname, 'screenspec.web.js'));
+// journey.mjs is pure ESM, unit-tested on its own (journey.test.mjs). The
+// filmstrip renders client-side from the same DATA the rest of the page's
+// glue reads, so journeyOrder()'s source is inlined into the browser
+// <script> below (next to LIB) rather than `require`d/`import`ed server-side.
+const JOURNEY_SRC = readFileSync(join(__dirname, 'journey.mjs'), 'utf8')
+  .replace(/export\s+function\s+journeyOrder/, 'function journeyOrder');
 // The page's inlined <script> runs in a browser, not Node, so it needs the
 // three UMD sources concatenated (styles first, then core, then web) rather
 // than the `require`d objects above — those only serve Node-side rendering.
@@ -35,22 +41,38 @@ const LIB = ['styles.js', 'screenspec.js', 'screenspec.web.js']
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 if (argv.includes('-h') || argv.includes('--help') || !argv.length) {
-  console.log('usage: build-screens.mjs --system <design-system.json> --specs <dir> --out <dir> [--img ../assets/img/]');
+  console.log('usage: build-screens.mjs --system <design-system.json> --specs <dir> --out <dir> [--img ../assets/img/] [--layout flat|story]');
   process.exit(argv.length ? 0 : 1);
 }
 const sysPath = resolve(arg('--system'));
 const specDir = resolve(arg('--specs', dirname(sysPath)));
 const outDir = resolve(arg('--out', join(specDir, 'html')));
-const imgBase = arg('--img', '../assets/img/');
+const layout = arg('--layout', 'flat');
+let imgBase = arg('--img', '../assets/img/');
+// Story layout writes one directory deeper (<out>/screens/<slug>.html instead
+// of <out>/<slug>.html), so a relative asset base needs one more `../` to
+// still resolve to the same place on disk. Absolute/remote bases pass through.
+if (layout === 'story' && !/^([a-z]+:)?\/\//i.test(imgBase) && !imgBase.startsWith('/')) {
+  imgBase = '../' + imgBase;
+}
 const ds = JSON.parse(readFileSync(sysPath, 'utf8'));
 const specs = readdirSync(specDir).filter(f => f.endsWith('.screens.json'))
   .sort()
   .map(f => ({ file: f, data: JSON.parse(readFileSync(join(specDir, f), 'utf8')) }));
-if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+// Story layout writes per-flow pages into screens/ so they can sit next to
+// build-flowmaps.mjs's flows/ output (and the future design-story hub's
+// index.html) without a filename collision. Flat (default) writes straight
+// to --out, exactly as before.
+const screensDir = layout === 'story' ? join(outDir, 'screens') : outDir;
+if (!existsSync(screensDir)) mkdirSync(screensDir, { recursive: true });
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const slugOf = s => String(s.flow || s.title || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+// Mirrors build-flowmaps.mjs's own `slug()` exactly (same formula, trimmed)
+// so a screen's "Flow node" link to `../flows/<slug>.html` lands on the file
+// that script actually writes for the shared flow key.
+const flowSlugOf = k => String(k || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /* -------------------------------------------------------- target-aware chrome
    One design system renders one target throughout a build, so these labels
@@ -105,6 +127,19 @@ h2{font-size:23px;line-height:30px;font-weight:500;margin:0}
   border:1px solid var(--m-outline-variant);background:var(--m-surface-container-low);
   color:var(--m-on-surface-variant);font-size:13px;font-weight:500;font-family:inherit}
 .bpbtn.on{background:var(--m-secondary-container);color:var(--m-on-secondary-container);border-color:transparent}
+.filmstrip-wrap{margin-top:28px}
+.filmstrip-wrap h2{font-size:15px}
+.filmstrip{display:flex;align-items:center;gap:2px;overflow-x:auto;overflow-y:hidden;
+  padding:14px 2px 16px;scrollbar-width:thin}
+.filmstrip::-webkit-scrollbar{height:8px}
+.filmstrip::-webkit-scrollbar-thumb{background:var(--m-outline-variant);border-radius:4px}
+.filmcard{flex:0 0 auto;display:flex;flex-direction:column;gap:4px;width:132px;padding:10px 12px;
+  border-radius:12px;border:1px solid var(--m-outline-variant);background:var(--m-surface-container-low);
+  text-decoration:none;color:inherit}
+.filmcard:hover{border-color:var(--m-primary)}
+.filmcard .fc-id{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--m-primary)}
+.filmcard .fc-title{font-size:12.5px;line-height:16px;font-weight:500;color:var(--m-on-surface)}
+.filmarrow{flex:0 0 auto;width:22px;text-align:center;color:var(--m-outline-variant);font-size:16px}
 .screen{margin-top:44px;border-top:1px solid var(--m-outline-variant);padding-top:28px}
 .screen h2 .id{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--m-primary);margin-right:10px}
 .purpose{margin:8px 0 0;font-size:15px;line-height:23px;color:var(--m-on-surface-variant);max-width:74ch}
@@ -179,6 +214,7 @@ ${body}
 const DATA=JSON.parse(document.getElementById('d').textContent);
 const IMG=${JSON.stringify(imgBase)};
 const el=(t,c,x)=>{const n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n;};
+${JOURNEY_SRC}
 ${glue}
 /* A mock renders from the top of the screen. When a state's point sits further
    down — an inline error beside the stepper that triggered it — scroll the
@@ -218,6 +254,10 @@ for (const { data } of specs) {
   <div class="meta" id="meta"></div>
   ${isWebDS ? '<div class="meta" id="bptoggle"></div>' : ''}
 </header>
+<div class="filmstrip-wrap">
+  <h2>Journey</h2>
+  <div class="filmstrip" id="filmstrip"></div>
+</div>
 <div id="screens"></div>
 <footer><p>Mocks render the spec's own <code>regions</code> through the tokens in <code>design-system.json</code>. They show structure, hierarchy and real seeded content — not final visual polish. Where a spec records an open question, it is reproduced verbatim rather than resolved.</p></footer>`;
 
@@ -230,6 +270,23 @@ for (const { data } of specs) {
   const calls=scr.reduce((a,s)=>a+((s.platform||[]).length),0);
   [[scr.length+' screens',1],[states+' states',0],[acs.size+' criteria',0],[calls+' platform calls',0]]
     .forEach(([t,on])=>{const c=el('div','chip'+(on?' on':''));c.textContent=t;m.appendChild(c);});
+
+  // Journey filmstrip: the flow's screens in journey order (by node id),
+  // each a small card linking to its full section further down the page.
+  // Layout-independent — same markup regardless of how the sections below
+  // are arranged — and reads only \`s.id\`/\`s.title\`, so it never touches
+  // ScreenSpec.mock()'s render path.
+  const film=document.getElementById('filmstrip');
+  if(film){
+    const ordered=journeyOrder(scr);
+    ordered.forEach((s,i)=>{
+      if(i>0){const ar=el('span','filmarrow');ar.textContent='→';ar.setAttribute('aria-hidden','true');film.appendChild(ar);}
+      const a=el('a','filmcard'); a.href='#'+s.id;
+      a.appendChild(el('div','fc-id',s.id));
+      a.appendChild(el('div','fc-title',s.title||''));
+      film.appendChild(a);
+    });
+  }
 
   const host=document.getElementById('screens');
   // Rebuildable: a web page's breakpoint toggle re-invokes this for every
@@ -310,12 +367,26 @@ for (const { data } of specs) {
 
     const p1=panel('Traceability');
     const dl=el('dl','kv');
+    ${layout === 'story' ? `// story layout (A — cross-link screen -> flow/coverage): the flow node
+    // value links back to its node in the flow poster, and each AC chip links
+    // to its coverage row (coverage.html is T3's; the anchor target is stable
+    // ahead of it existing). FLOW_SLUG mirrors build-flowmaps.mjs's own slug().
+    const FLOW_SLUG=${JSON.stringify(flowSlugOf(data.flow || data.title))};
     const kv=(k,v)=>{if(!v||(Array.isArray(v)&&!v.length))return;
+      dl.appendChild(el('dt',null,k));
+      const dd=el('dd');
+      if(k==='Criteria'){(Array.isArray(v)?v:[v]).forEach(a=>{
+        const s2=el('a','ac'); s2.textContent=a; s2.href='../coverage.html#ac-'+String(a).split(' ')[0]; dd.appendChild(s2);});}
+      else if(k==='Flow node'){(Array.isArray(v)?v:[v]).forEach((n,i)=>{
+        if(i>0) dd.appendChild(document.createTextNode(', '));
+        const nd=el('a',null,String(n)); nd.href='../flows/'+FLOW_SLUG+'.html#node-'+n; dd.appendChild(nd);});}
+      else dd.textContent=Array.isArray(v)?v.join(', '):String(v);
+      dl.appendChild(dd);};` : `const kv=(k,v)=>{if(!v||(Array.isArray(v)&&!v.length))return;
       dl.appendChild(el('dt',null,k));
       const dd=el('dd');
       if(k==='Criteria'){(Array.isArray(v)?v:[v]).forEach(a=>{const s2=el('span','ac');s2.textContent=a;dd.appendChild(s2);});}
       else dd.textContent=Array.isArray(v)?v.join(', '):String(v);
-      dl.appendChild(dd);};
+      dl.appendChild(dd);};`}
     kv('Flow node',s.node); kv('Presentation',(s.nav||{}).kind); kv('Criteria',s.ac);
     if(s.content) kv('Seeded content',Object.entries(s.content).map(([k,v])=>k+': '+v).join(' · '));
     p1.appendChild(dl);
@@ -425,7 +496,7 @@ for (const { data } of specs) {
   ` : ''}
 })();
 `;
-  writeFileSync(join(outDir, slug + '.html'),
+  writeFileSync(join(screensDir, slug + '.html'),
     page({ title: (data.flow ? data.flow + ' screens' : data.title), body, data: { ...data, system: ds }, glue }));
   console.log('wrote', slug + '.html');
 }
@@ -526,7 +597,7 @@ const indexGlue = `
 })();
 `;
 const totalScreens = specs.reduce((a, s) => a + (s.data.screens || []).length, 0);
-writeFileSync(join(outDir, 'index.html'),
+writeFileSync(join(screensDir, 'index.html'),
   page({ title: (ds.name || 'Design system'), body: indexBody,
          data: { system: ds, flows: specs.length, screens: totalScreens }, glue: indexGlue }));
 console.log('wrote index.html');
