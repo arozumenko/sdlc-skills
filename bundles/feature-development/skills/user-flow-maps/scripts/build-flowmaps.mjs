@@ -19,16 +19,12 @@ import { createRequire } from 'node:module';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const LIB = readFileSync(join(__dirname, 'flowmap.js'), 'utf8');
-// flowmap.js is a plain CJS UMD file with no package.json of its own in this
-// directory (unlike screen-specs/scripts, which pins { "type": "commonjs" }
-// next to screenspec.js) — Node's require() walks up to the repo root's
-// { "type": "module" } and (mis)loads it as ESM, which throws since it isn't
-// valid ESM. Evaluate the already-read source through a minimal manual CJS
-// wrapper instead of Node's loader; this is the same source used for the
-// browser-inlined <script>, so both sides render off one file, unchanged.
-const flowmapModule = { exports: {} };
-new Function('module', 'exports', 'require', LIB)(flowmapModule, flowmapModule.exports, require);
-const FlowMap = flowmapModule.exports;
+// flowmap.js is a CJS UMD; scripts/package.json pins { "type": "commonjs" } next
+// to it (as screen-specs/scripts and manual-qa/xlsx-reader/scripts do) so
+// require() loads it correctly despite the repo root's { "type": "module" }.
+// LIB (the same source) is inlined into each generated page's <script>, so the
+// Node side and the browser side render off one file.
+const FlowMap = require(join(__dirname, 'flowmap.js'));
 
 /* ------------------------------------------------------------------ args */
 const argv = process.argv.slice(2);
