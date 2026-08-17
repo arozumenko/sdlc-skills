@@ -56,9 +56,9 @@ export function loadReceipts(repo, { batch } = {}) {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      // Non-batch residents of automation/: the telemetry submodule and the
-      // underscore-prefixed working dirs (_returns, _gates) hold no receipts —
-      // descending into them is waste (and, for telemetry, a whole git checkout).
+      // Non-batch residents of automation/: underscore-prefixed working dirs
+      // (_returns, _gates) hold no receipts; 'telemetry' is defense for repos
+      // whose telemetry folder predates the move to .agents/telemetry.
       if (entry.name === 'telemetry' || entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
@@ -76,7 +76,7 @@ export function loadReceipts(repo, { batch } = {}) {
 // --- live (running sessions) -------------------------------------------------
 /**
  * Rebuild a PROVISIONAL session line for each still-running session from its
- * live dispatch log (`.agents/automation/telemetry/live/<session>.jsonl` — one small line
+ * live dispatch log (`.agents/telemetry/automation/live/<session>.jsonl` — one small line
  * per finished dispatch, written by the SubagentStop hook).
  *
  * This is what makes the batch report current DURING a run without the ledger
@@ -89,7 +89,7 @@ export function loadReceipts(repo, { batch } = {}) {
  * session is captured. The line is marked `live: true` so consumers can say so.
  */
 export function loadLiveLines(repo) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  const dir = join(repo, '.agents', 'telemetry', 'automation', 'live');
   if (!existsSync(dir)) return [];
   const out = [];
   let names;
@@ -135,7 +135,7 @@ export function loadLiveLines(repo) {
  */
 export function loadGateRuns(dir, { repo = null, slug = null } = {}) {
   const files = [dir && join(dir, 'gate-runs.jsonl')];
-  if (repo && slug) files.push(join(repo, '.agents', 'automation', 'telemetry', 'gate-runs', `${slug}.jsonl`));
+  if (repo && slug) files.push(join(repo, '.agents', 'telemetry', 'automation', 'gate-runs', `${slug}.jsonl`));
   const seen = new Set();
   const out = [];
   for (const p of files) {
@@ -157,7 +157,7 @@ export function loadGateRuns(dir, { repo = null, slug = null } = {}) {
  * no second source. Safe to call when there is nothing to fold.
  */
 export function foldGateRuns(repo, slug, dir) {
-  const src = join(repo, '.agents', 'automation', 'telemetry', 'gate-runs', `${slug}.jsonl`);
+  const src = join(repo, '.agents', 'telemetry', 'automation', 'gate-runs', `${slug}.jsonl`);
   if (!existsSync(src)) return 0;
   const dst = join(dir, 'gate-runs.jsonl');
   const have = new Set(existsSync(dst) ? readFileSync(dst, 'utf8').split('\n').filter(Boolean) : []);
@@ -263,10 +263,20 @@ export function lineMatchesBatch(line, { slug, ids, branches }) {
   return false;
 }
 
-const emptyBucket = () => ({ costUsd: null, tokens: 0, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
-function addTo(b, { costUsd, tokens, activeMin, toolCalls = 0, toolErrors = 0 }, share = 1) {
+// `tok` rides every bucket as the FULL quad — the scalar `tokens` sum hides
+// that ~95% of it is cache-read at ~1/10 input price, which made report token
+// columns alarming and incomparable (field: a $16 batch showing "47.5M
+// tokens"). The quad is what the tokenomics view (composition, cache hit
+// rate) renders per role/stage/case.
+const emptyQuad = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+const scaleQuad = (t, f = 1) => ({ input: num(t?.input) * f, output: num(t?.output) * f, cacheRead: num(t?.cacheRead) * f, cacheWrite: num(t?.cacheWrite) * f });
+const addQuad = (a, t, f = 1) => { for (const k of Object.keys(a)) a[k] += num(t?.[k]) * f; };
+const roundQuad = (t) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Math.round(v)]));
+const emptyBucket = () => ({ costUsd: null, tokens: 0, tok: emptyQuad(), activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
+function addTo(b, { costUsd, tokens, tok, activeMin, toolCalls = 0, toolErrors = 0 }, share = 1) {
   if (typeof costUsd === 'number') b.costUsd = num(b.costUsd) + costUsd * share;
   b.tokens += tokens * share;
+  if (tok && b.tok) addQuad(b.tok, tok, share);
   b.activeMin += activeMin * share;
   b.dispatches += share;
   b.toolCalls += toolCalls * share;
@@ -329,9 +339,10 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
 
   const addSplit = (t, f = 1) => { for (const k of Object.keys(tokensSplit)) tokensSplit[k] += num(t?.[k]) * f; };
   const roleAdd = (role, m, dispatches = 1) => {
-    if (!byRole.has(role)) byRole.set(role, { tokens: 0, costUsd: null, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
+    if (!byRole.has(role)) byRole.set(role, { tokens: 0, tok: emptyQuad(), costUsd: null, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
     const b = byRole.get(role);
     b.tokens += m.tokens; b.activeMin += m.activeMin; b.dispatches += dispatches;
+    if (m.tok) addQuad(b.tok, m.tok);
     b.toolCalls += num(m.toolCalls); b.toolErrors += num(m.toolErrors);
     if (typeof m.costUsd === 'number') b.costUsd = num(b.costUsd) + m.costUsd;
   };
@@ -366,6 +377,7 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
     const parent = {
       costUsd: typeof line.costUsd === 'number' ? Math.max(0, line.costUsd - subCostAll) / div : null,
       tokens: subTokens({ tokens: line.tokens }) / div,
+      tok: scaleQuad(line.tokens, 1 / div),
       activeMin: Math.max(0, num(line.activeMin) - subMinAll) / div,
       toolCalls: num(line.toolCalls) / div,
       toolErrors: num(line.toolErrors) / div,
@@ -380,12 +392,12 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
     for (const { s, w } of included) {
       const m = {
         costUsd: typeof s.costUsd === 'number' ? s.costUsd : null,
-        tokens: subTokens(s), activeMin: num(s.activeMin),
+        tokens: subTokens(s), tok: scaleQuad(s.tokens), activeMin: num(s.activeMin),
         toolCalls: num(s.toolCalls), toolErrors: num(s.toolErrors),
       };
       addTo(totals, m, w);
       addSplit(s.tokens, w);
-      roleAdd(s.role || 'unknown', { ...m, costUsd: typeof m.costUsd === 'number' ? m.costUsd * w : null, tokens: m.tokens * w, activeMin: m.activeMin * w, toolCalls: m.toolCalls * w, toolErrors: m.toolErrors * w }, w);
+      roleAdd(s.role || 'unknown', { ...m, costUsd: typeof m.costUsd === 'number' ? m.costUsd * w : null, tokens: m.tokens * w, tok: scaleQuad(m.tok, w), activeMin: m.activeMin * w, toolCalls: m.toolCalls * w, toolErrors: m.toolErrors * w }, w);
       const { kind, ids: matched } = classify(s.label, ids, s.cases || []);
       if (kind === 'direct') {
         if (typeof s.costUsd === 'number') pricedDirect = true;
@@ -411,7 +423,8 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
       findings: Array.isArray(c.findings) ? c.findings.length : 0,
       direct: {
         costUsd: typeof d.costUsd === 'number' ? round2(d.costUsd) : null,
-        tokens: Math.round(d.tokens), activeMin: Math.round(d.activeMin),
+        tokens: Math.round(d.tokens), tok: roundQuad(d.tok ?? emptyQuad()),
+        activeMin: Math.round(d.activeMin),
         dispatches: Math.round(d.dispatches * 100) / 100, fixRounds: Math.round(d.fixRounds * 100) / 100,
         toolCalls: Math.round(d.toolCalls), toolErrors: Math.round(d.toolErrors),
       },
@@ -453,7 +466,8 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
 
   const bucketOut = (b) => ({
     costUsd: typeof b.costUsd === 'number' ? round2(b.costUsd) : null,
-    tokens: Math.round(b.tokens), activeMin: Math.round(b.activeMin),
+    tokens: Math.round(b.tokens), tok: roundQuad(b.tok ?? emptyQuad()),
+    activeMin: Math.round(b.activeMin),
     dispatches: Math.round(b.dispatches * 100) / 100,
     toolCalls: Math.round(b.toolCalls), toolErrors: Math.round(b.toolErrors),
   });

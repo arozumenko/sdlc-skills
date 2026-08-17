@@ -23,23 +23,25 @@ node .claude/skills/tokenomics/scripts/install-hooks.mjs --doctor   # check it w
 Installing the skill alone does **nothing**. This command is the on-switch.
 `--remove` is the off-switch. That's it — capture is now automatic.
 
-The installer also sets up **where telemetry lives**: `.agents/automation/telemetry`
+The installer also sets up **where telemetry lives**: `.agents/telemetry`
 becomes a git **submodule of the same repo**, checked out on its own `telemetry`
 branch. Step by step, what that means:
 
-1. Hooks write usage files into that folder.
+1. Hooks write usage files into this bundle's subfolder there —
+   `.agents/telemetry/automation/`.
 2. Capture moments commit + push them — **to the `telemetry` branch, never main**.
    Your working tree stays clean; gates and branch switches never see them.
 3. One commit to main, once, right after install (the installer prints it):
-   `git add .gitmodules .agents/automation/telemetry && git commit -m "chore: telemetry submodule"`.
+   `git add .gitmodules .agents/telemetry && git commit -m "chore: telemetry submodule"`.
 4. Teammates: `git clone --recurse-submodules`. Forgot the flag? The folder is
    empty — `git submodule update --init` fixes it (doctor says exactly this).
 5. Didn't init it at all? Nothing breaks — main is unaffected, telemetry is
    just off on that machine.
 
-This telemetry contract is the **test-automation bundle's own** — manual-qa
-meters its runs differently, other bundles do their own thing. No conflicts:
-each writes to its own paths.
+The submodule is **shared, one subfolder per bundle**: `automation/` belongs to
+the test-automation bundle; when manual-qa or another bundle wants durable
+telemetry later, it adds its own subfolder and rides the same branch and the
+same sync — no second submodule, no second machinery.
 
 ---
 
@@ -79,7 +81,8 @@ spend — so a day of bug-hunting stops inflating "cost per automated case".
 | **what has this session spent SO FAR** (mid-run) | `work-scope.mjs status --session <id>` |
 | this batch's cost report | happens at `close`; or `team-report.mjs --batch my-batch` |
 | …as a shareable page | `--html --out batch.html` (close already wrote `batch-report.html`) |
-| **live batch page, mid-run** | already on disk: `.agents/automation/telemetry/reports/<batch>.html` — refreshed on every finished dispatch |
+| **where the tokens went** (composition, cache hit rate, per role/stage/case) | `--batch my-batch --tokenomics` (close already wrote `batch-tokenomics.md`/`.html`) — the other unfolding of the same cost.json |
+| **live batch page, mid-run** | already on disk: `.agents/telemetry/automation/reports/<batch>.html` — refreshed on every finished dispatch |
 | team/period rollup | `install-hooks.mjs --pull` first (grabs teammates' pushes), then `team-report.mjs` (add `--since 2026-08-01`, `--html`, `--json`) |
 | cost per case, across all batches | in the team report — "Per case" table, delivered first |
 | compare two batches | `build-tokenomics-export.mjs --compare a/cost.json b/cost.json` |
@@ -109,8 +112,9 @@ spend — so a day of bug-hunting stops inflating "cost per automated case".
 
 Two homes, one rule each:
 
-**The telemetry submodule** (`.agents/automation/telemetry/`) — ledger, scopes,
-config, live logs, mid-run gate verdicts, workflow returns, the live report.
+**The telemetry submodule** (`.agents/telemetry/`, this bundle's data in
+`automation/`) — ledger, scopes, config, live logs, mid-run gate verdicts,
+workflow returns, the live report.
 **You never commit any of it by hand.** Hooks commit + push it to the
 `telemetry` branch automatically. Its own inner `.gitignore` keeps the
 transient bits (live log, hook markers) out of even that branch.
@@ -133,27 +137,22 @@ A few in-run artifacts of other skills stay gitignored in the main tree
 .playwright-mcp/                        # browser scratch/screenshots
 ```
 
-**If your project gitignores the whole `.agents/automation/` directory**: git
-cannot re-include a child of an ignored *directory pattern*. Change it to:
-
-```gitignore
-.agents/automation/*
-!.agents/automation/telemetry
-```
-
-(same coverage, and the submodule stays visible to git).
+One rule to keep: **never gitignore `.agents/telemetry`** — it's a submodule,
+git has to see it. (And `.agents/automation/<batch>/` records must be
+committable, so don't blanket-ignore that directory either — ignore the
+specific patterns above instead.)
 
 ## Files on disk
 
 ```
-.agents/automation/telemetry/usage-<user>.jsonl     ← the ledger: one line per session
-.agents/automation/telemetry/live/<session>.jsonl   ← live: one line per finished dispatch
+.agents/telemetry/automation/usage-<user>.jsonl     ← the ledger: one line per session
+.agents/telemetry/automation/live/<session>.jsonl   ← live: one line per finished dispatch
                                             (written by the SubagentStop hook,
                                              deleted when the session's line lands)
-.agents/automation/telemetry/scopes/<session>.json  ← what each session declared + outcomes
-.agents/automation/telemetry/reports/<batch>.html   ← LIVE batch page, refreshed per dispatch
-.agents/automation/telemetry/gate-runs/<batch>.jsonl ← gate verdicts mid-run (folded at close)
-.agents/automation/telemetry/returns/<run>/          ← workflow returns (crash recovery)
+.agents/telemetry/automation/scopes/<session>.json  ← what each session declared + outcomes
+.agents/telemetry/automation/reports/<batch>.html   ← LIVE batch page, refreshed per dispatch
+.agents/telemetry/automation/gate-runs/<batch>.jsonl ← gate verdicts mid-run (folded at close)
+.agents/telemetry/automation/returns/<run>/          ← workflow returns (crash recovery)
 .agents/automation/<batch>/report.json   ← the pipeline's receipt (who delivered what)
 .agents/automation/<batch>/gate-runs.jsonl ← every gate verdict, script-written
 .agents/automation/<batch>/cost.json     ← machine cost report (written at close)

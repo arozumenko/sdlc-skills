@@ -8,7 +8,7 @@ subagent concluded, so an interrupted run can be resumed instead of redone.
 | Event | `SubagentStop` |
 | Scope | workflow dispatches only — a lead's own subagents are untouched |
 | Mode | `async: true` — never blocks or delays a dispatch |
-| Writes | `.agents/automation/telemetry/returns/<run-id>/<agent-id>.json` (legacy `_returns/` when no telemetry area) |
+| Writes | `.agents/telemetry/automation/returns/<run-id>/<agent-id>.json` (legacy `_returns/` when no telemetry area) |
 
 ## Why it exists
 

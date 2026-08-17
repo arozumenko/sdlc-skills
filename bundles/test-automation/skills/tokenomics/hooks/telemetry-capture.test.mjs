@@ -270,7 +270,7 @@ test('captureClaudeSession: reuses live-log dollars, meters only what changed', 
   const transcript = writeClaudeFixture(proj, 'sess-r');           // parent + agent-abc
   const subPath = join(proj, 'sess-r', 'subagents', 'agent-abc.jsonl');
   const bytes = readFileSync(subPath, 'utf8').length;
-  mkdirSync(join(repo, '.agents', 'automation', 'telemetry', 'live'), { recursive: true });
+  mkdirSync(join(repo, '.agents', 'telemetry', 'automation', 'live'), { recursive: true });
   writeFileSync(dispatchLogPath(repo, 'sess-r'),
     `${JSON.stringify({ v: 1, session: 'sess-r', agentId: 'agent-abc', role: 'qa-engineer', label: 'analyse', tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 4.25, bytes })}\n`);
 
@@ -542,8 +542,8 @@ test('main: direct capture appends once, re-run with unchanged transcript is a n
   const repo = tmp();
   const proj = tmp();
   const transcript = writeClaudeFixture(proj, 'sess-m', { withSub: false });
-  mkdirSync(join(repo, '.agents', 'automation', 'telemetry'), { recursive: true });
-  writeFileSync(join(repo, '.agents', 'automation', 'telemetry', 'config.json'), JSON.stringify({ priceAtCapture: false }));
+  mkdirSync(join(repo, '.agents', 'telemetry', 'automation'), { recursive: true });
+  writeFileSync(join(repo, '.agents', 'telemetry', 'automation', 'config.json'), JSON.stringify({ priceAtCapture: false }));
   // Empty override roots keep the trailing sweep hermetic (off the real stores).
   const env = { TOKENOMICS_CLAUDE_ROOT: tmp(), TOKENOMICS_COPILOT_ROOT: tmp() };
   const argv = ['--transcript', transcript, '--session', 'sess-m', '--cwd', repo];
@@ -560,7 +560,7 @@ test('main: direct capture appends once, re-run with unchanged transcript is a n
 test('renderLiveReport: writes the live batch page on the telemetry side', async () => {
   const { renderLiveReport } = await import('./telemetry-capture.mjs');
   const repo = tmp();
-  const tele = join(repo, '.agents', 'automation', 'telemetry');
+  const tele = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(join(tele, 'scopes'), { recursive: true });
   writeFileSync(join(tele, 'scopes', 'sess-live.json'), JSON.stringify({
     v: 1, session: 'sess-live', intent: 'automation', batch: 'b-live', cases: ['TC-1'], declaredAt: 'x', updatedAt: 'x',
@@ -571,7 +571,7 @@ test('renderLiveReport: writes the live batch page on the telemetry side', async
   assert.equal(await renderLiveReport(repo, 'sess-live', { TOKENOMICS_NO_BATCH_COST: '1' }), null, 'off-switch respected');
   const out = await renderLiveReport(repo, 'sess-live', {});
   assert.equal(out.length, 1);
-  assert.ok(out[0].endsWith(join('telemetry', 'reports', 'b-live.html')), `landed at ${out[0]}`);
+  assert.ok(out[0].endsWith(join('telemetry', 'automation', 'reports', 'b-live.html')), `landed at ${out[0]}`);
   assert.match(readFileSync(out[0], 'utf8'), /b-live/);
   assert.ok(!existsSync(join(dir, 'cost.json')), 'live render never writes into the batch dir');
   assert.equal(await renderLiveReport(repo, 'sess-unknown', {}), null, 'no scope → no page, no error');
@@ -707,7 +707,7 @@ test('captureVsCodeSession: billed credits → USD; tokens-only stays honest', (
 // is the only join. Without it every sidebar session reads undeclared.
 test('captureVsCodeSession: claims a pending scope by time window, same as the other hosts', () => {
   const repo = tmp(); const dir = tmp();
-  const scopes = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  const scopes = join(repo, '.agents', 'telemetry', 'automation', 'scopes');
   mkdirSync(scopes, { recursive: true });
   writeFileSync(join(scopes, 'pending-abc.json'), JSON.stringify({
     v: 1, session: 'pending-abc', intent: 'automation', batch: 'b-side', cases: ['TC-9'],

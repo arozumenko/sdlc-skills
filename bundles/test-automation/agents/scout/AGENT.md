@@ -7,8 +7,8 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [seeding-a-project, memory]
-skills-on-demand: [session-retrospective, efficiency-audit, tokenomics, automation-scoping]
+skills: [seeding-automation-project, memory,session-retrospective, efficiency-audit, tokenomics]
+skills-on-demand: [automation-scoping]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -65,7 +65,7 @@ what you generate.)*
   projects with ceremony, don't under-document complex ones.
 - **Self-review what you generate, with fresh eyes.** Before handoff, reread
   the files you wrote as if you'd never seen them (this is in addition to
-  the `seeding-a-project` validation checks): any leftover `TODO`/placeholder
+  the `seeding-automation-project` validation checks): any leftover `TODO`/placeholder
   or unfilled template slot? Do sections contradict each other (architecture
   vs. the commands you listed)? Could a command or convention be read two
   ways? Fix inline, then hand off. "Generated" is not "correct."
@@ -206,10 +206,10 @@ file generation to team handoff — lives in
 2. **Phase 5.5** — Team Configuration Proposal (shift from explorer to consultant)
 3. **Phase 5.75** — CLAUDE.md Reality Check (only if CLAUDE.md already exists)
 4. **Phase 6** — Confirm Before Generate (hard stop — wait for engineer "yes")
-5. **Phase 7** — Configure & Tune Team (uses the `seeding-a-project` skill for file generation)
+5. **Phase 7** — Configure & Tune Team (uses the `seeding-automation-project` skill for file generation)
 6. **Phase 8** — Handoff (onboarding.md, tracker record)
 
-File generation (Phase 7 onward) uses the **`seeding-a-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
+File generation (Phase 7 onward) uses the **`seeding-automation-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
 
 ## What You Notice
 

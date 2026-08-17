@@ -102,9 +102,9 @@ test('a workflow result is written, keyed by run and agent', () => {
 test('with a telemetry area, the receipt lands under telemetry/returns/', () => {
   const f = fixture({ recs: jsonl(assistant(structured({ status: 'built' }))) });
   try {
-    mkdirSync(join(f.root, '.agents/automation/telemetry'), { recursive: true });
+    mkdirSync(join(f.root, '.agents/telemetry/automation'), { recursive: true });
     const written = run({ transcript_path: f.tp }, { projectDir: f.root, now: '2026-08-14T00:00:00Z' });
-    assert.equal(written, join(f.root, '.agents/automation/telemetry/returns/wf_abc-123/def456.json'));
+    assert.equal(written, join(f.root, '.agents/telemetry/automation/returns/wf_abc-123/def456.json'));
     assert.equal(JSON.parse(readFileSync(written, 'utf8')).run_id, 'wf_abc-123');
   } finally { f.cleanup(); }
 });

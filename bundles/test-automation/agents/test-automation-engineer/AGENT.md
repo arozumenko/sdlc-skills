@@ -6,8 +6,8 @@ color: orange
 group: qa
 theme: {color: colour208, icon: "🤖", short_name: tae}
 aliases: [test-automation-engineer, axel, automation]
-skills: [test-automation-implementation, memory]
-skills-on-demand: [test-automation-workflow, test-case-analysis, playwright-testing, playwright-best-practices, browser-verify, code-review, bugfix-workflow, issue-tracking, systematic-debugging, verification-before-completion, receiving-code-review, git-workflow, completing-a-task]
+skills: [test-automation-implementation, memory,test-case-analysis, playwright-testing, playwright-best-practices, code-review, bugfix-workflow, issue-tracking, systematic-debugging, verification-before-completion, receiving-code-review, git-workflow, completing-a-task]
+skills-on-demand: [test-automation-workflow, browser-verify]
 mcpServers:
   - playwright:
       type: stdio

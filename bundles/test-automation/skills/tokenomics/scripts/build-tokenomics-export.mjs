@@ -9,7 +9,7 @@
 //
 // IDENTITY IS PROJECT-LOCAL, NEVER BUNDLED. The factory header (factory_id,
 // factory_name, owner_group, …) comes from a hand-authored profile file the
-// project keeps at .agents/automation/telemetry/factory-profile.json — copy
+// project keeps at .agents/telemetry/automation/factory-profile.json — copy
 // ../templates/factory-profile.template.json there and fill it in once. The
 // bundle ships only this generic plumbing; no organisation identifiers.
 //
@@ -111,7 +111,7 @@ function main(argv = process.argv.slice(2)) {
   const batch = val('--batch');
   const repo = resolve(argv.find((a, i) => !a.startsWith('--') && !['--batch', '--profile', '--out'].includes(argv[i - 1])) ?? process.cwd());
   if (!batch) { console.error('usage: build-tokenomics-export.mjs [repo] --batch <slug> [--profile <path>] [--out <file>] | --compare <a> <b>'); return 1; }
-  const profilePath = val('--profile') ?? join(repo, '.agents', 'automation', 'telemetry', 'factory-profile.json');
+  const profilePath = val('--profile') ?? join(repo, '.agents', 'telemetry', 'automation', 'factory-profile.json');
   const profile = existsSync(profilePath) ? (safeParse(readFileSync(profilePath, 'utf8')) ?? {}) : {};
   if (!profile.factory_id) console.error(`export: no factory profile at ${profilePath} — identity fields will be null (copy the skill's templates/factory-profile.template.json there and fill it in)`);
   const [cost] = updateBatchCosts(repo, { batch, write: true });

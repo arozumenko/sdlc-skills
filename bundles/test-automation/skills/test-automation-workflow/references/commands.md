@@ -25,8 +25,8 @@ cat .agents/testing.md 2>/dev/null
 cat .agents/architecture.md 2>/dev/null
 cat .agents/test-automation.yaml 2>/dev/null
 
-# If nothing — run seeding-a-project before proceeding
-# (invoke the seeding-a-project skill via the running host)
+# If nothing — run seeding-automation-project before proceeding
+# (invoke the seeding-automation-project skill via the running host)
 
 # Detect framework if testing.md didn't name it — scan broadly across
 # surfaces, not just browser runners. Match whatever the project uses.

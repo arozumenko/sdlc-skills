@@ -129,26 +129,55 @@ test('a local-only branch still gates, and the note says what was proved', () =>
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// A project that COMMITS its telemetry (the point of team-wide reporting) has
-// hooks writing under .agents/automation/telemetry while the run happens. That must not
-// make the gate refuse — it is bookkeeping, never part of what is gated.
-// Anything else dirty still refuses.
-test('the dirty check tolerates telemetry writes, and only those', () => {
+// Dirt policy (reworked 2026-08-17, field case: a foreign bundle's debug log
+// and installer-touched configs blocked gates that had nothing to do with
+// them). Unrelated dirt — telemetry, logs, foreign bundles' state, stray
+// files — never blocks; it rides the verdict record as carriedDirt. What DOES
+// refuse: a dirty path among the files the gate is about (base...branch diff)
+// — the run would prove the dirt, not the branch.
+test('unrelated dirt is carried, not refused; dirt on the gated files refuses', () => {
   const { dir, g } = repo();
   try {
     g('checkout', '-q', '-b', 'tests/batch-t');
     writeFileSync(join(dir, 'w.txt'), 'w'); g('add', '.'); g('commit', '-qm', 'work');
     g('checkout', '-q', 'main');
-    // the hooks' mid-run writes: a new scope record and the live dispatch log
-    execFileSync('mkdir', ['-p', join(dir, '.agents', 'automation', 'telemetry', 'scopes')]);
-    writeFileSync(join(dir, '.agents', 'automation', 'telemetry', 'scopes', 's1.json'), '{}');
-    writeFileSync(join(dir, '.agents', 'automation', 'telemetry', 'live.jsonl'), '{}');
-    assert.equal(runGate(dir, ['--branch', 'tests/batch-t', '--base', 'main', '--cmd', 'true', '--n', '1']).verdict,
-      'green', 'untracked telemetry writes do not block the gate');
-    // …but real work in progress still does
-    writeFileSync(join(dir, 'src.txt'), 'uncommitted');
-    const res = runGate(dir, ['--branch', 'tests/batch-t', '--base', 'main', '--cmd', 'true', '--n', '1']);
-    assert.match(res.notes, /working tree is dirty/);
+    // mid-run bookkeeping + a foreign bundle's log + a random stray file
+    execFileSync('mkdir', ['-p', join(dir, '.agents', 'telemetry', 'automation', 'scopes')]);
+    writeFileSync(join(dir, '.agents', 'telemetry', 'automation', 'scopes', 's1.json'), '{}');
+    writeFileSync(join(dir, 'benchmark-debug.log'), 'noise');
+    writeFileSync(join(dir, 'src.txt'), 'uncommitted but unrelated');
+    const ok = runGate(dir, ['--branch', 'tests/batch-t', '--base', 'main', '--cmd', 'true', '--n', '1']);
+    assert.equal(ok.verdict, 'green', 'unrelated dirt does not block the gate');
+    // telemetry dir exists in this fixture → the record lands on the telemetry side
+    const recs = readFileSync(join(dir, '.agents', 'telemetry', 'automation', 'gate-runs', 't.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l));
+    const rec = recs[recs.length - 1];
+    assert.ok(rec.carriedDirt.includes('src.txt'), 'the record names what the tree carried');
+    // …but dirt on a file the branch itself changes = the proof would be dirty
+    writeFileSync(join(dir, 'w.txt'), 'LOCAL JUNK'); // w.txt is what the branch adds
+    const bad = runGate(dir, ['--branch', 'tests/batch-t', '--base', 'main', '--cmd', 'true', '--n', '1']);
+    assert.match(bad.notes, /overlap the very files this gate proves/);
+    assert.match(bad.notes, /w\.txt/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The mechanical net: a local change git itself refuses to overwrite (a path
+// the BASE moved after the branch was cut — not in the base...branch diff, so
+// the proof check passes) surfaces as git's own victim list, never a generic
+// "setup failed".
+test('a checkout/merge blocked by local changes names the exact victim paths', () => {
+  const { dir, g } = repo();
+  try {
+    writeFileSync(join(dir, 'shared.txt'), 'v1'); g('add', '.'); g('commit', '-qm', 'shared v1');
+    g('checkout', '-q', '-b', 'tests/batch-m');
+    writeFileSync(join(dir, 'w.txt'), 'w'); g('add', '.'); g('commit', '-qm', 'work');
+    g('checkout', '-q', 'main');
+    writeFileSync(join(dir, 'shared.txt'), 'v2'); g('add', '.'); g('commit', '-qm', 'base moves shared');
+    writeFileSync(join(dir, 'shared.txt'), 'LOCAL EDIT'); // dirty, collides with checkout of the branch
+    const res = runGate(dir, ['--branch', 'tests/batch-m', '--base', 'main', '--cmd', 'true', '--n', '1']);
+    assert.notEqual(res.verdict, 'green');
+    assert.match(res.notes, /blocked by local changes to: .*shared\.txt/);
+    assert.match(res.notes, /stash BY PATH/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -174,10 +203,10 @@ test('batchSlugOfBranch + appendGateRecord: slug from the trunk, --batch overrid
 test('appendGateRecord: prefers telemetry/gate-runs/<slug>.jsonl when the telemetry dir exists', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gate-tel-'));
   try {
-    execFileSync('mkdir', ['-p', join(dir, '.agents', 'automation', 'telemetry')]);
+    execFileSync('mkdir', ['-p', join(dir, '.agents', 'telemetry', 'automation')]);
     const result = { branch: 'tests/batch-w7', base: 'main', n: 3, verdict: 'green', consecutiveGreen: 3, seconds: [1.1] };
     const file = appendGateRecord(dir, result, { now: '2026-08-14T10:00:00Z' });
-    assert.ok(file.endsWith(join('telemetry', 'gate-runs', 'w7.jsonl')), `landed at ${file}`);
+    assert.ok(file.endsWith(join('telemetry', 'automation', 'gate-runs', 'w7.jsonl')), `landed at ${file}`);
     const rec = JSON.parse(readFileSync(file, 'utf8').trim());
     assert.equal(rec.verdict, 'green');
   } finally { rmSync(dir, { recursive: true, force: true }); }

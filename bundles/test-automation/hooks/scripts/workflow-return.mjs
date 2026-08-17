@@ -156,9 +156,9 @@ export function run(payload, { projectDir = process.cwd(), now = null } = {}) {
   // Returns are working state written MID-RUN — on the telemetry side when it
   // exists, so a branch switch (gate checkout) never stashes or loses them.
   // Plain-dir fallback keeps repos without the telemetry area working as before.
-  const telDir = join(projectDir, '.agents', 'automation', 'telemetry');
-  const dir = existsSync(telDir)
-    ? join(telDir, 'returns', runId)
+  const telRoot = join(projectDir, '.agents', 'telemetry');
+  const dir = existsSync(telRoot)
+    ? join(telRoot, 'automation', 'returns', runId)
     : join(projectDir, '.agents', 'automation', '_returns', runId);
   const file = join(dir, `${agentId}.json`);
 

@@ -16,7 +16,7 @@ wins over this file.
   there is no PM above him. He is a top-level orchestrator, not a subagent.
 - **`scout`** seeds the project first (`claude --agent scout`): framework, TMS
   adapter, base branch, merge policy, credential matrix. If the project isn't
-  seeded, Tal **self-orients by running the same `seeding-a-project` skill
+  seeded, Tal **self-orients by running the same `seeding-automation-project` skill
   himself** (asking only for blocking unknowns) — he never dead-stops; a
   deliberate `claude --agent scout` run stays the thorough path.
 - **`qa-engineer` (Sage)** fills two slots — **analyst** (writes the AFS) and

@@ -104,7 +104,7 @@ test('close: captures the still-running session so its own spend is in the repor
   const prevRoot = process.env.TOKENOMICS_CLAUDE_ROOT; const prevCc = process.env.TOKENOMICS_NO_CCUSAGE;
   process.env.TOKENOMICS_CLAUDE_ROOT = proj; process.env.TOKENOMICS_NO_CCUSAGE = '1';
   try {
-    assert.ok(!existsSync(join(repo, '.agents', 'automation', 'telemetry', 'usage-' + (process.env.USER ?? '') + '.jsonl')));
+    assert.ok(!existsSync(join(repo, '.agents', 'telemetry', 'automation', 'usage-' + (process.env.USER ?? '') + '.jsonl')));
     assert.equal(await main(['close', '--session', 'live-sess', '--repo', repo], {}), 0);
     // the running session was captured into the ledger…
     const { listScopes } = await import('./work-scope.mjs');

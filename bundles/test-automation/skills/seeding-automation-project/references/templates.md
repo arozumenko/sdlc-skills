@@ -211,7 +211,7 @@ name that resolves to the credential at run time.
 
 ## Project systems
 
-_Captured during seeding-a-project Step 0.7 from operator input (or
+_Captured during seeding-automation-project Step 0.7 from operator input (or
 `Unconfirmed` when the operator didn't know yet — fill before the
 first test-case-analysis run)._
 

@@ -156,8 +156,12 @@ Dropping the gate's worktree **removed** work rather than adding it: a worktree
 carries only tracked files, so the suite arrived there without its env file and
 without dependencies, and `gate-case.mjs` had to carry env-resolution, symlink
 repair and a `--fix-env` flag to undo that. The real checkout has all of it
-already. One guard replaces the lot: the gate **refuses to run on a dirty tree**,
-because checking a branch out would drag or lose work in progress.
+already. One guard replaces the lot — and it is **precise, not blanket**
+(reworked 2026-08-17): the gate refuses only dirt that matters — a dirty path
+among the files it is proving (the base…branch diff), or one git itself
+refuses to overwrite on checkout/merge (reported by exact path). Unrelated
+noise — logs, configs, other bundles' state — never blocks; it rides the
+verdict record as `carriedDirt`.
 
 **The cost, stated plainly.** Gating no longer overlaps the next batch's build —
 wall clock goes from `max(build, gate)` to `build + gate`. That is real: in one
@@ -382,7 +386,7 @@ prose. Keep these if you ever fork it:
    makes access explicit and deterministic on every path.
    Both workers ship an inline browser-server definition (subagent-scoped,
    one at a time under the serial pipeline); the per-project lists are seeded
-   at Step 6.8 (`seeding-a-project` → agent-tools-wiring § Claude Code).
+   at Step 6.8 (`seeding-automation-project` → agent-tools-wiring § Claude Code).
 6. **Analyst tiering — the standalone analyst is for novel ground**
    (`tiering: 'auto'` default; `'off'` restores always-analyst). One cheap
    triage dispatch (haiku, read-only) routes each unit: surfaces whose
@@ -393,7 +397,14 @@ prose. Keep these if you ever fork it:
    Conservative twice over: triage routes to the analyst on any doubt, and
    the combined slot returns `needs-analyst` before writing anything when
    the ground turns out novel, falling back to the normal chain at the cost
-   of one dispatch.
+   of one dispatch. A third route, **`manual-qa-verified`**, covers repos
+   that also run the manual-qa bundle: a unit whose every case has a
+   manual-qa run record with verdict PASS plus its authored case file goes
+   to a combined slot that derives the AFS **from that evidence** (no live
+   re-run — the case was already executed; run age does not matter; the run
+   id becomes the AFS's execution provenance) — same `needs-analyst` escape
+   on thin evidence, and the gate still proves the result N× either way.
+   Playbook § Manual-qa-verified carries the full rule.
 
 ## Hooks & memory (verified 2026-07-20)
 

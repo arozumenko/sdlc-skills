@@ -6,8 +6,8 @@ color: green
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [test-case-analysis, memory]
-skills-on-demand: [code-review, test-automation-workflow, playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking]
+skills: [test-case-analysis, memory, code-review ,playwright-testing,reproducing-issues, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking]
+skills-on-demand: [test-automation-workflow,playwright-cli, browser-verify]
 mcpServers:
   - playwright:
       type: stdio

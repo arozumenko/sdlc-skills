@@ -6,6 +6,7 @@ group: qa
 color: green
 theme: {color: colour156, icon: "🔍", short_name: profiler}
 aliases: [app-profiler, profiler]
+context-docs: manual-qa/app_profile.md
 skills: [playwright-testing, playwright-best-practices, systematic-debugging, xlsx-reader, mobile-testing]
 metadata:
   authors:

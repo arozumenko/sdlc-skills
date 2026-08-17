@@ -14,7 +14,7 @@
 // which dispatches have finished. Nothing is written — the ledger stays
 // session-grain and lands at session end (`--fast` skips metering).
 //
-// One JSON file per session at .agents/automation/telemetry/scopes/<session>.json —
+// One JSON file per session at .agents/telemetry/automation/scopes/<session>.json —
 // committed like the ledger, so scope survives transcript expiry and travels
 // with the repo. The capture hook joins it to the session's ledger line, which
 // replaces regex-guessing for declared sessions and lets reports split
@@ -39,7 +39,7 @@ import { pathToFileURL } from 'node:url';
 
 export const SCOPE_VERSION = 1;
 
-export function scopesDir(repo) { return join(repo, '.agents', 'automation', 'telemetry', 'scopes'); }
+export function scopesDir(repo) { return join(repo, '.agents', 'telemetry', 'automation', 'scopes'); }
 export function scopePath(repo, session) { return join(scopesDir(repo), `${session}.json`); }
 
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } }
@@ -207,7 +207,7 @@ export async function generateBatchReports(repo, scope) {
       } catch { /* no transcript / metering unavailable — report what the ledger has */ }
     }
     const { updateBatchCosts, foldGateRuns } = await import('./batch-cost.mjs');
-    const { renderBatchMarkdown, renderBatchHtml } = await import('./team-report.mjs');
+    const { renderBatchMarkdown, renderBatchHtml, renderBatchTokenomicsMarkdown, renderBatchTokenomicsHtml } = await import('./team-report.mjs');
     // The declared batch may be a top slug, a nested wave's full path, or just
     // the wave's own name — resolve all three.
     let costs = updateBatchCosts(repo, { batch: scope.batch });
@@ -226,6 +226,11 @@ export async function generateBatchReports(repo, scope) {
       writeFileSync(path, `${renderBatchMarkdown(c)}\n`);
       // The shareable page, same rhythm as manual-qa's HTML tokenomics report.
       writeFileSync(join(dir, 'batch-report.html'), `${renderBatchHtml(c)}\n`);
+      // The OTHER unfolding of the same cost.json: token composition + cache
+      // hit rate per role/stage/case — where the delivery report shows only
+      // the honest real-work figure.
+      writeFileSync(join(dir, 'batch-tokenomics.md'), `${renderBatchTokenomicsMarkdown(c)}\n`);
+      writeFileSync(join(dir, 'batch-tokenomics.html'), `${renderBatchTokenomicsHtml(c)}\n`);
       out.push({ path, cost: c });
     }
     return out;
@@ -280,7 +285,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
         process.stderr.write(
           `work-scope: ⚠ NO RECEIPT for batch '${scope.batch}' — .agents/automation/${scope.batch}/report.json is missing, so no batch report was written.\n`
           + '  The receipt is an agent write; an interrupted run leaves none. Rebuild it from what IS on disk — gate-runs.jsonl (script-authored verdicts),\n'
-          + '  .agents/automation/telemetry/returns/ (per-dispatch returns; legacy _returns/), the run journal and git — see the orchestration playbook § Interruption and resumption,\n'
+          + '  .agents/telemetry/automation/returns/ (per-dispatch returns; legacy _returns/), the run journal and git — see the orchestration playbook § Interruption and resumption,\n'
           + `  then re-run: work-scope.mjs close --session ${safeSession(session)} (the render is idempotent).\n`,
         );
       }

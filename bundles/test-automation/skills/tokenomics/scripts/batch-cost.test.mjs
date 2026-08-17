@@ -263,7 +263,7 @@ test('telemetry + stage split + rework land in cost.json', () => {
 test('loadLiveLines: rebuilds a provisional session line from the dispatch deltas', async () => {
   const { loadLiveLines } = await import('./batch-cost.mjs');
   const repo = mkdtempSync(join(tmpdir(), 'bc-live-'));
-  const dir = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  const dir = join(repo, '.agents', 'telemetry', 'automation', 'live');
   mkdirSync(dir, { recursive: true });
   const rec = (agentId, costUsd, cases, bytes) => JSON.stringify({
     v: 1, session: 'run-1', agentId, role: 'qa-engineer', label: `analyse ${cases[0]}`,
@@ -290,7 +290,7 @@ test('updateBatchCosts: a running session shows up as provisional, and the real 
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const live = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  const live = join(repo, '.agents', 'telemetry', 'automation', 'live');
   mkdirSync(live, { recursive: true });
   writeFileSync(join(live, 'run-1.jsonl'),
     `${JSON.stringify({ v: 1, session: 'run-1', agentId: 'a1', role: 'test-automation-engineer', label: 'implement:TC-101', cases: ['TC-101'], tokens: { input: 0, output: 0, cacheRead: 9000, cacheWrite: 0 }, activeMin: 4, toolCalls: 6, toolErrors: 0, costUsd: 1.25, bytes: 9 })}\n`);
@@ -301,7 +301,7 @@ test('updateBatchCosts: a running session shows up as provisional, and the real 
   assert.equal(mid.cases.find((c) => c.id === 'TC-101').direct.costUsd, 1.25, 'mid-run per-case cost is real');
 
   // the session ends: its ledger line (with the lead thread) must win outright
-  const tele = join(repo, '.agents', 'automation', 'telemetry');
+  const tele = join(repo, '.agents', 'telemetry', 'automation');
   writeFileSync(join(tele, 'usage-u1.jsonl'),
     `${JSON.stringify(line('run-1', [sub('implement:TC-101', 9000, { costUsd: 1.25 })], { costUsd: 3.0 }))}\n`);
   const [after] = updateBatchCosts(repo, { write: false });
@@ -316,7 +316,7 @@ test('updateBatchCosts: live:false excludes running sessions (the period-rollup 
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const live = join(repo, '.agents', 'automation', 'telemetry', 'live');
+  const live = join(repo, '.agents', 'telemetry', 'automation', 'live');
   mkdirSync(live, { recursive: true });
   writeFileSync(join(live, 'run-9.jsonl'),
     `${JSON.stringify({ v: 1, session: 'run-9', agentId: 'a1', role: 'qa-engineer', label: 'implement:TC-101', cases: ['TC-101'], tokens: { input: 0, output: 0, cacheRead: 500, cacheWrite: 0 }, activeMin: 2, toolCalls: 3, toolErrors: 0, costUsd: 0.9, bytes: 5 })}\n`);
@@ -375,14 +375,14 @@ test('updateBatchCosts: gate-runs + scopes land in cost.json as records with dri
   }));
   writeFileSync(join(dir, 'gate-runs.jsonl'),
     `${JSON.stringify({ at: '2026-08-12T11:00:00Z', branch: 'tests/batch-b1', base: 'main', n: 3, verdict: 'green', consecutiveGreen: 3, seconds: [1, 1, 1] })}\n`);
-  const scopesDir = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  const scopesDir = join(repo, '.agents', 'telemetry', 'automation', 'scopes');
   mkdirSync(scopesDir, { recursive: true });
   writeFileSync(join(scopesDir, 'sess-1.json'), JSON.stringify({
     v: 1, session: 'sess-1', intent: 'automation', batch: 'b1', cases: ['TC-101'],
     declaredAt: 'x', updatedAt: 'y', outcomes: { 'TC-101': { outcome: 'automated', at: 'y' } },
   }));
-  mkdirSync(join(repo, '.agents', 'automation', 'telemetry'), { recursive: true });
-  writeFileSync(join(repo, '.agents', 'automation', 'telemetry', 'usage-u1.jsonl'),
+  mkdirSync(join(repo, '.agents', 'telemetry', 'automation'), { recursive: true });
+  writeFileSync(join(repo, '.agents', 'telemetry', 'automation', 'usage-u1.jsonl'),
     `${JSON.stringify(line('s1', [sub('implement:TC-101', 9000, { costUsd: 1.0 })], { costUsd: 2.0 }))}\n`);
 
   const [c] = updateBatchCosts(repo);
@@ -402,7 +402,7 @@ test('updateBatchCosts: gate-runs + scopes land in cost.json as records with dri
 test('loadGateRuns reads both homes and dedups; foldGateRuns moves telemetry lines into the batch dir', () => {
   const repo = mkdtempSync(join(tmpdir(), 'bc-fold-'));
   const dir = join(repo, '.agents', 'automation', 'b1');
-  const telRuns = join(repo, '.agents', 'automation', 'telemetry', 'gate-runs');
+  const telRuns = join(repo, '.agents', 'telemetry', 'automation', 'gate-runs');
   mkdirSync(dir, { recursive: true });
   mkdirSync(telRuns, { recursive: true });
   const r1 = JSON.stringify({ at: '2026-08-14T10:00:00Z', branch: 'tests/batch-b1', verdict: 'red' });
@@ -426,7 +426,7 @@ test('updateBatchCosts: writes cost.json next to the receipt, idempotent recompu
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const tele = join(repo, '.agents', 'automation', 'telemetry');
+  const tele = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(tele, { recursive: true });
   writeFileSync(join(tele, 'usage-u1.jsonl'), `${JSON.stringify(line('s1', [sub('implement:TC-101', 9000, { costUsd: 1.25 })], { costUsd: 2.0 }))}\n`);
 
@@ -445,7 +445,7 @@ test('team-report --batch renders the cost view end-to-end', async () => {
   const dir = join(repo, '.agents', 'automation', 'b1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
-  const tele = join(repo, '.agents', 'automation', 'telemetry');
+  const tele = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(tele, { recursive: true });
   writeFileSync(join(tele, 'usage-u1.jsonl'), `${JSON.stringify(line('s1', [
     sub('analyst:TC-101', 50_000, { costUsd: 0.60, activeMin: 6, role: 'qa-engineer' }),
@@ -487,4 +487,26 @@ test('buildExportRow: cost.json → dataset row, nulls where unmeasured, identit
   assert.equal(noProfile.factory_id, null, 'no invented identity');
   // compare renders both rows without throwing
   assert.match(renderCompare(c, c), /per delivered \(incl\. overhead\)/);
+});
+
+// The full token quad rides every bucket — the scalar sum hides that ~95% is
+// cache-read at ~1/10 input price (a $16 batch read as "47.5M tokens"). The
+// tokenomics view renders composition + hit rate from exactly these quads.
+test('token quads ride byRole, overhead.lead and per-case direct buckets', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc-tok-'));
+  const dir = join(repo, '.agents', 'automation', 'b1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'report.json'), JSON.stringify(RECEIPT));
+  const tele = join(repo, '.agents', 'telemetry', 'automation');
+  mkdirSync(tele, { recursive: true });
+  const s1 = sub('implement:TC-101', 9000, { costUsd: 1.25 });
+  s1.tokens = { input: 100, output: 400, cacheRead: 8000, cacheWrite: 500 };
+  writeFileSync(join(tele, 'usage-u1.jsonl'), `${JSON.stringify(line('s1', [s1], { costUsd: 2.0 }))}\n`);
+  const [c] = updateBatchCosts(repo);
+  const role = c.byRole['test-automation-engineer'];
+  assert.deepEqual(role.tok, { input: 100, output: 400, cacheRead: 8000, cacheWrite: 500 });
+  const tc = c.cases.find((x) => x.id === 'TC-101');
+  assert.equal(tc.direct.tok.output, 400, 'per-case direct carries the quad');
+  assert.ok(c.overhead.lead.tok, 'lead bucket carries a quad too');
+  assert.ok(c.totals.tokensSplit, 'batch-level split still present');
 });

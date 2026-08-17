@@ -6,6 +6,7 @@ group: qa
 color: green
 theme: {color: colour156, icon: "✍️", short_name: author}
 aliases: [test-author, author]
+context-docs: manual-qa/app_profile.md
 skills: []
 authors:
   - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>

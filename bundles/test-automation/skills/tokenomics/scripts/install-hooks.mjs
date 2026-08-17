@@ -294,20 +294,24 @@ Machine-written usage data: what each AI session cost, which cases it worked
 on. Hooks write here; commits go to the \`telemetry\` branch of THIS repo —
 never to main.
 
+One subfolder per bundle — \`automation/\` is the test-automation bundle's;
+other bundles add their own and ride the same branch and sync.
+
 - Don't edit by hand. Don't commit this folder to main.
-- See the team picture:  \`git -C .agents/automation/telemetry pull\`  → then run team-report
+- See the team picture:  \`git -C .agents/telemetry pull\`  → then run team-report
 - Empty after clone? run:  \`git submodule update --init\`
 `;
 
 // Transient files never worth committing even to the telemetry branch.
-const TELEMETRY_INNER_GITIGNORE = `live/
-scopes/.pending-*
-scopes/.nagged-*
-scopes/.unclosed-*
+// Generic on purpose: any bundle's subfolder gets the same transient handling.
+const TELEMETRY_INNER_GITIGNORE = `*/live/
+*/scopes/.pending-*
+*/scopes/.nagged-*
+*/scopes/.unclosed-*
 `;
 
 /**
- * Telemetry as a SELF-referential submodule: .agents/automation/telemetry is a checkout
+ * Telemetry as a SELF-referential submodule: .agents/telemetry is a checkout
  * of this same repository's orphan `telemetry` branch (.gitmodules url = ./).
  *
  * WHY. Telemetry is written continuously; the main tree lives in transactions
@@ -323,13 +327,34 @@ scopes/.unclosed-*
  * re-runs and initializes it (moving any interim files back in).
  */
 export function installTelemetrySubmodule(repo, { remove = false } = {}) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  // The submodule sits at the telemetry ROOT — shared across bundles, one
+  // branch, one sync. Each bundle keeps to its own subfolder (ours:
+  // automation/), so others join later with zero extra machinery.
+  const dir = join(repo, '.agents', 'telemetry');
   const git = (args, opts = {}) =>
     execFileSync('git', args, { cwd: opts.cwd ?? repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
   const inRepo = () => { try { git(['rev-parse', '--git-dir']); return true; } catch { return false; } };
   if (remove || !inRepo()) return { status: remove ? 'kept' : 'no-git' }; // --remove never deletes data
   if (existsSync(join(dir, '.git'))) return { status: 'already' };
 
+  // Interim files (plain-dir phase) move aside before the checkout — and MUST
+  // move back on ANY exit. Field lesson from the old-instance dry run: a
+  // failed `submodule add` left the whole flat-era history stranded in the
+  // stash dir while seedConfig planted a fresh config over the void.
+  const stash = `${dir}.pre-submodule`;
+  let stashed = false;
+  const restoreStash = () => {
+    if (!stashed || !existsSync(stash)) return;
+    try {
+      mkdirSync(dir, { recursive: true });
+      for (const name of readdirSync(stash)) {
+        const to = join(dir, name);
+        if (!existsSync(to)) renameSync(join(stash, name), to);
+      }
+      if (readdirSync(stash).length === 0) rmSync(stash, { recursive: true, force: true });
+      stashed = false;
+    } catch { /* stash left in place — data preserved, doctor will surface it */ }
+  };
   try {
     // 1. The orphan branch, created empty via plumbing if absent (no checkout,
     //    the main tree never moves).
@@ -345,10 +370,22 @@ export function installTelemetrySubmodule(repo, { remove = false } = {}) {
       }
     }
 
-    // 2. Any interim files (plain-dir phase) move aside before the checkout.
-    const stash = `${dir}.pre-submodule`;
+    // 2. Move the interim files aside.
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
-    if (hadFiles) renameSync(dir, stash);
+    if (hadFiles) { renameSync(dir, stash); stashed = true; }
+
+    // 2b. The flat era COMMITTED telemetry to main, and `submodule add`
+    //     refuses a tracked path outright — so the index entries must go
+    //     first. Index-only (`--cached`): files stay on disk (in the stash),
+    //     nothing is committed by us — the user's single review commit
+    //     records the removal together with the gitlink.
+    let untracked = false;
+    try {
+      if (git(['ls-files', '.agents/telemetry']).trim()) {
+        git(['rm', '-r', '-q', '--cached', '.agents/telemetry']);
+        untracked = true;
+      }
+    } catch { /* nothing tracked */ }
 
     // 3. Publish the branch where teammates will clone it from (best-effort —
     //    offline just means their first `submodule update` waits for a push).
@@ -357,15 +394,12 @@ export function installTelemetrySubmodule(repo, { remove = false } = {}) {
     // 4. Register + materialize. url './' = this same repository (resolved
     //    against origin, where the branch was just pushed; with no remote it
     //    resolves to the local repo, which also has it).
-    git(['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '-b', 'telemetry', '--', './', '.agents/automation/telemetry']);
-    git(['config', '-f', '.gitmodules', 'submodule..agents/automation/telemetry.ignore', 'all']);
+    git(['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '-b', 'telemetry', '--', './', '.agents/telemetry']);
+    git(['config', '-f', '.gitmodules', 'submodule..agents/telemetry.ignore', 'all']);
     git(['add', '.gitmodules']); // the ignore=all edit must ride the same staged version
 
     // 5. Move the interim files back in, seed README + inner gitignore.
-    if (hadFiles) {
-      for (const name of readdirSync(stash)) renameSync(join(stash, name), join(dir, name));
-      rmSync(stash, { recursive: true, force: true });
-    }
+    restoreStash();
     if (!existsSync(join(dir, 'README.md'))) writeFileSync(join(dir, 'README.md'), TELEMETRY_README);
     if (!existsSync(join(dir, '.gitignore'))) writeFileSync(join(dir, '.gitignore'), TELEMETRY_INNER_GITIGNORE);
     if (!hasBranch || hadFiles) {
@@ -375,20 +409,56 @@ export function installTelemetrySubmodule(repo, { remove = false } = {}) {
       // staged. Publish it and re-stage the gitlink, or a teammate's
       // `clone --recurse-submodules` pins an empty (or unpushed) commit.
       try { git(['push', 'origin', 'HEAD:telemetry'], { cwd: dir }); } catch { /* no remote / offline */ }
-      git(['add', '.agents/automation/telemetry']);
+      git(['add', '.agents/telemetry']);
     }
 
-    // 6. Anything previously committed to MAIN under this path must be
-    //    untracked there — we print the command, never commit to main ourselves.
-    let migrate = false;
-    try {
-      migrate = git(['ls-files', '.agents/automation/telemetry']).split('\n')
-        .some((l) => l.trim() && l.trim() !== '.agents/automation/telemetry'); // the gitlink itself is ours
-    } catch { /* fine */ }
-    return { status: 'installed', migrate };
+    // `migrate` now means: the flat era had committed this data to main, and
+    // step 2b already STAGED its removal — the user's one commit records it.
+    return { status: 'installed', migrate: untracked };
   } catch (err) {
+    restoreStash(); // a failed setup must never leave history stranded aside
     return { status: 'failed', error: String(err?.message ?? err).split('\n')[0] };
   }
+}
+
+/**
+ * Layout migration: the flat era wrote this bundle's files at the telemetry
+ * ROOT (usage-*.jsonl, scopes/, live/, config.json, factory-profile.json);
+ * the shared-submodule era puts them under automation/. Readers look ONLY in
+ * automation/, so un-migrated history silently vanishes from every report —
+ * hence this runs on every install, idempotent, plain dir or submodule alike.
+ * Never clobbers: an entry already present in automation/ wins (it is newer);
+ * directory moves merge file-by-file on the same rule.
+ */
+export function migrateTelemetryLayout(repo) {
+  const root = join(repo, '.agents', 'telemetry');
+  if (!existsSync(root)) return 0;
+  const auto = join(root, 'automation');
+  const OLD_FILES = (n) => /^usage-.*\.jsonl$/.test(n) || n === 'config.json' || n === 'factory-profile.json';
+  const OLD_DIRS = new Set(['scopes', 'live']);
+  let moved = 0;
+  let entries;
+  try { entries = readdirSync(root, { withFileTypes: true }); } catch { return 0; }
+  for (const e of entries) {
+    const old = e.isDirectory() ? OLD_DIRS.has(e.name) : OLD_FILES(e.name);
+    if (!old) continue;
+    const src = join(root, e.name);
+    const dest = join(auto, e.name);
+    try {
+      mkdirSync(auto, { recursive: true });
+      if (!existsSync(dest)) {
+        renameSync(src, dest);
+        moved++;
+      } else if (e.isDirectory()) {
+        for (const f of readdirSync(src)) {
+          const d2 = join(dest, f);
+          if (!existsSync(d2)) { renameSync(join(src, f), d2); moved++; }
+        }
+        if (readdirSync(src).length === 0) rmSync(src, { recursive: true, force: true });
+      } // a same-named FILE already in automation/: keep both untouched — surfaced by doctor, never merged blindly
+    } catch { /* best-effort per entry — a locked file must not abort the rest */ }
+  }
+  return moved;
 }
 
 /**
@@ -399,7 +469,7 @@ export function installTelemetrySubmodule(repo, { remove = false } = {}) {
  * fetch, merge (per-user files → conflict-free), push the merge back.
  */
 export function pullTelemetry(repo) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  const dir = join(repo, '.agents', 'telemetry'); // submodule root — all bundles
   if (!existsSync(join(dir, '.git'))) return { status: 'no-submodule' };
   const git = (args, timeout = 20000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
@@ -437,10 +507,10 @@ const GI_START = '# >>> tokenomics (managed) — working state only; the ledger/
 const GI_END = '# <<< tokenomics';
 export const GITIGNORE_BLOCK = [
   GI_START,
-  '.agents/automation/telemetry/live/',
-  '.agents/automation/telemetry/scopes/.pending-*',
-  '.agents/automation/telemetry/scopes/.nagged-*',
-  '.agents/automation/telemetry/scopes/.unclosed-*',
+  '.agents/telemetry/automation/live/',
+  '.agents/telemetry/automation/scopes/.pending-*',
+  '.agents/telemetry/automation/scopes/.nagged-*',
+  '.agents/telemetry/automation/scopes/.unclosed-*',
   GI_END,
 ].join('\n');
 
@@ -465,7 +535,7 @@ export function installGitignore(repo, { remove = false } = {}) {
 
 /** Seed the telemetry dir + default config (never overwrites an existing one). */
 export function seedConfig(repo) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  const dir = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(dir, { recursive: true });
   const cfg = join(dir, 'config.json');
   if (!existsSync(cfg)) {
@@ -506,13 +576,13 @@ export async function doctor(repo, { fix = false } = {}) {
   }
   // A file that is neither committed nor ignored blocks the pipeline's gate.
   const gi = existsSync(join(repo, '.gitignore')) ? readFileSync(join(repo, '.gitignore'), 'utf8') : '';
-  const giOk = gi.includes('.agents/automation/telemetry/live/');
+  const giOk = gi.includes('.agents/telemetry/automation/live/');
   say(giOk, 'gitignore (working state)', giOk ? undefined : 'transient telemetry files are not ignored — they will dirty the tree and block the gate; re-run install-hooks.mjs');
   // Telemetry submodule: the difference between "my numbers" and "the team's".
   {
-    const telDir = join(repo, '.agents', 'automation', 'telemetry');
+    const telDir = join(repo, '.agents', 'telemetry');
     const gm = existsSync(join(repo, '.gitmodules')) ? readFileSync(join(repo, '.gitmodules'), 'utf8') : '';
-    const registered = gm.includes('.agents/automation/telemetry');
+    const registered = gm.includes('.agents/telemetry');
     const materialized = existsSync(join(telDir, '.git'));
     if (registered && materialized) {
       let note = '';
@@ -527,13 +597,27 @@ export async function doctor(repo, { fix = false } = {}) {
         }
       } catch { note = 'state unreadable'; }
       process.stderr.write(`  info telemetry submodule — ${note}; team view: install-hooks.mjs --pull before a team report\n`);
+      // Local-only era leaves the submodule's origin pointing at the repo's own
+      // directory. The moment a REAL remote appears, every sync still lands
+      // only in the local branch — silently unshared — until `git submodule
+      // sync` re-resolves the './' url against the new origin. Detect exactly
+      // that transition.
+      try {
+        const originOf = (cwd) => execFileSync('git', ['-C', cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 }).trim().replace(/\/+$/, '');
+        const superRemote = originOf(repo); // throws when the repo has no remote → local-only, no warning
+        const subRemote = originOf(telDir);
+        if (subRemote !== superRemote) {
+          say(false, 'telemetry submodule remote',
+            `points at ${subRemote} while the repo's origin is ${superRemote} — captures stay local-only; run: git submodule sync .agents/telemetry`);
+        }
+      } catch { /* no remote at all — local-only mode, nothing to warn about */ }
     } else if (registered && !materialized) {
       say(false, 'telemetry submodule', 'registered but empty — cloned without --recurse-submodules; run: git submodule update --init');
     } else if (existsSync(telDir)) {
       process.stderr.write('  info telemetry — plain dir (local-only); re-run install-hooks.mjs in a git repo to get the shared branch\n');
     }
   }
-  const scopeDir = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  const scopeDir = join(repo, '.agents', 'telemetry', 'automation', 'scopes');
   if (existsSync(scopeDir)) {
     const names = readdirSync(scopeDir);
     const records = names.filter((n) => n.endsWith('.json')).length;
@@ -670,16 +754,22 @@ export async function main(argv = process.argv.slice(2)) {
   // Always: without it, the transient files this skill writes would block the
   // pipeline's gate (dirty tree) the first time a batch runs.
   touched.push(installGitignore(repo, { remove }));
+  // Old flat-layout data moves into automation/ BEFORE the submodule step, so
+  // its interim-files stash/restore already carries the migrated shape.
+  if (!remove) {
+    const migrated = migrateTelemetryLayout(repo);
+    if (migrated) process.stderr.write(`tokenomics: migrated ${migrated} old-layout telemetry entr${migrated === 1 ? 'y' : 'ies'} → .agents/telemetry/automation/\n`);
+  }
   const sub = installTelemetrySubmodule(repo, { remove });
   if (sub.status === 'installed') {
-    process.stderr.write('\ntokenomics: telemetry set up as a submodule (.agents/automation/telemetry → branch \'telemetry\', same repo)\n'
+    process.stderr.write('\ntokenomics: telemetry set up as a submodule (.agents/telemetry → branch \'telemetry\', same repo; this bundle writes automation/)\n'
       + '\n  what this means, once:\n'
       + '  • hooks write usage data there; it commits to its OWN branch — your working tree never gets dirty\n'
       + '  • one commit to make now (adds .gitmodules + the pointer):\n'
-      + '        git add .gitmodules .agents/automation/telemetry && git commit -m "chore: telemetry submodule"\n'
-      + (sub.migrate ? '        git rm -r --cached .agents/automation/telemetry   # it was tracked on main before — untrack it in the same commit\n' : '')
+      + '        git add .gitmodules .agents/telemetry && git commit -m "chore: telemetry submodule"\n'
+      + (sub.migrate ? '    (old telemetry files were tracked on main — their removal is ALREADY STAGED and rides this same commit; the data itself lives on in the telemetry branch)\n' : '')
       + '  • teammates: git clone --recurse-submodules   (forgot? this installer fixes it on next run)\n'
-      + '  • team report anytime:  git -C .agents/automation/telemetry pull && node …/team-report.mjs --html\n');
+      + '  • team report anytime:  git -C .agents/telemetry pull && node …/team-report.mjs --html\n');
   } else if (sub.status === 'failed') {
     process.stderr.write(`tokenomics: telemetry submodule setup skipped (${sub.error}) — plain-dir mode, everything still works locally\n`);
   }

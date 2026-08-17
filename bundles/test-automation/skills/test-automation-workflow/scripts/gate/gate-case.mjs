@@ -111,9 +111,11 @@ export function appendGateRecord(repo, result, { batch = null, now = new Date().
     // the very branch switch the gate needs. Telemetry rides its own branch
     // (or is gitignored in the plain-dir phase), so writes there never touch
     // the main tree. Close folds these lines back into the batch dir.
-    const telDir = join(repo, '.agents', 'automation', 'telemetry');
-    const file = existsSync(telDir)
-      ? join(telDir, 'gate-runs', `${slug}.jsonl`)
+    // Check the submodule ROOT (that's what install creates); write into this
+    // bundle's automation/ subfolder — mkdir below creates it on first use.
+    const telRoot = join(repo, '.agents', 'telemetry');
+    const file = existsSync(telRoot)
+      ? join(telRoot, 'automation', 'gate-runs', `${slug}.jsonl`)
       : join(repo, '.agents', 'automation', slug, 'gate-runs.jsonl');
     mkdirSync(dirname(file), { recursive: true });
     appendFileSync(file, `${JSON.stringify({
@@ -124,6 +126,10 @@ export function appendGateRecord(repo, result, { batch = null, now = new Date().
       consecutiveGreen: result.consecutiveGreen ?? 0,
       seconds: result.seconds ?? [],
       ...(result.conflictFiles?.length ? { conflictFiles: result.conflictFiles } : {}),
+      // Unrelated dirt the gate proceeded over — the verdict stays honest
+      // about the environment without having been hostage to it.
+      ...(result.carriedDirt?.length ? { carriedDirt: result.carriedDirt } : {}),
+      ...(result.carriedDirtMore ? { carriedDirtMore: result.carriedDirtMore } : {}),
     })}\n`);
     return file;
   } catch { return null; }
@@ -143,6 +149,16 @@ export function gateNote(summary, extra = '') {
 
 const git = (repo, args) =>
   execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
+// The exact paths git refuses to overwrite, parsed from a failed checkout/
+// merge ("Your local changes to the following files would be overwritten…" /
+// "…untracked working tree files would be overwritten…"). git indents each
+// victim with a tab; the list ends at the first unindented line.
+export function overwriteVictims(err) {
+  const msg = `${err?.message ?? ''}\n${err?.stderr ?? ''}`;
+  const m = msg.match(/would be overwritten by (?:checkout|merge):\n((?:[ \t]+[^\n]+\n?)+)/);
+  return m ? m[1].split('\n').map((s) => s.trim()).filter((s) => s && !/^Please\b|^Aborting/.test(s)) : [];
+}
 
 function conflictFiles(repo) {
   try {
@@ -207,8 +223,9 @@ function main() {
   }
   const result = { branch, base, spec, n, verdict: 'error', notes: '' };
 
-  // Refuse to gate over someone else's work in progress: this checks branches
-  // out in the real tree, so uncommitted changes would be dragged along or lost.
+  // Gate in the real tree — but judge its dirt precisely, not blanketly
+  // (see the dirt-policy block below): refuse only what would poison the
+  // proof or collide with the branch switch; carry the rest, on the record.
   try {
     // Not fatal: a repo with no remote, or an unreachable one, is still gateable
     // against what is on disk. Letting fetch throw here killed the whole setup
@@ -216,32 +233,47 @@ function main() {
     // local branch reported "git setup failed" instead of running.
     if (remote) { try { git(repo, ['fetch', remote, '--quiet']); } catch { result.fetched = false; } }
     else result.fetched = false;                     // no remote at all — local-only repo
-    // -uall lists untracked FILES (not collapsed dirs) so the legitimate
-    // exceptions are filterable. TWO of them, both pure bookkeeping that is
-    // never part of what is gated:
-    //   * this script's own gate-runs.jsonl records, written between the
-    //     one-run-per-call invocations — refusing on those would deadlock the
-    //     N-run loop on any project that does not gitignore .agents/automation;
-    //   * UNTRACKED files under .agents/automation/telemetry/ — scope records and the
-    //     live dispatch log, written by hooks WHILE the run happens. A project
-    //     that commits its telemetry (the point of team-wide reporting) would
-    //     otherwise have every gate refused by its own measurement layer.
-    //     Untracked only, deliberately: a MODIFIED TRACKED file is a different
-    //     animal — checkout/merge legitimately refuses to overwrite local
-    //     changes, so tolerating it here would turn a clear git error into a
-    //     confusing gate failure. Commit telemetry at close, not mid-run.
-    // Everything else still refuses, same as always.
-    const TOLERATED = [
-      /^\?\? "?\.agents\/automation\/.*gate-runs\.jsonl"?$/,
-      /^\?\? "?\.agents\/automation\/telemetry\//,
-    ];
-    const dirty = git(repo, ['status', '--porcelain', '-uall'])
+    // Dirt policy — precise, not blanket (reworked 2026-08-17 after a field
+    // case where a foreign bundle's debug log and installer-touched configs
+    // blocked gates that had nothing to do with them). Dirt endangers a gate
+    // in exactly two ways, and each gets its own precise treatment:
+    //   1. PROOF CONTAMINATION — a dirty path among the files this gate is
+    //      ABOUT (the base...branch diff): the spec run would prove the dirt,
+    //      not the branch. Always refuse, naming the paths.
+    //   2. GIT MECHANICS — checkout/merge refuse when a dirty path collides
+    //      with the switch. git itself is the precise judge there: we attempt
+    //      the operation and surface ITS victim list (catch blocks below)
+    //      instead of pre-refusing on everything.
+    // Everything else — logs, configs, other bundles' state, docs — is
+    // somebody else's business: the gate proceeds and books it in the verdict
+    // record as carriedDirt, honest about the environment without being
+    // hostage to it.
+    // RAW output, not the trimming git() helper: porcelain's XY column starts
+    // with a SPACE for worktree-modified files, and a global trim eats it on
+    // the first line — slice(3) then mangles the path (caught by test).
+    const dirtyPaths = execFileSync('git', ['status', '--porcelain', '-uall'], { cwd: repo, encoding: 'utf8' })
       .split('\n').filter((s) => s.trim())
-      .filter((l) => !TOLERATED.some((re) => re.test(l)))
-      .map((s) => s.trim());
-    if (dirty.length) {
-      result.notes = 'working tree is dirty — commit your own paths, or stash BY PATH (git stash push -- <paths>); NEVER stash or clean the whole tree (untracked receipts/AFS/memory vanish silently). Gating checks branches out in this tree.';
-      return fail(result, json);
+      .map((l) => l.slice(3).replace(/^"|"$/g, ''));
+    if (dirtyPaths.length) {
+      const refOf = (name) => {
+        for (const r of [remote ? `${remote}/${name}` : null, name]) {
+          if (!r) continue;
+          try { git(repo, ['rev-parse', '--verify', r]); return r; } catch { /* next */ }
+        }
+        return null;
+      };
+      let proofSet = [];
+      const bRef = refOf(branch); const baRef = refOf(base);
+      if (bRef && baRef) {
+        try { proofSet = git(repo, ['diff', '--name-only', `${baRef}...${bRef}`]).split('\n').filter(Boolean); } catch { /* no diff → no contamination check */ }
+      }
+      const contaminated = dirtyPaths.filter((p) => proofSet.includes(p));
+      if (contaminated.length) {
+        result.notes = `dirty paths overlap the very files this gate proves (${contaminated.join(', ')}) — the run would prove the dirt, not the branch. Commit them or stash BY PATH (git stash push -- <paths>); NEVER stash or clean the whole tree (untracked receipts/AFS/memory vanish silently).`;
+        return fail(result, json);
+      }
+      result.carriedDirt = dirtyPaths.slice(0, 20);
+      if (dirtyPaths.length > 20) result.carriedDirtMore = dirtyPaths.length - 20;
     }
     // origin/<branch> is the intended target: it is what will actually be
     // reviewed and merged, and a local-only branch may hold commits nobody else
@@ -259,8 +291,13 @@ function main() {
       result.localOnly = true;
     }
   } catch (e) {
-    result.notes = `git setup failed: ${String(e.message).split('\n')[0]}` +
-      ` (branch '${branch}' is on neither origin nor local — the integrator should have pushed it)`;
+    // git names the exact colliding paths when local changes block a checkout —
+    // surface THAT (precise, actionable) instead of a generic setup failure.
+    const victims = overwriteVictims(e);
+    result.notes = victims.length
+      ? `checkout blocked by local changes to: ${victims.join(', ')} — commit them or stash BY PATH (git stash push -- <paths>); NEVER stash or clean the whole tree (untracked receipts/AFS/memory vanish silently).`
+      : `git setup failed: ${String(e.message).split('\n')[0]}` +
+        ` (branch '${branch}' is on neither origin nor local — the integrator should have pushed it)`;
     return fail(result, json);
   }
 
@@ -274,12 +311,20 @@ function main() {
     git(repo, ['-c', 'user.email=gate@local', '-c', 'user.name=gate', 'merge', baseRef, '--no-edit']);
     result.baseMerged = true;
     result.baseRef = baseRef;      // report what was ACTUALLY merged, not what was asked for
-  } catch {
+  } catch (e) {
+    // Collect the unmerged paths BEFORE aborting — the abort erases them.
     const files = conflictFiles(repo);
     // Abort the half-merge (best effort) so the tree stays usable — leaving
     // MERGE_HEAD behind makes the NEXT gate run refuse with a misleading
     // "working tree is dirty" that only `git merge --abort` by hand would fix.
     try { git(repo, ['merge', '--abort']); } catch { /* no merge in progress */ }
+    // Local changes blocking the merge are NOT a branch conflict — report
+    // git's own victim list instead of mislabeling it one.
+    const victims = overwriteVictims(e);
+    if (victims.length) {
+      result.notes = `merging ${base} blocked by local changes to: ${victims.join(', ')} — commit them or stash BY PATH (git stash push -- <paths>); NEVER stash or clean the whole tree.`;
+      return fail(result, json);
+    }
     result.verdict = 'conflict';
     result.conflictFiles = files;
     result.notes =

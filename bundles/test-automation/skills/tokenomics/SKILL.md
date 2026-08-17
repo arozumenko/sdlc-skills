@@ -1,6 +1,6 @@
 ---
 name: tokenomics
-description: Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/automation/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, "enable telemetry", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.
+description: Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/automation/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, "enable telemetry", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.
 license: Apache-2.0
 compatibility: "Requires Node 18+. Captures on Claude Code (SessionEnd hook + start-time sweep), GitHub Copilot CLI (sessionEnd + sessionStart sweeps; older CLIs start-only), and the VS Code Copilot sidebar (folderOpen auto-task); other hosts run the capture script's --sweep manually, from CI, or via the optional git post-commit hook. Per-host detail: § How capture works on each host."
 metadata:
@@ -18,7 +18,7 @@ to whoever runs it, soon enough, where the work happened.
 
 This skill closes that gap with a **capture layer**: an optionally-enabled hook
 that writes one JSON line per finished session into a **git-committed ledger**
-(`.agents/automation/telemetry/usage-<user>.jsonl`). Ledger lines are grounded in the same
+(`.agents/telemetry/automation/usage-<user>.jsonl`). Ledger lines are grounded in the same
 sources efficiency-audit trusts (transcript token records, ccusage dollars,
 Copilot's billed credits) but are captured **at the moment they exist** — so the
 team's usage history survives transcript cleanup and accumulates through
@@ -27,6 +27,13 @@ and money did the team spend, and how many cases did it automate.*
 
 **Installing this skill does NOT start capturing.** Telemetry activates only
 when someone runs the install script below — that's the opt-in.
+
+**Updating an old install: re-run the same script.** It is idempotent and also
+migrates the flat-era layout — `usage-*.jsonl`, `scopes/`, `live/`,
+`config.json` sitting at the telemetry ROOT move into `automation/`
+automatically (readers look only there; un-migrated history would silently
+drop out of every report). Same-named newer data in `automation/` wins —
+nothing is ever clobbered.
 
 ## Quick start
 
@@ -67,7 +74,7 @@ node .claude/skills/tokenomics/scripts/team-report.mjs --batch <slug> --html --o
 node .claude/skills/tokenomics/scripts/team-report.mjs --batches                 # every batch with a receipt
 
 # 6. Cross-factory export (optional) — one dataset row per batch
-#    identity comes from .agents/automation/telemetry/factory-profile.json (copy
+#    identity comes from .agents/telemetry/automation/factory-profile.json (copy
 #    templates/factory-profile.template.json there and fill it in once)
 node .claude/skills/tokenomics/scripts/build-tokenomics-export.mjs --batch <slug>
 node .claude/skills/tokenomics/scripts/build-tokenomics-export.mjs --compare a/cost.json b/cost.json
@@ -121,7 +128,7 @@ suppressed — receipts aren't attributable to one role.)
 
 Mined ids answer *which cases a session mentioned*; the scope record answers
 *what the session was actually for*. A tiny structured file per session at
-`.agents/automation/telemetry/scopes/<session-id>.json` — written by the lead **when the
+`.agents/telemetry/automation/scopes/<session-id>.json` — written by the lead **when the
 work begins**, updated **when outcomes become true**, committed like the ledger:
 
 ```bash
@@ -195,7 +202,7 @@ The ledger stays **one honest line per session**, written at session end. But
 waiting for the session to end means a multi-hour batch shows nothing, so a
 **SubagentStop hook** (`--dispatch`, async) measures each dispatch the moment
 it finishes: it meters **that one transcript** (~1s) and appends **one line per
-dispatch** to `.agents/automation/telemetry/live/<session>.jsonl` — role, label, case ids,
+dispatch** to `.agents/telemetry/automation/live/<session>.jsonl` — role, label, case ids,
 tokens, active minutes, tool calls/errors, real dollars.
 
 Why a separate file rather than the ledger: appending a whole-session line per
@@ -219,7 +226,7 @@ meter the parent. `priceAtCapture: false` (or `TOKENOMICS_NO_CCUSAGE=1`) keeps
 the records tokens-only.
 
 The same hook also refreshes a **live batch page** —
-`.agents/automation/telemetry/reports/<batch>.html`, overwritten in place on
+`.agents/telemetry/automation/reports/<batch>.html`, overwritten in place on
 every finished dispatch and at session end (same renderer as the close-time
 report; mid-run figures read LIVE/PROVISIONAL and converge to the close
 figures). Open it in a browser and watch the batch spend as it happens.
@@ -264,20 +271,27 @@ Team reporting only works if the **records** travel. Cost-per-case is a join
 between the ledger and the receipts — without both in git a teammate can
 compute nothing. Two homes:
 
-**The telemetry submodule.** `install-hooks.mjs` sets `.agents/automation/telemetry`
+**The telemetry submodule.** `install-hooks.mjs` sets `.agents/telemetry`
 up as a submodule **of the same repository**, checked out on its own `telemetry`
-branch (`.gitmodules` url `./`, `ignore = all`). The ledger
+branch (`.gitmodules` url `./`, `ignore = all`). It is **shared, one subfolder
+per bundle** — this bundle writes `automation/`; another bundle that wants
+durable telemetry later adds its own subfolder and rides the same branch and
+sync, no second submodule. In `automation/`: the ledger
 (`usage-<user>.jsonl` — one file per user, so parallel work never conflicts),
 scope records, `config.json`, `factory-profile.json`, mid-run gate verdicts
 (`gate-runs/<batch>.jsonl`), workflow returns (`returns/`) and the live batch
-page (`reports/`) all live there. **Nobody hand-commits any of it**: every
+page (`reports/`). **Nobody hand-commits any of it**: every
 capture moment commits and pushes to the `telemetry` branch (best-effort;
 offline just means the next capture catches up; `TOKENOMICS_NO_SYNC=1`
 disables). Because of `ignore = all` and the separate branch, the main working
 tree never gets dirty and a branch switch never stashes a record. A teammate
 gets everything with `git clone --recurse-submodules` (forgot? — `git
 submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
-before a team report to merge in everyone's pushes.
+before a team report to merge in everyone's pushes. A repo with **no remote at
+all** works too — everything accumulates in the local `telemetry` branch; when
+a real remote appears later, run `git submodule sync .agents/telemetry` once
+so pushes start reaching it (`--doctor` detects the un-synced state and prints
+exactly that command).
 
 **The main tree.** The batch's own record ships with the batch, committed like
 any other file at close: `report.json`, `gate-runs.jsonl` (folded from the
@@ -291,17 +305,16 @@ telemetry folder is not (yet) a submodule:
 
 ```gitignore
 # >>> tokenomics (managed) — working state only; the ledger/scopes/receipts stay COMMITTED
-.agents/automation/telemetry/live/
-.agents/automation/telemetry/scopes/.pending-*
-.agents/automation/telemetry/scopes/.nagged-*
-.agents/automation/telemetry/scopes/.unclosed-*
+.agents/telemetry/automation/live/
+.agents/telemetry/automation/scopes/.pending-*
+.agents/telemetry/automation/scopes/.nagged-*
+.agents/telemetry/automation/scopes/.unclosed-*
 # <<< tokenomics
 ```
 
-**Projects that gitignore all of `.agents/automation/`**: git cannot re-include
-a child of an ignored directory pattern, so switch to the pair
-`.agents/automation/*` + `!.agents/automation/telemetry` — same coverage, and
-the submodule stays visible.
+**Never gitignore `.agents/telemetry`** — a submodule only works if git sees
+its path. (`.agents/automation/<batch>/` must stay committable too — its
+receipts and cost records are the point.)
 
 Artifacts other skills write are the project's call, not this skill's — most
 projects also ignore the legacy `.agents/automation/_returns/` (per-dispatch
@@ -310,12 +323,13 @@ batch's `cases/` snapshots and `run.json`, and any browser scratch
 (`.playwright-mcp/`). `--doctor` warns when the block is missing and reports
 the submodule's state (uninitialized clone, unpushed commits, detached HEAD).
 
-**Scope note:** this telemetry contract belongs to the **test-automation
-bundle**. manual-qa meters its benchmark runs with its own hooks, other
-bundles do their own thing — the paths never collide, so they coexist in one
-repo without conflict.
+**Scope note:** the capture/scope contract here belongs to the
+**test-automation bundle**; manual-qa meters its benchmark runs with its own
+hooks and other bundles do their own thing — the paths never collide, so they
+coexist in one repo without conflict. The telemetry *submodule* itself is the
+shared piece: per-bundle subfolders, one branch, one sync.
 
-## Config — `.agents/automation/telemetry/config.json`
+## Config — `.agents/telemetry/automation/config.json`
 
 ```json
 { "capturePrompts": false, "priceAtCapture": true, "maxSweep": 10,

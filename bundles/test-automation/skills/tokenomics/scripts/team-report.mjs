@@ -4,7 +4,7 @@
 //   node team-report.mjs [roots...] [--since YYYY-MM-DD] [--until YYYY-MM-DD]
 //                        [--receipts <path>] [--json] [--out <file>]
 //
-// Each root may be a repo root (reads .agents/automation/telemetry/*.jsonl and joins
+// Each root may be a repo root (reads .agents/telemetry/automation/*.jsonl and joins
 // .agents/automation/*/report.json receipts), a telemetry dir, or a single
 // ledger file. Several roots = several repos rolled into one report — that is
 // the whole point: every engineer's committed ledger lines merge through git,
@@ -32,7 +32,7 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 function ledgerFilesOf(root) {
   if (!existsSync(root)) return [];
   if (statSync(root).isFile()) return root.endsWith('.jsonl') ? [root] : [];
-  for (const dir of [join(root, '.agents', 'automation', 'telemetry'), root]) {
+  for (const dir of [join(root, '.agents', 'telemetry', 'automation'), root]) {
     if (!existsSync(dir)) continue;
     let names;
     try { names = readdirSync(dir); } catch { continue; }
@@ -125,7 +125,7 @@ function findReports(target) {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      // telemetry submodule + underscore working dirs are not batches
+      // underscore working dirs are not batches; 'telemetry' = legacy-layout defense
       if (entry.name === 'telemetry' || entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
@@ -268,6 +268,7 @@ export function renderMarkdown(rep, { window, label } = {}) {
   const src = Object.entries(rep.costSources).map(([s, n]) => `${s} ×${n}`).join(', ');
   out.push(`- Cost (real figures only): ${usd(t.priced ? t.costUsd : null)} from ${t.priced} priced session(s)${src ? ` (${src})` : ''}${rep.tokensOnly ? `  ·  ⚠️ ${rep.tokensOnly} session(s) tokens-only (no real dollar — never estimated)` : ''}`);
   out.push(`- Tokens (incl. sub-agents): ${tokStr(t.tokens)}`);
+  out.push(`- Real work: ${((t.tokens.input + t.tokens.output)).toLocaleString()} tokens (in+out)  ·  cache hit rate: ${(() => { const d = t.tokens.cacheRead + t.tokens.cacheWrite + t.tokens.input; return d ? `${((t.tokens.cacheRead / d) * 100).toFixed(1)}%` : 'n/a'; })()}`);
   out.push(`- Time: ${hours(t.activeMin)} active  ·  ${hours(t.wallMin)} wall  ·  ${t.turns} turns  ·  ${t.toolCalls} tool calls (${t.toolErrors} err)`);
   const caseIds = Object.keys(rep.byCase ?? {});
   if (caseIds.length) {
@@ -332,6 +333,36 @@ export function renderMarkdown(rep, { window, label } = {}) {
 // case (direct, measured) and at batch level (overhead, once). The numbers come
 // from batch-cost.mjs — the same recompute the capture hook runs, built fresh
 // here so the report never trails the ledger.
+// --- Token-economics helpers -------------------------------------------------
+// The scalar token sum buries the story: ~95% of it is cache-read at ~1/10
+// input price (field: a $16 batch showing "47.5M tokens"). Real work =
+// input+output. Cache hit rate = cacheRead / (input + cacheWrite + cacheRead):
+// the share of ALL prompt tokens replayed from cache versus processed fresh —
+// cache WRITE is fresh processing (at 1.25× input price), so it belongs in
+// the denominator. The naive cacheRead/(cacheRead+input) degenerates to ~100%
+// on Claude Code (uncached input per request is a few tokens; measured: 775
+// input across 18 turns) and discriminates nothing.
+export const realWork = (t) => (t ? num(t.input) + num(t.output) : null);
+export const cacheHitRate = (t) => {
+  const denom = num(t?.cacheRead) + num(t?.cacheWrite) + num(t?.input);
+  return denom ? num(t.cacheRead) / denom : null;
+};
+// What the cache BOUGHT: prompt cost without it (every token at 1× input
+// price) vs as billed (input 1× + write 1.25× + read 0.1×). Complements the
+// hit rate — "how often" vs "how much money it saved".
+export const cacheSavings = (t) => {
+  const would = num(t?.input) + num(t?.cacheWrite) + num(t?.cacheRead);
+  if (!would) return null;
+  const paid = num(t?.input) + num(t?.cacheWrite) * 1.25 + num(t?.cacheRead) * 0.1;
+  return 1 - paid / would;
+};
+const pct = (x) => (x == null ? 'n/a' : `${(x * 100).toFixed(1)}%`);
+const kTok = (n) => (n == null ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : String(Math.round(n)));
+const rwCell = (tokQuad, scalarFallback) =>
+  tokQuad && (tokQuad.input || tokQuad.output || tokQuad.cacheRead)
+    ? `${realWork(tokQuad).toLocaleString()} (in ${kTok(tokQuad.input)} / out ${kTok(tokQuad.output)})`
+    : `${(scalarFallback ?? 0).toLocaleString()} (incl. cache)`;
+
 export function renderBatchMarkdown(c) {
   const out = [`# Batch cost — ${c.batch}`, '',
     `Generated: ${c.generatedAt}  ·  sessions: ${c.sources.sessions} (${c.sources.hosts.join(', ') || 'none'})  ·  sources: ${c.sources.costSources.join(', ') || 'tokens only'}  ·  models: ${c.sources.models.join(', ') || '—'}`, ''];
@@ -346,7 +377,13 @@ export function renderBatchMarkdown(c) {
   if (c.records?.outcomeDrift?.length) out.push(`- ⚠️ **OUTCOME DRIFT** (${c.records.outcomeDrift.length}): ${c.records.outcomeDrift.map((d) => `${d.id} receipt=${d.receipt ?? '—'} declared=${d.declared}`).join('; ')} — reconcile report.json`);
   out.push(`- Findings reported: ${c.cases.reduce((n, x) => n + x.findings, 0)}  ·  fix rounds: ${c.cases.reduce((n, x) => n + x.direct.fixRounds, 0)}`, '');
   out.push('## What it cost', '');
-  out.push(`- Total: ${usd(c.totals.costUsd)}  ·  ${c.totals.tokens.toLocaleString()} tokens  ·  ${hours(c.totals.activeMin)} active  ·  ${c.totals.dispatches} dispatches`);
+  const ts = c.totals.tokensSplit;
+  out.push(`- Total: ${usd(c.totals.costUsd)}  ·  ${hours(c.totals.activeMin)} active  ·  ${c.totals.dispatches} dispatches`);
+  if (ts) {
+    out.push(`- Tokens: **real work ${realWork(ts).toLocaleString()}** (in ${ts.input.toLocaleString()} / out ${ts.output.toLocaleString()})  ·  cache ${kTok(ts.cacheRead)} read / ${kTok(ts.cacheWrite)} write  ·  **cache hit rate ${pct(cacheHitRate(ts))}**  ·  see batch-tokenomics for the full breakdown`);
+  } else {
+    out.push(`- Tokens: ${c.totals.tokens.toLocaleString()} (incl. cache — re-run close for the split)`);
+  }
   if (c.totals.toolCalls != null) out.push(`- Activity: ${c.totals.turns ?? '—'} turns  ·  ${c.totals.toolCalls} tool calls (${c.totals.toolErrors} err${c.totals.toolCalls ? `, ${Math.round((1 - c.totals.toolErrors / c.totals.toolCalls) * 100)}% ok` : ''})${c.totals.skills?.length ? `  ·  skills: ${c.totals.skills.join(', ')}` : ''}`);
   out.push(`- Overhead (lead + triage + gate + report, shown once): ${usd(c.overhead.costUsd)}${c.overhead.sharePct != null ? ` (${c.overhead.sharePct}%)` : ''}`);
   const bs = c.overhead.byStage;
@@ -361,16 +398,17 @@ export function renderBatchMarkdown(c) {
   if (s.directActiveMin) out.push(`- Active-time spread: ${line4(s.directActiveMin, (x) => `${x}m`)}${s.loadedActiveMin ? `  ·  loaded: ${line4(s.loadedActiveMin, (x) => `${x}m`)}` : ''}`);
   if (!s.directCostUsd && s.directTokens) out.push(`- Direct token spread (no per-dispatch dollars on this host): ${line4(s.directTokens, (x) => x.toLocaleString())}`);
   out.push('', '## Per case (direct = measured; loaded = direct + even overhead share, an allocation)', '');
-  out.push('| case | outcome | direct cost | loaded | tokens | active | loaded act. | dispatches | tools (err) | fix rounds | findings |', '|---|---|---|---|---|---|---|---|---|---|---|');
+  out.push('| case | outcome | direct cost | loaded | real-work tok | active | loaded act. | dispatches | tools (err) | fix rounds | findings |', '|---|---|---|---|---|---|---|---|---|---|---|');
   for (const x of c.cases) {
-    out.push(`| ${x.id} | ${x.outcome ?? '—'} | ${usd(x.direct.costUsd)} | ${usd(x.loaded?.costUsd)} | ${x.direct.tokens.toLocaleString()} | ${x.direct.activeMin}m | ${x.loaded?.activeMin ?? '—'}m | ${x.direct.dispatches} | ${x.direct.toolCalls ?? '—'} (${x.direct.toolErrors ?? 0}) | ${x.direct.fixRounds} | ${x.findings} |`);
+    out.push(`| ${x.id} | ${x.outcome ?? '—'} | ${usd(x.direct.costUsd)} | ${usd(x.loaded?.costUsd)} | ${rwCell(x.direct.tok, x.direct.tokens)} | ${x.direct.activeMin}m | ${x.loaded?.activeMin ?? '—'}m | ${x.direct.dispatches} | ${x.direct.toolCalls ?? '—'} (${x.direct.toolErrors ?? 0}) | ${x.direct.fixRounds} | ${x.findings} |`);
   }
+  out.push('', '_Cases analysed/built as one cluster share its measured dispatches — their rows are an even split, not per-case measurement (fractional `dispatches` marks them)._');
   const roles = Object.entries(c.byRole ?? {});
   if (roles.length) {
     out.push('', '## By role', '');
-    out.push('| role | cost | dispatches | tokens | active | tools (err) |', '|---|---|---|---|---|---|');
+    out.push('| role | cost | dispatches | real-work tok | cache hit | active | tools (err) |', '|---|---|---|---|---|---|---|');
     for (const [r, b] of roles.sort((a, z) => (z[1].costUsd ?? 0) - (a[1].costUsd ?? 0))) {
-      out.push(`| ${r} | ${usd(b.costUsd)} | ${b.dispatches} | ${b.tokens.toLocaleString()} | ${b.activeMin}m | ${b.toolCalls ?? '—'} (${b.toolErrors ?? 0}) |`);
+      out.push(`| ${r} | ${usd(b.costUsd)} | ${b.dispatches} | ${rwCell(b.tok, b.tokens)} | ${b.tok ? pct(cacheHitRate(b.tok)) : '—'} | ${b.activeMin}m | ${b.toolCalls ?? '—'} (${b.toolErrors ?? 0}) |`);
     }
   }
   if (c.coverage.casesUnattributed.length) {
@@ -438,6 +476,102 @@ export function renderBatchHtml(c) {
   ${c.coverage.casesUnattributed.length ? `<p class="note">Unattributed (no captured dispatch named them): ${esc(c.coverage.casesUnattributed.join(', '))}</p>` : ''}`;
 }
 
+// --- The TOKENOMICS view — the other unfolding of the same cost.json --------
+// The batch report answers "what did delivery cost"; this answers "where did
+// the tokens go and how well did the cache work" (same rhythm as manual-qa's
+// Orchestrator-composition section): composition per bucket — real work
+// (input+output) vs cache write vs cache read — plus the hit rate, so a huge
+// raw token number reads correctly instead of alarmingly.
+export function renderBatchTokenomicsMarkdown(c) {
+  const ts = c.totals.tokensSplit;
+  const out = [`# Batch tokenomics — ${c.batch}`, '',
+    `Generated: ${c.generatedAt}  ·  sessions: ${c.sources.sessions}  ·  models: ${c.sources.models.join(', ') || '—'}  ·  companion of batch-report (delivery view)`, ''];
+  if (!ts) { out.push('_No token split in this cost.json — regenerate it (work-scope close / batch-cost.mjs) with the current skill version._'); return out.join('\n'); }
+  const total = ts.input + ts.output + ts.cacheRead + ts.cacheWrite;
+  out.push('## Composition — where the tokens went', '');
+  out.push('| kind | tokens | share | what it is |', '|---|---|---|---|');
+  out.push(`| real work: input | ${ts.input.toLocaleString()} | ${pct(ts.input / total)} | fresh prompt tokens, full price |`);
+  out.push(`| real work: output | ${ts.output.toLocaleString()} | ${pct(ts.output / total)} | generated tokens — the most expensive kind |`);
+  out.push(`| cache write | ${ts.cacheWrite.toLocaleString()} | ${pct(ts.cacheWrite / total)} | context stored for reuse (~1.25× input price) |`);
+  out.push(`| cache read | ${ts.cacheRead.toLocaleString()} | ${pct(ts.cacheRead / total)} | context replayed from cache (~0.1× input price) |`);
+  out.push('', `**Cache hit rate: ${pct(cacheHitRate(ts))}** — share of all prompt tokens replayed from cache versus processed fresh (input + cache write are the fresh processing).`);
+  out.push(`**Cache savings: ~${pct(cacheSavings(ts))} of prompt cost** — what the same prompt volume would have cost uncached (all tokens at 1× input price) versus as billed (write 1.25×, read 0.1×).`);
+  out.push(`Raw total ${c.totals.tokens.toLocaleString()} tokens · ${usd(c.totals.costUsd)} — the raw sum is dominated by the cheapest kind; judge by composition, not by the big number.`, '');
+  const rowFor = (name, b) => `| ${name} | ${usd(b.costUsd)} | ${realWork(b.tok)?.toLocaleString() ?? '—'} | ${kTok(b.tok?.cacheWrite)} | ${kTok(b.tok?.cacheRead)} | ${b.tok ? pct(cacheHitRate(b.tok)) : '—'} |`;
+  const roles = Object.entries(c.byRole ?? {}).filter(([, b]) => b.tok);
+  if (roles.length) {
+    out.push('## By role', '', '| role | cost | real work | cache write | cache read | hit rate |', '|---|---|---|---|---|---|');
+    for (const [r, b] of roles.sort((a, z) => (z[1].costUsd ?? 0) - (a[1].costUsd ?? 0))) out.push(rowFor(r, b));
+    out.push('');
+  }
+  // The lead's share, decomposed — the e5aa3ba lesson: a big orchestrator
+  // number is usually cache traffic, not runaway thinking; show which.
+  const lead = c.overhead?.lead;
+  if (lead?.tok) {
+    out.push('## Orchestrator (lead thread) composition', '');
+    out.push(`Lead: ${usd(lead.costUsd)}${c.overhead.sharePct != null ? ` — overhead incl. stages is ${c.overhead.sharePct}% of the batch` : ''} · real work ${realWork(lead.tok).toLocaleString()} · cache ${kTok(lead.tok.cacheRead)} read / ${kTok(lead.tok.cacheWrite)} write · hit rate ${pct(cacheHitRate(lead.tok))}`);
+    out.push('A high lead share with a high hit rate is orchestration overhead working as designed (context replayed per turn), not runaway spend.', '');
+  }
+  const stages = Object.entries(c.overhead?.byStage ?? {}).filter(([, b]) => b.tok);
+  if (stages.length) {
+    out.push('## By stage (overhead)', '', '| stage | cost | real work | cache write | cache read | hit rate |', '|---|---|---|---|---|---|');
+    for (const [k, b] of stages) out.push(rowFor(k, b));
+    out.push('');
+  }
+  const cased = (c.cases ?? []).filter((x) => x.direct.tok && (x.direct.tok.input || x.direct.tok.output || x.direct.tok.cacheRead));
+  if (cased.length) {
+    out.push('## Per case (direct; clustered cases are an even split)', '', '| case | cost | real work | cache read | hit rate |', '|---|---|---|---|---|');
+    for (const x of cased) out.push(`| ${x.id} | ${usd(x.direct.costUsd)} | ${realWork(x.direct.tok).toLocaleString()} | ${kTok(x.direct.tok.cacheRead)} | ${pct(cacheHitRate(x.direct.tok))} |`);
+  }
+  return out.join('\n');
+}
+
+export function renderBatchTokenomicsHtml(c) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const ts = c.totals.tokensSplit;
+  const stack = (tok) => {
+    const total = num(tok?.input) + num(tok?.output) + num(tok?.cacheRead) + num(tok?.cacheWrite);
+    if (!total) return '<div class="track"></div>';
+    const seg = (v, cls, label) => (v > 0 ? `<div class="seg ${cls}" style="width:${Math.max(0.5, (v / total) * 100)}%" title="${label}: ${v.toLocaleString()}"></div>` : '');
+    return `<div class="track stacked">${seg(tok.output, 's-out', 'output')}${seg(tok.input, 's-in', 'input')}${seg(tok.cacheWrite, 's-cw', 'cache write')}${seg(tok.cacheRead, 's-cr', 'cache read')}</div>`;
+  };
+  const row = (name, b) => `
+    <div class="row"><div class="lbl">${esc(name)}</div>${stack(b.tok)}
+    <div class="num">${b.costUsd != null ? usd(b.costUsd) : '—'}<span class="sub"> · rw ${kTok(realWork(b.tok))} · hit ${b.tok ? pct(cacheHitRate(b.tok)) : '—'}</span></div></div>`;
+  const roles = Object.entries(c.byRole ?? {}).filter(([, b]) => b.tok).sort((a, z) => (z[1].costUsd ?? 0) - (a[1].costUsd ?? 0));
+  const stages = Object.entries(c.overhead?.byStage ?? {}).filter(([, b]) => b.tok);
+  const cased = (c.cases ?? []).filter((x) => x.direct.tok && (x.direct.tok.input || x.direct.tok.output || x.direct.tok.cacheRead));
+  return `<!doctype html><meta charset="utf-8"><title>Batch tokenomics — ${esc(c.batch)}</title><style>
+  :root{--fg:#1a1a1a;--dim:#666;--line:#ddd;--bg:#fff;--band:#f3f4f6;--out:#c05621;--in:#2b6cb0;--cw:#6b46c1;--cr:#9ae6b4}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--dim:#9a9a9a;--line:#333;--bg:#151515;--band:#1f2937;--out:#ed8936;--in:#63a4e0;--cw:#9f7aea;--cr:#2f855a}}
+  body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:var(--fg);background:var(--bg);max-width:920px;margin:2rem auto;padding:0 1rem}
+  h1{font-size:1.3rem} h2{font-size:1.05rem;margin-top:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+  .k{display:inline-block;margin:.2rem 1.2rem .2rem 0}.k b{font-size:1.25rem}.k span{color:var(--dim);font-size:.85rem;display:block}
+  .row{display:grid;grid-template-columns:200px 1fr 240px;gap:.6rem;align-items:center;margin:.3rem 0}
+  .lbl{font-family:ui-monospace,monospace;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .track{background:var(--band);border-radius:3px;height:16px}.stacked{display:flex;overflow:hidden}
+  .seg{height:16px}.s-out{background:var(--out)}.s-in{background:var(--in)}.s-cw{background:var(--cw)}.s-cr{background:var(--cr)}
+  .num{font-size:.85rem}.sub{color:var(--dim)}.note{color:var(--dim);font-size:.85rem}
+  .legend span{display:inline-block;margin-right:1rem;font-size:.82rem}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem}</style>
+  <h1>Batch tokenomics — ${esc(c.batch)}</h1>
+  <p class="note">The other unfolding of the same records as batch-report (delivery view). Generated ${esc(c.generatedAt)} · models: ${esc(c.sources.models.join(', ') || '—')}</p>
+  ${!ts ? '<p class="note">No token split in this cost.json — regenerate with the current skill version.</p>' : `
+  <div><span class="k"><b>${pct(cacheHitRate(ts))}</b><span>cache hit rate</span></span>
+  <span class="k"><b>~${pct(cacheSavings(ts))}</b><span>prompt cost saved by cache</span></span>
+  <span class="k"><b>${kTok(realWork(ts))}</b><span>real work (in ${kTok(ts.input)} / out ${kTok(ts.output)})</span></span>
+  <span class="k"><b>${kTok(ts.cacheRead)}</b><span>cache read (~0.1× input price)</span></span>
+  <span class="k"><b>${kTok(ts.cacheWrite)}</b><span>cache write (~1.25× input price)</span></span>
+  <span class="k"><b>${usd(c.totals.costUsd)}</b><span>total cost</span></span></div>
+  <p class="legend"><span><i style="background:var(--out)"></i>output</span><span><i style="background:var(--in)"></i>input</span><span><i style="background:var(--cw)"></i>cache write</span><span><i style="background:var(--cr)"></i>cache read</span></p>
+  <h2>Total composition</h2>${row('whole batch', { tok: ts, costUsd: c.totals.costUsd })}
+  <p class="note">The raw sum (${c.totals.tokens.toLocaleString()} tokens) is dominated by the cheapest kind — judge by composition and hit rate, not the big number.</p>
+  ${c.overhead?.lead?.tok ? `<h2>Orchestrator (lead thread)</h2>${row('lead', c.overhead.lead)}
+  <p class="note">A high lead share with a high hit rate is orchestration working as designed — context replayed per turn from cache, not runaway spend.${c.overhead.sharePct != null ? ` Overhead incl. stages: ${c.overhead.sharePct}% of the batch.` : ''}</p>` : ''}
+  ${roles.length ? `<h2>By role</h2>${roles.map(([r, b]) => row(r, b)).join('')}` : ''}
+  ${stages.length ? `<h2>By stage (overhead)</h2>${stages.map(([k, b]) => row(k, b)).join('')}` : ''}
+  ${cased.length ? `<h2>Per case (direct; clustered cases are an even split)</h2>${cased.map((x) => row(x.id, { tok: x.direct.tok, costUsd: x.direct.costUsd })).join('')}` : ''}`}`;
+}
+
 // Self-contained TEAM page — the whole ledger's rollup, same visual language
 // as the batch page (no external assets, light/dark aware). Real dollars only,
 // tokens-only sessions flagged, never estimated — same discipline as markdown.
@@ -493,6 +627,7 @@ export function main(argv = process.argv.slice(2)) {
     const a = argv[i];
     if (a === '--json') flags.set('json', true);
     else if (a === '--html') flags.set('html', true);
+    else if (a === '--tokenomics') flags.set('tokenomics', true);
     else if (a === '--batches') flags.set('batch', '*');
     else if (a === '--since' || a === '--until' || a === '--out' || a === '--receipts' || a === '--label' || a === '--role' || a === '--batch') flags.set(a.slice(2), argv[++i]);
     else roots.push(resolve(a));
@@ -503,11 +638,13 @@ export function main(argv = process.argv.slice(2)) {
     const batch = flags.get('batch') === '*' ? undefined : flags.get('batch');
     const results = updateBatchCosts(roots[0], { batch, write: true });
     if (!results.length) { process.stderr.write(`team-report: no receipts${batch ? ` for batch '${batch}'` : ''} under ${join(roots[0], '.agents', 'automation')}\n`); return 1; }
+    const mdR = flags.get('tokenomics') ? renderBatchTokenomicsMarkdown : renderBatchMarkdown;
+    const htmlR = flags.get('tokenomics') ? renderBatchTokenomicsHtml : renderBatchHtml;
     const output = flags.get('json')
       ? JSON.stringify(results.length === 1 ? results[0] : results, null, 2)
       : flags.get('html')
-        ? results.map(renderBatchHtml).join('\n')
-        : results.map(renderBatchMarkdown).join('\n\n---\n\n');
+        ? results.map(htmlR).join('\n')
+        : results.map(mdR).join('\n\n---\n\n');
     if (flags.get('out')) writeFileSync(flags.get('out'), `${output}\n`);
     else process.stdout.write(`${output}\n`);
     return 0;

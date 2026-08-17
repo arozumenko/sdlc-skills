@@ -153,3 +153,160 @@ test('session-start stays quiet when every index is within budget', () => {
     assert.doesNotMatch(runSession(dir).out, /memory-budget/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- per-role config overrides ---------------------------------------------
+// These hooks are SHARED — they fire for every dispatched agent in the repo,
+// including other bundles'. SDLC_SHARED_DOCS_<ROLE> / SDLC_ROLE_MEMORY_FILES_<ROLE>
+// tune what one role receives; `__none__` opts a role out entirely; a role with no
+// override inherits the globals (a new agent needs zero config).
+
+test('per-role SDLC_SHARED_DOCS override narrows that role only', () => {
+  const dir = project({
+    memory: { 'MEMORY.md': index(3) },
+    shared: { testing: '# testing doc', profile: '# profile doc' },
+  });
+  try {
+    const out = run(dir, 'qa-engineer', { SDLC_SHARED_DOCS_QA_ENGINEER: 'testing' });
+    assert.match(out, /testing doc/);
+    assert.doesNotMatch(out, /profile doc/, 'the override replaced the global list for this role');
+    // another role with no override still inherits the full default set
+    mkdirSync(join(dir, '.agents', 'memory', 'scout'), { recursive: true });
+    const other = run(dir, 'scout', { SDLC_SHARED_DOCS_QA_ENGINEER: 'testing' });
+    assert.match(other, /profile doc/, 'foreign override does not leak onto other roles');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('`__none__` opts a role out of shared docs while memory still flows', () => {
+  const dir = project({
+    memory: { 'MEMORY.md': index(3) },
+    shared: { testing: '# testing doc' },
+  });
+  try {
+    const out = run(dir, 'qa-engineer', { SDLC_SHARED_DOCS_QA_ENGINEER: '__none__' });
+    assert.doesNotMatch(out, /testing doc/);
+    assert.match(out, /Entry 0/, 'role memory unaffected');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('both lists `__none__` → the hook injects nothing at all for that role', () => {
+  const dir = project({
+    memory: { 'MEMORY.md': index(3) },
+    shared: { testing: '# testing doc' },
+  });
+  try {
+    const out = run(dir, 'qa-engineer', {
+      SDLC_SHARED_DOCS_QA_ENGINEER: '__none__',
+      SDLC_ROLE_MEMORY_FILES_QA_ENGINEER: '__none__',
+    });
+    assert.equal(out.trim(), '', 'fully opted-out role gets a silent hook');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('per-role SDLC_ROLE_MEMORY_FILES override picks specific files', () => {
+  const dir = project({
+    memory: { 'MEMORY.md': index(3), 'RULES.md': '- always be terse' },
+    shared: {},
+  });
+  try {
+    const out = run(dir, 'qa-engineer', { SDLC_ROLE_MEMORY_FILES_QA_ENGINEER: 'RULES.md' });
+    assert.match(out, /always be terse/);
+    assert.doesNotMatch(out, /Entry 0/, 'MEMORY.md excluded by the override');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('global __none__ silences a list for every role, not just one', () => {
+  const dir = project({
+    memory: { 'MEMORY.md': index(3) },
+    shared: { testing: '# testing doc' },
+  });
+  try {
+    const out = run(dir, 'qa-engineer', { SDLC_SHARED_DOCS: '__none__' });
+    assert.doesNotMatch(out, /testing doc/);
+    assert.match(out, /Entry 0/, 'memory list untouched by the docs sentinel');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- roster mode (generated config-defaults.sh present) --------------------
+// The installer generates per-role lines for every INSTALLED agent; the file's
+// presence flips default-deny for everyone else. SDLC_CONFIG_DIR points lib.sh
+// at a fixture dir so the repo's own hooks/ stays pristine under test.
+
+function configDir(files) {
+  const dir = mkdtempSync(join(tmpdir(), 'sdlc-cfg-'));
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+  return dir;
+}
+
+test('roster mode: an installed role keeps its context, an unknown role gets silence', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(3) }, shared: { testing: '# testing doc' } });
+  const cfg = configDir({
+    'config-defaults.sh':
+      ': "${SDLC_SHARED_DOCS_QA_ENGINEER:=${SDLC_SHARED_DOCS:-testing profile}}"\n'
+      + ': "${SDLC_ROLE_MEMORY_FILES_QA_ENGINEER:=${SDLC_ROLE_MEMORY_FILES:-MEMORY.md}}"\n',
+  });
+  try {
+    const rostered = run(dir, 'qa-engineer', { SDLC_CONFIG_DIR: cfg });
+    assert.match(rostered, /testing doc/);
+    assert.match(rostered, /Entry 0/);
+    // a role the installer never saw: no docs, no memory, silent hook
+    mkdirSync(join(dir, '.agents', 'memory', 'Plan'), { recursive: true });
+    writeFileSync(join(dir, '.agents', 'memory', 'Plan', 'MEMORY.md'), '- stray');
+    const unknown = runCapturingStderr(dir, 'Plan', { SDLC_CONFIG_DIR: cfg });
+    assert.equal(unknown.out.trim(), '', 'unrostered role receives nothing');
+    assert.equal(unknown.status, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(cfg, { recursive: true, force: true });
+  }
+});
+
+test('roster mode: config.sh grants an unrostered role, and beats generated lines', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(3) }, shared: { testing: '# testing doc', profile: '# profile doc' } });
+  const cfg = configDir({
+    'config.sh':
+      ': "${SDLC_SHARED_DOCS_PLAN:=profile}"\n'
+      + ': "${SDLC_SHARED_DOCS_QA_ENGINEER:=__none__}"\n',
+    'config-defaults.sh':
+      ': "${SDLC_SHARED_DOCS_QA_ENGINEER:=testing profile}"\n'
+      + ': "${SDLC_ROLE_MEMORY_FILES_QA_ENGINEER:=MEMORY.md}"\n',
+  });
+  try {
+    mkdirSync(join(dir, '.agents', 'memory', 'Plan'), { recursive: true });
+    const granted = run(dir, 'Plan', { SDLC_CONFIG_DIR: cfg });
+    assert.match(granted, /profile doc/, 'user config serves a host builtin');
+    assert.doesNotMatch(granted, /testing doc/);
+    const muted = run(dir, 'qa-engineer', { SDLC_CONFIG_DIR: cfg });
+    assert.doesNotMatch(muted, /testing doc/, 'user __none__ beats the generated grant');
+    assert.match(muted, /Entry 0/, 'memory list untouched by the docs override');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(cfg, { recursive: true, force: true });
+  }
+});
+
+test('no config-defaults.sh → legacy allow-all is unchanged', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(3) }, shared: { testing: '# testing doc' } });
+  const cfg = configDir({}); // empty config dir — no defaults file
+  try {
+    const out = run(dir, 'qa-engineer', { SDLC_CONFIG_DIR: cfg });
+    assert.match(out, /testing doc/);
+    assert.match(out, /Entry 0/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(cfg, { recursive: true, force: true });
+  }
+});
+
+// Both lists tolerate the "wrong" spelling — a mismatched entry is otherwise
+// skipped silently, which reads as "hook broken" with no error anywhere.
+test('naming tolerance: testing.md in the docs list and bare snapshot in the memory list both resolve', () => {
+  const dir = project({ memory: { 'snapshot.md': 'snapshot body' }, shared: { testing: '# testing doc' } });
+  try {
+    const out = run(dir, 'qa-engineer', {
+      SDLC_SHARED_DOCS: 'testing.md',
+      SDLC_ROLE_MEMORY_FILES: 'snapshot',
+    });
+    assert.match(out, /testing doc/);
+    assert.match(out, /snapshot body/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

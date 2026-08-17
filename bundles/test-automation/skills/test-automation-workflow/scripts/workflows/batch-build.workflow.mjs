@@ -298,17 +298,21 @@ const PREAMBLE =
   'filed, a place the case text disagrees with the live product, an open ' +
   'question, a gotcha another agent would want — goes in your result\'s ' +
   'findings[] with the right kind — the report is how the LEAD hears it. ' +
-  // Two channels, both live: findings[] routes to the run report; memory is
-  // durable role knowledge. Memory used to be write-only for workers ("the
-  // lead records it at close") — that left it untracked for a whole campaign,
-  // and a wholesale stash swept six entries mid-wave (2026-08-03).
+  // Two layers (instructions § Agent memory): role memory is LOCAL and
+  // gitignored — the ignore IS the protection (ignored files survive
+  // `stash -u`/`clean -fd`; the untracked-not-ignored era lost six entries
+  // to one wholesale stash, 2026-08-03). The shared, committed layer is
+  // .agents/knowledge/ — that is what travels between machines and roles.
   'Durable role knowledge — a live-product quirk, a framework gotcha, a ' +
-  'workaround the next dispatch will need — ALSO goes in your role memory ' +
-  '(memory skill), and you COMMIT WHAT YOU PRODUCE: code, AFS, and memory ' +
-  'alike, `git add` by exact path on the branch you are on. A dispatch that ' +
-  'forbids git (an analysis-only pass) leaves files on disk for a later stage ' +
-  'to land. Tracked knowledge survives tree cleaning and branch switches; ' +
-  'loose files are what sweeps delete. ' +
+  'workaround the next dispatch will need — goes in your role memory ' +
+  '(memory skill; LOCAL and gitignored — never `git add` it), and when it is ' +
+  'cross-role, verified and durable, promote it to .agents/knowledge/ — THAT ' +
+  'layer ships. You COMMIT WHAT YOU PRODUCE: code, AFS, and knowledge ' +
+  'promotions alike, `git add` by exact path on the branch you are on. A ' +
+  'dispatch that forbids git (an analysis-only pass) leaves files on disk for ' +
+  'a later stage to land. Committed knowledge survives tree cleaning and ' +
+  'branch switches, gitignored memory survives sweeps — plain-untracked ' +
+  'files are what sweeps delete. ' +
   // Context economy: the bill is resident-context × turns — every turn re-sends
   // your whole context, so turn count and payload size ARE the cost. Field
   // measurement: workers averaged ~30 turns at ~1 tool call per turn.
@@ -443,8 +447,11 @@ const TRIAGE_SCHEMA = {
         required: ['ids', 'route'],
         properties: {
           ids: { type: 'array', items: { type: 'string' } },
-          route: { type: 'string', enum: ['analyst', 'combined'] },
+          route: { type: 'string', enum: ['analyst', 'combined', 'manual-qa-verified'] },
           why: { type: 'string' },
+          // manual-qa-verified only: the paths the build dispatch works from
+          // (authored case files, the run report, the KB dir).
+          evidence: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -525,12 +532,12 @@ const REVIEW_SCHEMA = {
 // inflated one field batch's report-writer prompt to 74k chars, then rode into
 // every downstream context that touched the report. The full text is not lost:
 // each worker's complete return sits in its receipt under
-// `.agents/automation/telemetry/returns/` (SubagentStop hook; legacy
+// `.agents/telemetry/automation/returns/` (SubagentStop hook; legacy
 // `_returns/`) and in the run journal.
 const CLIP = 400
 const clip = (s) => {
   const t = String(s ?? '')
-  return t.length <= CLIP ? t : `${t.slice(0, CLIP)}… [clipped; full text in the unit's receipt under .agents/automation/telemetry/returns/ (legacy _returns/)]`
+  return t.length <= CLIP ? t : `${t.slice(0, CLIP)}… [clipped; full text in the unit's receipt under .agents/telemetry/automation/returns/ (legacy _returns/)]`
 }
 const OUTCOME = {}                          // id -> row
 for (const c of CASES) OUTCOME[c.id] = { id: c.id, outcome: 'not-started', note: '', findings: [] }
@@ -662,8 +669,8 @@ async function runAnalyst(unit) {
     // merges. So: commit on a real batch, leave on disk for a heads pass.
     (ANALYZE_ONLY
       ? 'YOU OWN THE TREE RIGHT NOW and nothing else runs. This is an ANALYSIS-ONLY pass: write your AFS, the digest, and any memory entries to disk and LEAVE them there uncommitted — run no git command and do not switch branches. The next stage reads them out of this same tree, and the campaign FOUNDATION stage is the designated lander: it stages and commits your files with its own work, so leave them exactly where you wrote them. '
-      : `YOU OWN THE TREE RIGHT NOW and nothing else runs, so ordinary git is yours. FIRST make sure you are on the batch trunk, because everything in this batch branches from it: \`git rev-parse --verify ${TRUNK}\` — if it exists (locally or on the remote), check it out; if it exists NOWHERE, create and push it: \`git checkout -B ${TRUNK} ${BASE} && git push -u origin ${TRUNK}\`. Never -B a trunk that already exists — that discards units already merged into it. ` +
-        `THEN write your AFS, the digest, and any role-memory entries you owe, \`git add\` them BY PATH, commit, and push. Do NOT switch to any other branch — leave the tree on ${TRUNK} when you finish. ` +
+      : `YOU OWN THE TREE RIGHT NOW and nothing else runs, so ordinary git is yours. FIRST make sure you are on the batch trunk, because everything in this batch branches from it: \`git rev-parse --verify ${TRUNK}\` — if it exists (locally or on the remote), check it out; if it exists NOWHERE, create it: \`git checkout -B ${TRUNK} ${BASE}\`, then \`git push -u origin ${TRUNK}\` ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`) — on a local-only project skip pushes, that is expected, not a failure. Never -B a trunk that already exists — that discards units already merged into it. ` +
+        `THEN write your AFS, the digest, and any role-memory entries you owe, \`git add\` them BY PATH, commit, and push (same remote rule — skip when there is none). Do NOT switch to any other branch — leave the tree on ${TRUNK} when you finish. ` +
         'Committing your own analysis is the point: it lands the moment it exists, so a case that turns out already-covered or blocked still has its AFS on the trunk, and an interrupted run loses nothing. Stage by exact path rather than `git add -A` — that is ordinary hygiene: the tree may hold artifacts from a previous unit that are not yours to commit. ') +
     'READ THE NEIGHBOURS FIRST, before you execute: grep test-specs/ and the suite dir BY BEHAVIOUR (the observable, the UI label, the endpoint) — never by case id — to arrive knowing the handles, the flow that reaches the screen, the fixtures and the conventions. That is what makes analysis cheap. This is REUSE, not a duplicate hunt: reading a spec that turns out to be unrelated costs minutes, but wrongly calling a case already-covered means it is never automated and the hole is invisible. So the normal outcome here is ready-for-automation WITH better context. already-covered is the rare exception and needs a spec merged to ' + BASE + ' proving the SAME observable with the SAME expected result, cited at file:line — same screen, same page object or a similar title is NOT coverage. When in doubt, ready-for-automation and say what you checked in notes. ' +
     'FAST-REACH: reuse the suite to travel — authenticate via the framework\'s auth state/fixture and drive deep navigation via existing specs/page-object scratch runs; transit is NOT execution (the case\'s own steps you still run and observe live), and a failing transit path falls back to manual navigation AND gets flagged in notes (possible regression). ' +
@@ -770,7 +777,8 @@ function absorbAnalysis(unit, a) {
 // One cheap dispatch routes every unit; nothing else about the pipeline moves.
 // A 'combined' unit spends one implementer dispatch where the normal chain
 // spends two (analyst + implementer) — the saving the tiering exists for.
-const ROUTES = new Map()   // sorted unit ids -> 'combined'
+const ROUTES = new Map()   // sorted unit ids -> 'combined' | 'manual-qa-verified'
+const MQ_EVIDENCE = new Map() // sorted unit ids -> evidence paths (manual-qa-verified route)
 const routeKey = (ids) => [...ids].sort().join('+')
 const routeOf = (unit) => ROUTES.get(routeKey(unit.map((c) => c.id))) ?? 'analyst'
 
@@ -780,11 +788,13 @@ async function runTriage() {
   if (!pending.length) return
   const t = await agent(
     `${PREAMBLE}\n\nTriage slot — a READ-ONLY routing decision: no git, no browser, no writes of any kind. ` +
-    "For each unit below decide who analyses it: 'analyst' (a standalone analyst explores the surface live first) or 'combined' (one implementer dispatch analyses AND builds, because the ground is already mapped).\n" +
+    "For each unit below decide who analyses it: 'analyst' (a standalone analyst explores the surface live first), 'combined' (one implementer dispatch analyses AND builds, because the ground is already mapped), or 'manual-qa-verified' (the manual-qa team ALREADY executed this case live — one implementer dispatch derives the AFS from their evidence and builds, no re-execution).\n" +
     `Units:\n${pending.map((unit) => `- ${unit.map((c) => `${c.id}${c.title ? ` (${quote(c.title, 80)})` : ''}`).join(' + ')} — snapshots: ${unit.map((c) => SRC(c.id)).join(' , ')}`).join('\n')}\n` +
     'Method: `ls test-specs/*/_surface.md` (the exploration digests), then skim each unit\'s snapshots just enough to name the screens/flows they touch. ' +
+    'Also check for manual-qa evidence: run reports (`reports/RUN-*.md`, `reports/metrics/*.json` — per-case PASS/FAIL verdicts), the manual-qa authored case files (commonly `tasks/<suite>/<ID>_*.md` — steps, expected results, often selectors), and the `.agents/manual-qa/` KB. ' +
     "Route 'combined' ONLY when EVERY case in the unit walks surfaces whose _surface.md digest exists AND the steps read routine against it (known screens, concrete steps, no exploratory language). " +
-    "Anything else — digest missing, snapshot missing, novel screen, ambiguous step, your own doubt — routes 'analyst'. The cost asymmetry decides doubt: a wasted analyst dispatch costs one dispatch; a combined slot on novel ground costs a bad AFS. " +
+    "Route 'manual-qa-verified' ONLY when EVERY case in the unit has a manual-qa run record with verdict PASS AND its authored manual-qa case file exists — list those paths in evidence[] (each case file + the run report; the KB dir once). Run age does not matter; a FAIL/flaky/blocked run never qualifies — that unit needs the analyst's eyes. When both routes qualify, prefer 'manual-qa-verified' (it skips the live re-run). " +
+    "Anything else — digest missing, snapshot missing, novel screen, ambiguous step, your own doubt — routes 'analyst'. The cost asymmetry decides doubt: a wasted analyst dispatch costs one dispatch; a shortcut on shaky ground costs a bad AFS. " +
     'Return every unit exactly once, ids exactly as given.',
     { label: 'triage', phase: 'Analysis', agentType: TYPES.analyst, model: A.triageModel ?? 'haiku', effort: 'low', schema: TRIAGE_SCHEMA }
   )
@@ -794,25 +804,42 @@ async function runTriage() {
   // otherwise inflate the routed count without routing anything.
   const valid = new Set(pending.map((unit) => routeKey(unit.map((c) => c.id))))
   for (const r of t.units ?? []) {
-    if (r.route === 'combined' && Array.isArray(r.ids) && valid.has(routeKey(r.ids))) ROUTES.set(routeKey(r.ids), 'combined')
+    if (!Array.isArray(r.ids) || !valid.has(routeKey(r.ids))) continue
+    if (r.route === 'combined') ROUTES.set(routeKey(r.ids), 'combined')
+    else if (r.route === 'manual-qa-verified') {
+      ROUTES.set(routeKey(r.ids), 'manual-qa-verified')
+      MQ_EVIDENCE.set(routeKey(r.ids), (r.evidence ?? []).slice(0, 12))
+    }
   }
-  log(`triage: ${ROUTES.size}/${pending.length} unit(s) routed combined (analyse+build in one dispatch); the rest take the standalone analyst`)
+  const mq = [...ROUTES.values()].filter((v) => v === 'manual-qa-verified').length
+  log(`triage: ${ROUTES.size}/${pending.length} unit(s) shortcut (${mq} manual-qa-verified, ${ROUTES.size - mq} combined); the rest take the standalone analyst`)
 }
 
-async function runCombined(unit) {
+async function runCombined(unit, mqEvidence = null) {
   const ids = unit.map((c) => c.id)
   if (!admitAnalysis(unit)) return null
+  // manual-qa-verified: the live execution ALREADY happened — manual-qa's
+  // test-runner walked the case against the real app (per-step verdicts,
+  // screenshots). Re-running it in a browser here would pay the most
+  // expensive slot twice; the AFS derives from their evidence instead, and
+  // anything thin escapes to the analyst the same way novel ground does.
+  const mqIntro = mqEvidence
+    ? `\nMANUAL-QA-VERIFIED unit. This case set was already executed live by the manual-qa team — do NOT re-run it in a browser. Evidence to work from: ${mqEvidence.join(' , ') || '(triage listed none — treat as thin)'} plus the .agents/manual-qa/ KB (app_profile, selectors, fragile areas).\n`
+    : ''
   const c = await agent(
-    `${PREAMBLE}\n\nCombined slot — analyse AND implement ${unit.map((m) => `${m.id}${m.title ? ` (${quote(m.title, 120)})` : ''}`).join(', ')} in ONE dispatch. Triage judged this surface already mapped, so the two halves share your session; each half's contract is unchanged.\n` +
-    `FIRST, DECIDE — before writing anything: read the case snapshot(s) (${ids.map((id) => SRC(id)).join(' , ')}) and the feature's test-specs/<feature>/_surface.md. If the digest is missing or stale, a flow is novel, a step is ambiguous, or honest analysis would need deep exploration — return status needs-analyst with why in notes and STOP: the standalone analyst takes over, and a wrong proceed costs a bad AFS while the fallback costs one dispatch.\n` +
-    'ANALYSIS HALF — per the test-case-analysis skill § Analyst slot contract (read it if not loaded): execute the case live against the real system — the digest speeds travel, it never replaces execution; every step run and observed with per-case evidence — then write the AFS per spec-format and update the digest. ' +
+    `${PREAMBLE}\n\nCombined slot — analyse AND implement ${unit.map((m) => `${m.id}${m.title ? ` (${quote(m.title, 120)})` : ''}`).join(', ')} in ONE dispatch. ${mqEvidence ? 'Triage judged this unit manual-qa-verified' : 'Triage judged this surface already mapped'}, so the two halves share your session; each half's contract is unchanged.\n${mqIntro}` +
+    (mqEvidence
+      ? `FIRST, DECIDE — before writing anything: read the case snapshot(s) (${ids.map((id) => SRC(id)).join(' , ')}), the manual-qa case file(s) and run report from the evidence list, and the feature's test-specs/<feature>/_surface.md if present. If the evidence is thin (steps without expected results, no usable selectors in the case files or the KB), contradicts the snapshot, the run verdict is not PASS for any case, or anything is ambiguous — return status needs-analyst with why in notes and STOP: the standalone analyst takes over with a live session.\n` +
+        'ANALYSIS HALF — derive the AFS per the test-case-analysis skill spec-format FROM THE EVIDENCE, no live execution: steps/expected from the manual-qa case file cross-checked against the TMS snapshot; selectors from the case file and the KB — they are hints, prefer the project\'s locator strategy (stable roles/ids) and mark any selector you could not ground as a risk in the AFS; cite the manual-qa run id as the AFS\'s execution provenance. A selector or expected value that exists NOWHERE in the evidence is a needs-analyst reason, never an invention. Then update the digest. '
+      : `FIRST, DECIDE — before writing anything: read the case snapshot(s) (${ids.map((id) => SRC(id)).join(' , ')}) and the feature's test-specs/<feature>/_surface.md. If the digest is missing or stale, a flow is novel, a step is ambiguous, or honest analysis would need deep exploration — return status needs-analyst with why in notes and STOP: the standalone analyst takes over, and a wrong proceed costs a bad AFS while the fallback costs one dispatch.\n` +
+        'ANALYSIS HALF — per the test-case-analysis skill § Analyst slot contract (read it if not loaded): execute the case live against the real system — the digest speeds travel, it never replaces execution; every step run and observed with per-case evidence — then write the AFS per spec-format and update the digest. ') +
     // Keep in step with the analyst dispatch: same trunk rule, same merged-target rule.
-    `YOU OWN THE TREE and nothing else runs. Ensure the batch trunk first: \`git rev-parse --verify ${TRUNK}\` — check it out if it exists anywhere; if it exists NOWHERE, \`git checkout -B ${TRUNK} ${BASE} && git push -u origin ${TRUNK}\` (never -B an existing trunk — that discards merged units). Commit the AFS, the digest, and any role-memory BY PATH on ${TRUNK} and push BEFORE you start building — analysis lands the moment it exists, even if the build half stops. ` +
+    `YOU OWN THE TREE and nothing else runs. Ensure the batch trunk first: \`git rev-parse --verify ${TRUNK}\` — check it out if it exists anywhere; if it exists NOWHERE, \`git checkout -B ${TRUNK} ${BASE}\` (never -B an existing trunk — that discards merged units). Commit the AFS, the digest, and any role-memory BY PATH on ${TRUNK} BEFORE you start building — analysis lands the moment it exists, even if the build half stops — and push ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`); on a local-only project the commit alone lands it, skip the push, that is expected, not a failure. ` +
     `MERGED-TARGET RULE: extend-existing may target a spec merged to ${BASE} or already on ${TRUNK}; already-covered may target ONLY a spec merged to ${BASE} (it is terminal); never a same-batch AFS not yet merged; in doubt, ready-for-automation. ` +
     (unit.length > 1 ? "Cluster: ONE live session, but EVERY case's steps executed and observed individually; true flow-variants of one flow → ONE family AFS (parameter table, same afs_path for members, family_afs=true). " : '') +
-    "BUILD HALF — per your test-automation-implementation skill (preloaded): for the cases you just judged ready-for-automation/extend-existing, cut your feature branch FROM the trunk you are standing on, implement inside the existing framework (family AFS → ONE parameterized spec, a row per case asserting its OWN expected values), run green ONCE locally (determinism is the gate's job), retry ≤ 2 reruns on one root cause, declare red-by-design tests in expected_red[] with case_ids, open the PR against the trunk (never the base), and leave the tree on your feature branch — the merge step returns it. If NO case advances (every verdict terminal), skip the build half and return status blocked with a one-line note. " +
+    "BUILD HALF — per your test-automation-implementation skill (preloaded): for the cases you just judged ready-for-automation/extend-existing, cut your feature branch FROM the trunk you are standing on, implement inside the existing framework (family AFS → ONE parameterized spec, a row per case asserting its OWN expected values), run green ONCE locally (determinism is the gate's job), retry ≤ 2 reruns on one root cause, declare red-by-design tests in expected_red[] with case_ids, land your work against the trunk (never the base) per \`.agents/profile.md\` § Automation PR policy — a PR against the trunk where the project uses PRs, otherwise leave your feature branch ready for the merge step — and leave the tree on your feature branch either way. If NO case advances (every verdict terminal), skip the build half and return status blocked with a one-line note. " +
     'Return BOTH halves: cases[] (per-case verdict/afs_path/notes) + surface_key + family_afs, AND status/branch/pr/reruns (plus rerun_causes: one short root-cause label per rerun — the cap is per cause, not total) for the build. A needs-analyst return still satisfies the schema with EMPTY values — cases: [], surface_key: "", family_afs: false, branch: "", pr: null, reruns: 0 — never invented verdict rows.',
-    { label: `combined:${label(unit)}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER, schema: COMBINED_SCHEMA }
+    { label: `${mqEvidence ? 'combined-mq' : 'combined'}:${label(unit)}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER, schema: COMBINED_SCHEMA }
   )
   if (c && c.status === 'needs-analyst') {
     addFindings(ids, c.findings)
@@ -937,7 +964,7 @@ async function buildUnit(u, pre = null) {
   const workspaceNote =
     'You work in the project\'s ONE working tree — its real checkout, with its installed dependencies and its env files. No worktree is created for you and you must not create one. NOTHING else runs while you do: units are strictly sequential, so the tree is yours alone for the whole dispatch. Two rules keep it usable for whoever comes next: stay on your own feature branch (never switch the tree to anything else), and stage ONLY your own paths (`git add <paths>`, never `-A`/`.`) so a stray artifact does not ride in on your commit. Leave the tree on your branch when you finish — the merge step takes it from there and returns it to the trunk. '
   const familyNote = u.family_afs
-    ? `FAMILY implementation: these ${ids.length} cases share one AFS with a parameter table — implement ONE parameterized spec (one data row per case, each row asserting its OWN expected values, tagged with its case id). One branch, one PR for the family. `
+    ? `FAMILY implementation: these ${ids.length} cases share one AFS with a parameter table — implement ONE parameterized spec (one data row per case, each row asserting its OWN expected values, tagged with its case id). One branch, one landed unit for the family. `
     : (ids.length > 1 ? `Implement all ${ids.length} cases on ONE branch (separate specs are fine when the AFS files are separate). ` : '')
 
   const impl = pre ?? await agent(
@@ -953,8 +980,8 @@ async function buildUnit(u, pre = null) {
     // hits and three git-surgery rescues in one measured session. Merging as we
     // go costs the same merges, smaller and while their author is still live.
     `The tree is on ${TRUNK} and that is where you start. Cut your feature branch FROM ${TRUNK} — it already carries every unit that finished before you, so page-object and fixture work accumulates and you are never rebasing onto a surprise. ` +
-    `If ${TRUNK} does not exist anywhere yet (you are the first unit of a fresh batch), create it: \`git checkout -B ${TRUNK} ${BASE} && git push -u origin ${TRUNK}\`. Never -B an existing trunk — that discards the units already merged into it. ` +
-    `Open your PR against ${TRUNK}, NOT against ${BASE} — case PRs land on the batch trunk, and one PR takes the trunk to ${BASE} after the gate. `+
+    `If ${TRUNK} does not exist anywhere yet (you are the first unit of a fresh batch), create it: \`git checkout -B ${TRUNK} ${BASE}\`, then \`git push -u origin ${TRUNK}\` ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`) — on a local-only project skip pushes, that is expected, not a failure. Never -B an existing trunk — that discards the units already merged into it. ` +
+    `Landing is PER \`.agents/profile.md\` § Automation PR policy: where the project uses PRs, open yours against ${TRUNK}, NOT against ${BASE} — case PRs land on the batch trunk, and one PR takes the trunk to ${BASE} after the gate. On a project with no PR mechanism, skip the PR and leave your feature branch ready — the merge step lands it, and the trunk still reaches ${BASE} only after the gate. `+
     // A retried unit can arrive at a feature branch a previous attempt already
     // built on. Whether that work is usable is a judgement about the diff, so
     // it is yours — a script cannot tell "half-finished and coherent" from
@@ -968,7 +995,7 @@ async function buildUnit(u, pre = null) {
     (u.members.length > 1
       ? (u.family_afs
         ? `FAMILY UNIT: the analyst judged these true variants of ONE flow and wrote a single AFS with a parameter table, one row per case. Implement ONE parameterized spec — a data table with a row per case id, each row carrying its OWN expected values, and the case id tagged on its row's test so it fails by itself. Never flatten distinct expected values into a shared assertion: that is how a case silently stops being tested. `
-        : `NOT a family: the analyst wrote a SEPARATE AFS per case (${u.members.length} of them), because these cases shared a surface but not a flow. Implement them as SEPARATE specs, one per case, exactly as if they had arrived alone. They ride ONE branch and ONE PR only because they were analysed together — that is a dispatch economy, not a reason to merge test code. Shared page objects and fixtures are of course reused. `)
+        : `NOT a family: the analyst wrote a SEPARATE AFS per case (${u.members.length} of them), because these cases shared a surface but not a flow. Implement them as SEPARATE specs, one per case, exactly as if they had arrived alone. They ride ONE branch and land as ONE unit only because they were analysed together — that is a dispatch economy, not a reason to merge test code. Shared page objects and fixtures are of course reused. `)
       : '') +
     'If any assertion is red for a PRODUCT reason with a ticket (the `expect.soft()` + `// Known defect: <TICKET>` case), that test is RED BY DESIGN and stays red until the product ships. Do NOT weaken it — declare it in expected_red[] with the spec path, the test id, the ticket, one line of why, and (in a multi-case unit) the case_ids the red test belongs to, so only THOSE cases are held on the ticket and not their healthy neighbours on the same branch. The gate then runs it without counting it against the batch, and the affected case is reported blocked-on-that-ticket instead of automated. An undeclared red-by-design test makes the gate unpassable and blocks every healthy case beside it. ' +
     (ids.every((id) => PRE.has(id))
@@ -977,7 +1004,7 @@ async function buildUnit(u, pre = null) {
     'If your exploration finds it has drifted from the live product (a selector, an observable), AMEND it and commit the amendment on YOUR branch with the spec it belongs to, so the change is reviewed with the code that motivated it. Stage by exact path, never `git add -A`. '+
     familyNote +
     'The feature\'s `_surface.md` digest is the analyst\'s document: read it; you may APPEND attributed implementation-time facts on your branch (testids you added, fixture realities, blockers your run resolved — your implementation skill Rule 11 scopes this), but never rewrite its behavior or scope claims — report that drift in findings[] instead. ' +
-    'Implement inside the existing framework, run it green ONCE locally (determinism is the gate\'s job, not repeated local runs), retry budget ≤ 2 reruns on the SAME root cause — distinct causes each get their own budget — then open the PR per your Phase 6 handoff. ' +
+    'Implement inside the existing framework, run it green ONCE locally (determinism is the gate\'s job, not repeated local runs), retry budget ≤ 2 reruns on the SAME root cause — distinct causes each get their own budget — then land the branch per your Phase 6 handoff and `.agents/profile.md` § Automation PR policy (a PR against the trunk where the project uses PRs, otherwise leave the branch ready for the merge step). ' +
     'Return the actual branch name, the PR number (null if none), your rerun count, and rerun_causes: one short root-cause label per rerun, so the cap can tell 4 reruns on 4 causes (fine) from 3 on one (blocked).',
     {
       label: `implement:${ul}`, phase: 'Build', agentType: TYPES.implementer,
@@ -1078,11 +1105,11 @@ async function buildUnit(u, pre = null) {
           `1. QUARANTINE by default — the code is usually fine and only the CASE is stuck. Mark ${carve.stuck.join(', ')}'s tests skipped per the project's convention (e.g. \`pytest.mark.skip(reason="blocked: <blocker> — carved from ${ul}, see <AFS path>")\`; family/data-table specs: mark just their rows via \`pytest.param(..., marks=...)\`). The finished code ships INERT on the trunk and re-arms by deleting the marker once the blocker clears. Quarantine is DECLARED, never silent: the reason must quote the blocker, the runner must report the test as skipped — that declaration is what makes this the sanctioned exception to the masking hunt, because a quarantined case recorded blocked claims nothing.\n` +
           '2. REMOVE instead ONLY when the blocker says the code ITSELF is wrong (masking, unsound, unreviewable). First record the preservation point: commit and push, then `git rev-parse HEAD` — once this unit merges that commit is in the trunk\'s history forever, and re-entry RESTORES from it (`git checkout <sha> -- <paths>`), never rebuilds. Then remove their test functions/files plus any page-object member or fixture NOTHING remaining uses (git grep a shared symbol before deleting it).\n' +
           '3. Either way KEEP their AFS on the branch — knowledge lands regardless. Amend each carved AFS: status blocked, one line quoting the blocker, plus the mode (quarantined at <path> | preserved@<sha> with the removed paths) so re-entry knows exactly how to resume.\n' +
-          "4. Do NOT touch the remaining cases' logic or assertions beyond steps 1–2. Re-run the remaining spec(s) once (collect-only where execution is environment-blocked), confirm quarantined tests report as SKIPPED not passed, commit by path, push, and update the PR body with what was carved and why.\n" +
+          "4. Do NOT touch the remaining cases' logic or assertions beyond steps 1–2. Re-run the remaining spec(s) once (collect-only where execution is environment-blocked), confirm quarantined tests report as SKIPPED not passed, commit by path, then push and update the PR body with what was carved and why — where the project uses a remote/PRs (§ Automation PR policy); locally the commit alone is enough.\n" +
           'Return status built; your notes MUST START with `quarantined:<paths>` or `preserved@<sha>` per mode, then name exactly what was marked or removed.'
         : `${PREAMBLE}\n\nImplementer slot — fix round ${round} for ${ids.join(', ')} on branch ${impl.branch} per your test-automation-implementation skill. ` +
           workspaceNote +
-          'Address EACH blocking finding (verify against the code first) and add the regression test that would have caught it, re-run the affected spec green once, update the PR:\n- ' +
+          'Address EACH blocking finding (verify against the code first) and add the regression test that would have caught it, re-run the affected spec green once, commit — and update the PR where the project uses one (§ Automation PR policy):\n- ' +
           prior +
           (skipped.length
             ? `\n\nTHE REVIEWER SAYS THESE WERE NOT ADDRESSED LAST ROUND — no attempt was visible in the diff:\n- ${skipped.join('\n- ')}\n`
@@ -1137,7 +1164,7 @@ async function buildUnit(u, pre = null) {
     // units produce the best gotchas.
     `then LAND THE UNIT'S KNOWLEDGE ANYWAY: \`git checkout ${impl.branch} -- .agents/memory/\`, commit by path (\`docs(memory): ${ids.join(', ')} — learnings from a parked unit\`; skip the commit if nothing changed), push. THEN report merged=false with the conflict files and a one-line reason, and STOP.\n` +
     'HARD RULES: never delete, `rm`, or `checkout --ours/--theirs` a file away to make a merge pass; never edit test logic, assertions or expected values while resolving; never run the suite (the gate does that).\n' +
-    `3. Push: \`git push origin ${TRUNK}\` — the gate reads the trunk from the remote, so an unpushed merge is invisible to it. Say so in notes if the push fails.\n` +
+    `3. Push ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`): \`git push origin ${TRUNK}\` — where a remote exists the gate reads the trunk from it, so an unpushed merge is invisible; say so in notes if the push fails. On a local-only project skip this step — the gate reads the local branch instead.\n` +
     `4. LEAVE THE TREE ON ${TRUNK}. The next unit branches from it and assumes it is there.\n` +
     'Return whether the merge landed, the trunk head sha, and any conflict files.',
     {
@@ -1218,10 +1245,11 @@ for (const unit of UNITS) {
   phase('Analysis')
   let u = null
   let pre = null
-  if (routeOf(unit) === 'combined') {
-    const c = await runCombined(unit)
-    // 'fallback' = the combined slot judged the ground novel BEFORE writing
-    // anything — the normal analyst chain takes over, one dispatch later.
+  const route = routeOf(unit)
+  if (route === 'combined' || route === 'manual-qa-verified') {
+    const c = await runCombined(unit, route === 'manual-qa-verified' ? (MQ_EVIDENCE.get(routeKey(unit.map((m) => m.id))) ?? []) : null)
+    // 'fallback' = the shortcut slot judged the ground novel / the evidence
+    // thin BEFORE writing anything — the normal analyst chain takes over.
     if (c === 'fallback') u = await runAnalyst(unit)
     else if (c) { u = c.u; pre = c.impl }
   } else {
@@ -1469,6 +1497,6 @@ return {
         // in the next rollup. Playbook prose did not fix it — this text is what
         // the lead actually reads at the moment it happens, so the obligation
         // lives here, next to the instruction that creates it.
-        ? `${gate?.verdict === 'incomplete' ? `GATE CUT OFF MID-RUN (${gate.runs ?? 0}/${GATE_N} banked)` : 'GATE NEVER RAN'} — ${gateBranch} holds ${merged.length} merged unit(s) that are UNPROVEN, not blocked (outcome merged-ungated). Re-run the gate first (re-invoke with resumeFromRunId — completed units replay from cache — or dispatch the gate alone on ${gateBranch}) and classify nothing until a verdict exists. An interrupted run's own totals are a claim, not evidence: verify against .agents/automation/telemetry/returns/ (legacy _returns/) and git (playbook § Interruption). THEN, THE MOMENT YOU HAVE A VERDICT, WRITE IT BACK INTO ${REPORT_DIR}/report.json — gate.verdict, gate.runs, gate.seconds, and each case's real outcome ('automated' on green; 'merged-sanctioned-red' for a ticketed red-by-design). This file is the receipt every audit, every --resolved-from and the next batch's plan divide by: a gate you re-ran green but never wrote back scores as ZERO delivered, and the specs read as unproven forever. The scope contract, where active, backs this up: work-scope.mjs outcome + close after the write-back — the close render cross-checks report.json against the recorded gate verdict and prints DRIFT if the write-back was missed.`
+        ? `${gate?.verdict === 'incomplete' ? `GATE CUT OFF MID-RUN (${gate.runs ?? 0}/${GATE_N} banked)` : 'GATE NEVER RAN'} — ${gateBranch} holds ${merged.length} merged unit(s) that are UNPROVEN, not blocked (outcome merged-ungated). Re-run the gate first (re-invoke with resumeFromRunId — completed units replay from cache — or dispatch the gate alone on ${gateBranch}) and classify nothing until a verdict exists. An interrupted run's own totals are a claim, not evidence: verify against .agents/telemetry/automation/returns/ (legacy _returns/) and git (playbook § Interruption). THEN, THE MOMENT YOU HAVE A VERDICT, WRITE IT BACK INTO ${REPORT_DIR}/report.json — gate.verdict, gate.runs, gate.seconds, and each case's real outcome ('automated' on green; 'merged-sanctioned-red' for a ticketed red-by-design). This file is the receipt every audit, every --resolved-from and the next batch's plan divide by: a gate you re-ran green but never wrote back scores as ZERO delivered, and the specs read as unproven forever. The scope contract, where active, backs this up: work-scope.mjs outcome + close after the write-back — the close render cross-checks report.json against the recorded gate verdict and prints DRIFT if the write-back was missed.`
         : `Classify each blocked case (product defect → tracker; flake/test-code bug → batch-stabilize on ${gateBranch}; architectural → § Framework architecture), then replan the remainder. ${gateBranch} is NOT landed — nothing reaches ${BASE} until it is green. Record classifications as they land (work-scope.mjs outcome <ID>=blocked, where the scope contract is active) — the ledger stays honest even if this session dies before a close.`,
 }

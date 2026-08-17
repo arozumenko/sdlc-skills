@@ -198,6 +198,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "seeding-automation-project",
+      "source": "./bundles/test-automation/skills/seeding-automation-project",
+      "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
+      "version": "0.2.0"
+    },
+    {
       "name": "session-retrospective",
       "source": "./bundles/feature-development/skills/session-retrospective",
       "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
@@ -230,7 +236,7 @@
     {
       "name": "tokenomics",
       "source": "./bundles/test-automation/skills/tokenomics",
-      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/automation/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
+      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/automation/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
       "version": "0.2.0"
     },
     {

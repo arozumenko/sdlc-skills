@@ -33,7 +33,7 @@ This skill section IS the orchestrator-slot contract for the test-automation pip
 - `.agents/team-comms.md` — host, dispatch syntax, installed roster
 - `.agents/role-overrides.md` (if present) — slot substitutions when the default agent isn't installed
 
-Missing files are tolerated; when ALL are absent the project was never seeded — **self-orient by running the `seeding-a-project` skill yourself** (scout's own onboarding procedure — load it on demand), asking the user only for the blocking unknowns it can't infer, then proceed — rather than dead-stopping. Full procedure: [`references/orchestration-playbook.md`](references/orchestration-playbook.md) § Self-orientation.
+Missing files are tolerated; when ALL are absent the project was never seeded — **self-orient by running the `seeding-automation-project` skill yourself** (scout's own onboarding procedure — load it on demand), asking the user only for the blocking unknowns it can't infer, then proceed — rather than dead-stopping. Full procedure: [`references/orchestration-playbook.md`](references/orchestration-playbook.md) § Self-orientation.
 
 **Per-batch parameters** (caller / user provides):
 
@@ -108,7 +108,7 @@ Steps 1–4 belong to the analyst slot (driven by [`test-case-analysis`](../test
 
 ### 1. Discover framework
 
-Before anything, read what scout / seeding-a-project produced:
+Before anything, read what scout / seeding-automation-project produced:
 
 - `AGENTS.md` — tech stack, test commands
 - `.agents/testing.md` — test framework, commands, fixtures, CI
@@ -229,10 +229,10 @@ Full mechanics and defaults (M/K/N) live in [`references/orchestration-playbook.
 - [`references/reviewer-contract.md`](references/reviewer-contract.md) — reviewer slot contract: static-review checklist, triangulate-three-artifacts, masking checks.
 - [`references/tech-task-brief.md`](references/tech-task-brief.md) — the unit contract for work that isn't a case (tech-debt, migrations, improvements): required sections, quality gate, example. Sits where the AFS sits; its blast radius is the gate's run set.
 - [`references/framework-architecture.md`](references/framework-architecture.md) — orchestrator's framework-architecture reference: greenfield bootstrap, framework-scale work, mid-flow escalation.
-- `scripts/gate/gate-case.mjs` — the **mechanical** half of the gate: fetch, check the branch out in this checkout (no worktree; it refuses a dirty tree), merge the base first, run the spec N× with timings, return a verdict. It never merges a PR, classifies a red, or resolves a conflict.
+- `scripts/gate/gate-case.mjs` — the **mechanical** half of the gate: fetch, check the branch out in this checkout (no worktree; dirt is refused only when it touches the files being proved or collides with the checkout/merge — unrelated noise rides the verdict as `carriedDirt`), merge the base first, run the spec N× with timings, return a verdict. It never merges a PR, classifies a red, or resolves a conflict.
 - `scripts/cleanup.mjs` — close-out sweep for delivered branches and any leftover worktrees, dry-run by default. **You decide, it refuses:** you read `.agents/workflow.md` § Host and ask that system what merged; `--merged` is required and has no fallback probe, and nothing is deleted without a merged claim naming it. The remote comes from `git remote`, not from an assumption.
 - `scripts/git-env.mjs` — the few facts a script may read for itself (today: which remote). It states the rule the other scripts follow: **read facts, take conventions as parameters, refuse to guess anything else.**
-- **Recovering an interrupted run has no script, on purpose** — it needs this project's branch naming, case-id shape and PR host, which are seed conventions a script can only hardcode wrongly. The procedure is playbook § Interruption and resumption: read the receipts the `SubagentStop` hook already wrote (`.agents/automation/telemetry/returns/`, legacy `_returns/`), then the run journal, then git, then write the report.
+- **Recovering an interrupted run has no script, on purpose** — it needs this project's branch naming, case-id shape and PR host, which are seed conventions a script can only hardcode wrongly. The procedure is playbook § Interruption and resumption: read the receipts the `SubagentStop` hook already wrote (`.agents/telemetry/automation/returns/`, legacy `_returns/`), then the run journal, then git, then write the report.
 - [`references/workflow-accelerant.md`](references/workflow-accelerant.md) — Claude Code's **default** batch path: the whole batch as one deterministic workflow via `scripts/workflows/batch-build.workflow.mjs` (any batch size, one included; exceptions in its § When NOT to use it), which integrates inline (one integrator agent) and gates internally; `batch-integrate.workflow.mjs` remains for the lead's standalone integrate jobs. Also `batch-stabilize.workflow.mjs` for a red gate classified as a flake or test-code bug — batch-level diagnosis before any fix. Other hosts use sequential dispatches, same contracts.
 - [`references/campaign-planning.md`](references/campaign-planning.md) — composing batches for scale: campaigns (waves + foundation pass + clusters of similar cases), plan proposed by a dispatched planner, conducted by `scripts/workflows/batch-campaign.workflow.mjs`; the lead reviews plans and reads one report per wave, never case bodies.
 - [`agents/test-automation-lead/AGENT.md`](../../agents/test-automation-lead/AGENT.md) — orchestration: slot routing, dispatch templates, AFS gating, automation merge gate, framework architecture.

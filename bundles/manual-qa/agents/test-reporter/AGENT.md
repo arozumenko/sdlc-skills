@@ -6,6 +6,7 @@ color: blue
 group: qa
 theme: {color: colour33, icon: "📊", short_name: reporter}
 aliases: [test-reporter, reporter]
+context-docs: manual-qa/app_profile.md
 skills: []
 authors:
   - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>

@@ -45,7 +45,7 @@ const MARKER_TTL_DAYS = 7;
  */
 export const INTENTS = ['automation', 'manual-testing', 'investigation', 'framework', 'onboarding', 'docs', 'other'];
 
-export function scopesDir(repo) { return join(repo, '.agents', 'automation', 'telemetry', 'scopes'); }
+export function scopesDir(repo) { return join(repo, '.agents', 'telemetry', 'automation', 'scopes'); }
 const safeSid = (id) => String(id || '').replace(/[^A-Za-z0-9._-]/g, '');
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } }
 

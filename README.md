@@ -342,7 +342,7 @@ installable via bundles is listed below.
 | `root-cause-analysis` | Trace a confirmed bug to its exact cause — execution-path tracing, classification, impact/regression (investigation only) |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
-| `seeding-a-project` | Scout's project onboarding / configuration flow |
+| `seeding-a-project` | Scout's project onboarding / configuration flow (feature-development bundle; the test-automation bundle's automation-specific variant is `seeding-automation-project`) |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
 **Other skills (18, mix of bundle-owned and orphan):**

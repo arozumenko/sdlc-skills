@@ -4,7 +4,7 @@
 // WHY THIS EXISTS. The efficiency-audit skill answers "what did this cost" by
 // reading live transcripts — but transcripts expire (~30 days) and live on each
 // engineer's machine. This hook captures each session's grounded numbers AT THE
-// MOMENT THEY EXIST into a git-committed ledger (.agents/automation/telemetry/*.jsonl), so
+// MOMENT THEY EXIST into a git-committed ledger (.agents/telemetry/automation/*.jsonl), so
 // the team's usage survives transcript cleanup and accumulates through git.
 //
 // Invocation modes:
@@ -65,7 +65,7 @@ export function loadConfig(repo) {
     vscodeUserDataDirs: [], // extra VS Code user-data or workspaceStorage dirs (portable mode, --user-data-dir)
     otel: null,             // { enabled: true, endpoint: 'http://localhost:4318' } — see install-hooks --otel
   };
-  const p = join(repo, '.agents', 'automation', 'telemetry', 'config.json');
+  const p = join(repo, '.agents', 'telemetry', 'automation', 'config.json');
   if (!existsSync(p)) return defaults;
   const cfg = safeParse(readFileSync(p, 'utf8'));
   return cfg && typeof cfg === 'object' ? { ...defaults, ...cfg } : defaults;
@@ -88,12 +88,12 @@ export function whoAmI(repo) {
 
 /** Per-user ledger file — one appender per file means git merges never conflict. */
 export function ledgerPath(repo, slug) {
-  return join(repo, '.agents', 'automation', 'telemetry', `usage-${slug}.jsonl`);
+  return join(repo, '.agents', 'telemetry', 'automation', `usage-${slug}.jsonl`);
 }
 
 /** Every `${host}:${id}` → latest endedAt already in ANY user's ledger file. */
 export function knownSessions(repo) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  const dir = join(repo, '.agents', 'telemetry', 'automation');
   const known = new Map();
   let files;
   try { files = readdirSync(dir).filter((f) => /^usage-.*\.jsonl$/.test(f) || f === 'usage.jsonl'); }
@@ -110,7 +110,7 @@ export function knownSessions(repo) {
 }
 
 export function appendLine(repo, slug, line) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  const dir = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(dir, { recursive: true });
   appendFileSync(ledgerPath(repo, slug), `${JSON.stringify(line)}\n`);
 }
@@ -321,7 +321,7 @@ export function findSubagents(projectDir, sessionId) {
 // `work-scope status`, and anything else that wants live numbers, reads
 // already-priced dispatches without re-metering anything.
 export function dispatchLogPath(repo, sessionId) {
-  return join(repo, '.agents', 'automation', 'telemetry', 'live', `${String(sessionId).replace(/[^A-Za-z0-9._-]/g, '')}.jsonl`);
+  return join(repo, '.agents', 'telemetry', 'automation', 'live', `${String(sessionId).replace(/[^A-Za-z0-9._-]/g, '')}.jsonl`);
 }
 
 /** agentId → latest record (a grown dispatch appends a superseding line). */
@@ -540,14 +540,14 @@ export function deriveLabel(description, firstText) {
 // --- work-scope join (scripts/work-scope.mjs records) ------------------------
 /**
  * The session's declared scope, if any. Exact match first
- * (.agents/automation/telemetry/scopes/<sessionId>.json — Claude, where the announce hook
+ * (.agents/telemetry/automation/scopes/<sessionId>.json — Claude, where the announce hook
  * injects the id). Else claim a PENDING record (`open --session auto` — hosts
  * whose agent cannot know its session id, e.g. Copilot): the pending scope
  * whose declaredAt falls inside the session's window, closest to its start,
  * is renamed to the real id so the claim is permanent and single-use.
  */
 export function sessionScope(repo, sessionId, { startTs = null, endTs = null } = {}) {
-  const dir = join(repo, '.agents', 'automation', 'telemetry', 'scopes');
+  const dir = join(repo, '.agents', 'telemetry', 'automation', 'scopes');
   const exact = join(dir, `${sessionId}.json`);
   if (existsSync(exact)) return safeParse(readFileSync(exact, 'utf8'));
   if (!startTs || !existsSync(dir)) return null;
@@ -1303,7 +1303,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   // Every capture moment is also a harvest moment (Copilot sessions, hard-killed
   // Claude ones) — bounded, so the hook stays quick.
   const r = sweep(repo, { config: cfg, user: me, env });
-  process.stderr.write(`tokenomics: captured ${captured + r.captured} session(s) → .agents/automation/telemetry/usage-${me}.jsonl\n`);
+  process.stderr.write(`tokenomics: captured ${captured + r.captured} session(s) → .agents/telemetry/automation/usage-${me}.jsonl\n`);
   if (sessionId) await renderLiveReport(repo, sessionId, env); // final overwrite from the completed ledger line
   if (captured + r.captured) syncTelemetry(repo, env);
   return 0;
@@ -1332,7 +1332,7 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
         .filter((c) => c.batch === scope.batch || c.batch.endsWith(`/${scope.batch}`));
     }
     if (!costs.length) return null;
-    const dir = join(repo, '.agents', 'automation', 'telemetry', 'reports');
+    const dir = join(repo, '.agents', 'telemetry', 'automation', 'reports');
     mkdirSync(dir, { recursive: true });
     const out = [];
     for (const c of costs) {
@@ -1352,7 +1352,9 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
  */
 export function syncTelemetry(repo, env = process.env) {
   if (env.TOKENOMICS_NO_SYNC === '1') return false;
-  const dir = join(repo, '.agents', 'automation', 'telemetry');
+  // The submodule ROOT — shared across bundles; this bundle's data lives in
+  // its automation/ subfolder, but commit/push covers whatever anyone wrote.
+  const dir = join(repo, '.agents', 'telemetry');
   if (!existsSync(join(dir, '.git'))) return false;   // not a submodule — nothing to sync
   const git = (args, timeout = 15000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout });

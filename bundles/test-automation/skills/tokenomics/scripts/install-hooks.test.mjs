@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   installClaude, installCopilot, installVsCode, installGitHook, gitHooksDir,
-  configureOtel, seedConfig, doctor, main,
+  configureOtel, seedConfig, doctor, main, migrateTelemetryLayout,
 } from './install-hooks.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'tokenomics-install-'));
@@ -109,11 +109,11 @@ test('installGitignore: owned block, preserves the rest, idempotent, clean remov
   assert.match(gi, /^node_modules\/$/m, 'existing rules preserved');
   assert.match(gi, /^\.env$/m);
   assert.equal(gi.match(/tokenomics \(managed\)/g).length, 1, 'idempotent');
-  for (const p of ['.agents/automation/telemetry/live/', '.agents/automation/telemetry/scopes/.pending-*', '.agents/automation/telemetry/scopes/.nagged-*']) {
+  for (const p of ['.agents/telemetry/automation/live/', '.agents/telemetry/automation/scopes/.pending-*', '.agents/telemetry/automation/scopes/.nagged-*']) {
     assert.ok(gi.includes(p), p);
   }
   // the RECORDS must stay committable — ignoring them would kill team reporting
-  assert.ok(!/^\.agents\/automation\/telemetry\/$/m.test(gi), 'never ignores the whole telemetry dir');
+  assert.ok(!/^\.agents\/telemetry\/automation\/$/m.test(gi), 'never ignores the whole telemetry dir');
   assert.ok(!gi.includes('usage-'), 'never ignores the ledger');
   assert.ok(!/scopes\/$/m.test(gi), 'never ignores the scope records themselves');
 
@@ -220,7 +220,7 @@ test('configureOtel: writes exactly its keys across the three surfaces; remove s
   const v = read(join(repo, '.vscode', 'settings.json'));
   assert.equal(v['editor.fontSize'], 14);
   assert.equal(v['github.copilot.chat.otel.enabled'], true);
-  assert.equal(read(join(repo, '.agents', 'automation', 'telemetry', 'config.json')).otel.enabled, true);
+  assert.equal(read(join(repo, '.agents', 'telemetry', 'automation', 'config.json')).otel.enabled, true);
   configureOtel(repo, { remove: true });
   const s2 = read(join(repo, '.claude', 'settings.json'));
   assert.equal(s2.env.KEEP, '1');
@@ -228,7 +228,7 @@ test('configureOtel: writes exactly its keys across the three surfaces; remove s
   const v2 = read(join(repo, '.vscode', 'settings.json'));
   assert.equal(v2['editor.fontSize'], 14);
   assert.ok(!('github.copilot.chat.otel.enabled' in v2));
-  assert.equal(read(join(repo, '.agents', 'automation', 'telemetry', 'config.json')).otel.enabled, false);
+  assert.equal(read(join(repo, '.agents', 'telemetry', 'automation', 'config.json')).otel.enabled, false);
 });
 
 test('doctor: runs clean on a temp repo without throwing (warnings expected, hermetic)', async () => {
@@ -240,4 +240,30 @@ test('doctor: runs clean on a temp repo without throwing (warnings expected, her
   installVsCode(repo, REL, {});
   const after = await doctor(repo, {});
   assert.ok(after < warns, 'wiring reduces warnings');
+});
+
+// The flat era wrote at the telemetry root; readers look only in automation/.
+// Un-migrated history silently vanishes from reports — so every install run
+// migrates, idempotently, without ever clobbering newer automation/ data.
+test('migrateTelemetryLayout: moves flat-era files into automation/, merges dirs, never clobbers', () => {
+  const repo = tmp();
+  const root = join(repo, '.agents', 'telemetry');
+  mkdirSync(join(root, 'scopes'), { recursive: true });
+  writeFileSync(join(root, 'usage-alice.jsonl'), '{"v":1}\n');
+  writeFileSync(join(root, 'config.json'), '{}');
+  writeFileSync(join(root, 'scopes', 'sess-1.json'), '{}');
+  writeFileSync(join(root, 'README.md'), 'seeded');       // submodule seed — must stay put
+  // automation/ already holds a NEWER scopes record with a clashing name
+  mkdirSync(join(root, 'automation', 'scopes'), { recursive: true });
+  writeFileSync(join(root, 'automation', 'scopes', 'sess-1.json'), '{"newer":true}');
+  const moved = migrateTelemetryLayout(repo);
+  assert.ok(moved >= 2, `usage + config moved (got ${moved})`);
+  assert.ok(existsSync(join(root, 'automation', 'usage-alice.jsonl')));
+  assert.ok(existsSync(join(root, 'automation', 'config.json')));
+  assert.ok(!existsSync(join(root, 'usage-alice.jsonl')), 'nothing left at the flat root');
+  assert.equal(readFileSync(join(root, 'automation', 'scopes', 'sess-1.json'), 'utf8'), '{"newer":true}',
+    'existing automation/ data wins over the flat-era clash');
+  assert.ok(existsSync(join(root, 'README.md')), 'non-telemetry seeds untouched');
+  assert.equal(migrateTelemetryLayout(repo), 0, 'idempotent — second run is a no-op');
+  assert.equal(migrateTelemetryLayout(tmp()), 0, 'no telemetry dir → quiet no-op');
 });

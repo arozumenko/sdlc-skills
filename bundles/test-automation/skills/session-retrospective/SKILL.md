@@ -24,7 +24,7 @@ waste first, durable facts second. You (scout) run this manually when asked.
   down", or "improve the team from recent work".
 - Periodically, to fold lessons from recent sessions into `.agents/`.
 
-Not for: onboarding a fresh repo (that's `seeding-a-project`), or refreshing
+Not for: onboarding a fresh repo (that's `seeding-automation-project`), or refreshing
 config from code/PR changes (that's scout's normal update flow).
 
 ## Procedure
@@ -65,7 +65,7 @@ config from code/PR changes (that's scout's normal update flow).
    `.agents/workflow.md` / `.agents/conventions.md`; durable fact → a curated
    entry (via the `memory` skill). If `.agents/` doesn't exist, the project
    isn't seeded — a retrospective refines an existing lens, it doesn't create
-   one; run `seeding-a-project` first.
+   one; run `seeding-automation-project` first.
 
    For anything a previous retrospective already wrote down and that happened
    anyway, don't write it again in firmer words — `finding-to-target.md` has the
@@ -123,7 +123,7 @@ you took. Where the shipped path runs out:
 |---|---|
 | Transcripts are on disk for this host | Parser exits 3. Ask the user to paste a session transcript or summary and run steps 3–7 on that text — skip the watermark, and note in the report that it was a pasted-transcript run. |
 | The sessions were held in English | The corrections list will be short or empty and will look exactly like a clean run. Say so rather than reporting "few corrections". Lean on the language-neutral signals (tool errors, retries, churn, interrupts), extend `CORRECTION_TIERS` for this team's language, or ask the user what the friction was. |
-| `.agents/` exists | It doesn't → the project was never seeded. A retrospective refines an existing lens; it can't create one. Run `seeding-a-project` first. |
+| `.agents/` exists | It doesn't → the project was never seeded. A retrospective refines an existing lens; it can't create one. Run `seeding-automation-project` first. |
 | The user wants the digest's questions answered | They often want something else — "why was last week expensive", "did the new briefing help", "what keeps breaking". The digest is one input; combine it with `efficiency-audit`, git history, or the run reports, and answer the question actually asked. |
 
 **What must survive whichever route you take:**

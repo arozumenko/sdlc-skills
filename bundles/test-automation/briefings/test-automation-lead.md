@@ -18,7 +18,7 @@ type: project
   `.agents/testing.md` (framework conventions), `.agents/test-automation.yaml`
   (TMS adapter).
 - **If none of scout's files exist:** the project was never seeded — **self-orient
-  by running the `seeding-a-project` skill yourself** (scout's own onboarding
+  by running the `seeding-automation-project` skill yourself** (scout's own onboarding
   procedure, loaded on demand): seed the `.agents/*` set, ask only for blocking
   unknowns, proceed. Don't dead-stop. A deliberate `claude --agent scout` run
   stays the thorough path. See playbook § Self-orientation.
