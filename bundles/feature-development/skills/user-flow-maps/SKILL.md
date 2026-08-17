@@ -26,6 +26,16 @@ anchor selection and label de-collision. Never write pixel maths in a spec.
    ```bash
    node scripts/build-flowmaps.mjs <spec.json> --out <dir>
    ```
+   Add `--layout story [--screens <dir|file>]` to build into a shared
+   **design-story site** instead of a standalone set: pages land in
+   `<out>/flows/<slug>.html` (one directory deeper than the flat default) so
+   they can sit next to screen-specs' `screens/` output without a filename
+   collision. When `--screens` points at the matching `*.screens.json`
+   spec(s), every flow node whose id matches a screen's `node` becomes a
+   click-through to that screen's page
+   (`../screens/<slug>.html#<screenId>`). Omitting `--screens` (or pointing
+   it at nothing yet built) just renders the flow with no screen links —
+   this build never depends on the other having run first.
 3. **Verify before you claim it works.** Open the pages and check them — the
    library is deterministic but a spec can still describe a flow badly (a
    dangling target, a decision with no outcomes). `references/verifying.md`

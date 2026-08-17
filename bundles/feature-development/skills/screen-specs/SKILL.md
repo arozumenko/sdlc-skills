@@ -36,8 +36,31 @@ disagree.
    node scripts/build-screens.mjs \
      --system <design-system.json> --specs <dir> --out <dir> [--img ../assets/img/]
    ```
+   Every flow page carries a **journey filmstrip** above its screens — the
+   flow's screens ordered by their `node` id (whole numbers ascending, then
+   decimals under their parent; node-less screens sort last), each a small
+   clickable card that jumps to its full section below. It renders in both
+   layouts.
+
+   Add `--layout story` to build into a shared **design-story site** instead
+   of a standalone set: pages land in `<out>/screens/<slug>.html` (one
+   directory deeper — a relative `--img` base gets an extra `../`
+   automatically) so they sit next to user-flow-maps' `flows/` output. Under
+   `story`, each screen's Flow node value links back to
+   `../flows/<flowSlug>.html#node-<id>`, and its Criteria chips link to
+   `../coverage.html#ac-<id>` — both resolve once the sibling builds
+   (`build-flowmaps.mjs --layout story` and `build-story.mjs`) have run;
+   until then they just 404, no build depends on the other running first.
 4. **Verify.** See `references/verifying.md`. Check that no mock overflows its
    frame, no image is broken, and the page never scrolls sideways.
+5. **Tie flows and screens into one site.** Once both builds have written
+   into the same `<out>` with `--layout story`, run
+   ```bash
+   node scripts/build-story.mjs --flows <flowspec dir|file> --screens <dir> --out <dir>
+   ```
+   to generate `<out>/index.html` (the design-story hub) and
+   `<out>/coverage.html` (the acceptance-criteria coverage matrix). See
+   "Design-story site" below for the full recipe.
 
 ## What a spec carries
 
@@ -100,6 +123,41 @@ Everything resolves through `design-system.json`'s tokens — colour roles becom
 CSS custom properties, the shape scale becomes radii. Swap the palette there and
 every mock in the set follows. Light and dark are both generated.
 
+## Design-story site
+
+The end-to-end recipe that turns the two skills' separate outputs into one
+navigable site a reviewer walks top to bottom — Problem → Journey → Screens →
+Coverage, everything cross-linked:
+
+```bash
+node <user-flow-maps>/scripts/build-flowmaps.mjs <flowspec.json> \
+  --out <dir> --layout story --screens <screens dir>
+
+node scripts/build-screens.mjs \
+  --system <design-system.json> --specs <screens dir> --out <dir> --layout story
+
+node scripts/build-story.mjs \
+  --flows <flowspec.json|dir> --screens <screens dir> --out <dir> [--system <design-system.json>]
+```
+
+All three point `--out` at the **same directory**. Order doesn't matter for
+correctness (each build degrades to a dead link, never a failure, if a
+sibling hasn't run yet), but running `build-story.mjs` last means its hub and
+coverage page reflect what's actually on disk. The result:
+
+```
+<dir>/
+  index.html      # the hub: Problem, Journey, Screens, Coverage
+  coverage.html   # every AC id x which node(s)/screen(s)/state(s) realize it
+  flows/<slug>.html
+  screens/<slug>.html
+```
+
+Open `<dir>/index.html`. It links to each `flows/<slug>.html` (the journey),
+groups screen links by flow in journey order, and summarizes coverage with a
+link to the full matrix — it never re-renders a mock or a poster, only links
+to the pages the other two builds produced.
+
 ## Files
 
 | Path | What it is |
@@ -107,7 +165,9 @@ every mock in the set follows. Light and dark are both generated.
 | `scripts/screenspec.js` | Mobile renderer: tokens, region renderers, device mock, state resolution. Browser and Node. |
 | `scripts/screenspec.web.js` | Web renderer: responsive breakpoints, app shell, region renderers for the web target. Browser and Node. |
 | `scripts/styles.js` | The four selectable web styles (Material UI, Neo-Flat, Minimal-Neutral, Fluent) — palette and token overrides per style. |
-| `scripts/build-screens.mjs` | CLI: design system + specs → linked HTML pages, one per flow, plus a design-system index. |
+| `scripts/build-screens.mjs` | CLI: design system + specs → linked HTML pages, one per flow (with a journey filmstrip), plus a design-system index. `--layout story` cross-links into a shared design-story site. |
+| `scripts/journey.mjs` | `journeyOrder(screens)` — sorts a flow's screens into journey order by `node` id; backs the filmstrip and the hub's per-flow screen groups. |
+| `scripts/build-story.mjs` | CLI: flow spec(s) + screen spec(s) → `index.html` (design-story hub) and `coverage.html` (AC coverage matrix). Reads both builds' inputs, renders neither's mocks — only links. |
 | `references/schema.md` | The spec contract, field by field. |
 | `references/verifying.md` | What to check before calling the set done. |
 | `references/coverage-both-ways.md` | Node→screen *and* screen→node coverage. Run after any flow-map edit — a retired node leaves an orphaned screen that a one-directional check cannot see. |
