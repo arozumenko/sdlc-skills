@@ -205,7 +205,7 @@ FlowMap.legend(document.getElementById('legend'));
 // FlowMap.render() already stamps with n.id is the only reliable way to
 // recover which node a .n cell is, since L.ord's render order isn't exposed.
 (function(){
-  var SCREEN_MAP = ${JSON.stringify(screensByFlow[f.key] || {})};
+  var SCREEN_MAP = ${JSON.stringify(screensByFlow[f.key] || {}).replace(/</g, '\\u003c')};
   document.querySelectorAll('#poster .n').forEach(function(cell){
     var badge = cell.querySelector('.badge');
     if(!badge) return;
