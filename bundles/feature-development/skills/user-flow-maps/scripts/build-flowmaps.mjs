@@ -11,41 +11,89 @@
  * The spec is data only. Positioning, routing and collision handling live in
  * flowmap.js — nothing here computes a coordinate.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const FlowMap = require(join(__dirname, 'flowmap.js'));
 const LIB = readFileSync(join(__dirname, 'flowmap.js'), 'utf8');
+// flowmap.js is a plain CJS UMD file with no package.json of its own in this
+// directory (unlike screen-specs/scripts, which pins { "type": "commonjs" }
+// next to screenspec.js) — Node's require() walks up to the repo root's
+// { "type": "module" } and (mis)loads it as ESM, which throws since it isn't
+// valid ESM. Evaluate the already-read source through a minimal manual CJS
+// wrapper instead of Node's loader; this is the same source used for the
+// browser-inlined <script>, so both sides render off one file, unchanged.
+const flowmapModule = { exports: {} };
+new Function('module', 'exports', 'require', LIB)(flowmapModule, flowmapModule.exports, require);
+const FlowMap = flowmapModule.exports;
 
 /* ------------------------------------------------------------------ args */
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes('-h') || argv.includes('--help')) {
-  console.log(`usage: build-flowmaps.mjs <spec.json> --out <dir> [--title "Set title"]
+  console.log(`usage: build-flowmaps.mjs <spec.json> --out <dir> [--title "Set title"] [--layout flat|story] [--screens <dir|file>]
 
 spec.json:
   { "title": "...",                     // set title, shown on the index
     "flows":  [ <flow>, ... ],          // see flowmap.js header for the flow shape
     "composition": { "flows": [...] },  // optional: how the flows join up
     "findings":    [ {group,title,body,tone}, ... ]   // optional: index notes
-  }`);
+  }
+
+--layout story writes flow pages into <out>/flows/ instead of <out>/ and, when
+--screens points at the matching *.screens.json spec(s), links each flow node
+to its screen spec page (../screens/<slug>.html#<screenId>).`);
   process.exit(argv.length ? 0 : 1);
 }
 const specPath = resolve(argv[0]);
 const outDir = resolve(argv[argv.indexOf('--out') + 1] || './flowmaps');
+const layout = argv.includes('--layout') ? argv[argv.indexOf('--layout') + 1] : 'flat';
+const screensArg = argv.includes('--screens') ? resolve(argv[argv.indexOf('--screens') + 1]) : null;
 const spec = JSON.parse(readFileSync(specPath, 'utf8'));
 const setTitle = argv.includes('--title') ? argv[argv.indexOf('--title') + 1]
   : (spec.title || 'Flow maps');
-if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+// Story layout writes into a flows/ subdir so it can sit next to build-screens.mjs's
+// screens/ output (and the future design-story hub's index.html) without a filename
+// collision. Flat (default) keeps writing straight to --out, unchanged.
+const flowsDir = layout === 'story' ? join(outDir, 'flows') : outDir;
+if (!existsSync(flowsDir)) mkdirSync(flowsDir, { recursive: true });
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const slug = f => String(f.key || f.title || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const cleanTitle = f => String(f.title || f.key || '')
   .replace(/^\s*Flow map\s*[^A-Za-z0-9(]+\s*/, '');
+
+// Mirrors build-screens.mjs's own `slugOf()` exactly (same formula, no trim)
+// so a flow node's link to `../screens/<slug>.html` lands on the file that
+// script actually writes for that spec.
+const screenSlugOf = s => String(s.flow || s.title || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+function loadScreenSpecs(p) {
+  if (!p || !existsSync(p)) return [];
+  if (statSync(p).isDirectory()) {
+    return readdirSync(p).filter(f => f.endsWith('.screens.json'))
+      .map(f => JSON.parse(readFileSync(join(p, f), 'utf8')));
+  }
+  return [JSON.parse(readFileSync(p, 'utf8'))];
+}
+
+// node id -> {slug, screenId}, keyed by flow key (the join key shared with
+// screen-specs's own `flow` field). Empty/absent --screens just yields {}
+// per flow, so a flow renders normally with no screen links (T2 degrades
+// gracefully rather than failing when the sibling build hasn't run yet).
+const screensByFlow = {};
+for (const s of loadScreenSpecs(screensArg)) {
+  if (s.flow == null) continue;
+  const map = screensByFlow[s.flow] || (screensByFlow[s.flow] = {});
+  const sSlug = screenSlugOf(s);
+  (s.screens || []).forEach(scr => {
+    const nodes = Array.isArray(scr.node) ? scr.node : (scr.node != null ? [scr.node] : []);
+    nodes.forEach(n => { map[String(n)] = { slug: sSlug, screenId: scr.id }; });
+  });
+}
 
 /* ------------------------------------------------------------------ shell */
 function page({ title, body, data, glue }) {
@@ -155,9 +203,31 @@ const F = DATA;
 FlowMap.render(document.getElementById('poster'), F);
 FlowMap.table(document.getElementById('table'), F);
 FlowMap.legend(document.getElementById('legend'));
-`;
+` + (layout === 'story' ? `// story layout (A — cross-link flow -> screens): every rendered node gets a
+// stable id="node-<id>" anchor; a node whose id has a matching screen (from
+// --screens) becomes a click-through to that screen's spec page. The badge
+// FlowMap.render() already stamps with n.id is the only reliable way to
+// recover which node a .n cell is, since L.ord's render order isn't exposed.
+(function(){
+  var SCREEN_MAP = ${JSON.stringify(screensByFlow[f.key] || {})};
+  document.querySelectorAll('#poster .n').forEach(function(cell){
+    var badge = cell.querySelector('.badge');
+    if(!badge) return;
+    var id = badge.textContent;
+    cell.id = 'node-' + id;
+    var hit = SCREEN_MAP[id];
+    if(!hit) return;
+    var a = document.createElement('a');
+    a.href = '../screens/' + hit.slug + '.html#' + hit.screenId;
+    a.className = 'node-link';
+    a.style.cssText = 'position:absolute;inset:0;';
+    a.setAttribute('aria-label', 'Open screen spec for node ' + id);
+    cell.appendChild(a);
+  });
+})();
+` : '');
   const html = page({ title: f.page_title || (f.key ? f.key + ' Flow' : cleanTitle(f)), body, data: f, glue });
-  writeFileSync(join(outDir, slug(f) + '.html'), html);
+  writeFileSync(join(flowsDir, slug(f) + '.html'), html);
   console.log('wrote', slug(f) + '.html', html.length, 'bytes');
 });
 
@@ -251,7 +321,7 @@ const indexData = {
   flows: flows.map(f => ({ ...f, slug: slug(f) })),
   composition: spec.composition || null
 };
-writeFileSync(join(outDir, 'index.html'),
+writeFileSync(join(flowsDir, 'index.html'),
   page({ title: setTitle, body: indexBody, data: indexData, glue: indexGlue }));
 console.log('wrote index.html');
 console.log('\n→', outDir);

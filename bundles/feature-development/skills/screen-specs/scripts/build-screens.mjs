@@ -41,22 +41,38 @@ const LIB = ['styles.js', 'screenspec.js', 'screenspec.web.js']
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 if (argv.includes('-h') || argv.includes('--help') || !argv.length) {
-  console.log('usage: build-screens.mjs --system <design-system.json> --specs <dir> --out <dir> [--img ../assets/img/]');
+  console.log('usage: build-screens.mjs --system <design-system.json> --specs <dir> --out <dir> [--img ../assets/img/] [--layout flat|story]');
   process.exit(argv.length ? 0 : 1);
 }
 const sysPath = resolve(arg('--system'));
 const specDir = resolve(arg('--specs', dirname(sysPath)));
 const outDir = resolve(arg('--out', join(specDir, 'html')));
-const imgBase = arg('--img', '../assets/img/');
+const layout = arg('--layout', 'flat');
+let imgBase = arg('--img', '../assets/img/');
+// Story layout writes one directory deeper (<out>/screens/<slug>.html instead
+// of <out>/<slug>.html), so a relative asset base needs one more `../` to
+// still resolve to the same place on disk. Absolute/remote bases pass through.
+if (layout === 'story' && !/^([a-z]+:)?\/\//i.test(imgBase) && !imgBase.startsWith('/')) {
+  imgBase = '../' + imgBase;
+}
 const ds = JSON.parse(readFileSync(sysPath, 'utf8'));
 const specs = readdirSync(specDir).filter(f => f.endsWith('.screens.json'))
   .sort()
   .map(f => ({ file: f, data: JSON.parse(readFileSync(join(specDir, f), 'utf8')) }));
-if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+// Story layout writes per-flow pages into screens/ so they can sit next to
+// build-flowmaps.mjs's flows/ output (and the future design-story hub's
+// index.html) without a filename collision. Flat (default) writes straight
+// to --out, exactly as before.
+const screensDir = layout === 'story' ? join(outDir, 'screens') : outDir;
+if (!existsSync(screensDir)) mkdirSync(screensDir, { recursive: true });
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const slugOf = s => String(s.flow || s.title || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+// Mirrors build-flowmaps.mjs's own `slug()` exactly (same formula, trimmed)
+// so a screen's "Flow node" link to `../flows/<slug>.html` lands on the file
+// that script actually writes for the shared flow key.
+const flowSlugOf = k => String(k || 'flow').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /* -------------------------------------------------------- target-aware chrome
    One design system renders one target throughout a build, so these labels
@@ -351,12 +367,26 @@ for (const { data } of specs) {
 
     const p1=panel('Traceability');
     const dl=el('dl','kv');
+    ${layout === 'story' ? `// story layout (A — cross-link screen -> flow/coverage): the flow node
+    // value links back to its node in the flow poster, and each AC chip links
+    // to its coverage row (coverage.html is T3's; the anchor target is stable
+    // ahead of it existing). FLOW_SLUG mirrors build-flowmaps.mjs's own slug().
+    const FLOW_SLUG=${JSON.stringify(flowSlugOf(data.flow || data.title))};
     const kv=(k,v)=>{if(!v||(Array.isArray(v)&&!v.length))return;
+      dl.appendChild(el('dt',null,k));
+      const dd=el('dd');
+      if(k==='Criteria'){(Array.isArray(v)?v:[v]).forEach(a=>{
+        const s2=el('a','ac'); s2.textContent=a; s2.href='../coverage.html#ac-'+String(a).split(' ')[0]; dd.appendChild(s2);});}
+      else if(k==='Flow node'){(Array.isArray(v)?v:[v]).forEach((n,i)=>{
+        if(i>0) dd.appendChild(document.createTextNode(', '));
+        const nd=el('a',null,String(n)); nd.href='../flows/'+FLOW_SLUG+'.html#node-'+n; dd.appendChild(nd);});}
+      else dd.textContent=Array.isArray(v)?v.join(', '):String(v);
+      dl.appendChild(dd);};` : `const kv=(k,v)=>{if(!v||(Array.isArray(v)&&!v.length))return;
       dl.appendChild(el('dt',null,k));
       const dd=el('dd');
       if(k==='Criteria'){(Array.isArray(v)?v:[v]).forEach(a=>{const s2=el('span','ac');s2.textContent=a;dd.appendChild(s2);});}
       else dd.textContent=Array.isArray(v)?v.join(', '):String(v);
-      dl.appendChild(dd);};
+      dl.appendChild(dd);};`}
     kv('Flow node',s.node); kv('Presentation',(s.nav||{}).kind); kv('Criteria',s.ac);
     if(s.content) kv('Seeded content',Object.entries(s.content).map(([k,v])=>k+': '+v).join(' · '));
     p1.appendChild(dl);
@@ -466,7 +496,7 @@ for (const { data } of specs) {
   ` : ''}
 })();
 `;
-  writeFileSync(join(outDir, slug + '.html'),
+  writeFileSync(join(screensDir, slug + '.html'),
     page({ title: (data.flow ? data.flow + ' screens' : data.title), body, data: { ...data, system: ds }, glue }));
   console.log('wrote', slug + '.html');
 }
@@ -567,7 +597,7 @@ const indexGlue = `
 })();
 `;
 const totalScreens = specs.reduce((a, s) => a + (s.data.screens || []).length, 0);
-writeFileSync(join(outDir, 'index.html'),
+writeFileSync(join(screensDir, 'index.html'),
   page({ title: (ds.name || 'Design system'), body: indexBody,
          data: { system: ds, flows: specs.length, screens: totalScreens }, glue: indexGlue }));
 console.log('wrote index.html');

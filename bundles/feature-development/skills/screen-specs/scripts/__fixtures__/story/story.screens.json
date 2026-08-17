@@ -1,0 +1,18 @@
+{
+  "flow": "story-flow",
+  "title": "Story flow screens",
+  "screens": [
+    {
+      "id": "S-001-0",
+      "node": "1",
+      "title": "Result",
+      "purpose": "Show the result of the search.",
+      "ac": ["AC-1"],
+      "nav": { "kind": "root", "title": "Result" },
+      "regions": [
+        { "type": "appbar", "label": "Header", "content": "Result" },
+        { "type": "cta", "label": "Book now", "content": "Book Now" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "title": "Story Test",
+  "flows": [
+    {
+      "key": "story-flow",
+      "title": "Flow map — story-flow: Test",
+      "nodes": [
+        {"id":"0","label":"Start","archetype":"form","regions":[],
+          "transitions":[{"target":"1","trigger":"go","kind":"primary","nav":"push","ac":"AC-1"}],
+          "decision":null},
+        {"id":"1","label":"Result","archetype":"list","regions":[],
+          "transitions":[],"decision":null}
+      ]
+    }
+  ]
+}
