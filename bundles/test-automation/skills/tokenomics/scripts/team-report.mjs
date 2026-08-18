@@ -267,7 +267,7 @@ export function renderMarkdown(rep, { window, label } = {}) {
   out.push(`- Sessions: ${rep.sessions} (${Object.entries(rep.byHost).map(([h, b]) => `${h} ${b.sessions}`).join(', ')})  ·  people: ${rep.people}`);
   const src = Object.entries(rep.costSources).map(([s, n]) => `${s} ×${n}`).join(', ');
   out.push(`- Cost (real figures only): ${usd(t.priced ? t.costUsd : null)} from ${t.priced} priced session(s)${src ? ` (${src})` : ''}${rep.tokensOnly ? `  ·  ⚠️ ${rep.tokensOnly} session(s) tokens-only (no real dollar — never estimated)` : ''}`);
-  out.push(`- Tokens (incl. sub-agents): ${tokStr(t.tokens)}`);
+  out.push(`- Tokens (incl. sub-agents): total ${quadTotal(t.tokens).toLocaleString()}  ·  ${tokStr(t.tokens)}`);
   out.push(`- Real work: ${((t.tokens.input + t.tokens.output)).toLocaleString()} tokens (in+out)  ·  cache hit rate: ${(() => { const d = t.tokens.cacheRead + t.tokens.cacheWrite + t.tokens.input; return d ? `${((t.tokens.cacheRead / d) * 100).toFixed(1)}%` : 'n/a'; })()}`);
   out.push(`- Time: ${hours(t.activeMin)} active  ·  ${hours(t.wallMin)} wall  ·  ${t.turns} turns  ·  ${t.toolCalls} tool calls (${t.toolErrors} err)`);
   const caseIds = Object.keys(rep.byCase ?? {});
@@ -380,7 +380,7 @@ export function renderBatchMarkdown(c) {
   const ts = c.totals.tokensSplit;
   out.push(`- Total: ${usd(c.totals.costUsd)}  ·  ${hours(c.totals.activeMin)} active  ·  ${c.totals.dispatches} dispatches`);
   if (ts) {
-    out.push(`- Tokens: **real work ${realWork(ts).toLocaleString()}** (in ${ts.input.toLocaleString()} / out ${ts.output.toLocaleString()})  ·  cache ${kTok(ts.cacheRead)} read / ${kTok(ts.cacheWrite)} write  ·  **cache hit rate ${pct(cacheHitRate(ts))}**  ·  see batch-tokenomics for the full breakdown`);
+    out.push(`- Tokens: total ${c.totals.tokens.toLocaleString()}  ·  **real work ${realWork(ts).toLocaleString()}** (in ${ts.input.toLocaleString()} / out ${ts.output.toLocaleString()})  ·  cache ${kTok(ts.cacheRead)} read / ${kTok(ts.cacheWrite)} write  ·  **cache hit rate ${pct(cacheHitRate(ts))}**  ·  see batch-tokenomics for the full breakdown`);
   } else {
     out.push(`- Tokens: ${c.totals.tokens.toLocaleString()} (incl. cache — re-run close for the split)`);
   }
@@ -417,11 +417,89 @@ export function renderBatchMarkdown(c) {
   return out.join('\n');
 }
 
-// Self-contained batch page — no external assets, light/dark aware. The bar
-// chart is plain divs: direct cost (or tokens where dollars don't exist on the
-// host) per case, with overhead drawn once as its own labelled band.
+// ---- shared page chrome — ported from manual-qa's tokenomics page ----------
+// Same design system (kpi cards / panels / stacked bars / legends, the same
+// light-dark palette) so the two bundles' reports read as one family.
+const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const fmtInt = (n) => (n == null ? '—' : Math.round(n).toLocaleString('en-US'));
+const PAGE_CSS = `
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100;--warn:#c53030;--ok:#2f855a}
+html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--warn:#e06c6c;--ok:#48a06f}
+*{box-sizing:border-box}
+body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1120px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
+h1{font-size:1.35rem;margin:0 0 .2rem}
+.meta{color:var(--text-muted);font-size:.85rem;margin:0 0 1.1rem}
+section{margin-top:1.1rem}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:.8rem}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;min-width:0}
+.kpi-card h3{margin:0 0 .55rem;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat-label{font-size:.74rem;color:var(--text-secondary)}
+.stat-sub{color:var(--text-muted);font-weight:400}
+.stat-value{font-size:1.02rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3;overflow-wrap:anywhere}
+.stat-value-sm{font-size:.84rem;font-weight:500}
+.kpi-callout{margin-top:.65rem;padding:.45rem .6rem;background:var(--page);border:1px solid var(--gridline);border-radius:7px;font-size:.81rem;color:var(--text-secondary)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;overflow-x:auto;min-width:0}
+.panel h2{margin:0;font-size:1rem}
+.panel-sub{margin:.15rem 0 .75rem;color:var(--text-muted);font-size:.84rem}
+.stacked-bar{display:flex;height:18px;border-radius:5px;overflow:hidden;background:var(--gridline)}
+.bar-seg{height:100%}
+.s-in{background:var(--series-1)}.s-out{background:var(--series-2)}.s-cr{background:var(--series-3)}.s-cw{background:var(--series-4)}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.35rem 1rem;margin-top:.6rem}
+.legend-item{display:flex;align-items:center;gap:.4rem;font-size:.82rem;min-width:0;flex-wrap:wrap}
+.legend-swatch{width:10px;height:10px;border-radius:3px;flex:none}
+.legend-label{color:var(--text-secondary)}
+.legend-value{margin-left:auto;font-variant-numeric:tabular-nums}
+.legend-pct{color:var(--text-muted)}
+.row{display:grid;grid-template-columns:minmax(130px,210px) minmax(140px,1fr) minmax(200px,240px);gap:.7rem;align-items:center;margin:.32rem 0}
+.row .lbl{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .track{background:var(--gridline);border-radius:4px;height:15px}
+.row .bar{background:var(--series-1);height:15px;border-radius:4px}
+.row .stacked{display:flex;overflow:hidden;height:15px;border-radius:4px}
+.row .num{font-size:.84rem;font-variant-numeric:tabular-nums}
+.sub{color:var(--text-muted)}
+.oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
+.oc-automated{color:var(--ok);border-color:var(--ok)}.oc-blocked{color:var(--warn);border-color:var(--warn)}
+.callout-warn{margin-top:.8rem;color:var(--warn);border:1px solid var(--warn);border-radius:7px;padding:.5rem .7rem;font-size:.86rem;background:var(--surface)}
+.note{color:var(--text-muted);font-size:.84rem}
+table{border-collapse:collapse;width:100%;font-size:.87rem;margin:.4rem 0}
+th{text-align:left;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--gridline);padding:.3rem .5rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+td{border-bottom:1px solid var(--gridline);padding:.3rem .5rem;font-variant-numeric:tabular-nums}
+.chip{font-size:.8rem;border:1px solid var(--gridline);border-radius:8px;padding:.1rem .5rem;margin-right:.4rem;color:var(--text-secondary);display:inline-block}
+.share-cell{display:flex;align-items:center;gap:.45rem;min-width:140px}
+.share-bar-track{flex:1;height:8px;border-radius:4px;background:var(--gridline);overflow:hidden}
+.share-bar-fill{height:8px;border-radius:4px;background:var(--series-1)}
+.share-bar-label{font-size:.8rem;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:640px){.row{grid-template-columns:110px 1fr}.row .num{grid-column:1/-1}}
+`;
+const statCell = (label, value, small) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value${small ? ' stat-value-sm' : ''}">${value}</span></div>`;
+const kpiCard = (title, cells, callout) => `<div class="kpi-card"><h3>${title}</h3><div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
+// One quad, four segments + a count-and-share legend (the manual-qa pattern:
+// a share bar you can read without hovering).
+const QUAD_SERIES = [
+  ['input', 's-in', 'input · 1×'],
+  ['output', 's-out', 'output'],
+  ['cacheWrite', 's-cw', 'cache write · 1.25×'],
+  ['cacheRead', 's-cr', 'cache read · 0.1×'],
+];
+const quadTotal = (tok) => num(tok?.input) + num(tok?.output) + num(tok?.cacheRead) + num(tok?.cacheWrite);
+const quadBar = (tok) => {
+  const total = quadTotal(tok);
+  if (!total) return '<div class="stacked-bar"></div>';
+  return `<div class="stacked-bar">${QUAD_SERIES.map(([k, cls, label]) =>
+    num(tok[k]) > 0 ? `<div class="bar-seg ${cls}" style="flex:${Math.max((num(tok[k]) / total) * 100, 0.4)} 0 0" title="${label}: ${fmtInt(tok[k])} (${pct(num(tok[k]) / total)})"></div>` : '').join('')}</div>`;
+};
+const quadLegend = (tok) => {
+  const total = quadTotal(tok) || 1;
+  return `<div class="legend">${QUAD_SERIES.map(([k, cls, label]) => `<div class="legend-item"><span class="legend-swatch ${cls}"></span><span class="legend-label">${label}</span><span class="legend-value">${fmtInt(tok?.[k])} <span class="legend-pct">(${pct(num(tok?.[k]) / total)})</span></span></div>`).join('')}</div>`;
+};
+
+// Self-contained batch DELIVERY page — no external assets, light/dark aware.
+// KPI cards up top (delivery / cost / tokens / activity — every headline number
+// incl. the raw token total), then per-case bars with overhead drawn once.
 export function renderBatchHtml(c) {
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const esc = escHtml;
   const priced = !!c.stats.directCostUsd;
   const val = (x) => (priced ? (x.direct.costUsd ?? 0) : x.direct.tokens);
   const fmtV = (v) => (priced ? `$${v.toFixed(2)}` : `${(v / 1000).toFixed(0)}k tok`);
@@ -432,47 +510,56 @@ export function renderBatchHtml(c) {
     <div class="num">${fmtV(val(x))}<span class="sub"> · ${x.loaded?.costUsd != null ? `loaded $${x.loaded.costUsd.toFixed(2)} · ` : ''}${x.direct.activeMin}m · ${x.direct.fixRounds ? `${x.direct.fixRounds} fix` : 'no fix'}${x.findings ? ` · ${x.findings} finding${x.findings > 1 ? 's' : ''}` : ''}</span></div></div>`).join('');
   const st = (s, f) => (s ? `avg ${f(s.avg)} · median ${f(s.median)} · min ${f(s.min)} · max ${f(s.max)}` : 'n/a');
   const oc = Object.entries(c.outcomes).map(([k, n]) => `<span class="oc oc-${esc(k)}">${esc(k)} ${n}</span>`).join(' ');
-  return `<!doctype html><meta charset="utf-8"><title>Batch cost — ${esc(c.batch)}</title><style>
-  :root{--fg:#1a1a1a;--dim:#666;--line:#ddd;--bg:#fff;--accent:#2b6cb0;--band:#f3f4f6}
-  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--dim:#9a9a9a;--line:#333;--bg:#151515;--accent:#63a4e0;--band:#1f2937}}
-  body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:var(--fg);background:var(--bg);max-width:920px;margin:2rem auto;padding:0 1rem}
-  h1{font-size:1.3rem} h2{font-size:1.05rem;margin-top:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
-  .k{display:inline-block;margin:.2rem 1.2rem .2rem 0}.k b{font-size:1.25rem}.k span{color:var(--dim);font-size:.85rem;display:block}
-  .row{display:grid;grid-template-columns:220px 1fr 220px;gap:.6rem;align-items:center;margin:.25rem 0}
-  .lbl{font-family:ui-monospace,monospace;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .track{background:var(--band);border-radius:3px;height:14px}.bar{background:var(--accent);height:14px;border-radius:3px}
-  .num{font-size:.85rem}.sub{color:var(--dim)}
-  .oc{font-size:.72rem;border:1px solid var(--line);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--dim)}
-  .oc-automated{color:#2f855a;border-color:#2f855a}.oc-blocked{color:#c53030;border-color:#c53030}
-  .note{color:var(--dim);font-size:.85rem}
-  .drift{color:#c53030;border:1px solid #c53030;border-radius:4px;padding:.4rem .6rem;font-size:.9rem}</style>
+  const ts = c.totals.tokensSplit;
+  const okPct = c.totals.toolCalls ? `${Math.round((1 - c.totals.toolErrors / c.totals.toolCalls) * 100)}% ok` : '';
+  const cards = [
+    kpiCard('Delivery', [
+      statCell('Delivered / cases', `${c.delivered}/${c.cases.length}`),
+      statCell(`Gate${c.gate?.runs ? ` <span class="stat-sub">(${c.gate.runs} runs)</span>` : ''}`, c.gate ? esc(c.gate.verdict) : 'n/a'),
+      statCell('Fix rounds', fmtInt(c.cases.reduce((n, x) => n + x.direct.fixRounds, 0))),
+      statCell('Findings', fmtInt(c.cases.reduce((n, x) => n + x.findings, 0))),
+    ], oc),
+    kpiCard('Cost', [
+      statCell('Total <span class="stat-sub">measured</span>', usd(c.totals.costUsd)),
+      statCell('Per delivered <span class="stat-sub">incl. overhead</span>', c.averages.totalPerDelivered ? usd(c.averages.totalPerDelivered.costUsd) : 'n/a'),
+      statCell('Overhead <span class="stat-sub">lead+stages, once</span>', `${usd(c.overhead.costUsd)}${c.overhead.sharePct != null ? ` <span class="stat-sub">(${c.overhead.sharePct}%)</span>` : ''}`),
+      c.rework ? statCell('Rework', usd(c.rework.costUsd)) : statCell('Avg direct / case', c.averages.directPerCase ? usd(c.averages.directPerCase.costUsd) : 'n/a'),
+    ], c.overhead.byStage && Object.keys(c.overhead.byStage).length ? `by stage: lead ${usd(c.overhead.lead.costUsd)}${Object.entries(c.overhead.byStage).map(([k, b]) => ` · ${esc(k)} ${usd(b.costUsd)}`).join('')}` : null),
+    kpiCard('Tokens', ts ? [
+      statCell('Total <span class="stat-sub">incl. cache replay</span>', fmtInt(c.totals.tokens)),
+      statCell('Real work <span class="stat-sub">in+out</span>', fmtInt(realWork(ts))),
+      statCell('Cache read', fmtInt(ts.cacheRead)),
+      statCell('Cache hit rate', pct(cacheHitRate(ts))),
+    ] : [statCell('Total <span class="stat-sub">incl. cache</span>', fmtInt(c.totals.tokens))],
+    ts ? `cache write ${fmtInt(ts.cacheWrite)} · ~${pct(cacheSavings(ts))} of prompt cost saved by cache — composition in <strong>batch-tokenomics.html</strong>` : 're-run close for the token split'),
+    kpiCard('Activity', [
+      statCell('Turns', fmtInt(c.totals.turns)),
+      statCell('Tool calls', c.totals.toolCalls != null ? `${fmtInt(c.totals.toolCalls)} <span class="stat-sub">(${c.totals.toolErrors} err${okPct ? `, ${okPct}` : ''})</span>` : '—'),
+      statCell('Dispatches', fmtInt(c.totals.dispatches)),
+      statCell('Active time', `${hours(c.totals.activeMin)}`),
+    ], c.totals.skills?.length ? `skills: ${esc(c.totals.skills.join(', '))}` : null),
+  ].join('');
+  return `<!doctype html><meta charset="utf-8"><title>Batch cost — ${esc(c.batch)}</title><style>${PAGE_CSS}</style>
   <h1>Batch cost — ${esc(c.batch)}</h1>
-  <p class="note">Generated ${esc(c.generatedAt)} · ${c.sources.sessions} session(s) on ${esc(c.sources.hosts.join(', '))} · sources: ${esc(c.sources.costSources.join(', ') || 'tokens only')}</p>
-  <div><span class="k"><b>${usd(c.totals.costUsd)}</b><span>total (measured)</span></span>
-  <span class="k"><b>${c.delivered}/${c.cases.length}</b><span>delivered / cases</span></span>
-  <span class="k"><b>${c.averages.totalPerDelivered ? usd(c.averages.totalPerDelivered.costUsd) : 'n/a'}</b><span>per delivered (incl. overhead)</span></span>
-  <span class="k"><b>${usd(c.overhead.costUsd)}${c.overhead.sharePct != null ? ` (${c.overhead.sharePct}%)` : ''}</b><span>overhead: lead + triage + gate + report</span></span>
-  <span class="k"><b>${c.gate ? esc(c.gate.verdict) : 'n/a'}</b><span>gate${c.gate?.runs ? ` (${c.gate.runs} runs)` : ''}</span></span>
-  ${c.rework ? `<span class="k"><b>${usd(c.rework.costUsd)}</b><span>rework (${c.rework.dispatches} fix dispatch(es))</span></span>` : ''}</div>
-  ${c.totals.toolCalls != null ? `<p class="note">${c.totals.turns ?? '—'} turns · ${c.totals.toolCalls} tool calls (${c.totals.toolErrors} err)${c.totals.skills?.length ? ` · skills: ${esc(c.totals.skills.join(', '))}` : ''}${c.overhead.byStage && Object.keys(c.overhead.byStage).length ? ` · overhead by stage: lead ${usd(c.overhead.lead.costUsd)}${Object.entries(c.overhead.byStage).map(([k, b]) => ` / ${esc(k)} ${usd(b.costUsd)}`).join('')}` : ''}</p>` : ''}
-  ${c.sources.liveSessions ? `<p class="drift">⏳ LIVE / PROVISIONAL — ${c.sources.liveSessions} session(s) still running. Finished dispatches are counted; their lead thread is not measured yet, so these totals are a floor.</p>` : ''}
+  <p class="meta">Delivery view · generated ${esc(c.generatedAt)} · ${c.sources.sessions} session(s) on ${esc(c.sources.hosts.join(', '))} · sources: ${esc(c.sources.costSources.join(', ') || 'tokens only')} · models: ${esc(c.sources.models.join(', ') || '—')}</p>
+  <section class="kpi-row">${cards}</section>
+  ${c.sources.liveSessions ? `<p class="callout-warn">⏳ LIVE / PROVISIONAL — ${c.sources.liveSessions} session(s) still running. Finished dispatches are counted; their lead thread is not measured yet, so these totals are a floor.</p>` : ''}
   ${c.sources.sharedSessions ? `<p class="note">${c.sources.sharedSessions} session(s) also served other batches — session-level figures split evenly${c.sources.foreignDispatchesExcluded ? `; ${c.sources.foreignDispatchesExcluded} other-batch dispatch(es) excluded` : ''}.</p>` : ''}
-  <p>${oc}</p>
-  ${c.records?.gateDrift ? `<p class="drift">⚠ GATE DRIFT — receipt says '${esc(c.records.gateDrift.receipt ?? 'not-run')}' but the recorded verdict is '${esc(c.records.gateDrift.recorded)}' (${esc(c.records.gateDrift.at ?? '?')}): write the verdict back into report.json</p>` : ''}
-  ${c.records?.outcomeDrift?.length ? `<p class="drift">⚠ OUTCOME DRIFT — ${c.records.outcomeDrift.map((d) => `${esc(d.id)}: receipt=${esc(d.receipt ?? '—')} declared=${esc(d.declared)}`).join('; ')} — reconcile report.json</p>` : ''}
-  <h2>Per case — direct, measured${priced ? '' : ' (tokens: no per-dispatch dollars on this host)'}</h2>
-  <p class="note">Batch overhead is NOT in these bars — it is the labelled figure above, shown once instead of smeared.</p>
-  ${bars}
-  <h2>Spread</h2>
-  <p>${priced ? `Direct cost: ${st(c.stats.directCostUsd, (x) => `$${x.toFixed(2)}`)}<br>` : ''}${c.stats.loadedCostUsd ? `Loaded cost (direct + even overhead share — allocation, not measurement): ${st(c.stats.loadedCostUsd, (x) => `$${x.toFixed(2)}`)}<br>` : ''}Tokens: ${st(c.stats.directTokens, (x) => x.toLocaleString())}<br>Active time: ${st(c.stats.directActiveMin, (x) => `${x}m`)}${c.stats.loadedActiveMin ? ` · loaded: ${st(c.stats.loadedActiveMin, (x) => `${x}m`)}` : ''}</p>
-  ${Object.keys(c.byRole ?? {}).length ? `<h2>By role</h2>${(() => {
+  ${c.records?.gateDrift ? `<p class="callout-warn">⚠ GATE DRIFT — receipt says '${esc(c.records.gateDrift.receipt ?? 'not-run')}' but the recorded verdict is '${esc(c.records.gateDrift.recorded)}' (${esc(c.records.gateDrift.at ?? '?')}): write the verdict back into report.json</p>` : ''}
+  ${c.records?.outcomeDrift?.length ? `<p class="callout-warn">⚠ OUTCOME DRIFT — ${c.records.outcomeDrift.map((d) => `${esc(d.id)}: receipt=${esc(d.receipt ?? '—')} declared=${esc(d.declared)}`).join('; ')} — reconcile report.json</p>` : ''}
+  <section class="panel"><h2>Per case — direct, measured${priced ? '' : ' (tokens: no per-dispatch dollars on this host)'}</h2>
+  <p class="panel-sub">Batch overhead is NOT in these bars — it is the labelled figure above, shown once instead of smeared. Clustered cases are an even split of their shared dispatches.</p>
+  ${bars}</section>
+  <section class="panel"><h2>Spread</h2>
+  <p>${priced ? `Direct cost: ${st(c.stats.directCostUsd, (x) => `$${x.toFixed(2)}`)}<br>` : ''}${c.stats.loadedCostUsd ? `Loaded cost (direct + even overhead share — allocation, not measurement): ${st(c.stats.loadedCostUsd, (x) => `$${x.toFixed(2)}`)}<br>` : ''}Tokens: ${st(c.stats.directTokens, (x) => x.toLocaleString())}<br>Active time: ${st(c.stats.directActiveMin, (x) => `${x}m`)}${c.stats.loadedActiveMin ? ` · loaded: ${st(c.stats.loadedActiveMin, (x) => `${x}m`)}` : ''}</p></section>
+  ${Object.keys(c.byRole ?? {}).length ? `<section class="panel"><h2>By role</h2>${(() => {
     const roles = Object.entries(c.byRole);
     const rmax = Math.max(1, ...roles.map(([, b]) => b.tokens));
     return roles.map(([r, b]) => `
     <div class="row"><div class="lbl">${esc(r)}</div>
     <div class="track"><div class="bar" style="width:${Math.max(1, (b.tokens / rmax) * 100)}%"></div></div>
     <div class="num">${b.costUsd != null ? `$${b.costUsd.toFixed(2)}` : `${(b.tokens / 1e6).toFixed(1)}M tok`}<span class="sub"> · ${b.dispatches || '—'} disp · ${b.activeMin}m${b.toolCalls != null ? ` · ${b.toolCalls} tools (${b.toolErrors})` : ''}</span></div></div>`).join('');
-  })()}` : ''}
+  })()}</section>` : ''}
   ${c.coverage.casesUnattributed.length ? `<p class="note">Unattributed (no captured dispatch named them): ${esc(c.coverage.casesUnattributed.join(', '))}</p>` : ''}`;
 }
 
@@ -494,9 +581,10 @@ export function renderBatchTokenomicsMarkdown(c) {
   out.push(`| real work: output | ${ts.output.toLocaleString()} | ${pct(ts.output / total)} | generated tokens — the most expensive kind |`);
   out.push(`| cache write | ${ts.cacheWrite.toLocaleString()} | ${pct(ts.cacheWrite / total)} | context stored for reuse (~1.25× input price) |`);
   out.push(`| cache read | ${ts.cacheRead.toLocaleString()} | ${pct(ts.cacheRead / total)} | context replayed from cache (~0.1× input price) |`);
+  out.push(`| **total** | **${total.toLocaleString()}** | 100% | raw sum — dominated by the cheapest kind |`);
   out.push('', `**Cache hit rate: ${pct(cacheHitRate(ts))}** — share of all prompt tokens replayed from cache versus processed fresh (input + cache write are the fresh processing).`);
   out.push(`**Cache savings: ~${pct(cacheSavings(ts))} of prompt cost** — what the same prompt volume would have cost uncached (all tokens at 1× input price) versus as billed (write 1.25×, read 0.1×).`);
-  out.push(`Raw total ${c.totals.tokens.toLocaleString()} tokens · ${usd(c.totals.costUsd)} — the raw sum is dominated by the cheapest kind; judge by composition, not by the big number.`, '');
+  out.push(`**Total: ${c.totals.tokens.toLocaleString()} tokens · ${usd(c.totals.costUsd)} · ${hours(c.totals.activeMin)} active · ${c.totals.dispatches} dispatches** — judge by composition and hit rate, not by the big number.`, '');
   const rowFor = (name, b) => `| ${name} | ${usd(b.costUsd)} | ${realWork(b.tok)?.toLocaleString() ?? '—'} | ${kTok(b.tok?.cacheWrite)} | ${kTok(b.tok?.cacheRead)} | ${b.tok ? pct(cacheHitRate(b.tok)) : '—'} |`;
   const roles = Object.entries(c.byRole ?? {}).filter(([, b]) => b.tok);
   if (roles.length) {
@@ -520,104 +608,129 @@ export function renderBatchTokenomicsMarkdown(c) {
   }
   const cased = (c.cases ?? []).filter((x) => x.direct.tok && (x.direct.tok.input || x.direct.tok.output || x.direct.tok.cacheRead));
   if (cased.length) {
-    out.push('## Per case (direct; clustered cases are an even split)', '', '| case | cost | real work | cache read | hit rate |', '|---|---|---|---|---|');
-    for (const x of cased) out.push(`| ${x.id} | ${usd(x.direct.costUsd)} | ${realWork(x.direct.tok).toLocaleString()} | ${kTok(x.direct.tok.cacheRead)} | ${pct(cacheHitRate(x.direct.tok))} |`);
+    out.push('## Per case (direct; clustered cases are an even split)', '', '| case | cost | input | output | cache write | cache read | total | hit rate | share |', '|---|---|---|---|---|---|---|---|---|');
+    for (const x of cased) {
+      const tk = x.direct.tok; const tot = tk.input + tk.output + tk.cacheRead + tk.cacheWrite;
+      out.push(`| ${x.id} | ${usd(x.direct.costUsd)} | ${tk.input.toLocaleString()} | ${tk.output.toLocaleString()} | ${kTok(tk.cacheWrite)} | ${kTok(tk.cacheRead)} | ${tot.toLocaleString()} | ${pct(cacheHitRate(tk))} | ${pct(c.totals.tokens ? tot / c.totals.tokens : 0)} |`);
+    }
   }
   return out.join('\n');
 }
 
 export function renderBatchTokenomicsHtml(c) {
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const esc = escHtml;
   const ts = c.totals.tokensSplit;
-  const stack = (tok) => {
-    const total = num(tok?.input) + num(tok?.output) + num(tok?.cacheRead) + num(tok?.cacheWrite);
-    if (!total) return '<div class="track"></div>';
-    const seg = (v, cls, label) => (v > 0 ? `<div class="seg ${cls}" style="width:${Math.max(0.5, (v / total) * 100)}%" title="${label}: ${v.toLocaleString()}"></div>` : '');
-    return `<div class="track stacked">${seg(tok.output, 's-out', 'output')}${seg(tok.input, 's-in', 'input')}${seg(tok.cacheWrite, 's-cw', 'cache write')}${seg(tok.cacheRead, 's-cr', 'cache read')}</div>`;
-  };
   const row = (name, b) => `
-    <div class="row"><div class="lbl">${esc(name)}</div>${stack(b.tok)}
+    <div class="row"><div class="lbl">${esc(name)}</div>${b.tok && quadTotal(b.tok) ? `<div class="stacked">${QUAD_SERIES.map(([k, cls, label]) =>
+      num(b.tok[k]) > 0 ? `<div class="bar-seg ${cls}" style="flex:${Math.max((num(b.tok[k]) / quadTotal(b.tok)) * 100, 0.4)} 0 0" title="${label}: ${fmtInt(b.tok[k])}"></div>` : '').join('')}</div>` : '<div class="track"></div>'}
     <div class="num">${b.costUsd != null ? usd(b.costUsd) : '—'}<span class="sub"> · rw ${kTok(realWork(b.tok))} · hit ${b.tok ? pct(cacheHitRate(b.tok)) : '—'}</span></div></div>`;
   const roles = Object.entries(c.byRole ?? {}).filter(([, b]) => b.tok).sort((a, z) => (z[1].costUsd ?? 0) - (a[1].costUsd ?? 0));
   const stages = Object.entries(c.overhead?.byStage ?? {}).filter(([, b]) => b.tok);
   const cased = (c.cases ?? []).filter((x) => x.direct.tok && (x.direct.tok.input || x.direct.tok.output || x.direct.tok.cacheRead));
-  return `<!doctype html><meta charset="utf-8"><title>Batch tokenomics — ${esc(c.batch)}</title><style>
-  :root{--fg:#1a1a1a;--dim:#666;--line:#ddd;--bg:#fff;--band:#f3f4f6;--out:#c05621;--in:#2b6cb0;--cw:#6b46c1;--cr:#9ae6b4}
-  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--dim:#9a9a9a;--line:#333;--bg:#151515;--band:#1f2937;--out:#ed8936;--in:#63a4e0;--cw:#9f7aea;--cr:#2f855a}}
-  body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:var(--fg);background:var(--bg);max-width:920px;margin:2rem auto;padding:0 1rem}
-  h1{font-size:1.3rem} h2{font-size:1.05rem;margin-top:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
-  .k{display:inline-block;margin:.2rem 1.2rem .2rem 0}.k b{font-size:1.25rem}.k span{color:var(--dim);font-size:.85rem;display:block}
-  .row{display:grid;grid-template-columns:200px 1fr 240px;gap:.6rem;align-items:center;margin:.3rem 0}
-  .lbl{font-family:ui-monospace,monospace;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .track{background:var(--band);border-radius:3px;height:16px}.stacked{display:flex;overflow:hidden}
-  .seg{height:16px}.s-out{background:var(--out)}.s-in{background:var(--in)}.s-cw{background:var(--cw)}.s-cr{background:var(--cr)}
-  .num{font-size:.85rem}.sub{color:var(--dim)}.note{color:var(--dim);font-size:.85rem}
-  .legend span{display:inline-block;margin-right:1rem;font-size:.82rem}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem}</style>
+  const lead = c.overhead?.lead;
+  const okPct = c.totals.toolCalls ? `${Math.round((1 - c.totals.toolErrors / c.totals.toolCalls) * 100)}% ok` : '';
+  const cachedShare = ts ? num(ts.cacheRead) / (quadTotal(ts) || 1) : null;
+  const cards = ts ? [
+    kpiCard('Cache', [
+      statCell('Cache hit rate', pct(cacheHitRate(ts))),
+      statCell('Prompt cost saved', `~${pct(cacheSavings(ts))}`),
+      statCell('Total cost <span class="stat-sub">measured</span>', usd(c.totals.costUsd)),
+      statCell('Active time', hours(c.totals.activeMin)),
+    ], 'a cache write is a STORED MISS (processed fresh at ~1.25×, kept for reuse); a read replays at ~0.1× input price'),
+    kpiCard('Tokens', [
+      statCell('Total <span class="stat-sub">incl. cache replay</span>', fmtInt(c.totals.tokens)),
+      statCell('Real work <span class="stat-sub">in+out</span>', fmtInt(realWork(ts))),
+      statCell('Input', fmtInt(ts.input)),
+      statCell('Output', fmtInt(ts.output)),
+      statCell('Cache read', fmtInt(ts.cacheRead)),
+      statCell('Cache write', fmtInt(ts.cacheWrite)),
+    ], `<strong>${pct(cachedShare)}</strong> of all tokens served from cache`),
+    kpiCard('Activity', [
+      statCell('Turns', fmtInt(c.totals.turns)),
+      statCell('Tool calls', c.totals.toolCalls != null ? `${fmtInt(c.totals.toolCalls)} <span class="stat-sub">(${c.totals.toolErrors} err${okPct ? `, ${okPct}` : ''})</span>` : '—'),
+      statCell('Dispatches', fmtInt(c.totals.dispatches)),
+      statCell('Sessions', fmtInt(c.sources.sessions)),
+    ], null),
+  ].join('') : '';
+  return `<!doctype html><meta charset="utf-8"><title>Batch tokenomics — ${esc(c.batch)}</title><style>${PAGE_CSS}</style>
   <h1>Batch tokenomics — ${esc(c.batch)}</h1>
-  <p class="note">The other unfolding of the same records as batch-report (delivery view). Generated ${esc(c.generatedAt)} · models: ${esc(c.sources.models.join(', ') || '—')}</p>
+  <p class="meta">The other unfolding of the same records as batch-report (delivery view) · generated ${esc(c.generatedAt)} · ${c.sources.sessions} session(s) · models: ${esc(c.sources.models.join(', ') || '—')}</p>
   ${!ts ? '<p class="note">No token split in this cost.json — regenerate with the current skill version.</p>' : `
-  <div><span class="k"><b>${pct(cacheHitRate(ts))}</b><span>cache hit rate</span></span>
-  <span class="k"><b>~${pct(cacheSavings(ts))}</b><span>prompt cost saved by cache</span></span>
-  <span class="k"><b>${kTok(realWork(ts))}</b><span>real work (in ${kTok(ts.input)} / out ${kTok(ts.output)})</span></span>
-  <span class="k"><b>${kTok(ts.cacheRead)}</b><span>cache read (~0.1× input price)</span></span>
-  <span class="k"><b>${kTok(ts.cacheWrite)}</b><span>cache write (~1.25× input price)</span></span>
-  <span class="k"><b>${usd(c.totals.costUsd)}</b><span>total cost</span></span></div>
-  <p class="legend"><span><i style="background:var(--out)"></i>output</span><span><i style="background:var(--in)"></i>input</span><span><i style="background:var(--cw)"></i>cache write</span><span><i style="background:var(--cr)"></i>cache read</span></p>
-  <h2>Total composition</h2>${row('whole batch', { tok: ts, costUsd: c.totals.costUsd })}
-  <p class="note">The raw sum (${c.totals.tokens.toLocaleString()} tokens) is dominated by the cheapest kind — judge by composition and hit rate, not the big number.</p>
-  ${c.overhead?.lead?.tok ? `<h2>Orchestrator (lead thread)</h2>${row('lead', c.overhead.lead)}
-  <p class="note">A high lead share with a high hit rate is orchestration working as designed — context replayed per turn from cache, not runaway spend.${c.overhead.sharePct != null ? ` Overhead incl. stages: ${c.overhead.sharePct}% of the batch.` : ''}</p>` : ''}
-  ${roles.length ? `<h2>By role</h2>${roles.map(([r, b]) => row(r, b)).join('')}` : ''}
-  ${stages.length ? `<h2>By stage (overhead)</h2>${stages.map(([k, b]) => row(k, b)).join('')}` : ''}
-  ${cased.length ? `<h2>Per case (direct; clustered cases are an even split)</h2>${cased.map((x) => row(x.id, { tok: x.direct.tok, costUsd: x.direct.costUsd })).join('')}` : ''}`}`;
+  <section class="kpi-row">${cards}</section>
+  <section class="panel"><h2>Token composition</h2>
+  <p class="panel-sub">Share of ${fmtInt(c.totals.tokens)} total tokens by type — the raw sum is dominated by the cheapest kind, so judge by composition and cache hit rate, not the big number.</p>
+  ${quadBar(ts)}${quadLegend(ts)}</section>
+  ${lead?.tok ? `<section class="panel"><h2>Orchestrator (lead thread) composition</h2>
+  <p class="panel-sub">${usd(lead.costUsd)} · real work ${kTok(realWork(lead.tok))} · cache hit ${pct(cacheHitRate(lead.tok))}${c.overhead.sharePct != null ? ` · overhead incl. stages: ${c.overhead.sharePct}% of the batch` : ''}</p>
+  ${quadBar(lead.tok)}${quadLegend(lead.tok)}
+  <div class="kpi-callout">A high lead share with a high cache hit rate is orchestration working as designed — context replayed per turn from cache, not runaway spend.</div></section>` : ''}
+  ${roles.length ? `<section class="panel"><h2>By role</h2><p class="panel-sub">Per-role composition; rw = real work (in+out), hit = cache hit rate.</p>${roles.map(([r, b]) => row(r, b)).join('')}</section>` : ''}
+  ${stages.length ? `<section class="panel"><h2>By stage (overhead)</h2>${stages.map(([k, b]) => row(k, b)).join('')}</section>` : ''}
+  ${cased.length ? `<section class="panel"><h2>Per case</h2><p class="panel-sub">Direct spend only; clustered cases are an even split of their shared dispatches. Share = of the batch's ${fmtInt(c.totals.tokens)} total tokens.</p>
+  <table><tr><th>case</th><th>cost</th><th>input</th><th>output</th><th>cache write</th><th>cache read</th><th>total</th><th>hit rate</th><th>share</th></tr>
+  ${cased.map((x) => {
+    const tk = x.direct.tok; const tot = quadTotal(tk); const share = c.totals.tokens ? tot / c.totals.tokens : 0;
+    return `<tr><td>${esc(x.id)}</td><td>${usd(x.direct.costUsd)}</td><td>${fmtInt(tk.input)}</td><td>${fmtInt(tk.output)}</td><td>${fmtInt(tk.cacheWrite)}</td><td>${fmtInt(tk.cacheRead)}</td><td>${fmtInt(tot)}</td><td>${pct(cacheHitRate(tk))}</td><td><div class="share-cell"><div class="share-bar-track"><div class="share-bar-fill" style="width:${Math.max(share * 100, 0.5)}%"></div></div><span class="share-bar-label">${pct(share)}</span></div></td></tr>`;
+  }).join('')}</table></section>` : ''}`}`;
 }
 
 // Self-contained TEAM page — the whole ledger's rollup, same visual language
 // as the batch page (no external assets, light/dark aware). Real dollars only,
 // tokens-only sessions flagged, never estimated — same discipline as markdown.
 export function renderTeamHtml(rep, { window, label } = {}) {
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const esc = escHtml;
   const t = rep.totals;
+  const teamTotal = quadTotal(t.tokens);
   const tbl = (entries, cols, row) => entries.length
     ? `<table><tr>${cols.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>${entries.map(row).join('')}</table>` : '';
   const bucketRow = ([k, b]) => `<tr><td>${esc(k)}</td><td>${b.priced ? usd(b.costUsd) : 'n/a'}</td><td>${b.sessions}</td><td>${b.tokens.output.toLocaleString()}</td><td>${hours(b.activeMin)}</td><td>${b.toolCalls} (${b.toolErrors})</td></tr>`;
   const intents = Object.entries(rep.byIntent ?? {});
   const cases = rep.cases;
-  return `<!doctype html><meta charset="utf-8"><title>Tokenomics — team report${label ? ` — ${esc(label)}` : ''}</title><style>
-  :root{--fg:#1a1a1a;--dim:#666;--line:#ddd;--bg:#fff;--accent:#2b6cb0;--band:#f3f4f6}
-  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--dim:#9a9a9a;--line:#333;--bg:#151515;--accent:#63a4e0;--band:#1f2937}}
-  body{font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:var(--fg);background:var(--bg);max-width:920px;margin:2rem auto;padding:0 1rem}
-  h1{font-size:1.3rem} h2{font-size:1.05rem;margin-top:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
-  .k{display:inline-block;margin:.2rem 1.2rem .2rem 0}.k b{font-size:1.25rem}.k span{color:var(--dim);font-size:.85rem;display:block}
-  table{border-collapse:collapse;width:100%;font-size:.88rem;margin:.5rem 0}
-  th{text-align:left;color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding:.25rem .5rem}
-  td{border-bottom:1px solid var(--band);padding:.25rem .5rem}
-  .chip{font-size:.8rem;border:1px solid var(--line);border-radius:8px;padding:.1rem .5rem;margin-right:.4rem;color:var(--dim)}
-  .note{color:var(--dim);font-size:.85rem}.warn{color:#c53030}</style>
+  const okPct = t.toolCalls ? `${Math.round((1 - t.toolErrors / t.toolCalls) * 100)}% ok` : '';
+  const cards = [
+    kpiCard('Cost', [
+      statCell('Real dollars <span class="stat-sub">never estimated</span>', usd(t.priced ? t.costUsd : null)),
+      statCell('Priced sessions', `${t.priced}/${rep.sessions}`),
+      rep.perDelivered ? statCell('Per delivered case', usd(rep.perDelivered.automationOnlyCostUsd ?? rep.perDelivered.costUsd)) : statCell('Per delivered case', 'n/a'),
+      rep.perExamined ? statCell('Per case examined', usd(rep.perExamined.costUsd)) : statCell('People', fmtInt(rep.people)),
+    ], rep.perDelivered?.automationOnlyCostUsd != null ? `automation-intent spend only; all-spend ${usd(rep.perDelivered.costUsd)}` : (Object.keys(rep.costSources ?? {}).length ? `sources: ${esc(Object.entries(rep.costSources).map(([s, n]) => `${s} ×${n}`).join(', '))}` : null)),
+    kpiCard('Tokens <span class="stat-sub">incl. sub-agents</span>', [
+      statCell('Total <span class="stat-sub">incl. cache replay</span>', fmtInt(teamTotal)),
+      statCell('Real work <span class="stat-sub">in+out</span>', fmtInt(realWork(t.tokens))),
+      statCell('Cache read', fmtInt(t.tokens.cacheRead)),
+      statCell('Cache hit rate', pct(cacheHitRate(t.tokens))),
+    ], `in ${fmtInt(t.tokens.input)} · out ${fmtInt(t.tokens.output)} · cache write ${fmtInt(t.tokens.cacheWrite)}`),
+    ...(cases?.reports ? [kpiCard('Delivery <span class="stat-sub">receipts</span>', [
+      statCell('delivered / examined', `${cases.delivered}/${cases.examined}`),
+      statCell('Reports', fmtInt(cases.reports)),
+      statCell('Batches', fmtInt(rep.byBatch?.length ?? 0)),
+      statCell('Sessions · people', `${rep.sessions} · ${rep.people}`),
+    ], Object.entries(cases.outcomes).sort((a, z) => z[1] - a[1]).map(([k, n]) => `<span class="chip">${esc(k)} ${n}</span>`).join(''))] : []),
+    kpiCard('Activity', [
+      statCell('Active', `${hours(t.activeMin)} <span class="stat-sub">(${hours(t.wallMin)} wall)</span>`),
+      statCell('Turns', fmtInt(t.turns)),
+      statCell('Tool calls', `${fmtInt(t.toolCalls)} <span class="stat-sub">(${t.toolErrors} err${okPct ? `, ${okPct}` : ''})</span>`),
+      statCell('Hosts', esc(Object.entries(rep.byHost).map(([h, b]) => `${h} ${b.sessions}`).join(', ')) || '—'),
+    ], null),
+  ].join('');
+  return `<!doctype html><meta charset="utf-8"><title>Tokenomics — team report${label ? ` — ${esc(label)}` : ''}</title><style>${PAGE_CSS}</style>
   <h1>Tokenomics — team usage report${label ? ` — ${esc(label)}` : ''}</h1>
-  <p class="note">Generated ${esc(new Date().toISOString())}${window ? ` · window: ${esc(window)}` : ''} · ${rep.sessions} session(s) · ${rep.people} person(s) · ${Object.entries(rep.byHost).map(([h, b]) => `${esc(h)} ${b.sessions}`).join(', ')}</p>
-  <div><span class="k"><b>${usd(t.priced ? t.costUsd : null)}</b><span>real dollars (${t.priced} priced session(s))</span></span>
-  <span class="k"><b>${hours(t.activeMin)}</b><span>active (${hours(t.wallMin)} wall)</span></span>
-  <span class="k"><b>${(t.tokens.output / 1e6).toFixed(1)}M</b><span>output tokens</span></span>
-  <span class="k"><b>${t.toolCalls}</b><span>tool calls (${t.toolErrors} err)</span></span>
-  ${cases?.reports ? `<span class="k"><b>${cases.delivered}/${cases.examined}</b><span>delivered / examined (receipts)</span></span>` : ''}
-  ${rep.perDelivered ? `<span class="k"><b>${usd(rep.perDelivered.automationOnlyCostUsd ?? rep.perDelivered.costUsd)}</b><span>per delivered case${rep.perDelivered.automationOnlyCostUsd != null ? ` (automation-intent spend; all-spend ${usd(rep.perDelivered.costUsd)})` : ''}</span></span>` : ''}
-  ${rep.perExamined ? `<span class="k"><b>${usd(rep.perExamined.costUsd)}</b><span>per case examined</span></span>` : ''}</div>
-  ${rep.tokensOnly ? `<p class="note warn">⚠ ${rep.tokensOnly} session(s) tokens-only — no real dollar, never estimated.</p>` : ''}
-  ${intents.some(([k]) => k !== 'undeclared') ? `<p>${intents.map(([k, b]) => `<span class="chip">${esc(k)}: ${b.priced ? usd(b.costUsd) : 'n/a'} (${b.sessions})</span>`).join('')}</p>` : ''}
-  ${cases?.reports ? `<h2>Cases (from the pipeline's receipts)</h2><p>${Object.entries(cases.outcomes).sort((a, z) => z[1] - a[1]).map(([k, n]) => `<span class="chip">${esc(k)} ${n}</span>`).join('')}</p>` : ''}
-  ${rep.byBatch?.length ? `<h2>By batch</h2>
+  <p class="meta">Generated ${esc(new Date().toISOString())}${window ? ` · window: ${esc(window)}` : ''} · ${rep.sessions} session(s) · ${rep.people} person(s) · ${Object.entries(rep.byHost).map(([h, b]) => `${esc(h)} ${b.sessions}`).join(', ')}</p>
+  <section class="kpi-row">${cards}</section>
+  ${rep.tokensOnly ? `<p class="callout-warn">⚠ ${rep.tokensOnly} session(s) tokens-only — no real dollar, never estimated.</p>` : ''}
+  ${intents.some(([k]) => k !== 'undeclared') ? `<section class="panel"><h2>By declared intent</h2><p>${intents.map(([k, b]) => `<span class="chip">${esc(k)}: ${b.priced ? usd(b.costUsd) : 'n/a'} (${b.sessions})</span>`).join('')}</p></section>` : ''}
+  ${rep.byBatch?.length ? `<section class="panel"><h2>By batch</h2>
   <table><tr><th>batch</th><th>cases</th><th>delivered</th><th>total</th><th>per delivered</th><th>active</th><th>gate</th><th>drift</th></tr>
-  ${rep.byBatch.map((b) => `<tr><td>${esc(b.batch)}</td><td>${b.cases}</td><td>${b.delivered}</td><td>${usd(b.costUsd)}</td><td>${usd(b.perDelivered)}</td><td>${hours(b.activeMin)}</td><td>${esc(b.gate ?? '—')}</td><td>${b.drift ? '⚠️' : '—'}</td></tr>`).join('')}</table>` : ''}
-  ${rep.perCase?.length ? `<h2>Per case — cost.json rows across batches (delivered first)</h2>
-  ${rep.perCaseStats?.loadedCostUsd ? `<p class="note">Delivered-case loaded cost: avg ${usd(rep.perCaseStats.loadedCostUsd.avg)} · median ${usd(rep.perCaseStats.loadedCostUsd.median)} · min ${usd(rep.perCaseStats.loadedCostUsd.min)} · max ${usd(rep.perCaseStats.loadedCostUsd.max)} (n=${rep.perCaseStats.loadedCostUsd.n}). Loaded = direct + even overhead share — allocation, not measurement.</p>` : ''}
+  ${rep.byBatch.map((b) => `<tr><td>${esc(b.batch)}</td><td>${b.cases}</td><td>${b.delivered}</td><td>${usd(b.costUsd)}</td><td>${usd(b.perDelivered)}</td><td>${hours(b.activeMin)}</td><td>${esc(b.gate ?? '—')}</td><td>${b.drift ? '⚠️' : '—'}</td></tr>`).join('')}</table></section>` : ''}
+  ${rep.perCase?.length ? `<section class="panel"><h2>Per case — cost.json rows across batches (delivered first)</h2>
+  ${rep.perCaseStats?.loadedCostUsd ? `<p class="panel-sub">Delivered-case loaded cost: avg ${usd(rep.perCaseStats.loadedCostUsd.avg)} · median ${usd(rep.perCaseStats.loadedCostUsd.median)} · min ${usd(rep.perCaseStats.loadedCostUsd.min)} · max ${usd(rep.perCaseStats.loadedCostUsd.max)} (n=${rep.perCaseStats.loadedCostUsd.n}). Loaded = direct + even overhead share — allocation, not measurement.</p>` : ''}
   <table><tr><th>case</th><th>batch</th><th>outcome</th><th>direct</th><th>loaded</th><th>active (loaded)</th></tr>
-  ${rep.perCase.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.batch)}</td><td>${esc(r.outcome ?? '—')}</td><td>${usd(r.direct.costUsd)}</td><td>${usd(r.loaded?.costUsd)}</td><td>${r.loaded?.activeMin ?? '—'}m</td></tr>`).join('')}</table>` : ''}
-  <h2>By person</h2>${tbl(Object.entries(rep.byPerson).sort((a, z) => (z[1].costUsd || 0) - (a[1].costUsd || 0)), ['person', 'cost', 'sessions', 'out tokens', 'active', 'tools (err)'], bucketRow)}
-  <h2>By role</h2><p class="note">Dollars are session-grain, so roles report tokens/time — sub-agent roles included.</p>
+  ${rep.perCase.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.batch)}</td><td>${esc(r.outcome ?? '—')}</td><td>${usd(r.direct.costUsd)}</td><td>${usd(r.loaded?.costUsd)}</td><td>${r.loaded?.activeMin ?? '—'}m</td></tr>`).join('')}</table></section>` : ''}
+  <section class="panel"><h2>By person</h2>${tbl(Object.entries(rep.byPerson).sort((a, z) => (z[1].costUsd || 0) - (a[1].costUsd || 0)), ['person', 'cost', 'sessions', 'out tokens', 'active', 'tools (err)'], bucketRow)}</section>
+  <section class="panel"><h2>By role</h2><p class="panel-sub">Dollars are session-grain, so roles report tokens/time — sub-agent roles included.</p>
   ${tbl(Object.entries(rep.byRole).sort((a, z) => z[1].tokens.output - a[1].tokens.output), ['role', 'units', 'out tokens', 'active', 'tools (err)'],
-    ([k, b]) => `<tr><td>${esc(k)}</td><td>${b.units}</td><td>${b.tokens.output.toLocaleString()}</td><td>${hours(b.activeMin)}</td><td>${b.toolCalls} (${b.toolErrors})</td></tr>`)}
-  <h2>By week</h2>${tbl(Object.entries(rep.byWeek).sort(([a], [z]) => a.localeCompare(z)), ['week', 'cost', 'sessions', 'out tokens', 'active', 'tools (err)'], bucketRow)}`;
+    ([k, b]) => `<tr><td>${esc(k)}</td><td>${b.units}</td><td>${b.tokens.output.toLocaleString()}</td><td>${hours(b.activeMin)}</td><td>${b.toolCalls} (${b.toolErrors})</td></tr>`)}</section>
+  <section class="panel"><h2>By week</h2>${tbl(Object.entries(rep.byWeek).sort(([a], [z]) => a.localeCompare(z)), ['week', 'cost', 'sessions', 'out tokens', 'active', 'tools (err)'], bucketRow)}</section>`;
 }
 
 export function main(argv = process.argv.slice(2)) {

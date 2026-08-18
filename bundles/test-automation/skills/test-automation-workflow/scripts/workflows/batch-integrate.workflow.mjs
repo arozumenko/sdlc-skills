@@ -93,7 +93,12 @@ const INTEGRATE_SCHEMA = {
   },
 }
 
-const result = await agent(
+// Stall-retry exhaustion THROWS out of agent() instead of returning null
+// (measured 2026-08-17, quota-throttled Bedrock) — catch it so the failure is
+// the designed one below, with the stall named as an ENVIRONMENT fact.
+let result = null
+try {
+result = await agent(
   'You are the batch integrator, working in the project\'s OWN checkout — no worktree is created for you and you must not create one. Nothing else writes this tree while you run (integration follows the build loop), so the branch you check out IS your isolation. Leave the tree on the integration branch when you finish. ' +
   `Build the integration branch for batch ${SLUG}:\n` +
   `1. git fetch origin --quiet, then check the batch trunk out: \`git checkout ${IB}\` (it was created and pushed by the first build of this batch). Only if it genuinely does not exist anywhere: \`git checkout -B ${IB} ${BASE} && git push -u origin ${IB}\`. Do NOT use -B on an existing trunk — that would discard the case work already merged into it.\n` +
@@ -114,6 +119,9 @@ const result = await agent(
   'Finish with git rev-parse HEAD. Return the integration branch, head sha, merged case ids (order preserved), parked cases, and one-line notes.',
   { label: `integrate:${SLUG}`, phase: 'Integrate', agentType: INTEGRATOR_TYPE, ...(INTEGRATOR_MODEL ? { model: INTEGRATOR_MODEL } : {}), schema: INTEGRATE_SCHEMA }
 )
+} catch (e) {
+  log(`integrator ${/stall/i.test(String(e?.message ?? e)) ? 'infra-stalled (environment — fix the provider before retrying)' : 'threw'}: ${String(e?.message ?? e).slice(0, 120)}`)
+}
 if (!result) throw new Error('integrator agent failed — nothing merged; re-run or integrate conversationally')
 log(`integrated ${result.merged.length}/${CASES.length} — parked: ${result.parked.map((p) => p.id).join(', ') || 'none'}`)
 

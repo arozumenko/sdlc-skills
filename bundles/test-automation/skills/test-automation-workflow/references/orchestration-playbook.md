@@ -237,7 +237,7 @@ Cases are the common instance, not the shape. Atomic fixes, batched fixes, frame
 
 ## Outcomes — what a run says about a case
 
-Seven terminal outcomes. They say **where a case ended**, not which state machine step it reached — there are no transitions, nothing to validate, and nothing to keep in sync mid-run:
+Eight terminal outcomes. They say **where a case ended**, not which state machine step it reached — there are no transitions, nothing to validate, and nothing to keep in sync mid-run:
 
 | Outcome | Means | Your move |
 |---|---|---|
@@ -248,8 +248,9 @@ Seven terminal outcomes. They say **where a case ended**, not which state machin
 | `merged-sanctioned-red` | merged with the batch while its own test is red **by design** — the red was pre-declared against a ticketed open defect's signature, and the gate ran it but excluded it from the green count | close with the ticket ref; re-enters when the defect ships — ticket-driven, not next-batch-driven. Neither `blocked` (its blocker already has a ticket) nor unproven |
 | `blocked` | something about THIS CASE stopped it — data, access, env, a defect, a conflict, a red gate, an R2 cap | classify per § Handling blockers, replan |
 | `not-started` | the run never got to it, for a reason that is not about the case — budget, account ceiling, breaker, or a dispatch that died on the harness (a 403, an interrupt, a killed session) | it is simply next batch's input |
+| `infra-stalled` | the harness killed the slot mid-flight — the model stream stopped making progress and every retry stalled the same way; the case itself was never judged | an ENVIRONMENT failure: check provider throttling (tokens/min quota, stream stability) before re-dispatching anything; the case re-enters the next batch untouched — but check its unit branch for checkpoint commits first |
 
-**`blocked` vs `not-started` is "whose problem is it".** A case whose own environment, data or code stopped it is `blocked` and needs its blocker cleared before anyone re-dispatches it. A case whose dispatch died *for reasons that have nothing to do with it* — the account ceiling, an auth 403, an interrupt — is `not-started`: nothing was learned about the case, and it re-enters the next batch untouched. Re-dispatching a `blocked` case at the same wall wastes a slot; treating a harness death as `blocked` invents a defect that was never observed.
+**`blocked` vs `not-started` is "whose problem is it".** A case whose own environment, data or code stopped it is `blocked` and needs its blocker cleared before anyone re-dispatches it. A case whose dispatch died *for reasons that have nothing to do with it* — the account ceiling, an auth 403, an interrupt — is `not-started`: nothing was learned about the case, and it re-enters the next batch untouched. Re-dispatching a `blocked` case at the same wall wastes a slot; treating a harness death as `blocked` invents a defect that was never observed. **`infra-stalled` is `not-started`'s louder sibling**: the same "nothing was learned", but the death has a name — the model stream stalled under the slot — and the remedy is specific: fix the provider (quota, stream) before spending another dispatch, and look at the unit branch first, because a checkpointing worker may have landed partial work a retry can continue (see § A dispatched slot that stalls).
 
 Two more appear **only in a report rebuilt from an interrupted run** (§ Interruption): `analysed` and `built` — a case that got partway. They are not statuses you manage; they are how far the evidence goes, and both sit in the **remainder** (they are not terminal), so they feed the next batch like anything unfinished.
 
@@ -499,6 +500,13 @@ branch FROM the trunk, implement, green once locally (≤ 2 reruns on one root
 cause), declare any red-by-design test with its ticket in your report, open the
 PR against the trunk. Leave the tree on your branch; I merge it next.
 
+CHECKPOINT DISCIPLINE — this dispatch can be killed and re-sent without
+warning, and the retry inherits ONLY what is committed. Before writing
+anything, check whether your feature branch already exists with commits from a
+killed attempt: coherent work → continue it and say what you inherited; wrong →
+rebuild those parts and say so. Commit as milestones land (skeleton, first
+green), by exact path; push per the project's push policy.
+
 Per-case parameters:
 - TMS case ID: {TMS_ID}
 - User set: {USER_SET}
@@ -524,6 +532,13 @@ Per-case parameters:
 
 Stage by exact path, never `git add -A` / `git add .`. Leave the tree on your
 branch when you finish; I merge it into the trunk next.
+
+CHECKPOINT DISCIPLINE — this dispatch can be killed and re-sent without
+warning, and the retry inherits ONLY what is committed. Before writing
+anything, check whether your branch already exists with commits from a killed
+attempt: coherent work → continue it and say what you inherited; wrong →
+rebuild those parts and say so. Commit as milestones land (skeleton, first
+green, each fix), by exact path; push per the project's push policy.
 ```
 
 ### Publisher dispatch (cheap tier — model haiku or the project's cheapest)
@@ -719,10 +734,11 @@ So the rule holds for **any** dispatched slot, and the two most exposed are not 
 
 **Waiting is legal. Idling is fatal. Busy-polling is fatal and expensive.** Those are three different things, and the difference is what the rule is about:
 
-1. **A call that fits — let it block.** Pass the maximum timeout (`timeout: 600000`; the default is 120s and will kill a suite run mid-flight). A foreground call cannot exceed **600s**, so "let it block" only works for jobs under ~9 minutes.
-2. **A job that does not fit — launch it detached** (output to a file), then **wait with blocking foreground polls**: `sleep 300; <check the file>`, each with `timeout: 600000`, until it is done. A sleep costs **one turn no matter how long it is**.
-3. **Never end a turn while a job runs.** Nothing wakes you.
-4. **Never poll at second-level intervals.** You pay a whole resident context per turn.
+1. **A call that fits — let it block.** Pass the maximum timeout (`timeout: 600000`; the default is 120s and will kill a suite run mid-flight). A foreground call cannot exceed **600s**, so "let it block" only works for jobs under ~9 minutes. (A project whose SINGLE run routinely exceeds that can raise the host's cap itself — `BASH_MAX_TIMEOUT_MS` in the Claude Code environment — and stay foreground; that is an operator/env decision, not the slot's.)
+2. **A job that does not fit — launch it detached** (output to a file), then **wait with blocking foreground polls**: ONE `sleep <n>; <tail the file>` per call, each with `timeout: 600000`, until it is done. A sleep costs **one turn no matter how long it is**. Make the FIRST poll short (~60-120s) — a run that dies in its first minute must not cost a five-minute blind sleep — then settle at ~`sleep 300`.
+3. **Never chain sleeps inside one call.** `sleep 120; tail; sleep 240; tail` outlives the call cap and is killed at its own timeout — taking the tail you already read with it (field-measured 2026-08-17: chained polls dying at 10m with exit 143). One sleep, one look, return, repeat.
+4. **Never end a turn while a job runs.** Nothing wakes you.
+5. **Never poll at second-level intervals.** You pay a whole resident context per turn.
 
 Measured, controlled probe (2026-08-10), two arms: a dispatched slot that ends its turn mid-job is forced to report **28ms later** — the documented `run_in_background` "you will be re-invoked when it exits" path and the Monitor tool **both** lose that race. In the same probe, three blocking 45s foreground sleeps ran untouched. So there is no waking, and sleeping is how you wait.
 
@@ -735,6 +751,20 @@ If a job is too long even for sleep-polling, that is a **finding** (`findings[]`
 When you run a background MCP / batch / loop script processing ≥10 items (status sweep, link batch, sub-task creation pass, file-by-file analysis), the script MUST emit incremental progress — append `N/total — <item-key> — <outcome>` to a status file per iteration. Then poll the status file and report progress proactively in your status updates ("link sweep — 32/58 done, no failures").
 
 Silent batches that print only at completion create false "stuck?" interpretations and force the operator to interrupt mid-stream. The fix is single-line-per-iteration logging + proactive polling — not reassurance ("not stuck, just long"). Reassurance scales poorly across multi-hour arcs; progress signals scale trivially.
+
+### A dispatched slot that stalls — environment, not case
+
+The failure the previous two sections cannot explain: a slot that was working normally goes **silent right after a completed tool step** — no new output, no error — and the harness eventually kills it as stalled. On Claude Code's Workflow tool the trace reads `[stall] agent "…" stalled (no progress) after Ns — retrying (n/5)` and, when every retry stalls too, the run's error is `agent stalled on all N attempts (no progress for …ms each)`. On any host the shape is the same: dead air where the next model response should be — sometimes an agent that never produces its **first** token.
+
+**That is the model stream dying under the slot, not the slot thinking and not the case failing.** Field case (2026-08-17, quota-throttled Bedrock): one combined slot burned **11 attempts across two runs** — every kill was dead air after a completed tool result, one attempt received zero model tokens in 15 minutes — while the lead's own small-context turns went through fine. That asymmetry is the diagnostic: big-context dispatches hang while small calls pass = provider throttling (tokens/min quota) or stream instability, not anything about the batch.
+
+The doctrine, on ANY host:
+
+1. **The stalled unit gets `infra-stalled`, the batch continues, and the report always lands.** The workflow scripts now absorb this themselves (a stalled slot is caught, recorded, and the run moves on). On the sequential path — you dispatching subagents by hand on Claude Code or any other host — **you are that try/catch**: record the outcome, move to the next unit, and never let one dead slot leave the whole batch unreported.
+2. **Never classify a stall as `blocked`** — that invents a case defect nobody observed and sends the next session hunting it.
+3. **Check the unit branch before re-dispatching.** A checkpointing worker (the dispatch briefs demand it) may have committed partial work a retry can continue from.
+4. **Consecutive stalls stop the batch.** Three in a row is the environment saying no — the workflow's breaker does this automatically; by hand, stop admitting units and report what happened instead of feeding more dispatches to the same wall.
+5. **The fix is operator-level**, not another dispatch: provider quota (on Bedrock, tokens/min service quotas — note the burndown counts *requested* max output tokens), stream stability, or moving the heavy slot to a less-throttled model. Re-enter the stalled units only after that changes.
 
 ## Handling blockers — classify and route
 

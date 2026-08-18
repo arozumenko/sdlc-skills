@@ -186,6 +186,7 @@ test('batch renders: real-work tokens + cache hit rate; tokenomics view unfolds 
   };
   const md = renderBatchMarkdown(cost);
   assert.match(md, /real work 5,000/);
+  assert.match(md, /Tokens: total 102,000/);
   assert.match(md, /cache hit rate 96.9%/);
   assert.match(md, /real-work tok/);
   assert.doesNotMatch(md.split('\n').find((l) => l.startsWith('- Total:')), /102,000/, 'the raw cache-inclusive sum no longer leads');
@@ -193,10 +194,19 @@ test('batch renders: real-work tokens + cache hit rate; tokenomics view unfolds 
   assert.match(tok, /Composition — where the tokens went/);
   assert.match(tok, /cache read \| 95,000/);
   assert.match(tok, /Cache hit rate: 96.9%/);
+  assert.match(tok, /\*\*total\*\* \| \*\*102,000\*\*/);
   assert.match(tok, /Orchestrator \(lead thread\) composition/);
   const html = renderBatchTokenomicsHtml(cost);
   assert.match(html, /Batch tokenomics — b1/);
-  assert.match(html, /cache hit rate/);
+  assert.match(html, /cache hit rate/i);
+  // manual-qa design parity: kpi cards + a composition panel with a legend,
+  // and the raw TOTAL is a first-class stat (user ask 2026-08-18), never hidden
+  assert.match(html, /kpi-card/);
+  assert.match(html, /Token composition/);
+  assert.match(html, /legend-item/);
+  assert.match(html, /stat-value">102,000/);
+  assert.match(html, /incl\. cache replay/);
+  assert.ok(!html.includes('http'), 'self-contained page — no external assets');
   assert.ok(!html.includes('http'), 'self-contained');
   // a quad-less (old) cost.json degrades to an explicit note, never throws
   const old = { ...cost, totals: { ...cost.totals, tokensSplit: undefined } };

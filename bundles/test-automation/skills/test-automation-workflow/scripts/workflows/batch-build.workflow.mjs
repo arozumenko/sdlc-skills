@@ -263,15 +263,40 @@ const FOREGROUND_RULE =
   '(default 120s, MAXIMUM 600000ms), so ALWAYS pass timeout: 600000 on a suite run, ' +
   'and let the call block when the job fits inside it. ' +
   'When the job does NOT fit in one call: launch it detached, writing its output to a file, ' +
-  'then WAIT with blocking foreground polls — `sleep 300; <check the output file>`, each with ' +
+  'then WAIT with blocking foreground polls — ONE `sleep <n>; <tail the output file>` per call, each with ' +
   'timeout: 600000 — until it is done. Sleeping in the foreground is legal and cheap: it is ONE turn ' +
-  'however long you sleep. ' +
+  'however long you sleep. Make the FIRST poll short (~60-120s) — a run that dies in its first minute ' +
+  'must not cost a five-minute blind sleep — then settle at ~`sleep 300`. NEVER chain sleeps inside one ' +
+  'call (`sleep 120; tail; sleep 240; tail`): the chain outlives the call cap and is killed at its own ' +
+  'timeout, taking the tail you already read with it — one sleep, one look, return, repeat. ' +
   'NEVER end a turn while a job is running — nothing will wake you (measured: you are forced to ' +
   'report 28ms later, before the job finishes, and neither run_in_background nor Monitor beats that), ' +
   'this workflow blocks on your return, and your silence is indistinguishable from thinking. ' +
   'NEVER poll at second-level intervals either — you pay a full context per turn, and a busy-wait ' +
   'exhausts your turn budget and gets you cut off mid-job (measured: 27 polls, $1.29, no verdict). ' +
   'If a job is too long even for sleep-polling, say so in findings[] and run the narrower selection you need.'
+
+// A killed slot is retried with the SAME prompt and no memory of the attempt
+// that died — the harness stall-retry and a resume-after-pause both work that
+// way — so a retry inherits ONLY what is committed. Field case 2026-08-17,
+// quota-throttled Bedrock: one combined slot burned ELEVEN attempts, each
+// re-implementing the same case from scratch, because nothing had ever landed
+// on the case branch (the AFS, committed on the trunk per its own rule, was
+// the one thing that survived). The continue-vs-rebuild judgment is the
+// worker's: a script cannot tell "half-finished and coherent" from "abandoned
+// and wrong", and both look identical to `git rev-parse`.
+const CHECKPOINT_RULE =
+  'CHECKPOINT DISCIPLINE — this dispatch can be killed and re-dispatched without warning (a stalled ' +
+  'model stream is indistinguishable from thinking), and the retry inherits ONLY what is committed. ' +
+  'So: (1) BEFORE writing anything, check whether your feature branch already exists with commits ' +
+  'from a killed attempt (`git log <trunk>..<branch>`, `git status`): coherent work in progress -> ' +
+  'continue it and say in notes what you inherited; wrong or contradicting the AFS -> rebuild those ' +
+  'parts and say so. Never silently restart on a branch that already has work, and never assume it ' +
+  'is finished because it exists. (2) Commit as milestones land — first coherent skeleton, spec ' +
+  'green once, each fix — by exact path on your branch; push after the first commit and then per ' +
+  'milestone ONLY if this project pushes to a remote (`.agents/profile.md` § Automation PR policy / ' +
+  '`git remote -v`) — on a local-only project the commits alone are the checkpoint, skip pushes, ' +
+  'that is expected, not a failure. '
 
 // FOREIGN TEXT GOES THROUGH HERE. Case titles come from the TMS, blocking items
 // and notes are written by other agents, tickets by the implementer — none of
@@ -610,6 +635,25 @@ function breakerCount(cause, why = '') {
   }
 }
 
+// ---- infra stalls ----------------------------------------------------------
+// The harness kills a subagent whose model stream stops making progress and
+// retries it a few times; when EVERY attempt stalls, agent() THROWS ("agent
+// stalled on all N attempts") instead of returning null. Field case
+// 2026-08-17, quota-throttled Bedrock: one combined slot burned 11 attempts
+// across two runs — every kill was dead air right after a completed
+// tool_result, one attempt never received a single model token — and the
+// uncaught throw took the whole run down, report and all. A stall says
+// NOTHING about the case: the model stopped streaming, the case was never
+// judged. So it gets its own outcome, `infra-stalled` — like `not-started` it
+// re-enters the next batch untouched, but the fix is the ENVIRONMENT
+// (provider quota, stream stability), and a retried unit may hold checkpoint
+// commits on its branch worth continuing from (see CHECKPOINT_RULE).
+const isStall = (e) => /stall/i.test(String(e?.message ?? e))
+const stallNote = (where, e) =>
+  `harness stall during ${where}: ${String(e?.message ?? e).slice(0, 140)} — the model stream stopped ` +
+  '(quota-throttled providers do this), nothing was learned about the case; fix the environment before ' +
+  're-entering, and check the unit branch for checkpoint commits first'
+
 // ---- slot dispatches -------------------------------------------------------
 let analyzedCount = 0
 let extendishCount = 0
@@ -838,6 +882,7 @@ async function runCombined(unit, mqEvidence = null) {
     `MERGED-TARGET RULE: extend-existing may target a spec merged to ${BASE} or already on ${TRUNK}; already-covered may target ONLY a spec merged to ${BASE} (it is terminal); never a same-batch AFS not yet merged; in doubt, ready-for-automation. ` +
     (unit.length > 1 ? "Cluster: ONE live session, but EVERY case's steps executed and observed individually; true flow-variants of one flow → ONE family AFS (parameter table, same afs_path for members, family_afs=true). " : '') +
     "BUILD HALF — per your test-automation-implementation skill (preloaded): for the cases you just judged ready-for-automation/extend-existing, cut your feature branch FROM the trunk you are standing on, implement inside the existing framework (family AFS → ONE parameterized spec, a row per case asserting its OWN expected values), run green ONCE locally (determinism is the gate's job), retry ≤ 2 reruns on one root cause, declare red-by-design tests in expected_red[] with case_ids, land your work against the trunk (never the base) per \`.agents/profile.md\` § Automation PR policy — a PR against the trunk where the project uses PRs, otherwise leave your feature branch ready for the merge step — and leave the tree on your feature branch either way. If NO case advances (every verdict terminal), skip the build half and return status blocked with a one-line note. " +
+    CHECKPOINT_RULE +
     'Return BOTH halves: cases[] (per-case verdict/afs_path/notes) + surface_key + family_afs, AND status/branch/pr/reruns (plus rerun_causes: one short root-cause label per rerun — the cap is per cause, not total) for the build. A needs-analyst return still satisfies the schema with EMPTY values — cases: [], surface_key: "", family_afs: false, branch: "", pr: null, reruns: 0 — never invented verdict rows.',
     { label: `${mqEvidence ? 'combined-mq' : 'combined'}:${label(unit)}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER, schema: COMBINED_SCHEMA }
   )
@@ -983,10 +1028,10 @@ async function buildUnit(u, pre = null) {
     `If ${TRUNK} does not exist anywhere yet (you are the first unit of a fresh batch), create it: \`git checkout -B ${TRUNK} ${BASE}\`, then \`git push -u origin ${TRUNK}\` ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`) — on a local-only project skip pushes, that is expected, not a failure. Never -B an existing trunk — that discards the units already merged into it. ` +
     `Landing is PER \`.agents/profile.md\` § Automation PR policy: where the project uses PRs, open yours against ${TRUNK}, NOT against ${BASE} — case PRs land on the batch trunk, and one PR takes the trunk to ${BASE} after the gate. On a project with no PR mechanism, skip the PR and leave your feature branch ready — the merge step lands it, and the trunk still reaches ${BASE} only after the gate. `+
     // A retried unit can arrive at a feature branch a previous attempt already
-    // built on. Whether that work is usable is a judgement about the diff, so
-    // it is yours — a script cannot tell "half-finished and coherent" from
-    // "abandoned and wrong", and both look identical to `git rev-parse`.
-    'If YOUR feature branch already exists, read it before writing anything (`git log <base>..<branch>`, `git status`): coherent work in progress → continue it and say in notes what you inherited; wrong or contradicting the AFS → rebuild those parts and say so. Never silently restart on a branch that already has work, and never assume it is finished because it exists. ' +
+    // built on — CHECKPOINT_RULE carries both halves: continue-vs-rebuild is
+    // the worker's judgment, and committing per milestone is what makes the
+    // NEXT retry inherit anything at all.
+    CHECKPOINT_RULE +
     // A multi-case unit is NOT automatically one spec. Clustering buys a shared
     // LIVE SESSION (one login, one discovery pass) — merging the output is a
     // separate judgement the analyst already made: one AFS means true
@@ -1239,21 +1284,41 @@ async function buildUnit(u, pre = null) {
 const analyzed = []
 
 phase('Analysis')
-await runTriage()
+// A dead triage costs nothing either way — null OR thrown, every unit takes
+// the standalone analyst (the conservative route).
+try { await runTriage() } catch (e) {
+  log(`triage threw (${String(e?.message ?? e).slice(0, 120)}) — every unit takes the standalone analyst`)
+}
 
 for (const unit of UNITS) {
   phase('Analysis')
   let u = null
   let pre = null
   const route = routeOf(unit)
-  if (route === 'combined' || route === 'manual-qa-verified') {
-    const c = await runCombined(unit, route === 'manual-qa-verified' ? (MQ_EVIDENCE.get(routeKey(unit.map((m) => m.id))) ?? []) : null)
-    // 'fallback' = the shortcut slot judged the ground novel / the evidence
-    // thin BEFORE writing anything — the normal analyst chain takes over.
-    if (c === 'fallback') u = await runAnalyst(unit)
-    else if (c) { u = c.u; pre = c.impl }
-  } else {
-    u = await runAnalyst(unit)
+  // A thrown analysis costs its unit, never the run. agent() returns null on
+  // most deaths, but stall-retry exhaustion THROWS (measured 2026-08-17) —
+  // uncaught, one stalled combined slot killed a whole batch with its report
+  // unwritten. A stall is an environment fact, so it feeds the same breaker
+  // as agent-died: three in a row stop admitting units.
+  try {
+    if (route === 'combined' || route === 'manual-qa-verified') {
+      const c = await runCombined(unit, route === 'manual-qa-verified' ? (MQ_EVIDENCE.get(routeKey(unit.map((m) => m.id))) ?? []) : null)
+      // 'fallback' = the shortcut slot judged the ground novel / the evidence
+      // thin BEFORE writing anything — the normal analyst chain takes over.
+      if (c === 'fallback') u = await runAnalyst(unit)
+      else if (c) { u = c.u; pre = c.impl }
+    } else {
+      u = await runAnalyst(unit)
+    }
+  } catch (e) {
+    const ids = unit.map((c) => c.id)
+    const stalled = isStall(e)
+    ids.forEach((id) => record(id, stalled
+      ? { outcome: 'infra-stalled', note: stallNote('analysis', e) }
+      : { outcome: 'not-started', note: `analysis dispatch threw: ${String(e?.message ?? e).slice(0, 160)}` }))
+    breakerCount('agent-died', String(e?.message ?? e))
+    log(`${label(unit)} ${stalled ? 'infra-stalled' : 'threw'} during analysis — continuing with the next unit`)
+    continue
   }
   if (!u) continue
   if (ANALYZE_ONLY) {
@@ -1267,8 +1332,17 @@ for (const unit of UNITS) {
     await buildUnit(u, pre)
   } catch (e) {
     const ids = u.members.map((m) => m.id)
-    ids.forEach((id) => record(id, { outcome: 'blocked', note: `build failed: ${String(e?.message ?? e).slice(0, 160)}` }))
-    log(`${ids.join('+')} build threw — continuing with the next unit`)
+    if (isStall(e)) {
+      // A stall mid-build is the same environment fact as one mid-analysis —
+      // but here the branch may hold checkpoint commits (CHECKPOINT_RULE), so
+      // the note points the re-entry at them instead of at a blocker.
+      ids.forEach((id) => record(id, { outcome: 'infra-stalled', note: stallNote('build', e) }))
+      breakerCount('agent-died', String(e?.message ?? e))
+      log(`${ids.join('+')} infra-stalled mid-build — the trunk is where it was; continuing with the next unit`)
+    } else {
+      ids.forEach((id) => record(id, { outcome: 'blocked', note: `build failed: ${String(e?.message ?? e).slice(0, 160)}` }))
+      log(`${ids.join('+')} build threw — continuing with the next unit`)
+    }
   }
 }
 
@@ -1321,6 +1395,10 @@ let gate = null
 const gateBranch = TRUNK
 if (!ANALYZE_ONLY && !SKIP_GATE && merged.length) {
   phase('Gate')
+  // A thrown gate (stall-retry exhaustion) proves nothing either way — gate
+  // stays null, merged units become merged-ungated below exactly as if the
+  // gate had been dropped, and the report still lands.
+  try {
   gate = await agent(
     `${PREAMBLE}\n\nHardening gate for batch ${SLUG}. You did not write this code and you do not fix it — you PROVE it, and you report exactly what you saw.\n` +
     `Branch: ${gateBranch} (the batch trunk — every approved unit is already merged into it). Base: ${BASE}.\n` +
@@ -1364,6 +1442,9 @@ if (!ANALYZE_ONLY && !SKIP_GATE && merged.length) {
     // stays inherit: blast-radius scoping still reads a diff with judgment.
     { label: `gate:${SLUG}`, phase: 'Gate', agentType: TYPES.gate, ...WORKER, ...(A.gateModel ? { model: A.gateModel } : {}), schema: GATE_SCHEMA }
   )
+  } catch (e) {
+    log(`gate ${isStall(e) ? 'infra-stalled' : 'threw'} (${String(e?.message ?? e).slice(0, 120)}) — merged units stay merged-ungated; re-run the gate on ${gateBranch}`)
+  }
   if (gate) addFindings(merged.flatMap((r) => r.ids), gate.findings ?? [])
   // The gate proves the TRUNK, so it speaks for exactly the units on it.
   const integratedIds = new Set(merged.flatMap((r) => r.ids))
@@ -1429,6 +1510,10 @@ const qualityFlags = []
 if (analyzedCount >= 4 && extendishCount / analyzedCount > EXTEND_RATE) {
   qualityFlags.push(`extend-rate ${extendishCount}/${analyzedCount} exceeds ${EXTEND_RATE} — blind-audit a sample of the extend/covered conclusions (a second analyst re-analyzing 1-2) before trusting this batch's coverage`)
 }
+const stalledCount = rows.filter((r) => r.outcome === 'infra-stalled').length
+if (stalledCount) {
+  qualityFlags.push(`${stalledCount} case(s) infra-stalled — the harness killed their slot mid-flight (the model stream stopped; on a quota-limited provider check tokens/min throttling before blaming the batch); they re-enter the next batch untouched — check their unit branches for checkpoint commits first`)
+}
 // There is deliberately NO mirror flag for a batch with zero already-covered /
 // extend-existing. Zero is the normal, healthy result: reading the neighbouring
 // specs (§ 2b) exists to make ANALYSIS cheaper — handles, flows, conventions —
@@ -1459,7 +1544,9 @@ const WRITE_SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['written'], properties: { written: { type: 'boolean' }, detail: { type: 'string' } },
 }
-const wrote = await agent(
+let wrote = null
+try {
+wrote = await agent(
   'You are the report writer — the single disk write of this run.\n' +
   `Create the directory ${REPORT_DIR} if needed, then Write TWO files:\n` +
   `1. ${REPORT_DIR}/report.json — EXACTLY this JSON, byte for byte, no edits, no commentary:\n` +
@@ -1477,6 +1564,12 @@ const wrote = await agent(
   // capable tier. Override via reporterModel if a project's renderer needs more.
   { label: `report:${SLUG}`, phase: 'Report', agentType: TYPES.reporter, model: A.reporterModel ?? 'haiku', effort: 'low', schema: WRITE_SCHEMA }
 )
+} catch (e) {
+  // Even a dead report writer must not kill the run at the finish line: this
+  // return carries the full report object, so the lead writes report.json
+  // from it by hand — report_written: false says exactly that.
+  log(`report writer threw (${String(e?.message ?? e).slice(0, 120)}) — report_written: false; write ${REPORT_DIR}/report.json from this return by hand`)
+}
 
 return {
   ...report,
@@ -1498,5 +1591,5 @@ return {
         // the lead actually reads at the moment it happens, so the obligation
         // lives here, next to the instruction that creates it.
         ? `${gate?.verdict === 'incomplete' ? `GATE CUT OFF MID-RUN (${gate.runs ?? 0}/${GATE_N} banked)` : 'GATE NEVER RAN'} — ${gateBranch} holds ${merged.length} merged unit(s) that are UNPROVEN, not blocked (outcome merged-ungated). Re-run the gate first (re-invoke with resumeFromRunId — completed units replay from cache — or dispatch the gate alone on ${gateBranch}) and classify nothing until a verdict exists. An interrupted run's own totals are a claim, not evidence: verify against .agents/telemetry/automation/returns/ (legacy _returns/) and git (playbook § Interruption). THEN, THE MOMENT YOU HAVE A VERDICT, WRITE IT BACK INTO ${REPORT_DIR}/report.json — gate.verdict, gate.runs, gate.seconds, and each case's real outcome ('automated' on green; 'merged-sanctioned-red' for a ticketed red-by-design). This file is the receipt every audit, every --resolved-from and the next batch's plan divide by: a gate you re-ran green but never wrote back scores as ZERO delivered, and the specs read as unproven forever. The scope contract, where active, backs this up: work-scope.mjs outcome + close after the write-back — the close render cross-checks report.json against the recorded gate verdict and prints DRIFT if the write-back was missed.`
-        : `Classify each blocked case (product defect → tracker; flake/test-code bug → batch-stabilize on ${gateBranch}; architectural → § Framework architecture), then replan the remainder. ${gateBranch} is NOT landed — nothing reaches ${BASE} until it is green. Record classifications as they land (work-scope.mjs outcome <ID>=blocked, where the scope contract is active) — the ledger stays honest even if this session dies before a close.`,
+        : `${stalledCount ? `${stalledCount} case(s) infra-stalled — an ENVIRONMENT failure (the model stream stalled), not a case failure: fix the provider first, check their unit branches for checkpoint commits, then re-enter them. ` : ''}Classify each blocked case (product defect → tracker; flake/test-code bug → batch-stabilize on ${gateBranch}; architectural → § Framework architecture), then replan the remainder. ${gateBranch} is NOT landed — nothing reaches ${BASE} until it is green. Record classifications as they land (work-scope.mjs outcome <ID>=blocked, where the scope contract is active) — the ledger stays honest even if this session dies before a close.`,
 }

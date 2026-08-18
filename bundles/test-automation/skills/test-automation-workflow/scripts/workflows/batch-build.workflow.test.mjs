@@ -774,3 +774,53 @@ test('manual-qa-verified route: triage offers it, evidence rides the schema, the
   assert.match(text, /manual-qa run id as the AFS/);
   assert.match(text, /combined-mq/, 'distinct dispatch label for attribution');
 });
+
+// Stall-retry exhaustion THROWS out of agent() ("agent stalled on all N
+// attempts") instead of returning null. Field case 2026-08-17 (quota-throttled
+// Bedrock): one combined slot burned 11 attempts across two runs — every kill
+// dead air right after a completed tool_result, one attempt with zero model
+// tokens — and the uncaught throw killed the whole run, report unwritten.
+// A stall says nothing about the case, so it gets its own outcome and the
+// batch keeps going.
+test('a stalled slot costs its unit as infra-stalled, never the run', () => {
+  assert.match(text, /const isStall = \(e\) => \/stall\/i\.test/);
+  // analysis dispatches (the site that actually threw in the field) are wrapped
+  assert.match(text, /try \{\n\s*if \(route === 'combined' \|\| route === 'manual-qa-verified'\)/);
+  assert.match(text, /\? \{ outcome: 'infra-stalled', note: stallNote\('analysis', e\) \}/);
+  // a stall is an environment fact and feeds the same breaker as agent-died
+  assert.match(text, /breakerCount\('agent-died', String\(e\?\.message \?\? e\)\)/);
+  // the build catch distinguishes stall (infra-stalled) from other throws (blocked)
+  assert.match(text, /record\(id, \{ outcome: 'infra-stalled', note: stallNote\('build', e\) \}\)/);
+  assert.match(text, /build failed:/);
+  // triage, gate and reporter are guarded too — null-safe paths already exist
+  assert.match(text, /try \{ await runTriage\(\) \} catch/);
+  assert.match(text, /merged units stay merged-ungated; re-run the gate/);
+  assert.match(text, /report writer threw/);
+  // and the report flags the environment loudly
+  assert.match(text, /case\(s\) infra-stalled/);
+});
+
+// A killed slot is retried with the SAME prompt and no memory of the attempt
+// that died — a retry inherits ONLY what is committed. The 11-attempt field
+// case re-implemented from scratch every time because nothing had landed on
+// the case branch.
+test('checkpoint discipline rides both build-capable dispatches', () => {
+  assert.match(text, /const CHECKPOINT_RULE =/);
+  assert.match(text, /retry inherits ONLY what is committed/);
+  assert.match(text, /Never silently restart on a branch that already has work/);
+  // policy-deferential push, same shape the push/PR test enforces
+  assert.match(text, /push after the first commit and then per /);
+  assert.match(text, /milestone ONLY if this project pushes to a remote/);
+  // injected into the combined slot's build half AND the implementer dispatch
+  const sites = [...text.matchAll(/CHECKPOINT_RULE \+/g)];
+  assert.ok(sites.length >= 2, `CHECKPOINT_RULE must ride combined + implementer, found ${sites.length} site(s)`);
+});
+
+// Sleep-poll hygiene (field 2026-08-17): chained sleeps inside one call died
+// at their own cap (exit 143), losing the tail already read; long blind first
+// sleeps hid early failures for minutes.
+test('the long-jobs rule pins one bounded sleep per call, early first look, no chains', () => {
+  assert.match(text, /ONE `sleep <n>; <tail the output file>` per call/);
+  assert.match(text, /Make the FIRST poll short/);
+  assert.match(text, /NEVER chain sleeps inside one/);
+});

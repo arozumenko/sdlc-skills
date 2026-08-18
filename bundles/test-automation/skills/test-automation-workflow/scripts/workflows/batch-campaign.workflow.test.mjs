@@ -156,3 +156,18 @@ test("an interrupted wave surfaces as 'ungated', never 'nothing-landed'", () => 
   assert.match(text, /unproven, NOT blocked/);
   assert.match(text, /never from this summary alone/);
 });
+
+// Stall-retry exhaustion THROWS out of agent() instead of returning null
+// (measured 2026-08-17, quota-throttled Bedrock; one uncaught stall killed a
+// whole run). Every direct dispatch goes through guarded(): a throw becomes
+// the null each call site already handles. Wave children need no guard — the
+// wave loop catches, and the hardened batch-build absorbs stalls per unit.
+test('every direct dispatch is guarded: a stall becomes the null its site already handles', () => {
+  assert.match(text, /const guarded = async \(what, fn\)/);
+  assert.match(text, /infra-stalled \(environment — fix the provider before retrying\)/);
+  for (const site of ["guarded('planner'", "guarded('heads analysis child'", "guarded('foundation implementer'", "guarded('foundation review'", 'guarded(`foundation fix round', "guarded('foundation mini-gate'"]) {
+    assert.ok(text.includes(site), `unguarded dispatch: ${site}`);
+  }
+  // no bare direct dispatch remains outside guarded()
+  assert.doesNotMatch(text, /^ *const \w+ = await agent\(/m);
+});

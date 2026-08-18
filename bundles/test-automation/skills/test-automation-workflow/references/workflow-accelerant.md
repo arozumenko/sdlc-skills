@@ -406,6 +406,22 @@ prose. Keep these if you ever fork it:
    on thin evidence, and the gate still proves the result N× either way.
    Playbook § Manual-qa-verified carries the full rule.
 
+7. **A stalled slot costs its unit, never the run** (field-measured
+   2026-08-17, quota-throttled Bedrock). The harness stall-kills a subagent
+   whose model stream stops making progress and retries it blind; when every
+   attempt stalls, `agent()` THROWS (`agent stalled on all N attempts`)
+   rather than returning null — and uncaught, that throw killed a whole run
+   with its report unwritten while one slot burned 11 attempts. Every script
+   now catches it: the unit is recorded **`infra-stalled`** (an ENVIRONMENT
+   verdict — provider quota or stream stability, nothing about the case; see
+   playbook § A dispatched slot that stalls), consecutive stalls feed the
+   same breaker as agent-died, the batch continues, and the report always
+   lands. The other half is the workers' CHECKPOINT DISCIPLINE: a retry
+   inherits only what is committed, so implementer/combined dispatches check
+   for a killed attempt's branch first and commit per milestone — which is
+   what makes the harness's blind retries incremental instead of 11×
+   from-scratch.
+
 ## Hooks & memory (verified 2026-07-20)
 
 `SubagentStart` hooks DO fire for workflow-spawned agents, and the payload

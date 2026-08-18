@@ -96,9 +96,12 @@ const PREAMBLE =
   '(default 120s, MAXIMUM 600000ms), so ALWAYS pass timeout: 600000 on a suite run, ' +
   'and let the call block when the job fits inside it. ' +
   'When the job does NOT fit in one call: launch it detached, writing its output to a file, ' +
-  'then WAIT with blocking foreground polls — `sleep 300; <check the output file>`, each with ' +
+  'then WAIT with blocking foreground polls — ONE `sleep <n>; <tail the output file>` per call, each with ' +
   'timeout: 600000 — until it is done. Sleeping in the foreground is legal and cheap: it is ONE turn ' +
-  'however long you sleep. ' +
+  'however long you sleep. Make the FIRST poll short (~60-120s) — a run that dies in its first minute ' +
+  'must not cost a five-minute blind sleep — then settle at ~`sleep 300`. NEVER chain sleeps inside one ' +
+  'call (`sleep 120; tail; sleep 240; tail`): the chain outlives the call cap and is killed at its own ' +
+  'timeout, taking the tail you already read with it — one sleep, one look, return, repeat. ' +
   'NEVER end a turn while a job is running — nothing will wake you (measured: forced to report 28ms ' +
   'later, and neither run_in_background nor Monitor beats that) and this workflow blocks on your return. ' +
   'NEVER poll at second-level intervals — you pay a full context per turn and a busy-wait gets you cut off.'
@@ -146,7 +149,20 @@ const DIAGNOSIS_SCHEMA = {
     findings: FINDINGS,
   },
 }
-const diag = await agent(
+// Stall-retry exhaustion THROWS out of agent() ("agent stalled on all N
+// attempts") instead of returning null — measured 2026-08-17, quota-throttled
+// Bedrock. guarded() turns the throw into the null every call site here
+// already handles, and the log names the stall so the lead blames the
+// ENVIRONMENT (provider quota, stream stability), not the batch.
+const isStall = (e) => /stall/i.test(String(e?.message ?? e))
+const guarded = async (what, fn) => {
+  try { return await fn() } catch (e) {
+    log(`${what} ${isStall(e) ? 'infra-stalled (environment — fix the provider before retrying)' : 'threw'}: ${String(e?.message ?? e).slice(0, 120)}`)
+    return null
+  }
+}
+
+const diag = await guarded('diagnostician', () => agent(
   `${PREAMBLE}\n\nDiagnostician — batch ${SLUG} on branch ${BRANCH} (base ${BASE}) failed its hardening gate. ` +
   'The lead has already classified this as a TEST-CODE bug or a flake, so do not re-argue that; find the CAUSES.\n\n' +
   'Failures, all of them:\n' +
@@ -161,7 +177,7 @@ const diag = await agent(
   'Reproduce where you can, but do not attempt any fix — you are diagnosing. ' +
   'Any failure you cannot explain goes in `unexplained` — say so rather than inventing a cause; an unexplained failure is a real answer and the lead needs it.',
   { label: `diagnose:${SLUG}`, phase: 'Diagnose', agentType: TYPES.fixer, ...WORKER, schema: DIAGNOSIS_SCHEMA }
-)
+))
 if (!diag || !diag.causes?.length) {
   return {
     batch: SLUG, branch: BRANCH, status: 'diagnosis-failed',
@@ -219,7 +235,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   // Sequential: every fixer writes code in the one working tree, and two of
   // them at once corrupt it whatever files each believes it owns.
   for (const cause of causes) {
-    const fix = await agent(
+    const fix = await guarded(`fixer round ${round}`, () => agent(
       `${PREAMBLE}\n\nFixer — batch ${SLUG}, branch ${BRANCH}, round ${round}. Fix ONE diagnosed cause; do not range beyond it.\n\n` +
       `CAUSE (${cause.kind}): ${quote(cause.title, 200)}\n` +
       `Specs it explains: ${(cause.specs ?? []).map((s) => quote(s, 200)).join(', ')}\n` +
@@ -232,13 +248,13 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
       'Do NOT weaken or delete an assertion, do NOT add a sleep, do NOT mark anything skipped/xfail to get past it — that is defect masking, and the point of this run is the opposite. ' +
       'If the real fix turns out to be a product change or an architectural one, stop and return blocked with what you found; do not force it.',
       { label: `fix:${cause.kind}:${round}`, phase: 'Fix', agentType: TYPES.fixer, ...WORKER, schema: FIX_SCHEMA }
-    )
+    ))
     findings.push(...(fix?.findings ?? []))
     applied.push({ cause: cause.title, kind: cause.kind, status: fix?.status ?? 'blocked', summary: fix?.summary ?? 'fixer agent failed', regression_test: fix?.regression_test ?? null })
   }
 
   phase('Re-gate')
-  gate = await agent(
+  gate = await guarded(`re-gate round ${round}`, () => agent(
     `${PREAMBLE}\n\nHardening gate — batch ${SLUG}, branch ${BRANCH}, after stabilization round ${round}. ` +
     'You did not write these fixes and you do not judge them — you re-run the batch and report exactly what you see.\n' +
     `Run the batch's specs TOGETHER, ${GATE_N} CONSECUTIVE deterministic green runs, each a clean process against the live env. ` +
@@ -248,7 +264,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
     'On red, read the runner\'s STRUCTURED report for per-spec verdicts and return one failures[] entry per failing spec with its signature. ' +
     'Do NOT merge. Do NOT fix. Do NOT classify.',
     { label: `re-gate:${SLUG}:${round}`, phase: 'Re-gate', agentType: TYPES.gate, ...WORKER, schema: GATE_SCHEMA }
-  )
+  ))
   rounds.push({ round, causes: applied, gate: { verdict: gate?.verdict ?? 'not-run', runs: gate?.runs ?? 0, failures: gate?.failures ?? [] } })
   log(`round ${round}: ${applied.length} cause(s) fixed → gate ${gate?.verdict ?? 'not-run'}`)
 
@@ -263,14 +279,14 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   // cause than the ones just fixed, and assuming otherwise is how a fix loop
   // spins on the wrong hypothesis.
   phase('Diagnose')
-  const again = await agent(
+  const again = await guarded(`re-diagnose round ${round + 1}`, () => agent(
     `${PREAMBLE}\n\nDiagnostician — batch ${SLUG} on ${BRANCH} is still red after round ${round}.\n\n` +
     'Fixes applied so far:\n' + rounds.flatMap((r) => r.causes.map((c) => `- [${c.status}] ${quote(c.cause, 200)}: ${quote(c.summary, 400)}`)).join('\n') + '\n\n' +
     'Still failing:\n' + (gate?.failures ?? []).map((f, i) => `${i + 1}. ${quote(f.spec, 200)}\n   ${quote(f.signature, 300)}`).join('\n') + '\n\n' +
     'Read these together as before. A failure that survived a fix is EVIDENCE: either that fix was wrong, or this failure always had a different cause. Say which, and do not simply restate the previous diagnosis. ' +
     'Anything you still cannot explain goes in `unexplained`.',
     { label: `diagnose:${SLUG}:${round + 1}`, phase: 'Diagnose', agentType: TYPES.fixer, ...WORKER, schema: DIAGNOSIS_SCHEMA }
-  )
+  ))
   findings.push(...(again?.findings ?? []))
   for (const u of (again?.unexplained ?? [])) unexplained.add(u)
   if (!again?.causes?.length) { log('no new cause identified — stopping'); break }
