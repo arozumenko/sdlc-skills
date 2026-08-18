@@ -24,6 +24,25 @@ where the work lands (the batch trunk; the unit branch for a batch of one) —
 same rule as the AFS, and for the same reason: the plan survives an interrupted
 run, and the reviewer reads it from disk, not from your context.
 
+## Implementer substitutions — how the six-phase loop absorbs a brief
+
+The implementer slot (`test-automation-implementation` skill) runs its normal
+loop on a brief with three substitutions:
+
+- **Phase 1** absorbs the brief (scope, out-of-scope, acceptance criteria)
+  instead of walking a Coverage Map — a brief missing a required section goes
+  back to the orchestrator naming the section, the same move as
+  `needs-analyst-rerun` aimed at the brief's author.
+- **Phase 2** explores by reproducing the failure or reading the code the
+  brief names.
+- **Phase 4** runs the brief's **Verification** set (its blast-radius specs)
+  green once locally instead of a new spec.
+
+Everything else — Hard Rules, context economy, retry budget, Run Report,
+return contract — applies unchanged. The dispatch passes the brief path where
+the AFS path would go, and adjacent debt spotted mid-build returns as a
+finding, never as silent scope widening.
+
 ## Required sections
 
 A brief missing any of these is `blocked`, not dispatchable — the mirror of

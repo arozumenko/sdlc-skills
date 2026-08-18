@@ -243,11 +243,9 @@ and observe live; and a **failing transit path falls back to manual
 navigation AND gets flagged** in your return (a broken existing flow is a
 possible regression, free signal). You are the only analyst
 running — units are serialized — so the shared Playwright MCP browser is
-simply yours: no lane, no isolated instance, no port to juggle. (The lane
-machinery existed for a parallel front that no longer exists; if you are
-somehow dispatched alongside another analyst, fall back to `browser-verify`
-(CDP) or `playwright-cli` on an ISOLATED instance so observations never
-switch each other's tabs.)
+simply yours: no lane, no isolated instance, no port to juggle (the
+parallel-analyst fallback, should you ever need it:
+[`references/execution-aids.md`](references/execution-aids.md)).
 
 **Exploration digest — read before, update after.** Before driving the
 surface, read `test-specs/<feature>/_surface.md` if it exists: confirmed
@@ -259,35 +257,20 @@ them. After your run, create or update the digest with what you confirmed
 this batch skip re-deriving handles, the implementer enters Phase 2 with
 them pre-confirmed, and the next batch on this app starts warm.
 
-**When the digest outgrows one file — split it into an index.** A surface
-batches keep returning to accumulates handles for screens a given case never
-touches, and every reader pays for all of it. When `_surface.md` stops being
-a comfortable single read (~150 lines is the smell, not a rule), split it —
-you are its writer, so the split is yours to make: `_surface.md` stays the
-ENTRY POINT and becomes the index — how to reach the area (auth, transit),
-the waits and quirks that hold area-wide, and a table of subareas (one line
-of scope each) linking to `test-specs/<feature>/_surface/<subarea>.md`,
-where that subarea's handle tables, waits and quirks move. Readers then load
-the index plus only the subarea(s) their case touches; the single-writer
-rule applies per file, and implementers append to the subarea file the index
-points at. Never split pre-emptively: most surfaces stay comfortably in one
-file, and an index over three lines of content is pure ceremony.
+**When the digest outgrows one file — split it into an index.** When
+`_surface.md` stops being a comfortable single read (~150 lines is the
+smell, not a rule), split it into an index + per-subarea files — you are its
+writer, so the split is yours to make; never split pre-emptively. Mechanics:
+[`references/execution-aids.md`](references/execution-aids.md) § When the
+digest outgrows one file.
 
 **A manual-qa knowledge base is a warm start — reuse it before re-deriving.**
-If the project runs the manual-qa team, its knowledge base lives under
-`.agents/manual-qa/` — `app_profile.md` is its entry point (module table +
-a knowledge map saying what to read when), with the detail in
-`knowledge/modules/<module>.md`, `knowledge/selectors.md`,
-`knowledge/ui-patterns.md`, and `knowledge/fragile-areas.md`. Before live
-exploration, read `app_profile.md` and the module file covering your case's
-area: their selectors are candidate handles, their ui-patterns are candidate
-waits, and `fragile-areas.md` is a pre-built quirk list — a known bug with a
-ticket there is a red-by-design candidate to hand the implementer rather
-than a surprise mid-run. Same discipline as the digest: it is a hint cache
-from a *different team's* live runs — verify everything as you use it — and
-it is READ-ONLY for you: the manual team owns those files, so drift you
-observe goes into your findings[] and your own digest, never as an edit to
-theirs.
+If the project runs the manual-qa team, read its knowledge base under
+`.agents/manual-qa/` before live exploration — candidate handles, waits, and
+a pre-built quirk list. It is a hint cache from a *different team's* live
+runs (verify everything as you use it) and READ-ONLY for you. What to read
+and the ownership rules: [`references/execution-aids.md`](references/execution-aids.md)
+§ A manual-qa knowledge base.
 
 **Cluster dispatches — one session, every case executed.** When your dispatch
 names several similar cases (a plan-declared cluster), run them in ONE live
@@ -346,34 +329,23 @@ trunk when you finish.
 
 Committing immediately is the point: your analysis lands the moment it exists,
 so a case that ends `already-covered`, `blocked` or `un-automatable` still has
-its AFS in history even though no build ever carried it. Two failure modes are
-retired by this — one campaign left **47 AFS files stranded uncommitted** with
-no owner to pick them up, and an earlier fix (leaving them for the implementer)
-meant a case that never reached a build had nobody to commit it at all.
+its AFS in history even though no build ever carried it (the field incidents
+this retires: [`references/execution-aids.md`](references/execution-aids.md)
+§ Why commit-immediately exists).
 
 One exception: an **analysis-only** pass (the campaign heads run, where no
 build follows and the next stage reads your files out of this same tree) leaves
 them on disk uncommitted and runs no git at all. Your dispatch says which you
 are in; when it does not, you are in a normal batch — commit.
 
-**Worked UI example** — three browser tools sit at different layers.
+**Worked UI example** — three browser tools sit at different layers:
+[`playwright-testing`](../playwright-testing/) (Playwright MCP, the default —
+prefer its accessibility-snapshot tool for accessible-name discovery; under
+the bundle's lean flags snapshot explicitly and screenshots land on disk),
+the Playwright CLI when no MCP is wired, and
+[`browser-verify`](../browser-verify/) for computed styles / CDP / a11y.
 Full triage:
 [`../test-automation-workflow/references/browser-tools.md`](../test-automation-workflow/references/browser-tools.md).
-In short:
-
-- **Default UI tool** — [`playwright-testing`](../playwright-testing/)
-  (Playwright MCP). Prefer its accessibility-snapshot tool for accessible-name
-  discovery — it yields both the ref you need to click and the
-  role-name pair you'll assert on. Under the bundle's lean server flags,
-  actions do NOT echo the page back (`--snapshot-mode none`) — snapshot
-  explicitly when you need to read it — and screenshots land on disk as
-  paths (`--image-responses omit`).
-- **MCP server not wired** — the Playwright CLI from the shell
-  drives the same browser surface (`codegen`,
-  `--trace`, multi-tab, storage, request mocking).
-- **Visual / CDP / a11y** — [`browser-verify`](../browser-verify/)
-  for computed styles, real CDP input events, storage/cookies, or axe
-  audits.
 
 For each step:
 
@@ -637,6 +609,11 @@ When the AFS is ready:
 - [references/spec-format.md](references/spec-format.md) — the
   Automation-Friendly Spec (AFS) structure, required sections,
   examples. This is what the skill's output looks like.
+- [references/execution-aids.md](references/execution-aids.md) —
+  situational helpers for the live run: digest split-into-index
+  mechanics, the manual-qa knowledge-base warm start, the
+  parallel-analyst fallback, and the commit-immediately field
+  evidence.
 - [references/defect-filing.md](references/defect-filing.md) — full
   bug-filing mechanics: issue-tracker routing, the three filing styles,
   and the bundle-per-case umbrella-ticket convention.

@@ -40,7 +40,7 @@ Missing context → flag the gap; don't fabricate defaults.
 - Conditional: `defect-found` — only under the Phase 1 gate table's conditions (the defect is filed and the remaining flow is automatable); otherwise it ends at the orchestrator.
 - Refuse: `already-covered` (no implementation needed — traceability AFS only), `blocked`, `un-automatable`, `out-of-scope-by-author`.
 
-**Brief-driven dispatch (work that isn't a case).** The orchestrator may dispatch this slot on a [tech-task brief](../test-automation-workflow/references/tech-task-brief.md) instead of an AFS — a technical unit (tech-debt, a stable-handle migration, a config or reporting fix) with no TMS case behind it. Same loop, three substitutions: Phase 1 absorbs the brief (scope, out-of-scope, acceptance criteria) instead of walking a Coverage Map — a brief missing a required section goes back to the orchestrator naming the section, the same move as `needs-analyst-rerun` aimed at the brief's author; Phase 2 explores by reproducing the failure or reading the code the brief names; Phase 4 runs the brief's **Verification** set (its blast-radius specs) green once locally instead of a new spec. Everything else — Hard Rules, context economy, retry budget, Run Report, return contract — applies unchanged. The dispatch passes the brief path where the AFS path would go, and adjacent debt spotted mid-build returns as a finding, never as silent scope widening.
+**Brief-driven dispatch (work that isn't a case).** The orchestrator may dispatch this slot on a [tech-task brief](../test-automation-workflow/references/tech-task-brief.md) instead of an AFS — a technical unit with no TMS case behind it. Same loop, three phase substitutions; everything else (Hard Rules, context economy, retry budget, Run Report, return contract) applies unchanged. When dispatched on a brief, read the brief reference's § Implementer substitutions alongside the brief itself.
 
 **Per-case parameters** (caller provides at dispatch time):
 
@@ -49,15 +49,15 @@ Missing context → flag the gap; don't fabricate defaults.
 - User set — a key into `.agents/profile.md` § Roles & sample users (e.g. `${TEST_USER}`)
 - Branch name — if the caller created the branch. **Don't `switch`, `commit`, `push`, or otherwise touch git unless `.agents/workflow.md` grants commit authority to this slot.**
 
-**Context economy (hard rules — same wording as the workflow PREAMBLE; keep in step).** The bill is resident-context × turns — every turn re-sends your whole context, so turn count and payload size ARE the cost (field measurement: workers averaged ~30 turns at ~1 tool call per turn):
+**Context economy (hard rules — same wording as the workflow PREAMBLE; keep in step).** The bill is resident-context × turns — every turn re-sends your whole context, so turn count and payload size ARE the cost (measurements behind each rule: [`references/field-evidence.md`](references/field-evidence.md) § Context economy):
 
 - **Batch independent tool calls into ONE message** — issue non-dependent reads/greps together, never one tool per turn.
 - **Read a file once and work from what you read** — ranged reads for big files; no re-reads to double-check what is already in context.
 - **Keep runner output lean** — line/dot reporter, tail long failures; never dump a full HTML report or trace into the transcript.
 - **Screenshots only when a step fails or visual judgment is the task** — save to disk and cite the path instead of re-emitting pixels into context.
 - **Soft budget, a self-check not a cap: ~15 tool turns per case in your unit** (batching makes turns dense — 15 batched turns carry what ~40 single-call turns did). A genuinely long case — 30 steps, a deep debug — may exceed it; what the check catches is **circling**: re-reading what's already in context, retrying the same probe, exploring without acting. At each ~15-turn mark ask: did the last stretch advance the case, or circle? Advance → continue. Circle → act on what you have and record the gap in your Run Report notes.
-- **Never clean the tree wholesale.** `git stash --include-untracked`, `git clean -fd`, `git checkout -- .` and `git reset --hard` delete work you did not write — anything plain-untracked (an AFS just written, a spec mid-edit) vanishes with no diff and no error (field incident 2026-08-03: one such stash before a `git checkout` swept six freshly written memory entries and three receipts; later agents ran without them — role memory is gitignored and returns live on the telemetry side today, but your own uncommitted work is just as exposed as ever). Need a clean tree before switching branches? **Stash by path** (`git stash push -- <the paths you touched>`) or commit your own work first. If a dirty tree you didn't create is blocking you, report it in findings instead of clearing it.
-- **Commit what you produce — memory included.** Durable learnings you write under `.agents/memory/<your-agent>/` are part of your deliverable: `git add` them **by exact path** with your work on your case branch, and the merge carries them to the trunk (a parked unit's memory is landed by the merge agent anyway — the code may not land, but what you learned always does). Two disciplines keep this clean: memory rides in **your own commits by path** — never swept in by a broad stage — and any mechanical self-check grep runs against the project's **code root** (e.g. `git diff … -- automation/`), never the whole tree, so memory prose can't produce false hits in a diff scan (field-measured failure: an unscoped locator-policy grep matched dozens of documentation strings).
+- **Never clean the tree wholesale.** `git stash --include-untracked`, `git clean -fd`, `git checkout -- .` and `git reset --hard` delete work you did not write — anything plain-untracked (an AFS just written, a spec mid-edit) vanishes with no diff and no error. Need a clean tree before switching branches? **Stash by path** (`git stash push -- <the paths you touched>`) or commit your own work first. If a dirty tree you didn't create is blocking you, report it in findings instead of clearing it.
+- **Commit what you produce — memory included.** Durable learnings you write under `.agents/memory/<your-agent>/` are part of your deliverable: `git add` them **by exact path** with your work on your case branch, and the merge carries them to the trunk (a parked unit's memory is landed by the merge agent anyway — the code may not land, but what you learned always does). Two disciplines keep this clean: memory rides in **your own commits by path** — never swept in by a broad stage — and any mechanical self-check grep runs against the project's **code root** (e.g. `git diff … -- automation/`), never the whole tree, so memory prose can't produce false hits in a diff scan.
 - **A permission denial blocks an effect, not the task.** Never re-achieve the *same* blocked effect through a different shape — a script instead of the denied command, an alternate binary, a broader allowed command; that evades a pattern, not a policy. But a genuinely different allowed route to the task goal — one that does **not** produce the blocked effect — is legitimate adaptation: take it, and record the substitution in your Run Report notes (what was denied, what you did instead) so a human can veto one that broke intent. No such route → the case goes `blocked` with the denial recorded, and you continue with what remains.
 
 **Retry budget.** Soft limit: **≤ 2 reruns** against the same root cause before escalating. The orchestrator's R2 cap rule will refuse R3 on the same cause regardless — see [`orchestration-playbook.md`](../test-automation-workflow/references/orchestration-playbook.md) § R2 cap rule.
@@ -106,7 +106,7 @@ If your Absorb pass surfaces a discrepancy between the AFS-stated handles and th
 
 Phase 2 has a budget: **30 minutes of exploration** before escalating to the orchestrator.
 
-**For `extend-existing` AFS:** Phase 2 has an additional pre-step — read the covering spec end-to-end AND its own AFS (the one that authored it) before driving the live surface. The goal is to enter Phase 3 knowing *exactly* what's already proven, so the gap-fill is purely additive. If the covering AFS has been amended since the spec merged (selectors drifted, observable changed), surface that to the orchestrator via `needs-analyst-rerun` *on the covering spec's case*, not on yours — the covering spec is unstable upstream and your extension would land on shifting ground.
+**For `extend-existing` AFS:** Phase 2 has an additional pre-step — read the covering spec end-to-end AND its own AFS before driving the live surface. Full variant mechanics: [`references/extend-existing.md`](references/extend-existing.md).
 
 ### Phase 3 — Automate
 
@@ -126,13 +126,7 @@ Apply the **No Defect Masking Rule** (§ Hard Rules → 2 below). Forbidden: `te
 
 #### Phase 3 for `extend-existing` AFS
 
-When the AFS status is `extend-existing`, the artefact is an *edit to the covering spec*, not a fresh `.spec.ts`. Three mechanics differ from a fresh implementation:
-
-1. **Additive-only on the covering spec.** The spec file is the shared-caller file (Hard Rule 3 → § Additive-only on shared-caller files applies): existing `test()` bodies stay byte-identical; new `test()` blocks (or new `test.step()` sections, or new `expect()` lines inside an existing test only when the AFS Gap assertions section names that exact insertion point) sit alongside. Verify with `git diff <covering-spec> | grep -E '^-[^-]' | head` → empty.
-
-2. **Coverage tag chain.** Append `@<NEW-TMS-ID>` to the covering test group's tag list alongside the existing `@<COVERING-TMS-ID>` tag — `test.describe()` title tags are the Playwright example; pytest markers / JUnit `@Tag`s / scenario tags are the analogues. The group-level tag list is the engagement-level coverage signal; each Jira/TMS case referenced by the spec gets its own tag in that list. Don't create a sibling group/describe block — that would fragment the cluster.
-
-3. **Same-PR amendment if the AFS drifts.** If Phase 2 surfaces an observation that the AFS § Gap assertions section didn't anticipate, amend the AFS via the Phase 2 amend-in-PR rule and ship the AFS update in the same PR — same as fresh implementation. If the amendment widens scope to the point of being a near-rewrite of the covering spec, return `needs-analyst-rerun` and ask analyst to reclassify (typically `ready-for-automation` with a split).
+The artefact is an *edit to the covering spec*, not a fresh `.spec.ts`: additive-only on the covering spec (existing `test()` bodies stay byte-identical), the coverage tag chain grows by `@<NEW-TMS-ID>`, and AFS drift is amended in the same PR. Full mechanics and the verification command: [`references/extend-existing.md`](references/extend-existing.md).
 
 ### Phase 4 — Execute
 
@@ -142,11 +136,7 @@ Run the single test locally with the exact CI command from `.agents/testing.md`.
 
 **If the run is longer than that**, do not end your turn and do not busy-poll. Launch it detached, writing its output to a file, then wait with **blocking foreground polls** — `sleep 300; <check the output file>`, each with `timeout: 600000` — until it is done. A sleep is **one turn however long it lasts**, so waiting this way is both legal and nearly free.
 
-**Never end a turn with "I'll wait for this to complete"** — nothing is going to wake you. Measured in a controlled probe (2026-08-10): a dispatched slot that ends its turn mid-job is forced to report **28ms later**, and *both* the documented `run_in_background` completion notification and the Monitor tool lose that race. What actually happens is that your slot goes silent holding an unfinished branch; and inside a batch, the workflow is blocked on your return, so one idled run stalls the whole campaign behind it, with a `pending` journal entry and no error anywhere to explain it.
-
-**Never poll every few seconds either.** You pay a full resident context on every turn: measured at 132k context, a poll costs ~$0.048, and one gate agent's 27 `kill -0` checks burned $1.29 — a third of its total cost — before being cut off with no verdict. The same wait as two `sleep 300` calls: $0.10.
-
-Measured on the lazy-modal foundation build (2026-07-30): the implementer backgrounded the full suite, wrote *"I'll wait for this full-suite run to complete"*, and stopped. Twelve minutes later its output file was still empty, the conductor was still waiting, and it took a human noticing plus a rescue dispatch to finish a branch that was nearly done. The rescue agent's own note is the rule: *"run synchronously in the foreground — this is exactly the step the prior session backgrounded and abandoned."*
+Two absolutes, both measured the expensive way (incidents and numbers: [`references/field-evidence.md`](references/field-evidence.md) § Waiting on long runs). **Never end a turn with "I'll wait for this to complete"** — nothing wakes you, your slot goes silent holding an unfinished branch, and inside a batch the whole campaign stalls behind it. And **never poll every few seconds** — every poll pays your full resident context, and two `sleep 300` calls do the same wait for a fraction of the cost.
 
 If a suite is too long even for sleep-polling, that is a finding worth reporting (`findings[]`, kind `note`) — say so and run the narrower selection your case needs. A slow suite is a problem to surface, not to hide behind a background job.
 
@@ -210,7 +200,7 @@ Missing fields are unacceptable — every field has a defensible "none" or "n/a"
 
 **Two-verdict split.** Your implementer-local verdict (your `N/M`) is what *you* observed running the spec in your workspace. The **Independent-gate verdict** is what *the orchestrator* observes running the merged spec independently against the live environment — and that's the merge signal, not yours. Leave the independent-gate row blank; the orchestrator fills it. Don't conflate the two: a GREEN N/N implementer-local + RED 1/3 independent-gate is a real outcome class (environment drift / parallel interaction / fresh-credential interaction), and the format must distinguish them.
 
-**For `extend-existing` AFS, the verdict scopes the entire extended spec.** Run the covering spec end-to-end (original `test()` blocks + your appended ones); your `N/M` covers all of them. A GREEN delta + RED original is a regression — the additive-only contract broke. Same merge gate as any other regression: block until additive-only is restored OR follow the shared-file regression protocol (enumerate affected callers, name re-run results in the PR description). the orchestrator's independent-gate verdict applies to the full extended spec too — same scope, different runner.
+**For `extend-existing` AFS, the verdict scopes the entire extended spec** — run the covering spec end-to-end; your `N/M` covers original and appended blocks alike. A GREEN delta + RED original is a regression. Details: [`references/extend-existing.md`](references/extend-existing.md) § Run Report.
 
 ---
 
@@ -243,18 +233,7 @@ Missing fields are unacceptable — every field has a defensible "none" or "n/a"
 
 #### Reverse-masking guard (case-text drift from live product)
 
-Masking is bi-directional. The case text is a *hypothesis*; the live product is ground truth. Weakening an assertion *away from* a real defect is the obvious masking class. Weakening an assertion *toward* the case text when live product correctly diverges is **also** masking — it asserts a stale hypothesis as if it were the contract:
-
-| Case text says | Live product does | Wrong — reverse-masking | Right — live-contract |
-|---|---|---|---|
-| Tap target ≥44px (WCAG AAA) | Tap target = 40px (per current design spec) | `expect(box.height).toBeGreaterThanOrEqual(44)` — fails on a non-defect | `expect(box.height).toBeGreaterThanOrEqual(40)` + file CLARIFICATION on case-text drift |
-| "Save button visible on form" | Save button correctly removed in v2 redesign | `expect(saveBtn).toBeVisible()` — fails on intentional change | `expect(saveBtn).toHaveCount(0)` + CLARIFICATION |
-| Field labelled "Customer" | Field labelled "Constituent" (legacy term, behaviour identical) | Assert "Customer" — fails on cosmetic | Assert "Constituent" + CLARIFICATION |
-| Step "click confirm dialog" | No confirm dialog (removed in flow simplification) | `expect(dialog).toBeVisible()` — fails on improved UX | Skip the step in the spec + CLARIFICATION; AFS amended via Phase 2 amend-in-PR |
-
-**The case-text drift is itself a finding** — it goes in the AFS as a CLARIFICATION (lightweight ticket per the project's `Bug filing style`), not as a Bug. Asserting the stale case-text to "honour" the TMS is masking in the opposite direction.
-
-Why this matters empirically: the test will pass-by-luck on the next product change that happens to land on the asserted value, then fail unpredictably when the product moves again. The live-contract assertion is durable.
+Masking is bi-directional. The case text is a *hypothesis*; the live product is ground truth. Weakening an assertion *away from* a real defect is the obvious masking class. Weakening an assertion *toward* the case text when live product correctly diverges is **also** masking — it asserts a stale hypothesis as if it were the contract. Assert the live contract instead, and **file the case-text drift as a finding** — a CLARIFICATION (lightweight ticket per the project's `Bug filing style`), not a Bug; where a step no longer exists, the AFS is amended via the Phase 2 amend-in-PR rule. Worked examples of both directions: [`references/field-evidence.md`](references/field-evidence.md) § Reverse-masking.
 
 > **The orchestrator-side gate.** The orchestrator also enforces this rule. Any dispatch prompt that explicitly instructs the implementer to use `test.fail()` / `xit()` / `@Ignore` / `pytest.skip()` for a product defect is a hard failure on the orchestrator, not the implementer. If your dispatch prompt says "add `test.fail()`", refuse and route back to the orchestrator with the violation noted.
 
@@ -280,7 +259,7 @@ When the page object / fixture / helper you're editing has **≥3 merged callers
   git diff <file> | grep -E '^-[^-]' | head     # should be empty — no real removals
   ```
 
-**The spec file itself counts as a shared-caller file when AFS status is `extend-existing`.** The covering spec is your edit target; the original `test()` bodies stay byte-identical alongside the new ones you append. Run the same `grep -E '^-[^-]'` verification on the spec diff. The mechanics are identical — the "callers" of an existing `test()` block are downstream CI / TMS back-write / coverage reporters; modifying the test body breaks their state silently.
+**The spec file itself counts as a shared-caller file when AFS status is `extend-existing`** — the "callers" of an existing `test()` block are downstream CI / TMS back-write / coverage reporters ([`references/extend-existing.md`](references/extend-existing.md)).
 
 If the change genuinely cannot be additive (the existing method is broken, or the API needs to change), follow the shared-file regression protocol:
 
@@ -339,9 +318,7 @@ Before writing seed-and-cleanup logic, ask: **can this observable be asserted on
 
 You (implementer) are the right person to make this call — you've seen the surface in Phase 2 Explore. If the AFS specifies seed-and-cleanup but your exploration shows the observable can be satisfied read-only on stable existing data, **amend the AFS via the Phase 2 amend-in-PR rule and ship read-only.**
 
-Why this matters empirically: seed/cleanup is the largest flake source in any non-trivial suite — state leaks across tests, fixtures interact with parallel runners, cleanup race conditions. Eliminating the mutation eliminates the entire flake class.
-
-The rule sequence: Rule 7 (reuse before create) tells you to find an existing helper; this rule tells you to find existing **data**. Both are the same instinct — prefer what's already proven stable over freshly-built state.
+Seed/cleanup is the largest flake source in any non-trivial suite; eliminating the mutation eliminates the entire flake class (why, and how this pairs with Rule 7: [`references/field-evidence.md`](references/field-evidence.md) § Read-only-by-default).
 
 ### 11. Shared files have one writer — know whose you may touch
 
@@ -350,7 +327,7 @@ Files that several roles could write need a declared owner, or every merge relit
 | File | Writer | Where it is committed |
 |---|---|---|
 | `test-specs/<feature>/_surface.md` (+ `_surface/<subarea>.md` once split — append to the subarea file the index points at) | analyst authors it; you may **append** attributed implementation-time facts (testids you added, fixture realities, resolved blockers — Phase 2 scopes this), never rewrite its behavior/scope claims; parallel context → read-only, drift in Run Report | the trunk (the analyst commits it); your appended notes ride your case branch like an AFS amendment |
-| `.agents/memory/<your-agent>/…` | you — **commit what you produce**, by exact path, on the branch you are on (§ Context economy above); the merge carries it to the trunk. In a PARALLEL context (no pipeline dispatch granting you the tree), the memory skill's base-branch caution applies instead — the serialized pipeline is what makes commit-in-place safe (cov60: 26 of 32 merge conflicts were memory add/add collisions from parallel branches; serialization retired that cause) | your case branch |
+| `.agents/memory/<your-agent>/…` | you — **commit what you produce**, by exact path, on the branch you are on (§ Context economy above); the merge carries it to the trunk. In a PARALLEL context (no pipeline dispatch granting you the tree), the memory skill's base-branch caution applies instead — the serialized pipeline is what makes commit-in-place safe (the numbers: [`references/field-evidence.md`](references/field-evidence.md) § Memory commit safety) | your case branch |
 | The AFS (`test-specs/…`) | analyst writes AND commits it to the trunk; you amend | **the analyst already committed it** before your branch was cut — amend it on your branch when exploration shows drift, by exact path, with the spec that motivated the change |
 
 **Expect the AFS already COMMITTED on the trunk when you start.** Units run one at a time, so the analyst owned the tree before you and committed its own AFS there; your branch is cut from the trunk, so the file is simply present. If exploration shows it has drifted from the live product (a selector, an observable), **amend it on your branch** and commit the amendment with the spec that motivated it, so the change is reviewed alongside the code — stage by exact path, never `git add -A`/`.`. If the dispatch names an `afs_path` that is not on your branch at all, the analyst did not finish the handoff — say so and return, rather than reconstructing the spec from the case text. Reconstructing silently is how a batch ends up with an implementation that no longer matches the reviewed AFS.
@@ -359,4 +336,4 @@ Files that several roles could write need a declared owner, or every merge relit
 
 When you scaffold a framework or set up test infra (framework-execution mode), build only what runs tests: runner + config, abstraction layer, fixtures, one smoke test, run/CI command. **Don't wire integrations the task didn't ask for and the project doesn't declare — especially network-calling ones** (TMS/result reporters, analytics, dashboards, notification hooks). A TMS-reporting reporter is opt-in: add it only when explicitly requested **or** declared in `.agents/test-automation.yaml`, and then gated + graceful per [`references/reporters.md`](references/reporters.md) § TMS / result-reporting reporters. Genuinely-needed integration? Propose it to the orchestrator and wait; never wire it silently.
 
-Why this matters: an unsolicited side-effect — the `jira-reporter`-firing-on-every-local-`npx playwright test` class, making per-test network calls that fail and spam offline — breaks local dev and erodes trust. The user asked for tests, not for their machine to phone a TMS on every run.
+An unsolicited network-calling side-effect breaks local dev and erodes trust — the user asked for tests, not for their machine to phone a TMS on every run (the canonical failure class: [`references/field-evidence.md`](references/field-evidence.md) § Scaffold minimal).
