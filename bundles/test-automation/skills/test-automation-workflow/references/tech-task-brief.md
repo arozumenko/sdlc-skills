@@ -9,6 +9,13 @@ objective to tick and the gate has no defined run set. The **brief** is that equ
 one markdown file per unit, written before the build dispatch, gated by the
 orchestrator exactly like AFS quality.
 
+**Give the unit a tracker-shaped id** (`TD-123`, a JIRA key — LETTERS-digits),
+not a freeform slug. The id is what telemetry attribution keys on: on the
+workflow path any string survives (the worker's `unit_ids` echo rides the
+receipt parametrically), but on the hand-dispatch path there is no receipt and
+the fallback mining only recognises tracker-shaped ids — a unit named
+`refactor-auth-fixture` costs its spend attribution there.
+
 Where the AFS is grounded in *executing the case live*, the brief is grounded
 in *reading the actual code and the actual failure*. Scope comes from
 enumeration, not from the issue title: "finish the testid migration" becomes a

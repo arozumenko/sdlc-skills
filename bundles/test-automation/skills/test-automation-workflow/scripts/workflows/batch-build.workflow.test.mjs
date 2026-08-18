@@ -824,3 +824,31 @@ test('the long-jobs rule pins one bounded sleep per call, early first look, no c
   assert.match(text, /Make the FIRST poll short/);
   assert.match(text, /NEVER chain sleeps inside one/);
 });
+
+// Field case 2026-08-18 (my-qa-project demo): triage was shown the cluster
+// "TC-001 + TC-002", chose manual-qa-verified CORRECTLY, and returned it as
+// two per-case rows — the old exact-key guard silently dropped both and the
+// cluster fell to the analyst default (a live-browser dispatch for exactly
+// the unit the shortcut exists to save). Routes are now reassembled by case
+// coverage: unanimous route across every member shortcuts the unit; foreign
+// ids do nothing; partials/disagreements stay on the analyst default, loudly.
+test('triage routes survive per-case row splits: coverage votes, unanimity, loud logs', () => {
+  assert.match(text, /const unitOf = new Map\(\)/);
+  assert.match(text, /const votes = new Map\(\)/);
+  assert.match(text, /v\.size !== ids\.length\) continue/, 'partial coverage falls back to the analyst');
+  assert.match(text, /routes\.size !== 1\) continue/, 'disagreeing members fall back to the analyst');
+  assert.match(text, /naming no pending case — ignored/, 'hallucinated ids are logged, not silently eaten');
+  assert.match(text, /reassembled by coverage \(unanimous route required\)/);
+  // and the prompt now forbids the split explicitly
+  assert.match(text, /ONE entry with ids \["A","B"\], never two entries/);
+});
+
+// Field case 2026-08-18: one dispatch re-invoked the Skill tool for 10 skills
+// its frontmatter already preloads — ~25k tokens of duplicate context in a
+// slot that ended the run at 97% of its window. Confirming presence means
+// CHECKING the context, never re-pasting it.
+test('the preamble forbids re-loading preloaded skills via the Skill tool', () => {
+  assert.match(text, /confirming means CHECKING your context/);
+  assert.match(text, /NEVER re-invoking the Skill tool for a skill you already carry/);
+  assert.match(text, /genuinely ABSENT from your context/);
+});

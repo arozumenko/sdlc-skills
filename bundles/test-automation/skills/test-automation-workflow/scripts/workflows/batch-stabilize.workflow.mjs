@@ -83,8 +83,10 @@ const quote = (s, max = 400) => String(s ?? '')
 const PREAMBLE =
   'You are dispatched from the batch-stabilize workflow. If your role memory / ' +
   'project briefing / .agents/*.md digests are not already in your context, load ' +
-  'them now (memory skill; read the files). Confirm your slot contract file is ' +
-  'loaded before touching anything. ' +
+  'them now (memory skill; read the files). Confirm your slot contract is ' +
+  'PRESENT before touching anything — by CHECKING your context (preloaded ' +
+  'skills are already there); re-invoking the Skill tool for a skill you ' +
+  'already carry pastes a duplicate copy. ' +
   'Anything worth telling someone that did not stop you goes in findings[] — do ' +
   'not write it to memory yourself; the report is what gets read. ' +
   // Same measured facts as batch-build's FOREGROUND_RULE: a turn ended mid-job

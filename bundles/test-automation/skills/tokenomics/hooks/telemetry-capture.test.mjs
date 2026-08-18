@@ -797,3 +797,39 @@ test('sameCwdOrUnder: exact, nested, separator/case-insensitive', () => {
 test('encodeProjectPath matches the transcript-store encoding', () => {
   assert.equal(encodeProjectPath('/Users/x y/repo.name'), '-Users-x-y-repo-name');
 });
+
+// Field case 2026-08-18 (manual-qa-verified route): the dispatch prompt names
+// the run report "RUN-2026-08-17-001", and the case-id regex minted a phantom
+// case "RUN-2026" that siphoned half the combined slot's cost attribution.
+// A real case id is never immediately followed by another dash-digit segment.
+test('extractCaseIds rejects fragments of longer dash-number chains', async () => {
+  const { extractCaseIds } = await import('./telemetry-capture.mjs');
+  assert.deepEqual(extractCaseIds('validated by RUN-2026-08-17-001 evidence'), []);
+  assert.deepEqual(extractCaseIds('implement TC-001 per tasks/smoke/TC-001_home.md'), ['TC-001']);
+  assert.deepEqual(extractCaseIds('ELITEA-2083 on branch tests/batch-chat-2083'), ['ELITEA-2083']);
+  // a bare run-report-shaped token with no continuation still counts — honesty
+  // over cleverness; the scope intersection is the second guard for those
+  assert.deepEqual(extractCaseIds('see RUN-2026 for details'), ['RUN-2026']);
+});
+
+// Attribution reads the workflow-return RECEIPT first — a parameter round-trip
+// (workflow args → prompt → schema-required unit_ids echo → receipt) — and
+// only falls back to scope-gated prompt mining where no receipt exists.
+test('receiptCaseIds: unit_ids echo wins; analyst cases[] and triage units[] parse too', async () => {
+  const { receiptCaseIds } = await import('./telemetry-capture.mjs');
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const repo = mkdtempSync(join(tmpdir(), 'receipt-ids-'));
+  const dir = join(repo, '.agents', 'telemetry', 'automation', 'returns', 'wf_x');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'aaa.json'), JSON.stringify({ result: { unit_ids: ['TC-2', 'TC-1'] } }));
+  writeFileSync(join(dir, 'bbb.json'), JSON.stringify({ result: { cases: [{ case_id: 'TC-7' }, { case_id: 'TC-7' }] } }));
+  writeFileSync(join(dir, 'ccc.json'), JSON.stringify({ result: { units: [{ ids: ['TC-1'] }, { ids: ['TC-2'] }] } }));
+  writeFileSync(join(dir, 'ddd.json'), JSON.stringify({ result: { text: 'no ids here' } }));
+  assert.deepEqual(receiptCaseIds(repo, 'aaa'), ['TC-1', 'TC-2']);
+  assert.deepEqual(receiptCaseIds(repo, 'bbb'), ['TC-7']);
+  assert.deepEqual(receiptCaseIds(repo, 'ccc'), ['TC-1', 'TC-2']);
+  assert.equal(receiptCaseIds(repo, 'ddd'), null, 'text-shaped receipt → fall back to mining');
+  assert.equal(receiptCaseIds(repo, 'zzz'), null, 'no receipt → fall back to mining');
+});

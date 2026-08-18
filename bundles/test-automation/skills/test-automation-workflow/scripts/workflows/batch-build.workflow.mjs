@@ -316,8 +316,14 @@ const quote = (s, max = 400) => String(s ?? '')
 const PREAMBLE =
   'You are dispatched from the batch workflow. If your role memory / project ' +
   'briefing / .agents/*.md digests are not already in your context, load them ' +
-  'now (memory skill; read the files). Confirm your slot skill / contract file ' +
-  'is loaded (Skill tool / Read) before touching anything. ' +
+  'now (memory skill; read the files). Confirm your slot skill / contract is ' +
+  'PRESENT before touching anything — confirming means CHECKING your context ' +
+  '(your `skills:` frontmatter content is preloaded; you can see its headings), ' +
+  'NEVER re-invoking the Skill tool for a skill you already carry: every ' +
+  'invocation pastes the FULL skill text again (measured 2026-08-18: one ' +
+  'dispatch re-loaded 10 preloaded skills — ~25k tokens of duplicate context). ' +
+  'The Skill tool is for skills genuinely ABSENT from your context — your ' +
+  'skills-on-demand, or a preload that visibly failed. ' +
   // The findings channel: a durable gotcha has somewhere to go that is read.
   'Anything worth telling someone that did NOT stop you — a product defect you ' +
   'filed, a place the case text disagrees with the live product, an open ' +
@@ -422,8 +428,13 @@ const ANALYST_SCHEMA = {
 }
 const IMPL_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['status', 'branch', 'pr', 'reruns', 'notes', 'findings'],
+  required: ['unit_ids', 'status', 'branch', 'pr', 'reruns', 'notes', 'findings'],
   properties: {
+    // Echo of the unit's case ids EXACTLY as dispatched — the parametric
+    // attribution key: the telemetry capture reads it from this return's
+    // receipt instead of regex-mining the prompt (field case 2026-08-18:
+    // mining minted a phantom case from a run-report filename).
+    unit_ids: { type: 'array', items: { type: 'string' } },
     status: { type: 'string', enum: ['built', 'blocked', 'needs-analyst-rerun', 'needs-escalation'] },
     branch: { type: 'string' },
     pr: { type: ['integer', 'null'] },
@@ -488,8 +499,10 @@ const TRIAGE_SCHEMA = {
 // ground turns out novel, so the normal analyst chain takes over cleanly.
 const COMBINED_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['surface_key', 'family_afs', 'cases', 'status', 'branch', 'pr', 'reruns', 'notes', 'findings'],
+  required: ['unit_ids', 'surface_key', 'family_afs', 'cases', 'status', 'branch', 'pr', 'reruns', 'notes', 'findings'],
   properties: {
+    unit_ids: { type: 'array', items: { type: 'string' } },   // echo — see IMPL_SCHEMA; stays filled even on a needs-analyst return (cases[] may be empty there)
+
     surface_key: ANALYST_SCHEMA.properties.surface_key,
     family_afs: ANALYST_SCHEMA.properties.family_afs,
     cases: ANALYST_SCHEMA.properties.cases,
@@ -505,8 +518,9 @@ const COMBINED_SCHEMA = {
 }
 const REVIEW_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['verdict', 'findings', 'blocking', 'notes'],
+  required: ['unit_ids', 'verdict', 'findings', 'blocking', 'notes'],
   properties: {
+    unit_ids: { type: 'array', items: { type: 'string' } },   // echo — see IMPL_SCHEMA
     verdict: { type: 'string', enum: ['APPROVED', 'CHANGES_REQUESTED'] },
     blocking: { type: 'array', items: { type: 'string' } },
     notes: { type: 'string' },
@@ -839,22 +853,52 @@ async function runTriage() {
     "Route 'combined' ONLY when EVERY case in the unit walks surfaces whose _surface.md digest exists AND the steps read routine against it (known screens, concrete steps, no exploratory language). " +
     "Route 'manual-qa-verified' ONLY when EVERY case in the unit has a manual-qa run record with verdict PASS AND its authored manual-qa case file exists — list those paths in evidence[] (each case file + the run report; the KB dir once). Run age does not matter; a FAIL/flaky/blocked run never qualifies — that unit needs the analyst's eyes. When both routes qualify, prefer 'manual-qa-verified' (it skips the live re-run). " +
     "Anything else — digest missing, snapshot missing, novel screen, ambiguous step, your own doubt — routes 'analyst'. The cost asymmetry decides doubt: a wasted analyst dispatch costs one dispatch; a shortcut on shaky ground costs a bad AFS. " +
-    'Return every unit exactly once, ids exactly as given.',
+    'Return ONE entry per unit with ids EXACTLY as listed — a unit shown as "A + B" is ONE entry with ids ["A","B"], never two entries. A split or partial unit cannot be matched back and falls to the analyst, wasting the shortcut you just chose.',
     { label: 'triage', phase: 'Analysis', agentType: TYPES.analyst, model: A.triageModel ?? 'haiku', effort: 'low', schema: TRIAGE_SCHEMA }
   )
   // A dead triage costs nothing: every unit takes the standalone analyst.
   if (!t) { log('triage agent died — every unit takes the standalone analyst (the conservative route)'); return }
-  // Only keys naming a real unit count — a hallucinated id set would
-  // otherwise inflate the routed count without routing anything.
-  const valid = new Set(pending.map((unit) => routeKey(unit.map((c) => c.id))))
+  // Reassemble the return BY CASE COVERAGE, not by exact unit key. Field case
+  // 2026-08-18: triage was shown the cluster "TC-001 + TC-002", chose
+  // manual-qa-verified CORRECTLY — and returned it as two per-case rows; the
+  // old exact-key guard silently dropped both, and the cluster fell to the
+  // analyst default: a live-browser dispatch for the exact unit the shortcut
+  // exists to save. Per-case votes keep both protections: an id naming no
+  // pending case does nothing (hallucination guard), and a unit shortcuts
+  // ONLY when EVERY member voted the SAME route — the mq eligibility rule is
+  // per-case anyway. Partial or conflicting coverage stays on the
+  // conservative analyst default, and both anomalies are logged, not silent.
+  const unitOf = new Map()   // case id -> its unit's routeKey
+  for (const unit of pending) { const k = routeKey(unit.map((c) => c.id)); for (const c of unit) unitOf.set(c.id, k) }
+  const votes = new Map()    // unit key -> Map(case id -> route)
+  const evid = new Map()     // unit key -> union of mq evidence paths
+  let foreign = 0
   for (const r of t.units ?? []) {
-    if (!Array.isArray(r.ids) || !valid.has(routeKey(r.ids))) continue
-    if (r.route === 'combined') ROUTES.set(routeKey(r.ids), 'combined')
-    else if (r.route === 'manual-qa-verified') {
-      ROUTES.set(routeKey(r.ids), 'manual-qa-verified')
-      MQ_EVIDENCE.set(routeKey(r.ids), (r.evidence ?? []).slice(0, 12))
+    if (!Array.isArray(r.ids)) continue
+    for (const id of r.ids) {
+      const k = unitOf.get(id)
+      if (!k) { foreign++; continue }
+      if (!votes.has(k)) votes.set(k, new Map())
+      votes.get(k).set(id, r.route)
+      if (r.route === 'manual-qa-verified') evid.set(k, [...new Set([...(evid.get(k) ?? []), ...(r.evidence ?? [])])].slice(0, 12))
     }
   }
+  const returnedKeys = new Set((t.units ?? []).filter((r) => Array.isArray(r.ids)).map((r) => routeKey(r.ids)))
+  let reshaped = 0
+  for (const unit of pending) {
+    const ids = unit.map((c) => c.id)
+    const k = routeKey(ids)
+    const v = votes.get(k)
+    if (!v || v.size !== ids.length) continue          // partial coverage -> analyst default
+    const routes = new Set(v.values())
+    if (routes.size !== 1) continue                    // members disagree -> analyst default
+    const route = routes.values().next().value
+    if (route === 'combined') ROUTES.set(k, 'combined')
+    else if (route === 'manual-qa-verified') { ROUTES.set(k, 'manual-qa-verified'); MQ_EVIDENCE.set(k, evid.get(k) ?? []) }
+    if (ids.length > 1 && !returnedKeys.has(k)) reshaped++
+  }
+  if (foreign) log(`triage returned ${foreign} id(s) naming no pending case — ignored`)
+  if (reshaped) log(`triage split ${reshaped} cluster(s) into per-case rows — reassembled by coverage (unanimous route required)`)
   const mq = [...ROUTES.values()].filter((v) => v === 'manual-qa-verified').length
   log(`triage: ${ROUTES.size}/${pending.length} unit(s) shortcut (${mq} manual-qa-verified, ${ROUTES.size - mq} combined); the rest take the standalone analyst`)
 }
@@ -883,6 +927,7 @@ async function runCombined(unit, mqEvidence = null) {
     (unit.length > 1 ? "Cluster: ONE live session, but EVERY case's steps executed and observed individually; true flow-variants of one flow → ONE family AFS (parameter table, same afs_path for members, family_afs=true). " : '') +
     "BUILD HALF — per your test-automation-implementation skill (preloaded): for the cases you just judged ready-for-automation/extend-existing, cut your feature branch FROM the trunk you are standing on, implement inside the existing framework (family AFS → ONE parameterized spec, a row per case asserting its OWN expected values), run green ONCE locally (determinism is the gate's job), retry ≤ 2 reruns on one root cause, declare red-by-design tests in expected_red[] with case_ids, land your work against the trunk (never the base) per \`.agents/profile.md\` § Automation PR policy — a PR against the trunk where the project uses PRs, otherwise leave your feature branch ready for the merge step — and leave the tree on your feature branch either way. If NO case advances (every verdict terminal), skip the build half and return status blocked with a one-line note. " +
     CHECKPOINT_RULE +
+    `Return unit_ids EXACTLY as given here: [${ids.join(', ')}] — it keys this dispatch's telemetry attribution; never add, drop, or reformat ids. ` +
     'Return BOTH halves: cases[] (per-case verdict/afs_path/notes) + surface_key + family_afs, AND status/branch/pr/reruns (plus rerun_causes: one short root-cause label per rerun — the cap is per cause, not total) for the build. A needs-analyst return still satisfies the schema with EMPTY values — cases: [], surface_key: "", family_afs: false, branch: "", pr: null, reruns: 0 — never invented verdict rows.',
     { label: `${mqEvidence ? 'combined-mq' : 'combined'}:${label(unit)}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER, schema: COMBINED_SCHEMA }
   )
@@ -924,6 +969,7 @@ function reviewOnce(u, impl, fixNote, lens) {
         'Scope every blocking_detail entry with case_ids[] — the ids from THIS unit the blocker actually binds. Omit case_ids only when it truly holds the whole unit (a shared fixture, the family AFS, a framework gap). Scoping is load-bearing: when every surviving blocker is confined to a subset of the cases, the workflow carves those cases out and lands the rest — an unscoped entry chains all the finished cases to the fate of one stuck one.\n' +
         'This decides whether the case gets another round. `unaddressed` sends it back — that is the point, and you must not use `persists` to end a loop you are tired of. Reserve `persists` for a real attempt that really failed; the difference is whether more effort could plausibly fix it. A NEW item you are raising for the first time is not in this list at all — new ground is progress and needs no status.\n'
       : '') +
+    `Return unit_ids EXACTLY as given here: [${ids.join(', ')}] — it keys this dispatch's telemetry attribution. ` +
     'blocking[] is what must change before this can land; anything else worth saying goes in findings[].',
     { label: `review:${ids.join('+')}${lens ? `:${lens.split(' ')[0]}` : ''}`, phase: 'Build', agentType: TYPES.reviewer, ...REV, schema: REVIEW_SCHEMA }
   )
@@ -1050,6 +1096,7 @@ async function buildUnit(u, pre = null) {
     familyNote +
     'The feature\'s `_surface.md` digest is the analyst\'s document: read it; you may APPEND attributed implementation-time facts on your branch (testids you added, fixture realities, blockers your run resolved — your implementation skill Rule 11 scopes this), but never rewrite its behavior or scope claims — report that drift in findings[] instead. ' +
     'Implement inside the existing framework, run it green ONCE locally (determinism is the gate\'s job, not repeated local runs), retry budget ≤ 2 reruns on the SAME root cause — distinct causes each get their own budget — then land the branch per your Phase 6 handoff and `.agents/profile.md` § Automation PR policy (a PR against the trunk where the project uses PRs, otherwise leave the branch ready for the merge step). ' +
+    `Return unit_ids EXACTLY as given here: [${ids.join(', ')}] — it keys this dispatch's telemetry attribution; never add, drop, or reformat ids. ` +
     'Return the actual branch name, the PR number (null if none), your rerun count, and rerun_causes: one short root-cause label per rerun, so the cap can tell 4 reruns on 4 causes (fine) from 3 on one (blocked).',
     {
       label: `implement:${ul}`, phase: 'Build', agentType: TYPES.implementer,
@@ -1151,15 +1198,18 @@ async function buildUnit(u, pre = null) {
           '2. REMOVE instead ONLY when the blocker says the code ITSELF is wrong (masking, unsound, unreviewable). First record the preservation point: commit and push, then `git rev-parse HEAD` — once this unit merges that commit is in the trunk\'s history forever, and re-entry RESTORES from it (`git checkout <sha> -- <paths>`), never rebuilds. Then remove their test functions/files plus any page-object member or fixture NOTHING remaining uses (git grep a shared symbol before deleting it).\n' +
           '3. Either way KEEP their AFS on the branch — knowledge lands regardless. Amend each carved AFS: status blocked, one line quoting the blocker, plus the mode (quarantined at <path> | preserved@<sha> with the removed paths) so re-entry knows exactly how to resume.\n' +
           "4. Do NOT touch the remaining cases' logic or assertions beyond steps 1–2. Re-run the remaining spec(s) once (collect-only where execution is environment-blocked), confirm quarantined tests report as SKIPPED not passed, commit by path, then push and update the PR body with what was carved and why — where the project uses a remote/PRs (§ Automation PR policy); locally the commit alone is enough.\n" +
-          'Return status built; your notes MUST START with `quarantined:<paths>` or `preserved@<sha>` per mode, then name exactly what was marked or removed.'
+          'Return status built; your notes MUST START with `quarantined:<paths>` or `preserved@<sha>` per mode, then name exactly what was marked or removed. ' +
+          `Return unit_ids EXACTLY as given here: [${ids.join(', ')}].`
         : `${PREAMBLE}\n\nImplementer slot — fix round ${round} for ${ids.join(', ')} on branch ${impl.branch} per your test-automation-implementation skill. ` +
           workspaceNote +
+          'Load your receiving-code-review skill first if it is not in your context (it is on-demand, not preloaded) — it is the contract for this exact moment. ' +
           'Address EACH blocking finding (verify against the code first) and add the regression test that would have caught it, re-run the affected spec green once, commit — and update the PR where the project uses one (§ Automation PR policy):\n- ' +
           prior +
           (skipped.length
             ? `\n\nTHE REVIEWER SAYS THESE WERE NOT ADDRESSED LAST ROUND — no attempt was visible in the diff:\n- ${skipped.join('\n- ')}\n`
               + 'Do them. If one genuinely cannot be done on this branch, say so in notes with the reason (missing primitive, AFS wrong, product defect) instead of leaving it silent — an unexplained gap reads as another skip and costs the unit another round.'
-            : ''),
+            : '') +
+          `\nReturn unit_ids EXACTLY as given here: [${ids.join(', ')}].`,
       { label: carve ? `carve:${ul}` : `fix:${ul}:${round}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER, schema: IMPL_SCHEMA }
     )
     if (fix) { addFindings(ids, fix.findings); noteRed(fix.expected_red) }
@@ -1211,6 +1261,7 @@ async function buildUnit(u, pre = null) {
     'HARD RULES: never delete, `rm`, or `checkout --ours/--theirs` a file away to make a merge pass; never edit test logic, assertions or expected values while resolving; never run the suite (the gate does that).\n' +
     `3. Push ONLY if this project pushes to a remote (\`.agents/profile.md\` § Automation PR policy / \`git remote -v\`): \`git push origin ${TRUNK}\` — where a remote exists the gate reads the trunk from it, so an unpushed merge is invisible; say so in notes if the push fails. On a local-only project skip this step — the gate reads the local branch instead.\n` +
     `4. LEAVE THE TREE ON ${TRUNK}. The next unit branches from it and assumes it is there.\n` +
+    `Return unit_ids EXACTLY as given here: [${ids.join(', ')}]. ` +
     'Return whether the merge landed, the trunk head sha, and any conflict files.',
     {
       label: `merge:${ul}`, phase: 'Build', agentType: TYPES.implementer, ...WORKER,
@@ -1225,8 +1276,9 @@ async function buildUnit(u, pre = null) {
         // declarable here — `additionalProperties: false` plus a preamble that
         // asks for a field the schema forbids means an obedient agent returns
         // schema-invalid output and its unit gets parked on a clean merge.
-        required: ['merged', 'head_sha', 'conflict_files', 'notes'],
+        required: ['unit_ids', 'merged', 'head_sha', 'conflict_files', 'notes'],
         properties: {
+          unit_ids: { type: 'array', items: { type: 'string' } },   // echo — see IMPL_SCHEMA
           merged: { type: 'boolean' },
           head_sha: { type: 'string' },
           conflict_files: { type: 'array', items: { type: 'string' } },
@@ -1364,8 +1416,10 @@ for (const unit of UNITS) {
 // may dispatch the stabilize workflow for the batch.
 const GATE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['verdict', 'runs', 'green_specs', 'failures', 'notes'],
+  required: ['unit_ids', 'verdict', 'runs', 'green_specs', 'failures', 'notes'],
   properties: {
+    unit_ids: { type: 'array', items: { type: 'string' } },   // echo of the batch's merged ids — see IMPL_SCHEMA
+
     // `incomplete` is NOT `not-run`. Measured 2026-08-09: three gates were cut
     // off with runs already banked and pytest still executing, reported
     // `not-run` because it was the only honest option in the enum, and their
@@ -1435,6 +1489,7 @@ if (!ANALYZE_ONLY && !SKIP_GATE && merged.length) {
       : '') +
     'Do NOT merge anything. Do NOT classify the failure (product defect vs flake vs architectural — that is the lead\'s call). Do NOT fix. ' +
     FOREGROUND_RULE +
+    `Return unit_ids EXACTLY as this batch's merged ids: [${merged.flatMap((r) => r.ids).join(', ')}]. ` +
     'Return verdict=green only if you observed ' + GATE_N + ' consecutive green runs.',
     // gateModel: the script does the mechanics (run, time, record), so the
     // wrapping agent's job is loop + count + report honestly — tier-able like

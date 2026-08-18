@@ -385,7 +385,7 @@ if (F && A.foundationMerged !== true) {
     const skipped = (rev.blocking_detail ?? []).filter((d) => d.status === 'unaddressed').map((d) => quote(d.item))
     const fixed = await guarded(`foundation fix round ${round}`, () => agent(
       `Implementer slot — fix round ${round} on the foundation branch ${built.branch} per your test-automation-implementation skill. ` +
-      'You are the ONLY writer in the project\'s one working tree for this stage. Address EACH blocking finding (verify against the code first), keep the smoke spec green ONCE, commit, update the PR — do NOT run the whole suite, that is the mini-gate\'s job. ' +
+      'You are the ONLY writer in the project\'s one working tree for this stage. Load your receiving-code-review skill first if it is not in your context (on-demand, not preloaded). Address EACH blocking finding (verify against the code first), keep the smoke spec green ONCE, commit, update the PR — do NOT run the whole suite, that is the mini-gate\'s job. ' +
       FOREGROUND_RULE + '\n- ' +
       prior +
       (skipped.length

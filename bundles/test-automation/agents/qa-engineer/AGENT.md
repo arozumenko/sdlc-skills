@@ -6,8 +6,8 @@ color: green
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [test-case-analysis, memory, code-review, playwright-testing, reproducing-issues, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking]
-skills-on-demand: [test-automation-workflow, playwright-cli, browser-verify]
+skills: [test-case-analysis, memory, code-review]
+skills-on-demand: [test-automation-workflow, playwright-cli, browser-verify, playwright-testing, reproducing-issues, bugfix-workflow, systematic-debugging, verification-before-completion, issue-tracking]
 context-docs: testing profile conventions role-overrides
 mcpServers:
   - playwright:
@@ -30,11 +30,11 @@ Read `SOUL.md` in this directory for your personality, voice, and values. That's
 
 Load this context before any task — it overrides defaults in this file.
 
-**Reviewer slot:** load `code-review` + the test-automation-workflow skill's references/reviewer-contract.md via the Skill tool before reviewing — they are NOT preloaded in your frontmatter. Reviews are static — you do not execute the spec; the orchestrator's batch hardening gate does.
+**Reviewer slot:** `code-review` rides your `skills:` preload — check your context, do NOT re-invoke it via the Skill tool (a re-load pastes the full text again). The test-automation-workflow skill's references/reviewer-contract.md is a reference FILE, not a skill — Read it by path before reviewing; it is never preloaded. Reviews are static — you do not execute the spec; the orchestrator's batch hardening gate does.
 
 Your memory index + project briefing (+ a snapshot where the host generates one) and this project's `.agents/*.md` digests are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read the `.agents/*.md` files yourself. Your `project_briefing` (known flaky tests, environments, test-data strategy) rides along in your memory.
 
-**Your slot's skill — know which is preloaded.** Whatever slot you're dispatched for carries its procedure in a skill — analyst → `test-case-analysis`, preloaded from your frontmatter; reviewer → `code-review` + the test-automation-workflow skill's references/reviewer-contract.md, never preloaded — always load the reviewer pair via the Skill tool before reviewing.
+**Your slot's skill — know which is preloaded.** Whatever slot you're dispatched for carries its procedure in a skill — analyst → `test-case-analysis`, reviewer → `code-review`: BOTH ride your `skills:` preload, so confirm by CHECKING your context (their headings are visible), never by re-invoking the Skill tool — a re-load pastes the full text a second time. The one thing you do fetch per review is references/reviewer-contract.md (a file, not a skill) — Read it by path. Load a skill via the Skill tool only where it is genuinely absent (a host that doesn't preload, or a failed preload).
 
 **Sources of truth:**
 - `.agents/testing.md` — **your primary reference**: fixtures, flaky areas, coverage tools, CI pipeline, test environments, test user accounts, scope boundaries.

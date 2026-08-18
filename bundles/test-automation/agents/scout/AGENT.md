@@ -7,8 +7,8 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [seeding-automation-project, memory, session-retrospective]
-skills-on-demand: [automation-scoping, efficiency-audit, tokenomics]
+skills: [seeding-automation-project, memory]
+skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

@@ -176,7 +176,13 @@ function timeStats(stampsMs) {
 // `SCRUM-T101` (letter-prefixed numbers) is a real TMS shape — hence `[A-Z]?`.
 // The stoplist drops the common tech tokens the loose pattern would otherwise
 // swallow (ISO-8601, SHA-256, …); imperfect by design, ids are a hint not a claim.
-const CASE_ID_RE = /\b[A-Z][A-Z0-9]{1,9}-[A-Z]?\d{1,6}\b/g;
+// The negative lookahead rejects FRAGMENTS of longer dash-number chains:
+// "RUN-2026-08-17-001" (a manual-qa run report id, named in every
+// manual-qa-verified dispatch prompt) would otherwise yield a phantom case
+// "RUN-2026" that silently siphons half a combined slot's cost attribution
+// (field case 2026-08-18). A real case id is never immediately followed by
+// another dash-digit segment.
+const CASE_ID_RE = /\b[A-Z][A-Z0-9]{1,9}-[A-Z]?\d{1,6}\b(?!-\d)/g;
 const CASE_ID_STOP = new Set(['ISO', 'SHA', 'UTF', 'GPT', 'RFC', 'HTTP', 'HTTPS', 'TLS', 'SSL', 'AES', 'MD', 'CVE', 'OAUTH', 'IPV', 'ERR']);
 const CASE_ID_MAX = 50;
 export function extractCaseIds(...texts) {
@@ -310,6 +316,41 @@ export function findSubagents(projectDir, sessionId) {
   return out;
 }
 
+// --- parametric attribution: receipts first ---------------------------------
+// The workflow-return hook persists every workflow agent's STRUCTURED return
+// to .agents/telemetry/automation/returns/<runId>/<agentId>.json (legacy
+// .agents/automation/_returns/). The batch workflow's worker schemas echo the
+// unit's case ids (`unit_ids`; analyst-shaped returns carry cases[].case_id,
+// triage units[].ids) — a parameter ROUND-TRIP from the workflow args, so
+// attribution reads them first and falls back to scope-gated prompt mining
+// only where no receipt exists (hand dispatches, other hosts, a stop the
+// return hook missed, or the return hook racing this one on the same event).
+export function receiptCaseIds(repo, agentId) {
+  if (!agentId) return null;
+  const bases = [
+    join(repo, '.agents', 'telemetry', 'automation', 'returns'),
+    join(repo, '.agents', 'automation', '_returns'),
+  ];
+  for (const base of bases) {
+    let runs; try { runs = readdirSync(base, { withFileTypes: true }); } catch { continue; }
+    for (const r of runs) {
+      if (!r.isDirectory()) continue;
+      const f = join(base, r.name, `${agentId}.json`);
+      if (!existsSync(f)) continue;
+      let j; try { j = safeParse(readFileSync(f, 'utf8')); } catch { return null; }
+      const res = j?.result;
+      if (!res || typeof res !== 'object') return null;
+      const ids = Array.isArray(res.unit_ids) ? res.unit_ids
+        : Array.isArray(res.cases) ? res.cases.map((c) => c?.case_id).filter(Boolean)
+          : Array.isArray(res.units) ? res.units.flatMap((u) => (Array.isArray(u?.ids) ? u.ids : []))
+            : null;
+      if (!ids || !ids.length) return null;
+      return [...new Set(ids.map(String))].sort();
+    }
+  }
+  return null;
+}
+
 // --- live dispatch log (SubagentStop) ---------------------------------------
 // Measurements update AS SUB-AGENTS FINISH, not only at session end: each stop
 // meters THAT ONE transcript (1 file, ~1s, async) and appends ONE line per
@@ -346,6 +387,18 @@ export function captureDispatches(repo, sessionId, { projectDir, config, env = p
   const want = agentId ? String(agentId).replace(/^agent-/, '') : null;
   const path = dispatchLogPath(repo, sessionId);
   const known = readDispatchLog(path);
+  // The session's declared scope is the authority on WHICH cases this work
+  // belongs to. When mined ids overlap it, keep only the overlap — regex
+  // mining is a fallback, and its false positives (a TMS-adjacent token in
+  // the prompt) otherwise split a dispatch's cost with a phantom case. No
+  // overlap → keep the mined ids untouched: a stale or partial scope must
+  // not zero out real attribution.
+  const declared = sessionScope(repo, sessionId)?.cases ?? [];
+  const scoped = (mined) => {
+    if (!declared.length || !mined?.length) return mined;
+    const hit = mined.filter((c) => declared.includes(c));
+    return hit.length ? hit : mined;
+  };
   let n = 0;
   for (const meta of findSubagents(proj, sessionId)) {
     if (want && !meta.id.endsWith(want)) continue;
@@ -358,7 +411,8 @@ export function captureDispatches(repo, sessionId, { projectDir, config, env = p
     const priced = cfg.priceAtCapture === false ? null : meterSession([meta.path], { env });
     const rec = {
       v: LEDGER_VERSION, session: sessionId, agentId: meta.id, role: meta.role,
-      label: deriveLabel(meta.description, sp.firstText), cases: sp.caseIds,
+      label: deriveLabel(meta.description, sp.firstText),
+      cases: receiptCaseIds(repo, meta.id) ?? scoped(sp.caseIds),
       tokens: sp.tokens, activeMin: sp.activeMin, toolCalls: sp.toolCalls, toolErrors: sp.toolErrors,
       ...(priced?.totalUsd != null ? { costUsd: priced.totalUsd } : {}),
       endedAt: sp.endTs ? new Date(sp.endTs).toISOString() : null,
@@ -643,13 +697,21 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
   // The session's DECLARED scope (work-scope.mjs) joins here too: declared ids
   // are authoritative and ride the same field; the full scope is stamped below.
   const scope = sessionScope(repo, sessionId, { startTs: p.startTs, endTs: p.endTs });
-  const cases = [...new Set([
-    ...extractCaseIds(
-      ...p.caseIds, ...subMeta.map((s) => s.description),
-      ...subs.flatMap((s) => s.caseIds ?? []),
-    ),
-    ...(scope?.cases ?? []),
-  ])].sort();
+  // Mined ids that overlap the declared scope are trimmed TO the overlap
+  // (same rule as captureDispatches: mining is the fallback, the scope is the
+  // authority, and a phantom id would ride into batch-cost attribution); with
+  // no overlap the mined set stands, so a stale scope cannot erase real work.
+  const mined = extractCaseIds(
+    ...p.caseIds, ...subMeta.map((s) => s.description),
+    ...subs.flatMap((s) => s.caseIds ?? []),
+  );
+  const declaredCases = scope?.cases ?? [];
+  const scopedIds = (ids) => {
+    if (!declaredCases.length || !ids?.length) return ids;
+    const hit = ids.filter((c) => declaredCases.includes(c));
+    return hit.length ? hit : ids;
+  };
+  const cases = [...new Set([...scopedIds(mined), ...declaredCases])].sort();
   // foldDispatchLog: keeps any dispatch the live log measured but the
   // transcripts can no longer produce (deleted/expired sub-agent file).
   return foldDispatchLog(repo, {
@@ -678,7 +740,7 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
       ...(s.id ? { id: s.id } : {}), role: s.role, label: s.label, n: 1,
       tokens: s.tokens, activeMin: s.activeMin,
       toolCalls: s.toolCalls, toolErrors: s.toolErrors,
-      ...(s.caseIds?.length ? { cases: s.caseIds } : {}),
+      ...((() => { const ids = receiptCaseIds(repo, s.id) ?? scopedIds(s.caseIds); return ids?.length ? { cases: ids } : {}; })()),
       ...(s.costUsd != null ? { costUsd: s.costUsd } : {}),
     })),
     skills: [...p.skills].sort(),
