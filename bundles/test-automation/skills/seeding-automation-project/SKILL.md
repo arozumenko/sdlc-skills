@@ -30,6 +30,7 @@ project-root/
     ├── conventions.md            ← Detected coding standards
     ├── testing.md                ← Test infrastructure details
     ├── test-automation.yaml      ← TMS adapter + transport config (Step 6.6)
+    ├── telemetry/                ← cost/attribution submodule, own branch (Step 6.7 — default ON)
     ├── onboarding.md             ← Scout's own audit trail
     └── memory/<role-id>/
         ├── MEMORY.md             ← Index (add a line for each entry)
@@ -290,6 +291,31 @@ Mark any field you couldn't confirm with the skill's normal
 downstream by Step 6.8 (tool-whitelist wiring) and by the whole
 test-automation pipeline at runtime.
 
+## Step 6.7 — Install telemetry (tokenomics) — DEFAULT ON
+
+Every seeded project gets the cost/attribution telemetry unless the
+operator explicitly declines. Load the **tokenomics** skill (it is
+installed with the bundle; not preloaded — load it now) and run its
+installer from the repo root:
+
+```bash
+node .claude/skills/tokenomics/scripts/install-hooks.mjs
+node .claude/skills/tokenomics/scripts/install-hooks.mjs --doctor   # must end "all good"
+```
+
+What this sets up (the skill owns the details — don't restate them):
+capture hooks in the host settings, the `.agents/telemetry` submodule
+on its own `telemetry` branch (the main tree stays clean; a local-only
+repo is fine — data accrues on the local branch), and the per-batch
+cost pipeline every close and report depends on. The installer prints
+**one commit to make** (`.gitmodules` + the submodule pointer) —
+include it in the seed commit rather than leaving it staged.
+
+Degrade gracefully: tokenomics skill not installed → skip with a
+`Telemetry: not installed` line in the seeding report, never a failure.
+Re-runs are idempotent — the installer is also the updater, and
+`--doctor` is the health check to quote in the report.
+
 ## Step 6.8 — Wire agent tool whitelists + MCP scoping
 
 Hosts that default to a restrictive tool-permission model — notably
@@ -379,4 +405,7 @@ fi
 # Memory files present and non-empty for all roles
 ls .agents/memory/
 find .agents/memory -name 'project_briefing.md' -exec wc -l {} +
+
+# Telemetry installed and healthy (Step 6.7; absent only if declined/skipped)
+node .claude/skills/tokenomics/scripts/install-hooks.mjs --doctor 2>/dev/null | tail -1  # "all good"
 ```
