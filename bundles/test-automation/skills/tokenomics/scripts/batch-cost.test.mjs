@@ -458,7 +458,7 @@ test('team-report --batch renders the cost view end-to-end', async () => {
   assert.match(md, /# Batch cost — b1/);
   assert.match(md, /delivered: 2/);
   assert.match(md, /Gate: green \(3 runs\)/);
-  assert.match(md, /\| TC-101 \| automated \| \$2\.00 \|/);          // 0.60 + 1.40 direct
+  assert.match(md, /\| TC-101 \| automated \| \$2\.00 \|/);          // no sizing in this fixture -> no size column          // 0.60 + 1.40 direct
   assert.match(md, /Overhead .*: \$2\.00 \(50%\)/);                   // lead 1.45 + gate 0.55
   assert.match(md, /Per delivered case \(incl\. overhead\): \$2\.00/); // 4.00 / 2
   assert.match(md, /Unattributed .*: TC-102, CASE_9/);
@@ -509,4 +509,76 @@ test('token quads ride byRole, overhead.lead and per-case direct buckets', () =>
   assert.equal(tc.direct.tok.output, 400, 'per-case direct carries the quad');
   assert.ok(c.overhead.lead.tok, 'lead bucket carries a quad too');
   assert.ok(c.totals.tokensSplit, 'batch-level split still present');
+});
+
+// Sizing join: pre-run predicted size (automation-scoping) vs the size class's
+// cross-batch actuals. Flags are tokens/time ANALYSIS POINTERS — the scoping
+// doctrine forbids per-case dollar verdicts (Spearman ~0.015 on 89 cases).
+test('applySizing: percentile flags against size-class history, batch-grain est-vs-actual', async () => {
+  const { applySizing } = await import('./batch-cost.mjs');
+  const mk = (id, rw, min) => ({ id, direct: { tok: { input: 0, output: rw, cacheRead: 0, cacheWrite: 0 }, activeMin: min, tokens: rw, dispatches: 1, fixRounds: 0 }, findings: 0 });
+  const cases = [mk('TC-1', 60000, 20), mk('TC-2', 9000, 8), mk('TC-3', 10000, 9)];
+  const sizings = new Map([
+    ['TC-1', { size: 'S', sp: 2, estMin: 10, src: 't.json' }],
+    ['TC-2', { size: 'S', sp: 2, estMin: 10, src: 't.json' }],
+    ['TC-3', { size: 'XL', sp: 13, estMin: 60, src: 't.json' }],
+  ]);
+  const baselines = {
+    S: { tok: [8000, 9000, 10000, 11000, 12000, 13000], min: [7, 8, 9, 10, 11, 12] },
+    XL: { tok: [50000, 60000], min: [40, 50] },   // n<5 → no verdict
+  };
+  const roll = applySizing(cases, sizings, baselines);
+  assert.equal(cases[0].sizing.flag, 'above-p90', 'S-case at 5x class median flags high');
+  assert.equal(cases[1].sizing.flag, undefined, 'mid-class case carries no flag');
+  assert.match(cases[2].sizing.note, /insufficient XL-class history/);
+  assert.equal(roll.flagged.length, 1);
+  assert.match(roll.flagged[0].detail, /review: estimate drift, execution smell, or a mis-sized case/);
+  assert.equal(roll.estVsActualMin.est, 80);
+  assert.equal(roll.estVsActualMin.actual, 37);
+  assert.match(roll.note, /never per-case dollar verdicts/);
+});
+
+test('loadSizings: tolerant of score-cases --json shape and bare arrays', async () => {
+  const { loadSizings } = await import('./batch-cost.mjs');
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const repo = mkdtempSync(join(tmpdir(), 'sizing-'));
+  const dir = join(repo, '.agents', 'estimation');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'scope-scored.json'), JSON.stringify({ cases: [
+    { id: 'TC-1', size: 'M', sp: 5, estimated_active_minutes: 25 },
+    { id: 'TC-2', size: { size: 'L', sp: 8 }, estimated_active_minutes: 40 },
+    { note: 'no id — skipped' },
+  ] }));
+  const m = loadSizings(repo);
+  assert.equal(m.get('TC-1').size, 'M');
+  assert.equal(m.get('TC-2').size, 'L');
+  assert.equal(m.get('TC-2').sp, 8);
+  assert.equal(m.size, 2);
+});
+
+// Case ids repeat across batch GENERATIONS, and the catch-up capture heals
+// pre-era sessions into the ledger — a bare id-match then resurrects them
+// into the current batch (field 2026-08-18: +$17.89/+40% from a pre-reset
+// session). A session that ended before the batch was first DECLARED is out,
+// unless its own scope names the batch; undeclared batches keep id-match.
+test('batch time window: sessions ended before the first declare are excluded', async () => {
+  const { buildBatchCost } = await import('./batch-cost.mjs');
+  const receipt = { batch: 'b2', cases: [{ id: 'TC-1', outcome: 'automated' }], gate: null };
+  const mkLine = (id, endedAt, extra = {}) => ({
+    v: 1, host: 'claude', id, user: 'u', repo: 'r', branch: 'tests/batch-b2', role: 'test-automation-lead',
+    startedAt: endedAt, endedAt, wallMin: 10, activeMin: 10, turns: 5, toolCalls: 5, toolErrors: 0,
+    tokens: { input: 1, output: 100, cacheRead: 0, cacheWrite: 0 }, costUsd: 2, costSource: 'ccusage-metered',
+    cases: ['TC-1'], subagents: [], skills: [], dispatches: 1, capturedAt: endedAt, ...extra,
+  });
+  const old = mkLine('old-era', '2026-08-17T10:00:00Z');                      // ended before declare
+  const cur = mkLine('current', '2026-08-18T14:00:00Z');                      // inside the window
+  const named = mkLine('named', '2026-08-17T09:00:00Z', { scope: { batch: 'b2' } }); // pre-window but scope-named
+  const scopes = [{ session: 'current', batch: 'b2', declaredAt: '2026-08-18T12:00:00Z', cases: ['TC-1'] }];
+  const c = buildBatchCost('b2', receipt, [old, cur, named], { scopes });
+  assert.equal(c.totals.costUsd, 4, 'old-era session excluded; current + scope-named counted');
+  // no scope record for the batch → old behavior, everything id-matched counts
+  const c2 = buildBatchCost('b2', receipt, [old, cur], { scopes: [] });
+  assert.equal(c2.totals.costUsd, 4);
 });

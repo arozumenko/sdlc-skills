@@ -398,11 +398,23 @@ export function renderBatchMarkdown(c) {
   if (s.directActiveMin) out.push(`- Active-time spread: ${line4(s.directActiveMin, (x) => `${x}m`)}${s.loadedActiveMin ? `  ·  loaded: ${line4(s.loadedActiveMin, (x) => `${x}m`)}` : ''}`);
   if (!s.directCostUsd && s.directTokens) out.push(`- Direct token spread (no per-dispatch dollars on this host): ${line4(s.directTokens, (x) => x.toLocaleString())}`);
   out.push('', '## Per case (direct = measured; loaded = direct + even overhead share, an allocation)', '');
-  out.push('| case | outcome | direct cost | loaded | real-work tok | active | loaded act. | dispatches | tools (err) | fix rounds | findings |', '|---|---|---|---|---|---|---|---|---|---|---|');
+  const sized = !!c.sizing;   // no scoping ran -> no size column at all
+  const sz = (x) => (x.sizing ? `${x.sizing.size}${x.sizing.flag ? ' ⚠' : ''}` : '—');
+  out.push(sized
+    ? '| case | size | outcome | direct cost | loaded | real-work tok | active | loaded act. | dispatches | tools (err) | fix rounds | findings |'
+    : '| case | outcome | direct cost | loaded | real-work tok | active | loaded act. | dispatches | tools (err) | fix rounds | findings |',
+  sized ? '|---|---|---|---|---|---|---|---|---|---|---|---|' : '|---|---|---|---|---|---|---|---|---|---|---|');
   for (const x of c.cases) {
-    out.push(`| ${x.id} | ${x.outcome ?? '—'} | ${usd(x.direct.costUsd)} | ${usd(x.loaded?.costUsd)} | ${rwCell(x.direct.tok, x.direct.tokens)} | ${x.direct.activeMin}m | ${x.loaded?.activeMin ?? '—'}m | ${x.direct.dispatches} | ${x.direct.toolCalls ?? '—'} (${x.direct.toolErrors ?? 0}) | ${x.direct.fixRounds} | ${x.findings} |`);
+    out.push(`| ${x.id} | ${sized ? `${sz(x)} | ` : ''}${x.outcome ?? '—'} | ${usd(x.direct.costUsd)} | ${usd(x.loaded?.costUsd)} | ${rwCell(x.direct.tok, x.direct.tokens)} | ${x.direct.activeMin}m | ${x.loaded?.activeMin ?? '—'}m | ${x.direct.dispatches} | ${x.direct.toolCalls ?? '—'} (${x.direct.toolErrors ?? 0}) | ${x.direct.fixRounds} | ${x.findings} |`);
   }
   out.push('', '_Cases analysed/built as one cluster share its measured dispatches — their rows are an even split, not per-case measurement (fractional `dispatches` marks them)._');
+  if (c.sizing) {
+    out.push('', '## By size — predicted (automation-scoping) vs actual', '');
+    out.push('| size | cases | ΣSP | est min | actual min | actual rw tok |', '|---|---|---|---|---|---|');
+    for (const [k, b] of Object.entries(c.sizing.bySize)) out.push(`| ${k} | ${b.cases} | ${b.sp || '—'} | ${b.estMin || '—'} | ${b.actualMin} | ${b.actualTok.toLocaleString()} |`);
+    if (c.sizing.estVsActualMin) out.push('', `**Estimate vs actual (batch grain): ${c.sizing.estVsActualMin.est}m predicted / ${c.sizing.estVsActualMin.actual}m actual — ×${c.sizing.estVsActualMin.ratio}.** Batch grain only: per-case dollars rank-correlate ~zero with predictions (scoping doctrine) — deviations below are tokens/time analysis pointers.`);
+    for (const f of c.sizing.flagged) out.push(`- ⚠ **${f.id}** (${f.size}, ${f.flag}): ${f.detail}`);
+  }
   const roles = Object.entries(c.byRole ?? {});
   if (roles.length) {
     out.push('', '## By role', '');
@@ -507,7 +519,7 @@ export function renderBatchHtml(c) {
   const bars = c.cases.map((x) => `
     <div class="row"><div class="lbl" title="${esc(x.outcome)}">${esc(x.id)}<span class="oc oc-${esc(x.outcome)}">${esc(x.outcome ?? '')}</span></div>
     <div class="track"><div class="bar" style="width:${Math.max(1, (val(x) / max) * 100)}%"></div></div>
-    <div class="num">${fmtV(val(x))}<span class="sub"> · ${x.loaded?.costUsd != null ? `loaded $${x.loaded.costUsd.toFixed(2)} · ` : ''}${x.direct.activeMin}m · ${x.direct.fixRounds ? `${x.direct.fixRounds} fix` : 'no fix'}${x.findings ? ` · ${x.findings} finding${x.findings > 1 ? 's' : ''}` : ''}</span></div></div>`).join('');
+    <div class="num">${fmtV(val(x))}<span class="sub"> · ${x.sizing ? `size ${esc(x.sizing.size)}${x.sizing.flag ? ' ⚠' : ''} · ` : ''}${x.loaded?.costUsd != null ? `loaded $${x.loaded.costUsd.toFixed(2)} · ` : ''}${x.direct.activeMin}m · ${x.direct.fixRounds ? `${x.direct.fixRounds} fix` : 'no fix'}${x.findings ? ` · ${x.findings} finding${x.findings > 1 ? 's' : ''}` : ''}</span></div></div>`).join('');
   const st = (s, f) => (s ? `avg ${f(s.avg)} · median ${f(s.median)} · min ${f(s.min)} · max ${f(s.max)}` : 'n/a');
   const oc = Object.entries(c.outcomes).map(([k, n]) => `<span class="oc oc-${esc(k)}">${esc(k)} ${n}</span>`).join(' ');
   const ts = c.totals.tokensSplit;
@@ -560,6 +572,11 @@ export function renderBatchHtml(c) {
     <div class="track"><div class="bar" style="width:${Math.max(1, (b.tokens / rmax) * 100)}%"></div></div>
     <div class="num">${b.costUsd != null ? `$${b.costUsd.toFixed(2)}` : `${(b.tokens / 1e6).toFixed(1)}M tok`}<span class="sub"> · ${b.dispatches || '—'} disp · ${b.activeMin}m${b.toolCalls != null ? ` · ${b.toolCalls} tools (${b.toolErrors})` : ''}</span></div></div>`).join('');
   })()}</section>` : ''}
+  ${c.sizing ? `<section class="panel"><h2>By size — predicted vs actual</h2>
+  <p class="panel-sub">Pre-run size (automation-scoping) against actuals${c.sizing.estVsActualMin ? ` · batch grain: ${c.sizing.estVsActualMin.est}m predicted / ${c.sizing.estVsActualMin.actual}m actual (×${c.sizing.estVsActualMin.ratio})` : ''}. Deviations are tokens/time analysis pointers — never per-case dollar verdicts.</p>
+  <table><tr><th>size</th><th>cases</th><th>ΣSP</th><th>est min</th><th>actual min</th><th>actual rw tok</th></tr>
+  ${Object.entries(c.sizing.bySize).map(([k, b]) => `<tr><td>${esc(k)}</td><td>${b.cases}</td><td>${b.sp || '—'}</td><td>${b.estMin || '—'}</td><td>${b.actualMin}</td><td>${b.actualTok.toLocaleString()}</td></tr>`).join('')}</table>
+  ${c.sizing.flagged.map((f) => `<p class="callout-warn">⚠ ${esc(f.id)} (${esc(f.size)}, ${esc(f.flag)}): ${esc(f.detail)}</p>`).join('')}</section>` : ''}
   ${c.coverage.casesUnattributed.length ? `<p class="note">Unattributed (no captured dispatch named them): ${esc(c.coverage.casesUnattributed.join(', '))}</p>` : ''}`;
 }
 
@@ -604,6 +621,11 @@ export function renderBatchTokenomicsMarkdown(c) {
   if (stages.length) {
     out.push('## By stage (overhead)', '', '| stage | cost | real work | cache write | cache read | hit rate |', '|---|---|---|---|---|---|');
     for (const [k, b] of stages) out.push(rowFor(k, b));
+    out.push('');
+  }
+  if (c.sizing?.flagged?.length) {
+    out.push('## Size-class deviations (analysis pointers)', '');
+    for (const f of c.sizing.flagged) out.push(`- ⚠ **${f.id}** (${f.size}, ${f.flag}): ${f.detail}`);
     out.push('');
   }
   const cased = (c.cases ?? []).filter((x) => x.direct.tok && (x.direct.tok.input || x.direct.tok.output || x.direct.tok.cacheRead));

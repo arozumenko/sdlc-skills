@@ -82,7 +82,15 @@ export function whoAmI(repo) {
   };
   const email = git('user.email');
   const name = git('user.name') || userInfo().username;
-  const slug = (email ? email.split('@')[0] : name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+  // Ledger identity prefers the USERNAME (git user.name, else the OS account)
+  // — human-readable in file names and team reports. The email local-part is
+  // the last resort only: an address like bermudas.alexander@gmail.com used
+  // to mint `usage-bermudas-alexander.jsonl`, which reads as an account, not
+  // a person (user feedback 2026-08-18). A renamed identity is safe: readers
+  // glob usage-*.jsonl and dedup by session id, so the old file keeps
+  // counting and new lines start a new one — nothing lost, nothing doubled.
+  const base = name || (email ? email.split('@')[0] : null);
+  const slug = String(base ?? 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
   return { name, email, slug };
 }
 

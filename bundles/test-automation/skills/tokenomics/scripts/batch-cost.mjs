@@ -313,10 +313,148 @@ const stageKindOf = (label) => (STAGE_KIND.find(([, re]) => re.test(stageHead(la
  * another batch's ids/slug are EXCLUDED here, and its session-level figures
  * (lead thread, unnamed work) are split EVENLY across the batches it matched.
  * All optional, so pure-ledger callers and old tests stay valid. */
+// ---- sizing join (automation-scoping) --------------------------------------
+// PRE-RUN predicted size (score-cases.mjs --json under .agents/estimation/)
+// joined to POST-RUN actuals, so a case can be judged against the cross-batch
+// history OF ITS OWN SIZE CLASS. Deviations are computed on TOKENS and TIME,
+// never on per-case dollars — the scoping skill's own validation (89 blind
+// cases) measured ~zero rank correlation for per-case $ (Spearman 0.015); a
+// flag here is an ANALYSIS POINTER (estimate drift? execution smell? mis-sized
+// case?), not a verdict, and it doubles as calibration health: size classes
+// whose histories don't separate are Mode 4 material.
+export function loadSizings(repo) {
+  const out = new Map();
+  const dir = join(repo, '.agents', 'estimation');
+  let entries; try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.json')) continue;
+    const j = safeParse(readFileSync(join(dir, e.name), 'utf8'));
+    const rows = Array.isArray(j?.cases) ? j.cases : Array.isArray(j) ? j : null;
+    if (!rows) continue;
+    for (const r of rows) {
+      const id = r?.id ?? r?.case_id;
+      const size = typeof r?.size === 'string' ? r.size : r?.size?.size;
+      if (!id || !size) continue;
+      // Later files win (a re-scored scope supersedes) — Map.set overwrites.
+      out.set(String(id), {
+        size: String(size),
+        sp: num(r.sp ?? r.size?.sp) || null,
+        estMin: num(r.estimated_active_minutes ?? r.est_min) || null,
+        src: e.name,
+      });
+    }
+  }
+  return out;
+}
+
+const percentileOf = (sorted, v) => (sorted.length ? Math.round((100 * sorted.filter((x) => x <= v).length) / sorted.length) : null);
+const pctVal = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : null);
+
+/** Cross-batch actuals per size class: sorted real-work-token and active-min arrays. */
+export function sizeBaselines(repo, { excludeSlug = null } = {}) {
+  const buckets = {};
+  const walk = (d) => {
+    let entries; try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = join(d, e.name);
+      if (e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && e.name !== 'telemetry') walk(full);
+      else if (e.name === 'cost.json') {
+        const c = safeParse(readFileSync(full, 'utf8'));
+        if (!c?.cases || (excludeSlug && c.batch === excludeSlug)) continue;
+        for (const x of c.cases) {
+          const size = x?.sizing?.size;
+          if (!size || !x.direct) continue;
+          const rw = x.direct.tok ? num(x.direct.tok.input) + num(x.direct.tok.output) : null;
+          const b = (buckets[size] ??= { tok: [], min: [] });
+          if (rw != null && rw > 0) b.tok.push(rw);
+          if (num(x.direct.activeMin) > 0) b.min.push(num(x.direct.activeMin));
+        }
+      }
+    }
+  };
+  walk(join(repo, '.agents', 'automation'));
+  for (const b of Object.values(buckets)) { b.tok.sort((a, z) => a - z); b.min.sort((a, z) => a - z); }
+  return buckets;
+}
+
+const MIN_CLASS_N = 5;   // below this, history can't support a percentile verdict
+
+/** Pure enrichment: stamps cases[].sizing and returns the batch-level rollup (or null). */
+export function applySizing(casesOut, sizings, baselines) {
+  if (!sizings?.size) return null;
+  const bySize = {};
+  const flagged = [];
+  let sized = 0;
+  for (const c of casesOut) {
+    const s = sizings.get(c.id);
+    if (!s) continue;
+    sized++;
+    const rw = c.direct.tok ? num(c.direct.tok.input) + num(c.direct.tok.output) : null;
+    const min = num(c.direct.activeMin);
+    const dev = { size: s.size, sp: s.sp, estMin: s.estMin, src: s.src };
+    const hist = baselines?.[s.size];
+    const n = Math.min(hist?.tok.length ?? 0, hist?.min.length ?? 0) || Math.max(hist?.tok.length ?? 0, hist?.min.length ?? 0);
+    if (hist && n >= MIN_CLASS_N) {
+      const medTok = pctVal(hist.tok, 50); const p90Tok = pctVal(hist.tok, 90);
+      const medMin = pctVal(hist.min, 50); const p90Min = pctVal(hist.min, 90);
+      dev.baseline = { n, medianTok: medTok, p90Tok, medianMin: medMin, p90Min };
+      if (rw != null) dev.tokPercentile = percentileOf(hist.tok, rw);
+      if (min > 0) dev.minPercentile = percentileOf(hist.min, min);
+      const hiTok = rw != null && medTok && rw >= p90Tok && rw >= 1.5 * medTok;
+      const hiMin = min > 0 && medMin && min >= p90Min && min >= 1.5 * medMin;
+      const loTok = rw != null && medTok && rw <= pctVal(hist.tok, 10) && rw <= 0.5 * medTok;
+      if (hiTok || hiMin) dev.flag = 'above-p90';
+      else if (loTok) dev.flag = 'below-p10';
+      if (dev.flag) {
+        flagged.push({
+          id: c.id, size: s.size, flag: dev.flag,
+          detail: dev.flag === 'above-p90'
+            ? `real-work ${rw?.toLocaleString?.() ?? rw} tok (p${dev.tokPercentile ?? '—'}) / ${min}m (p${dev.minPercentile ?? '—'}) vs ${s.size}-class median ${medTok?.toLocaleString?.() ?? medTok} tok / ${medMin}m — review: estimate drift, execution smell, or a mis-sized case`
+            : `real-work ${rw?.toLocaleString?.() ?? rw} tok ≤ p10 of ${s.size}-class — suspiciously cheap: verify coverage was not shortcut`,
+        });
+      }
+    } else {
+      dev.note = `insufficient ${s.size}-class history (n=${n ?? 0} < ${MIN_CLASS_N}) — no deviation verdict`;
+    }
+    c.sizing = dev;
+    const agg = (bySize[s.size] ??= { cases: 0, sp: 0, estMin: 0, actualMin: 0, actualTok: 0 });
+    agg.cases++; agg.sp += num(s.sp); agg.estMin += num(s.estMin); agg.actualMin += min; agg.actualTok += num(rw);
+  }
+  if (!sized) return null;
+  const estTotal = Object.values(bySize).reduce((a, b) => a + b.estMin, 0);
+  const actTotal = Object.values(bySize).reduce((a, b) => a + b.actualMin, 0);
+  return {
+    note: 'pre-run predicted size (automation-scoping) joined to actuals. Deviations are tokens/time vs the size-class CROSS-BATCH history — analysis pointers, never per-case dollar verdicts (scoping doctrine: per-case $ rank-correlates ~zero with actuals; only batch totals are quotable). Flags feed Mode 4 calibration.',
+    sized, bySize,
+    ...(estTotal && actTotal ? { estVsActualMin: { est: Math.round(estTotal), actual: Math.round(actTotal), ratio: Math.round((actTotal / estTotal) * 100) / 100 } } : {}),
+    flagged,
+  };
+}
+
 export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [], others = [], repo = null } = {}) {
   const ids = receipt.cases.map((c) => c.id).filter(Boolean);
   const branches = [receipt.integration_branch, ...receipt.cases.map((c) => c.branch)].filter(Boolean);
-  const lines = dedupLines(allLines).filter((l) => lineMatchesBatch(l, { slug: [slug, receipt.batch].filter(Boolean), ids, branches }));
+  // BATCH TIME WINDOW — the guard against resurrected history. Case ids
+  // repeat across batch GENERATIONS (a re-run demo, a reset repo, a case
+  // re-entering a later batch), and transcripts outlive trees: the catch-up
+  // capture legitimately heals a pre-era session into the ledger, where a
+  // bare id-match would then attribute it here (field case 2026-08-18: a
+  // pre-reset session matched TC-001..004 and inflated a $27 batch to $45).
+  // A session that ENDED before this batch was FIRST DECLARED cannot be its
+  // work — unless its own scope names the batch outright. Batches with no
+  // scope record keep the old id-match behavior unchanged.
+  const declaredTs = scopes
+    .filter((s) => s.batch === slug || s.batch === receipt.batch)
+    .map((s) => Date.parse(s.declaredAt))
+    .filter(Number.isFinite);
+  const windowStart = declaredTs.length ? Math.min(...declaredTs) : null;
+  const inWindow = (l) => {
+    if (!windowStart) return true;
+    if (l.scope?.batch === slug || l.scope?.batch === receipt.batch) return true;
+    const ended = Date.parse(l.endedAt ?? '');
+    return !Number.isFinite(ended) || ended >= windowStart;
+  };
+  const lines = dedupLines(allLines).filter((l) => inWindow(l) && lineMatchesBatch(l, { slug: [slug, receipt.batch].filter(Boolean), ids, branches }));
 
   const myKeys = [slug, receipt.batch].filter(Boolean).map((s) => String(s).toLowerCase());
   const foreignIds = new Set(others.flatMap((o) => o?.ids ?? []).filter((id) => !ids.includes(id)));
@@ -464,6 +602,15 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
     },
   }));
 
+  // Sizing join: predicted size (if the scoping skill scored this scope) +
+  // deviation vs the size class's cross-batch history. Baselines exclude this
+  // batch so a first close never compares a case against itself.
+  // No scoping ran → loadSizings is empty → skip entirely (incl. the history
+  // walk): cost.json carries no `sizing` key and every renderer degrades to
+  // the exact pre-sizing output.
+  const sizings0 = repo ? loadSizings(repo) : null;
+  const sizingRollup = sizings0?.size ? applySizing(casesOut, sizings0, sizeBaselines(repo, { excludeSlug: slug })) : null;
+
   const bucketOut = (b) => ({
     costUsd: typeof b.costUsd === 'number' ? round2(b.costUsd) : null,
     tokens: Math.round(b.tokens), tok: roundQuad(b.tok ?? emptyQuad()),
@@ -514,6 +661,7 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
       },
     } : {}),
     cases: casesOut,
+    ...(sizingRollup ? { sizing: sizingRollup } : {}),
     stats: {
       note: 'direct = per-case measured values only; loaded = direct + even overhead share (allocation, not measurement)',
       directCostUsd: pricedDirect ? money(stats(attributed.map((c) => c.direct.costUsd))) : null,
