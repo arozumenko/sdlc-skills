@@ -238,8 +238,25 @@ if (preHasData && postHasData) {
     cache_read:    Math.max(0, postSnap.cache_read    - preSnap.cache_read),
   };
 
-  // Keep flat fields for backwards compat
+  // Keep flat fields for backwards compat.
+  //
+  // NOTE: `tokens_coverage` describes only whether the ccusage lookup was
+  // SCOPED to this session id. It has never described whether the token
+  // accounting is COMPLETE, and the name has been read as if it did.
+  //
+  // It cannot be complete. ccusage reads Claude Code's own session logs, which
+  // record conversation turns — not API calls. Auxiliary requests the harness
+  // makes (the "describe your most recent action in 3-5 words" progress
+  // summariser, the permission/safety classifier) never appear there, yet they
+  // bill real tokens. Measured against a Bifrost gateway for RUN-2026-08-18-002:
+  // 5,720 real requests vs 2,309 conversation turns, and $145.87 actual vs
+  // $20.17 reported here — 58.6% of the true cost was auxiliary traffic this
+  // pipeline is structurally blind to.
+  //
+  // So: every total below is a FLOOR. Where a gateway exists, it is the
+  // authority; treat these numbers as a lower bound, never as the bill.
   session.tokens_coverage = tokensCoverage;
+  session.total_tokens_is_floor = true;
   session.total_tokens = delta.total_tokens;
   session.input_tokens = delta.input_tokens;
   session.output_tokens = delta.output_tokens;
@@ -274,6 +291,7 @@ if (preHasData && postHasData) {
   // once `model` is fully resolved from the report / hardcoded default.
 } else {
   session.tokens_coverage = tokensCoverage;
+  session.total_tokens_is_floor = true;
   session.total_tokens = null;
   session.input_tokens = null;
   session.output_tokens = null;
@@ -308,9 +326,31 @@ session.support_agent_duration_ms = supportDurationMs || null;
 // in the trace file; just never surfaced as its own field before.
 session.subagent_dispatches = tcTraces.length + supportTraces.length;
 
-// Orchestrator overhead = total minus TC runners minus support agents
+// --- Token attribution health (added after RUN-2026-08-18-002) ---
+//
+// Every derived split below subtracts per-dispatch tokens from a session
+// total. That is only meaningful if the dispatches actually reported tokens.
+// When the harness returns `<subagent_tokens>0</subagent_tokens>` (see
+// resolve-subagent-traces.mjs), tcTokens/supportTokens collapse to 0 and the
+// subtraction silently credits 100% of the session to the orchestrator.
+//
+// That is exactly what RUN-2026-08-18-002 published: 57/57 runners attributed
+// 0 tokens, orchestrator_tokens = 90,934,490 of 90,934,806, and
+// orchestrator_cost_pct = 100 — for a run where the orchestrator was ~1% of
+// real usage and the 57 runners did all the work. Emit null rather than a
+// confidently wrong number.
+const allTraces = [...tcTraces, ...supportTraces];
+const attributedCount = allTraces.filter(t => t.tokens_attributed === true || (t.tokens_attributed == null && (t.total_tokens ?? 0) > 0)).length;
+session.tokens_attribution = allTraces.length === 0
+  ? 'none'
+  : attributedCount === allTraces.length ? 'complete'
+  : attributedCount === 0 ? 'none' : 'partial';
+session.tokens_attributed_dispatches = attributedCount;
+
+// Orchestrator overhead = total minus TC runners minus support agents.
+// Only computable when EVERY dispatch reported its tokens.
 const tcTokens = tcTraces.reduce((s, t) => s + (t.total_tokens ?? 0), 0);
-session.orchestrator_tokens = session.total_tokens != null
+session.orchestrator_tokens = (session.total_tokens != null && session.tokens_attribution === 'complete')
   ? Math.max(0, session.total_tokens - tcTokens - supportTokens)
   : null;
 
@@ -745,12 +785,24 @@ if (reportPath && ccusageBlock && costBlock) {
   const { pre, post, delta } = ccusageBlock;
   const fmt = n => n.toLocaleString('en-US');
   const fmtCost = n => `$${n.toFixed(2)}`;
+  // Surface attribution collapse in the report itself. Without this the table
+  // reads as an authoritative bill; RUN-2026-08-18-002 published $20.17 against
+  // a real $145.87 with nothing on the page hinting the number was a floor.
+  const attributionNote = session.tokens_attribution === 'complete' ? '' :
+    `\n> ⚠️ **Token attribution ${session.tokens_attribution}** — ` +
+    `${session.tokens_attributed_dispatches}/${session.subagent_dispatches} dispatches reported tokens. ` +
+    `Per-agent splits and \`orchestrator_cost_pct\` are suppressed.\n`;
+  // Every total here is a FLOOR: auxiliary harness requests (progress
+  // summariser, permission classifier) bill real tokens but never reach the
+  // session log this is derived from. Measured gap on RUN-2026-08-18-002: 7.2x.
+  const floorNote = '\n> ℹ️ **Lower bound, not the bill.** Excludes auxiliary harness requests ' +
+    'invisible to the session log. Where an LLM gateway is available, take cost from it.\n';
   const scopeNote = session.tokens_coverage === 'full_session_unscoped'
     ? ' *(⚠️ unscoped — may include other concurrent Claude Code sessions on this machine)*'
     : '';
 
   const section = `
-## ccusage Session Delta${scopeNote}
+## ccusage Session Delta${scopeNote}${attributionNote}${floorNote}
 
 | Metric | Before | After | Delta |
 |--------|-------:|------:|------:|
