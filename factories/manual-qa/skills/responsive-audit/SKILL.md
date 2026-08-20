@@ -1,8 +1,6 @@
 ---
 name: responsive-audit
-description: >
-  Responsive-layout analysis on a real browser — viewport configuration,
-  touch-target sizing, and mobile-layout issues via a resized Playwright viewport.
+description: Responsive-layout analysis on a real browser — viewport configuration, touch-target sizing, and mobile-layout issues via a resized Playwright viewport.
 license: Apache-2.0
 metadata:
   user-invocable: false

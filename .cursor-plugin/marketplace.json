@@ -140,7 +140,7 @@
     {
       "name": "accessibility-audit",
       "source": "./factories/manual-qa/skills/accessibility-audit",
-      "description": ">",
+      "description": "Accessibility and WCAG compliance analysis, from the accessibility snapshot and visual review — flags issues automated axe-style scans miss.",
       "version": "0.2.0"
     },
     {
@@ -188,7 +188,7 @@
     {
       "name": "content-seo-audit",
       "source": "./factories/manual-qa/skills/content-seo-audit",
-      "description": ">",
+      "description": "Content quality, copywriting, and SEO metadata analysis. Checks copy quality visually and page metadata (title, description, structured data) where observable.",
       "version": "0.2.0"
     },
     {
@@ -302,7 +302,7 @@
     {
       "name": "performance-audit",
       "source": "./factories/manual-qa/skills/performance-audit",
-      "description": ">",
+      "description": "Performance, networking, console, and JavaScript analysis. Checks network issues, console errors, and JS problems; approximates load/resource health where full Core Web Vitals aren't available.",
       "version": "0.2.0"
     },
     {
@@ -326,7 +326,7 @@
     {
       "name": "privacy-audit",
       "source": "./factories/manual-qa/skills/privacy-audit",
-      "description": ">",
+      "description": "Privacy, cookie consent, and GDPR analysis. Audits cookies, trackers, consent banners, and GDPR compliance from network traffic and the page.",
       "version": "0.2.0"
     },
     {
@@ -338,7 +338,7 @@
     {
       "name": "responsive-audit",
       "source": "./factories/manual-qa/skills/responsive-audit",
-      "description": ">",
+      "description": "Responsive-layout analysis on a real browser — viewport configuration, touch-target sizing, and mobile-layout issues via a resized Playwright viewport.",
       "version": "0.2.0"
     },
     {
@@ -356,7 +356,7 @@
     {
       "name": "security-audit",
       "source": "./factories/manual-qa/skills/security-audit",
-      "description": ">",
+      "description": "Security and OWASP analysis. Reviews for XSS, CSRF, injection risks, missing security headers, and exposed data.",
       "version": "0.2.0"
     },
     {
@@ -416,7 +416,7 @@
     {
       "name": "ux-audit",
       "source": "./factories/manual-qa/skills/ux-audit",
-      "description": ">",
+      "description": "UI/UX, forms, and page-type analysis. Checks general UI patterns, form usability, and domain-specific UX for 20+ page types.",
       "version": "0.2.0"
     },
     {

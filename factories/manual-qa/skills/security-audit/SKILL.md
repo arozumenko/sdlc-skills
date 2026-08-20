@@ -1,8 +1,6 @@
 ---
 name: security-audit
-description: >
-  Security and OWASP analysis. Reviews for XSS, CSRF, injection risks,
-  missing security headers, and exposed data.
+description: Security and OWASP analysis. Reviews for XSS, CSRF, injection risks, missing security headers, and exposed data.
 license: Apache-2.0
 metadata:
   user-invocable: false

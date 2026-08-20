@@ -1,8 +1,6 @@
 ---
 name: privacy-audit
-description: >
-  Privacy, cookie consent, and GDPR analysis. Audits cookies, trackers,
-  consent banners, and GDPR compliance from network traffic and the page.
+description: Privacy, cookie consent, and GDPR analysis. Audits cookies, trackers, consent banners, and GDPR compliance from network traffic and the page.
 license: Apache-2.0
 metadata:
   user-invocable: false

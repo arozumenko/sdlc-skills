@@ -1,8 +1,6 @@
 ---
 name: accessibility-audit
-description: >
-  Accessibility and WCAG compliance analysis, from the accessibility
-  snapshot and visual review — flags issues automated axe-style scans miss.
+description: Accessibility and WCAG compliance analysis, from the accessibility snapshot and visual review — flags issues automated axe-style scans miss.
 license: Apache-2.0
 metadata:
   user-invocable: false
