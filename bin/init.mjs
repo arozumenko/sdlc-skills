@@ -566,8 +566,11 @@ function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Match the OLD `BUNDLE:<id>` marker too — so a project installed before the
   // rename still gets its block found and replaced (with the new FACTORY form).
-  const startRe = `<!-- (?:BUNDLE|FACTORY):${id} START -->`;
-  const endRe = `<!-- (?:BUNDLE|FACTORY):${id} END -->`;
+  // `id` must stay escaped: it's interpolated into a RegExp, and a factory id
+  // containing a regex-special char (e.g. ".") would otherwise change match
+  // semantics or throw.
+  const startRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} START -->`;
+  const endRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} END -->`;
   const re = new RegExp(`${startRe}[\\s\\S]*?${endRe}`);
   if (re.test(text)) {
     const updated = text.replace(re, block);
