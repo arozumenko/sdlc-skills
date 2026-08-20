@@ -7,8 +7,8 @@ of native plugin formats and a shared npx installer.
 
 ## What's here
 
-Content lives in **bundles** (`bundles/<id>/`) — team presets that physically
-own their `agents/` and `skills/` as real directories. Four bundles ship:
+Content lives in **factories** (`factories/<id>/`) — team presets that physically
+own their `agents/` and `skills/` as real directories. Four factories ship:
 
 - **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
   Python / JS / iOS / Android devs, QA, Scout, test-automation-engineer.
@@ -73,8 +73,8 @@ once if you want the full catalog.
 ## Using an agent
 
 Load the agent's `AGENT.md` and `SOUL.md` when starting work in that role.
-The source lives under the bundle that owns it
-(`bundles/<id>/agents/<name>/`); only `personal-assistant` lives at the
+The source lives under the factory that owns it
+(`factories/<id>/agents/<name>/`); only `personal-assistant` lives at the
 top-level `agents/`. The `AGENT.md` declares the skills the agent relies on —
 load each skill's `SKILL.md` when its trigger conditions are met, not
 preemptively.

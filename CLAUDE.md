@@ -10,25 +10,25 @@ them into any AI IDE via `bin/init.mjs` (the npx installer) or per-host native
 plugin manifests. There is no build step — the installer discovers content at
 runtime.
 
-**Content lives in bundles.** Each bundle (`bundles/<id>/`) physically owns its
+**Content lives in factories.** Each factory (`factories/<id>/`) physically owns its
 `agents/` and `skills/` directories — real copies, not mirrors. The same agent
-or skill id may appear in several bundles with different content (intentional
+or skill id may appear in several factories with different content (intentional
 divergence is normal). Top-level `agents/` and `skills/` hold only the
-standalone-only "orphan" content not belonging to any bundle: one agent
+standalone-only "orphan" content not belonging to any factory: one agent
 (`personal-assistant`) and eight skills (`deep-research`, `gathering-context`,
 `verifying-outcomes`, `microsoft-365`, `obsidian-vault`, `tosca-automation`,
 `vividus`, `xray-testing`). `skills.json` registers those orphan monorepo skills
 plus the 28 external (`repo:`) skills fetched from upstream at install time.
 
 Read `README.md` for the full catalog and install paths, `AGENTS.md` for the
-consumer-facing summary, and `bundles/SPEC.md` before touching bundles.
+consumer-facing summary, and `factories/SPEC.md` before touching factories.
 
 ## Commands
 
 ```bash
 npm test                       # node --test (runs *.test.mjs anywhere in tree)
-npm run validate               # validate:bundles + validate:marketplaces — run before committing
-npm run validate:bundles       # bin/validate-bundles.mjs — bundle.json manifests
+npm run validate               # validate:factories + validate:marketplaces — run before committing
+npm run validate:factories       # bin/validate-factories.mjs — factory.json manifests
 npm run validate:marketplaces  # gen-marketplaces.mjs --check — fails if generated manifests are stale
 npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .github/plugin marketplaces
 
@@ -36,28 +36,29 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 node --test bin/lib/item-resolver.test.mjs
 
 # Exercise the installer against a throwaway dir
-node bin/init.mjs init --bundle feature-development --target claude --yes
+node bin/init.mjs init --factory feature-development --target claude --yes
+# --bundle is a silent back-compat alias for --factory (pre-rename flag name)
 ```
 
-CI (`.github/workflows/validate.yml`) runs `validate-bundles.mjs` and validates
-every `skills/*/SKILL.md` and `bundles/*/skills/*/SKILL.md` against the
+CI (`.github/workflows/validate.yml`) runs `validate-factories.mjs` and validates
+every `skills/*/SKILL.md` and `factories/*/skills/*/SKILL.md` against the
 agentskills.io spec via `skills-ref`.
 
 ## Architecture
 
-**Resolution layers.** Each bundle's `agents/<name>/AGENT.md` declares (in
+**Resolution layers.** Each factory's `agents/<name>/AGENT.md` declares (in
 frontmatter) the skills a role needs. `skills.json` is the registry mapping
 orphan and external skill ids: monorepo entries (`monorepo: sdlc-skills`) for
 the orphan skills in top-level `skills/`, and `repo: owner/repo` entries for
 externals. `bin/init.mjs` resolves an agent's `skills:` list against the
-registry, copies monorepo/bundle skills directly, and git-clones externals into
+registry, copies monorepo/factory skills directly, and git-clones externals into
 `~/.cache/sdlc-skills/registry/` then copies (or `--symlink`s) them in.
 
 **Standalone resolution order.** `--agents <name>` / `--skills <id>` resolve:
-orphan top-level first, then alphabetical-first bundle that owns the id (a
-one-line notice prints when the id appears in more than one bundle). Use the
-qualified form `--agents <bundle>/<name>` (or `--skills <bundle>/<id>`) to pin
-a specific bundle's copy. `--bundle` is unchanged.
+orphan top-level first, then alphabetical-first factory that owns the id (a
+one-line notice prints when the id appears in more than one factory). Use the
+qualified form `--agents <factory>/<name>` (or `--skills <factory>/<id>`) to pin
+a specific factory's copy. `--factory` is unchanged.
 
 **Per-host install shapes.** The installer emits each host's native form:
 directories for Claude/Cursor/Windsurf, flat `<name>.agent.md` for Copilot CLI
@@ -66,16 +67,16 @@ TOML for Codex (`writeCodexAgent`). Claude Code preloads skill content from
 frontmatter; for the others, `injectSkillsSection` writes a bracketed
 `SKILLS-INJECTED` block into the agent file (idempotent on `--update`).
 
-**Bundles** (`bundles/<id>/`) are team presets installed with `--bundle`. Each
-bundle **physically owns** its `agents/` and `skills/` as real directories —
-there is no sync and no cross-bundle equality requirement. The same id may
-differ across bundles by design. A bundle tunes the *installed copy* via two
+**Factories** (`factories/<id>/`) are team presets installed with `--factory`. Each
+factory **physically owns** its `agents/` and `skills/` as real directories —
+there is no sync and no cross-factory equality requirement. The same id may
+differ across factories by design. A factory tunes the *installed copy* via two
 parallel overlays: `briefings/<role>.md` (behavior → seeded into
 `.agents/memory/<role>/project_briefing.md`) and `skillOverlays` in
-`bundle.json` (capability → rewrites the installed agent's `skills:` add/remove).
-It also splices `instructions.md` into a `<!-- BUNDLE:<id> -->` block in
+`factory.json` (capability → rewrites the installed agent's `skills:` add/remove).
+It also splices `instructions.md` into a `<!-- FACTORY:<id> -->` block in
 `AGENTS.md`/`CLAUDE.md` and seeds `knowledge/` reference docs. See
-`bundles/SPEC.md` for the full spec.
+`factories/SPEC.md` for the full spec.
 
 **Hooks** (`hooks/`) inject context at session/subagent start because Claude's
 `@import` doesn't work in subagent files, on other IDEs, or across
@@ -87,10 +88,21 @@ templates the installer materializes per target. Big manuals are deliberately
 
 **Generated vs hand-curated manifests.** The Cursor/Codex/Copilot marketplace
 manifests are generated by `gen-marketplaces.mjs` by discovering agents/skills
-across top-level orphans and all bundles (one entry per id, sourced from the
+across top-level orphans and all factories (one entry per id, sourced from the
 alphabetical-first owner) — edit the generator or sources, then
-`npm run gen:marketplaces`, never the output files.
+`npm run gen:marketplaces`, never the output files. An agent's `AGENT.md` or
+skill's `SKILL.md` can set `discoverable: false` in its own frontmatter to be
+excluded from these generated catalogs (it still installs normally).
 Claude Code's `.claude-plugin/marketplace.json` is hand-curated and left alone.
+
+**`FACTORY.md` catalog descriptor.** Each factory ships a `FACTORY.md` with
+YAML frontmatter: `name`, `description`, `owner`, `authors` (list of
+`"Name <email>"`), `sdlc_phase` (single scalar), `support_level` (`Self-Serve`
+| `Best Effort Support` | `Dedicated Capacity`), `use_cases` (list), and
+optional `project_deployments` (omit the key when N/A; an explicit `[]` is a
+distinct "not disclosed" sentinel). `bin/validate-factories.mjs` enforces the
+required fields, the `sdlc_phase`/`support_level` shape, and quoting of risky
+unquoted values. See `factories/SPEC.md` for the full schema.
 
 ## What runs where: nothing ships from this repo at runtime
 
