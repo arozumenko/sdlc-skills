@@ -45,29 +45,29 @@ install so you don't accidentally drop a role or skill. Pin to a
 specific commit with `github:arozumenko/sdlc-skills#<sha>` when you
 want to control rollout timing.
 
-## Updating a bundle install
+## Updating a factory install
 
-If you installed a **team bundle** (e.g. `--bundle feature-development`),
-update it the same way — re-run with the same `--bundle` and add `--update`:
+If you installed a **team factory** (e.g. `--factory feature-development`),
+update it the same way — re-run with the same `--factory` and add `--update`:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle feature-development --update --yes
+npx github:arozumenko/sdlc-skills init --factory feature-development --update --yes
 ```
 
-What `--update` does for a bundle:
+What `--update` does for a factory:
 
 - **Agents & skills** — overwritten in place (same as a plain install).
 - **Briefings** (`.agents/memory/<role>/project_briefing.md`) — overwritten
-  with the bundle's defaults. **Without `--update` they're preserved**, so
+  with the factory's defaults. **Without `--update` they're preserved**, so
   scout's project-specific refinements survive a normal re-run.
-- **Instructions** — the `<!-- BUNDLE:<id> -->` block in `AGENTS.md` /
+- **Instructions** — the `<!-- FACTORY:<id> -->` block in `AGENTS.md` /
   `CLAUDE.md` is refreshed in place regardless of `--update` (idempotent).
-- **Hooks** — the bundle's `_bundle`-tagged entries in
+- **Hooks** — the factory's `_factory`-tagged entries in
   `.claude/settings.json` are replaced; your own hooks are untouched.
   `settings.json` is backed up to `settings.json.bak` first.
 
-Bundle authors: run `npm run validate:bundles` before publishing (CI runs
-it on every push/PR). See [`bundles/SPEC.md`](bundles/SPEC.md).
+Factory authors: run `npm run validate:factories` before publishing (CI runs
+it on every push/PR). See [`factories/SPEC.md`](factories/SPEC.md).
 
 ## What `--update` rewrites vs what it preserves
 

@@ -46,7 +46,7 @@ remains the orchestrator for feature-development work; on hybrid
 projects, PM and `test-automation-lead` coexist as peers, and PM points
 TA traffic at `test-automation-lead` via a user-readable prompt (not a
 subagent dispatch). Full routing rules:
-[`agents/test-automation-lead/AGENT.md`](../../bundles/test-automation/agents/test-automation-lead/AGENT.md).
+[`agents/test-automation-lead/AGENT.md`](../../factories/test-automation/agents/test-automation-lead/AGENT.md).
 
 ---
 
@@ -210,7 +210,7 @@ agents can't load them.
 
 #### A. Install project-specific skills (before scout)
 
-The bundle install pulls the **default roster's** declared skills — but a given
+The factory install pulls the **default roster's** declared skills — but a given
 project usually needs **additional** catalog/external skills for its own
 automation technology and domain.
 
@@ -225,7 +225,7 @@ automation technology and domain.
    npx skills add <owner/repo@skill>   # install a match (add -g -y for global, no prompt)
    ```
 
-2. **This registry** — the sdlc-skills catalogue the bundle installer knows:
+2. **This registry** — the sdlc-skills catalogue the factory installer knows:
    repo README ([§ Skills](../../README.md#skills) +
    [§ External skills](../../README.md#external-skills-fetched-by-the-installer))
    or [`skills.json`](../../skills.json). Common test-automation mappings:
@@ -241,7 +241,7 @@ automation technology and domain.
    | Engineering craft (any stack) | `tdd`, `systematic-debugging`, `verification-before-completion` |
 
 Install **before scout** (so its Step 6.8/6.9 see them and the pipeline agents can
-load them): **registry** skills via the bundle installer's quoted
+load them): **registry** skills via the factory installer's quoted
 `--skills "id1,id2,..."` form ([Explicit `--skills` form](#1-install-sdlc-skills)
 under Step 1 has the exact invocation + the shell-whitespace guard); **any other
 ecosystem** skill via `npx skills add`. Nothing matches your exact framework
@@ -258,11 +258,11 @@ credentials in the HOST** (`.mcp.json` / `~/.claude.json` / host
 settings), **never in the project repo**, before scout.
 
 **Wire them with the installer.** `sdlc-skills init` can write the MCP config in
-each host's native form — it works with `--bundle test-automation`:
+each host's native form — it works with `--factory test-automation`:
 
 ```bash
 # interactive menu — pick servers (↑↓ move · space toggle · enter confirm)
-npx github:arozumenko/sdlc-skills init --bundle test-automation --target claude --interactive
+npx github:arozumenko/sdlc-skills init --factory test-automation --target claude --interactive
 
 # or wire specific servers non-interactively (--mcp on its own = MCP-only run)
 npx github:arozumenko/sdlc-skills init --target claude --mcp playwright,atlassian,onetest,elitea-next
@@ -304,22 +304,22 @@ and ideally TMS MCP tools. If any of these are missing, see the
 cd /path/to/your-automation-repo
 ```
 
-**Easiest path — bundle install** (works for Claude Code, Copilot, Cursor, and Windsurf). One command installs the test-automation pipeline (`test-automation-lead` + `qa-engineer` + `test-automation-engineer` + scout), their declared skills, per-role briefing overlays, and the pipeline's onboarding instructions:
+**Easiest path — factory install** (works for Claude Code, Copilot, Cursor, and Windsurf). One command installs the test-automation pipeline (`test-automation-lead` + `qa-engineer` + `test-automation-engineer` + scout), their declared skills, per-role briefing overlays, and the pipeline's onboarding instructions:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle test-automation --yes
+npx github:arozumenko/sdlc-skills init --factory test-automation --yes
 
 # or pin a host explicitly
-npx github:arozumenko/sdlc-skills init --bundle test-automation --target copilot --yes
+npx github:arozumenko/sdlc-skills init --factory test-automation --target copilot --yes
 ```
 
 This expands to the same content as the manual `--agents` form below, plus:
-- briefing overlays (`bundles/test-automation/briefings/*.md`) seeded into each role's `.agents/memory/<role>/project_briefing.md`
-- team instructions spliced into `AGENTS.md` / `CLAUDE.md` under `<!-- BUNDLE:test-automation -->` markers
+- briefing overlays (`factories/test-automation/briefings/*.md`) seeded into each role's `.agents/memory/<role>/project_briefing.md`
+- team instructions spliced into `AGENTS.md` / `CLAUDE.md` under `<!-- FACTORY:test-automation -->` markers
 
-See `bundles/test-automation/README.md` for what's included.
+See `factories/test-automation/README.md` for what's included.
 
-Swap `--target` per host (`claude` / `cursor` / `windsurf` / `copilot`); omit it to install into every detected IDE directory. The manual `--agents` form below is only needed if you want to hand-pick a subset of the roster instead of the whole bundle.
+Swap `--target` per host (`claude` / `cursor` / `windsurf` / `copilot`); omit it to install into every detected IDE directory. The manual `--agents` form below is only needed if you want to hand-pick a subset of the roster instead of the whole factory.
 
 **Simplest manual form — let agent frontmatter resolve the skills automatically.** The installer reads each agent's `skills:` frontmatter, partitions into monorepo + external, fetches the externals, and reports both lists before installing:
 
@@ -337,8 +337,8 @@ npx github:arozumenko/sdlc-skills init \
   --yes
 ```
 
-The `test-automation/<id>` form pins **this bundle's copy** — a bare id
-resolves to the alphabetical-first bundle that owns it
+The `test-automation/<id>` form pins **this factory's copy** — a bare id
+resolves to the alphabetical-first factory that owns it
 (`feature-development` here), whose copies diverge by design.
 
 **Explicit `--skills` form** — if you want to install skills not declared in the selected agents' frontmatter (e.g. `xray-testing` because the project uses Xray as its TMS), pass them inline. Quote the list to defend against shell whitespace splitting it:
@@ -374,7 +374,7 @@ the override into `.agents/role-overrides.md` with a fallback-tier
 warning. The pipeline runs, but a tech-lead or generic dev filling
 test-automation-engineer's slot ships less framework-faithful tests than test-automation-engineer would —
 prefer installing the dedicated agent when you can. See
-[`skills/seeding-a-project/references/role-overrides.md`](../../bundles/test-automation/skills/seeding-a-project/references/role-overrides.md)
+[`skills/seeding-a-project/references/role-overrides.md`](../../factories/test-automation/skills/seeding-a-project/references/role-overrides.md)
 for the substitution table.
 
 ### 2. Seed via scout
@@ -431,7 +431,7 @@ Merge strategy:     <squash | rebase | merge | ASK>
 Scout writes `.agents/testing.md`, `.agents/architecture.md`,
 `.agents/workflow.md`, `.agents/profile.md`,
 `.agents/test-automation.yaml`, `.agents/team-comms.md`. Full
-procedure: [`skills/seeding-a-project/SKILL.md`](../../bundles/test-automation/skills/seeding-a-project/SKILL.md).
+procedure: [`skills/seeding-a-project/SKILL.md`](../../factories/test-automation/skills/seeding-a-project/SKILL.md).
 
 **Keep the seed as a committed file** — e.g. `SEED_PROMPT.md` at the repo
 root — and paste it to scout rather than retyping it. The team then evolves
@@ -459,7 +459,7 @@ transport, or an MCP server name when multiple candidates exist).
 
 Full schema + all adapter variants (Xray / Zephyr / TestRail /
 Azure / markdown; MCP vs HTTP transport):
-[`skills/test-automation-workflow/references/tms-adapters.md`](../../bundles/test-automation/skills/test-automation-workflow/references/tms-adapters.md).
+[`skills/test-automation-workflow/references/tms-adapters.md`](../../factories/test-automation/skills/test-automation-workflow/references/tms-adapters.md).
 
 No TMS? The markdown fallback is a one-liner:
 
@@ -508,7 +508,7 @@ and hand it this no-op routing prompt:
 
 If the smoke fails, the dispatch wiring is broken on this host. See
 [`skills/test-automation-workflow/references/orchestration-playbook.md` § How to dispatch a subagent
-(host preflight)](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#how-to-dispatch-a-subagent-host-preflight) and re-read
+(host preflight)](../../factories/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#how-to-dispatch-a-subagent-host-preflight) and re-read
 `.agents/team-comms.md` for the per-host invocation pattern. Re-run
 the smoke until it passes before continuing.
 
@@ -519,10 +519,10 @@ a navigation, a simple form. The point is to prove the pipeline, not
 the app.
 
 The full slot-by-slot routing flow lives in the orchestration playbook —
-[`skills/test-automation-workflow/references/orchestration-playbook.md` § Canonical dispatch templates](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#canonical-dispatch-templates).
+[`skills/test-automation-workflow/references/orchestration-playbook.md` § Canonical dispatch templates](../../factories/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#canonical-dispatch-templates).
 The IC-facing process for each slot (analyst six-phase loop, implementer
 six-phase loop, AFS rules, no-defect-masking, run-report template) is in
-[`skills/test-automation-workflow/SKILL.md`](../../bundles/test-automation/skills/test-automation-workflow/SKILL.md).
+[`skills/test-automation-workflow/SKILL.md`](../../factories/test-automation/skills/test-automation-workflow/SKILL.md).
 Shape:
 
 1. **Intake (test-automation-lead)** resolves the case with one TMS
@@ -605,15 +605,15 @@ the gate are paid once for the whole batch instead of once each.
 
 Beyond one batch, batches compose into **campaigns** — waves, a
 foundation pass, and clusters of similar cases planned together:
-[`references/campaign-planning.md`](../../bundles/test-automation/skills/test-automation-workflow/references/campaign-planning.md).
+[`references/campaign-planning.md`](../../factories/test-automation/skills/test-automation-workflow/references/campaign-planning.md).
 The loop itself, its defaults and its serialization rules:
-[`references/orchestration-playbook.md` § The loop: plan → run → close](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#the-loop-plan--run--close), plus
-[`references/commands.md`](../../bundles/test-automation/skills/test-automation-workflow/references/commands.md)
+[`references/orchestration-playbook.md` § The loop: plan → run → close](../../factories/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#the-loop-plan--run--close), plus
+[`references/commands.md`](../../factories/test-automation/skills/test-automation-workflow/references/commands.md)
 for host-specific sub-agent spawning recipes.
 
 **Work that isn't a test case** — tech-debt, a migration, framework
 improvements, suite health — runs the *same* loop: a
-[tech-task brief](../../bundles/test-automation/skills/test-automation-workflow/references/tech-task-brief.md)
+[tech-task brief](../../factories/test-automation/skills/test-automation-workflow/references/tech-task-brief.md)
 takes the AFS's place as the unit contract (source, scope from the real
 code, out-of-scope, acceptance criteria, blast radius, verification),
 and build → static review → merge → one gate is unchanged. Ask the lead
@@ -668,7 +668,7 @@ owns it.**
 
    > Bootstrap a test-automation scaffold for this empty repo. Pick
    > the framework per the decision flow in
-   > [`skills/test-automation-workflow/references/framework-scaffold.md`](../../bundles/test-automation/skills/test-automation-workflow/references/framework-scaffold.md)
+   > [`skills/test-automation-workflow/references/framework-scaffold.md`](../../factories/test-automation/skills/test-automation-workflow/references/framework-scaffold.md)
    > — test surface first (UI / API / mobile / performance), then the
    > project's primary language within that surface.
    > Define page-object style, fixture pattern, naming, run command,
@@ -691,7 +691,7 @@ laid down"). That's fine. The sweep gets real once 3–4 cases have
 shipped and a body of convention exists to mirror.
 
 test-automation-lead's full framework-architecture contract lives in
-[`skills/test-automation-workflow/references/orchestration-playbook.md` § Framework architecture](../../bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#framework-architecture).
+[`skills/test-automation-workflow/references/orchestration-playbook.md` § Framework architecture](../../factories/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md#framework-architecture).
 
 ---
 
@@ -726,16 +726,16 @@ test-automation-lead's full framework-architecture contract lives in
 ## Maintenance
 
 **Where to tune what — this decides whether you can keep updating.** The
-bundle is a kickstarter, not a locked product: everything it installs is plain
+factory is a kickstarter, not a locked product: everything it installs is plain
 files, and your copy is *expected* to drift from the original. But in the
 majority of cases the right place to tune is **not** the agent files — it's
 `.agents/`, the project knowledge every agent reads (`testing.md`,
 `profile.md`, `workflow.md`, per-role memory). Land changes there — via
 scout's retrospective, or by simply telling an agent to change how it works —
-and you can keep pulling newer bundle versions with `init --update` without
+and you can keep pulling newer factory versions with `init --update` without
 losing anything. Edit the agents and skills *themselves* only when you intend
 to contribute the improvement back, or to deliberately maintain your own
-variant: a bundle edited in place stops being cleanly updatable.
+variant: a factory edited in place stops being cleanly updatable.
 
 General update / sync notes live in [MAINTENANCE.md](../../MAINTENANCE.md). One
 flow specific to the test-automation roster matters often enough to put

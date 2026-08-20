@@ -1,14 +1,14 @@
 # Feature Development — Onboarding
 
-The `feature-development` bundle drops a **cross-platform product team** into a
+The `feature-development` factory drops a **cross-platform product team** into a
 repo: a BA, a PM orchestrator, a tech-lead, a QA engineer, scout, and whichever
 developer roles you pick (Python, JS/TS, iOS, Android, test-automation). This
 guide takes you from "I want a delivery team here" to "the team is shipping
 features."
 
-For the pipeline picture, roster, and overlay model, read the bundle README
+For the pipeline picture, roster, and overlay model, read the factory README
 first — this guide assumes it and focuses on **adoption**:
-[`bundles/feature-development/README.md`](../../bundles/feature-development/README.md).
+[`factories/feature-development/README.md`](../../factories/feature-development/README.md).
 
 **Pick your path:**
 
@@ -36,8 +36,8 @@ You → ba (story) → project-manager (routes) → tech-lead (decomposes)
 
 `project-manager` is the **top-level orchestrator you launch directly**. The
 core `tech-lead` and `qa-engineer` auto-tune to the platforms your dev-role
-selection spans (web, iOS, Android, or any combination) via the bundle's
-overlay model — see [`bundles/SPEC.md`](../../bundles/SPEC.md).
+selection spans (web, iOS, Android, or any combination) via the factory's
+overlay model — see [`factories/SPEC.md`](../../factories/SPEC.md).
 
 ---
 
@@ -68,22 +68,22 @@ Per-stack tooling — only what your selected dev roles need:
 > is **not closed automatically** — either `qa-engineer` closes it on an
 > emulator, or you explicitly accept it (record the acceptance on the PR or
 > issue). **This makes `qa-engineer`'s emulator a real prerequisite, not an
-> optional nicety** — `qa-engineer` always installs with the bundle, and
+> optional nicety** — `qa-engineer` always installs with the factory, and
 > booting an AVD needs a multi-GB system image plus working hardware
 > virtualization (KVM on Linux, Hypervisor.framework on macOS), which fails
 > outright on some corporate/locked-down laptops. Confirm that works *before*
 > the first Android change reaches the merge gate. See
-> [`bundles/feature-development/agents/android-dev/README.md`](../../bundles/feature-development/agents/android-dev/README.md#what-dan-does-not-do)
+> [`factories/feature-development/agents/android-dev/README.md`](../../factories/feature-development/agents/android-dev/README.md#what-dan-does-not-do)
 > for the full policy, including what changes if you install him standalone
 > (no `qa-engineer` to route to). Separately: if scout detects a Kotlin
 > Multiplatform project (`kotlin("multiplatform")`, a `commonMain/` source
-> set), it records the finding, but this bundle does not define who owns that
+> set), it records the finding, but this factory does not define who owns that
 > shared code — ownership of `commonMain/` between `ios-dev` and `android-dev`
 > is yours to arbitrate.
 
 Your host can be Claude Code, Cursor, Windsurf, or GitHub Copilot CLI. The
-bundle install (`--bundle`) currently targets **Claude Code**; other hosts use
-the manual `--agents` form below until the bundle's `targets:` list expands.
+factory install (`--factory`) currently targets **Claude Code**; other hosts use
+the manual `--agents` form below until the factory's `targets:` list expands.
 Host-specific launch syntax and install flags:
 [README.md](../../README.md).
 
@@ -93,11 +93,11 @@ Host-specific launch syntax and install flags:
 
 You have a working codebase and want the delivery team to start shipping into it.
 
-### 1. Install the bundle
+### 1. Install the factory
 
 ```bash
 cd /path/to/your-repo
-npx github:arozumenko/sdlc-skills init --bundle feature-development
+npx github:arozumenko/sdlc-skills init --factory feature-development
 ```
 
 The installer always sets up the **core roles** (`scout`, `ba`,
@@ -154,7 +154,7 @@ Merge strategy:     <squash | rebase | merge | ASK>
 Scout writes `.agents/architecture.md`, `.agents/workflow.md`,
 `.agents/profile.md`, `.agents/testing.md`, and `.agents/team-comms.md`, plus a
 per-role briefing under `.agents/memory/<role>/`. Full procedure:
-[`seeding-a-project/SKILL.md`](../../bundles/feature-development/skills/seeding-a-project/SKILL.md).
+[`seeding-a-project/SKILL.md`](../../factories/feature-development/skills/seeding-a-project/SKILL.md).
 
 **After scout completes, review `.agents/architecture.md` and
 `.agents/testing.md`.** If the stack, build command, test command, or the
@@ -188,7 +188,7 @@ tweak). The point is to prove the pipeline, not the feature.
 3. **dev role(s)** implement with TDD — backend and frontend stay aligned on the
    API contract (a contract change is two-sided and isn't done until both sides
    are updated). See
-   [`instructions.md`](../../bundles/feature-development/instructions.md).
+   [`instructions.md`](../../factories/feature-development/instructions.md).
 4. **`qa-engineer`** verifies the PR — reproduces, runs e2e where relevant,
    reports with file:line refs.
 5. **`project-manager` merges** per `.agents/profile.md`'s merge policy.
@@ -213,7 +213,7 @@ rather than an omission. "I wrote the code" is not done.
 A new or near-empty repo. The flow is the same as
 [Existing project](#existing-project) with two adjustments:
 
-1. **Install** the bundle with the dev roles your product will need from the
+1. **Install** the factory with the dev roles your product will need from the
    start (you can add more later with `--update --agents <role>`).
 2. **Seed via scout** with `PR base branch: main`. Scout writes stub
    `.agents/architecture.md` / `.agents/testing.md` noting the stack isn't built
@@ -242,7 +242,7 @@ pipeline. `project-manager` (Max) and `test-automation-lead` (Tal) coexist as
 - PM points test-automation traffic at Tal via a **user-readable prompt**, not a
   subagent dispatch.
 
-Install both bundles into the same repo (run each `--bundle` once), or install
+Install both factories into the same repo (run each `--factory` once), or install
 the combined agent set manually:
 
 ```bash
@@ -266,7 +266,7 @@ context hooks, so it survives `/clear`, compaction, and resume):
 
 | File | Owner | What it holds |
 |---|---|---|
-| `AGENTS.md` / `CLAUDE.md` | scout | Project context; the team conventions block is spliced under `<!-- BUNDLE:feature-development -->` |
+| `AGENTS.md` / `CLAUDE.md` | scout | Project context; the team conventions block is spliced under `<!-- FACTORY:feature-development -->` |
 | `.agents/architecture.md` | scout | Stack, layout, the API-contract seam |
 | `.agents/testing.md` | scout | Frameworks, build + test + CI commands |
 | `.agents/workflow.md` | scout | Branching, PR, merge conventions |
@@ -307,7 +307,7 @@ Re-run the same `init` command with `--update` to pull upstream fixes; add a dev
 role to an existing install with:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --update --bundle feature-development --agents android-dev
+npx github:arozumenko/sdlc-skills init --update --factory feature-development --agents android-dev
 ```
 
 Then re-run scout so its frontmatter audit verifies the context wiring for the

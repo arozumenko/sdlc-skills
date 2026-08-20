@@ -58,7 +58,7 @@ registry, copies monorepo/factory skills directly, and git-clones externals into
 orphan top-level first, then alphabetical-first factory that owns the id (a
 one-line notice prints when the id appears in more than one factory). Use the
 qualified form `--agents <factory>/<name>` (or `--skills <factory>/<id>`) to pin
-a specific factory's copy. `--factory` is unchanged.
+a specific factory's copy. `--factory` itself takes no such qualifier.
 
 **Per-host install shapes.** The installer emits each host's native form:
 directories for Claude/Cursor/Windsurf, flat `<name>.agent.md` for Copilot CLI

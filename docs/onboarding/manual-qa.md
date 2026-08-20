@@ -1,6 +1,6 @@
 # Manual QA — Onboarding
 
-The `manual-qa` bundle drops a **standalone agentic manual-QA team** into a
+The `manual-qa` factory drops a **standalone agentic manual-QA team** into a
 repo. Cases are authored as structured Markdown and run **live** against a
 running app — no test code is generated, which is what distinguishes this team
 from a Playwright automation engineer. It targets **web** (Playwright MCP) and
@@ -8,8 +8,8 @@ from a Playwright automation engineer. It targets **web** (Playwright MCP) and
 real devices).
 
 For the pipeline picture, roster, and the `{{base_url}}` / evidence rules, read
-the bundle README first — this guide assumes it and focuses on **adoption**:
-[`bundles/manual-qa/README.md`](../../bundles/manual-qa/README.md).
+the factory README first — this guide assumes it and focuses on **adoption**:
+[`factories/manual-qa/README.md`](../../factories/manual-qa/README.md).
 
 **Pick your path:**
 
@@ -56,8 +56,8 @@ Plus a **running app** and the MCP server for your target:
 | **Mobile — local native** | A simulator/emulator or attached device + the **Appium MCP** server (the `mobile-testing` skill covers setup) |
 | **Mobile — cloud devices** | **Mobitru** device-farm credentials wired into the host MCP config |
 
-Test credentials for any auth-gated flows you want covered. The bundle install
-(`--bundle`) currently targets **Claude Code**; other hosts use the manual
+Test credentials for any auth-gated flows you want covered. The factory install
+(`--factory`) currently targets **Claude Code**; other hosts use the manual
 `--agents` form. Host-specific launch syntax and flags:
 [README.md](../../README.md).
 
@@ -68,11 +68,11 @@ Test credentials for any auth-gated flows you want covered. The bundle install
 You already have `tasks/<suite>/` cases (migrated, hand-written, or from a prior
 run) and just want to run them against a fresh build.
 
-### 1. Install the bundle
+### 1. Install the factory
 
 ```bash
 cd /path/to/your-repo
-npx github:arozumenko/sdlc-skills init --bundle manual-qa
+npx github:arozumenko/sdlc-skills init --factory manual-qa
 ```
 
 This installs the 6 agents into `.claude/agents/`, seeds the reference docs
@@ -101,7 +101,7 @@ app live and writes `.agents/manual-qa/app_profile.md` — URLs, auth, key pages
 reliable selectors, fragile areas. For a **mobile** target, `app-profiler`
 carries the `mobile-testing` skill and profiles via Appium / the device farm
 instead of a browser. Full role contract:
-[`app-profiler/AGENT.md`](../../bundles/manual-qa/agents/app-profiler/AGENT.md).
+[`app-profiler/AGENT.md`](../../factories/manual-qa/agents/app-profiler/AGENT.md).
 
 **Review `app_profile.md` before running.** Selectors and auth come from here;
 a thin or wrong profile produces flaky runs.
@@ -140,7 +140,7 @@ You can also run `test-author` / `test-sizer` **standalone** to build out a
 suite outside of a run. The `tasks/` suite becomes a living regression set that
 grows over time; re-run `app-profiler` after UI changes so selectors and flows
 stay accurate. Case format + template:
-[`knowledge/`](../../bundles/manual-qa/knowledge/).
+[`knowledge/`](../../factories/manual-qa/knowledge/).
 
 ---
 
@@ -152,7 +152,7 @@ authors/maintains a regression suite, and runs it live. They share the repo but
 own different artifacts — the dev team owns `src/` and the feature merge gate;
 the manual-QA team owns `tasks/`, `reports/`, and `.agents/manual-qa/`.
 
-Install both bundles into the same repo (run each `--bundle` once). There is no
+Install both factories into the same repo (run each `--factory` once). There is no
 orchestration coupling between them — you drive `project-manager` for delivery
 and `test-run-lead` for QA runs independently. Point `app-profiler` at whatever
 environment (dev / staging) the dev team's build is deployed to; `{{base_url}}`
@@ -170,8 +170,8 @@ reports/screenshots/                 evidence screenshots from runs
 .agents/manual-qa/knowledge/         seeded reference docs (format, template, report)
 ```
 
-Two rules every case obeys (full detail in the bundle README and
-[`instructions.md`](../../bundles/manual-qa/instructions.md)):
+Two rules every case obeys (full detail in the factory README and
+[`instructions.md`](../../factories/manual-qa/instructions.md)):
 
 - **`{{base_url}}` substitution** — all case URLs are written `{{base_url}}/path`
   and resolved at run time, keeping cases environment-agnostic.
@@ -196,7 +196,7 @@ Two rules every case obeys (full detail in the bundle README and
 - **Mobile session won't start** → see the `mobile-testing` skill's
   troubleshooting (Appium driver readiness, device trust, WebDriverAgent, or
   Mobitru credentials):
-  [`mobile-testing/SKILL.md`](../../bundles/manual-qa/skills/mobile-testing/SKILL.md).
+  [`mobile-testing/SKILL.md`](../../factories/manual-qa/skills/mobile-testing/SKILL.md).
 - **MCP auth errors** → token rotated / scope missing. Fix the MCP server config
   in the host (`~/.claude.json`, `.mcp.json`, Copilot settings), never in the
   project repo, then restart the session.
@@ -218,7 +218,7 @@ to re-profile the app and which cases to keep.
 
 ```
 <project-root>/
-├── AGENTS.md / CLAUDE.md             # team conventions spliced under <!-- BUNDLE:manual-qa -->
+├── AGENTS.md / CLAUDE.md             # team conventions spliced under <!-- FACTORY:manual-qa -->
 ├── .agents/manual-qa/
 │   ├── app_profile.md                # app map (app-profiler) — yours to keep
 │   └── knowledge/                    # seeded format/template/report docs
