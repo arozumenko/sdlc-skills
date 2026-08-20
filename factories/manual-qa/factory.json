@@ -9,7 +9,8 @@
     "test-author",
     "test-run-lead",
     "test-runner",
-    "test-reporter"
+    "test-reporter",
+    "qa-auditor"
   ],
   "localSkills": [
     "playwright-testing",

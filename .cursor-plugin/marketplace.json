@@ -78,6 +78,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "qa-auditor",
+      "source": "./factories/manual-qa/agents/qa-auditor",
+      "description": "Use for a specialist web audit of a live page or app — runs Step-0 Playwright evidence collection, then the applicable specialist skills (security, privacy, accessibility, content/SEO, performance always; UX and responsive conditionally) to produce a prioritized, evidence-backed findings report, and codifies notable findings into regression cases via test-author. Standalone entrypoint — run it directly with a target URL, or dispatched by test-run-lead's audit branch.",
+      "version": "0.2.0"
+    },
+    {
       "name": "qa-engineer",
       "source": "./factories/feature-development/agents/qa-engineer",
       "description": "Use when a feature needs verification, a bug needs reproduction with evidence, E2E tests need writing or running via Playwright, or a TMS case needs turning into an automation-ready spec (AFS). Sage — meticulous QA who treats every passing test with suspicion and every failure as a gift.",
