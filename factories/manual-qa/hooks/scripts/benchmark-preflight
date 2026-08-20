@@ -73,7 +73,7 @@ CCUSAGE_WAIT_DEBUG_LOG="${STATE_DIR}/benchmark-ccusage-wait-debug.log"
 # subagent_type (older builds) fails open to the old behavior. Once a
 # manual-qa run IS live (state file exists), keep refreshing the dispatch
 # timer for every dispatch — the premature-firing guard needs the timeline.
-MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter)$'
+MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter|qa-auditor)$'
 agent_type="$(printf '%s' "$payload" | node -e "
   const c=[];process.stdin.on('data',d=>c.push(d));
   process.stdin.on('end',()=>{

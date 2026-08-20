@@ -6,7 +6,7 @@
 > roster guard in `benchmark-preflight` / `benchmark-tc` initializes the
 > per-session machinery **only when the dispatched agent is one of this
 > factory's** (app-profiler / test-sizer / test-author / test-run-lead /
-> test-runner / test-reporter) — other factories' sessions get no state files,
+> test-runner / test-reporter / qa-auditor) — other factories' sessions get no state files,
 > no ccusage retries, and no synthetic `reports/metrics/RUN-*.json`. An
 > empty `subagent_type` (older Claude Code builds) fails open to the old
 > behavior. `benchmark-session-start` still takes its one background

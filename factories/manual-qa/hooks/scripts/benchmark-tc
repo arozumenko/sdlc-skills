@@ -44,7 +44,7 @@ SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
 # another factory's dispatch must not init state here via the fallback below,
 # or benchmark-stop will fabricate a metrics file for a session that was
 # never a manual-qa run. Empty subagent_type fails open (older builds).
-MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter)$'
+MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter|qa-auditor)$'
 agent_type="$(printf '%s' "$payload" | node -e "
   const c=[];process.stdin.on('data',d=>c.push(d));
   process.stdin.on('end',()=>{
