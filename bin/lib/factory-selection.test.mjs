@@ -8,7 +8,7 @@ import {
   buildBriefingPlan,
   composeBriefing,
   briefingDescription,
-} from "./bundle-selection.mjs";
+} from "./factory-selection.mjs";
 
 const BUNDLE = {
   coreAgents: ["scout", "tech-lead", "qa-engineer"],

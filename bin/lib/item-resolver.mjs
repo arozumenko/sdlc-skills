@@ -10,10 +10,10 @@ import { join } from "node:path";
 const MARKER = { agents: "AGENT.md", skills: "SKILL.md" };
 
 function bundleIds(root) {
-  const b = join(root, "bundles");
+  const b = join(root, "factories");
   if (!existsSync(b)) return [];
   return readdirSync(b)
-    .filter((d) => existsSync(join(b, d, "bundle.json")))
+    .filter((d) => existsSync(join(b, d, "factory.json")))
     .sort();
 }
 
@@ -36,7 +36,7 @@ export function buildItemIndex(root) {
       (index[kind][name] ||= []).push({ bundle: null, dir: root });
     }
     for (const id of bundleIds(root)) {
-      const bdir = join(root, "bundles", id);
+      const bdir = join(root, "factories", id);
       for (const name of dirsWithMarker(join(bdir, kind), kind)) {
         (index[kind][name] ||= []).push({ bundle: id, dir: bdir });
       }

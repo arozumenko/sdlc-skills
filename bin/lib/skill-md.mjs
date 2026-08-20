@@ -4,7 +4,7 @@
 // drift apart:
 //   - bin/init.mjs (installExternalSkill) uses it to name the directory an
 //     external skill installs into.
-//   - bin/validate-bundles.mjs (--check-externals) uses it to verify a
+//   - bin/validate-factories.mjs (--check-externals) uses it to verify a
 //     skills.json `repo:` entry's `id` matches what upstream actually
 //     declares — the exact value the installer will use as the directory
 //     name. If this parser is hardened/changed in only one importer, the
@@ -20,7 +20,7 @@
 //   2. An empty or whitespace-only value (`name:`, `name: ""`, `name: '  '`)
 //      yields null, not "". This matters because the two callers test the
 //      result differently: init.mjs tests truthiness (and falls back to the
-//      registry id) while validate-bundles.mjs tests `=== null` (and reports
+//      registry id) while validate-factories.mjs tests `=== null` (and reports
 //      "no name: frontmatter"). Returning "" would make them disagree about
 //      the same document; returning null makes them agree by construction.
 //   3. The returned name is trimmed and stripped of one layer of surrounding
@@ -29,7 +29,7 @@
 //      value that is not a bare path segment).
 export function extractSkillMdName(text) {
   // Leading (unanchored-by-/m) `---` block only, tolerating a UTF-8 BOM.
-  // Same frontmatter shape bin/validate-bundles.mjs's parseFrontmatter uses.
+  // Same frontmatter shape bin/validate-factories.mjs's parseFrontmatter uses.
   const fm = String(text).match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/);
   if (!fm) return null;
   // `[ \t]*`, not `\s*`: `\s` matches newlines, so `\s*` on a bare `name:`

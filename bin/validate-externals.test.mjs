@@ -6,7 +6,7 @@ import {
   checkExternals,
   parseValidateArgs,
   summarizeExternalResults,
-} from "./validate-bundles.mjs";
+} from "./validate-factories.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 // Fast retries in tests — the production default (300ms) would make this
@@ -300,7 +300,7 @@ test("parseValidateArgs: a bare positional argument is rejected too", () => {
 
 // --- extractSkillMdName: the contract both callers depend on ---------------
 //
-// init.mjs tests the result for truthiness; validate-bundles.mjs tests it for
+// init.mjs tests the result for truthiness; validate-factories.mjs tests it for
 // `=== null`. A "" return would make them disagree about the same document
 // (installer falls back to the id, guard FAILs), so empty must be null.
 

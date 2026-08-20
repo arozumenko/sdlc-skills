@@ -70,7 +70,7 @@ import {
   buildBriefingPlan,
   composeBriefing,
   briefingDescription,
-} from "./lib/bundle-selection.mjs";
+} from "./lib/factory-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 import { execSync, execFileSync } from "child_process";
@@ -172,30 +172,30 @@ function loadCatalog() {
 }
 
 // ---------------------------------------------------------------------------
-// Bundles — bundles/<id>/bundle.json describes a curated team: which shared
+// Bundles — factories/<id>/factory.json describes a curated team: which shared
 // agents to install, any team-wide extra skills, per-role briefing overlays,
-// team instructions, and hooks. See bundles/SPEC.md. A bundle expands into
+// team instructions, and hooks. See factories/SPEC.md. A bundle expands into
 // the normal agent/skill install path: its `agents` populate the agent
 // selection (so each agent's declared skills auto-resolve as usual) and its
-// `skills` are appended as extras. `localAgents` live in bundles/<id>/agents/
+// `skills` are appended as extras. `localAgents` live in factories/<id>/agents/
 // and install like shared agents but from the bundle dir. `localSkills` live
-// in bundles/<id>/skills/ and install like monorepo skills but from the
+// in factories/<id>/skills/ and install like monorepo skills but from the
 // bundle dir — they don't need a skills.json entry and are scoped to the
 // bundle (an agent in another team that declares the same id would resolve
 // it against the global catalog, not this bundle's copy).
 // ---------------------------------------------------------------------------
 
 function listBundles() {
-  const root = join(PKG_ROOT, "bundles");
+  const root = join(PKG_ROOT, "factories");
   if (!existsSync(root)) return [];
   return readdirSync(root)
-    .filter((d) => existsSync(join(root, d, "bundle.json")))
+    .filter((d) => existsSync(join(root, d, "factory.json")))
     .sort();
 }
 
 function loadBundle(id) {
-  const dir = join(PKG_ROOT, "bundles", id);
-  const manifest = join(dir, "bundle.json");
+  const dir = join(PKG_ROOT, "factories", id);
+  const manifest = join(dir, "factory.json");
   if (!existsSync(manifest)) {
     console.error(`  ! Unknown bundle: ${id}`);
     console.error(`    Available bundles: ${listBundles().join(", ") || "(none)"}`);
@@ -205,7 +205,7 @@ function loadBundle(id) {
   try {
     b = JSON.parse(readFileSync(manifest, "utf8"));
   } catch (err) {
-    console.error(`  ! Failed to parse bundles/${id}/bundle.json: ${err.message}`);
+    console.error(`  ! Failed to parse factories/${id}/factory.json: ${err.message}`);
     process.exit(1);
   }
   b.dir = dir;
@@ -322,7 +322,7 @@ async function applyBundle(bundle, args, catalog) {
   for (const la of bundle.localAgents) {
     if (!existsSync(join(bundleAgentsRoot, la, "AGENT.md"))) {
       console.error(
-        `  ! Bundle ${bundle.id} declares localAgent "${la}" but bundles/${bundle.id}/agents/${la}/AGENT.md is missing`
+        `  ! Bundle ${bundle.id} declares localAgent "${la}" but factories/${bundle.id}/agents/${la}/AGENT.md is missing`
       );
       process.exit(1);
     }
@@ -330,7 +330,7 @@ async function applyBundle(bundle, args, catalog) {
 
   // localSkills are the capability twin of localAgents: skill content shipped
   // inside the bundle dir, not the global catalog. They install like monorepo
-  // skills but from bundles/<id>/skills/. Register each into the in-memory
+  // skills but from factories/<id>/skills/. Register each into the in-memory
   // catalog so (a) the unknown-id partition doesn't reject them and (b)
   // injected SKILLS sections pick up a real description.
   const bundleSkillsRoot = join(bundle.dir, "skills");
@@ -338,7 +338,7 @@ async function applyBundle(bundle, args, catalog) {
     const skillMd = join(bundleSkillsRoot, ls, "SKILL.md");
     if (!existsSync(skillMd)) {
       console.error(
-        `  ! Bundle ${bundle.id} declares localSkill "${ls}" but bundles/${bundle.id}/skills/${ls}/SKILL.md is missing`
+        `  ! Bundle ${bundle.id} declares localSkill "${ls}" but factories/${bundle.id}/skills/${ls}/SKILL.md is missing`
       );
       process.exit(1);
     }
@@ -992,7 +992,7 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
   }
   // Directory name for the installed skill, in three branches:
   //   1. SKILL.md exists and declares a usable `name:` → that name (parsed by
-  //      the shared lib/skill-md.mjs, the same parser bin/validate-bundles.mjs
+  //      the shared lib/skill-md.mjs, the same parser bin/validate-factories.mjs
   //      --check-externals uses, so the guard predicts this behavior exactly).
   //   2. SKILL.md exists but has no parseable `name:` → the registry
   //      `entry.id` (the initial value below), NOT the subdir basename.

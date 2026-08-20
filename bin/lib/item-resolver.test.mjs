@@ -13,11 +13,11 @@ function fixture() {
   const S = (p) => { mkdirSync(join(root, p), { recursive: true }); writeFileSync(join(root, p, "SKILL.md"), "x"); };
   A("agents/personal-assistant");            // orphan agent
   S("skills/deep-research");                 // orphan skill
-  mkdirSync(join(root, "bundles/alpha"), { recursive: true }); writeFileSync(join(root, "bundles/alpha/bundle.json"), "{}");
-  mkdirSync(join(root, "bundles/beta"), { recursive: true }); writeFileSync(join(root, "bundles/beta/bundle.json"), "{}");
-  A("bundles/alpha/agents/scout");
-  A("bundles/beta/agents/scout");
-  S("bundles/beta/skills/memory");
+  mkdirSync(join(root, "factories/alpha"), { recursive: true }); writeFileSync(join(root, "factories/alpha/factory.json"), "{}");
+  mkdirSync(join(root, "factories/beta"), { recursive: true }); writeFileSync(join(root, "factories/beta/factory.json"), "{}");
+  A("factories/alpha/agents/scout");
+  A("factories/beta/agents/scout");
+  S("factories/beta/skills/memory");
   return root;
 }
 
@@ -44,7 +44,7 @@ test("resolveItem: multi-bundle id picks alphabetical-first bundle + reports amb
   const idx = buildItemIndex(root);
   const r = resolveItem(idx, "agents", "scout");
   assert.equal(r.bundle, "alpha");
-  assert.equal(r.dir, join(root, "bundles/alpha"));
+  assert.equal(r.dir, join(root, "factories/alpha"));
   assert.deepEqual(r.ambiguousAcross, ["alpha", "beta"]);
   rmSync(root, { recursive: true, force: true });
 });
@@ -54,7 +54,7 @@ test("resolveItem: qualified bundle/name selects that bundle", () => {
   const idx = buildItemIndex(root);
   const r = resolveItem(idx, "agents", "beta/scout");
   assert.equal(r.bundle, "beta");
-  assert.equal(r.dir, join(root, "bundles/beta"));
+  assert.equal(r.dir, join(root, "factories/beta"));
   rmSync(root, { recursive: true, force: true });
 });
 

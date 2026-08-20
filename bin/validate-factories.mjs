@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Validate every bundles/<id>/bundle.json against the repo. Run in CI and
+// Validate every factories/<id>/factory.json against the repo. Run in CI and
 // before publishing. Checks, per bundle:
 //   - directory name matches manifest `id`
 //   - a README.md exists (the team's front-door doc, human/LLM-readable)
-//   - a BUNDLE.md exists with non-empty name/description/owner frontmatter
+//   - a FACTORY.md exists with non-empty name/description/owner frontmatter
 //     (the structured catalog descriptor)
 //   - `agents` is a non-empty array and every entry exists under agents/
 //   - every `briefings` role is in `agents` and its file exists
@@ -46,7 +46,7 @@ import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Parse the YAML frontmatter of a BUNDLE.md into a flat key→value map.
+// Parse the YAML frontmatter of a FACTORY.md into a flat key→value map.
 // Only the simple `key: value` lines we care about — no full YAML needed.
 function parseFrontmatter(text) {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -86,15 +86,15 @@ function loadSkillIds() {
 }
 
 function main() {
-  const bundlesRoot = join(PKG_ROOT, "bundles");
+  const bundlesRoot = join(PKG_ROOT, "factories");
   if (!existsSync(bundlesRoot)) {
-    console.log("No bundles/ directory — nothing to validate.");
+    console.log("No factories/ directory — nothing to validate.");
     return;
   }
   const agents = new Set(dirsWith("agents", "AGENT.md"));
   const skillIds = loadSkillIds();
   const bundleDirs = readdirSync(bundlesRoot).filter((d) =>
-    existsSync(join(bundlesRoot, d, "bundle.json"))
+    existsSync(join(bundlesRoot, d, "factory.json"))
   );
 
   if (bundleDirs.length === 0) {
@@ -113,24 +113,24 @@ function main() {
     const before = errorCount;
     let b;
     try {
-      b = JSON.parse(readFileSync(join(dir, "bundle.json"), "utf8"));
+      b = JSON.parse(readFileSync(join(dir, "factory.json"), "utf8"));
     } catch (e) {
-      err(id, `bundle.json failed to parse: ${e.message}`);
+      err(id, `factory.json failed to parse: ${e.message}`);
       continue;
     }
 
     if (b.id !== id) err(id, `manifest id "${b.id}" != directory name "${id}"`);
     if (!existsSync(join(dir, "README.md"))) err(id, "missing README.md");
 
-    const bundleMd = join(dir, "BUNDLE.md");
+    const bundleMd = join(dir, "FACTORY.md");
     if (!existsSync(bundleMd)) {
-      err(id, "missing BUNDLE.md (catalog descriptor)");
+      err(id, "missing FACTORY.md (catalog descriptor)");
     } else {
       const fm = parseFrontmatter(readFileSync(bundleMd, "utf8"));
-      if (!fm) err(id, "BUNDLE.md has no YAML frontmatter");
+      if (!fm) err(id, "FACTORY.md has no YAML frontmatter");
       else
         for (const k of ["name", "description", "owner"])
-          if (!fm[k]) err(id, `BUNDLE.md frontmatter missing "${k}"`);
+          if (!fm[k]) err(id, `FACTORY.md frontmatter missing "${k}"`);
     }
 
     const hasLocal = Array.isArray(b.localAgents) && b.localAgents.length > 0;

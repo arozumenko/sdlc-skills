@@ -33,7 +33,7 @@ function collectFiles() {
     }
   };
   scanGroups(ROOT);
-  const bundlesDir = join(ROOT, 'bundles');
+  const bundlesDir = join(ROOT, 'factories');
   for (const b of readdirSync(bundlesDir, { withFileTypes: true })) {
     if (b.isDirectory()) scanGroups(join(bundlesDir, b.name));
   }
