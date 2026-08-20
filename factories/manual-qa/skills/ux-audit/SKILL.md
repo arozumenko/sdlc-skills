@@ -3,6 +3,7 @@ name: ux-audit
 description: UI/UX, forms, and page-type analysis. Checks general UI patterns, form usability, and domain-specific UX for 20+ page types.
 license: Apache-2.0
 metadata:
+  discoverable: false
   user-invocable: false
 ---
 

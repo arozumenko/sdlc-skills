@@ -12,12 +12,6 @@
       "version": "0.2.0"
     },
     {
-      "name": "accessibility-audit",
-      "source": "./factories/manual-qa/skills/accessibility-audit",
-      "description": "Accessibility and WCAG compliance analysis, from the accessibility snapshot and visual review — flags issues automated axe-style scans miss.",
-      "version": "0.2.0"
-    },
-    {
       "name": "atlassian-content",
       "source": "./factories/test-automation/skills/atlassian-content",
       "description": "Use when the user says 'file a bug', 'comment on JIRA-123', 'write up a decision page', or authors any Atlassian content. Creates well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch plus repair.",
@@ -57,12 +51,6 @@
       "name": "completing-a-task",
       "source": "./factories/feature-development/skills/completing-a-task",
       "description": "Use when a routed task has been implemented and the working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
-      "version": "0.2.0"
-    },
-    {
-      "name": "content-seo-audit",
-      "source": "./factories/manual-qa/skills/content-seo-audit",
-      "description": "Content quality, copywriting, and SEO metadata analysis. Checks copy quality visually and page metadata (title, description, structured data) where observable.",
       "version": "0.2.0"
     },
     {
@@ -174,12 +162,6 @@
       "version": "0.2.0"
     },
     {
-      "name": "performance-audit",
-      "source": "./factories/manual-qa/skills/performance-audit",
-      "description": "Performance, networking, console, and JavaScript analysis. Checks network issues, console errors, and JS problems; approximates load/resource health where full Core Web Vitals aren't available.",
-      "version": "0.2.0"
-    },
-    {
       "name": "plan-feature",
       "source": "./factories/feature-development/skills/plan-feature",
       "description": "Use when the user says \"plan a feature\", \"design this\", \"how should we build\", or before writing code for any non-trivial feature. Produces an approved task breakdown before implementation begins — plan first, build second.",
@@ -198,21 +180,9 @@
       "version": "0.2.0"
     },
     {
-      "name": "privacy-audit",
-      "source": "./factories/manual-qa/skills/privacy-audit",
-      "description": "Privacy, cookie consent, and GDPR analysis. Audits cookies, trackers, consent banners, and GDPR compliance from network traffic and the page.",
-      "version": "0.2.0"
-    },
-    {
       "name": "reproducing-issues",
       "source": "./factories/feature-development/skills/reproducing-issues",
       "description": "Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Turns a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Reproduction and documentation only — does not fix code.",
-      "version": "0.2.0"
-    },
-    {
-      "name": "responsive-audit",
-      "source": "./factories/manual-qa/skills/responsive-audit",
-      "description": "Responsive-layout analysis on a real browser — viewport configuration, touch-target sizing, and mobile-layout issues via a resized Playwright viewport.",
       "version": "0.2.0"
     },
     {
@@ -225,12 +195,6 @@
       "name": "screen-specs",
       "source": "./factories/feature-development/skills/screen-specs",
       "description": "Use when screens need designing or documenting as reference a developer or agent can build from — \"design the screens\", \"screen specs\", \"what should this screen look like\", \"turn the flows into designs\", \"document the UI\", or when a flow map's nodes need to become actual screens. Produces standalone HTML pages showing each screen as a device-framed mock beside its spec — regions with Material component and token names, every state the criteria demand, the MD3-vs-platform calls, accessibility notes, and traceability back to a flow node and acceptance criterion. Mock and spec are generated from one source so they cannot drift. NOT for flow/journey diagrams (use user-flow-maps), NOT a design tool replacement, and NOT for writing the screens' production code.",
-      "version": "0.2.0"
-    },
-    {
-      "name": "security-audit",
-      "source": "./factories/manual-qa/skills/security-audit",
-      "description": "Security and OWASP analysis. Reviews for XSS, CSRF, injection risks, missing security headers, and exposed data.",
       "version": "0.2.0"
     },
     {
@@ -285,12 +249,6 @@
       "name": "user-flow-maps",
       "source": "./factories/feature-development/skills/user-flow-maps",
       "description": "Use when a user flow, journey, or screen-to-screen behaviour needs to become a visual flow map — \"draw the flow\", \"make a flow map\", \"user flow diagram\", \"map the screens\", \"turn these journeys into diagrams\", or when acceptance criteria need a picture reviewers can sign off on. Renders a spec of screens, decisions and transitions into standalone HTML posters — numbered screen wireframes, decision diamonds, Start/End markers naming where a flow hands off, orthogonal connectors routed from the data, and an authoritative edge table. Layout, routing and label collision are handled by the bundled flowmap.js; you supply data, never coordinates. NOT for architecture or sequence diagrams, NOT for visual/UI design of the screens themselves (that is a design role's job), and NOT a mermaid replacement — the source diagram stays canonical.",
-      "version": "0.2.0"
-    },
-    {
-      "name": "ux-audit",
-      "source": "./factories/manual-qa/skills/ux-audit",
-      "description": "UI/UX, forms, and page-type analysis. Checks general UI patterns, form usability, and domain-specific UX for 20+ page types.",
       "version": "0.2.0"
     },
     {

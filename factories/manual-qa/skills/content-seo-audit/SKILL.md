@@ -3,6 +3,7 @@ name: content-seo-audit
 description: Content quality, copywriting, and SEO metadata analysis. Checks copy quality visually and page metadata (title, description, structured data) where observable.
 license: Apache-2.0
 metadata:
+  discoverable: false
   user-invocable: false
 ---
 

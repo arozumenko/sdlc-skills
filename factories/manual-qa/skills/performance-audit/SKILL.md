@@ -3,6 +3,7 @@ name: performance-audit
 description: Performance, networking, console, and JavaScript analysis. Checks network issues, console errors, and JS problems; approximates load/resource health where full Core Web Vitals aren't available.
 license: Apache-2.0
 metadata:
+  discoverable: false
   user-invocable: false
 ---
 
