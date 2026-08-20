@@ -52,4 +52,4 @@ For **GitHub Copilot**, agents must be flat files — use the CLI with `--target
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/`](../../bundles/)
+- Team factories that include this agent: [`../../../`](../../../)

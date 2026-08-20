@@ -52,4 +52,4 @@ External †: `playwright-cli`, `systematic-debugging`, `verification-before-com
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`bundles/`](../../../)
+- Team factories that include this agent: [`factories/`](../../../)

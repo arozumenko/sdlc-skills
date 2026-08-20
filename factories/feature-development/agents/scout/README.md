@@ -7,7 +7,7 @@ An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition li
 | | |
 |---|---|
 | Model | `sonnet` |
-| Group | core (**required** — bundles install it by default) |
+| Group | core (**required** — factories install it by default) |
 | Aliases | `kit` |
 
 ## Install
@@ -49,4 +49,4 @@ For **GitHub Copilot**, agents must be flat files — use the CLI with `--target
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles always include `scout` to onboard the repo first.
+- Team factories always include `scout` to onboard the repo first.

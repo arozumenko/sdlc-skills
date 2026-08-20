@@ -141,4 +141,4 @@ across dev, staging, and prod.
   output schema.
 
 See [`bundle.json`](bundle.json) for the exact manifest and the top-level
-[`../SPEC.md`](../SPEC.md) for how bundles are defined and installed.
+[`../SPEC.md`](../SPEC.md) for how factories are defined and installed.

@@ -11,7 +11,7 @@ An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition li
 | Aliases | `remy` |
 
 This is the **discovery-side** copy of the designer, scoped to pre-design flow mapping. The
-`feature-development` bundle ships a designer that also owns `screen-specs` for building the screens.
+`feature-development` factory ships a designer that also owns `screen-specs` for building the screens.
 
 ## Install
 
@@ -55,4 +55,4 @@ For **GitHub Copilot**, agents must be flat files — use the CLI with `--target
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/`](../../bundles/)
+- Team factories that include this agent: [`../../../`](../../../)

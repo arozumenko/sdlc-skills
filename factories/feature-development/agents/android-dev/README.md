@@ -45,7 +45,7 @@ Read this before you install him, so the gap is never a surprise:
 - **He is native-Android only, and greenfield-Compose only.** Not React Native, Flutter, or Expo; not server-side Spring or JVM-backend work; no new Java feature code; and no XML/Views or Java-interop migration work. If your app is an established Fragments/XML codebase, Dan is not the right agent for it.
 - **He does not create the project.** Project scaffolding is yours — Android Studio's new-project wizard — and Dan works from the first commit onward. He will not hand-roll a Gradle build.
 
-**If you install Dan standalone** (`--agents android-dev`, without the bundle), note that the handoff targets above do not exist: there is no `qa-engineer` to route device work to, and this bundle ships no CI runner for instrumented tests. Standalone, **you are the verifier** — Dan will still name every gap, but closing them is on you. Install him with the `feature-development` bundle if you want the QA half of that loop.
+**If you install Dan standalone** (`--agents android-dev`, without the factory), note that the handoff targets above do not exist: there is no `qa-engineer` to route device work to, and this factory ships no CI runner for instrumented tests. Standalone, **you are the verifier** — Dan will still name every gap, but closing them is on you. Install him with the `feature-development` factory if you want the QA half of that loop.
 
 ## Skills this agent uses
 
@@ -64,4 +64,4 @@ External †: `tdd`, `systematic-debugging`, `requesting-code-review`, `receivin
 ## Learn more
 
 - Repo overview & install matrix: [`../../README.md`](../../README.md)
-- Team bundles that include this agent: [`../../bundles/feature-development`](../../bundles/feature-development) (selected in the dev-role picker)
+- Team factories that include this agent: [`../../../feature-development`](../../../feature-development) (selected in the dev-role picker)
