@@ -21,10 +21,16 @@ type: project
   (e.g. `ui` / `api` / `mobile` / `perf` / `mixed`) as a hint for the engineer —
   not an enforced enum. Write these into `.agents/testing.md`.
 - **Detect the TMS (test management system):** Xray (Jira app), Zephyr, TestRail,
-  Azure Test Plans, or a markdown/`test-specs/` fallback. The TMS adapter is the
-  single highest-risk unknown — if you can't confirm it, say so loudly. Record it
-  in `.agents/test-automation.yaml` (`tms.adapter: …`) so Tal loads the right
-  adapter skill conditionally.
+  Azure Test Plans, or a markdown fallback (`tasks/<suite>/TC-*.md`). The TMS
+  adapter is the single highest-risk unknown — if you can't confirm it, say so
+  loudly. Record it in `.agents/test-automation.yaml` (`tms.adapter: …`) so Tal
+  loads the right adapter skill conditionally.
+- **Seed the three routing-policy entries in `.agents/testing.md`** (procedure in
+  the `seeding-automation-project` skill): **§ Execution provider** (`manual-qa`
+  when manual-qa agents are in the host roster AND `.agents/manual-qa/` exists,
+  else `self`), **§ Coverage idiom** (the framework-native per-step coverage
+  declaration style), and the **knowledge-routing table** (surface cache vs
+  `.agents/knowledge/` vs role memory; `.agents/manual-qa/**` read-only).
 - **Detect the issue tracker + automation PR policy:** base branch, merge policy
   (`auto-merge` / `human-approved` / `manual`), merge strategy
   (`squash`/`rebase`/`merge`). Record under `.agents/profile.md` § Automation PR
@@ -43,6 +49,6 @@ type: project
 Onboard a test-automation engagement: produce `.agents/profile.md`,
 `.agents/testing.md`, `.agents/workflow.md`, and `.agents/team-comms.md` so Tal
 can dispatch the pipeline without flying blind. The framework + TMS adapter +
-automation PR policy are the fields Tal depends on most — fill them or flag them
-explicitly as gaps. There is no separate PM or tech-lead on this team; Tal owns
+execution provider + automation PR policy are the fields Tal depends on most —
+fill them or flag them explicitly as gaps. There is no separate PM or tech-lead on this team; Tal owns
 both, so your profile is his single source of project truth.

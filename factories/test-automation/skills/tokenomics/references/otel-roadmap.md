@@ -124,7 +124,7 @@ repo by reading the sibling `workspace.json` (`folder` file-URI; multi-root
 `<Product>` is a family, not one name: `Code`, `Code - Insiders`, `VSCodium`
 (forks like Cursor keep their own product dirs — extensible list). Plus:
 `--user-data-dir` launches are unknowable → config knob
-`vscodeUserDataDirs: []` in `.agents/telemetry/config.json` for explicit extra
+`vscodeUserDataDirs: []` in `.agents/telemetry/automation/config.json` for explicit extra
 roots; `emptyWindowChatSessions/` (chats opened with no folder) has no repo to
 attribute — skip by default, count in verbose output. Same search-don't-assume
 rule already holds for the other hosts: Claude (`CLAUDE_CONFIG_DIR` →

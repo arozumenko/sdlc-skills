@@ -131,7 +131,7 @@ For each task, define:
 - What to build (not how — that's the developer's job)
 - Interface contract (input/output types)
 - Acceptance criteria it satisfies
-- Which role should do it (python-dev, js-dev, qa-engineer)
+- Which role should do it (python-dev, js-dev, test-automation-engineer)
 
 ## Step 7: Approval presentation template
 

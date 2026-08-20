@@ -40,6 +40,21 @@ TRACE_FILE="${STATE_DIR}/benchmark-tc-trace${SID_SUFFIX}.jsonl"
 PRE_FILE="${STATE_DIR}/benchmark-pre${SID_SUFFIX}.json"
 SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
 
+# MULTI-FACTORY GUARD — same rule as benchmark-preflight (see its comment):
+# another factory's dispatch must not init state here via the fallback below,
+# or benchmark-stop will fabricate a metrics file for a session that was
+# never a manual-qa run. Empty subagent_type fails open (older builds).
+MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter)$'
+agent_type="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.tool_input?.subagent_type||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+if [ ! -f "$STATE_FILE" ] && [ -n "$agent_type" ] && ! printf '%s' "$agent_type" | grep -Eq "$MANUAL_QA_ROSTER"; then
+  exit 0
+fi
+
 # Fallback init — runs only if benchmark-preflight (PreToolUse hook) didn't fire
 # (e.g., hook not yet wired or first run after upgrade).
 if [ ! -f "$STATE_FILE" ]; then

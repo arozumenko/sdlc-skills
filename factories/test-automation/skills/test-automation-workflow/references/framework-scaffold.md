@@ -26,7 +26,7 @@ pick.
 Scaffold **whatever the project uses** — the surface under test and the
 app's stack drive the choice, not a default tool. The Playwright
 scaffolds below are the most fully-worked example because UI is the
-bundle's most exercised surface; they are *one* worked path among
+factory's most exercised surface; they are *one* worked path among
 others, not the privileged answer. For an API, mobile, or performance
 suite, scaffold that surface's idiomatic framework the same way (see
 [Other surfaces](#other-surfaces--brief-stubs)).

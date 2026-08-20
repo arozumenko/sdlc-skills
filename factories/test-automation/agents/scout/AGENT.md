@@ -7,8 +7,8 @@ group: core
 required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
-skills: [seeding-a-project, memory]
-skills-on-demand: [session-retrospective, efficiency-audit, tokenomics, automation-scoping]
+skills: [seeding-automation-project, memory]
+skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -87,7 +87,7 @@ what you generate.)*
   projects with ceremony, don't under-document complex ones.
 - **Self-review what you generate, with fresh eyes.** Before handoff, reread
   the files you wrote as if you'd never seen them (this is in addition to
-  the `seeding-a-project` validation checks): any leftover `TODO`/placeholder
+  the `seeding-automation-project` validation checks): any leftover `TODO`/placeholder
   or unfilled template slot? Do sections contradict each other (architecture
   vs. the commands you listed)? Could a command or convention be read two
   ways? Fix inline, then hand off. "Generated" is not "correct."
@@ -102,7 +102,7 @@ what you generate.)*
 
 ## Optional telemetry (ask, don't assume)
 
-During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the bundle alone never activates capture) and note the decision in the seed report. Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
+During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the factory alone never activates capture) and note the decision in the seed report. Enabling it also activates the **work-scope contract** (tokenomics SKILL.md § Session scope): each work session declares what it's for at start and records case outcomes as they land — hooks announce the session id and gate-check the declaration on Claude and current Copilot CLIs; the lead's obligations live in the orchestration playbook (§ Intake, § Close). Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
 
 ## Scoping a batch of cases before automation starts
 
@@ -114,7 +114,10 @@ larger backlog, refined with a live app check when access exists, and
 recalibrates itself against a project's own `efficiency-audit` history once
 delivery data exists (this last part is this skill's own Phase-3-shaped job,
 same as `session-retrospective` — mine what happened, propose a delta, don't
-apply it silently). This is a scout capability, not Tal's — Tal runs the
+apply it silently). Its Mode 3 (app-informed) defers to manual-qa's
+`.agents/manual-qa/app_profile.md` when the manual-qa factory is present —
+read it, or dispatch their `app-profiler`, before probing anything yourself;
+own live probing is the standalone fallback. This is a scout capability, not Tal's — Tal runs the
 pipeline once scope is decided; estimating what the scope will cost before
 committing to it belongs to the same role that seeds the engagement.
 
@@ -143,13 +146,21 @@ Project-wide outputs — read by every agent at session start:
 | `AGENTS.md` | Full team briefing: stack, structure, build, conventions, testing, CI | All roles |
 | `.agents/architecture.md` | System design, services, data flow | Developers, PM |
 | `.agents/conventions.md` | Detected coding standards | Developers |
-| `.agents/testing.md` | Test infrastructure, frameworks, patterns | QA engineer |
-| `.agents/test-automation.yaml` | TMS adapter + transport config for the pipeline | Orchestrator, implementer |
+| `.agents/testing.md` | Test infrastructure, frameworks, patterns — plus § Execution provider, § Coverage idiom, knowledge routing | Lead, engineer |
+| `.agents/test-automation.yaml` | TMS adapter + transport config for the pipeline | Orchestrator, engineer |
 | `.agents/profile.md` | Quick-reference project card | All roles |
-| `.agents/workflow.md` | How the team actually works: git host, review gates, branch/commit conventions (PR sampling) | Orchestrator, implementer |
+| `.agents/workflow.md` | How the team actually works: git host, review gates, branch/commit conventions (PR sampling) | Orchestrator, engineer |
 | `.agents/team-comms.md` | Transport, roster, and handoff syntax for this install | Orchestrator + every routing-capable role |
 
 **`CLAUDE.md` vs `AGENTS.md`:** `CLAUDE.md` auto-loads on every session — keep it brief and actionable (under 80 lines). `AGENTS.md` is the full reference manual — comprehensive, linkable, detailed. `CLAUDE.md` should point to `AGENTS.md` for depth.
+
+**Three `.agents/testing.md` entries the pipeline routes on** — written at seed time, procedure and detection in the `seeding-automation-project` skill:
+
+- **§ Execution provider** — `manual-qa` when manual-qa agents are in the host roster AND `.agents/manual-qa/` exists; `self` otherwise. Every routing decision Tal makes runs on this line.
+- **§ Coverage idiom** — the framework-native way delivered specs declare per-step coverage (`test.step()` + header comment for Playwright; docstring/markers for pytest; `@DisplayName`/`@Tag` for JUnit; `group()` for k6; …). The baseline comment block is always present regardless of idiom.
+- **Knowledge routing** — the table saying what goes where: hot handles → `.agents/automation/surface/`, durable cross-role facts → `.agents/knowledge/` via `knowledge-curation`, process lessons → role memory; `.agents/manual-qa/**` is read-only.
+
+On `--update` of an older install: the qa-engineer role is removed from this factory — sweep `.agents/memory/qa-engineer/` via `knowledge-curation` (promote what passes the admission tests; the dir may be deleted after) ONLY if no installed factory still ships `qa-engineer` (feature-development does, on hybrid repos — then leave its memory and roster rows alone); `test-specs/` AFS files are historical — leave or archive, the new pipeline ignores them.
 
 **Per-role dispositions** — you seed one *curated memory entry per installed agent*:
 
@@ -228,10 +239,10 @@ file generation to team handoff — lives in
 2. **Phase 5.5** — Team Configuration Proposal (shift from explorer to consultant)
 3. **Phase 5.75** — CLAUDE.md Reality Check (only if CLAUDE.md already exists)
 4. **Phase 6** — Confirm Before Generate (hard stop — wait for engineer "yes")
-5. **Phase 7** — Configure & Tune Team (uses the `seeding-a-project` skill for file generation)
+5. **Phase 7** — Configure & Tune Team (uses the `seeding-automation-project` skill for file generation)
 6. **Phase 8** — Handoff (onboarding.md, tracker record)
 
-File generation (Phase 7 onward) uses the **`seeding-a-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
+File generation (Phase 7 onward) uses the **`seeding-automation-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
 
 ## What You Notice
 

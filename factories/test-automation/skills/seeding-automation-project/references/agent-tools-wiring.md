@@ -20,7 +20,7 @@ need. Scope is per-project and fully autonomous — scout derives every
 decision from evidence already on disk or in its own session, with no
 operator prompts and no per-agent capability manifest.
 
-Runs as **Step 6.8** of `seeding-a-project`, between team-comms (6.5) and
+Runs as **Step 6.8** of `seeding-automation-project`, between team-comms (6.5) and
 role customization (7), in the **same scout pass** as the other seed
 work. Idempotent — if an agent already declares `tools:`, scout leaves
 it alone unless `--update-tools` is passed.
@@ -75,26 +75,26 @@ work). For calibration, one mature project's measured usage across
 
 | Role | playwright | TMS adapter | tracker (github) |
 |---|---|---|---|
-| `qa-engineer` (analyst) | **6,210** | 18 | 5 |
+| live case execution (v1 analyst role — now manual-qa's `test-runner`, or the engineer's combined mode) | **6,210** | 18 | 5 |
 | `test-automation-engineer` | **462** | 5 | — |
 | lead (main session) | 99 | 19 | **71** |
 | built-in `general-purpose` (intake sweeps) | 3 | **298** | — |
 
-- **`qa-engineer` and `test-automation-engineer`** → both ship an
-  **inline** browser-server definition from the bundle (subagent-scoped
+- **`test-automation-engineer`** → ships an **inline** browser-server
+  definition from the factory (subagent-scoped
   — connects at dispatch start, disconnects at finish; affordable
   because the serial pipeline runs one worker, hence one browser, at a
-  time). The measured usage justifies both: the analyst's live
-  execution is the heaviest MCP consumer by an order of magnitude, and
-  the implementer's live verification (injecting testids into a UI
-  repo, confirming a handle resolves against the running app) is real
-  work, not a hypothetical. **Scout tunes both per project**: an
+  time). The measured usage justifies it: live execution is the
+  heaviest MCP consumer by an order of magnitude, and the engineer's
+  targeted probing and live verification (extracting a locator,
+  confirming a handle resolves against the running app) is real
+  work, not a hypothetical. **Scout tunes it per project**: an
   API-only project strips the browser server; a project on
   `browser-verify` (CDP over Bash) may prefer that route — the same
   field project ran 3,280 `cdp.mjs` calls inside workflows against 455
-  MCP calls, so CDP is proven at scale; and qa-engineer additionally
+  MCP calls, so CDP is proven at scale; and the engineer additionally
   gets the TMS adapter (`mcpServers: [playwright, onetest-tms]`-style)
-  when standalone analysis fetches its own cases. When scout's intent
+  when combined-mode dispatches fetch their own cases. When scout's intent
   for a role is "no MCP at all", it writes `mcpServers: []` **and** —
   because empty-list semantics are not documented on every host
   version — the documented fallback on the same file:
@@ -147,8 +147,8 @@ wirings survive that, in order of preference:
    response embedding a full page snapshot — **actions no longer show
    the page; the agent calls `browser_snapshot` explicitly when it
    needs to read it.** Tune per project at seeding when a stack needs
-   otherwise (e.g. restore `--snapshot-mode full` for a heavily
-   exploratory analyst on a fast-changing UI).
+   otherwise (e.g. restore `--snapshot-mode full` for heavily
+   exploratory probing on a fast-changing UI).
 2. **Move the server to user scope** (`claude mcp add --scope user …`,
    or `~/.claude.json`) — the documented workaround in #13898 for
    custom agents that can't see project-scoped servers. Cheaper to try,
@@ -187,7 +187,7 @@ when they conflict.
    skill needs. Example:
 
    ```yaml
-   # skills/playwright-testing/setup.yaml
+   # a browser skill's setup.yaml (e.g. manual-qa's playwright-testing on a co-install)
    dependencies:
      mcp:
        - name: playwright
@@ -195,7 +195,7 @@ when they conflict.
          args: ["@playwright/mcp@latest", "--image-responses", "omit", "--console-level", "error", "--snapshot-mode", "none"]
    ```
 
-   This says: any agent with `playwright-testing` in its `skills:`
+   This says: any agent with that skill in its `skills:`
    needs the Playwright MCP. The `name:` is the **logical role name**
    scout matches against live MCP servers by name heuristic (see
    input 3). Skills without an MCP `dependencies` block don't
@@ -407,7 +407,7 @@ project.
 
 Default: include all of them as a union with wildcard form
 (`<server>/*`). This is liberal but safe — redundant tools don't break
-anything, and Axel/Sage will discover which one actually works
+anything, and Axel will discover which one actually works
 against this app. The operator can narrow it later.
 
 ## Decision heuristics
@@ -427,25 +427,28 @@ covers the IDE surface scout sees under Copilot.
 ### + `execute` (shell / terminal)
 
 Added when the agent's skills include any of:
-`git-workflow`, `completing-a-task`, `bugfix-workflow`, `tdd`,
-`implement-feature`, `systematic-debugging`, or
-`test-automation-workflow`.
+`git-workflow`, `completing-a-task`, `tdd`,
+`implement-feature`, `systematic-debugging`,
+`test-automation-workflow`, or `test-automation-implementation`.
 
 Rationale: these workflows run commands (tests, git, gh).
 
 ### + `edit` (file modification)
 
 Added when the agent's skills include any of:
-`implement-feature`, `bugfix-workflow`, `code-review`, `tdd`,
-`test-automation-workflow`, `plan-feature`, `seeding-a-project`.
+`implement-feature`, `code-review`, `tdd`,
+`test-automation-workflow`, `test-automation-implementation`,
+`plan-feature`, `seeding-automation-project`.
 
-The skill `seeding-a-project` itself implies doc-writing; `code-review`
+The skill `seeding-automation-project` itself implies doc-writing; `code-review`
 implies suggesting edits.
 
 ### + browser / Playwright MCP
 
-Added when the agent's skills include `playwright-testing` or
-`browser-verify`. Scout picks the Playwright MCP prefix by asking the
+Added when any of the agent's skills declares a browser MCP in its
+`setup.yaml` (e.g. manual-qa's `playwright-testing` on a co-install).
+`browser-verify` (CDP over Bash) needs no MCP — a project on that route
+skips this. Scout picks the Playwright MCP prefix by asking the
 host (or reading MCP config) — wildcard form `<server>/*`.
 
 ### + TMS MCP tools
@@ -459,13 +462,13 @@ Added when **both**:
 
 Scope the TMS tool set by intent:
 
-- **Read-only / exploration** sessions (qa-engineer running
-  `test-case-analysis`, qa-engineer as reviewer) →
+- **Read-only / exploration** sessions (reviewer-slot dispatches,
+  scoping/intake sweeps) →
   `get_*`, `list_*`, `search_*`
 - **Write / back-write** sessions (test-automation-engineer) → add
   `create_*`, `update_*`, `sync_*`
 - **Jira integration** → add `jira_toolset` tools when the agent
-  touches stories (test-automation-lead, qa-engineer in analysis). Prefer
+  touches stories (test-automation-lead). Prefer
   `search_using_jql` +
   `execute_generic_rq` / `getIssue` rather than blanket `*`.
 
@@ -474,7 +477,7 @@ ambiguous, default to read-only (safer).
 
 ### + Orchestrator inheritance (the roster's routing agents)
 
-The roster's routing agents — in this bundle, `test-automation-lead`
+The roster's routing agents — in this factory, `test-automation-lead`
 (typically `group: core`) — don't always declare TMS or Jira skills
 themselves, but they **route and review** work that other agents do.
 If they can't read the team's tickets and stories, they can't preview
@@ -492,7 +495,7 @@ Concretely:
   slice (`get_*` / `list_*` / `search_*`) regardless of his own
   skill list. Same for the tracker (`search_using_jql`, `getIssue` /
   equivalent). Rationale: he needs to open `SCRUM-T101` to see what
-  he's routing to Sage, and open the linked `SCRUM-42` story to
+  he's routing to Axel, and open the linked `SCRUM-42` story to
   catch context mismatches.
 - **TMS execution-write verbs** (`create_*` / `update_*` / `sync_*`
   on executions) — added to `test-automation-lead` **only when**
@@ -523,18 +526,9 @@ step is a no-op.
 Illustrative only — scout derives each list from the rules above:
 
 ```yaml
-# qa-engineer (Sage) — analysis pass via test-case-analysis skill:
-# reads TMS, drives browser, emits AFS. No code writing.
-tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
-        'playwright_<server>/*',
-        'elitea_dev/ZephyrConnector_get_test_case',
-        'elitea_dev/ZephyrConnector_get_test_case_test_steps',
-        'elitea_dev/ZephyrConnector_get_test_case_links',
-        'elitea_dev/ZephyrConnector_get_issue_link_test_cases',
-        'elitea_dev/JiraIntegration_search_using_jql',
-        'elitea_dev/JiraIntegration_execute_generic_rq']
-
-# test-automation-engineer (Axel) — codes, runs tests, back-writes TMS
+# test-automation-engineer (Axel) — codes, runs tests, probes live at
+# discretion, back-writes TMS. The reviewer slot is a fresh dispatch of
+# this same agent file — no separate tools: line.
 tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
         'playwright_<server>/*',
         'elitea_dev/ZephyrConnector_get_test_case',
@@ -544,14 +538,9 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
         'elitea_dev/ZephyrConnector_update_test_execution_test_steps',
         'elitea_dev/ZephyrConnector_sync_test_execution_script']
 
-# qa-engineer (Sage) — verifies tests, reads stories
-tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo',
-        'playwright_<server>/*',
-        'elitea_dev/JiraIntegration_search_using_jql']
-
-# test-automation-lead (Tal) — routes, gates AFS quality, runs the
-# hardening gate, merges. Base set + execute; read-only TMS + Jira
-# inherited from the worker roster (see § Orchestrator inheritance).
+# test-automation-lead (Tal) — routes, owns the merge (the hardening
+# gate is a dispatched engineer). Base set + execute; read-only TMS +
+# Jira inherited from the worker roster (see § Orchestrator inheritance).
 # Execution-write verbs included here because profile.md § Status
 # reporting assigns the post-merge TMS back-write to the orchestrator.
 tools: ['vscode', 'execute', 'read', 'search', 'web', 'agent', 'todo',
@@ -581,7 +570,7 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
    `skills/<name>/`, read `setup.yaml`. If it declares
    `dependencies.mcp[].name`, add the role:
    ```
-   role "playwright"   ← needed by any agent with skill playwright-testing
+   role "playwright"   ← declared by a browser skill's setup.yaml (e.g. manual-qa's playwright-testing)
    role "zephyr-scale" ← needed when test-automation.yaml adapter matches
    role "jira"         ← needed when test-automation.yaml jira_toolset present
    ```
@@ -636,7 +625,7 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
      the frontmatter block
 
 7. **Orchestrator pass (the roster's routing agents — in this
-   bundle, `test-automation-lead`).** After step 6, scan the
+   factory, `test-automation-lead`).** After step 6, scan the
    worker roster for TMS / Jira role assignments. Apply orchestrator
    inheritance (see § Orchestrator inheritance):
    - `test-automation-lead` gets the base set + `execute` plus the
@@ -645,7 +634,7 @@ tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
    - Add the TMS execution-write verbs (`create_*` / `update_*` /
      `sync_*` on executions) only when `.agents/profile.md`
      § Status reporting assigns the TMS back-write to the
-     orchestrator — in this bundle the lead owns the merge (the
+     orchestrator — in this factory the lead owns the merge (the
      gate is a dispatched engineer), so the post-merge back-write
      is the lead's.
 

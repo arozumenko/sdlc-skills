@@ -2,7 +2,7 @@
 # SubagentStop hook — persist a workflow subagent's structured result.
 #
 # Thin launcher. All logic (and all the tests) live in workflow-return.mjs;
-# this exists because the bundle installer copies hooks/scripts/ and Claude
+# this exists because the factory installer copies hooks/scripts/ and Claude
 # Code invokes an extensionless command through run-hook.cmd.
 #
 # Contract, in order of importance:

@@ -67,7 +67,7 @@ edge cases. Include performance criteria when relevant.
 Ordered list of tasks with dependencies, grouped into phases. For each task
 define: what to build (not how — that's the developer's job), interface
 contract, acceptance criteria it satisfies, and which role owns it
-(python-dev, js-dev, qa-engineer). Call out parallel opportunities and the
+(python-dev, js-dev, test-automation-engineer). Call out parallel opportunities and the
 critical path.
 
 ### 7. Get approval

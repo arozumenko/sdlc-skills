@@ -1,4 +1,9 @@
-# Playwright Testing Patterns
+# Playwright Patterns
+
+POM, fixture strategy, and framework-specific selectors for Playwright
+projects. Read when the project's framework is Playwright and its own
+conventions (`.agents/testing.md` + three neighbouring tests — always the
+first authority) leave a pattern question open.
 
 ## Contents
 

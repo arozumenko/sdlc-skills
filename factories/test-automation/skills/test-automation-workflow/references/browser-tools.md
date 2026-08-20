@@ -15,7 +15,7 @@ The honesty rule below is surface-independent: don't synthesize an
 observation you couldn't reproduce through a real tool against the real
 system, whatever the surface.
 
-## Concurrency — one browser, one analyst
+## Concurrency — one browser, one slot
 
 The **Playwright MCP server drives ONE shared browser**: two concurrent
 agents calling it switch each other's tabs and share auth state — corrupted
@@ -43,8 +43,8 @@ The isolation machinery below exists for the cases that fall outside that:
 A full-page accessibility snapshot of a complex page costs 5–15k tokens of
 context; a scripted CDP probe (`browser-verify`) or a scoped query answers
 most questions ("what's the submit button's handle?", "did the banner
-appear?") for ~50. Over a 30–80-operation exploration that ratio dominates
-the analyst's entire cost. Default order during exploration:
+appear?") for ~50. Over a 30–80-operation probing session that ratio dominates
+its entire cost. Default order during probing:
 
 1. **Scripted probe** (`browser-verify` CDP, or a targeted MCP query) for
    any question with a known shape;
@@ -57,15 +57,15 @@ system, and the honesty rule above is untouched.
 
 ## UI worked example — the three browser tools
 
-When the surface is a browser, three skills can drive it in this
-monorepo. None replaces the others — they sit at different layers and
-excel at different things. Load this reference when you have to pick (or
-switch) during AFS authoring, ad-hoc verification, or while implementing
-a UI test.
+When the surface is a browser, three tool stacks can drive it. None
+replaces the others — they sit at different layers and excel at
+different things. Load this reference when you have to pick (or switch)
+during live probing, ad-hoc verification, or while implementing a UI
+test.
 
-| Skill | Layer | Best at | Reach for it when |
+| Tool | Layer | Best at | Reach for it when |
 |---|---|---|---|
-| [`playwright-testing`](../../playwright-testing/) | Playwright **MCP server** (in-host tool calls) | Snapshot-driven interaction — `browser_snapshot`, `browser_click`, `browser_fill`, `browser_navigate`. Accessible-name discovery falls out for free. | **Default for UI** analyst exploration and any interactive browser check when the Playwright MCP server is wired into the host. |
+| Playwright MCP (the `playwright-testing` skill on manual-qa co-installs, or the host's Playwright MCP server directly) | Playwright **MCP server** (in-host tool calls) | Snapshot-driven interaction — `browser_snapshot`, `browser_click`, `browser_fill`, `browser_navigate`. Accessible-name discovery falls out for free. | **Default for UI** live probing and any interactive browser check when the Playwright MCP server is wired into the host. |
 | `playwright-cli` | Microsoft Playwright **CLI** (shell) | Same Playwright browser surface, driven from `npx playwright-cli` / `playwright-cli` commands. Multi-tab, storage, request mocking, tracing, `codegen` (test generation), persistent profiles. | The Playwright MCP server isn't available, or you want a reproducible **shell command** instead of a tool call — CI smoke, trace capture, codegen, deep CLI flows. |
 | [`browser-verify`](../../browser-verify/) | **Chrome DevTools Protocol** (CDP) | Computed styles, real CDP input events, storage/cookies dump, axe accessibility audit, screenshot diffs. Lighter than full Playwright. | Visual smoke check, accessibility audit, deep DOM inspection, or when Playwright (MCP + CLI) is overkill for the question. |
 
@@ -75,7 +75,7 @@ Before choosing a tool, scan the host's environment:
 
 1. **Playwright MCP server up?** Look for `mcp__playwright__*` /
    `playwright/*` entries in the host's tool list (Claude Code, Copilot
-   CLI, Cursor, Windsurf). If present, `playwright-testing` is the
+   CLI, Cursor, Windsurf). If present, the Playwright MCP is the
    default.
 2. **`playwright-cli` installed?** Check `npx playwright-cli --version`,
    or whether the Playwright CLI is available. If
@@ -85,24 +85,25 @@ Before choosing a tool, scan the host's environment:
    always installed for QA / test-automation agents. Use it for
    visual / CDP / accessibility checks regardless of the above.
 
-If only `browser-verify` is available you can still execute most
-analyst-side flows — you'll just be more verbose. Note that constraint
-in the AFS / PR so the next reader knows what produced what.
+If only `browser-verify` is available you can still run most
+live-probing flows — you'll just be more verbose. Note that constraint
+in the PR / Run Report so the next reader knows what produced what.
 
 ## Pick by challenge
 
-- **Authoring an AFS step-by-step** → `playwright-testing` (snapshot
-  yields the ref + accessible name in one call). Falls back to
-  `playwright-cli` if MCP is offline; to `browser-verify` if neither.
+- **Grounding a case step live** (extract a handle, watch a step
+  behave) → the Playwright MCP (snapshot yields the ref + accessible
+  name in one call). Falls back to `playwright-cli` if MCP is offline;
+  to `browser-verify` if neither.
 - **Selector is flaky / accessible name unclear** → re-snapshot via
-  `playwright-testing`; or use `browser-verify` for computed-style /
+  the Playwright MCP; or use `browser-verify` for computed-style /
   shadow-DOM dive; or `playwright-cli codegen` to see the locator
   Playwright itself proposes.
 - **Visual regression / pixel-level diff** → `browser-verify`
   (screenshot + diff).
 - **Accessibility audit (axe)** → `browser-verify`.
 - **Multi-tab / multi-window / storage manipulation** →
-  `playwright-testing` if the MCP server exposes the relevant tools;
+  the Playwright MCP if the server exposes the relevant tools;
   `playwright-cli` otherwise (first-class CLI territory).
 - **Capturing a trace for a flake report** → `playwright-cli`
   (`--trace=on`). The resulting `.zip` opens in Playwright Trace Viewer.
@@ -116,10 +117,10 @@ in the AFS / PR so the next reader knows what produced what.
 
 If the first tool you try doesn't give the answer (snapshot is stale,
 MCP times out, CDP can't reach a deeply nested iframe), switch to the
-next. Don't ping-pong silently — note in the AFS (or PR body) which
+next. Don't ping-pong silently — note in the PR body / Run Report which
 tool produced which observation:
 
-> Logged in via `playwright-testing` (snapshot ref `s4f2`).
+> Logged in via the Playwright MCP (snapshot ref `s4f2`).
 > Verified computed `aria-expanded` via `browser-verify` because the
 > snapshot wasn't surfacing it after the dropdown animation.
 
@@ -130,7 +131,7 @@ product behaviour.
 
 ## Agents that load this reference
 
-- `qa-engineer` (Sage) — via `test-case-analysis` during AFS authoring.
 - `test-automation-engineer` (Axel) — via `test-automation-workflow`
-  during implementation, when a chosen tool isn't producing useful
-  evidence and a switch may unblock the test.
+  during a build, when a chosen tool isn't producing useful evidence
+  and a switch may unblock the test. (manual-qa's `test-runner` carries
+  its own tool stack and never needs this file.)

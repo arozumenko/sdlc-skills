@@ -124,8 +124,8 @@ Key findings written to:
 ## Step 0.7 — Project-systems capture
 
 After PR sampling, scout resolves the **project-systems map** — which
-issue tracker, TMS, KB the team uses, and where bugs found during
-test-case-analysis should land. Repo contents hint at some of these
+issue tracker, TMS, KB the team uses, and where bugs found by the
+pipeline should land. Repo contents hint at some of these
 (a `.github/ISSUE_TEMPLATE/` folder = GitHub Issues, a CODEOWNERS
 file, Jira references in READMEs), but most fields need the
 operator's confirmation.
@@ -168,12 +168,12 @@ value or `ASK`:
    the orchestrator knows where its work comes from, not just how to report on it.
 3. **Knowledge base** — `confluence` / `notion` / `obsidian` /
    `github-wiki` / `readme-only` / `none`. Space / database name.
-4. **Bug filing style** — where a defect discovered during
-   `test-case-analysis` lands. A ticket is **always** filed (so
-   nothing slips through tracking); these options only differ on
-   *which tracker*:
+4. **Bug filing style** — where a defect discovered by the pipeline
+   lands. A ticket is **always** filed (so nothing slips through
+   tracking); these options only differ on *which tracker*:
    - `github-issue` *(default)* — open a standalone issue in the
-     repo's tracker via `bugfix-workflow`
+     repo's tracker per the implementation skill's defect-filing
+     discipline
    - `story-subtask` — create a sub-task linked to the originating
      Jira/Azure story (the story the TMS case is linked to)
    - `separate-ticket` — file in a dedicated QA/bugs project
@@ -193,8 +193,8 @@ value or `ASK`:
 7. **Link case in bug** — `yes` / `no`. Whether filed tickets
    reference the TMS case ID in their body.
 8. **Test case storage** — `tms` / `markdown` / `both-synced` /
-   `none`. Whether AFS files under `test-specs/` mirror the TMS or
-   exist standalone.
+   `none`. Whether authored case files under `tasks/<suite>/` mirror
+   the TMS or exist standalone.
 9. **Automation PR base branch** — the branch automation PRs target
    (and where Axel cuts his feature branches FROM). Typically the
    project's default branch; sometimes a dedicated
@@ -277,13 +277,12 @@ the operator sees what was changed and why.
 § profile.md for the section template). Downstream skills read this
 at runtime:
 
-- `test-case-analysis` reads § Bug filing style + § Bug filing target +
-  § Bundling policy when Sage needs to file a defect.
-- `bugfix-workflow` reads § Issue tracker to know which CLI to invoke
-  (`gh issue create` vs. Jira create vs. …).
-- `test-automation-workflow` reads § Test case storage to decide
-  whether AFS files should be written to git under `test-specs/`,
-  pushed back to the TMS, or both.
+- `test-automation-implementation` (references/defect-filing.md) reads
+  § Issue tracker + § Bug filing style + § Bug filing target +
+  § Bundling policy when the engineer files a defect — including which
+  CLI to invoke (`gh issue create` vs. Jira create vs. …).
+- `test-automation-workflow` reads § Test case storage to locate
+  authored cases (`tasks/<suite>/` files or the TMS).
 - the orchestrator (`test-automation-lead`) reads § Automation PR
   policy at session start — uses the base branch when routing Axel's
   PRs, and only fires the merge when the policy is `auto-merge`
@@ -319,7 +318,7 @@ Roles & sample users:    <N roles — keys + env-var names, no secrets>
 Additional notes:        <verbatim from operator's ## Notes block, or none>
 
 Any "Unconfirmed" field — edit .agents/profile.md § Project systems
-before the first test-case-analysis run.
+before the first batch run.
 ```
 
 ---

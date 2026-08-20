@@ -13,7 +13,7 @@ capture:
 - **`.agents/automation/**/report.json`** (recursive glob — a campaign may
   nest batches in subfolders, e.g. `approved-next50/wave-02-05-merged/`;
   don't assume one level deep) — gives `cases[].id`, `.outcome`, `.branch`,
-  `.afs`, and the batch's `integration_branch`.
+  and the batch's `integration_branch`.
 - **A `usage-rollup.mjs --json` rollup** (from the `efficiency-audit` skill,
   run separately and passed in via `--ledger`) — gives the metered `ledger`
   array, where every unit carries `gitBranch`, `costUsd`, `durationMin`.
@@ -88,7 +88,7 @@ row/summary provenance that it was hand-verified, not joined. See
    `.agents/estimation/calibration-proposal-<date>.md`. Nothing else changes.
 4. **`--apply`**: writes the computed `bucket_stats` into the project-local
    `.agents/estimation/complexity-taxonomy.json` (a copy of the bundled
-   default on first run, never the bundle's own shipped file — recalibration
+   default on first run, never the factory's own shipped file — recalibration
    is always project-scoped) and appends a dated entry to
    `.agents/estimation/calibration-log.md` naming what changed, from how many
    cases, and linking the proposal file it came from.
@@ -97,7 +97,7 @@ row/summary provenance that it was hand-verified, not joined. See
 be defensible months later — "why do we believe $X/case for canvas work"
 should always resolve to a dated, human-approved calibration entry, not an
 opaque script decision. This mirrors the same "declared, not silent"
-discipline used elsewhere in this bundle for judgment calls a script can
+discipline used elsewhere in this factory for judgment calls a script can
 propose but shouldn't unilaterally commit.
 
 ### Known limitation: review/recovery work dispatched against the trunk, not the case branch

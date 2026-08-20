@@ -74,7 +74,8 @@ Standard flow when the caller is filing a new defect:
    the tracker's create command. For `separate-ticket`, target the
    project named in § Bug filing target.
 4. Return the ticket ID and URL to the caller. What the caller does
-   with that ID (note in an AFS, attach to a test, link in a PR
+   with that ID (note in the spec's coverage block (a `blocked-by-defect`
+   exclusion), attach to a test, link in a PR
    body) is caller policy, not this skill's concern.
 
 This skill files tickets and posts/queries/closes them. It does **not**

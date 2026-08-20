@@ -1,5 +1,5 @@
 {
-  "_comment": "Identity header for the cross-factory tokenomics dataset. Copy to .agents/telemetry/factory-profile.json in YOUR project and fill the <angle-bracket> placeholders — hand-authored once, never regenerated, and never shipped by the bundle. The non-placeholder defaults hold for a stock test-automation install; override only where your setup actually differs.",
+  "_comment": "Identity header for the cross-factory tokenomics dataset. Copy to .agents/telemetry/factory-profile.json in YOUR project and fill the <angle-bracket> placeholders — hand-authored once, never regenerated, and never shipped by the factory. The non-placeholder defaults hold for a stock test-automation install; override only where your setup actually differs.",
   "schema_version": "1.0",
   "factory_id": "<your-project-slug>-test-automation",
   "factory_name": "<Your Project / App Under Test> — Test Automation (agentic TMS-to-merged-tests pipeline)",
@@ -24,7 +24,6 @@
   "pipeline": [
     "scout",
     "test-automation-lead",
-    "qa-engineer",
     "test-automation-engineer"
   ],
   "submitted_by": null,

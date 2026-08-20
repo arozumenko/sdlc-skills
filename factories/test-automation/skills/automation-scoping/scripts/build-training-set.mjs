@@ -110,9 +110,8 @@ export function buildTrainingSet({ automationDir, ledgerPath, repoRoot, taxonomy
     const trunkShareMin = trunkPool.min / batchCaseCount;
 
     // How many of THIS report's cases share each branch — a cluster dispatch
-    // (test-case-analysis § Cluster dispatches: several cases, one analyst
-    // session, one implementer branch/PR, separate specs OR one family AFS)
-    // puts N case ids on one branch. sumByBranch() below returns that
+    // (several cases built on one implementer branch/PR) puts N case ids on
+    // one branch. sumByBranch() below returns that
     // branch's FULL cost for every case that shares it — divide by the
     // cluster size or every clustered case's cost gets counted N times over
     // (confirmed in the wild: a real 3-case cluster otherwise reported the

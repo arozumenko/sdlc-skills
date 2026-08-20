@@ -1,9 +1,8 @@
 # Defect filing — routing, styles, and bundle-per-case
 
-When you find a defect during execution, this is the full mechanics of
-*where* the ticket lands and *what shape* it takes. The analyst's primary
-loop (SKILL.md § 5 Classify findings) keeps only the safe defaults; the
-heavy detail lives here.
+When you find a defect during a build, this is the full mechanics of *where*
+the ticket lands and *what shape* it takes. The engineer's loop (SKILL.md
+Phase 5) keeps only the safe defaults; the heavy detail lives here.
 
 Three foundations carry across everything below:
 
@@ -22,27 +21,46 @@ Three foundations carry across everything below:
   app's internal drag bookkeeping off-by-one for every subsequent,
   individually-correct gesture — a state no real user can produce, and a
   classic source of confidently-filed non-bugs. No pristine repro → treat
-  as self-inflicted session state: document it in the AFS (or the run
-  report) instead of filing, and note what was ruled out.
-- **Filing is not this skill's job.** This skill hands you the *what*
-  (severity, repro, evidence) and the *where* (tracker + style + target);
-  your agent's wired bug-filing skill does the *how*. Do not run a
-  dev-side fix lifecycle (failing test → RCA → implement fix → verify) —
-  those steps belong to whoever picks the defect up later, not to you
-  during analysis. You file and walk away.
+  as self-inflicted session state: document it in the Run Report instead
+  of filing, and note what was ruled out.
+- **Filing is not fixing.** This file hands you the *what* (severity,
+  repro, evidence) and the *where* (tracker + style + target); your
+  agent's wired bug-filing skill does the *how*. Do not run a dev-side
+  fix lifecycle (failing test → RCA → implement fix → verify) — those
+  steps belong to whoever picks the defect up later. **You file and walk
+  away.**
 
 ## Contents
 
+- [Synthetic input hygiene](#synthetic-input-hygiene)
 - [Where the ticket lands — issue tracker](#where-the-ticket-lands--issue-tracker)
 - [What shape — the three bug-filing styles](#what-shape--the-three-bug-filing-styles)
 - [Whether to bundle or split](#whether-to-bundle-or-split)
-- [Recording the finding in the AFS](#recording-the-finding-in-the-afs)
+- [Recording the finding in your deliverable](#recording-the-finding-in-your-deliverable)
+
+## Synthetic input hygiene
+
+Some interactions can't be driven natively (OS-level file drag, clipboard
+writes) and need synthesized events (`dispatchEvent` with a constructed
+`DataTransfer`, force-clicks, JS-evaluated state). These are not real user
+input — sloppy sequences create app states no user can reach:
+
+- **One continuous gesture per `DataTransfer`** — `dragenter → dragover →
+  drop` with the same handle. Never start a second gesture (a second
+  `dragenter` with no `dragleave`/`drop` ending the first); apps that
+  count enter/leave pairs are left permanently desynced.
+- **Fresh context per experiment.** While debugging, earlier synthetic
+  input in the same page may have poisoned the app's internal state —
+  re-verify anything suspicious in a new, isolated context before
+  trusting it.
+- **A "bug" seen only after synthetic input isn't a bug yet.** It classifies
+  as a defect only after passing the pristine-repro gate above.
 
 ## Where the ticket lands — issue tracker
 
 Determine **where** the ticket lands by reading `.agents/profile.md`
 § Project systems § Bug filing. Two orthogonal fields drive the routing —
-scout's Step 0.7 fills both.
+scout's onboarding pass fills both.
 
 **Issue tracker** — the *system* the ticket lands in (`github-issues` /
 `gitlab-issues` / `jira` / `azure-devops` / `linear` / …). Your agent
@@ -50,8 +68,8 @@ has a bug-filing capability wired in; use it.
 
 If `.agents/profile.md` § Bug filing is `Unconfirmed`, or your agent has
 no wired tooling for the named tracker, stop and ask the operator before
-filing — don't pick a default silently. Flag the gap in the AFS so scout
-can fill the field on the next onboarding pass.
+filing — don't pick a default silently. Flag the gap in your Run Report so
+scout can fill the field on the next onboarding pass.
 
 ## What shape — the three bug-filing styles
 
@@ -80,7 +98,8 @@ classifying the finding's severity.
 
 - *Lightweight clarification / question* — expected behavior unclear,
   minor UI copy ambiguity, missing doc, "should this modal close on
-  outside-click?"-type questions.
+  outside-click?"-type questions. Case-text drift from the live product
+  is this class (SKILL.md § Reverse-masking guard), never a Bug.
 - *Real defect* — reproducible bug, functional breakage, incorrect data,
   blocker — anything where the product is provably wrong.
 
@@ -93,7 +112,7 @@ Then apply the policy:
   - If the finding is a *real defect* → its own ticket (same as
     strict-per-bug). Real defects never bundle.
   - If the finding is a *lightweight clarification* → check if there's
-    already an open "umbrella" ticket for this TMS case.
+    already an open "umbrella" ticket for this case.
     - If yes: add the finding as a comment on the existing ticket.
     - If no: file a new umbrella ticket (title e.g. "Clarifications for
       SCRUM-T101") and make this the first comment. Future lightweight
@@ -106,17 +125,24 @@ project already has both prerequisites:
 
 - A title convention for umbrella tickets (so the find-or-create search
   has something stable to match on).
-- A documented comment-anchor format that the analyst can reference from
-  the AFS (e.g. "comment-3" or a permalink fragment).
+- A documented comment-anchor format that can be referenced from the
+  test code and Run Report (e.g. "comment-3" or a permalink fragment).
 
 Without both, `strict-per-bug` is the safe default; one more ticket is
 cheaper than a missed clarification.
 
-## Recording the finding in the AFS
+## Recording the finding in your deliverable
 
-Note the finding in the AFS under "Known Defects Found" with the ticket
-ID, filing style, and a recommendation — soft-expect (isolated) or
-natural-fail (blocking). Under `bundle-per-case`, reference both the
-umbrella ticket ID and the comment anchor so the downstream implementer
-can find the specific note (e.g. "Known defect: JIRA SCRUM-BUG-42
-comment-3 — soft-expect", or "Known defect: GH#234 — natural-fail").
+Three places, each with a job:
+
+- **The spec** — `// Known defect: <TICKET>` beside the `expect.soft()`
+  (isolated), and for an excluded step the coverage declaration's
+  `blocked-by-defect` line with the ticket id as its referent
+  (SKILL.md § Coverage declaration).
+- **The Run Report** — the ticket ID, filing style, and the handling
+  (soft-expect for isolated, natural-fail for blocking); a soft-expected
+  defect is also declared in `expected_red[]`.
+- Under `bundle-per-case`, reference both the umbrella ticket ID and the
+  comment anchor so a reader can find the specific note (e.g. "Known
+  defect: JIRA SCRUM-BUG-42 comment-3 — soft-expect", or "Known defect:
+  GH#234 — natural-fail").

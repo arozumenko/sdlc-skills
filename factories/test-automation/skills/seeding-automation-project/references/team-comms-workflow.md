@@ -107,7 +107,7 @@ no declaration is documented, note the gap in your scout report.
 
 ## 6.5e — Add the `team-comms.md` reference to agent "Project Context"
 
-The routing roles — in this bundle, `test-automation-lead` — and any
+The routing roles — in this factory, `test-automation-lead` — and any
 worker whose "Project Context" already points at `AGENTS.md` should
 also point at `.agents/team-comms.md`. Scout adds a one-liner near the
 existing `AGENTS.md` reference only if it's missing:
@@ -117,7 +117,7 @@ existing `AGENTS.md` reference only if it's missing:
 > work off to another persona.
 
 Do not add this to every file — only to agents that actually route work
-(in this bundle, `test-automation-lead`). Workers — `qa-engineer`,
+(in this factory, `test-automation-lead`). Workers —
 `test-automation-engineer` — can read it on demand.
 
 ---

@@ -44,7 +44,7 @@ concluding a quiet session was a good one — see `signal-taxonomy.md`.
 `Candidate corrections` and `Interrupts` both need a human at the keyboard — in
 an unattended run (a workflow, or a plain sub-agent dispatch) they are always
 empty. These four sections are their equivalents, and none of them needs a
-human, a board, or knowledge of any bundle's schemas:
+human, a board, or knowledge of any factory's schemas:
 
 - **Repeated identical dispatches** — a byte-identical prompt sent to the same
   agent type more than once. Reported as a fact, not judged: a clerk invoked 24x

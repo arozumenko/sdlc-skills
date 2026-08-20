@@ -4,7 +4,7 @@ The full 10-phase procedure scout follows when onboarding a new codebase.
 This file is loaded by scout at session start; the main AGENT.md keeps only
 role identity, behavioral rules, and a pointer here.
 
-File generation (Phase 7 onward) uses the `seeding-a-project` skill — read that
+File generation (Phase 7 onward) uses the `seeding-automation-project` skill — read that
 skill's SKILL.md and references for templates and composition guidance.
 
 ---
@@ -151,7 +151,7 @@ find . -path "*/__tests__/*" -o -name "*.test.*" -o -name "*.spec.*" | head -10
 Look for: framework(s), fixture patterns, mocking approach, test data strategy, CI test commands.
 
 **Record three things into `.agents/testing.md` for the engineer** (use the
-template in `seeding-a-project/references/templates.md`):
+template in `seeding-automation-project/references/templates.md`):
 
 1. **Framework(s) + version** — exactly what's installed (e.g. `pytest 8`,
    `Playwright 1.47`, `WDIO 8`, `k6`), not a recommendation.
@@ -161,6 +161,12 @@ template in `seeding-a-project/references/templates.md`):
    `perf` / `mixed`. This is a **hint** for the engineer to match per case, **not
    an enforced enum**: if the repo spans surfaces, write `mixed` and note which
    directories are which. Don't force a single label on a polyglot repo.
+
+`.agents/testing.md` also carries the three routing-policy entries —
+**§ Execution provider**, **§ Coverage idiom**, and the knowledge-routing
+table (see your AGENT.md § Outputs); they're written in Phase 7 via the
+`seeding-automation-project` skill, but the detection evidence (frameworks
+found, manual-qa co-install signals) comes from this phase.
 
 ---
 
@@ -206,15 +212,13 @@ confirm rather than assume GitHub.
 Role                      Persona  Focus for this project
 ──────────────────────────────────────────────────────────────────
 test-automation-lead      Tal      [pipeline routing, merge gate, framework architecture here]
-test-automation-engineer  Axel     [framework + surfaces this role implements against]
-qa-engineer               Sage     [test framework and approach for this stack]
+test-automation-engineer  Axel     [framework + surfaces this role builds and reviews against]
 scout                     Kit      Codebase exploration (this session)
 ```
 
 **2. Explain the reasoning.** If you're recommending role changes, say why:
 - "test-automation-engineer's default examples lean web/UI — this is a pure API service, so I've tuned the briefing toward the HTTP-client test stack."
-- "The repo has both pytest and Cypress suites — I've noted the split so the implementer matches the right one per surface."
-- "QA's focus is exploratory + contract testing here — I've noted the detected framework so the engineer matches it."
+- "The repo has both pytest and Cypress suites — I've noted the split so the engineer matches the right one per surface."
 
 If the default roles fit, say so: "Default team fits a web app project — no role changes needed."
 
@@ -228,14 +232,14 @@ If the default roles fit, say so: "Default team fits a web app project — no ro
 
 **Role fit pattern-matching** (use Phase 1–2 data):
 
-| Detected | Implementer (test-automation-engineer) focus | Analyst/reviewer (qa-engineer) focus |
-|----------|----------------------------------------------|--------------------------------------|
-| `playwright.config.*` / `cypress.config.*` / `wdio.conf.*` | That UI framework, its page objects + fixtures | Browser-driven exploration, selector review |
-| HTTP-test stack (pytest + httpx, REST Assured, supertest, …) | API-client layer, contract assertions | Request/response evidence, schema checks |
-| Mobile (Appium caps, XCUITest, Espresso) | Screen objects, device/emulator runs | Accessibility-id review, device evidence |
-| Perf (k6, Gatling, JMeter) | Scenario modules, thresholds | Metric/threshold review |
-| Mixed suites (several of the above) | Match the framework per surface, note the split | Same — per-surface evidence |
-| None of the above (greenfield) | Bootstrap per playbook § Framework architecture | Exploration against the live app |
+| Detected | Engineer (test-automation-engineer) focus — build + review |
+|----------|------------------------------------------------------------|
+| `playwright.config.*` / `cypress.config.*` / `wdio.conf.*` | That UI framework, its page objects + fixtures; selector review |
+| HTTP-test stack (pytest + httpx, REST Assured, supertest, …) | API-client layer, contract assertions, schema checks |
+| Mobile (Appium caps, XCUITest, Espresso) | Screen objects, device/emulator runs, accessibility-id review |
+| Perf (k6, Gatling, JMeter) | Scenario modules, thresholds, metric review |
+| Mixed suites (several of the above) | Match the framework per surface, note the split |
+| None of the above (greenfield) | Bootstrap per playbook § Framework architecture |
 
 ---
 
@@ -279,7 +283,6 @@ Files to CREATE:   AGENTS.md
                    .agents/onboarding.md
 
 Roles to tune:     test-automation-engineer → [focus] (framework, surfaces)
-                   qa-engineer → [focus] (exploration tooling, evidence style)
                    ...
 
 Memory to seed:    [N] role files — all roles get project context
@@ -295,7 +298,7 @@ Proceed? [yes / no / adjust]
 
 Execute everything approved in Phase 6. Report each file as you generate it: `✓ project_briefing.md — test-automation-engineer (Playwright + API-client split)`
 
-**File generation uses the `seeding-a-project` skill.** Read the installed
+**File generation uses the `seeding-automation-project` skill.** Read the installed
 skill's SKILL.md (load it via your host's skill mechanism) for the
 generation flow, and the skill's `references/` directory for templates:
 
@@ -312,19 +315,19 @@ generation flow, and the skill's `references/` directory for templates:
 `CLAUDE.md` lives at the project root.
 
 **7b — Tune SOUL.md and AGENT.md for repurposed roles:**
-See `skills/seeding-a-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, communication conventions, and restart protocol intact.
+See `skills/seeding-automation-project/references/role-customization.md`. Surgical edits only: update persona name, domain expertise, identity paragraph, mission statement. Leave session lifecycle, communication conventions, and restart protocol intact.
 
 **7c — Seed role memory files:**
 For **all roles** — not just customized ones — write a `project_briefing.md`
 curated entry at `.agents/memory/<role-id>/project_briefing.md` (with
 `type: project` frontmatter per the `memory` skill spec) and append/update
 the corresponding line in `.agents/memory/<role-id>/MEMORY.md`. Use the
-template in `skills/seeding-a-project/references/templates.md`. Write "My
+template in `skills/seeding-automation-project/references/templates.md`. Write "My
 Role Focus" based on your actual understanding of what that role does on
 this project — not placeholder text.
 
 **7d — Generate `.agents/team-comms.md`:**
-Run the full procedure in `skills/seeding-a-project/references/team-comms-workflow.md` (substeps 6.5a–6.5f). Every project gets a `team-comms.md`; PM and every routing-capable role point at it for all routing decisions.
+Run the full procedure in `skills/seeding-automation-project/references/team-comms-workflow.md` (substeps 6.5a–6.5f). Every project gets a `team-comms.md`; PM and every routing-capable role point at it for all routing decisions.
 
 **Legacy marker cleanup.** Earlier iterations of this design used `<!-- SCOUT:TEAM-ROSTER:BEGIN -->` / `END` markers inside agent files. Those are gone. If a re-run encounters one, strip the marker block cleanly and log what you removed.
 

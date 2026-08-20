@@ -10,20 +10,22 @@
 // Claude Code:  adds a SessionEnd entry to .claude/settings.json (shared — the
 //               whole team captures once it's committed). --local targets
 //               .claude/settings.local.json instead (just you).
-// Copilot CLI:  writes .github/hooks/tokenomics.json with a sessionStart sweep
-//               (Copilot's stream has no documented session-end hook; the sweep
-//               harvests each COMPLETED session on the next session's start).
+// Copilot CLI:  writes .github/hooks/tokenomics.json with sessionStart +
+//               sessionEnd sweeps and the scope-contract hooks (older CLIs
+//               ignore events they don't know).
 // Both paths point at hooks/telemetry-capture.mjs inside THIS installed skill —
 // the script self-locates, so it works wherever the skill was installed.
 //
 // Beyond wiring: `--host vscode` adds a folderOpen auto-task (the sidebar's
-// "session start hook" — VS Code asks permission once per folder),
+// "session start hook" — VS Code asks permission once per folder; OPT-IN, NOT
+// part of the default install: every sweep already walks the sidebar store, so
+// this only matters in a sidebar-ONLY repo — see installVsCode),
 // `--git-hook` adds a host-agnostic post-commit sweep, `--otel` writes the
 // OpenTelemetry opt-in (Claude settings env + workspace VS Code settings +
 // telemetry config), and `--doctor` health-checks the whole telemetry path.
 //
 // STDLIB ONLY.
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync, renameSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -50,21 +52,27 @@ function writeJson(path, obj) {
 
 /**
  * Claude: splice our entries into settings hooks; remove strips them.
- * Two entries: SessionEnd captures the ending session (freshest data, priced
+ * Capture: SessionEnd captures the ending session (freshest data, priced
  * while the transcript is guaranteed alive), and SessionStart runs a bounded
  * sweep so sessions that never ended cleanly (killed terminal) are harvested
  * the moment anyone opens the repo again — same rhythm as the Copilot side.
  * The start sweep injects no context, so it runs async where supported.
+ * Scope contract (scope-hook.mjs): SessionStart --announce injects ONE line
+ * with the session id (the model cannot name its scope file without it);
+ * PreToolUse on Agent|Workflow marks "this session dispatched work"; Stop
+ * --gate blocks the turn end ONCE when work was dispatched with no declared
+ * scope. All marked, all stripped by --remove.
  */
 export function installClaude(repo, rel, { local = false, remove = false } = {}) {
   const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
   const settings = readJson(file, {});
   settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   const script = `\${CLAUDE_PROJECT_DIR}/${posix(rel)}/hooks/telemetry-capture.mjs`;
-  const splice = (event, entry) => {
+  const scopeScript = `\${CLAUDE_PROJECT_DIR}/${posix(rel)}/hooks/scope-hook.mjs`;
+  const splice = (event, entries) => {
     const list = Array.isArray(settings.hooks[event]) ? settings.hooks[event] : [];
     const kept = list.filter((e) => !e || !e[MARKER]);
-    if (entry) kept.push(entry);
+    for (const entry of [].concat(entries ?? [])) kept.push(entry);
     if (kept.length) settings.hooks[event] = kept;
     else delete settings.hooks[event];
   };
@@ -72,9 +80,34 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
     hooks: [{ type: 'command', command: `node "${script}"`, timeout: 120 }],
     [MARKER]: true,
   });
-  splice('SessionStart', remove ? null : {
+  splice('SessionStart', remove ? null : [{
     matcher: 'startup|resume',
     hooks: [{ type: 'command', command: `node "${script}" --sweep`, timeout: 120, async: true }],
+    [MARKER]: true,
+  }, {
+    // sync on purpose: its single stdout line (session id + scope ask/digest)
+    // must reach context, and it must survive resume/clear/compact.
+    matcher: '*',
+    hooks: [{ type: 'command', command: `node "${scopeScript}" --announce`, timeout: 10 }],
+    [MARKER]: true,
+  }]);
+  splice('PreToolUse', remove ? null : {
+    // Workflow included: its inner agents never pass through the Agent tool,
+    // but the Workflow call itself marks the session as work-dispatching.
+    matcher: 'Agent|Workflow',
+    hooks: [{ type: 'command', command: `node "${scopeScript}" --mark-dispatch`, timeout: 10, async: true }],
+    [MARKER]: true,
+  });
+  splice('Stop', remove ? null : {
+    hooks: [{ type: 'command', command: `node "${scopeScript}" --gate`, timeout: 10 }],
+    [MARKER]: true,
+  });
+  // Measurements update as work finishes: each finished dispatch is metered
+  // (its own transcript only) into the session's live dispatch log. Async —
+  // it injects nothing and must never delay the run.
+  splice('SubagentStop', remove ? null : {
+    matcher: '*',
+    hooks: [{ type: 'command', command: `node "${script}" --dispatch`, timeout: 60, async: true }],
     [MARKER]: true,
   });
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
@@ -82,23 +115,47 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
   return file;
 }
 
-/** Copilot: a standalone hooks file — Copilot reads every .github/hooks/*.json. */
+/**
+ * Copilot: a standalone hooks file — Copilot reads every .github/hooks/*.json.
+ * Since the CLI hooks-reference added the full event set, the scope contract
+ * gets the SAME three moments as Claude (hooks-reference, checked 2026-08-12):
+ * sessionStart may return {additionalContext} (the announce — hence --json),
+ * subagentStart fires per dispatch (better than a tool matcher: named agents
+ * only, exactly the work we mean), and agentStop takes the identical
+ * {decision:'block', reason} shape with its own stop_hook_active guard and a
+ * runaway cap. Older CLIs simply ignore events they don't know — the
+ * `open --session auto` pending-record path stays as their fallback.
+ */
 export function installCopilot(repo, rel, { remove = false } = {}) {
   const file = join(repo, '.github', 'hooks', 'tokenomics.json');
   if (remove) {
     if (existsSync(file)) rmSync(file);
     return file;
   }
+  const cmd = (script, args) => ({
+    type: 'command',
+    bash: `node "./${posix(rel)}/hooks/${script}" ${args}`,
+    powershell: `& node "./${posix(rel)}/hooks/${script}" ${args}`,
+    env: { COPILOT_CLI: '1' },
+    timeoutSec: script === 'telemetry-capture.mjs' ? 120 : 10,
+  });
   writeJson(file, {
     version: 1,
     hooks: {
-      sessionStart: [{
-        type: 'command',
-        bash: `node "./${posix(rel)}/hooks/telemetry-capture.mjs" --sweep`,
-        powershell: `& node "./${posix(rel)}/hooks/telemetry-capture.mjs" --sweep`,
-        env: { COPILOT_CLI: '1' },
-        timeoutSec: 120,
-      }],
+      sessionStart: [
+        cmd('telemetry-capture.mjs', '--sweep'),
+        cmd('scope-hook.mjs', '--announce --json'),
+      ],
+      // sessionEnd exists per the hooks-reference: capture the ending session
+      // NOW instead of waiting for the next session's start. Just a sweep —
+      // the Copilot path has no live-grace (it keys on session.shutdown being
+      // written), so the ended session qualifies immediately; if shutdown
+      // races the hook, the start sweep remains the safety net, as before.
+      sessionEnd: [cmd('telemetry-capture.mjs', '--sweep')],
+      subagentStart: [cmd('scope-hook.mjs', '--mark-dispatch')],
+      // per-dispatch measurement, same as Claude's SubagentStop
+      subagentStop: [cmd('telemetry-capture.mjs', '--dispatch')],
+      agentStop: [cmd('scope-hook.mjs', '--gate')],
     },
   });
   return file;
@@ -109,6 +166,13 @@ export function installCopilot(repo, rel, { remove = false } = {}) {
  * mechanism, but tasks.json is its native "on session start". VS Code prompts
  * once per folder to allow automatic tasks; the task runs silently after that.
  * Identified by its label — never touches other tasks.
+ *
+ * OPT-IN (`--host vscode`), deliberately NOT part of `--host all`: every sweep
+ * walks all three stores, so a repo where anyone runs Claude Code or Copilot
+ * CLI already harvests sidebar sessions on those sweeps. This task only earns
+ * its keep in a SIDEBAR-ONLY repo — and it is the one thing the installer
+ * writes into SHARED editor config, so it costs every teammate a "allow
+ * automatic tasks?" prompt for a benefit most repos already have.
  */
 export function installVsCode(repo, rel, { remove = false } = {}) {
   const file = join(repo, '.vscode', 'tasks.json');
@@ -222,9 +286,256 @@ export function configureOtel(repo, { endpoint = 'http://localhost:4318', remove
   return touched;
 }
 
+// The README committed INSIDE the telemetry submodule — the first thing anyone
+// sees when they open the folder or browse the `telemetry` branch on the host.
+const TELEMETRY_README = `# Team telemetry (auto-written)
+
+Machine-written usage data: what each AI session cost, which cases it worked
+on. Hooks write here; commits go to the \`telemetry\` branch of THIS repo —
+never to main.
+
+One subfolder per factory — \`automation/\` is the test-automation factory's;
+other factories add their own and ride the same branch and sync.
+
+- Don't edit by hand. Don't commit this folder to main.
+- See the team picture:  \`git -C .agents/telemetry pull\`  → then run team-report
+- Empty after clone? run:  \`git submodule update --init\`
+`;
+
+// Transient files never worth committing even to the telemetry branch.
+// Generic on purpose: any factory's subfolder gets the same transient handling.
+const TELEMETRY_INNER_GITIGNORE = `*/live/
+*/scopes/.pending-*
+*/scopes/.nagged-*
+*/scopes/.unclosed-*
+`;
+
+/**
+ * Telemetry as a SELF-referential submodule: .agents/telemetry is a checkout
+ * of this same repository's orphan `telemetry` branch (.gitmodules url = ./).
+ *
+ * WHY. Telemetry is written continuously; the main tree lives in transactions
+ * (checkout/stash/gate demand cleanliness). Two lifecycles in one tree
+ * conflict by construction — measured: a stash swept the ledger, ` M usage-*`
+ * blocked a gate, cost.json rewrites dirtied the tree on every session end.
+ * A submodule gives the continuous writer its own branch and working dir the
+ * parent never scans (`ignore = all`), on any git, any OS, with the native
+ * clone story (`git clone --recurse-submodules` → team history in place).
+ *
+ * Degradation ladder: no git → plain dir (everything works locally); cloned
+ * without --recurse → empty dir, plain-dir behavior until this installer
+ * re-runs and initializes it (moving any interim files back in).
+ */
+export function installTelemetrySubmodule(repo, { remove = false } = {}) {
+  // The submodule sits at the telemetry ROOT — shared across factories, one
+  // branch, one sync. Each factory keeps to its own subfolder (ours:
+  // automation/), so others join later with zero extra machinery.
+  const dir = join(repo, '.agents', 'telemetry');
+  const git = (args, opts = {}) =>
+    execFileSync('git', args, { cwd: opts.cwd ?? repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+  const inRepo = () => { try { git(['rev-parse', '--git-dir']); return true; } catch { return false; } };
+  if (remove || !inRepo()) return { status: remove ? 'kept' : 'no-git' }; // --remove never deletes data
+  if (existsSync(join(dir, '.git'))) return { status: 'already' };
+
+  // Interim files (plain-dir phase) move aside before the checkout — and MUST
+  // move back on ANY exit. Field lesson from the old-instance dry run: a
+  // failed `submodule add` left the whole flat-era history stranded in the
+  // stash dir while seedConfig planted a fresh config over the void.
+  const stash = `${dir}.pre-submodule`;
+  let stashed = false;
+  const restoreStash = () => {
+    if (!stashed || !existsSync(stash)) return;
+    try {
+      mkdirSync(dir, { recursive: true });
+      for (const name of readdirSync(stash)) {
+        const to = join(dir, name);
+        if (!existsSync(to)) renameSync(join(stash, name), to);
+      }
+      if (readdirSync(stash).length === 0) rmSync(stash, { recursive: true, force: true });
+      stashed = false;
+    } catch { /* stash left in place — data preserved, doctor will surface it */ }
+  };
+  try {
+    // 1. The orphan branch, created empty via plumbing if absent (no checkout,
+    //    the main tree never moves).
+    let hasBranch = true;
+    try { git(['rev-parse', '--verify', 'refs/heads/telemetry']); } catch {
+      try { git(['rev-parse', '--verify', 'refs/remotes/origin/telemetry']);
+        git(['branch', 'telemetry', 'origin/telemetry']);
+      } catch {
+        const emptyTree = git(['hash-object', '-t', 'tree', '/dev/null']).trim();
+        const commit = git(['commit-tree', emptyTree, '-m', 'telemetry: root']).trim();
+        git(['update-ref', 'refs/heads/telemetry', commit]);
+        hasBranch = false; // fresh — seed files below
+      }
+    }
+
+    // 2. Move the interim files aside.
+    const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
+    if (hadFiles) { renameSync(dir, stash); stashed = true; }
+
+    // 2b. The flat era COMMITTED telemetry to main, and `submodule add`
+    //     refuses a tracked path outright — so the index entries must go
+    //     first. Index-only (`--cached`): files stay on disk (in the stash),
+    //     nothing is committed by us — the user's single review commit
+    //     records the removal together with the gitlink.
+    let untracked = false;
+    try {
+      if (git(['ls-files', '.agents/telemetry']).trim()) {
+        git(['rm', '-r', '-q', '--cached', '.agents/telemetry']);
+        untracked = true;
+      }
+    } catch { /* nothing tracked */ }
+
+    // 3. Publish the branch where teammates will clone it from (best-effort —
+    //    offline just means their first `submodule update` waits for a push).
+    try { git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']); } catch { /* no remote / offline */ }
+
+    // 4. Register + materialize. url './' = this same repository (resolved
+    //    against origin, where the branch was just pushed; with no remote it
+    //    resolves to the local repo, which also has it).
+    git(['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '-b', 'telemetry', '--', './', '.agents/telemetry']);
+    git(['config', '-f', '.gitmodules', 'submodule..agents/telemetry.ignore', 'all']);
+    git(['add', '.gitmodules']); // the ignore=all edit must ride the same staged version
+
+    // 5. Move the interim files back in, seed README + inner gitignore.
+    restoreStash();
+    if (!existsSync(join(dir, 'README.md'))) writeFileSync(join(dir, 'README.md'), TELEMETRY_README);
+    if (!existsSync(join(dir, '.gitignore'))) writeFileSync(join(dir, '.gitignore'), TELEMETRY_INNER_GITIGNORE);
+    if (!hasBranch || hadFiles) {
+      git(['add', '-A'], { cwd: dir });
+      try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], { cwd: dir }); } catch { /* nothing to commit */ }
+      // The seed commit moved the branch PAST the SHA that `submodule add`
+      // staged. Publish it and re-stage the gitlink, or a teammate's
+      // `clone --recurse-submodules` pins an empty (or unpushed) commit.
+      try { git(['push', 'origin', 'HEAD:telemetry'], { cwd: dir }); } catch { /* no remote / offline */ }
+      git(['add', '.agents/telemetry']);
+    }
+
+    // `migrate` now means: the flat era had committed this data to main, and
+    // step 2b already STAGED its removal — the user's one commit records it.
+    return { status: 'installed', migrate: untracked };
+  } catch (err) {
+    restoreStash(); // a failed setup must never leave history stranded aside
+    return { status: 'failed', error: String(err?.message ?? err).split('\n')[0] };
+  }
+}
+
+/**
+ * Layout migration: the flat era wrote this factory's files at the telemetry
+ * ROOT (usage-*.jsonl, scopes/, live/, config.json, factory-profile.json);
+ * the shared-submodule era puts them under automation/. Readers look ONLY in
+ * automation/, so un-migrated history silently vanishes from every report —
+ * hence this runs on every install, idempotent, plain dir or submodule alike.
+ * Never clobbers: an entry already present in automation/ wins (it is newer);
+ * directory moves merge file-by-file on the same rule.
+ */
+export function migrateTelemetryLayout(repo) {
+  const root = join(repo, '.agents', 'telemetry');
+  if (!existsSync(root)) return 0;
+  const auto = join(root, 'automation');
+  const OLD_FILES = (n) => /^usage-.*\.jsonl$/.test(n) || n === 'config.json' || n === 'factory-profile.json';
+  const OLD_DIRS = new Set(['scopes', 'live']);
+  let moved = 0;
+  let entries;
+  try { entries = readdirSync(root, { withFileTypes: true }); } catch { return 0; }
+  for (const e of entries) {
+    const old = e.isDirectory() ? OLD_DIRS.has(e.name) : OLD_FILES(e.name);
+    if (!old) continue;
+    const src = join(root, e.name);
+    const dest = join(auto, e.name);
+    try {
+      mkdirSync(auto, { recursive: true });
+      if (!existsSync(dest)) {
+        renameSync(src, dest);
+        moved++;
+      } else if (e.isDirectory()) {
+        for (const f of readdirSync(src)) {
+          const d2 = join(dest, f);
+          if (!existsSync(d2)) { renameSync(join(src, f), d2); moved++; }
+        }
+        if (readdirSync(src).length === 0) rmSync(src, { recursive: true, force: true });
+      } // a same-named FILE already in automation/: keep both untouched — surfaced by doctor, never merged blindly
+    } catch { /* best-effort per entry — a locked file must not abort the rest */ }
+  }
+  return moved;
+}
+
+/**
+ * The chief lead's "give me everyone's telemetry NOW" button. Sync (in the
+ * capture hooks) only PUSHES this machine's state — a clean local branch
+ * fast-forwards nowhere and never fetches, so teammates' pushes sit unseen
+ * until something merges them. Pull is that something: commit anything local,
+ * fetch, merge (per-user files → conflict-free), push the merge back.
+ */
+export function pullTelemetry(repo) {
+  const dir = join(repo, '.agents', 'telemetry'); // submodule root — all factories
+  if (!existsSync(join(dir, '.git'))) return { status: 'no-submodule' };
+  const git = (args, timeout = 20000) =>
+    execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
+  try {
+    git(['add', '-A']);
+    if (git(['status', '--porcelain']).trim()) {
+      git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
+    }
+    if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
+    git(['fetch', 'origin', 'telemetry']);
+    git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+    try { git(['push', 'origin', 'HEAD:telemetry']); } catch { /* offline push-back — next sync retries */ }
+    return { status: 'pulled' };
+  } catch (err) {
+    return { status: 'failed', error: String(err?.message ?? err).split('\n')[0] };
+  }
+}
+
+/**
+ * Ignore the WORKING STATE this skill writes, so it never blocks a gate.
+ *
+ * The constraint that forces this: `gate-case.mjs` refuses a dirty tree, so a
+ * file that is neither committed nor ignored stops the pipeline. Everything
+ * tokenomics writes falls in one of two classes and this block encodes the
+ * split — the RECORDS (ledger, scope files, config, factory profile) are
+ * deliberately NOT ignored, because team-wide reporting is exactly their
+ * point; only the transient per-run state is.
+ *
+ * Owned block, replaced in place on re-run and stripped by --remove; the rest
+ * of the file is never touched. Artifacts written by OTHER skills
+ * (.agents/automation/_returns/, case snapshots, browser scratch) are the
+ * project's call — the skill README lists them.
+ */
+const GI_START = '# >>> tokenomics (managed) — working state only; the ledger/scopes/receipts stay COMMITTED';
+const GI_END = '# <<< tokenomics';
+export const GITIGNORE_BLOCK = [
+  GI_START,
+  '.agents/telemetry/automation/live/',
+  '.agents/telemetry/automation/scopes/.pending-*',
+  '.agents/telemetry/automation/scopes/.nagged-*',
+  '.agents/telemetry/automation/scopes/.unclosed-*',
+  GI_END,
+].join('\n');
+
+export function installGitignore(repo, { remove = false } = {}) {
+  const file = join(repo, '.gitignore');
+  const prev = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  // Drop any previous block (start..end inclusive), keeping everything else.
+  const kept = [];
+  let skipping = false;
+  for (const line of prev.split('\n')) {
+    if (line.startsWith(GI_START.slice(0, 24))) { skipping = true; continue; }
+    if (skipping) { if (line.trim() === GI_END) skipping = false; continue; }
+    kept.push(line);
+  }
+  let body = kept.join('\n').replace(/\n{3,}$/, '\n\n').trimEnd();
+  if (!remove) body = `${body ? `${body}\n\n` : ''}${GITIGNORE_BLOCK}`;
+  if (!body.trim()) { if (existsSync(file)) rmSync(file); return file; }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${body}\n`);
+  return file;
+}
+
 /** Seed the telemetry dir + default config (never overwrites an existing one). */
 export function seedConfig(repo) {
-  const dir = join(repo, '.agents', 'telemetry');
+  const dir = join(repo, '.agents', 'telemetry', 'automation');
   mkdirSync(dir, { recursive: true });
   const cfg = join(dir, 'config.json');
   if (!existsSync(cfg)) {
@@ -250,14 +561,73 @@ export async function doctor(repo, { fix = false } = {}) {
   process.stderr.write(`tokenomics doctor — ${repo}\n`);
 
   const readJ = (p) => readJson(p, {});
-  const claudeWired = ['settings.json', 'settings.local.json'].some((f) => {
-    const h = readJ(join(repo, '.claude', f)).hooks ?? {};
-    return [...(h.SessionEnd ?? []), ...(h.SessionStart ?? [])].some((e) => e && e[MARKER]);
-  });
+  const claudeSettings = ['settings.json', 'settings.local.json'].map((f) => readJ(join(repo, '.claude', f)).hooks ?? {});
+  const claudeHas = (event) => claudeSettings.some((h) => (h[event] ?? []).some((e) => e && e[MARKER]));
+  const claudeWired = claudeHas('SessionEnd') || claudeHas('SessionStart');
   say(claudeWired, 'claude hooks', claudeWired ? undefined : 'not wired (run install-hooks.mjs)');
-  say(existsSync(join(repo, '.github', 'hooks', 'tokenomics.json')), 'copilot hook', undefined);
-  const tasks = readJ(join(repo, '.vscode', 'tasks.json')).tasks ?? [];
-  say(tasks.some((t) => t?.label === TASK_LABEL), 'vscode folderOpen task', 'sidebar sessions rely on this or on other hosts’ sweeps');
+  const claudeScope = claudeHas('Stop') && claudeHas('PreToolUse');
+  say(claudeScope, 'claude scope contract', claudeScope ? undefined : 'announce/gate not wired (re-run install-hooks.mjs — older install)');
+  const copFile = join(repo, '.github', 'hooks', 'tokenomics.json');
+  const copHooks = readJ(copFile).hooks ?? {};
+  say(existsSync(copFile), 'copilot hook', undefined);
+  if (existsSync(copFile)) {
+    const copScope = !!(copHooks.agentStop && copHooks.subagentStart && copHooks.sessionEnd);
+    say(copScope, 'copilot scope contract + sessionEnd capture', copScope ? undefined : 're-run install-hooks.mjs (older install; old CLIs ignore unknown events, safe to write)');
+  }
+  // A file that is neither committed nor ignored blocks the pipeline's gate.
+  const gi = existsSync(join(repo, '.gitignore')) ? readFileSync(join(repo, '.gitignore'), 'utf8') : '';
+  const giOk = gi.includes('.agents/telemetry/automation/live/');
+  say(giOk, 'gitignore (working state)', giOk ? undefined : 'transient telemetry files are not ignored — they will dirty the tree and block the gate; re-run install-hooks.mjs');
+  // Telemetry submodule: the difference between "my numbers" and "the team's".
+  {
+    const telDir = join(repo, '.agents', 'telemetry');
+    const gm = existsSync(join(repo, '.gitmodules')) ? readFileSync(join(repo, '.gitmodules'), 'utf8') : '';
+    const registered = gm.includes('.agents/telemetry');
+    const materialized = existsSync(join(telDir, '.git'));
+    if (registered && materialized) {
+      let note = '';
+      try {
+        const g = (args) => execFileSync('git', ['-C', telDir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 }).trim();
+        const branch = g(['branch', '--show-current']);
+        if (branch !== 'telemetry') note = `detached/off-branch (${branch || 'detached'}) — the next capture sync re-pins it`;
+        else {
+          let ahead = 0;
+          try { ahead = Number(g(['rev-list', '--count', 'origin/telemetry..HEAD'])) || 0; } catch { /* no remote-tracking yet */ }
+          note = ahead ? `${ahead} unpushed commit(s) — sync pushes at the next capture` : 'in sync';
+        }
+      } catch { note = 'state unreadable'; }
+      process.stderr.write(`  info telemetry submodule — ${note}; team view: install-hooks.mjs --pull before a team report\n`);
+      // Local-only era leaves the submodule's origin pointing at the repo's own
+      // directory. The moment a REAL remote appears, every sync still lands
+      // only in the local branch — silently unshared — until `git submodule
+      // sync` re-resolves the './' url against the new origin. Detect exactly
+      // that transition.
+      try {
+        const originOf = (cwd) => execFileSync('git', ['-C', cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 }).trim().replace(/\/+$/, '');
+        const superRemote = originOf(repo); // throws when the repo has no remote → local-only, no warning
+        const subRemote = originOf(telDir);
+        if (subRemote !== superRemote) {
+          say(false, 'telemetry submodule remote',
+            `points at ${subRemote} while the repo's origin is ${superRemote} — captures stay local-only; run: git submodule sync .agents/telemetry`);
+        }
+      } catch { /* no remote at all — local-only mode, nothing to warn about */ }
+    } else if (registered && !materialized) {
+      say(false, 'telemetry submodule', 'registered but empty — cloned without --recurse-submodules; run: git submodule update --init');
+    } else if (existsSync(telDir)) {
+      process.stderr.write('  info telemetry — plain dir (local-only); re-run install-hooks.mjs in a git repo to get the shared branch\n');
+    }
+  }
+  const scopeDir = join(repo, '.agents', 'telemetry', 'automation', 'scopes');
+  if (existsSync(scopeDir)) {
+    const names = readdirSync(scopeDir);
+    const records = names.filter((n) => n.endsWith('.json')).length;
+    const pendings = names.filter((n) => n.startsWith('pending-')).length;
+    const markers = names.filter((n) => n.startsWith('.pending-') || n.startsWith('.nagged-')).length;
+    process.stderr.write(`  info scopes — ${records} record(s)${pendings ? `, ${pendings} unclaimed pending (a sweep claims them)` : ''}${markers ? `, ${markers} marker(s)` : ''}\n`);
+  } else {
+    process.stderr.write('  info scopes — none yet (sessions declare via work-scope.mjs; see SKILL.md § Session scope)\n');
+  }
+  const vsTaskInstalled = (readJ(join(repo, '.vscode', 'tasks.json')).tasks ?? []).some((t) => t?.label === TASK_LABEL);
   const hooksDir = gitHooksDir(repo);
   const gitHook = hooksDir && existsSync(join(hooksDir, 'post-commit')) && readFileSync(join(hooksDir, 'post-commit'), 'utf8').includes(GIT_MARKER);
   process.stderr.write(`  info git post-commit sweep ${gitHook ? 'installed' : 'not installed (optional; --git-hook)'}\n`);
@@ -275,6 +645,20 @@ export async function doctor(repo, { fix = false } = {}) {
     } catch { /* ignore */ }
   }
   process.stderr.write(`  info stores — claude: ${claudeDirs.length} project dir(s), copilot: ${copRoots.length} root(s), vscode: ${vsRoots.length} root(s) / ${vsHashes} matching workspace(s)\n`);
+
+  // The sidebar task is opt-in because every sweep walks the sidebar store —
+  // so it only matters when NOTHING ELSE ever sweeps in this repo. Decide from
+  // the evidence rather than nagging: warn only for a genuine sidebar-only repo.
+  if (vsTaskInstalled) {
+    process.stderr.write('  info vscode folderOpen task installed (sidebar sweeps on folder open)\n');
+  } else if (vsHashes && !claudeDirs.length && !copRoots.length) {
+    say(false, 'vscode sidebar capture',
+      `${vsHashes} sidebar workspace(s) for this repo and no Claude/Copilot store — nothing will sweep them here; run install-hooks.mjs --host vscode (adds a folderOpen task to shared .vscode/tasks.json; each teammate allows auto-tasks once)`);
+  } else if (vsHashes) {
+    process.stderr.write(`  info vscode sidebar — ${vsHashes} workspace(s), swept by the other host(s)' sweeps (no task needed; --host vscode adds one anyway)\n`);
+  } else {
+    process.stderr.write('  info vscode sidebar — no workspaces for this repo (task not needed)\n');
+  }
 
   let ccusage = 'via npx at capture time';
   try {
@@ -328,6 +712,17 @@ export async function main(argv = process.argv.slice(2)) {
     return argv.includes('--strict') && warns ? 1 : 0;
   }
 
+  if (argv.includes('--pull')) {
+    const r = pullTelemetry(repo);
+    const note = {
+      pulled: 'telemetry pulled — the team\'s pushes are merged in; reports now see everyone',
+      'no-submodule': 'no telemetry submodule here — nothing to pull (plain-dir mode is local-only)',
+      failed: `pull failed (${r.error}) — offline, or no telemetry branch on the remote yet`,
+    }[r.status];
+    process.stderr.write(`tokenomics: ${note}\n`);
+    return r.status === 'failed' ? 1 : 0;
+  }
+
   if (argv.includes('--otel') || argv.includes('--otel-remove')) {
     const off = argv.includes('--otel-remove');
     const endpoint = arg('--endpoint') || 'http://localhost:4318';
@@ -353,7 +748,31 @@ export async function main(argv = process.argv.slice(2)) {
   const touched = [];
   if (host === 'all' || host === 'claude') touched.push(installClaude(repo, rel, { local, remove }));
   if (host === 'all' || host === 'copilot') touched.push(installCopilot(repo, rel, { remove }));
-  if (host === 'all' || host === 'vscode') touched.push(installVsCode(repo, rel, { remove }));
+  // vscode is opt-in only (see installVsCode) — but --remove still strips it
+  // from `all`, so uninstalling never leaves our task behind.
+  if (host === 'vscode' || (remove && host === 'all')) touched.push(installVsCode(repo, rel, { remove }));
+  // Always: without it, the transient files this skill writes would block the
+  // pipeline's gate (dirty tree) the first time a batch runs.
+  touched.push(installGitignore(repo, { remove }));
+  // Old flat-layout data moves into automation/ BEFORE the submodule step, so
+  // its interim-files stash/restore already carries the migrated shape.
+  if (!remove) {
+    const migrated = migrateTelemetryLayout(repo);
+    if (migrated) process.stderr.write(`tokenomics: migrated ${migrated} old-layout telemetry entr${migrated === 1 ? 'y' : 'ies'} → .agents/telemetry/automation/\n`);
+  }
+  const sub = installTelemetrySubmodule(repo, { remove });
+  if (sub.status === 'installed') {
+    process.stderr.write('\ntokenomics: telemetry set up as a submodule (.agents/telemetry → branch \'telemetry\', same repo; this factory writes automation/)\n'
+      + '\n  what this means, once:\n'
+      + '  • hooks write usage data there; it commits to its OWN branch — your working tree never gets dirty\n'
+      + '  • one commit to make now (adds .gitmodules + the pointer):\n'
+      + '        git add .gitmodules .agents/telemetry && git commit -m "chore: telemetry submodule"\n'
+      + (sub.migrate ? '    (old telemetry files were tracked on main — their removal is ALREADY STAGED and rides this same commit; the data itself lives on in the telemetry branch)\n' : '')
+      + '  • teammates: git clone --recurse-submodules   (forgot? this installer fixes it on next run)\n'
+      + '  • team report anytime:  git -C .agents/telemetry pull && node …/team-report.mjs --html\n');
+  } else if (sub.status === 'failed') {
+    process.stderr.write(`tokenomics: telemetry submodule setup skipped (${sub.error}) — plain-dir mode, everything still works locally\n`);
+  }
   if (!remove) touched.push(seedConfig(repo));
   process.stderr.write(`tokenomics: ${remove ? 'removed hooks from' : 'wired hooks into'}\n${touched.map((f) => `  ${relative(repo, f)}`).join('\n')}\n`);
   return 0;

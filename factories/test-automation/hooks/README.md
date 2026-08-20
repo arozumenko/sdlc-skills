@@ -1,6 +1,6 @@
 # test-automation hooks
 
-One hook, installed **only** with this bundle: it records what a workflow
+One hook, installed **only** with this factory: it records what a workflow
 subagent concluded, so an interrupted run can be resumed instead of redone.
 
 | | |
@@ -8,14 +8,14 @@ subagent concluded, so an interrupted run can be resumed instead of redone.
 | Event | `SubagentStop` |
 | Scope | workflow dispatches only — a lead's own subagents are untouched |
 | Mode | `async: true` — never blocks or delays a dispatch |
-| Writes | `.agents/automation/_returns/<run-id>/<agent-id>.json` |
+| Writes | `.agents/telemetry/automation/returns/<run-id>/<agent-id>.json` (legacy `_returns/` when no telemetry area) |
 
 ## Why it exists
 
-A dispatched agent's *payload* survives it — an analyst's AFS is on disk, an
-implementer's commits are in git. Its **conclusion** does not: the structured
-result lives only in the value handed back, so an agent that dies takes the
-record with it.
+A dispatched agent's *payload* survives it — an implementer's commits are in
+git, its surface-cache write-back is on disk. Its **conclusion** does not: the
+structured result lives only in the value handed back, so an agent that dies
+takes the record with it.
 
 Measured on the lazy-modal campaign (2026-07-30): a foundation implementer built
 its page objects, wrote the smoke spec, committed — then stalled. The branch was
@@ -62,18 +62,24 @@ unschema'd agent falls back to its final text.
 
 ## Install
 
-Merged into `<target>/settings.json` by the bundle installer, tagged
-`"_bundle": "test-automation"` — re-running replaces only this bundle's entries,
-and other bundles' hooks plus your own are left alone. Scripts land in
+Merged into `<target>/settings.json` by the factory installer, tagged
+`"_factory": "test-automation"` — re-running replaces only this factory's entries,
+and other factories' hooks plus your own are left alone. Scripts land in
 `<target>/hooks/test-automation/`.
 
-Claude-only for now (bundle hooks v1), which matches the scope anyway: workflows
+Claude-only for now (factory hooks v1), which matches the scope anyway: workflows
 are a Claude Code feature. On other hosts nothing is installed and nothing
 changes.
 
 ## Files
 
-- `hooks.json` — the event registration
+- `hooks.json` — the event registration; the matcher lists the pipeline's
+  dispatchable roles, `test-automation-engineer|test-automation-lead|test-runner`
+  (`qa-engineer` left the roster in v2; `test-runner` is manual-qa's agent,
+  matched so a runner PASS obtained on the needs-execution route banks a
+  receipt in TA's own telemetry — a resume then doesn't pay the live run
+  twice. Inert in manual-qa's own led runs: the hook writes only for
+  Workflow-tool dispatches.)
 - `scripts/workflow-return` — thin bash launcher
 - `scripts/workflow-return.mjs` — all the logic, unit-tested in
   `workflow-return.test.mjs` (kept OUT of `scripts/`, so it is not copied into consumer projects)

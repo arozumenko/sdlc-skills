@@ -6,6 +6,7 @@ group: qa
 color: orange
 theme: {color: colour208, icon: "📏", short_name: sizer}
 aliases: [test-sizer, sizer]
+context-docs: manual-qa/app_profile.md
 skills: []
 authors:
   - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>

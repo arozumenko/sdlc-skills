@@ -24,6 +24,7 @@
 // CDN request that fails exactly when someone is trying to read the report.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { DELIVERED_OUTCOMES } from './run-reports.mjs';
 
 /**
  * Role → pipeline slot. The rollup reports whatever agent name the host
@@ -31,9 +32,10 @@ import { pathToFileURL } from 'node:url';
  * than being forced into a bucket — a role nobody recognises is a finding.
  */
 export const SLOT_OF = {
-  'qa-engineer': 'analyst / reviewer',
+  'qa-engineer': 'analyst / reviewer (v1)', // pre-v2 role, kept for old telemetry
   'test-analyst': 'analyst',
-  'test-automation-engineer': 'implementer',
+  'test-runner': 'case execution (manual-qa)',
+  'test-automation-engineer': 'builder / reviewer',
   'test-automation-lead': 'orchestrator',
   'code-review': 'reviewer',
   'test-executor': 'executor',
@@ -126,7 +128,7 @@ export function perUnitCost(totals, resolved) {
 
 /**
  * Delivery, when the snapshot carries it. Two denominators side by side and
- * never one: `automated` cases are the specs that shipped, but every case that
+ * never one: `delivered` cases are the specs that shipped, but every case that
  * entered consumed analysis whether it shipped or not. A lone "cost per case"
  * is always one of these wearing the other's name — and which one it is decides
  * whether the pipeline looks cheap or expensive.
@@ -140,7 +142,7 @@ function deliverySection(d, costUsd) {
 <h2>What the money bought</h2>
 <div class="kpis">
   <div class="kpi"><span class="k">Per spec delivered</span><span class="v">${usd(d.perDelivered)}</span>
-    <span class="sub">${num(d.delivered)} automated</span></div>
+    <span class="sub">${num(d.delivered)} delivered</span></div>
   <div class="kpi"><span class="k">Per case examined</span><span class="v">${usd(d.perExamined)}</span>
     <span class="sub">${num(d.casesEntered)} entered${d.reentered ? `, ${num(d.reentered)} re-entry(ies) folded` : ''}</span></div>
   <div class="kpi"><span class="k">Batches</span><span class="v">${num((d.batches || []).length)}</span>
@@ -149,8 +151,8 @@ function deliverySection(d, costUsd) {
 <div class="scroll"><table>
   <tr><th>Outcome</th><th class="n">Cases</th><th class="n">Share</th></tr>
   ${rows.map(([k, n]) => `<tr>
-      <td>${esc(k)}${k === 'automated' ? ' <span class="sub">— produced a spec</span>' : ''}</td>
-      <td class="n">${num(n)}${bar(n, maxN, k === 'automated' ? '' : 'alt')}</td>
+      <td>${esc(k)}${DELIVERED_OUTCOMES.includes(k) ? ' <span class="sub">— produced a spec</span>' : ''}</td>
+      <td class="n">${num(n)}${bar(n, maxN, DELIVERED_OUTCOMES.includes(k) ? '' : 'alt')}</td>
       <td class="n">${d.casesEntered ? Math.round((n / d.casesEntered) * 100) : 0}%</td>
     </tr>`).join('\n')}
 </table></div>
@@ -160,7 +162,7 @@ function deliverySection(d, costUsd) {
   in the second and not the first.</p>
 ${cov && cov.share != null ? `<p class="note">Spend on branches these batches name: ${usd(cov.matchedUsd)} of
   ${usd(cov.totalUsd)} (${Math.round(cov.share * 100)}%, ${num(cov.matchedUnits)} unit(s)). This is a
-  <em>floor</em> — analysts never touch git, so their cost cannot be matched by branch. Read it as a dilution
+  <em>floor</em> — the read-only dispatches (triage, review) never touch git, so their cost cannot be matched by branch. Read it as a dilution
   check: a low share means this window mostly paid for other work, and the per-case figures above are
   diluted by it.</p>` : cov ? `<p class="note">Dilution check not run —
   ${cov.branchesKnown === 0 ? 'these reports name no branches' : 'no unit in this window records the branch it ran on'},

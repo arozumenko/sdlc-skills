@@ -129,7 +129,7 @@ It reports **two** numbers, because there are two honest questions:
 
 | | |
 |---|---|
-| **$ / spec delivered** | what a shipped test cost. Denominator: cases that reached `automated`. |
+| **$ / spec delivered** | what a shipped test cost. Denominator: cases that reached `delivered` (legacy `automated`). |
 | **$ / case examined** | what putting a case through this pipeline costs. Denominator: every case that entered — a case that ended `out-of-scope` still consumed analysis. |
 
 Three things it checks rather than assumes: a case that appears in two batches is

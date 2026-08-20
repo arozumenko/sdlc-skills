@@ -6,6 +6,7 @@
 - [Transports](#transports)
 - [Configuration file](#configuration-file)
 - [Adapter contract](#adapter-contract)
+- [Dual-write policy — TA writes automation, manual-qa writes live runs](#dual-write-policy--ta-writes-automation-manual-qa-writes-live-runs)
 - [Supported adapters](#supported-adapters)
 - [MCP transport — tool mapping](#mcp-transport-tool-mapping)
 - [Choosing an adapter](#choosing-an-adapter)
@@ -24,8 +25,9 @@ workflow keeps running.
 | **TMS adapter contract** (fetch / list / update / create / link) | this file — *Contract* section below |
 | **Per-TMS auth + URL shape** | this file — adapter blocks (Zephyr / TestRail / Xray / Azure / markdown) |
 | **Which MCP toolset each adapter uses** | this file — *Toolset mapping* table |
-| **Concrete invocation examples** (analyst fetch, back-write) | `commands.md` (Phase 2 + Phase 8) |
+| **Concrete invocation examples** (case fetch, back-write) | `commands.md` (§ Ingest + § Deliver) |
 | **TMS status verbs** (passed / failed / blocked / not-executed / skipped) | this file — adapter contract |
+| **Who writes what** (TA vs manual-qa) | this file — *Dual-write policy* |
 | **When the TMS is unreachable** | this file — *Failure modes* |
 
 If you're onboarding a new project:
@@ -37,8 +39,9 @@ If you're onboarding a new project:
 4. Wire any required env vars (`auth_env` line names them).
 5. Done — the workflow doesn't care which adapter you picked.
 
-No TMS at all? `adapter: markdown` is a one-liner; AFS files in
-`test-specs/` become the source of truth.
+No TMS at all? `adapter: markdown` is a one-liner; case files in the repo
+(manual-qa's `tasks/<suite>/TC-*.md` convention, or whatever `cases_dir`
+names) become the source of truth.
 
 ## Transports
 
@@ -94,7 +97,7 @@ tms:
   # auth_env: AZURE_DEVOPS_PAT
 
   # --- markdown (default fallback) ---
-  # cases_dir: test-specs
+  # cases_dir: tasks          # manual-qa's authored-case convention: tasks/<suite>/TC-*.md
 
 framework:
   language: typescript       # typescript | javascript | python | java | csharp | ...
@@ -117,7 +120,7 @@ evidence:
 
 Only the `tms.adapter` plus the adapter's own fields are mandatory. The
 `framework:` block is filled from scout output — regenerate it via
-[`seeding-a-project`](../../seeding-a-project/) if absent.
+[`seeding-automation-project`](../../seeding-automation-project/) if absent.
 
 ## Adapter contract
 
@@ -134,10 +137,13 @@ fetch_case(id)
 list_cases(filter)
   → [ id, ... ]   # filter: jql, tag, folder, story link, execution cycle, etc.
 
-update_execution(case_id, { status, evidence_urls, duration_ms, notes })
+update_execution(case_id, { status, coverage, evidence_urls, duration_ms, notes })
   → { execution_id, synced: bool }
+  # coverage: "full" | "partial" — partial lists the excluded steps with their
+  # categories/referents, lifted from the spec's coverage declaration
+  # (coverage-contract.md)
 
-create_case(afs_markdown)          # optional — not all adapters support
+create_case(case_markdown)         # optional — not all adapters support
   → { id }
 
 link_case_to_story(case_id, story) # optional
@@ -151,6 +157,25 @@ passed | failed | blocked | not-executed | skipped
 ```
 
 Each adapter maps these to its native statuses.
+
+## Dual-write policy — TA writes automation, manual-qa writes live runs
+
+On a repo that also runs the manual-qa factory, two teams touch the same TMS
+cases, and the split is by **what kind of record it is**, never by who got
+there first:
+
+- **TA back-writes ONLY automation executions** — the gate outcome via
+  `update_execution`, plus the case's status/coverage note (`full | partial`
+  and the excluded steps with reasons) and the PR link, at the close sweep.
+- **manual-qa's live runs are their own record.** TA never writes a manual
+  execution — not even the runner PASS it dispatched on the
+  `needs-execution` route (that result is TA's build evidence; recording the
+  live run in the TMS is the manual-qa side's convention and theirs to run).
+
+The split keeps both histories trustworthy: an automation execution says "the
+suite proved this N×", a manual execution says "a person (or their runner)
+walked this live" — collapsing them into one writer is how a case shows
+"passed" with nobody able to say which claim that was.
 
 ## Supported adapters
 
@@ -187,9 +212,10 @@ Each adapter maps these to its native statuses.
 
 ### markdown
 
-- **Fetch**: read file at `test-specs/{feature}/{id}.md`
-- **Update execution**: append to `test-specs/{feature}/{id}.md` under
-  a `## Executions` section, plus write JSON to `evidence.json_dir`
+- **Fetch**: read the case file under `cases_dir` (e.g. `tasks/{suite}/{id}_*.md`)
+- **Update execution**: append under a `## Executions` section in that file,
+  plus write JSON to `evidence.json_dir` — the dual-write policy still holds:
+  TA appends only automation executions
 - No auth. No network. Zero dependency. Always works.
 
 ## MCP transport — tool mapping
@@ -248,8 +274,8 @@ mechanism, not via commits.
 ## When the adapter fails
 
 Fetch failures (network, auth, deleted case) — fall back to the TMS's
-web UI: analyst opens the case in the browser, copies content into
-`markdown` format, proceeds. Do not block the workflow on a flaky TMS.
+web UI: open the case in the browser, copy content into
+`markdown` format, proceed. Do not block the workflow on a flaky TMS.
 
 Back-write failures (execution update) — queue the update, log it in
 `test-results/unsynced/`, surface a warning at end-of-run. Humans can

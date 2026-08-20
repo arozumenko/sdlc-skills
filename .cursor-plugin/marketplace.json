@@ -110,7 +110,7 @@
     {
       "name": "test-automation-lead",
       "source": "./factories/test-automation/agents/test-automation-lead",
-      "description": "Use when a TMS case or batch of cases needs to be automated, when technical suite work (tech-debt, migrations, improvements) needs planning and batching, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the batch pipeline (units one at a time on a batch trunk: analyse — or a tech-task brief for non-case units — implement, static review, merge back, then one hardening gate per batch), owns the automation merge, owns test-framework architecture.",
+      "description": "Use when a batch of ready test cases needs to be automated, when technical suite work (tech-debt, migrations, improvements) needs planning and batching, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the batch pipeline (units one at a time on a batch trunk: route on execution evidence — or a tech-task brief for non-case units — build, static review, merge back, then one hardening gate per batch), owns the automation merge, owns test-framework architecture.",
       "version": "0.2.0"
     },
     {
@@ -146,7 +146,7 @@
     {
       "name": "automation-scoping",
       "source": "./factories/test-automation/skills/automation-scoping",
-      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
+      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs sizing or a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", \"size these cases S/M/L/XL\", estimating the framework/CI/foundation work an engagement needs on top of its cases, sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
       "version": "0.2.0"
     },
     {
@@ -330,6 +330,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "seeding-automation-project",
+      "source": "./factories/test-automation/skills/seeding-automation-project",
+      "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
+      "version": "0.2.0"
+    },
+    {
       "name": "session-retrospective",
       "source": "./factories/feature-development/skills/session-retrospective",
       "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
@@ -344,7 +350,7 @@
     {
       "name": "test-automation-implementation",
       "source": "./factories/test-automation/skills/test-automation-implementation",
-      "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test — the implementer slot of the test-automation pipeline. Six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the Run Report template. Analyst counterpart: test-case-analysis; orchestration: test-automation-workflow.",
+      "description": "Use when a test case needs to become a green, framework-resident test — the build slot of the test-automation pipeline, from case to green test. Six-phase loop (Absorb → Investigate → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the coverage declaration, the Run Report. Orchestration: test-automation-workflow.",
       "version": "0.2.0"
     },
     {
@@ -362,7 +368,7 @@
     {
       "name": "tokenomics",
       "source": "./factories/test-automation/skills/tokenomics",
-      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
+      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/automation/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
       "version": "0.2.0"
     },
     {

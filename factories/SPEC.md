@@ -232,8 +232,9 @@ leaves the item discoverable.
    if missing; `CLAUDE.md` is auto-loaded and scout-owned (kept lean), so its
    block is only refreshed when the file already exists — never created.
    When scout later regenerates `AGENTS.md`/`CLAUDE.md`, the
-   `seeding-a-project` skill preserves `<!-- FACTORY:* -->` blocks verbatim, so
-   a factory's conventions survive onboarding.
+   `seeding-a-project` / `seeding-automation-project` skills preserve
+   `<!-- FACTORY:* -->` blocks (legacy `<!-- BUNDLE:* -->` included) verbatim,
+   so a factory's conventions survive onboarding.
 4. **Hooks** — for each target in `targets ∩ installed targets`, merge
    `hooks/hooks.json` into `<target>/settings.json` under `hooks` (tagged
    entries, merge-not-clobber, back up first); copy `hooks/scripts/` and
@@ -274,6 +275,33 @@ On install:
 
 The `feature-development` factory does not ship hooks yet — the merge
 machinery is in place; concrete hooks (format-on-edit, etc.) come later.
+
+## Coexistence (installing several factories into one repo)
+
+Factories are additive by construction — any combination installs in any
+order. Three conventions keep it that way:
+
+- **Consumer-repo namespaces.** Each factory owns `.agents/<its-id-or-domain>/`
+  for the working state its agents write in the consumer repo
+  (test-automation → `.agents/automation/`, manual-qa → `.agents/manual-qa/`,
+  feature-development → `.agents/feature-development/`). The `.agents/` root
+  holds only genuinely shared things (`profile.md`, `memory/<role>/`, shared
+  docs). Product artifacts (specs, tests, source) belong in the repo tree,
+  never under `.agents/`.
+- **Roster-guard shared-event hooks.** A hook that fires on a generic event
+  (`SubagentStop`, `PreToolUse` on `Agent`, session start/end) runs in EVERY
+  factory's sessions. Such a hook must check that the dispatched agent belongs
+  to its own factory's roster and exit silently otherwise (fail-open on a
+  missing `subagent_type` for older hosts). Field incident that set the rule:
+  manual-qa's benchmark hooks matched on the Agent *tool* and seeded state +
+  synthetic RUN reports in every test-automation session until guarded.
+- **One shared telemetry submodule.** Durable telemetry lives in
+  `.agents/telemetry` — a self-referential submodule on the repo's own
+  `telemetry` branch, **one subfolder per factory** (test-automation writes
+  `automation/`). A factory adopting durable telemetry later adds its own
+  subfolder and rides the same branch and sync machinery — never a second
+  submodule or a second branch. Setup and mechanics:
+  `factories/test-automation/skills/tokenomics/`.
 
 ## Idempotency & validation
 

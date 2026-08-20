@@ -1,3 +1,4 @@
+<!-- RULES.md is a dispatch-injection ECHO, not a canonical home. Canon: seeding-automation-project SKILL.md + AGENT.md. Edit the canon first, then mirror here. -->
 RULES: You MUST respond to this message.
 
 If it is a task (onboarding, exploration, documentation):

@@ -1,5 +1,5 @@
 ---
-name: seeding-a-project
+name: seeding-automation-project
 description: Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.
 license: Apache-2.0
 compatibility: Requires project root write access. No external dependencies.
@@ -28,8 +28,9 @@ project-root/
     ├── team-comms.md             ← Who's on the team and how to route work (Step 6.5)
     ├── architecture.md           ← System design map (if complex enough)
     ├── conventions.md            ← Detected coding standards
-    ├── testing.md                ← Test infrastructure details
+    ├── testing.md                ← Test infrastructure + pipeline policy (provider, coverage idiom)
     ├── test-automation.yaml      ← TMS adapter + transport config (Step 6.6)
+    ├── telemetry/                ← cost/attribution submodule, own branch (Step 6.7 — default ON)
     ├── onboarding.md             ← Scout's own audit trail
     └── memory/<role-id>/
         ├── MEMORY.md             ← Index (add a line for each entry)
@@ -56,9 +57,10 @@ test-automation-lead runs this skill *inline* to self-orient — rather
 than dispatching a dedicated scout pass — it may defer the heavier
 steps (full PR survey Step 0.5, role-overrides Step 6.9, role
 customization Step 7) and capture inline only the blocking fields the
-pipeline can't run without: the TMS (Step 0.7 / Step 6.6), the base
-branch + merge policy, the test user / credential env keys, and the
-base URL / API base. Everything else can be filled in later.
+pipeline can't run without: the TMS (Step 0.7 / Step 6.6), the
+execution provider (Step 6 § Execution provider), the base branch +
+merge policy, the test user / credential env keys, and the base URL /
+API base. Everything else can be filled in later.
 
 ## References
 
@@ -114,8 +116,8 @@ scout either asks interactively or writes `Unconfirmed`. A trailing
 free-form `## Notes` block in the prompt is carried verbatim into
 § Additional notes for anything that doesn't fit a structured field.
 
-Downstream skills read this section at runtime:
-`test-case-analysis` (bug filing), `bugfix-workflow` (tracker CLI),
+Downstream readers at runtime:
+`test-automation-implementation` (defect filing),
 `test-automation-workflow` (test-case storage),
 `test-automation-lead` + `test-automation-engineer` (merge policy,
 base branch).
@@ -139,12 +141,11 @@ cat CLAUDE.md 2>/dev/null && echo "EXISTS" || echo "NOT FOUND"
 - **If it doesn't exist:** create it fresh from the template in
   `references/templates.md`. **Then carry the team's block over:** if
   `AGENTS.md` contains any `<!-- FACTORY:<id> START -->` … `END -->`
-  block (or the pre-rename `<!-- BUNDLE:<id> START -->` … `END -->` form,
-  which may also appear on older installs), copy each one into the new
-  CLAUDE.md verbatim (at the end). The installer splices these into
-  CLAUDE.md on its next `--update` anyway — copying now just closes the
-  window where Claude sessions run without the team's working agreements
-  auto-loaded.
+  block (or the pre-rename `<!-- BUNDLE:<id> -->` form), copy each one
+  into the new CLAUDE.md verbatim (at the end).
+  The installer splices these into CLAUDE.md on its next `--update`
+  anyway — copying now just closes the window where Claude sessions
+  run without the team's working agreements auto-loaded.
 - **If it exists:** treat it as the engineer's carefully crafted
   document. Read the whole thing before touching anything. Make only
   surgical additions for genuinely missing facts (e.g. a command you
@@ -152,9 +153,8 @@ cat CLAUDE.md 2>/dev/null && echo "EXISTS" || echo "NOT FOUND"
   restructure, reword, or "improve" prose — the wording is
   intentional. When in doubt, leave it alone and ask the engineer
   directly. **Preserve any `<!-- FACTORY:<id> START -->` … `END -->`
-  block verbatim** (the pre-rename `<!-- BUNDLE:<id> START -->` … `END -->`
-  form may also appear on older installs and must likewise be preserved) —
-  it's a team factory's conventions, not yours to edit.
+  block verbatim (legacy `<!-- BUNDLE:<id> -->` included)** — it's a team
+  factory's conventions, not yours to edit.
 
 **What belongs here:** one-paragraph project overview, 3–5 most
 important commands (install, dev, test), critical conventions, key
@@ -185,13 +185,12 @@ CI/CD, environment.
   `npx jest --ci`".
 - Keep it under 200 lines. Link to `.agents/` files for details.
 - **Preserve factory blocks.** If `AGENTS.md` already contains any
-  `<!-- FACTORY:<id> START -->` … `<!-- FACTORY:<id> END -->` block (or the
-  pre-rename `<!-- BUNDLE:<id> START -->` … `<!-- BUNDLE:<id> END -->` form
-  on older installs), copy it through verbatim — it was installed by a team
-  factory and holds that team's working agreements. Read existing
-  `AGENTS.md` before regenerating; keep every factory block intact
-  (placement doesn't matter — keep it whole). Never edit or drop the
-  marker lines.
+  `<!-- FACTORY:<id> START -->` … `END -->` block (or the pre-rename
+  `<!-- BUNDLE:<id> -->` form), copy
+  it through verbatim — it was installed by a team factory and holds that
+  team's working agreements. Read existing `AGENTS.md` before
+  regenerating; keep every factory block intact (placement doesn't
+  matter — keep it whole). Never edit or drop the marker lines.
 
 ## Step 2.5 — Scaffold .agents/knowledge/ (shared knowledge layer)
 
@@ -230,8 +229,8 @@ uncertain ones.
 
 **Record the contract in `CLAUDE.md` and `AGENTS.md`** (Steps 1 and 2) so agents know the layer
 exists and how to add to it — a knowledge layer nobody is told about is one nobody uses. In
-`AGENTS.md`, place it **outside** any `<!-- FACTORY -->` (or legacy `<!-- BUNDLE -->`) markers so
-factory regeneration cannot clobber it.
+`AGENTS.md`, place it **outside** any `<!-- FACTORY -->` markers (legacy `<!-- BUNDLE -->` included) so factory regeneration cannot
+clobber it.
 
 Ongoing curation is the `knowledge-curation` skill's job; seeding just creates the structure and
 the first entries.
@@ -253,11 +252,32 @@ Only for multi-service or non-trivial architectures: service/component
 map, data flow, API boundaries, database schema overview,
 infrastructure diagram (text-based).
 
-## Step 6 — Generate .agents/testing.md (if test infra exists)
+## Step 6 — Generate .agents/testing.md
 
-QA engineer reads this. Include test framework and config, how to
-run tests (exact commands), fixture/setup patterns, test data
-strategy, CI test pipeline, coverage tools, known flaky areas.
+The lead and engineer read this before touching tests. Include test
+framework and config, how to run tests (exact commands), fixture/setup
+patterns, test data strategy, CI test pipeline, coverage tools, known
+flaky areas — plus four pipeline-policy sections the batch pipeline
+can't run without (templates in `references/templates.md` § testing.md):
+
+- **§ Execution provider** — `manual-qa | self`. Detection: manual-qa
+  personas in the host agent roster (Step 6.5's enumeration —
+  `test-runner`, `test-author`, …) **and** `.agents/manual-qa/`
+  present → `manual-qa`; otherwise `self`. This routes batch triage —
+  the lead never guesses it.
+- **§ Coverage idiom** — the framework-native carrier for per-case
+  coverage declarations (Playwright → `test.step()` + header comment;
+  pytest → docstring/markers; JUnit/REST-assured →
+  `@DisplayName`/`@Tag`; k6 → `group()`). The baseline comment grammar
+  applies regardless of idiom — grammar + exclusion vocabulary live in
+  [../test-automation-workflow/references/coverage-contract.md](../test-automation-workflow/references/coverage-contract.md).
+- **§ Knowledge routing** — where a learned fact goes: hot handles →
+  the surface cache, durable cross-role facts → `.agents/knowledge/`,
+  process lessons → role memory, `.agents/manual-qa/**` read-only.
+- **§ Base URL mapping** — authored cases template `{{base_url}}`
+  (manual-qa convention); record the project's concrete env var
+  (e.g. `BASE_URL`) so generated code and test-runner dispatches
+  resolve it identically.
 
 ## Step 6.5 — Generate .agents/team-comms.md
 
@@ -288,13 +308,62 @@ If the project has **no TMS** (markdown source of truth), write the
 one-liner:
 
 ```yaml
-tms: { adapter: markdown, cases_dir: test-specs }
+tms: { adapter: markdown, cases_dir: tasks }
 ```
 
 Mark any field you couldn't confirm with the skill's normal
 `Unconfirmed` convention rather than guessing. This file is consumed
 downstream by Step 6.8 (tool-whitelist wiring) and by the whole
 test-automation pipeline at runtime.
+
+## Step 6.7 — Install telemetry (tokenomics) — DEFAULT ON
+
+Every seeded project gets the cost/attribution telemetry unless the
+operator explicitly declines. Load the **tokenomics** skill (it is
+installed with the factory; not preloaded — load it now) and run its
+installer from the repo root:
+
+```bash
+node <skills root>/tokenomics/scripts/install-hooks.mjs
+node <skills root>/tokenomics/scripts/install-hooks.mjs --doctor   # must end "all good"
+```
+
+`<skills root>` = the host's skills dir: `.claude/skills/` on Claude Code,
+`.github/skills/` on Copilot CLI, `.cursor/skills/` on Cursor — scout knows
+the host from Step 6.5's detection.
+
+What this sets up (the skill owns the details — don't restate them):
+capture hooks in the host settings, the `.agents/telemetry` submodule
+on its own `telemetry` branch (the main tree stays clean; a local-only
+repo is fine — data accrues on the local branch), and the per-batch
+cost pipeline every close and report depends on. The installer prints
+**one commit to make** (`.gitmodules` + the submodule pointer) —
+include it in the seed commit rather than leaving it staged.
+
+Degrade gracefully: tokenomics skill not installed → skip with a
+`Telemetry: not installed` line in the seeding report, never a failure.
+Re-runs are idempotent — the installer is also the updater, and
+`--doctor` is the health check to quote in the report.
+
+**Then seed the factory identity** (the cross-factory tokenomics dataset's
+segment header — every batch close appends a dataset row automatically, and
+without identity those rows carry null `factory_id`):
+
+1. Copy `<skills root>/tokenomics/templates/factory-profile.template.json`
+   to `.agents/telemetry/automation/factory-profile.json` — skip if it
+   already exists (hand-authored once, never regenerated).
+2. Fill the `<angle-bracket>` placeholders: ask the operator for
+   `factory_id` / `factory_name` (one AskUserQuestion — suggest
+   `<repo-slug>-test-automation`); set `agent_tool` to the detected host +
+   version; add `maturity` (`production | pilot | experimental`) and
+   `env_setup` (`trivial | single-fixture | multi-fixture | external-deps |
+   full-env`) from what Step 6 learned about the test infrastructure — the
+   dataset rows read both from this file.
+3. The non-placeholder defaults (stop `testing`, owner `QA`, the efficiency
+   techniques, the pipeline stages) hold for a stock install — override only
+   where this project genuinely differs. Never invent an org identifier the
+   operator didn't give; a declined question stays `null` and the export's
+   §7 checklist flags it.
 
 ## Step 6.8 — Wire agent tool whitelists + MCP scoping
 
@@ -308,11 +377,10 @@ configured server's tool schemas ride along on each turn, while
 workflow-spawned workers' MCP access has flipped with host versions
 (present on 2.1.218, absent on 2.1.220) — scoping makes access explicit
 and deterministic on every path instead of a build lottery. The
-reference carries who gets which servers (both workers ship an inline
-browser server the factory defines — scout tunes it per project, strips
-it for API-only stacks, and adds the TMS adapter for qa-engineer; a
-"none" intent gets `mcpServers: []` plus the `disallowedTools`
-fallback; lead/scout → unscoped).
+reference carries who gets which servers (the engineer ships an inline
+browser server the factory defines — scout tunes it per project and
+strips it for API-only stacks; a "none" intent gets `mcpServers: []`
+plus the `disallowedTools` fallback; lead/scout → unscoped).
 
 Scout is **fully autonomous** at this step — no operator prompts, no
 per-agent capability manifest. It derives the whitelist from evidence
@@ -331,7 +399,7 @@ installed workflow skills + stated pipelines) against the **installed
 agent roster**. For any slot lacking a dedicated agent, scout picks
 the best-matching installed agent and records per-project routing
 overrides in `.agents/role-overrides.md`, which the orchestrator
-(`test-automation-lead` in this bundle) reads at session start and
+(`test-automation-lead` in this factory) reads at session start and
 consults at dispatch time.
 
 Lightweight substitution (the `.agents/role-overrides.md` mapping)
@@ -357,6 +425,29 @@ lives in
 
 ---
 
+## Migration — re-seeding a v1 install (`--update`)
+
+v2 removed the `qa-engineer` role and the AFS layer. On a re-seed of a
+project that has them:
+
+- **`.agents/memory/qa-engineer/`** — FIRST check the installed roster:
+  if `.claude/agents/qa-engineer/` exists (the feature-development
+  factory ships a live `qa-engineer` on hybrid repos), the role is NOT
+  gone — leave its memory and roster rows alone. Only when the role is
+  absent everywhere: sweep via the knowledge-curation skill — promote
+  entries that pass the admission tests (cross-role, verified, durable,
+  costly) into `.agents/knowledge/`; the directory may be deleted
+  afterwards.
+- **`test-specs/` AFS files are historical.** Leave or archive them —
+  the new pipeline ignores them; the case (TMS or `tasks/`) and the
+  code are the two sources of truth. Surface digests now live at
+  `.agents/automation/surface/<feature>.md`.
+- Remove `qa-engineer` rows from any hand-maintained rosters the
+  re-seed doesn't overwrite (Step 6.5 regenerates `team-comms.md`
+  itself) — again, only when no installed factory still ships the role.
+
+---
+
 ## Validation
 
 After generating, verify:
@@ -375,9 +466,8 @@ wc -l AGENTS.md  # should be under 200 lines
 grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .agents/ 2>/dev/null || echo "clean"
 
 # Factory blocks survived regeneration (paired START/END markers, if any;
-# also check the legacy BUNDLE form on older installs)
-grep -c "<!-- FACTORY:.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
-grep -c "<!-- BUNDLE:.* START -->" AGENTS.md 2>/dev/null   # legacy form, if present
+# legacy BUNDLE form counted too)
+grep -cE "<!-- (FACTORY|BUNDLE):.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
 
 # Agent tool whitelists wired (only expected under Copilot CLI / restrictive hosts)
 if ls .github/agents/*.agent.md >/dev/null 2>&1; then
@@ -387,4 +477,7 @@ fi
 # Memory files present and non-empty for all roles
 ls .agents/memory/
 find .agents/memory -name 'project_briefing.md' -exec wc -l {} +
+
+# Telemetry installed and healthy (Step 6.7; absent only if declined/skipped)
+node <skills root>/tokenomics/scripts/install-hooks.mjs --doctor 2>/dev/null | tail -1  # "all good"
 ```

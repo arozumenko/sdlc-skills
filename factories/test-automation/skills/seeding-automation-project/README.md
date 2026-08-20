@@ -1,4 +1,4 @@
-# seeding-a-project
+# seeding-automation-project
 
 > Generate AGENTS.md and `.agents/` configuration files for a new project.
 
@@ -18,13 +18,13 @@ Loads on _"seed the project"_, _"onboard this repo"_, _"generate project config"
 
 ```text
 /plugin marketplace add arozumenko/sdlc-skills
-/plugin install seeding-a-project@sdlc-skills
+/plugin install seeding-automation-project@sdlc-skills
 ```
 
 ### npx CLI (Claude Code, Cursor, Windsurf, GitHub Copilot)
 
 ```bash
-npx github:arozumenko/sdlc-skills init --skills seeding-a-project
+npx github:arozumenko/sdlc-skills init --skills seeding-automation-project
 ```
 
 Add `--target claude` (or `cursor` / `windsurf` / `copilot`) to limit IDEs, and `--update` to overwrite. Installs as part of `--all`.
@@ -32,7 +32,7 @@ Add `--target claude` (or `cursor` / `windsurf` / `copilot`) to limit IDEs, and 
 ### Manual
 
 ```bash
-cp -r skills/seeding-a-project .claude/skills/seeding-a-project   # or ~/.claude/skills, .cursor/skills, .github/skills
+cp -r skills/seeding-automation-project .claude/skills/seeding-automation-project   # or ~/.claude/skills, .cursor/skills, .github/skills
 ```
 
 ## Contents

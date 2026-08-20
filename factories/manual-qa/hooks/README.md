@@ -1,5 +1,17 @@
 # Metrics collection add-on (manual-qa)
 
+> **Coexistence with other factories.** These hooks match on the *tool*
+> (`Agent`), so in a repo that also runs another factory (test-automation,
+> feature-development) they would fire for every factory's dispatches. A
+> roster guard in `benchmark-preflight` / `benchmark-tc` initializes the
+> per-session machinery **only when the dispatched agent is one of this
+> factory's** (app-profiler / test-sizer / test-author / test-run-lead /
+> test-runner / test-reporter) — other factories' sessions get no state files,
+> no ccusage retries, and no synthetic `reports/metrics/RUN-*.json`. An
+> empty `subagent_type` (older Claude Code builds) fails open to the old
+> behavior. `benchmark-session-start` still takes its one background
+> snapshot per session — cost only, it writes no metrics by itself.
+
 Optional add-on to the `manual-qa` factory. Once installed, it collects
 token/cost/timing/pass-rate metrics on every `test-run-lead`-driven session —
 purely observational, it doesn't touch any agent or skill, and doesn't change

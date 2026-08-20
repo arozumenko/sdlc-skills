@@ -4,12 +4,10 @@
 
 - [Phase 1: Framework discovery](#phase-1-framework-discovery)
 - [Phase 2: Ingest case from TMS](#phase-2-ingest-case-from-tms)
-- [Phase 3–4: Analyst execution + AFS output](#phase-34-analyst-execution-afs-output)
-- [Phase 5–6: Automation implementation](#phase-56-automation-implementation)
-- [Phase 7: Review](#phase-7-review)
-- [Phase 8: Deliver + TMS sync](#phase-8-deliver-tms-sync)
-- [Summary](#summary)
-- [Test plan](#test-plan)
+- [Phase 3: Route — earning execution evidence](#phase-3-route--earning-execution-evidence)
+- [Phase 4: Build](#phase-4-build)
+- [Phase 5: Review](#phase-5-review)
+- [Phase 6: Deliver + TMS sync](#phase-6-deliver-tms-sync)
 - [Sub-agent result collection pattern (cross-host)](#sub-agent-result-collection-pattern-cross-host)
 - [Evidence paths (convention)](#evidence-paths-convention)
 
@@ -25,8 +23,8 @@ cat .agents/testing.md 2>/dev/null
 cat .agents/architecture.md 2>/dev/null
 cat .agents/test-automation.yaml 2>/dev/null
 
-# If nothing — run seeding-a-project before proceeding
-# (invoke the seeding-a-project skill via the running host)
+# If nothing — run seeding-automation-project before proceeding
+# (invoke the seeding-automation-project skill via the running host)
 
 # Detect framework if testing.md didn't name it — scan broadly across
 # surfaces, not just browser runners. Match whatever the project uses.
@@ -114,41 +112,38 @@ curl -s -u ":$AZURE_DEVOPS_PAT" \
 ### Markdown (default)
 
 ```bash
-find test-specs -name "*${TMS_ID:-$SLUG}*.md"
+find "${CASES_DIR:-tasks}" -name "*${TMS_ID:-$SLUG}*.md"
 ```
 
-## Phase 3–4: Analyst execution + AFS output
+## Phase 3: Route — earning execution evidence
 
-Host-native sub-agent spawning:
+The route is decided by `.agents/testing.md § Execution provider` plus the
+evidence on disk (playbook § The loop, per unit). Commands worth having:
 
-### Claude Code (this harness)
+```bash
+# provider manual-qa: does qualifying evidence exist for this case?
+ls tasks/*/${TMS_ID}_*.md               # the authored case file
+# the run record is reports/RUN-*.md (always written by test-reporter);
+# require the case id with a Pass verdict in its Results table
+grep -lE "${TMS_ID}.*Pass" reports/RUN-*.md 2>/dev/null
+grep -l "\"tc_id\": \"${TMS_ID}\"" reports/metrics/*.json 2>/dev/null   # optional corroboration (metrics add-on)
+```
 
-Use the canonical dispatch templates in
-[orchestration-playbook.md § Canonical dispatch templates](./orchestration-playbook.md#canonical-dispatch-templates)
-— native subagent types, per-case parameters, and the reviewer
-triangulation preamble. Dispatch analysts ONE AT A TIME — the analyst
-owns the tree and commits its own AFS to the trunk (playbook § The
-loop, per unit); verify each returned AFS path exists on disk before
-the next dispatch. Never fan out writers (playbook § Dispatching).
+PASS run record + case file → build from that evidence, no dispatch. Missing
+→ dispatch manual-qa's `test-runner` per case, on their exact contract
+(playbook § Canonical dispatch templates → Runner):
 
-### Copilot / other hosts
+```
+Execute the test case at {CASE_FILE_PATH} against base_url={BASE_URL}.
+```
 
-Use the exact dispatch form `.agents/team-comms.md` documents for the
-host. Pass the same prompt. The `qa-engineer` persona lives in
-`.github/agents/` (Copilot) or `.claude/agents/` (Claude Code). The
-`test-case-analysis` skill it loads lives under the matching
-`.../skills/` path.
+One runner at a time — it drives the one shared browser and the tree stays on
+the trunk. The dispatch failing (agent type unknown) → the unit is
+`needs-execution` in the report; never execute the case yourself when policy
+says manual-qa. Provider `self` → no runner at all: the build's first green
+run is the execution.
 
-**Collecting results** (per dispatch, before the next one starts):
-
-1. Wait for the agent to complete — never end a turn with a dispatch in flight.
-2. Retrieve its final message via the host's `read_agent` tool (or the return itself).
-3. Parse for the AFS path.
-4. Verify the file exists on disk — `ls test-specs/.../lN_*.md`. If
-   missing, recreate it yourself from the agent's returned content.
-5. Aggregate paths as you go; hand the full list to the automation engineers.
-
-## Phase 5–6: Automation implementation
+## Phase 4: Build
 
 Run with **whatever the project uses** — the run command lives in
 `.agents/testing.md` § Run command (or `.agents/test-automation.yaml`
@@ -221,20 +216,20 @@ mvn gatling:test -Dgatling.simulationClass=CheckoutSim   # Gatling
 locust -f perf/checkout.py --headless -u 50 -r 5         # Locust
 ```
 
-## Phase 7: Review
+## Phase 5: Review
 
 ```bash
 # Code-review skill
 # Invoke via host: Skill tool with "code-review" against the branch diff
 ```
 
-QA review — delegate to the reviewer slot. Use the canonical dispatch
-templates in
+Delegate to the reviewer slot — an engineer-typed FRESH dispatch. Use the
+canonical dispatch templates in
 [orchestration-playbook.md § Canonical dispatch templates](./orchestration-playbook.md#canonical-dispatch-templates)
-— native subagent types, per-case parameters, and the reviewer
-triangulation preamble.
+— native subagent types, per-unit parameters, and the coverage-walk preamble
+([reviewer-contract.md](./reviewer-contract.md)).
 
-## Phase 8: Deliver + TMS sync
+## Phase 6: Deliver + TMS sync
 
 The commit + PR below is a **Playwright/UI worked example**; the shape is
 the same for any framework — substitute the project's abstraction layer
@@ -242,14 +237,16 @@ the same for any framework — substitute the project's abstraction layer
 
 ```bash
 # Commit, push, PR — via completing-a-task skill
-git checkout -b automation/CASE-ID-short-slug
-git add tests/ test-specs/
+git checkout -b tests/CASE-ID-short-slug
+git add tests/checkout/apply-promo.spec.ts tests/pages/checkout.page.ts \
+        .agents/automation/surface/checkout.md      # by exact path, always
 git commit -m "$(cat <<'EOF'
 test(CASE-ID): automate apply-promo flow
 
-- AFS at test-specs/checkout/l2_apply_promo_CASE-ID.md
+- Coverage declaration in the spec: steps 1-5; 6 excluded
+  (blocked-by-defect: GH#234)
 - Page object extension in tests/pages/checkout.page.ts
-- Regression for GH#234 via expect.soft
+- Surface cache updated with the promo-field handles
 
 <your host's co-author trailer, if the project convention uses one>
 EOF
@@ -258,14 +255,15 @@ git push -u origin HEAD
 gh pr create --title "test(CASE-ID): automate apply-promo flow" \
   --body "$(cat <<'EOF'
 ## Summary
-- Automates CASE-ID (apply-promo) in Playwright
+- Automates CASE-ID (apply-promo) in Playwright, coverage: partial
+  (step 6 blocked-by-defect: GH#234)
+- Execution provenance: manual-qa run RUN-2026-08-12 (or: first green run)
 - Re-uses `CheckoutPage` page object
-- Known defect GH#234 captured as soft-expect
 
 ## Test plan
 - [x] Ran locally, green
-- [ ] Ran in CI pipeline, green
-- [ ] TMS execution updated to PASSED
+- [ ] Hardening gate N× green
+- [ ] TMS execution updated post-merge (status + coverage note)
 
 <your host's co-author trailer, if the project convention uses one>
 EOF
@@ -275,20 +273,25 @@ EOF
 ### Post-merge TMS back-write (orchestrator, per seeded policy — playbook § 3. Close)
 
 Owned by the **orchestrator after the merge** — see
-[orchestration-playbook.md § 3. Close — read the report, act on it](./orchestration-playbook.md#3-close--read-the-report-act-on-it-yours),
-phase 5 — never fired unconditionally at PR-open. Gated on CI / an opt-in
+[orchestration-playbook.md § 3. Close — read the report, act on it](./orchestration-playbook.md#3-close--read-the-report-act-on-it-yours)
+— never fired unconditionally at PR-open. Gated on CI / an opt-in
 env flag, and only runs when the seed declares a real `tms.adapter`
-(graceful on failure — `SKILL.md` § Phase 5).
+(graceful on failure). **Dual-write policy applies**
+([tms-adapters.md § Dual-write policy](./tms-adapters.md#dual-write-policy--ta-writes-automation-manual-qa-writes-live-runs)):
+this writes the AUTOMATION execution — gate outcome, coverage note
+(`full | partial` + excluded steps with reasons), PR link — and never a
+manual/live run.
 
 ```bash
-# Example: Zephyr Scale over HTTP
+# Example: Zephyr Scale over HTTP — comment carries the coverage note
 curl -s -X POST -H "Authorization: Bearer $ZEPHYR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"projectKey\":\"SCRUM\",\"testCaseKey\":\"$TMS_ID\",\"statusName\":\"Pass\"}" \
+  -d "{\"projectKey\":\"SCRUM\",\"testCaseKey\":\"$TMS_ID\",\"statusName\":\"Pass\",
+       \"comment\":\"Automated (gate 3/3 green). Coverage: partial — step 6 excluded (blocked-by-defect: GH#234). PR #41.\"}" \
   "https://api.zephyrscale.smartbear.com/v2/testexecutions"
 
 # Over MCP (preferred when server is configured):
-# mcp__<server>__ZephyrConnector_create_test_execution({ projectKey, testCaseKey, statusName })
+# mcp__<server>__ZephyrConnector_create_test_execution({ projectKey, testCaseKey, statusName, comment })
 ```
 
 ## Sub-agent result collection pattern (cross-host)
@@ -317,7 +320,7 @@ test-results/
   unsynced/        # TMS back-writes that failed and need manual sync
 ```
 
-Analyst writes evidence here during execution; the engineer's test runs
+The runner writes evidence here during execution; the engineer's test runs
 extend the same tree for CI artifacts. The artifact *kinds* follow the
 surface — `screenshots/` for UI, request/response captures or `json/`
 transcripts for API, metric summaries for perf — but the tree and the

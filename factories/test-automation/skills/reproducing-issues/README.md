@@ -10,7 +10,9 @@ Loads when a bug is unclear or unconfirmed and needs reproduction before RCA or 
 
 ## Requirements
 
-- None bundled. Hands off to `root-cause-analysis`, then `bugfix-workflow`.
+- None bundled. In this factory you reproduce, file the defect with evidence,
+  and walk away — fixing belongs to the product's dev team (their factory
+  carries `root-cause-analysis`/`bugfix-workflow`).
 
 ## Install
 

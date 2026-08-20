@@ -14,8 +14,8 @@
 //
 // Hard rules encoded:
 //   - NEVER delete or rm files to make a merge pass (the destructive-recovery
-//     class that lost AFS files in the wild). A merge that needs deletion is
-//     parked, not forced.
+//     class that lost analysis artifacts in the wild). A merge that needs
+//     deletion is parked, not forced.
 //   - Mechanical-union resolution ONLY (both-added imports/exports, additive
 //     page-object members, independent spec files). Anything semantic — same
 //     method edited both sides, assertion differences, fixture signature
@@ -33,7 +33,7 @@
 export const meta = {
   name: 'ta-batch-integrate',
   description: 'Integrate approved case branches into the batch integration branch in the project checkout — mechanical-only conflict resolution, semantic conflicts parked; the lead runs the hardening gate on the result',
-  whenToUse: 'Orchestrator (test-automation-lead) on Claude Code, after the build loop reports gate_ready cases — replaces conversational merge/conflict handling; the hardening gate and PR merges stay with the lead',
+  whenToUse: 'Orchestrator (test-automation-lead) on Claude Code — a REPAIR tool for when a batch left un-merged unit branches behind (batch-build integrates internally); replaces conversational merge/conflict handling; the hardening gate and PR merges stay with the lead',
   phases: [
     { title: 'Integrate', detail: 'sequential merges on the integration branch, bounded resolution' },
   ],
@@ -55,7 +55,7 @@ const IB = A.integrationBranch ?? `tests/batch-${SLUG}`
 // frontmatter `model:` governs (agentType resolves like the Agent tool).
 const INTEGRATOR_MODEL = A.integratorModel ?? null
 // The integrator does REAL work in the repository — it resolves merges in the
-// project's own tree — so it must be one of the bundle's agents, not an
+// project's own tree — so it must be one of the factory's agents, not an
 // anonymous dispatch. An `agent()` call without `agentType` arrives at the
 // SubagentStart hook as `workflow-subagent`, resolves to no role, and gets NO
 // role memory or project briefing: it would merge this project's code knowing
@@ -93,11 +93,16 @@ const INTEGRATE_SCHEMA = {
   },
 }
 
-const result = await agent(
+// Stall-retry exhaustion THROWS out of agent() instead of returning null
+// (measured 2026-08-17, quota-throttled Bedrock) — catch it so the failure is
+// the designed one below, with the stall named as an ENVIRONMENT fact.
+let result = null
+try {
+result = await agent(
   'You are the batch integrator, working in the project\'s OWN checkout — no worktree is created for you and you must not create one. Nothing else writes this tree while you run (integration follows the build loop), so the branch you check out IS your isolation. Leave the tree on the integration branch when you finish. ' +
   `Build the integration branch for batch ${SLUG}:\n` +
   `1. git fetch origin --quiet, then check the batch trunk out: \`git checkout ${IB}\` (it was created and pushed by the first build of this batch). Only if it genuinely does not exist anywhere: \`git checkout -B ${IB} ${BASE} && git push -u origin ${IB}\`. Do NOT use -B on an existing trunk — that would discard the case work already merged into it.\n` +
-  `2. SWEEP THE LEFTOVER AFS FIRST. Analysts write their AFS to disk and never commit (they run in parallel with a build that owns this tree). Each implementer commits its own unit's AFS, so what remains uncommitted belongs to cases that never reached a build — blocked, already-covered, out-of-scope. Stage every remaining file under the project's test-specs/ convention BY PATH (\`git status --porcelain\` to find them; never \`git add -A\`) and commit them here with message \"docs(afs): analysis not carried by a build\". Two reasons this is not optional: that analysis is otherwise lost, and the hardening gate REFUSES to run on a dirty tree — leftovers would fail the gate for a reason that has nothing to do with the tests.\n` +
+  `2. SWEEP THE LEFTOVER SURFACE CACHE FIRST. Build dispatches commit their own unit's work, surface digests included, so what remains uncommitted belongs to units that never reached a merge — blocked, defect-found, screened out. Stage every remaining file under .agents/automation/surface/ (and any stray .agents/memory/ entries) BY PATH (\`git status --porcelain\` to find them; never \`git add -A\`) and commit them here with message \"docs(surface): probing not carried by a build\". Two reasons this is not optional: what live probing revealed is otherwise lost, and the hardening gate refuses a tree whose dirt could contaminate the proof and carries other leftovers as noise on its record — either way the sweep belongs here, not in the gate's lap.\n` +
   `3. Merge each case branch IN THIS ORDER with git merge --no-ff <branch> -m "merge <ID> into ${IB}":\n` +
   CASES.map((c) => `   - ${c.id}: ${c.branch}`).join('\n') + '\n' +
   'On a merge conflict, classify EVERY conflicted file before touching anything:\n' +
@@ -114,6 +119,9 @@ const result = await agent(
   'Finish with git rev-parse HEAD. Return the integration branch, head sha, merged case ids (order preserved), parked cases, and one-line notes.',
   { label: `integrate:${SLUG}`, phase: 'Integrate', agentType: INTEGRATOR_TYPE, ...(INTEGRATOR_MODEL ? { model: INTEGRATOR_MODEL } : {}), schema: INTEGRATE_SCHEMA }
 )
+} catch (e) {
+  log(`integrator ${/stall/i.test(String(e?.message ?? e)) ? 'infra-stalled (environment — fix the provider before retrying)' : 'threw'}: ${String(e?.message ?? e).slice(0, 120)}`)
+}
 if (!result) throw new Error('integrator agent failed — nothing merged; re-run or integrate conversationally')
 log(`integrated ${result.merged.length}/${CASES.length} — parked: ${result.parked.map((p) => p.id).join(', ') || 'none'}`)
 

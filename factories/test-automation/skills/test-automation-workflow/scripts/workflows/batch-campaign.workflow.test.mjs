@@ -19,9 +19,11 @@ test('campaign conductor parses under the runtime async-function wrapping', () =
 
 test('meta: canonical name and the four stages', () => {
   assert.match(text, /name: 'ta-batch-campaign'/);
-  for (const ph of ['Plan', 'Heads', 'Foundation', 'Waves']) {
+  for (const ph of ['Plan', 'Foundation', 'Mini-gate', 'Waves']) {
     assert.ok(text.includes(`title: '${ph}'`), `missing phase ${ph}`);
   }
+  // v2: no separate heads-analysis phase — the foundation investigates itself
+  assert.ok(!text.includes("title: 'Heads'"), 'Heads phase must not exist');
 });
 
 test('lean-lead invariants: planner reads snapshots, lead reviews plans not bodies', () => {
@@ -32,9 +34,7 @@ test('lean-lead invariants: planner reads snapshots, lead reviews plans not bodi
   assert.match(text, /rationale/); // the operator-facing why travels with the plan
 });
 
-test('human-owned moments stay outside: heads → foundation early-return, rolling wave gates', () => {
-  assert.match(text, /analyzeOnly: true/); // heads pass sources the foundation inventory
-  assert.match(text, /headsAnalyzed/); // carried across the checkpoint
+test('human-owned moments stay outside: foundation early-return, rolling wave gates', () => {
   assert.match(text, /foundationMerged/);
   assert.match(text, /re-invoke this workflow with \{ plan, foundationMerged: true/);
   assert.match(text, /gate \$\{report\?\.gate\?\.verdict/);   // each wave gates itself and reports
@@ -78,13 +78,23 @@ test('the foundation return still hands the merge decision to the lead', () => {
   assert.doesNotMatch(text, /git merge|gh pr merge/);
 });
 
-test('extend cross-check: planner pre-marks, conductor reports divergence + flags', () => {
-  assert.match(text, /extendCandidates/);
-  assert.match(text, /do not tell the analysts/); // independence of the two judgments
-  assert.match(text, /extend_divergence/);
-  assert.match(text, /analyst_only/);
-  assert.match(text, /planner_only/);
-  assert.match(text, /quality_flags/);
+// v2: extend/already-covered decisions live in the intake screening (verdicts
+// the reviewer cross-checks per the coverage contract) — the planner routes
+// suspected-covered cases OUT of waves instead of running a blind cross-check.
+test('suspected-covered cases route to intake screening, not into waves', () => {
+  assert.match(text, /belong to the intake screening/);
+  assert.doesNotMatch(text, /extendCandidates|extend_divergence|extend_cases/);
+  assert.match(text, /quality_flags/); // wave-level quality signals still surface
+});
+
+// TA v2: three agents, no analyst slot, no AFS layer. Review is an
+// engineer-typed dispatch in the reviewer slot (independence = clean context +
+// reviewer contract), and the surface digest lives at
+// .agents/automation/surface/<feature>.md — the foundation is scoped by it.
+test('v2 vocabulary: no qa-engineer, no analyst slot, no AFS/test-specs', () => {
+  assert.doesNotMatch(text, /qa-engineer|afs_path|\bAFS\b|test-specs|spec-format/);
+  assert.doesNotMatch(text, /analyst/i);
+  assert.match(text, /\.agents\/automation\/surface\//); // foundation scoped by the surface cache
 });
 
 test('nesting + resilience: child workflows per wave, campaign survives a failed wave', () => {
@@ -94,7 +104,6 @@ test('nesting + resilience: child workflows per wave, campaign survives a failed
   assert.doesNotMatch(text, /scriptPath: INTEG/);
   assert.match(text, /report\?\.gate\?\.verdict/);
   assert.match(text, /report_path/);
-  assert.match(text, /preAnalyzed/); // heads not re-analyzed in waves
   assert.ok(text.includes('integrationBranch: `tests/batch-${w.slug}`')); // per-wave branches
   assert.match(text, /campaign continues with the next wave/);
   assert.doesNotMatch(text, /isolation: 'worktree'/); // foundation is a lone sequential build — one tree, no worktree
@@ -122,13 +131,10 @@ test('a declared goal is re-measured at every wave gate, not at campaign end', (
   assert.match(text, /blind from there on/); // why it is per-gate
 });
 
-// The heads child is a full batch-build invocation: without base it throws its
-// args error and the whole campaign dies in Phase Heads (field bug). And every
-// child needs its own report dir — waves share the batch slug, so a shared
-// default path would overwrite report.json wave after wave.
-test('heads and wave children carry base and their own report dirs', () => {
-  assert.match(text, /base: plan\.base,[^]*?analyzeOnly: true/);
-  assert.ok(text.includes('reportDir: `.agents/automation/${plan.batch}/heads`'));
+// Every child needs its own report dir — waves share the batch slug, so a
+// shared default path would overwrite report.json wave after wave.
+test('wave children carry base and their own report dirs', () => {
+  assert.match(text, /base: plan\.base/);
   assert.ok(text.includes('reportDir: `.agents/automation/${plan.batch}/${w.slug}`'));
 });
 
@@ -155,4 +161,19 @@ test("an interrupted wave surfaces as 'ungated', never 'nothing-landed'", () => 
   assert.match(text, /thisWave\?\.status === 'ungated'/);
   assert.match(text, /unproven, NOT blocked/);
   assert.match(text, /never from this summary alone/);
+});
+
+// Stall-retry exhaustion THROWS out of agent() instead of returning null
+// (measured 2026-08-17, quota-throttled Bedrock; one uncaught stall killed a
+// whole run). Every direct dispatch goes through guarded(): a throw becomes
+// the null each call site already handles. Wave children need no guard — the
+// wave loop catches, and the hardened batch-build absorbs stalls per unit.
+test('every direct dispatch is guarded: a stall becomes the null its site already handles', () => {
+  assert.match(text, /const guarded = async \(what, fn\)/);
+  assert.match(text, /infra-stalled \(environment — fix the provider before retrying\)/);
+  for (const site of ["guarded('planner'", "guarded('foundation implementer'", "guarded('foundation review'", 'guarded(`foundation fix round', "guarded('foundation mini-gate'"]) {
+    assert.ok(text.includes(site), `unguarded dispatch: ${site}`);
+  }
+  // no bare direct dispatch remains outside guarded()
+  assert.doesNotMatch(text, /^ *const \w+ = await agent\(/m);
 });
