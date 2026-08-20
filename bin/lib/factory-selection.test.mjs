@@ -9,8 +9,16 @@ import {
   composeBriefing,
   briefingDescription,
 } from "./factory-selection.mjs";
+import { parseArgs } from "../init.mjs";
 
-const BUNDLE = {
+test("--bundle is a silent alias for --factory", () => {
+  const viaFactory = parseArgs(["init", "--factory", "manual-qa"]);
+  const viaBundle = parseArgs(["init", "--bundle", "manual-qa"]);
+  assert.equal(viaBundle.factory, "manual-qa");
+  assert.equal(viaBundle.factory, viaFactory.factory);
+});
+
+const FACTORY = {
   coreAgents: ["scout", "tech-lead", "qa-engineer"],
   devRoles: {
     "python-dev": { label: "Python backend", platform: "web", skillOverlay: { add: ["fastapi"] } },
@@ -35,55 +43,55 @@ const BUNDLE = {
 };
 
 test("activePlatforms is unique and order-preserving", () => {
-  assert.deepEqual(activePlatforms(BUNDLE.devRoles, ["js-dev", "python-dev"]), ["web"]);
-  assert.deepEqual(activePlatforms(BUNDLE.devRoles, ["js-dev", "ios-dev"]), ["web", "ios"]);
-  assert.deepEqual(activePlatforms(BUNDLE.devRoles, []), []);
+  assert.deepEqual(activePlatforms(FACTORY.devRoles, ["js-dev", "python-dev"]), ["web"]);
+  assert.deepEqual(activePlatforms(FACTORY.devRoles, ["js-dev", "ios-dev"]), ["web", "ios"]);
+  assert.deepEqual(activePlatforms(FACTORY.devRoles, []), []);
 });
 
 test("resolveSelection: explicit splits known/unknown", () => {
-  const r = resolveSelection({ explicit: ["ios-dev", "nope"], devRoleNames: Object.keys(BUNDLE.devRoles), yes: false, isTTY: true });
+  const r = resolveSelection({ explicit: ["ios-dev", "nope"], devRoleNames: Object.keys(FACTORY.devRoles), yes: false, isTTY: true });
   assert.deepEqual(r, { mode: "explicit", roles: ["ios-dev"], unknown: ["nope"] });
 });
 
 test("resolveSelection: --yes or no TTY => all", () => {
-  const names = Object.keys(BUNDLE.devRoles);
+  const names = Object.keys(FACTORY.devRoles);
   assert.equal(resolveSelection({ explicit: null, devRoleNames: names, yes: true, isTTY: true }).mode, "all");
   assert.equal(resolveSelection({ explicit: null, devRoleNames: names, yes: false, isTTY: false }).mode, "all");
 });
 
 test("resolveSelection: TTY, no flags => picker", () => {
-  const r = resolveSelection({ explicit: null, devRoleNames: Object.keys(BUNDLE.devRoles), yes: false, isTTY: true });
+  const r = resolveSelection({ explicit: null, devRoleNames: Object.keys(FACTORY.devRoles), yes: false, isTTY: true });
   assert.equal(r.mode, "picker");
   assert.equal(r.roles, null);
 });
 
 test("mergeCoreOverlay: single platform applies remove verbatim", () => {
-  assert.deepEqual(mergeCoreOverlay(BUNDLE.platforms, ["ios"], "qa-engineer"), {
+  assert.deepEqual(mergeCoreOverlay(FACTORY.platforms, ["ios"], "qa-engineer"), {
     add: ["xcuitest-real-device-config"],
     remove: ["playwright-testing", "browser-verify"],
   });
 });
 
 test("mergeCoreOverlay: web has no qa overlay => empty", () => {
-  assert.deepEqual(mergeCoreOverlay(BUNDLE.platforms, ["web"], "qa-engineer"), { add: [], remove: [] });
+  assert.deepEqual(mergeCoreOverlay(FACTORY.platforms, ["web"], "qa-engineer"), { add: [], remove: [] });
 });
 
 test("mergeCoreOverlay: web+ios unions adds, suppresses removes (web contributes none)", () => {
-  assert.deepEqual(mergeCoreOverlay(BUNDLE.platforms, ["web", "ios"], "qa-engineer"), {
+  assert.deepEqual(mergeCoreOverlay(FACTORY.platforms, ["web", "ios"], "qa-engineer"), {
     add: ["xcuitest-real-device-config"],
     remove: [],
   });
 });
 
 test("mergeCoreOverlay: tech-lead unions adds across platforms (deduped)", () => {
-  assert.deepEqual(mergeCoreOverlay(BUNDLE.platforms, ["web", "ios"], "tech-lead"), {
+  assert.deepEqual(mergeCoreOverlay(FACTORY.platforms, ["web", "ios"], "tech-lead"), {
     add: ["fastapi", "vercel-react-best-practices", "swiftui-pro"],
     remove: [],
   });
 });
 
 test("buildOverlays: dev-role own overlays + core platform overlays", () => {
-  const ov = buildOverlays(BUNDLE, ["js-dev", "ios-dev"]);
+  const ov = buildOverlays(FACTORY, ["js-dev", "ios-dev"]);
   assert.deepEqual(ov["js-dev"], { add: ["vercel-react-best-practices"] });
   // Core-role tuning is platform-level union: tech-lead gets the full web
   // overlay (incl. fastapi) because the web platform is active, regardless of
@@ -94,9 +102,9 @@ test("buildOverlays: dev-role own overlays + core platform overlays", () => {
 });
 
 test("buildBriefingPlan: one platform => single entry; two => concatenated entries", () => {
-  const one = buildBriefingPlan(BUNDLE, ["python-dev"]);
+  const one = buildBriefingPlan(FACTORY, ["python-dev"]);
   assert.deepEqual(one["scout"], [{ label: "Web", path: "briefings/web/scout.md" }]);
-  const two = buildBriefingPlan(BUNDLE, ["js-dev", "ios-dev"]);
+  const two = buildBriefingPlan(FACTORY, ["js-dev", "ios-dev"]);
   assert.deepEqual(two["scout"], [
     { label: "Web", path: "briefings/web/scout.md" },
     { label: "iOS", path: "briefings/ios/scout.md" },

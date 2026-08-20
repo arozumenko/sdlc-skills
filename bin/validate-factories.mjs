@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Validate every factories/<id>/factory.json against the repo. Run in CI and
-// before publishing. Checks, per bundle:
+// before publishing. Checks, per factory:
 //   - directory name matches manifest `id`
 //   - a README.md exists (the team's front-door doc, human/LLM-readable)
 //   - a FACTORY.md exists with non-empty name/description/owner frontmatter
@@ -10,16 +10,16 @@
 //   - every `skills` id resolves in skills.json (or a monorepo skills/ dir)
 //   - `instructions` (if set) points at an existing file
 //   - `hooks` (if set) points at a file that parses as JSON
-//   - every `localAgents` entry has agents/<name>/AGENT.md in the bundle dir
-//   - every `localSkills` entry has skills/<name>/SKILL.md in the bundle dir
+//   - every `localAgents` entry has agents/<name>/AGENT.md in the factory dir
+//   - every `localSkills` entry has skills/<name>/SKILL.md in the factory dir
 // Exits non-zero with a per-error report when anything fails.
 //
-// `--check-externals`: opt-in, network-using mode. Instead of the bundle
+// `--check-externals`: opt-in, network-using mode. Instead of the factory
 // checks above, fetches every skills.json `repo:` entry's upstream SKILL.md
 // and verifies (a) it exists and (b) its `name:` frontmatter equals the
 // registry `id` — bin/init.mjs derives the installed skill's directory name
 // from that upstream `name:`, not from the registry id, so a mismatch means
-// the skill silently installs under the wrong directory and any bundle
+// the skill silently installs under the wrong directory and any factory
 // overlay referencing the registry id finds nothing. The default (no-flag)
 // path never touches the network, so `npm run validate` stays offline-safe;
 // only `--check-externals` / `npm run validate:externals` hits GitHub.
@@ -86,19 +86,19 @@ function loadSkillIds() {
 }
 
 function main() {
-  const bundlesRoot = join(PKG_ROOT, "factories");
-  if (!existsSync(bundlesRoot)) {
+  const factoriesRoot = join(PKG_ROOT, "factories");
+  if (!existsSync(factoriesRoot)) {
     console.log("No factories/ directory — nothing to validate.");
     return;
   }
   const agents = new Set(dirsWith("agents", "AGENT.md"));
   const skillIds = loadSkillIds();
-  const bundleDirs = readdirSync(bundlesRoot).filter((d) =>
-    existsSync(join(bundlesRoot, d, "factory.json"))
+  const factoryDirs = readdirSync(factoriesRoot).filter((d) =>
+    existsSync(join(factoriesRoot, d, "factory.json"))
   );
 
-  if (bundleDirs.length === 0) {
-    console.log("No bundles found.");
+  if (factoryDirs.length === 0) {
+    console.log("No factories found.");
     return;
   }
 
@@ -108,8 +108,8 @@ function main() {
     errorCount++;
   };
 
-  for (const id of bundleDirs.sort()) {
-    const dir = join(bundlesRoot, id);
+  for (const id of factoryDirs.sort()) {
+    const dir = join(factoriesRoot, id);
     const before = errorCount;
     let b;
     try {
@@ -122,11 +122,11 @@ function main() {
     if (b.id !== id) err(id, `manifest id "${b.id}" != directory name "${id}"`);
     if (!existsSync(join(dir, "README.md"))) err(id, "missing README.md");
 
-    const bundleMd = join(dir, "FACTORY.md");
-    if (!existsSync(bundleMd)) {
+    const factoryMd = join(dir, "FACTORY.md");
+    if (!existsSync(factoryMd)) {
       err(id, "missing FACTORY.md (catalog descriptor)");
     } else {
-      const fm = parseFrontmatter(readFileSync(bundleMd, "utf8"));
+      const fm = parseFrontmatter(readFileSync(factoryMd, "utf8"));
       if (!fm) err(id, "FACTORY.md has no YAML frontmatter");
       else
         for (const k of ["name", "description", "owner"])
@@ -144,7 +144,7 @@ function main() {
     }
 
     // A briefing/overlay role may target any installed agent — shared (agents[])
-    // or bundle-local (localAgents[]). Build the combined roster once.
+    // or factory-local (localAgents[]). Build the combined roster once.
     const roster = new Set([
       ...declaredAgents,
       ...(Array.isArray(b.localAgents) ? b.localAgents : []),
@@ -156,9 +156,9 @@ function main() {
       if (!existsSync(join(dir, rel))) err(id, `briefing file missing: ${rel}`);
     }
 
-    // Per-bundle skill universe = global catalog + this bundle's localSkills.
+    // Per-factory skill universe = global catalog + this factory's localSkills.
     // `b.skills` (team-wide extras) and overlay adds may both reference a
-    // localSkill — the installer resolves extras bundle-locally, so a bundle
+    // localSkill — the installer resolves extras factory-locally, so a factory
     // can ship a skill installed-but-unrostered (loaded on demand).
     const localSkills = Array.isArray(b.localSkills) ? b.localSkills : [];
     if (b.localSkills !== undefined && !Array.isArray(b.localSkills))
@@ -172,7 +172,7 @@ function main() {
     }
     const effectiveSkillIds = new Set([...skillIds, ...localSkills]);
 
-    // feature-development-style bundles: flat devRoles + platform overlays.
+    // feature-development-style factories: flat devRoles + platform overlays.
     if (b.coreAgents !== undefined) {
       if (!Array.isArray(b.coreAgents)) err(id, "`coreAgents` must be an array");
       else for (const a of b.coreAgents) {
@@ -212,7 +212,7 @@ function main() {
     }
 
     for (const s of b.skills || [])
-      if (!effectiveSkillIds.has(s)) err(id, `skill "${s}" not in skills.json, skills/, or this bundle's localSkills`);
+      if (!effectiveSkillIds.has(s)) err(id, `skill "${s}" not in skills.json, skills/, or this factory's localSkills`);
 
     if (b.instructions && !existsSync(join(dir, b.instructions)))
       err(id, `instructions file missing: ${b.instructions}`);
@@ -255,10 +255,10 @@ function main() {
   }
 
   if (errorCount > 0) {
-    console.error(`\n${errorCount} error(s) across ${bundleDirs.length} bundle(s).`);
+    console.error(`\n${errorCount} error(s) across ${factoryDirs.length} factory(ies).`);
     process.exit(1);
   }
-  console.log(`\nAll ${bundleDirs.length} bundle(s) valid.`);
+  console.log(`\nAll ${factoryDirs.length} factory(ies) valid.`);
 }
 
 const CHECK_EXTERNALS_TIMEOUT_MS = 10_000;
@@ -310,7 +310,7 @@ function isWarnableAttempt(attempt) {
 // `name:` frontmatter matches the registry `id`. bin/init.mjs (installExternalSkill)
 // names the installed skill directory from that upstream `name:` field — never
 // from the registry id — so an id/name mismatch is a live bug: the skill
-// installs under a different directory than any bundle skillOverlay expects,
+// installs under a different directory than any factory skillOverlay expects,
 // and is silently absent from the role that declared it. A 200 response alone
 // does not prove the entry works; the name must be checked too.
 //
@@ -505,7 +505,7 @@ async function runCheckExternals() {
 
 // Detect "run as the main module" robustly (same rationale/approach as
 // bin/init.mjs's isMainModule): lets test files `import` the pure helpers
-// above without triggering CLI execution (bundle validation or a live
+// above without triggering CLI execution (factory validation or a live
 // network check) as a side effect of the import.
 function isMainModule() {
   const entry = process.argv[1];
@@ -520,8 +520,8 @@ function isMainModule() {
 }
 
 // Every flag this CLI accepts. Anything else is rejected rather than ignored:
-// a typo like `--check-external` used to fall through to bundle validation,
-// print "All N bundle(s) valid." and exit 0 — under a CI step named "Validate
+// a typo like `--check-external` used to fall through to factory validation,
+// print "All N factory(ies) valid." and exit 0 — under a CI step named "Validate
 // external skill registry entries" that had in fact fetched nothing.
 const KNOWN_FLAGS = new Set(["--check-externals"]);
 
@@ -530,7 +530,7 @@ const KNOWN_FLAGS = new Set(["--check-externals"]);
 export function parseValidateArgs(argv) {
   const unknown = argv.filter((a) => !KNOWN_FLAGS.has(a));
   if (unknown.length > 0) return { mode: "error", unknown, knownFlags: [...KNOWN_FLAGS] };
-  return { mode: argv.includes("--check-externals") ? "check-externals" : "bundles", unknown: [] };
+  return { mode: argv.includes("--check-externals") ? "check-externals" : "factories", unknown: [] };
 }
 
 if (isMainModule()) {
@@ -538,7 +538,7 @@ if (isMainModule()) {
   if (parsed.mode === "error") {
     console.error(
       `! unknown argument(s): ${parsed.unknown.join(", ")}\n` +
-        `  Known flags: ${parsed.knownFlags.join(", ")} (or no flag to validate bundles).\n` +
+        `  Known flags: ${parsed.knownFlags.join(", ")} (or no flag to validate factories).\n` +
         `  Refusing to run: a mistyped flag must not silently run a different check and exit 0.`
     );
     process.exit(2);

@@ -1,5 +1,5 @@
-// Resolve agent/skill ids across top-level "orphan" dirs and every bundle.
-// Bundles own their content; the same id may appear in several bundles with
+// Resolve agent/skill ids across top-level "orphan" dirs and every factory.
+// Factories own their content; the same id may appear in several factories with
 // different content (divergence is allowed). Standalone --agents/--skills and
 // the marketplace generator use this to find where an id physically lives.
 // Stdlib-only, no deps. The fs reads are confined here so callers stay simple.
@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 const MARKER = { agents: "AGENT.md", skills: "SKILL.md" };
 
-function bundleIds(root) {
+function factoryIds(root) {
   const b = join(root, "factories");
   if (!existsSync(b)) return [];
   return readdirSync(b)
@@ -26,19 +26,19 @@ function dirsWithMarker(parent, kind) {
   return out;
 }
 
-/** Index every id → ordered occurrences. Top-level (orphan) first, then bundles
- *  in alphabetical id order. Each occurrence: { bundle: id|null, dir }, where
+/** Index every id → ordered occurrences. Top-level (orphan) first, then factories
+ *  in alphabetical id order. Each occurrence: { factory: id|null, dir }, where
  *  `dir` is the srcRoot to pass to copyItem (joins dir/<kind>/<name>). */
 export function buildItemIndex(root) {
   const index = { agents: {}, skills: {} };
   for (const kind of ["agents", "skills"]) {
     for (const name of dirsWithMarker(join(root, kind), kind)) {
-      (index[kind][name] ||= []).push({ bundle: null, dir: root });
+      (index[kind][name] ||= []).push({ factory: null, dir: root });
     }
-    for (const id of bundleIds(root)) {
-      const bdir = join(root, "factories", id);
-      for (const name of dirsWithMarker(join(bdir, kind), kind)) {
-        (index[kind][name] ||= []).push({ bundle: id, dir: bdir });
+    for (const id of factoryIds(root)) {
+      const fdir = join(root, "factories", id);
+      for (const name of dirsWithMarker(join(fdir, kind), kind)) {
+        (index[kind][name] ||= []).push({ factory: id, dir: fdir });
       }
     }
   }
@@ -50,29 +50,29 @@ export function catalogIds(index, kind) {
   return Object.keys(index[kind]).sort();
 }
 
-/** Resolve `idOrQualified` ("name" or "bundle/name") to a single occurrence.
- *  Orphan (top-level) wins; else alphabetical-first bundle. ambiguousAcross
- *  lists every bundle holding the id when more than one does (for a notice).
- *  Returns { name, dir, bundle, ambiguousAcross } or null if not found. */
+/** Resolve `idOrQualified` ("name" or "factory/name") to a single occurrence.
+ *  Orphan (top-level) wins; else alphabetical-first factory. ambiguousAcross
+ *  lists every factory holding the id when more than one does (for a notice).
+ *  Returns { name, dir, factory, ambiguousAcross } or null if not found. */
 export function resolveItem(index, kind, idOrQualified) {
-  let wantBundle = null;
+  let wantFactory = null;
   let name = idOrQualified;
   const slash = idOrQualified.indexOf("/");
   if (slash !== -1) {
-    wantBundle = idOrQualified.slice(0, slash);
+    wantFactory = idOrQualified.slice(0, slash);
     name = idOrQualified.slice(slash + 1);
   }
   const occ = index[kind][name];
   if (!occ || occ.length === 0) return null;
-  if (wantBundle !== null) {
-    const m = occ.find((o) => o.bundle === wantBundle);
-    return m ? { name, dir: m.dir, bundle: wantBundle, ambiguousAcross: [] } : null;
+  if (wantFactory !== null) {
+    const m = occ.find((o) => o.factory === wantFactory);
+    return m ? { name, dir: m.dir, factory: wantFactory, ambiguousAcross: [] } : null;
   }
-  const top = occ.find((o) => o.bundle === null);
-  const bundles = occ.filter((o) => o.bundle !== null).map((o) => o.bundle);
-  if (top) return { name, dir: top.dir, bundle: null, ambiguousAcross: [] };
-  const chosen = occ.find((o) => o.bundle !== null);
-  return { name, dir: chosen.dir, bundle: chosen.bundle, ambiguousAcross: bundles.length > 1 ? bundles : [] };
+  const top = occ.find((o) => o.factory === null);
+  const factories = occ.filter((o) => o.factory !== null).map((o) => o.factory);
+  if (top) return { name, dir: top.dir, factory: null, ambiguousAcross: [] };
+  const chosen = occ.find((o) => o.factory !== null);
+  return { name, dir: chosen.dir, factory: chosen.factory, ambiguousAcross: factories.length > 1 ? factories : [] };
 }
 
 /** True if the id (bare or qualified) resolves anywhere. */

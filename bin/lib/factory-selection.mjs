@@ -1,4 +1,4 @@
-// Pure (I/O-free) helpers for resolving a feature-development-style bundle:
+// Pure (I/O-free) helpers for resolving a feature-development-style factory:
 // a flat dev-role selection → install roster, merged skillOverlays, and merged
 // briefing plans. Kept out of init.mjs so they unit-test without the CLI.
 // Stdlib-only, no deps. File I/O (reading briefing files, drawing the picker)
@@ -15,7 +15,7 @@ export function activePlatforms(devRoles, selected) {
 }
 
 /** Decide how dev roles get chosen, without doing any I/O.
- *  explicit: string[]|null (from --agents); devRoleNames: the bundle's dev roles. */
+ *  explicit: string[]|null (from --agents); devRoleNames: the factory's dev roles. */
 export function resolveSelection({ explicit, devRoleNames, yes, isTTY }) {
   if (explicit && explicit.length) {
     const roles = explicit.filter((r) => devRoleNames.includes(r));
@@ -49,15 +49,15 @@ export function mergeCoreOverlay(platforms, active, role) {
  *  Core-role tuning is platform-level (union across active platforms) — it does
  *  not depend on which specific dev role of a platform was picked, matching the
  *  legacy per-team behavior. */
-export function buildOverlays(bundle, selected) {
+export function buildOverlays(factory, selected) {
   const overlays = {};
   for (const r of selected) {
-    const ov = bundle.devRoles[r] && bundle.devRoles[r].skillOverlay;
+    const ov = factory.devRoles[r] && factory.devRoles[r].skillOverlay;
     if (ov && ((ov.add && ov.add.length) || (ov.remove && ov.remove.length))) overlays[r] = ov;
   }
-  const active = activePlatforms(bundle.devRoles, selected);
-  for (const role of bundle.coreAgents || []) {
-    const m = mergeCoreOverlay(bundle.platforms || {}, active, role);
+  const active = activePlatforms(factory.devRoles, selected);
+  for (const role of factory.coreAgents || []) {
+    const m = mergeCoreOverlay(factory.platforms || {}, active, role);
     if (m.add.length || m.remove.length) overlays[role] = m;
   }
   return overlays;
@@ -65,17 +65,17 @@ export function buildOverlays(bundle, selected) {
 
 /** Which briefing file(s) feed each role's project_briefing.md.
  *  Returns { role: [{ label, path }] }; one entry = direct, many = concatenated. */
-export function buildBriefingPlan(bundle, selected) {
+export function buildBriefingPlan(factory, selected) {
   const plan = {};
   for (const r of selected) {
-    const rel = bundle.devRoles[r] && bundle.devRoles[r].briefing;
-    if (rel) plan[r] = [{ label: bundle.devRoles[r].label || r, path: rel }];
+    const rel = factory.devRoles[r] && factory.devRoles[r].briefing;
+    if (rel) plan[r] = [{ label: factory.devRoles[r].label || r, path: rel }];
   }
-  const active = activePlatforms(bundle.devRoles, selected);
-  for (const role of bundle.coreAgents || []) {
+  const active = activePlatforms(factory.devRoles, selected);
+  for (const role of factory.coreAgents || []) {
     const entries = [];
     for (const p of active) {
-      const pf = bundle.platforms[p];
+      const pf = factory.platforms[p];
       const rel = pf && pf.briefings && pf.briefings[role];
       if (rel) entries.push({ label: pf.label || p, path: rel });
     }

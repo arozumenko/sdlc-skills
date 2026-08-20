@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./item-resolver.mjs";
 
 // Build a throwaway repo tree: an orphan agent/skill at top level, plus two
-// bundles that each own a "scout" agent and a "memory" skill.
+// factories that each own a "scout" agent and a "memory" skill.
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "ir-"));
   const A = (p) => { mkdirSync(join(root, p), { recursive: true }); writeFileSync(join(root, p, "AGENT.md"), "x"); };
@@ -21,7 +21,7 @@ function fixture() {
   return root;
 }
 
-test("buildItemIndex finds orphans and bundle items", () => {
+test("buildItemIndex finds orphans and factory items", () => {
   const root = fixture();
   const idx = buildItemIndex(root);
   assert.deepEqual(catalogIds(idx, "agents"), ["personal-assistant", "scout"]);
@@ -34,31 +34,31 @@ test("resolveItem: orphan resolves to top-level root", () => {
   const idx = buildItemIndex(root);
   const r = resolveItem(idx, "agents", "personal-assistant");
   assert.equal(r.dir, root);
-  assert.equal(r.bundle, null);
+  assert.equal(r.factory, null);
   assert.deepEqual(r.ambiguousAcross, []);
   rmSync(root, { recursive: true, force: true });
 });
 
-test("resolveItem: multi-bundle id picks alphabetical-first bundle + reports ambiguity", () => {
+test("resolveItem: multi-factory id picks alphabetical-first factory + reports ambiguity", () => {
   const root = fixture();
   const idx = buildItemIndex(root);
   const r = resolveItem(idx, "agents", "scout");
-  assert.equal(r.bundle, "alpha");
+  assert.equal(r.factory, "alpha");
   assert.equal(r.dir, join(root, "factories/alpha"));
   assert.deepEqual(r.ambiguousAcross, ["alpha", "beta"]);
   rmSync(root, { recursive: true, force: true });
 });
 
-test("resolveItem: qualified bundle/name selects that bundle", () => {
+test("resolveItem: qualified factory/name selects that factory", () => {
   const root = fixture();
   const idx = buildItemIndex(root);
   const r = resolveItem(idx, "agents", "beta/scout");
-  assert.equal(r.bundle, "beta");
+  assert.equal(r.factory, "beta");
   assert.equal(r.dir, join(root, "factories/beta"));
   rmSync(root, { recursive: true, force: true });
 });
 
-test("resolveItem: unknown id and unknown qualified bundle return null", () => {
+test("resolveItem: unknown id and unknown qualified factory return null", () => {
   const root = fixture();
   const idx = buildItemIndex(root);
   assert.equal(resolveItem(idx, "agents", "nope"), null);

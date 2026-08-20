@@ -50,10 +50,10 @@ function frontmatterField(file, field) {
 
 /** Source path string for an agent/skill that was resolved via item-resolver. */
 function resolvedSource(resolved, kind) {
-  if (resolved.bundle === null) {
+  if (resolved.factory === null) {
     return `./${kind}/${resolved.name}`;
   }
-  return `./factories/${resolved.bundle}/${kind}/${resolved.name}`;
+  return `./factories/${resolved.factory}/${kind}/${resolved.name}`;
 }
 
 /** External (repo:) skill entries from skills.json, keyed by id. */
@@ -90,7 +90,7 @@ function buildPlugins(rt, index, externals) {
   }
 
   if (rt.skills) {
-    // Collect dir-backed skill ids (orphans + bundle-owned).
+    // Collect dir-backed skill ids (orphans + factory-owned).
     const dirIds = new Set(catalogIds(index, "skills"));
 
     // Dir-backed skills first (sorted).

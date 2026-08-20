@@ -267,19 +267,19 @@ test("checkExternals: an unexpected throw on one entry is contained as a FAIL an
 
 // --- parseValidateArgs: unknown-flag rejection -----------------------------
 //
-// A typo like `--check-external` used to fall through to bundle validation
+// A typo like `--check-external` used to fall through to factory validation
 // and exit 0 under a CI step named "Validate external skill registry
 // entries", having fetched nothing.
 
-test("parseValidateArgs: no args -> bundle validation", () => {
-  assert.deepEqual(parseValidateArgs([]), { mode: "bundles", unknown: [] });
+test("parseValidateArgs: no args -> factory validation", () => {
+  assert.deepEqual(parseValidateArgs([]), { mode: "factories", unknown: [] });
 });
 
 test("parseValidateArgs: --check-externals -> the externals check", () => {
   assert.deepEqual(parseValidateArgs(["--check-externals"]), { mode: "check-externals", unknown: [] });
 });
 
-test("parseValidateArgs: a mistyped flag is rejected, never silently downgraded to bundle validation", () => {
+test("parseValidateArgs: a mistyped flag is rejected, never silently downgraded to factory validation", () => {
   const p = parseValidateArgs(["--check-external"]);
   assert.equal(p.mode, "error");
   assert.deepEqual(p.unknown, ["--check-external"]);
