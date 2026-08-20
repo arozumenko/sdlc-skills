@@ -102,8 +102,12 @@ export function checkFactoryFrontmatter(id, fm, rawLines = []) {
       errs.push(`FACTORY.md frontmatter missing "${k}"`);
   if (fm.support_level !== undefined && !SUPPORT_LEVELS.has(fm.support_level))
     errs.push(`support_level "${fm.support_level}" not one of Self-Serve | Best Effort Support | Dedicated Capacity`);
-  if (typeof fm.sdlc_phase === "string" && (fm.sdlc_phase.includes(",") || Array.isArray(fm.sdlc_phase)))
-    errs.push(`sdlc_phase must be a single value, not a list: "${fm.sdlc_phase}"`);
+  if (fm.sdlc_phase !== undefined) {
+    if (Array.isArray(fm.sdlc_phase))
+      errs.push(`sdlc_phase must be a single value, not a list`);
+    else if (typeof fm.sdlc_phase === "string" && fm.sdlc_phase.includes(","))
+      errs.push(`sdlc_phase must be a single value, not a comma-separated list: "${fm.sdlc_phase}"`);
+  }
   // risky-unquoted scan on raw frontmatter lines
   for (const line of rawLines) {
     const kv = line.match(/^([A-Za-z0-9_-]+):\s+(.*)$/);

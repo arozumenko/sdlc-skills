@@ -27,6 +27,13 @@ test("rejects sdlc_phase with a comma list", () => {
   assert.ok(errs.some((e) => /sdlc_phase/.test(e)));
 });
 
+test("rejects sdlc_phase given as a YAML block list (real array)", () => {
+  const fm = parseFrontmatter(`---\nname: X\nsdlc_phase:\n  - Plan\n  - Build\n---\n`);
+  assert.ok(Array.isArray(fm.sdlc_phase), "parseFrontmatter should yield an array for a block list");
+  const errs = checkFactoryFrontmatter("t", { name: "X", description: "d", owner: "o", authors: ["a"], sdlc_phase: fm.sdlc_phase });
+  assert.ok(errs.some((e) => /sdlc_phase/.test(e) && /list/i.test(e)));
+});
+
 test("flags an unquoted colon value as risky", () => {
   // raw line form is what the risk check inspects
   const errs = checkFactoryFrontmatter("t", { name: "X", description: "d", owner: "o", authors: ["a"], sdlc_phase: "P" }, [`description: Workflow: plan`]);
