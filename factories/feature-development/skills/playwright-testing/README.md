@@ -4,7 +4,7 @@
 
 A skill for the [sdlc-skills](../../README.md) toolkit. Full instructions live in [`SKILL.md`](SKILL.md); this file is just how to install it.
 
-This is the **manual-QA** copy: it drives a real browser live to explore web apps and execute test cases (used by `app-profiler` and `test-runner`). It does **not** write Playwright code — that is the `test-automation-engineer`'s automation-focused copy in the feature-development / test-automation bundles.
+This is the **manual-QA** copy: it drives a real browser live to explore web apps and execute test cases (used by `app-profiler` and `test-runner`). It does **not** write Playwright code — that is the `test-automation-engineer`'s automation-focused copy in the feature-development / test-automation factories.
 
 ## When it triggers
 

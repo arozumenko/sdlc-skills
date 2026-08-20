@@ -23,12 +23,12 @@ type: project
   which DAO/Hilt code generation strategy is available.
 - **Compose vs XML:** check for `buildFeatures { compose = true }` and the
   presence/absence of `res/layout/*.xml` — flag a project that mixes both, or
-  one that's still XML/Views-only (out of scope for this bundle's `android-dev`).
+  one that's still XML/Views-only (out of scope for this factory's `android-dev`).
 - **KMP detection:** check root `build.gradle.kts` / module `build.gradle.kts`
   for `kotlin("multiplatform")` (or `org.jetbrains.kotlin.multiplatform`) and
   for a `commonMain/` source set under any module. **Record the finding either
   way** — a Kotlin Multiplatform project changes ownership questions between
-  `android-dev` and `ios-dev` that this bundle deliberately leaves unresolved;
+  `android-dev` and `ios-dev` that this factory deliberately leaves unresolved;
   the seam can't be addressed if nobody records whether it applies.
 - **Data layer:** check for Room (`@Database`/`@Entity`), DataStore, or a
   networked backend (Retrofit/Ktor).

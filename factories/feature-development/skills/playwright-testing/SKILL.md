@@ -18,7 +18,7 @@ test code** — no Page Object Model, no pytest, no `.spec.ts` files. The output
 a verdict plus evidence, not a test suite.
 
 > Writing actual Playwright test code is `test-automation-engineer`'s job (a
-> different bundle's copy of this skill). Here, the browser is your hands.
+> different factory's copy of this skill). Here, the browser is your hands.
 
 ## When to use
 

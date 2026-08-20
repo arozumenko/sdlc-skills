@@ -118,8 +118,10 @@ cat CLAUDE.md 2>/dev/null && echo "EXISTS" || echo "NOT FOUND"
   verified that isn't listed). Fix only clear errors. Do not
   restructure, reword, or "improve" prose — the wording is
   intentional. When in doubt, leave it alone and ask the engineer
-  directly. **Preserve any `<!-- BUNDLE:<id> START -->` … `END -->`
-  block verbatim** — it's a team bundle's conventions, not yours to edit.
+  directly. **Preserve any `<!-- FACTORY:<id> START -->` … `END -->`
+  block verbatim** (the pre-rename `<!-- BUNDLE:<id> START -->` … `END -->`
+  form may also appear on older installs and must likewise be preserved) —
+  it's a team factory's conventions, not yours to edit.
 
 **What belongs here:** one-paragraph project overview, 3–5 most
 important commands (install, dev, test), critical conventions, key
@@ -149,12 +151,14 @@ CI/CD, environment.
 - Note inconsistencies: "README says `npm test` but CI runs
   `npx jest --ci`".
 - Keep it under 200 lines. Link to `.agents/` files for details.
-- **Preserve bundle blocks.** If `AGENTS.md` already contains any
-  `<!-- BUNDLE:<id> START -->` … `<!-- BUNDLE:<id> END -->` block, copy
-  it through verbatim — it was installed by a team bundle and holds that
-  team's working agreements. Read existing `AGENTS.md` before
-  regenerating; keep every bundle block intact (placement doesn't
-  matter — keep it whole). Never edit or drop the marker lines.
+- **Preserve factory blocks.** If `AGENTS.md` already contains any
+  `<!-- FACTORY:<id> START -->` … `<!-- FACTORY:<id> END -->` block (or the
+  pre-rename `<!-- BUNDLE:<id> START -->` … `<!-- BUNDLE:<id> END -->` form
+  on older installs), copy it through verbatim — it was installed by a team
+  factory and holds that team's working agreements. Read existing
+  `AGENTS.md` before regenerating; keep every factory block intact
+  (placement doesn't matter — keep it whole). Never edit or drop the
+  marker lines.
 
 ## Step 2.5 — Scaffold .agents/knowledge/ (shared knowledge layer)
 
@@ -193,8 +197,8 @@ uncertain ones.
 
 **Record the contract in `CLAUDE.md` and `AGENTS.md`** (Steps 1 and 2) so agents know the layer
 exists and how to add to it — a knowledge layer nobody is told about is one nobody uses. In
-`AGENTS.md`, place it **outside** any `<!-- BUNDLE -->` markers so bundle regeneration cannot
-clobber it.
+`AGENTS.md`, place it **outside** any `<!-- FACTORY -->` (or legacy `<!-- BUNDLE -->`) markers so
+factory regeneration cannot clobber it.
 
 Ongoing curation is the `knowledge-curation` skill's job; seeding just creates the structure and
 the first entries.
@@ -300,8 +304,10 @@ wc -l AGENTS.md  # should be under 200 lines
 # No secrets leaked anywhere scout wrote
 grep -ri "password\|secret\|token\|api_key" CLAUDE.md AGENTS.md .agents/ 2>/dev/null || echo "clean"
 
-# Bundle blocks survived regeneration (paired START/END markers, if any)
-grep -c "<!-- BUNDLE:.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
+# Factory blocks survived regeneration (paired START/END markers, if any;
+# also check the legacy BUNDLE form on older installs)
+grep -c "<!-- FACTORY:.* START -->" AGENTS.md 2>/dev/null  # must equal the END count
+grep -c "<!-- BUNDLE:.* START -->" AGENTS.md 2>/dev/null   # legacy form, if present
 
 # Agent tool whitelists wired (only expected under Copilot CLI / restrictive hosts)
 if ls .github/agents/*.agent.md >/dev/null 2>&1; then
