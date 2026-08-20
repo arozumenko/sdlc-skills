@@ -13,43 +13,43 @@
     },
     {
       "name": "android-dev",
-      "source": "./bundles/feature-development/agents/android-dev",
+      "source": "./factories/feature-development/agents/android-dev",
       "description": "Use when Android work needs to be implemented — Kotlin, Jetpack Compose, Gradle/AGP, Room/DataStore features, or any Android-platform task requiring TDD and verification before handoff. Scoped to greenfield Compose codebases — he does not do XML/Views work or Java-interop migration, so an established Fragments/XML app is not a fit. Native Android only — not React Native/Flutter, not server-side Spring/JVM. Dan — pragmatic Android engineer, Compose-first, allergic to build drift.",
       "version": "0.2.0"
     },
     {
       "name": "app-profiler",
-      "source": "./bundles/manual-qa/agents/app-profiler",
+      "source": "./factories/manual-qa/agents/app-profiler",
       "description": "Use when onboarding a new or changed web app for manual QA — interview the user, explore the running app via Playwright MCP, and write .agents/manual-qa/app_profile.md (URLs, auth, key pages, reliable selectors, fragile areas) that every other manual-qa agent reads.",
       "version": "0.2.0"
     },
     {
       "name": "ba",
-      "source": "./bundles/feature-development/agents/ba",
+      "source": "./factories/feature-development/agents/ba",
       "description": "Use when user requirements need to be translated into user stories, acceptance criteria, or epics — or when a vague idea needs structuring before developers can act on it. Alex — sharp BA who turns vague ideas into clear requirements and bridges users to developers.",
       "version": "0.2.0"
     },
     {
       "name": "designer",
-      "source": "./bundles/feature-development/agents/designer",
+      "source": "./factories/feature-development/agents/designer",
       "description": "Use when a user flow needs to become a reviewable flow map, or when screens need designing and documenting as build-ready specs — \"draw the user flow\", \"map the screens\", \"design the screens\", \"screen specs\", \"turn the flows into designs\", \"document the UI\", \"what should this screen look like\". Remy — product/UX designer who turns agreed behaviour into buildable design — flow-map posters from journeys and acceptance criteria, then device-framed (mobile) or responsive (web) screen specs a developer implements from, every screen traced to a flow node and a criterion. NOT for writing production UI code (that's the platform devs), NOT for requirements or user stories (that's the BA).",
       "version": "0.2.0"
     },
     {
       "name": "discovery-researcher",
-      "source": "./bundles/product-management/agents/discovery-researcher",
+      "source": "./factories/product-management/agents/discovery-researcher",
       "description": "Use when a discovery hypothesis or product claim needs evidence — stakeholder interviews, market/vendor research, or adversarial verification before a bet is promoted. Sam — skeptical researcher who grounds every claim in a source.",
       "version": "0.2.0"
     },
     {
       "name": "ios-dev",
-      "source": "./bundles/feature-development/agents/ios-dev",
+      "source": "./factories/feature-development/agents/ios-dev",
       "description": "Use when iOS work needs to be implemented — Swift, SwiftUI features, SwiftData models, or any Apple-platform task requiring TDD and verification before handoff. Io — energetic developer, opinionated about modern Apple APIs, pragmatic about delivery.",
       "version": "0.2.0"
     },
     {
       "name": "js-dev",
-      "source": "./bundles/feature-development/agents/js-dev",
+      "source": "./factories/feature-development/agents/js-dev",
       "description": "Use when JavaScript or TypeScript work needs to be implemented — React components, Next.js pages, Node backend services, or any JS/TS task requiring TDD and verification before handoff. Jay — energetic TypeScript developer opinionated about DX, pragmatic about delivery.",
       "version": "0.2.0"
     },
@@ -61,121 +61,121 @@
     },
     {
       "name": "product-owner",
-      "source": "./bundles/product-management/agents/product-owner",
+      "source": "./factories/product-management/agents/product-owner",
       "description": "Use when a raw ask, feature request, or product idea needs discovery — turning it into problems, personas, journeys, and a verified, prioritized hypothesis before engineering. Priya — decisive Product Owner who runs the discovery loop and guards the promotion gate.",
       "version": "0.2.0"
     },
     {
       "name": "project-manager",
-      "source": "./bundles/feature-development/agents/project-manager",
+      "source": "./factories/feature-development/agents/project-manager",
       "description": "Use when tasks need to be routed to developers, when an approved PR needs to be merged, or when team progress needs coordination and status reporting. Max — sharp PM who turns chaos into actionable plans and owns the merge gate.",
       "version": "0.2.0"
     },
     {
       "name": "python-dev",
-      "source": "./bundles/feature-development/agents/python-dev",
+      "source": "./factories/feature-development/agents/python-dev",
       "description": "Use when Python work needs to be implemented — FastAPI services, FastMCP servers, scripts, or any Python task requiring TDD and verification before handoff. Py — methodical Python developer who treats readable code as kindness to your future self.",
       "version": "0.2.0"
     },
     {
       "name": "qa-engineer",
-      "source": "./bundles/feature-development/agents/qa-engineer",
+      "source": "./factories/feature-development/agents/qa-engineer",
       "description": "Use when a feature needs verification, a bug needs reproduction with evidence, E2E tests need writing or running via Playwright, or a TMS case needs turning into an automation-ready spec (AFS). Sage — meticulous QA who treats every passing test with suspicion and every failure as a gift.",
       "version": "0.2.0"
     },
     {
       "name": "scout",
-      "source": "./bundles/feature-development/agents/scout",
+      "source": "./factories/feature-development/agents/scout",
       "description": "Use when an unfamiliar codebase needs to be onboarded — generating CLAUDE.md, AGENTS.md, `.agents/` content docs, and per-role memory briefings from exploration so the rest of the team can hit the ground running. Kit — maps repositories, surfaces patterns, flags risks.",
       "version": "0.2.0"
     },
     {
       "name": "tech-lead",
-      "source": "./bundles/feature-development/agents/tech-lead",
+      "source": "./factories/feature-development/agents/tech-lead",
       "description": "Use when a user story needs technical decomposition into dependency-ordered tasks with interface contracts, a confirmed bug needs root-cause analysis, or a PR needs a blocking code review before merge. Rio — senior tech lead who turns stories into executable plans and owns architecture decisions.",
       "version": "0.2.0"
     },
     {
       "name": "test-author",
-      "source": "./bundles/manual-qa/agents/test-author",
+      "source": "./factories/manual-qa/agents/test-author",
       "description": "Use when turning rough test ideas (prose, bullets, bug reports, user stories) into properly formatted TC-NNN_<slug>.md cases under tasks/<suite>/. Reads the app profile and the test-case format; asks only for what it cannot infer.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-engineer",
-      "source": "./bundles/feature-development/agents/test-automation-engineer",
+      "source": "./factories/feature-development/agents/test-automation-engineer",
       "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Axel — senior automation engineer who matches the project's existing framework (Playwright/Cypress/pytest/JUnit/…), never masks product defects, and stops at the AFS boundary.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-lead",
-      "source": "./bundles/test-automation/agents/test-automation-lead",
+      "source": "./factories/test-automation/agents/test-automation-lead",
       "description": "Use when a TMS case or batch of cases needs to be automated, when technical suite work (tech-debt, migrations, improvements) needs planning and batching, when an automation PR needs the merge gate, when the existing suite needs triage (red/flaky CI, maintenance), or when test-automation framework architecture needs a decision (bootstrap, framework-scale work, mid-flow escalation). Tal — runs the batch pipeline (units one at a time on a batch trunk: analyse — or a tech-task brief for non-case units — implement, static review, merge back, then one hardening gate per batch), owns the automation merge, owns test-framework architecture.",
       "version": "0.2.0"
     },
     {
       "name": "test-reporter",
-      "source": "./bundles/manual-qa/agents/test-reporter",
+      "source": "./factories/manual-qa/agents/test-reporter",
       "description": "Use when turning an array of test-runner JSON results into a Markdown test run report — Summary, Results, Performance Metrics, Failed/Blocked/Defects sections — saved to reports/{run_id}.md. Dispatched by the test-run-lead at the end of a run.",
       "version": "0.2.0"
     },
     {
       "name": "test-run-lead",
-      "source": "./bundles/manual-qa/agents/test-run-lead",
+      "source": "./factories/manual-qa/agents/test-run-lead",
       "description": "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url.",
       "version": "0.2.0"
     },
     {
       "name": "test-runner",
-      "source": "./bundles/manual-qa/agents/test-runner",
+      "source": "./factories/manual-qa/agents/test-runner",
       "description": "Use when executing one manual test case against a running web app via Playwright MCP — runs each step, verifies with snapshots, takes screenshots, and returns a single structured JSON result. Dispatched per case by the test-run-lead.",
       "version": "0.2.0"
     },
     {
       "name": "test-sizer",
-      "source": "./bundles/manual-qa/agents/test-sizer",
+      "source": "./factories/manual-qa/agents/test-sizer",
       "description": "Use when test cases need a size/complexity rating (S/M/L) — scoring rough descriptions before authoring (flagging Large ones to split) or scoring existing TC files and writing `size:` into their frontmatter. Runs before test-author to keep cases lean and estimable.",
       "version": "0.2.0"
     },
     {
       "name": "atlassian-content",
-      "source": "./bundles/test-automation/skills/atlassian-content",
+      "source": "./factories/test-automation/skills/atlassian-content",
       "description": "Use when the user says 'file a bug', 'comment on JIRA-123', 'write up a decision page', or authors any Atlassian content. Creates well-formatted Jira issues/comments and Confluence pages on both Cloud and Server/Data Center, with mandatory post-creation re-fetch plus repair.",
       "version": "0.2.0"
     },
     {
       "name": "automation-scoping",
-      "source": "./bundles/test-automation/skills/automation-scoping",
+      "source": "./factories/test-automation/skills/automation-scoping",
       "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
       "version": "0.2.0"
     },
     {
       "name": "browser-verify",
-      "source": "./bundles/feature-development/skills/browser-verify",
+      "source": "./factories/feature-development/skills/browser-verify",
       "description": "Use when you need to run arbitrary JS in a page, inspect cookies/localStorage, check computed styles, emulate devices, or drive real mouse/keyboard events. Chrome DevTools Protocol browser automation with zero external dependencies.",
       "version": "0.2.0"
     },
     {
       "name": "bugfix-workflow",
-      "source": "./bundles/feature-development/skills/bugfix-workflow",
+      "source": "./factories/feature-development/skills/bugfix-workflow",
       "description": "Use when the user says \"fix bug\", \"fix #NNN\", or you hit a failing test or reproducible defect that needs fixing end-to-end (not investigation alone). The full bugfix workflow from reproduction through a verified, documented fix.",
       "version": "0.2.0"
     },
     {
       "name": "capture-learning",
-      "source": "./bundles/product-management/skills/capture-learning",
+      "source": "./factories/product-management/skills/capture-learning",
       "description": "Use when a hypothesis closes, an experiment concludes with a metric movement or a killed assumption, a vendor / data source / external service behaves differently than its docs implied, or a non-obvious product decision needs its rationale preserved — even if the user never says the word 'learning'. Captures a problem → outcome → lesson from product experiments and hypothesis outcomes (won or lost) into docs/discovery/evidence/learnings/ so the next similar discovery moves faster. Trigger phrases — 'capture learning', 'save what worked', 'document this lesson', 'what did we learn from X', 'we should remember that'. NOT for meeting minutes or transcripts, NOT for a durable forward-looking rule (record a decision via grill-decision), NOT for a retrospective, and NOT for a bare todo or a one-off observation.",
       "version": "0.2.0"
     },
     {
       "name": "code-review",
-      "source": "./bundles/feature-development/skills/code-review",
+      "source": "./factories/feature-development/skills/code-review",
       "description": "Use when the user asks to 'review this code', 'check my changes', 'review PR', 'audit' — and proactively after a non-trivial change or before opening, approving, or merging a PR, even unprompted. Reviews code for correctness, security, performance, and maintainability.",
       "version": "0.2.0"
     },
     {
       "name": "completing-a-task",
-      "source": "./bundles/feature-development/skills/completing-a-task",
+      "source": "./factories/feature-development/skills/completing-a-task",
       "description": "Use when a routed task has been implemented and the working code needs to be committed, pushed, PR'd, commented on the issue, and handed to a reviewer. The canonical task-handoff protocol; runs standalone or as the final phase of implement-feature.",
       "version": "0.2.0"
     },
@@ -187,25 +187,25 @@
     },
     {
       "name": "define-outcomes",
-      "source": "./bundles/product-management/skills/define-outcomes",
+      "source": "./factories/product-management/skills/define-outcomes",
       "description": "Use when a hypothesis names no ratified outcome and so cannot be promoted, a quarterly bet is being set, or someone asks what number a bet is actually trying to move. Drafts, stress-tests, and records ratification of outcome anchors in docs/discovery/outcomes.md — measurable customer-behavior metrics with a dated baseline, a target, and a quarterly timeframe — running each candidate through a definition-quality checklist, where only the product owner's explicit in-chat act ratifies one and never without a dated baseline. Trigger phrases — 'define the outcomes', 'our hypotheses have no ratified outcome', 'what metric is this bet moving', 'set the quarterly targets', 'ratify the anchor'. NOT for business or traction metrics as anchors (revenue, signups, ARR — those may appear only as lagging confirmation), NOT for team OKRs or engineering SLOs, and NOT a metrics-dashboard builder.",
       "version": "0.2.0"
     },
     {
       "name": "define-personas",
-      "source": "./bundles/product-management/skills/define-personas",
+      "source": "./factories/product-management/skills/define-personas",
       "description": "Use when personas come up — 'define the personas', 'who are our users', 'make a persona card for X', 'which persona owns this journey' — or proactively whenever a journey, BDD scenario, or hypothesis names an actor that has no card yet or spells one inconsistently. Creates and maintains the canonical persona cards under docs/discovery/personas/ (one file per persona with its surface, goals, pains, jobs-to-be-done, and evidence links) so downstream artifacts reference stable persona slugs instead of drifting ad-hoc actor names. NOT for org-chart or stakeholder-power mapping, and NOT for market-segmentation research (deep-research).",
       "version": "0.2.0"
     },
     {
       "name": "discovery-status",
-      "source": "./bundles/product-management/skills/discovery-status",
+      "source": "./factories/product-management/skills/discovery-status",
       "description": "Use when starting a work session, when the PO is unsure what to do next, or when promotion, gates, blockers, what's-stuck, where-am-I, or am-I-ready-for-review come up — even without the word 'status'. Reports the whole discovery pipeline as one navigable dashboard — where every hypothesis stands against the promotion gate, what is blocked and on whom, the tracker board versus what docs/discovery/ says, and the exact next action (naming the exact skill) for each item; read-only, reading the docs/discovery/ tree and the product-owner's role memory directly and re-deriving gate state from the promotion checklist in prose (no vault, no validator script). NOT for code or CI status, PR-review state, deployment health, or git status — those are different tools.",
       "version": "0.2.0"
     },
     {
       "name": "efficiency-audit",
-      "source": "./bundles/test-automation/skills/efficiency-audit",
+      "source": "./factories/test-automation/skills/efficiency-audit",
       "description": "Use when the user asks 'what did this cost', cost per session/role/test case, which role or sub-agent burned the most, tool-call/skill/time breakdowns, 'before vs after' cost comparisons, or wants to audit AI spend over time. Measures the token/cost/time efficiency of AI coding-agent work — per session, per role, per day, and per individual sub-agent — with every dollar metered by ccusage.",
       "version": "0.2.0"
     },
@@ -217,37 +217,37 @@
     },
     {
       "name": "git-workflow",
-      "source": "./bundles/feature-development/skills/git-workflow",
+      "source": "./factories/feature-development/skills/git-workflow",
       "description": "Use when the user asks to \"commit\", \"create PR\", \"branch\", \"merge\", \"rebase\", \"cherry-pick\", \"tag\", or otherwise manage git history. Guides disciplined git operations — branching, commits, PRs, and recovery.",
       "version": "0.2.0"
     },
     {
       "name": "grill-decision",
-      "source": "./bundles/product-management/skills/grill-decision",
+      "source": "./factories/product-management/skills/grill-decision",
       "description": "Use when you're trying to make a hard call, sharpen fuzzy language, interrogate a fresh Hypothesis before promotion, or pressure-test a plan or new initiative — even if you don't say 'grill'. A Socratic, one-question-at-a-time interview that walks the decision tree branch by branch, taking a position on each question instead of asking open-ended ones and reading (never asking for) what is already written down; it challenges every idea against the project's guardrails, open pending decisions, and established terminology, and captures outcomes inline the moment they crystallize — a sharpened term edited into the artifact that used it, a real decision written as a DEC entry in decisions.md, a hypothesis edited in place. NOT for adversarial claim verification against external sources, NOT for feasibility sign-off, and NOT for code / PR review or CI status.",
       "version": "0.2.0"
     },
     {
       "name": "implement-feature",
-      "source": "./bundles/feature-development/skills/implement-feature",
+      "source": "./factories/feature-development/skills/implement-feature",
       "description": "Use when the user says \"implement\", \"build feature\", \"work on task\", or once a plan or story is approved and you're about to start building. The end-to-end feature-implementation workflow; delegates the final handoff to completing-a-task.",
       "version": "0.2.0"
     },
     {
       "name": "intake-triage",
-      "source": "./bundles/product-management/skills/intake-triage",
+      "source": "./factories/product-management/skills/intake-triage",
       "description": "Use when a raw ask arrives — a feature request, stakeholder ask, support theme, or 'someone wants X' — before anything becomes a Problem or Hypothesis. Verdicts every item Act Now / Plan Next / Collect More Signal / Decline-or-Defer, writes one batch record, and mints accepted in-scope items as Problems carrying discovered_from provenance; out-of-scope asks are declined against the scope line, and raw material naming a person stays in the confidential inbox with records referring by role. Trigger phrases — 'triage these requests', 'here are the asks from the sales call', 'someone wants X, what do we do with it', 'sort these into the pipeline'. NOT for interview synthesis (stakeholder-interview), NOT for bug or support-ticket triage, and NOT for meeting minutes.",
       "version": "0.2.0"
     },
     {
       "name": "issue-tracking",
-      "source": "./bundles/feature-development/skills/issue-tracking",
+      "source": "./factories/feature-development/skills/issue-tracking",
       "description": "Use when the user asks to 'create an issue', 'file a bug', 'check issues', 'update a ticket', 'create an epic', or anything about issue or ticket management. Creates, manages, and tracks issues in GitHub, Linear, or GitLab.",
       "version": "0.2.0"
     },
     {
       "name": "journeys-to-hypotheses",
-      "source": "./bundles/product-management/skills/journeys-to-hypotheses",
+      "source": "./factories/product-management/skills/journeys-to-hypotheses",
       "description": "Use when journeys and the backlog need reconciling — 'turn my journeys into hypotheses', 'map the journeys to the backlog', 'what do my journeys cover', 'convergence pass', 'where are the gaps in the backlog' — or proactively whenever new journey files exist that no hypothesis or epic references. Runs a convergence pass over every user journey (maps, list, BDD), every existing hypothesis, and (where one is configured) the project's issue tracker, classifying each journey COVERED / GAP / OUT-OF-SCOPE, regenerating the journey-coverage board, and on confirmation authoring the missing problem statements and hypothesis stubs with house frontmatter and collision-free IDs. NOT for authoring journeys themselves, NOT for promoting hypotheses, and NOT for breaking epics into stories.",
       "version": "0.2.0"
     },
@@ -271,7 +271,7 @@
     },
     {
       "name": "mobile-testing",
-      "source": "./bundles/manual-qa/skills/mobile-testing",
+      "source": "./factories/manual-qa/skills/mobile-testing",
       "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",
       "version": "0.2.0"
     },
@@ -283,85 +283,85 @@
     },
     {
       "name": "opportunity-tree",
-      "source": "./bundles/product-management/skills/opportunity-tree",
+      "source": "./factories/product-management/skills/opportunity-tree",
       "description": "Use when mapping opportunities under an outcome, asking where a hypothesis hangs, spotting solution-shaped 'problems', or when a new Problem or Hypothesis has no parent. Maintains the opportunity–solution tree over existing Discovery artifacts by adding only node_type / parent frontmatter to existing files and regenerating the derived docs/discovery/outcome-tree.md board (no new file silo); applies the disguise test (an opportunity that cannot spawn 3+ different solutions may be a solution in disguise) and annotates opportunities with Olsen scores for prioritize-bets. Trigger phrases — 'map the opportunity tree', 'where does this hypothesis hang', 'is this an opportunity or a solution', 'regenerate the outcome tree'. NOT for authoring outcome anchors (define-outcomes), NOT for ranking bets (prioritize-bets), and NOT for reconciling journeys against the backlog (journeys-to-hypotheses).",
       "version": "0.2.0"
     },
     {
       "name": "plan-feature",
-      "source": "./bundles/feature-development/skills/plan-feature",
+      "source": "./factories/feature-development/skills/plan-feature",
       "description": "Use when the user says \"plan a feature\", \"design this\", \"how should we build\", or before writing code for any non-trivial feature. Produces an approved task breakdown before implementation begins — plan first, build second.",
       "version": "0.2.0"
     },
     {
       "name": "playwright-testing",
-      "source": "./bundles/feature-development/skills/playwright-testing",
+      "source": "./factories/feature-development/skills/playwright-testing",
       "description": "Use when a manual-QA agent does live browser testing through the Playwright MCP server — exploring/profiling a web app or executing a web test case against a running app, with no test code generated. Web/PWA/hybrid targets; used by app-profiler and test-runner. Mobile native → use mobile-testing instead.",
       "version": "0.2.0"
     },
     {
       "name": "prioritize-bets",
-      "source": "./bundles/product-management/skills/prioritize-bets",
+      "source": "./factories/product-management/skills/prioritize-bets",
       "description": "Use when deciding what to build next, when validated hypotheses outnumber the team's appetite, when a ranking feels stale, or when someone asks which bet comes first. Ranks the incubating and promotion-ready bets against the active prioritization framework — RICE by default, with WSJF and ICE as config options — deriving the confidence factor from each hypothesis's evidence-banded confidence block (never free-guessed), persisting scores into hypothesis frontmatter so the ranking survives the session, warning (never blocking) when a bet is ranked on gut-band evidence, and rewriting the derived priority board at docs/discovery/priority.md. Trigger phrases — 'what should we build next', 'rank the backlog', 'prioritize the hypotheses', 'which bet comes first', 'the backlog is stale'. NOT for promotion-gate scoring, NOT for triaging raw incoming asks (intake-triage), and NOT for attacking the assumptions inside one hypothesis.",
       "version": "0.2.0"
     },
     {
       "name": "reproducing-issues",
-      "source": "./bundles/feature-development/skills/reproducing-issues",
+      "source": "./factories/feature-development/skills/reproducing-issues",
       "description": "Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Turns a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Reproduction and documentation only — does not fix code.",
       "version": "0.2.0"
     },
     {
       "name": "root-cause-analysis",
-      "source": "./bundles/feature-development/skills/root-cause-analysis",
+      "source": "./factories/feature-development/skills/root-cause-analysis",
       "description": "Use when a bug has been reproduced or confirmed and needs its exact cause traced before a fix is proposed, or when the user says 'investigate issue'. Traces a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.",
       "version": "0.2.0"
     },
     {
       "name": "screen-specs",
-      "source": "./bundles/feature-development/skills/screen-specs",
+      "source": "./factories/feature-development/skills/screen-specs",
       "description": "Use when screens need designing or documenting as reference a developer or agent can build from — \"design the screens\", \"screen specs\", \"what should this screen look like\", \"turn the flows into designs\", \"document the UI\", or when a flow map's nodes need to become actual screens. Produces standalone HTML pages showing each screen as a device-framed mock beside its spec — regions with Material component and token names, every state the criteria demand, the MD3-vs-platform calls, accessibility notes, and traceability back to a flow node and acceptance criterion. Mock and spec are generated from one source so they cannot drift. NOT for flow/journey diagrams (use user-flow-maps), NOT a design tool replacement, and NOT for writing the screens' production code.",
       "version": "0.2.0"
     },
     {
       "name": "seeding-a-project",
-      "source": "./bundles/feature-development/skills/seeding-a-project",
+      "source": "./factories/feature-development/skills/seeding-a-project",
       "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
       "version": "0.2.0"
     },
     {
       "name": "session-retrospective",
-      "source": "./bundles/feature-development/skills/session-retrospective",
+      "source": "./factories/feature-development/skills/session-retrospective",
       "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
       "version": "0.2.0"
     },
     {
       "name": "stakeholder-interview",
-      "source": "./bundles/product-management/skills/stakeholder-interview",
+      "source": "./factories/product-management/skills/stakeholder-interview",
       "description": "Use when a stakeholder conversation, customer meeting, or user session is being planned or has just happened — even if the user only says 'I'm meeting them Thursday' or pastes raw notes. Runs two modes — PREPARE aggregates every open question, untested critical assumption, and unresolved escalation across the workspace into a themed, value-of-information-ordered guide filtered to what THIS interviewee can answer; SYNTHESIZE turns raw notes or a transcript into a durable evidence file and propagates the answers into the hypotheses they touch (evidence links, assumption verdicts, resolved questions). Trigger phrases — 'prep the interview', 'what should I ask', 'here are my notes', 'synthesize this interview', 'we talked to the customer'. NOT for triaging raw feature asks (intake-triage), NOT for team-internal meeting minutes, and NOT for fact-checking a document (deep-research factcheck mode).",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-implementation",
-      "source": "./bundles/test-automation/skills/test-automation-implementation",
+      "source": "./factories/test-automation/skills/test-automation-implementation",
       "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test — the implementer slot of the test-automation pipeline. Six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the Run Report template. Analyst counterpart: test-case-analysis; orchestration: test-automation-workflow.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-workflow",
-      "source": "./bundles/feature-development/skills/test-automation-workflow",
+      "source": "./factories/feature-development/skills/test-automation-workflow",
       "description": "Use when a TMS test case needs to become an automated test, or when automating a regression batch — \"automate TC-NNN\", \"convert this case to Playwright\", any flow from a manual case to green framework tests. Pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).",
       "version": "0.2.0"
     },
     {
       "name": "test-case-analysis",
-      "source": "./bundles/feature-development/skills/test-case-analysis",
+      "source": "./factories/feature-development/skills/test-case-analysis",
       "description": "Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — \"analyse SCRUM-T101\", \"run this case and emit an AFS\", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.",
       "version": "0.2.0"
     },
     {
       "name": "tokenomics",
-      "source": "./bundles/test-automation/skills/tokenomics",
+      "source": "./factories/test-automation/skills/tokenomics",
       "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
       "version": "0.2.0"
     },
@@ -373,7 +373,7 @@
     },
     {
       "name": "user-flow-maps",
-      "source": "./bundles/feature-development/skills/user-flow-maps",
+      "source": "./factories/feature-development/skills/user-flow-maps",
       "description": "Use when a user flow, journey, or screen-to-screen behaviour needs to become a visual flow map — \"draw the flow\", \"make a flow map\", \"user flow diagram\", \"map the screens\", \"turn these journeys into diagrams\", or when acceptance criteria need a picture reviewers can sign off on. Renders a spec of screens, decisions and transitions into standalone HTML posters — numbered screen wireframes, decision diamonds, Start/End markers naming where a flow hands off, orthogonal connectors routed from the data, and an authoritative edge table. Layout, routing and label collision are handled by the bundled flowmap.js; you supply data, never coordinates. NOT for architecture or sequence diagrams, NOT for visual/UI design of the screens themselves (that is a design role's job), and NOT a mermaid replacement — the source diagram stays canonical.",
       "version": "0.2.0"
     },
@@ -397,7 +397,7 @@
     },
     {
       "name": "xlsx-reader",
-      "source": "./bundles/manual-qa/skills/xlsx-reader",
+      "source": "./factories/manual-qa/skills/xlsx-reader",
       "description": "Use when the user provides an Excel file of test cases or requirements, or asks to import a spreadsheet. Reads .xlsx/.xls spreadsheets (test cases, checklists, requirement matrices) into Markdown tables so an agent can ingest them.",
       "version": "0.2.0"
     },

@@ -48,6 +48,13 @@ function frontmatterField(file, field) {
   return m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
 }
 
+/** True unless frontmatter explicitly opts out with `discoverable: false`
+ *  (boolean or the string form, since our regex-based frontmatter reader
+ *  yields strings). Items without the field default to discoverable. */
+export function isDiscoverable(fm) {
+  return !(fm && (fm.discoverable === false || fm.discoverable === "false"));
+}
+
 /** Source path string for an agent/skill that was resolved via item-resolver. */
 function resolvedSource(resolved, kind) {
   if (resolved.factory === null) {
@@ -80,6 +87,7 @@ function buildPlugins(rt, index, externals) {
       const resolved = resolveItem(index, "agents", id);
       if (!resolved) continue;
       const agentFile = join(resolved.dir, "agents", id, "AGENT.md");
+      if (!isDiscoverable({ discoverable: frontmatterField(agentFile, "discoverable") })) continue;
       plugins.push({
         name: id,
         source: resolvedSource(resolved, "agents"),
@@ -98,6 +106,7 @@ function buildPlugins(rt, index, externals) {
       const resolved = resolveItem(index, "skills", id);
       if (!resolved) continue;
       const skillFile = join(resolved.dir, "skills", id, "SKILL.md");
+      if (!isDiscoverable({ discoverable: frontmatterField(skillFile, "discoverable") })) continue;
       plugins.push({
         name: id,
         source: resolvedSource(resolved, "skills"),
@@ -149,4 +158,6 @@ function main() {
   if (check && stale) process.exit(1);
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
