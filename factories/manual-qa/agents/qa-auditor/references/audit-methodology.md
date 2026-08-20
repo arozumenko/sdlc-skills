@@ -248,22 +248,28 @@ confidence ≥ 5** — get codified into regression test cases via `test-author`
 
 **Who dispatches `test-author` depends on how `qa-auditor` was invoked:**
 
-- **Standalone** (a user ran `qa-auditor` directly, or the invocation prompt
-  names a target URL with no run/suite context): `qa-auditor` itself
-  dispatches `test-author` via the Agent tool after writing the report, per
-  `AGENT.md`'s "Codify handoff (standalone path)" section.
-- **Dispatched by `test-run-lead`'s audit branch** (the invocation prompt
-  names a `run_id` / `suite` and asks for findings back, rather than for a
-  standalone report-and-codify): `qa-auditor` returns the report path and the
-  list of notable findings in its final message and **does not** dispatch
-  `test-author` itself — `test-run-lead` collects that list and performs the
-  dispatch once, after its own result-collection step, so the same findings
-  aren't codified twice.
+- **Self-dispatch (the default)** — `qa-auditor` itself dispatches
+  `test-author` via the Agent tool after writing the report, per `AGENT.md`'s
+  "Codify handoff (standalone path)" section. This covers a user running
+  `qa-auditor` directly with no suite context, **and** a request that names a
+  suite/target and asks to codify into it — naming a suite is not, by itself,
+  a reason to skip self-dispatch.
+- **Lead-routed (the one exception)** — `qa-auditor` returns the report path
+  and the list of notable findings in its final message and **does not**
+  dispatch `test-author` itself, only when the invocation prompt *explicitly
+  asks it to return the notable findings* for the caller to codify — the
+  concrete signal `test-run-lead`'s audit branch uses is language like
+  "return the notable findings" / "reporting back into suite {suite_path}".
+  `test-run-lead` then collects that list and performs the dispatch once,
+  after its own result-collection step, so the same findings aren't codified
+  twice.
 
-The signal to check is simple: **did the invocation prompt hand you a
-run/suite context to report back into, or did it just hand you a target to
-audit end-to-end?** The former means the lead codifies; the latter means you
-do.
+The signal to check is **not** whether a `run_id` / suite was named — it's
+whether the prompt explicitly asked for findings to be *returned* rather than
+*codified*. Without that explicit return-and-let-me-codify instruction,
+self-dispatch — including when a suite path is present. When in doubt,
+self-dispatch: silently skipping a requested codify is the failure mode to
+avoid, not an extra dispatch.
 
 If no finding meets the p0/p1 + confidence ≥5 bar, skip the dispatch entirely
 and say so in the summary — don't invent a codify step where none applies.

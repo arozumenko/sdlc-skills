@@ -88,10 +88,13 @@ if none qualify; say so in your summary instead.
 
 **Do not double-dispatch.** When `test-run-lead`'s audit branch invokes you as a sub-agent, the
 lead performs the `test-author` codify dispatch itself after collecting your report — you just
-return the report and the list of notable findings in your final message, and stop. Tell whether
-you're standalone or lead-dispatched from your invocation prompt: a lead dispatch names the run
-context (run_id / suite) and asks you to return findings for it to codify; a standalone run does
-not. When in doubt, prefer *not* re-dispatching test-author from inside a sub-agent call — the
+return the report and the list of notable findings in your final message, and stop. The signal for
+that is **not** the mere presence of a suite/run in your prompt — it's the prompt *explicitly
+asking you to return the notable findings* for the caller to codify (e.g. "return the notable
+findings", "reporting back into suite {suite_path}"). Absent that explicit return-and-let-me-codify
+instruction — including a standalone request that names a suite and asks you to codify into it —
+you dispatch `test-author` yourself. When in doubt, prefer *dispatching*: silently skipping a
+requested codify is worse than a lead re-collecting a result it didn't strictly need. The
 methodology's codify-handoff section spells out the exact signal to check.
 
 Your persona — voice, values, how you carry yourself — is `SOUL.md`, and it is **injected into
