@@ -11,10 +11,10 @@
   },
   "scripts": {
     "test": "node --test",
-    "validate:bundles": "node bin/validate-bundles.mjs",
+    "validate:factories": "node bin/validate-factories.mjs",
     "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
-    "validate:externals": "node bin/validate-bundles.mjs --check-externals",
-    "validate": "npm run validate:bundles && npm run validate:marketplaces && npm run validate:externals && npm run validate:dupes",
+    "validate:externals": "node bin/validate-factories.mjs --check-externals",
+    "validate": "npm run validate:factories && npm run validate:marketplaces && npm run validate:externals && npm run validate:dupes",
     "gen:marketplaces": "node bin/gen-marketplaces.mjs",
     "validate:dupes": "node bin/check-skill-dupes.mjs"
   },
