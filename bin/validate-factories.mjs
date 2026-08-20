@@ -46,17 +46,74 @@ import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Parse the YAML frontmatter of a FACTORY.md into a flat key→value map.
-// Only the simple `key: value` lines we care about — no full YAML needed.
-function parseFrontmatter(text) {
+// Parse the YAML frontmatter of a FACTORY.md into a key→value map. Handles
+// the subset of YAML this repo's frontmatter actually uses: scalar
+// `key: value` lines, block-sequence lists (`key:` followed by `- item`
+// lines, including object-list entries like `- project_code: EPM-EASE`), and
+// an explicit `key: []` empty-list sentinel (preserved as [], not coerced to
+// absent — that's the "not disclosed" marker some fields use). No full YAML
+// parser needed; still stdlib-only.
+export function parseFrontmatter(text) {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const out = {};
-  for (const line of m[1].split(/\r?\n/)) {
+  const lines = m[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const kv = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (kv) out[kv[1]] = kv[2].trim();
+    if (!kv) continue;
+    const key = kv[1];
+    let val = kv[2].trim();
+    if (val === "[]") {
+      out[key] = []; // explicit empty list — ND sentinel, not absence
+      continue;
+    }
+    if (val === "") {
+      // maybe a block sequence
+      const items = [];
+      while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1])) {
+        const raw = lines[++i].replace(/^\s*-\s+/, "").trim();
+        const obj = raw.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+        items.push(obj ? { [obj[1]]: unquote(obj[2].trim()) } : unquote(raw));
+      }
+      out[key] = items.length ? items : "";
+      continue;
+    }
+    out[key] = unquote(val);
   }
   return out;
+}
+
+function unquote(s) {
+  return s.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+}
+
+const SUPPORT_LEVELS = new Set(["Self-Serve", "Best Effort Support", "Dedicated Capacity"]);
+
+// Validate a FACTORY.md frontmatter object against the catalog descriptor
+// schema. `rawLines` (the un-parsed frontmatter block lines, when available)
+// feeds a risky-unquoted-value scan that must inspect the text pre-parse,
+// since parseFrontmatter already strips quotes. Returns an array of error
+// strings (empty when valid); callers route each through err(id, msg).
+export function checkFactoryFrontmatter(id, fm, rawLines = []) {
+  const errs = [];
+  for (const k of ["name", "description", "owner", "authors", "sdlc_phase"])
+    if (fm[k] === undefined || fm[k] === "" || (Array.isArray(fm[k]) && !fm[k].length))
+      errs.push(`FACTORY.md frontmatter missing "${k}"`);
+  if (fm.support_level !== undefined && !SUPPORT_LEVELS.has(fm.support_level))
+    errs.push(`support_level "${fm.support_level}" not one of Self-Serve | Best Effort Support | Dedicated Capacity`);
+  if (typeof fm.sdlc_phase === "string" && (fm.sdlc_phase.includes(",") || Array.isArray(fm.sdlc_phase)))
+    errs.push(`sdlc_phase must be a single value, not a list: "${fm.sdlc_phase}"`);
+  // risky-unquoted scan on raw frontmatter lines
+  for (const line of rawLines) {
+    const kv = line.match(/^([A-Za-z0-9_-]+):\s+(.*)$/);
+    if (!kv) continue;
+    const v = kv[2].trim();
+    const quoted = /^".*"$/.test(v) || /^'.*'$/.test(v);
+    const risky = v.includes(":") || /^[*&#@]/.test(v);
+    if (risky && !quoted) errs.push(`value for "${kv[1]}" must be quoted (contains ':' or leading special char): ${v}`);
+  }
+  return errs;
 }
 
 function dirsWith(parent, marker) {
@@ -126,11 +183,15 @@ function main() {
     if (!existsSync(factoryMd)) {
       err(id, "missing FACTORY.md (catalog descriptor)");
     } else {
-      const fm = parseFrontmatter(readFileSync(factoryMd, "utf8"));
-      if (!fm) err(id, "FACTORY.md has no YAML frontmatter");
-      else
-        for (const k of ["name", "description", "owner"])
-          if (!fm[k]) err(id, `FACTORY.md frontmatter missing "${k}"`);
+      const factoryMdText = readFileSync(factoryMd, "utf8");
+      const fm = parseFrontmatter(factoryMdText);
+      if (!fm) {
+        err(id, "FACTORY.md has no YAML frontmatter");
+      } else {
+        const fmMatch = factoryMdText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        const rawLines = fmMatch ? fmMatch[1].split(/\r?\n/) : [];
+        for (const msg of checkFactoryFrontmatter(id, fm, rawLines)) err(id, msg);
+      }
     }
 
     const hasLocal = Array.isArray(b.localAgents) && b.localAgents.length > 0;
