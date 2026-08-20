@@ -128,11 +128,25 @@ for (const entry of lines) {
       if (!toolUseIdM || !usageM) continue; // no usage block yet (e.g. a non-`completed` notification) — skip
       const toolUseId = toolUseIdM[1];
       const tcIdM = block.match(TC_ID_RE);
+      // A `<subagent_tokens>0</subagent_tokens>` is NOT a measurement of zero —
+      // it is the harness failing to report. A dispatch that ran to `completed`
+      // and issued tool calls cannot have consumed zero tokens. Found in
+      // RUN-2026-08-18-002 (6-suite/55-case regression on a non-Anthropic
+      // gateway): all 57 dispatches reported 0, which downstream was summed as
+      // a real zero — see build-run-metrics.mjs's `tokens_attribution` guard for
+      // what that silently did to orchestrator_cost_pct.
+      //
+      // Record it as null (unmeasured) rather than 0 (measured, empty) so the
+      // distinction survives into the trace file. tool_uses/duration_ms are
+      // reported independently and stay trustworthy.
+      const rawTokens = parseInt(usageM[1], 10);
+      const tokensAttributed = Number.isFinite(rawTokens) && rawTokens > 0;
       byToolUseId.set(toolUseId, {
         tc_id: tcIdM ? tcIdM[1] : null,
         agent_type: dispatchAgentType.get(toolUseId) ?? null,
         role: tcIdM ? 'test-runner' : 'support',
-        total_tokens: parseInt(usageM[1], 10),
+        tokens_attributed: tokensAttributed,
+        total_tokens: tokensAttributed ? rawTokens : null,
         input_tokens: null,
         output_tokens: null,
         cache_creation_input_tokens: null,
