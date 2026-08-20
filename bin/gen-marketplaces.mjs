@@ -40,12 +40,56 @@ const RUNTIMES = [
   { id: "copilot", out: ".github/plugin/marketplace.json", agents: false, skills: true },
 ];
 
+/**
+ * Read one top-level `field:` from a YAML frontmatter block (a string, no `---`
+ * fences). Handles inline scalars (quoted or not) AND block scalars — a folded
+ * `field: >` or literal `field: |` (with optional `-`/`+` chomping) whose value
+ * spans several indented continuation lines. Folded joins with spaces, literal
+ * with newlines. Without this, a `>`-folded value collapses to the literal ">".
+ * Returns the trimmed value, or null if the field is absent.
+ */
+export function parseFrontmatterField(fmText, field) {
+  const lines = fmText.split(/\r?\n/);
+  // Top-level fields only (column 0), matching the frontmatter fields callers
+  // read — never a same-named key nested under e.g. `metadata:`.
+  const keyRe = new RegExp(`^${field}:\\s*(.*)$`);
+  const keyIndent = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(keyRe);
+    if (!m) continue;
+    const rest = m[1].trim();
+    const block = rest.match(/^([>|])([+-]?)$/);
+    if (!block) {
+      // Inline scalar — strip one layer of surrounding quotes.
+      return rest.replace(/^["']|["']$/g, "");
+    }
+    // Block scalar: gather subsequent lines indented deeper than the key. The
+    // block's content indentation is set by its first non-empty line; strip it.
+    const folded = block[1] === ">";
+    const body = [];
+    let blockIndent = null;
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j];
+      if (line.trim() === "") { body.push(""); continue; }
+      const indent = line.match(/^(\s*)/)[1].length;
+      if (indent <= keyIndent) break; // dedent → block ended
+      if (blockIndent === null) blockIndent = indent;
+      body.push(line.slice(blockIndent));
+    }
+    while (body.length && body[body.length - 1] === "") body.pop();
+    const joined = folded
+      ? body.map((l) => l.trim()).join(" ").replace(/\s+/g, " ")
+      : body.join("\n");
+    return joined.trim();
+  }
+  return null;
+}
+
 function frontmatterField(file, field) {
   if (!existsSync(file)) return null;
   const fm = readFileSync(file, "utf8").match(/^---\s*\n([\s\S]*?)\n---/m);
   if (!fm) return null;
-  const m = fm[1].match(new RegExp(`^${field}:\\s*(.+)$`, "m"));
-  return m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
+  return parseFrontmatterField(fm[1], field);
 }
 
 /** True unless frontmatter explicitly opts out with `discoverable: false`
