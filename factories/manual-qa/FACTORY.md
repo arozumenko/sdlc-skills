@@ -11,6 +11,7 @@ support_level: Self-Serve
 use_cases:
   - Manual test execution
   - Web and mobile QA
+  - "Specialist web audits (security, accessibility, privacy, performance, responsive, UX, SEO)"
 ---
 # Manual QA Team
 
