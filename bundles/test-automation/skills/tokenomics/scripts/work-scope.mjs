@@ -231,6 +231,15 @@ export async function generateBatchReports(repo, scope) {
       // the honest real-work figure.
       writeFileSync(join(dir, 'batch-tokenomics.md'), `${renderBatchTokenomicsMarkdown(c)}\n`);
       writeFileSync(join(dir, 'batch-tokenomics.html'), `${renderBatchTokenomicsHtml(c)}\n`);
+      // Hyperfactory dataset row — compliance as a side effect of closing:
+      // every close appends/replaces this batch's row in the accumulating
+      // export (identity from factory-profile.json; missing profile just
+      // means null identity + a §7 checklist warning, never a failed close).
+      try {
+        const { appendRun, loadProfile } = await import('./build-tokenomics-export.mjs');
+        const { profile } = loadProfile(repo);
+        appendRun(repo, c, profile);
+      } catch { /* export is best-effort; the close artifacts above are the deliverable */ }
       out.push({ path, cost: c });
     }
     return out;

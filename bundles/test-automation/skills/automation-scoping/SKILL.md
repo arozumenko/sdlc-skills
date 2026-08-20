@@ -117,10 +117,21 @@ judged.
 context-frugality rule the lead's playbook measures at ~10K tokens per 14
 cases read in-context. Dispatch readers over the case files in chunks of
 ~10–20 cases each. Reading writes nothing, so this is the sanctioned
-read-only fan-out: on Claude Code run the chunks as one parallel `Workflow`
-fan-out (schema-forced verdicts); on other hosts, sequential sub-agent
-dispatches. Verdicts land in
-`.agents/estimation/<scope-slug>-verdicts.json`; you keep only the rollup.
+read-only fan-out. On Claude Code the shipped mini-workflow IS this pass —
+enumerate the case files (one `ls`/glob) and invoke:
+
+```
+Workflow({ scriptPath: '<this skill>/scripts/sizing.workflow.mjs',
+           args: { scope: '<scope-slug>', files: ['<case>.md', …] } })
+```
+
+It fans the chunks out in parallel (schema-forced verdicts, project taxonomy
+preferred over the bundled one), lands
+`.agents/estimation/<scope-slug>-verdicts.json`, runs `score-cases.mjs
+--verdicts` itself, and returns only the rollup — the scored file it leaves
+behind is exactly what the tokenomics sizing join and the dataset export
+read. On other hosts, sequential sub-agent dispatches with the same verdict
+contract; verdicts land in the same file and you run the scorer yourself.
 
 **The verdict, per case:**
 

@@ -153,12 +153,26 @@ export function dedupUsage(records) {
   }
   const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const models = new Set();
+  // Per-model quads ride along: the hyperfactory dataset REQUIRES
+  // tokens_by_model whenever models_used has >1 entry (a blended total can't
+  // be re-priced across tiers) — and our runs always mix tiers (haiku triage
+  // + sonnet workers). Each usage record carries message.model, so the split
+  // costs nothing to keep.
+  const tokensByModel = {};
   for (const v of byId.values()) {
     tokens.input += v.input; tokens.output += v.output;
     tokens.cacheRead += v.cacheRead; tokens.cacheWrite += v.cacheWrite;
-    if (v.model) models.add(v.model);
+    if (v.model) {
+      models.add(v.model);
+      const m = (tokensByModel[v.model] ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+      m.input += v.input; m.output += v.output; m.cacheRead += v.cacheRead; m.cacheWrite += v.cacheWrite;
+    }
   }
-  return { tokens, models };
+  // usageSeen distinguishes MEASURED-EMPTY from UNMEASURED: on a non-Anthropic
+  // gateway the transcript can carry zero usage records for a dispatch that
+  // demonstrably worked — publishing those zeros as a measurement is how a
+  // $146 run reports as $20 (manual-qa field case, PR #63; mirrored here).
+  return { tokens, models, tokensByModel, usageSeen: byId.size };
 }
 
 /** Active minutes = gap-capped sum; wall = last − first. Same rule both hosts. */
@@ -292,14 +306,14 @@ export function parseClaudeTranscript(records, { capturePrompts = false, sidecha
       }
     }
   }
-  const { tokens, models } = dedupUsage(records);
+  const { tokens, models, tokensByModel, usageSeen } = dedupUsage(records);
   // firstText is included explicitly: on a SUB-AGENT transcript every record is
   // sidechain-marked, so promptText() skips them all and caseTexts never sees
   // the dispatch prompt — the one surface that names the unit's case ids when
   // the label window missed them. On a parent transcript it duplicates a
   // caseText; extractCaseIds dedupes.
   const caseIds = extractCaseIds(branch, firstText, ...caseTexts);
-  return { role, branch, firstText, turns, toolCalls, toolErrors, skills, dispatched, prompts, caseIds, tokens, models, ...timeStats(stamps) };
+  return { role, branch, firstText, turns, toolCalls, toolErrors, skills, dispatched, prompts, caseIds, tokens, tokensByModel, usageSeen, models, ...timeStats(stamps) };
 }
 
 /** `{path, id, role}` per sub-agent transcript — keyed off the .meta.json sidecar. */
@@ -417,11 +431,18 @@ export function captureDispatches(repo, sessionId, { projectDir, config, env = p
     const sp = parseClaudeTranscript(readRecords(meta.path), { sidechain: true });
     if (!sp.turns && !sp.tokens.output) continue;            // nothing measurable yet
     const priced = cfg.priceAtCapture === false ? null : meterSession([meta.path], { env });
+    // A dispatch that ran (turns/tool calls) with ZERO usage records is
+    // UNMEASURED, not free: tokens go null + tokensAttributed:false so the
+    // rollups can say 'floor' instead of billing it as zero (PR #63 mirror).
+    const attributed = sp.usageSeen > 0;
     const rec = {
       v: LEDGER_VERSION, session: sessionId, agentId: meta.id, role: meta.role,
       label: deriveLabel(meta.description, sp.firstText),
       cases: receiptCaseIds(repo, meta.id) ?? scoped(sp.caseIds),
-      tokens: sp.tokens, activeMin: sp.activeMin, toolCalls: sp.toolCalls, toolErrors: sp.toolErrors,
+      tokensByModel: attributed ? sp.tokensByModel : {},
+      tokens: attributed ? sp.tokens : null,
+      ...(attributed ? {} : { tokensAttributed: false }),
+      activeMin: sp.activeMin, toolCalls: sp.toolCalls, toolErrors: sp.toolErrors,
       ...(priced?.totalUsd != null ? { costUsd: priced.totalUsd } : {}),
       endedAt: sp.endTs ? new Date(sp.endTs).toISOString() : null,
       bytes, at: new Date().toISOString(),
@@ -732,7 +753,21 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
     endedAt: p.endTs ? new Date(p.endTs).toISOString() : null,
     wallMin: p.wallMin, activeMin: p.activeMin + subs.reduce((n, s) => n + s.activeMin, 0),
     turns: p.turns, toolCalls: p.toolCalls, toolErrors: p.toolErrors,
-    tokens: p.tokens, // parent only — sub-agent tokens live in subagents[]
+    tokens: p.usageSeen > 0 ? p.tokens : null, // parent only — sub-agent tokens live in subagents[]; null = the transcript reported no usage (unmeasured, not free)
+    ...(p.usageSeen > 0 ? {} : { tokensAttributed: false }),
+    // complete | partial | none — whether every unit (parent + subs) actually
+    // reported usage. Anything short of complete means the totals are a FLOOR
+    // (PR #63 mirror: a confident number is unrecoverable, a null is not).
+    ...((() => {
+      const flags = [p.usageSeen > 0, ...subs.map((x) => (x.usageSeen ?? 1) > 0)];
+      return flags.every(Boolean) ? {} : { tokensAttribution: flags.some(Boolean) ? 'partial' : 'none' };
+    })()),
+    // PARENT-ONLY per-model quads (mirrors `tokens`); every subagents[] entry
+    // carries its own — so batch-cost can weight them exactly like the scalar
+    // totals (shared sessions, foreign-dispatch exclusion). Together they are
+    // the dataset's tokens_by_model source — required whenever a run mixes
+    // tiers, which ours always do (haiku triage + sonnet workers).
+    tokensByModel: p.tokensByModel ?? {},
     costUsd, costSource: costUsd != null ? 'ccusage-metered' : 'none',
     cases,
     ...(scope ? { scope: scopeForLine(scope) } : {}),
@@ -746,7 +781,9 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
       // `id` is the dispatch's transcript id — the join key to the live
       // dispatch log (SubagentStop records) and to _returns receipts.
       ...(s.id ? { id: s.id } : {}), role: s.role, label: s.label, n: 1,
-      tokens: s.tokens, activeMin: s.activeMin,
+      tokens: (s.usageSeen ?? 1) > 0 ? s.tokens : null,
+      ...((s.usageSeen ?? 1) > 0 ? {} : { tokensAttributed: false }),
+      tokensByModel: s.tokensByModel ?? {}, activeMin: s.activeMin,
       toolCalls: s.toolCalls, toolErrors: s.toolErrors,
       ...((() => { const ids = receiptCaseIds(repo, s.id) ?? scopedIds(s.caseIds); return ids?.length ? { cases: ids } : {}; })()),
       ...(s.costUsd != null ? { costUsd: s.costUsd } : {}),
@@ -772,7 +809,7 @@ export function captureClaudeSession(repo, transcriptPath, sessionId, { config, 
  * appends a superseding line, and every reader dedupes latest-endedAt-wins, so
  * closing early costs nothing and double-counts nothing.
  */
-export function captureSessionNow(repo, sessionId, { config, user, env = process.env, price = true } = {}) {
+export function captureSessionNow(repo, sessionId, { config, user, env = process.env, price = true, force = false } = {}) {
   const cfg = config ?? loadConfig(repo);
   const me = user ?? whoAmI(repo).slug;
   for (const dir of claudeProjectDirs(repo, env)) {
@@ -782,7 +819,11 @@ export function captureSessionNow(repo, sessionId, { config, user, env = process
     if (!line) return null;
     const prevEnd = knownSessions(repo).get(`claude:${sessionId}`);
     const thisEnd = line.endedAt ? Date.parse(line.endedAt) : 0;
-    if (prevEnd === undefined || thisEnd > prevEnd) appendLine(repo, me, line);
+    // `force` re-appends even when the transcript hasn't grown — the guard
+    // compares CONTENT freshness, but a capture-code upgrade (new fields like
+    // tokensByModel) legitimately wants to re-emit the same transcript;
+    // dedupLines keeps latest-by-capturedAt, so a forced line supersedes.
+    if (force || prevEnd === undefined || thisEnd > prevEnd) appendLine(repo, me, line);
     return line;
   }
   return null;

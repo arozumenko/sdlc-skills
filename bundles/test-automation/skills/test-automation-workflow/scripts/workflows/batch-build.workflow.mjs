@@ -99,7 +99,7 @@ const A = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 if (!A.slug || !A.base || !Array.isArray(A.cases) || A.cases.length === 0 || A.cases.some((c) => !c?.id)) {
   throw new Error(
     'args required: { slug, base, cases: [{id, title?, path?}, …] (every case needs an id; path = repo-relative source file when the body already lives in this repo — no snapshot copy), clusters?: [[id,…],…], ' +
-    'analyzeOnly?, preAnalyzed?: [{id, afs_path, surface_key}], quotaResume?, root?, reportDir?, ' +
+    'analyzeOnly?, preAnalyzed?: [{id, afs_path, surface_key}], quotaResume?, root?, reportDir?, workItemRef?, ' +
     'agentTypes?, workerModel?, workerEffort?, reviewerModel?, mergeModel?, reporterModel?, triageModel?, gateModel?, ' +
     'extendImplementerModel?, fixRounds?, gateN?, gateCmd?, integrationBranch?, skipGate?, ' +
     "tiering?: 'auto'|'off', reviewPanel?, breakerThreshold?, extendRateThreshold?, budgetReserve? }"
@@ -1580,6 +1580,10 @@ if (stalledCount) {
 const report = {
   batch: SLUG,
   base: BASE,
+  // Tracker/TMS reference of the work-item this batch serves (issue, story,
+  // suite link) — flows into the tokenomics dataset export's work_item_ref.
+  // Optional: absent, the export uses a telemetry-cohort ref (T-<slug>).
+  ...(A.workItemRef ? { work_item_ref: String(A.workItemRef) } : {}),
   integration_branch: merged.length ? gateBranch : null,
   gate: gate ? { verdict: gate.verdict, runs: gate.runs, seconds: gate.seconds ?? [], failures: (gate.failures ?? []).map((f) => ({ ...f, ...(typeof f?.signature === 'string' ? { signature: clip(f.signature) } : {}) })) } : null,
   cases: rows,

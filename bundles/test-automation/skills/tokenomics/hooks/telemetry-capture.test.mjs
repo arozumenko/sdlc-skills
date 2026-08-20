@@ -113,6 +113,8 @@ test('captureClaudeSession: one line — parent tokens, per-dispatch sub-agent r
     // `id` joins this dispatch to its live-log record and its _returns receipt
     id: 'agent-abc', role: 'qa-engineer', label: 'analyse', n: 1,
     tokens: { input: 510, output: 55, cacheRead: 0, cacheWrite: 0 },
+    // per-model quads ride each sub — the dataset's tokens_by_model source
+    tokensByModel: { 'claude-haiku-4-5': { input: 500, output: 50, cacheRead: 0, cacheWrite: 0 } },
     activeMin: 2, toolCalls: 0, toolErrors: 0,
   });
   assert.deepEqual(line.models, ['claude-haiku-4-5', 'claude-sonnet-5']);

@@ -299,9 +299,13 @@ installed with the bundle; not preloaded — load it now) and run its
 installer from the repo root:
 
 ```bash
-node .claude/skills/tokenomics/scripts/install-hooks.mjs
-node .claude/skills/tokenomics/scripts/install-hooks.mjs --doctor   # must end "all good"
+node <skills root>/tokenomics/scripts/install-hooks.mjs
+node <skills root>/tokenomics/scripts/install-hooks.mjs --doctor   # must end "all good"
 ```
+
+`<skills root>` = the host's skills dir: `.claude/skills/` on Claude Code,
+`.github/skills/` on Copilot CLI, `.cursor/skills/` on Cursor — scout knows
+the host from Step 6.5's detection.
 
 What this sets up (the skill owns the details — don't restate them):
 capture hooks in the host settings, the `.agents/telemetry` submodule
@@ -315,6 +319,26 @@ Degrade gracefully: tokenomics skill not installed → skip with a
 `Telemetry: not installed` line in the seeding report, never a failure.
 Re-runs are idempotent — the installer is also the updater, and
 `--doctor` is the health check to quote in the report.
+
+**Then seed the factory identity** (the cross-factory tokenomics dataset's
+segment header — every batch close appends a dataset row automatically, and
+without identity those rows carry null `factory_id`):
+
+1. Copy `<skills root>/tokenomics/templates/factory-profile.template.json`
+   to `.agents/telemetry/automation/factory-profile.json` — skip if it
+   already exists (hand-authored once, never regenerated).
+2. Fill the `<angle-bracket>` placeholders: ask the operator for
+   `factory_id` / `factory_name` (one AskUserQuestion — suggest
+   `<repo-slug>-test-automation`); set `agent_tool` to the detected host +
+   version; add `maturity` (`production | pilot | experimental`) and
+   `env_setup` (`trivial | single-fixture | multi-fixture | external-deps |
+   full-env`) from what Step 6 learned about the test infrastructure — the
+   dataset rows read both from this file.
+3. The non-placeholder defaults (stop `testing`, owner `QA`, the efficiency
+   techniques, the pipeline stages) hold for a stock install — override only
+   where this project genuinely differs. Never invent an org identifier the
+   operator didn't give; a declined question stays `null` and the export's
+   §7 checklist flags it.
 
 ## Step 6.8 — Wire agent tool whitelists + MCP scoping
 
@@ -407,5 +431,5 @@ ls .agents/memory/
 find .agents/memory -name 'project_briefing.md' -exec wc -l {} +
 
 # Telemetry installed and healthy (Step 6.7; absent only if declined/skipped)
-node .claude/skills/tokenomics/scripts/install-hooks.mjs --doctor 2>/dev/null | tail -1  # "all good"
+node <skills root>/tokenomics/scripts/install-hooks.mjs --doctor 2>/dev/null | tail -1  # "all good"
 ```

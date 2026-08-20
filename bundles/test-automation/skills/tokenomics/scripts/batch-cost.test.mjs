@@ -466,25 +466,46 @@ test('team-report --batch renders the cost view end-to-end', async () => {
   assert.ok(JSON.parse(readFileSync(join(dir, 'cost.json'), 'utf8')).v >= 1);
 });
 
-// The export row carries only measured figures + project-local identity; the
-// bundle itself ships no organisation identifiers.
-test('buildExportRow: cost.json → dataset row, nulls where unmeasured, identity from profile', async () => {
-  const { buildExportRow, renderCompare } = await import('./build-tokenomics-export.mjs');
+// Exporter v2 — schema 1.0 container {schema_version, segment, runs[]}: the
+// segment header from the project-local profile, one ROW per work-item (our
+// batch), measured figures only, §7 checklist instead of silent guessing.
+test('export v2: segment+row per spec, checklist flags gaps, upsert never duplicates', async () => {
+  const { buildSegment, buildRunRow, checklist, appendRun, anonymizeDoc, effortDaysToSize, costWeightedCacheShare, renderCompare } = await import('./build-tokenomics-export.mjs');
   const c = buildBatchCost('b1', RECEIPT, [
     line('s1', [sub('implement:TC-101', 90_000, { costUsd: 1.40, activeMin: 12 })], { costUsd: 2.40 }),
   ]);
-  const row = buildExportRow(c, { factory_id: 'proj-x-test-automation', owner_group: 'QA' });
-  assert.equal(row.factory_id, 'proj-x-test-automation');
-  assert.equal(row.work_item_level, 'batch');
-  assert.equal(row.work_item_ref, 'b1');
-  assert.equal(row.scenarios_executed, 3);
+  const seg = buildSegment({ factory_id: 'proj-x-test-automation' }, c);
+  assert.equal(seg.factory_id, 'proj-x-test-automation');
+  assert.equal(seg.stop, 'testing');
+  assert.equal(seg.work_item_level, 'feature');
+  const row = buildRunRow(c, { factory_id: 'proj-x-test-automation' });
+  assert.equal(row.work_item_ref, 'T-b1', 'telemetry cohort prefix when no tracker ref was threaded');
   assert.equal(row.scenarios_automated, 2);
-  assert.equal(row.cost_api_equivalent_usd, 2.4);
-  assert.equal(row.cost_per_scenario_automated_usd, 1.2);
   assert.equal(row.tokens.cache_read, 91_000); // 90k sub + 1k parent
-  assert.ok(row.tokens_by_agent['test-automation-engineer']);
-  const noProfile = buildExportRow(c, {});
-  assert.equal(noProfile.factory_id, null, 'no invented identity');
+  assert.ok(row.cache_read_share_pct > 0 && row.cache_read_share_pct <= 100, 'COST share, not the token share');
+  const checks = checklist(seg, row);
+  assert.ok(checks.missing.some((m) => m.includes('effort_days')), 'no sizing → flagged, never invented');
+  assert.ok(checks.missing.some((m) => m.includes('env_setup')), 'seed-owned field flagged when absent');
+  // effort→size bands per §3.1 spine
+  assert.equal(effortDaysToSize(0.4), 'XS');
+  assert.equal(effortDaysToSize(2.5), 'M');
+  assert.equal(effortDaysToSize(30), 'XL');
+  assert.equal(costWeightedCacheShare(null), null);
+  // append: upsert by work_item_ref — a re-closed batch replaces its row
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const repo = mkdtempSync(join(tmpdir(), 'export-v2-'));
+  const first = appendRun(repo, c, { factory_id: 'proj-x-test-automation' });
+  assert.equal(first.replaced, false);
+  const second = appendRun(repo, c, { factory_id: 'proj-x-test-automation' });
+  assert.equal(second.replaced, true, 'latest close wins — never a duplicate row');
+  const doc = JSON.parse(readFileSync(first.path, 'utf8'));
+  assert.equal(doc.runs.length, 1);
+  assert.equal(doc.schema_version, '1.0');
+  // anonymisation: opaque refs + generic briefs (submission norm)
+  const anon = anonymizeDoc(doc);
+  assert.equal(anon.runs[0].work_item_ref, 'T-WI-001');
+  assert.doesNotMatch(anon.runs[0].work_item_brief, /b1/);
   // compare renders both rows without throwing
   assert.match(renderCompare(c, c), /per delivered \(incl\. overhead\)/);
 });
@@ -581,4 +602,27 @@ test('batch time window: sessions ended before the first declare are excluded', 
   // no scope record for the batch → old behavior, everything id-matched counts
   const c2 = buildBatchCost('b2', receipt, [old, cur], { scopes: [] });
   assert.equal(c2.totals.costUsd, 4);
+});
+
+// PR #63 mirror: on a non-Anthropic gateway a dispatch can run to completion
+// with ZERO usage records — that is the harness failing to report, not a free
+// run. Unmeasured units go null+flag at capture; here the batch verdict says
+// FLOOR instead of posing as a complete bill.
+test('token attribution: unattributed units flag the totals as a floor', async () => {
+  const withFlag = line('s1', [
+    sub('implement:TC-101', 90_000, { costUsd: 1.40, activeMin: 12 }),
+    { ...sub('review:TC-101', 0, { activeMin: 5 }), tokens: null, tokensAttributed: false },
+  ], { costUsd: 2.40 });
+  const c = buildBatchCost('b1', RECEIPT, [withFlag]);
+  assert.equal(c.totals.tokensAttribution, 'partial');
+  assert.equal(c.totals.unattributedUnits, 1);
+  // fully attributed batch carries NO flag — absence means complete
+  const clean = buildBatchCost('b1', RECEIPT, [line('s1', [sub('implement:TC-101', 90_000, { costUsd: 1.4, activeMin: 12 })], { costUsd: 2.4 })]);
+  assert.equal(clean.totals.tokensAttribution, undefined);
+  // and the dataset row carries the floor into notes + checklist
+  const { buildRunRow, checklist, buildSegment } = await import('./build-tokenomics-export.mjs');
+  const row = buildRunRow(c, { factory_id: 'x' });
+  assert.match(row.notes, /TOKEN ATTRIBUTION PARTIAL/);
+  const checks = checklist(buildSegment({ factory_id: 'x' }, c), row);
+  assert.ok(checks.missing.some((m) => m.includes('FLOOR')));
 });

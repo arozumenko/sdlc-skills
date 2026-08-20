@@ -55,19 +55,50 @@ If `.agents/testing.md` names a known blocking modal (session-expired, forced-pa
 
 **Cut and push the batch trunk.** `git checkout -B tests/batch-<slug> <base> && git push -u origin tests/batch-<slug>`. Case branches live under it and their PRs target it; the gate proves it; one PR takes it to base. Push it now, not later: the gate checks out `origin/tests/batch-<slug>`, and a trunk that only exists locally fails the gate for an infrastructure reason that reads as a red case. (On Claude Code the shipped workflow's first build does this for you.) **A batch of one skips the trunk** — the case branch targets base directly.
 
-**Cluster the batch — by DISPATCHING one pass, never by reading the cases yourself.** Grouping similar cases needs their bodies, and your context is the batch's scarcest resource (Critical rule 7), so this is the one Intake step you delegate: dispatch a single agent over the snapshots you just wrote, and take back only the grouping.
+**Cluster AND size the batch — by DISPATCHING one pass, never by reading the cases yourself.** Grouping similar cases needs their bodies, and your context is the batch's scarcest resource (Critical rule 7), so this is the one Intake step you delegate: dispatch a single cheap agent (haiku-tier, read-only — any generic agent type, no role memory needed) over the snapshots you just wrote, and take back only the grouping and the sizing verdicts. The same read answers both questions — sizing rides free on the dispatch you were paying for anyway. The prompt below is self-sufficient: it tells the reader where its verdict contract and tier definitions live, so it never improvises a taxonomy.
 
 ```
-Clustering pass — read each case's body (the intake snapshots at
+Clustering + sizing pass — read each case's body (the intake snapshots at
 .agents/automation/{SLUG}/cases/*.md, or the in-repo source paths where intake
-skipped the copy) and group the ones a single analyst could explore in ONE live session: same
-surface, same flow family (field-validation variants, CRUD permutations on one
-entity). Every case's own steps still get executed individually inside that
-session, so group only what shares a setup path — when in doubt, leave it solo.
-Return clusters: [[id, …], …] plus one line of rationale per cluster. Nothing else.
+skipped the copy) and return TWO things, nothing else:
+1. clusters: [[id, …], …] — group the ones a single analyst could explore in
+   ONE live session: same surface, same flow family (field-validation
+   variants, CRUD permutations on one entity). Every case's own steps still
+   get executed individually inside that session, so group only what shares a
+   setup path — when in doubt, leave it solo. One line of rationale per cluster.
+2. verdicts: one per case — but FIRST read your contract, in this order:
+   a. .agents/estimation/complexity-taxonomy.json — IF it exists, its tier
+      names/definitions are THIS project's calibrated truth;
+   b. else <skills root>/automation-scoping/references/complexity-taxonomy.md
+      — the bundled tier definitions and modifier list;
+   c. <skills root>/automation-scoping/SKILL.md § "The verdict pass" — the
+      verdict field semantics and rules (~40 lines; read just that section).
+   Then judge each case BODY against the tier DEFINITIONS — what interaction
+   it actually exercises, never keyword-matching — and return per case:
+   { id, tier, tier_rationale, steps, surfaces, new_abstractions, size,
+     size_rationale, modifiers, quality_flags, risk_flags, signals,
+     split_recommended, confidence }.
+   If the automation-scoping skill is not installed (paths above missing),
+   return clusters only and verdicts: [] with a one-line note.
 ```
 
-Pass the result as `args.clusters`. **Do not `cat` the case files.** Field-measured on a live lead session: clustering by hand pulled **14 case bodies — 40,865 bytes, ~10K tokens — into the orchestrator's context**, more than its entire startup injection, before a single case was dispatched. The rule was written down, but in [`campaign-planning.md`](campaign-planning.md) § Clustering, which a flat batch never opens; that is why it is restated here, where Intake actually happens.
+Save the verdicts to `.agents/estimation/<slug>-verdicts.json` and let the script do the arithmetic (never price by hand):
+
+```bash
+node <skills root>/automation-scoping/scripts/score-cases.mjs \
+  .agents/automation/<slug>/cases --verdicts .agents/estimation/<slug>-verdicts.json \
+  --json --out .agents/estimation/<slug>-scored.json
+```
+
+`<skills root>` is the HOST's skills directory — substitute it before
+dispatching: `.claude/skills/` on Claude Code, `.github/skills/` on Copilot
+CLI, `.cursor/skills/` on Cursor (the host is named in
+`.agents/team-comms.md`). The same substitution applies inside the dispatch
+prompt above.
+
+That file is what the close-time sizing join reads: per-case `size` columns, size-class deviation flags, est-vs-actual at batch grain, and the dataset-export fields (`size_tshirt` / `self_size` / `effort`) all come from it. No automation-scoping skill installed → skip the verdicts half silently (clusters alone are still worth the dispatch); the pipeline degrades to reports without size columns, never to a failure. **A scoping-grade scope (20+ cases, a presales backlog) doesn't go through this single pass** — use the scoping skill's own mini-workflow instead (`automation-scoping/scripts/sizing.workflow.mjs` — parallel reader fan-out, same output files), and keep this Intake pass for the batch in hand.
+
+Pass the clusters as `args.clusters`. **Do not `cat` the case files.** Field-measured on a live lead session: clustering by hand pulled **14 case bodies — 40,865 bytes, ~10K tokens — into the orchestrator's context**, more than its entire startup injection, before a single case was dispatched. The rule was written down, but in [`campaign-planning.md`](campaign-planning.md) § Clustering, which a flat batch never opens; that is why it is restated here, where Intake actually happens.
 
 **Declare the session's work scope — now, while the work set is fresh.** Where
 the `tokenomics` capture hooks are enabled (a session-start line names your

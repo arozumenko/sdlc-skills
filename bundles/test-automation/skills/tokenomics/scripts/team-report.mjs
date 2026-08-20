@@ -356,6 +356,13 @@ export const cacheSavings = (t) => {
   const paid = num(t?.input) + num(t?.cacheWrite) * 1.25 + num(t?.cacheRead) * 0.1;
   return 1 - paid / would;
 };
+// Cost-weighted cache-read share at public list ratios — the spec's
+// cache_read_share_pct semantics (a COST share, not the token share).
+export const costShareOfCacheRead = (t) => {
+  if (!t) return null;
+  const total = num(t.input) + num(t.output) * 5 + num(t.cacheWrite) * 1.25 + num(t.cacheRead) * 0.1;
+  return total ? Math.round(((num(t.cacheRead) * 0.1) / total) * 1000) / 10 : null;
+};
 const pct = (x) => (x == null ? 'n/a' : `${(x * 100).toFixed(1)}%`);
 const kTok = (n) => (n == null ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : String(Math.round(n)));
 const rwCell = (tokQuad, scalarFallback) =>
@@ -380,6 +387,7 @@ export function renderBatchMarkdown(c) {
   const ts = c.totals.tokensSplit;
   out.push(`- Total: ${usd(c.totals.costUsd)}  ·  ${hours(c.totals.activeMin)} active  ·  ${c.totals.dispatches} dispatches`);
   if (ts) {
+    if (c.totals.tokensAttribution) out.push(`- ⚠️ **TOKEN TOTALS ARE A FLOOR** — attribution ${c.totals.tokensAttribution}: ${c.totals.unattributedUnits} unit(s) reported no usage (gateway pass-through gap); the real bill is higher.`);
     out.push(`- Tokens: total ${c.totals.tokens.toLocaleString()}  ·  **real work ${realWork(ts).toLocaleString()}** (in ${ts.input.toLocaleString()} / out ${ts.output.toLocaleString()})  ·  cache ${kTok(ts.cacheRead)} read / ${kTok(ts.cacheWrite)} write  ·  **cache hit rate ${pct(cacheHitRate(ts))}**  ·  see batch-tokenomics for the full breakdown`);
   } else {
     out.push(`- Tokens: ${c.totals.tokens.toLocaleString()} (incl. cache — re-run close for the split)`);
@@ -601,6 +609,17 @@ export function renderBatchTokenomicsMarkdown(c) {
   out.push(`| **total** | **${total.toLocaleString()}** | 100% | raw sum — dominated by the cheapest kind |`);
   out.push('', `**Cache hit rate: ${pct(cacheHitRate(ts))}** — share of all prompt tokens replayed from cache versus processed fresh (input + cache write are the fresh processing).`);
   out.push(`**Cache savings: ~${pct(cacheSavings(ts))} of prompt cost** — what the same prompt volume would have cost uncached (all tokens at 1× input price) versus as billed (write 1.25×, read 0.1×).`);
+  {
+    const share = costShareOfCacheRead(ts);
+    if (share != null) out.push(`**Cache-read cost share: ~${share}% of spend** (public-list ratios: in 1× / out 5× / write 1.25× / read 0.1×) — the dollar-weighted view the cross-factory dataset reports.`);
+  }
+  const bm = c.totals.tokensByModel;
+  if (bm && Object.keys(bm).length) {
+    out.push('', '## By model', '', '| model | input | output | cache write | cache read | total |', '|---|---|---|---|---|---|');
+    for (const [m, q0] of Object.entries(bm).sort((a, z) => num(z[1].output) - num(a[1].output))) {
+      out.push(`| ${m} | ${num(q0.input).toLocaleString()} | ${num(q0.output).toLocaleString()} | ${kTok(q0.cacheWrite)} | ${kTok(q0.cacheRead)} | ${(num(q0.input) + num(q0.output) + num(q0.cacheRead) + num(q0.cacheWrite)).toLocaleString()} |`);
+    }
+  }
   out.push(`**Total: ${c.totals.tokens.toLocaleString()} tokens · ${usd(c.totals.costUsd)} · ${hours(c.totals.activeMin)} active · ${c.totals.dispatches} dispatches** — judge by composition and hit rate, not by the big number.`, '');
   const rowFor = (name, b) => `| ${name} | ${usd(b.costUsd)} | ${realWork(b.tok)?.toLocaleString() ?? '—'} | ${kTok(b.tok?.cacheWrite)} | ${kTok(b.tok?.cacheRead)} | ${b.tok ? pct(cacheHitRate(b.tok)) : '—'} |`;
   const roles = Object.entries(c.byRole ?? {}).filter(([, b]) => b.tok);
@@ -658,7 +677,7 @@ export function renderBatchTokenomicsHtml(c) {
       statCell('Prompt cost saved', `~${pct(cacheSavings(ts))}`),
       statCell('Total cost <span class="stat-sub">measured</span>', usd(c.totals.costUsd)),
       statCell('Active time', hours(c.totals.activeMin)),
-    ], 'a cache write is a STORED MISS (processed fresh at ~1.25×, kept for reuse); a read replays at ~0.1× input price'),
+    ], `a cache write is a STORED MISS (processed fresh at ~1.25×, kept for reuse); a read replays at ~0.1× input price${costShareOfCacheRead(ts) != null ? ` — cache-read ≈ ${costShareOfCacheRead(ts)}% of SPEND at public ratios` : ''}`),
     kpiCard('Tokens', [
       statCell('Total <span class="stat-sub">incl. cache replay</span>', fmtInt(c.totals.tokens)),
       statCell('Real work <span class="stat-sub">in+out</span>', fmtInt(realWork(ts))),
@@ -679,6 +698,7 @@ export function renderBatchTokenomicsHtml(c) {
   <p class="meta">The other unfolding of the same records as batch-report (delivery view) · generated ${esc(c.generatedAt)} · ${c.sources.sessions} session(s) · models: ${esc(c.sources.models.join(', ') || '—')}</p>
   ${!ts ? '<p class="note">No token split in this cost.json — regenerate with the current skill version.</p>' : `
   <section class="kpi-row">${cards}</section>
+  ${c.totals.tokensAttribution ? `<p class="callout-warn">⚠ Token totals are a FLOOR — attribution ${esc(c.totals.tokensAttribution)}: ${c.totals.unattributedUnits} unit(s) reported no usage (gateway pass-through gap). The real bill is higher.</p>` : ''}
   <section class="panel"><h2>Token composition</h2>
   <p class="panel-sub">Share of ${fmtInt(c.totals.tokens)} total tokens by type — the raw sum is dominated by the cheapest kind, so judge by composition and cache hit rate, not the big number.</p>
   ${quadBar(ts)}${quadLegend(ts)}</section>
@@ -688,6 +708,10 @@ export function renderBatchTokenomicsHtml(c) {
   <div class="kpi-callout">A high lead share with a high cache hit rate is orchestration working as designed — context replayed per turn from cache, not runaway spend.</div></section>` : ''}
   ${roles.length ? `<section class="panel"><h2>By role</h2><p class="panel-sub">Per-role composition; rw = real work (in+out), hit = cache hit rate.</p>${roles.map(([r, b]) => row(r, b)).join('')}</section>` : ''}
   ${stages.length ? `<section class="panel"><h2>By stage (overhead)</h2>${stages.map(([k, b]) => row(k, b)).join('')}</section>` : ''}
+  ${c.totals.tokensByModel && Object.keys(c.totals.tokensByModel).length ? `<section class="panel"><h2>By model</h2>
+  <p class="panel-sub">Per-model token split — what lets a mixed-tier run be re-priced (the dataset's tokens_by_model).</p>
+  <table><tr><th>model</th><th>input</th><th>output</th><th>cache write</th><th>cache read</th><th>total</th></tr>
+  ${Object.entries(c.totals.tokensByModel).sort((a, z) => num(z[1].output) - num(a[1].output)).map(([m, q0]) => `<tr><td>${esc(m)}</td><td>${fmtInt(q0.input)}</td><td>${fmtInt(q0.output)}</td><td>${fmtInt(q0.cacheWrite)}</td><td>${fmtInt(q0.cacheRead)}</td><td>${fmtInt(num(q0.input) + num(q0.output) + num(q0.cacheRead) + num(q0.cacheWrite))}</td></tr>`).join('')}</table></section>` : ''}
   ${cased.length ? `<section class="panel"><h2>Per case</h2><p class="panel-sub">Direct spend only; clustered cases are an even split of their shared dispatches. Share = of the batch's ${fmtInt(c.totals.tokens)} total tokens.</p>
   <table><tr><th>case</th><th>cost</th><th>input</th><th>output</th><th>cache write</th><th>cache read</th><th>total</th><th>hit rate</th><th>share</th></tr>
   ${cased.map((x) => {

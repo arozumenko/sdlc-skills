@@ -114,7 +114,9 @@ export function loadLiveLines(repo) {
       cases: [...new Set(recs.flatMap((r) => r.cases ?? []))].sort(),
       subagents: recs.map((r) => ({
         id: r.agentId, role: r.role, label: r.label, n: 1,
-        tokens: r.tokens, activeMin: num(r.activeMin),
+        tokens: r.tokens, tokensByModel: r.tokensByModel ?? {},
+        ...(r.tokensAttributed === false ? { tokensAttributed: false } : {}),
+        activeMin: num(r.activeMin),
         toolCalls: num(r.toolCalls), toolErrors: num(r.toolErrors),
         ...(r.cases?.length ? { cases: r.cases } : {}),
         ...(typeof r.costUsd === 'number' ? { costUsd: r.costUsd } : {}),
@@ -476,6 +478,21 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
   let pricedDirect = false; let sharedSessions = 0; let foreignExcluded = 0;
 
   const addSplit = (t, f = 1) => { for (const k of Object.keys(tokensSplit)) tokensSplit[k] += num(t?.[k]) * f; };
+  // Session-grain per-model quads, scaled by the SAME share factor as the
+  // scalar totals — the dataset's tokens_by_model (required whenever a run
+  // mixes tiers, which ours always do: haiku triage + sonnet workers).
+  // Attribution audit (PR #63 mirror): a unit whose transcript reported no
+  // usage sums as ZERO here — which silently under-bills. Count them so the
+  // totals can say FLOOR instead of posing as complete.
+  let unattributedUnits = 0;
+  let attributedUnits = 0;
+  const tokensByModel = {};
+  const addByModel = (bm, f = 1) => {
+    for (const [m, q] of Object.entries(bm ?? {})) {
+      const t = (tokensByModel[m] ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+      for (const k of Object.keys(t)) t[k] += num(q?.[k]) * f;
+    }
+  };
   const roleAdd = (role, m, dispatches = 1) => {
     if (!byRole.has(role)) byRole.set(role, { tokens: 0, tok: emptyQuad(), costUsd: null, activeMin: 0, dispatches: 0, toolCalls: 0, toolErrors: 0 });
     const b = byRole.get(role);
@@ -523,6 +540,8 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
     totals.turns += num(line.turns) / div;
     addTo(totals, parent); totals.dispatches--; // phantom dispatch for the parent
     addSplit(line.tokens, 1 / div);
+    addByModel(line.tokensByModel, 1 / div);
+    if (line.tokens === null || line.tokensAttributed === false) unattributedUnits++; else attributedUnits++;
     addTo(overhead.lead, parent);
     overhead.lead.dispatches--; // ditto
     roleAdd(line.role || 'session', parent, 0);
@@ -535,6 +554,8 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
       };
       addTo(totals, m, w);
       addSplit(s.tokens, w);
+      addByModel(s.tokensByModel, w);
+      if (s.tokens === null || s.tokensAttributed === false) unattributedUnits++; else attributedUnits++;
       roleAdd(s.role || 'unknown', { ...m, costUsd: typeof m.costUsd === 'number' ? m.costUsd * w : null, tokens: m.tokens * w, tok: scaleQuad(m.tok, w), activeMin: m.activeMin * w, toolCalls: m.toolCalls * w, toolErrors: m.toolErrors * w }, w);
       const { kind, ids: matched } = classify(s.label, ids, s.cases || []);
       if (kind === 'direct') {
@@ -632,6 +653,8 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
     totals: {
       costUsd: typeof totals.costUsd === 'number' ? round2(totals.costUsd) : null,
       tokens: Math.round(totals.tokens), tokensSplit: Object.fromEntries(Object.entries(tokensSplit).map(([k, v]) => [k, Math.round(v)])),
+      ...(Object.keys(tokensByModel).length ? { tokensByModel: Object.fromEntries(Object.entries(tokensByModel).map(([m, q]) => [m, roundQuad(q)])) } : {}),
+      ...(unattributedUnits ? { tokensAttribution: attributedUnits ? 'partial' : 'none', unattributedUnits } : {}),
       activeMin: Math.round(totals.activeMin),
       dispatches: Math.round(totals.dispatches * 100) / 100, sessions: totals.sessions,
       turns: Math.round(totals.turns), toolCalls: Math.round(totals.toolCalls), toolErrors: Math.round(totals.toolErrors),
@@ -661,6 +684,7 @@ export function buildBatchCost(slug, receipt, allLines, { dir = null, scopes = [
       },
     } : {}),
     cases: casesOut,
+    ...(receipt.work_item_ref ? { workItemRef: receipt.work_item_ref } : {}),
     ...(sizingRollup ? { sizing: sizingRollup } : {}),
     stats: {
       note: 'direct = per-case measured values only; loaded = direct + even overhead share (allocation, not measurement)',
