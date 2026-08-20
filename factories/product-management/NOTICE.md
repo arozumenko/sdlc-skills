@@ -1,6 +1,6 @@
 # Notice
 
-The discovery skills and pipeline in this bundle are adapted from
+The discovery skills and pipeline in this factory are adapted from
 [PetroczyP/PO-RnD](https://github.com/PetroczyP/PO-RnD), licensed under the
 MIT License.
 
@@ -14,12 +14,12 @@ repo's overlay model. Likewise, upstream's `product-constitution.md` and
 The underlying discovery loop — problems, personas, journeys, hypotheses,
 outcomes, decisions, and evidence — has been re-expressed as plain markdown
 records and agent/skill personas native to `sdlc-skills`, installed via
-`bin/init.mjs` and tuned per team through the standard `bundle.json`
+`bin/init.mjs` and tuned per team through the standard `factory.json`
 overlay mechanism.
 
 ## Additional acknowledgements
 
-Much of the product-management thinking behind this bundle draws on
+Much of the product-management thinking behind this factory draws on
 [mattpocock/skills](https://github.com/mattpocock/skills) ("Skills for Real
 Engineers", MIT) — its skill-design patterns and insights informed how these
 discovery skills are framed and composed.

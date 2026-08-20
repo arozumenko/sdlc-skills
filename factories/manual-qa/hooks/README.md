@@ -1,6 +1,6 @@
 # Metrics collection add-on (manual-qa)
 
-Optional add-on to the `manual-qa` bundle. Once installed, it collects
+Optional add-on to the `manual-qa` factory. Once installed, it collects
 token/cost/timing/pass-rate metrics on every `test-run-lead`-driven session —
 purely observational, it doesn't touch any agent or skill, and doesn't change
 how the team runs. Full field-by-field schema docs:
@@ -23,14 +23,16 @@ how the team runs. Full field-by-field schema docs:
 Run from the root of a project that already has `manual-qa` installed:
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle manual-qa --update --yes
+npx github:arozumenko/sdlc-skills init --factory manual-qa --update --yes
 ```
 
 This merges 5 hook events (`SessionStart`, `PreToolUse`, `PostToolUse`,
 `SubagentStop`, `SessionEnd`) into `.claude/settings.json` under groups
-tagged `"_bundle": "manual-qa"` (merge-not-clobber — your other hooks and
-other bundles' hooks are left untouched; `.claude/settings.json.bak` is
-written first), and copies 12 files into `.claude/hooks/manual-qa/`.
+tagged `"_factory": "manual-qa"` (the installer still recognizes the
+pre-rename `"_bundle"` tag for back-compat) — merge-not-clobber, so your
+other hooks and other factories' hooks are left untouched
+(`.claude/settings.json.bak` is written first) — and copies 12 files into
+`.claude/hooks/manual-qa/`.
 Nothing in `agents/` or `skills/` is touched — this is additive only.
 
 ## What to expect after a run
@@ -64,7 +66,7 @@ from it:
    to `reports/tokenomics/factory-profile.json`, `hooks/templates/tokenomics-readme.template.md`
    to `reports/tokenomics/README.md`, and `hooks/templates/tokenomics-html-readme.template.md`
    to `reports/tokenomics/html/README.md` — these three aren't copied
-   automatically by the bundle installer (only `hooks/scripts/` is). Fill in
+   automatically by the factory installer (only `hooks/scripts/` is). Fill in
    `factory-profile.json`'s placeholders (at minimum `factory_id` and
    `factory_name`).
 2. **Export a run:**
@@ -129,7 +131,7 @@ please do a quick check the first time you install it:
   `../knowledge/metrics-format.md`).
 - **macOS/Linux — not yet verified on real hardware.** The wrapper mechanism
   (`run-hook.cmd`) is the same one already used for every other sdlc-skills
-  hook shipped with any bundle, so it's expected to work, but this specific
+  hook shipped with any factory, so it's expected to work, but this specific
   add-on hasn't been confirmed on a Mac yet. Your first install (see
   self-check above) is effectively that first confirmation — please flag it
   if `reports/metrics/*.json` never shows up.

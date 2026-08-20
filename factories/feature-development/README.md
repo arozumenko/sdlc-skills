@@ -11,7 +11,7 @@ greenfield Android Kotlin/Compose).
 ## Install
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle feature-development
+npx github:arozumenko/sdlc-skills init --factory feature-development
 ```
 
 The installer always sets up the **core roles** (`scout`, `ba`,
@@ -29,7 +29,7 @@ briefings, wires the memory/context hooks, and splices `instructions.md` into
 
 ## Quick start
 
-The team runs in **three phases**. Unlike the single-lead bundles, there is no
+The team runs in **three phases**. Unlike the single-lead factories, there is no
 one orchestrator — you launch `scout` once to onboard the repo, then drive the
 team as a **relay**: `ba` → `tech-lead` → `project-manager` → devs + `qa-engineer`.
 Each role hands off to the next via host-native subagent dispatch.
@@ -81,7 +81,7 @@ only one is automatic:
 
 ```mermaid
 flowchart TD
-    install(["npx … init --bundle feature-development"]) --> scout
+    install(["npx … init --factory feature-development"]) --> scout
 
     subgraph p1["Phase 1 — Inception · you launch scout (once per repo)"]
         scout["scout (kit) — interview + explore"]
@@ -144,9 +144,9 @@ Picking any **web** role activates the web briefings/skills for `tech-lead` and
 activates the Android ones. Pick more than one and the shared roles get the
 **superset** — e.g. `qa-engineer` keeps Playwright *and* gains the iOS testing
 skills (`swift-testing-pro`, `setup-xcuitest`, …) *and* the Android testing
-skills (`compose-ui-testing-patterns`, `setup-uiautomator2`, …). A bundle tunes
+skills (`compose-ui-testing-patterns`, `setup-uiautomator2`, …). A factory tunes
 the *installed copy* via two parallel overlays:
-`briefings/` (behavior) and `skillOverlays` in `bundle.json` (capability). See
+`briefings/` (behavior) and `skillOverlays` in `factory.json` (capability). See
 [`../SPEC.md`](../SPEC.md) for the overlay model.
 
 ## When to use it
@@ -158,7 +158,7 @@ the *installed copy* via two parallel overlays:
   without committing to a stack up front — pick the dev roles per project.
 
 Compared to **`test-automation`**, which wraps a single orchestrator (Tal)
-around the TMS → merged-test pipeline, this bundle is a broader delivery team
+around the TMS → merged-test pipeline, this factory is a broader delivery team
 with no automation orchestrator — it includes `test-automation-engineer` and
 `qa-engineer` as part of the relay. Compared to **`manual-qa`**, which runs
 cases live with no code generated, this team builds and ships the feature
@@ -171,11 +171,11 @@ itself.
 - Per-role **briefings** seeded to `.agents/memory/<role>/project_briefing.md`,
   tuned to the platforms your selection spans.
 - Team conventions spliced into `AGENTS.md` (inside
-  `<!-- BUNDLE:feature-development -->` markers).
-- Bundle-owned skills (`implement-feature`, `plan-feature`, `code-review`,
+  `<!-- FACTORY:feature-development -->` markers).
+- Factory-owned skills (`implement-feature`, `plan-feature`, `code-review`,
   `git-workflow`, `completing-a-task`, `test-automation-workflow`,
-  `seeding-a-project`, `memory`, …) — real directories this bundle physically
-  owns; the same id may differ in another bundle by design.
+  `seeding-a-project`, `memory`, …) — real directories this factory physically
+  owns; the same id may differ in another factory by design.
 
-See [`bundle.json`](bundle.json) for the exact manifest and the top-level
+See [`factory.json`](factory.json) for the exact manifest and the top-level
 [`../SPEC.md`](../SPEC.md) for how factories are defined and installed.

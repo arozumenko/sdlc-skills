@@ -6,7 +6,7 @@ MCP (local native) or the Mobitru device farm (cloud real devices) — no test c
 ## Install
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle manual-qa
+npx github:arozumenko/sdlc-skills init --factory manual-qa
 ```
 
 Installs the 6 agents below into `.claude/agents/`, seeds QA reference docs
@@ -15,11 +15,11 @@ into `.agents/manual-qa/knowledge/`, and splices the team conventions into
 
 ## Quick start
 
-The team runs in **three phases**. Unlike the other bundles there is no
+The team runs in **three phases**. Unlike the other factories there is no
 `scout`: `app-profiler` onboards the app, then `test-run-lead` orchestrates
 the rest — it authors and sizes cases when needed, runs them, and reports.
 
-**Install (once)** — `npx github:arozumenko/sdlc-skills init --bundle manual-qa`.
+**Install (once)** — `npx github:arozumenko/sdlc-skills init --factory manual-qa`.
 Installs the 6 agents into `.claude/agents/`, seeds reference docs into
 `.agents/manual-qa/knowledge/`, wires the context hooks, and splices
 `instructions.md` into `AGENTS.md`.
@@ -67,7 +67,7 @@ refinement comes from re-profiling the live app and curating the suite.
 
 ```mermaid
 flowchart TD
-    install(["npx … init --bundle manual-qa"]) --> profiler
+    install(["npx … init --factory manual-qa"]) --> profiler
 
     subgraph p1["Phase 1 — Inception · you launch app-profiler (once per app)"]
         profiler["app-profiler — interview +<br/>explore live app"]
@@ -126,13 +126,13 @@ All test-case URLs use `{{base_url}}` — the test-run-lead or test-runner
 substitutes the real base URL at run time, keeping cases environment-agnostic
 across dev, staging, and prod.
 
-## What this bundle adds
+## What this factory adds
 
 - **Agents** — the 6 local roles above (installed into `.claude/agents/`).
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/manual-qa/knowledge/` (test-case format guide, template, report format).
 - **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging` (declared in the relevant agent frontmatter).
-- **Bundle-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/) — real directories this bundle physically owns (declared in `localSkills`), installed when you install the bundle. The same id may exist in another bundle or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
+- **Factory-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/) — real directories this factory physically owns (declared in `localSkills`), installed when you install the factory. The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
 - **Briefings** — _(none)_.
 - **Hooks** — [`hooks/`](hooks/) → optional metrics-collection add-on
   (token/cost/timing/pass-rate per run), installed automatically alongside
@@ -140,5 +140,5 @@ across dev, staging, and prod.
   and [`knowledge/metrics-format.md`](knowledge/metrics-format.md) for the
   output schema.
 
-See [`bundle.json`](bundle.json) for the exact manifest and the top-level
+See [`factory.json`](factory.json) for the exact manifest and the top-level
 [`../SPEC.md`](../SPEC.md) for how factories are defined and installed.

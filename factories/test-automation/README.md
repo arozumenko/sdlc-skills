@@ -11,7 +11,7 @@ automation merge gate.
 ## Install
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle test-automation
+npx github:arozumenko/sdlc-skills init --factory test-automation
 ```
 
 ## Quick start
@@ -42,7 +42,7 @@ In the VS Code extension, pick the agent in the chat panel and switch the
 session to auto-approve/bypass first. Full per-host detail, flag table, and
 the CI form: [onboarding § Launching the agents](../../docs/onboarding/test-automation.md#launching-the-agents--run-them-as-your-main-agent).
 
-**Install (once)** — `npx github:arozumenko/sdlc-skills init --bundle test-automation`.
+**Install (once)** — `npx github:arozumenko/sdlc-skills init --factory test-automation`.
 Drops the four agents into `.claude/`, pulls their skills (incl.
 `test-automation-workflow` + `test-case-analysis`), wires the memory/context
 hooks, and splices `instructions.md` into `AGENTS.md`.
@@ -53,7 +53,7 @@ scouting: **(A)** install any project-specific skills the roster doesn't declare
 — find them with `npx skills find <tech>` (e.g. `playwright`, `appium`) or the
 registry catalogue ([`skills.json`](../../skills.json)), and **(B)** wire MCP /
 connectivity in the **host** (never the repo) — the installer can do it:
-`init --bundle test-automation --interactive` (menu) or `--mcp playwright,atlassian,onetest,elitea-next`.
+`init --factory test-automation --interactive` (menu) or `--mcp playwright,atlassian,onetest,elitea-next`.
 Full detail — plus the **way-of-work** you set at seeding (task source, TMS/tracker
 reporting, bug-vs-subtask filing, branch + PR policy):
 [onboarding § Prerequisites → Before you seed](../../docs/onboarding/test-automation.md#before-you-seed).
@@ -156,7 +156,7 @@ never a bare number.
 cost?"_ and the `efficiency-audit` skill breaks metered spend down per session,
 per role, per day and per sub-agent, then joins it to the run's own report for
 **cost per case delivered** and **per case examined**. The `tokenomics` skill
-ships with the bundle too: once its capture hooks are enabled (opt-in),
+ships with the factory too: once its capture hooks are enabled (opt-in),
 session hooks record each finished session into a git-committed ledger
 (`.agents/telemetry/`) — surviving transcript expiry, across Claude Code,
 Copilot CLI and the VS Code sidebar — and every batch gets an automatic
@@ -175,7 +175,7 @@ only to contribute back or to deliberately fork your own variant.
 
 ```mermaid
 flowchart TD
-    install(["npx … init --bundle test-automation"]) --> scout
+    install(["npx … init --factory test-automation"]) --> scout
 
     subgraph p1["Phase 1 — Inception · you launch scout (once per repo)"]
         scout["scout (kit) — interview + explore"]
@@ -238,13 +238,13 @@ had 4 of 12 merged cases mis-stated on one campaign.
 
 | Role | Agent | Source | Job |
 |---|---|---|---|
-| Lead / orchestrator (PM + tech-lead combined) | `test-automation-lead` (Tal) | bundle-local | Runs the batch pipeline, owns framework architecture + the automation merge gate. The user launches Tal directly. |
-| Onboarding | `scout` | bundle-local | Seeds framework / TMS / base branch / merge policy into `.agents/`. |
-| Implementer | `test-automation-engineer` (Axel) | bundle-local | Turns a ready AFS into a PR + Run Report. |
-| Analyst + Reviewer | `qa-engineer` (Sage) | bundle-local | Writes the AFS (analyst); reviews for test honesty (reviewer, fresh session). |
+| Lead / orchestrator (PM + tech-lead combined) | `test-automation-lead` (Tal) | factory-local | Runs the batch pipeline, owns framework architecture + the automation merge gate. The user launches Tal directly. |
+| Onboarding | `scout` | factory-local | Seeds framework / TMS / base branch / merge policy into `.agents/`. |
+| Implementer | `test-automation-engineer` (Axel) | factory-local | Turns a ready AFS into a PR + Run Report. |
+| Analyst + Reviewer | `qa-engineer` (Sage) | factory-local | Writes the AFS (analyst); reviews for test honesty (reviewer, fresh session). |
 
 The pipeline-critical skills — `test-automation-workflow` and
-`test-case-analysis` — are bundle-local (`localSkills` in `bundle.json`) and
+`test-case-analysis` — are factory-local (`localSkills` in `factory.json`) and
 install with the agents that declare them in their frontmatter. The project's TMS adapter skill loads conditionally
 (e.g. `xray-testing` for an Xray project, only when the project declares
 `tms.adapter: xray`).
@@ -258,16 +258,16 @@ install with the agents that declare them in their frontmatter. The project's TM
 
 Compared to **`feature-development`**, which includes `test-automation-engineer` +
 `qa-engineer` as part of a cross-platform delivery team but has no automation
-orchestrator, this bundle adds Tal and focuses the whole team on the
+orchestrator, this factory adds Tal and focuses the whole team on the
 TMS → merged-test pipeline.
 
 ## What gets installed
 
-- The four agents above (all bundle-owned — Tal and the other three copied from
-  this bundle), with their declared skills.
-- `test-automation-workflow` + `test-case-analysis` skills (bundle-local, via
+- The four agents above (all factory-owned — Tal and the other three copied from
+  this factory), with their declared skills.
+- `test-automation-workflow` + `test-case-analysis` skills (factory-local, via
   `localSkills` + the agents' frontmatter).
 - Project briefings seeded to `.agents/memory/<role>/project_briefing.md` for all
   four roles.
 - Team conventions spliced into `AGENTS.md` (inside
-  `<!-- BUNDLE:test-automation -->` markers).
+  `<!-- FACTORY:test-automation -->` markers).

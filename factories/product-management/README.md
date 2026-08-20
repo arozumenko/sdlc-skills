@@ -11,7 +11,7 @@ product-management insights drawn from
 ## Install
 
 ```bash
-npx github:arozumenko/sdlc-skills init --bundle product-management --target claude
+npx github:arozumenko/sdlc-skills init --factory product-management --target claude
 ```
 
 Installs the 2 agents below into `.claude/agents/`, seeds the empty
@@ -44,7 +44,7 @@ Installs the 2 agents below into `.claude/agents/`, seeds the empty
 
 ```mermaid
 flowchart TD
-    install(["npx … init --bundle product-management"]) --> po
+    install(["npx … init --factory product-management"]) --> po
 
     subgraph loop["product-owner (Priya) drives the loop"]
         po["product-owner"]
@@ -89,9 +89,9 @@ layout, ID conventions, and hypothesis lifecycle.
 
 ## Reused skills
 
-These skills are **not** owned by this bundle — there's no duplicate copy here.
+These skills are **not** owned by this factory — there's no duplicate copy here.
 They're pulled in via the installer's normal resolution: most through an agent's
-`skills:` frontmatter, and `knowledge-curation` through `bundle.json`'s team-wide
+`skills:` frontmatter, and `knowledge-curation` through `factory.json`'s team-wide
 `skills` list. The resolution differs per skill:
 
 - `deep-research`, `verifying-outcomes` — orphan entries in the top-level
@@ -104,17 +104,17 @@ They're pulled in via the installer's normal resolution: most through an agent's
   `skills.json` too, same tier as `deep-research`/`verifying-outcomes`, backed
   by `skills/memory/` and `skills/knowledge-curation/`. `memory` is on both
   agents' rosters for role memory and checkpointing; `knowledge-curation` is
-  installed via `bundle.json`'s team-wide `skills` list and loaded on demand
+  installed via `factory.json`'s team-wide `skills` list and loaded on demand
   for the shared `.agents/knowledge/` layer.
 
-## What this bundle adds
+## What this factory adds
 
 - **Agents** — the 2 local roles above (installed into `.claude/agents/`).
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded scaffold** — [`discovery-scaffold/`](discovery-scaffold/) → `docs/discovery/` (empty registers and folders, no example content).
-- **Bundle-owned skills** — [`skills/`](skills/) — the 10 skills in the table above, real directories this bundle physically owns (declared in `localSkills`). The same id may exist in another bundle or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
+- **Factory-owned skills** — [`skills/`](skills/) — the 10 skills in the table above, real directories this factory physically owns (declared in `localSkills`). The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
 - **Briefings** — _(none)_.
 
-See [`bundle.json`](bundle.json) for the exact manifest, [`NOTICE.md`](NOTICE.md)
+See [`factory.json`](factory.json) for the exact manifest, [`NOTICE.md`](NOTICE.md)
 for the upstream MIT attribution, and the top-level [`../SPEC.md`](../SPEC.md)
-for how bundles are defined and installed.
+for how factories are defined and installed.
