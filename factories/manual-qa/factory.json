@@ -14,7 +14,14 @@
   "localSkills": [
     "playwright-testing",
     "xlsx-reader",
-    "mobile-testing"
+    "mobile-testing",
+    "security-audit",
+    "accessibility-audit",
+    "privacy-audit",
+    "performance-audit",
+    "responsive-audit",
+    "ux-audit",
+    "content-seo-audit"
   ],
   "skills": [
     "memory",
