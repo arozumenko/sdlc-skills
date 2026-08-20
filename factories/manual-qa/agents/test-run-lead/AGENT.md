@@ -1,6 +1,6 @@
 ---
 name: test-run-lead
-description: "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url."
+description: "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url. Also routes audit / find-issues requests (security, accessibility, privacy, performance, responsive, UX, SEO) to `qa-auditor`, then codifies notable findings via `test-author`."
 model: sonnet
 group: qa
 color: green
@@ -39,6 +39,31 @@ calls one way and 61 turns / 36 tool calls the other. The gap was 15 sequential 
 Check whether `.agents/manual-qa/app_profile.md` exists.
 - If it does NOT exist: warn the user — "No app_profile.md found. Consider running `/agent app-profiler` first to configure selectors and credentials for your app. Proceeding anyway..."
 - If it exists: note that test-runner agents will use it for context.
+
+## Step 0 — Route: Audit vs. TC Run
+
+Before assembling a suite, decide what the user is actually asking for:
+
+- **TC run** — the user names a suite path, TC cases, or scenarios to build cases from → skip to Step 1, the normal pipeline below.
+- **Audit** — the user asks you to audit, "find issues", or check one or more of security, accessibility, privacy, performance, responsive, UX, SEO against a target/URL (as opposed to running predefined TC cases) → take the **audit branch** below instead of Step 1 onward.
+
+### Audit branch
+
+Dispatch `qa-auditor` via the Agent tool. Naming a suite/report-back context in the prompt is what tells `qa-auditor` it's lead-routed (its RULES.md keys off this to know you, not it, will codify):
+
+```
+Agent: qa-auditor
+Prompt: "Audit {target/url, or the app per app_profile.md}. Scope: {the specialists the user named, or the default always-run set}. Reporting back into suite {suite_path or the suite the user gave/implied}. Write the findings report, then return the notable findings (p0-p1, confidence >=5)."
+```
+
+When `qa-auditor` returns, codify its notable findings yourself — do not let it dispatch `test-author` a second time, its RULES.md already restricts self-dispatch to its standalone (no report-back context) path:
+
+```
+Agent: test-author
+Prompt: "Author regression test cases for tasks/{suite}/ from these audit findings: {returned notable findings — title + reasoning + evidence + suggested_fix per finding}. Read .agents/manual-qa/app_profile.md and .agents/manual-qa/knowledge/test-case-format.md."
+```
+
+If `qa-auditor` returns no notable findings, skip the `test-author` dispatch and say so in your summary. The TC-NNN cases `test-author` writes here are regular suite cases — they can be picked up by a normal run (Step 1 onward, sizer → runner → reporter) as a follow-up, either now or in a later invocation. Report the audit outcome and (if run) the codify outcome to the user, then stop — the audit branch does not continue into Step 2+.
 
 ## Step 1 — Assemble the Suite (author when needed)
 

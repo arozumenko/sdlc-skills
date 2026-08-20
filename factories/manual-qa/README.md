@@ -9,7 +9,7 @@ MCP (local native) or the Mobitru device farm (cloud real devices) — no test c
 npx github:arozumenko/sdlc-skills init --factory manual-qa
 ```
 
-Installs the 6 agents below into `.claude/agents/`, seeds QA reference docs
+Installs the 7 agents below into `.claude/agents/`, seeds QA reference docs
 into `.agents/manual-qa/knowledge/`, and splices the team conventions into
 `AGENTS.md` / `CLAUDE.md`.
 
@@ -20,7 +20,7 @@ The team runs in **three phases**. Unlike the other factories there is no
 the rest — it authors and sizes cases when needed, runs them, and reports.
 
 **Install (once)** — `npx github:arozumenko/sdlc-skills init --factory manual-qa`.
-Installs the 6 agents into `.claude/agents/`, seeds reference docs into
+Installs the 7 agents into `.claude/agents/`, seeds reference docs into
 `.agents/manual-qa/knowledge/`, wires the context hooks, and splices
 `instructions.md` into `AGENTS.md`.
 
@@ -107,6 +107,42 @@ flowchart TD
 | `test-run-lead` | lead | **Run orchestrator** — assembles the suite (dispatches `test-author` / `test-sizer` when needed), runs one `test-runner` per case, triggers `test-reporter` |
 | `test-runner` | runner | Runs one test case live via Playwright MCP and emits a structured JSON result |
 | `test-reporter` | reporter | Collects test-runner results and writes the run report to `reports/` |
+| `qa-auditor` | auditor | Specialist web auditor — runs Step-0 Playwright evidence collection, then the applicable specialist passes (security, accessibility, privacy, performance, responsive, UX, SEO), writes a findings report, and codifies notable findings into regression cases |
+
+## Audit mode
+
+Alongside case-driven runs, the team supports specialist **web audits** — a
+different question ("what's wrong with this page?") than a scripted test
+case ("does this flow work?").
+
+- **Lead-routed** — ask `test-run-lead` to audit, "find issues", or check
+  security/accessibility/privacy/performance/responsive/UX/SEO against a
+  target, and it takes the audit branch: dispatches `qa-auditor` with the
+  target and scope, collects its findings back, and codifies them itself.
+- **Standalone** — invoke `/agent qa-auditor` directly with a target URL for
+  a one-off audit outside a run.
+
+`qa-auditor` collects Step-0 evidence (navigate, snapshot, screenshot,
+console errors, network requests) via the same Playwright MCP as
+`test-runner`, then runs the applicable **specialist passes** —
+`security-audit`, `accessibility-audit`, `privacy-audit`, `performance-audit`,
+`responsive-audit`, `ux-audit`, `content-seo-audit` (security, accessibility,
+privacy, content-seo, and performance always run; UX and responsive run
+conditionally on page signals). These are declared as `skills-on-demand` on
+`qa-auditor`, so they install with the agent but are only loaded into
+context when their specialty is actually selected for a given audit — not
+all seven on every run. Each specialist works best-effort within the
+Playwright MCP toolset (there's no `browser_evaluate`; some checks — e.g.
+cookie/meta-tag inspection — degrade or are noted as unavailable rather than
+faked).
+
+Findings are deduped, ranked, and written to
+`reports/audit-{target}-{date}.md`. Notable findings (priority p0–p1,
+confidence ≥5) are then **codified**: `qa-auditor` (standalone) or
+`test-run-lead` (lead-routed) dispatches `test-author` with the findings,
+which authors `TC-NNN` regression cases under `tasks/<suite>/` — ordinary
+suite cases a later `test-run-lead` run can pick up via `test-runner` like
+any other case.
 
 ## How this team works
 
@@ -128,11 +164,11 @@ across dev, staging, and prod.
 
 ## What this factory adds
 
-- **Agents** — the 6 local roles above (installed into `.claude/agents/`).
+- **Agents** — the 7 local roles above (installed into `.claude/agents/`).
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/manual-qa/knowledge/` (test-case format guide, template, report format).
 - **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging` (declared in the relevant agent frontmatter).
-- **Factory-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/) — real directories this factory physically owns (declared in `localSkills`), installed when you install the factory. The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
+- **Factory-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/), plus the 7 specialist audit skills — [`skills/security-audit/`](skills/security-audit/), [`skills/accessibility-audit/`](skills/accessibility-audit/), [`skills/privacy-audit/`](skills/privacy-audit/), [`skills/performance-audit/`](skills/performance-audit/), [`skills/responsive-audit/`](skills/responsive-audit/), [`skills/ux-audit/`](skills/ux-audit/), [`skills/content-seo-audit/`](skills/content-seo-audit/) — real directories this factory physically owns (declared in `localSkills`), installed when you install the factory. The audit skills are `skills-on-demand` on `qa-auditor` (see [Audit mode](#audit-mode)) rather than standing `skills:`. The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
 - **Briefings** — _(none)_.
 - **Hooks** — [`hooks/`](hooks/) → optional metrics-collection add-on
   (token/cost/timing/pass-rate per run), installed automatically alongside
