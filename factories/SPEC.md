@@ -326,6 +326,6 @@ order. Three conventions keep it that way:
 | id | team | dev roles |
 |---|---|---|
 | `feature-development` | cross-platform (web + iOS + Android) | pick any of `python-dev`, `js-dev`, `test-automation-engineer`, `ios-dev`, `android-dev` (greenfield Compose only); core roles auto-tune |
-| `manual-qa` | manual QA for web | 6 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter` |
+| `manual-qa` | manual QA for web | 7 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter`, `qa-auditor` |
 | `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |
 | `product-management` | PO discovery pipeline | 2 local agents: `product-owner`, `discovery-researcher`; 10 discovery skills; seeds `docs/discovery/` |

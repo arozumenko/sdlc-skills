@@ -177,7 +177,7 @@ ship today:
 | Factory | Roster | What it's for |
 |---|---|---|
 | `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI), `android-dev` (greenfield Kotlin/Compose); core roles auto-tune per picked platforms. |
-| `manual-qa` | 6 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
+| `manual-qa` | 7 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter, qa-auditor) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Also ships a specialist audit mode: `qa-auditor` runs security/accessibility/privacy/performance/responsive/UX/SEO passes via Playwright MCP, writes a findings report, and codifies notable findings into regression TC cases. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
 
@@ -325,6 +325,7 @@ roles rather than named personas), all driving a running app via Playwright MCP:
 | `test-runner` | Executes one case against the running app, returns a structured JSON result |
 | `test-reporter` | Turns runner results into a Markdown run report |
 | `app-profiler` | Onboards a web app and writes the shared `app_profile.md` every manual-qa agent reads |
+| `qa-auditor` | Specialist web auditor — Step-0 Playwright evidence collection then specialist audit passes (security, accessibility, privacy, performance, responsive, UX, SEO); writes a findings report and codifies notable findings into regression TC cases |
 
 ### Skills
 

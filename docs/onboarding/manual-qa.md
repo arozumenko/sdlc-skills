@@ -24,16 +24,18 @@ the factory README first — this guide assumes it and focuses on **adoption**:
 You → app-profiler (onboard the app, once) → test-run-lead (orchestrates a run)
         → test-author / test-sizer (assemble the suite, when needed)
         → test-runner (one per case, live) → test-reporter (run report)
+        → qa-auditor (audit requests, lead-routed or standalone) → codifies findings via test-author
 ```
 
 | Slot | Agent | Job |
 |---|---|---|
 | Onboarding | `app-profiler` | Explores the running app, writes `.agents/manual-qa/app_profile.md` (URLs, auth, key flows, selectors, fragile areas) |
-| Orchestrator | `test-run-lead` | The single run orchestrator — assembles the suite, runs a `test-runner` per case, triggers the report |
+| Orchestrator | `test-run-lead` | The single run orchestrator — assembles the suite, runs a `test-runner` per case, triggers the report; routes audit requests to `qa-auditor` |
 | Sizing | `test-sizer` | Rates cases S/M/L for agent-execution cost |
 | Authoring | `test-author` | Turns flow descriptions into `tasks/<suite>/TC-NNN_<slug>.md` |
 | Execution | `test-runner` | Runs one case live, returns a structured JSON result |
 | Reporting | `test-reporter` | Collects results, writes `reports/RUN-YYYY-MM-DD-NNN.md` |
+| Audit | `qa-auditor` | Specialist web auditor — runs security/accessibility/privacy/performance/responsive/UX/SEO passes via Playwright MCP, writes a findings report, and dispatches `test-author` to codify notable findings into regression TC cases; invocable lead-routed or standalone |
 
 **There is no `scout` here** — `app-profiler` is the onboarding agent, and
 `test-run-lead` is the orchestrator you launch directly. Every other agent reads
@@ -75,7 +77,7 @@ cd /path/to/your-repo
 npx github:arozumenko/sdlc-skills init --factory manual-qa
 ```
 
-This installs the 6 agents into `.claude/agents/`, seeds the reference docs
+This installs the 7 agents into `.claude/agents/`, seeds the reference docs
 (case format, template, report format) into `.agents/manual-qa/knowledge/`,
 wires the context hooks, and splices the team conventions into `AGENTS.md`.
 
@@ -84,7 +86,7 @@ For Copilot / Cursor / Windsurf, use the manual form:
 ```bash
 npx github:arozumenko/sdlc-skills init \
   --target copilot \
-  --agents app-profiler,test-run-lead,test-author,test-sizer,test-runner,test-reporter \
+  --agents app-profiler,test-run-lead,test-author,test-sizer,test-runner,test-reporter,qa-auditor \
   --yes
 ```
 
@@ -119,6 +121,40 @@ snapshot of the **Expected Final State** to record a PASS — a PASS without a
 confirming snapshot is invalid), then triggers `test-reporter` to write
 `reports/RUN-YYYY-MM-DD-NNN.md`. **Talk only to the lead** during a run — don't
 invoke `test-runner` / `test-sizer` / `test-author` by hand mid-run.
+
+---
+
+## Audit mode
+
+Alongside case-driven runs, the team supports specialist **web audits** — a
+different question ("what's wrong with this page?") than a scripted test case
+("does this flow work?"). There are two ways in:
+
+- **Lead-routed** — ask `test-run-lead` to audit, "find issues", or check
+  security/accessibility/privacy/performance/responsive/UX/SEO against a
+  target, and it takes the audit branch: dispatches `qa-auditor` with the
+  target and scope, collects its findings back, and codifies them itself.
+- **Standalone** — invoke `/agent qa-auditor` directly with a target URL for
+  a one-off audit outside a run.
+
+`qa-auditor` collects Step-0 evidence (navigate, snapshot, screenshot,
+console errors, network requests) via the same Playwright MCP as
+`test-runner`, then runs the applicable **specialist passes** —
+`security-audit`, `accessibility-audit`, `privacy-audit`, `performance-audit`,
+`responsive-audit`, `ux-audit`, `content-seo-audit` (security, accessibility,
+privacy, content-seo, and performance always run; UX and responsive run
+conditionally on page signals). These are `skills-on-demand` on `qa-auditor`,
+so they install with the agent but only load into context when their
+specialty is actually selected for a given audit.
+
+Findings are deduped, ranked, and written to
+`reports/audit-{target}-{date}.md`. Notable findings (priority p0–p1,
+confidence ≥5) are then **codified**: `qa-auditor` (standalone) or
+`test-run-lead` (lead-routed) dispatches `test-author` with the findings,
+which authors `TC-NNN` regression cases under `tasks/<suite>/` — ordinary
+suite cases a later `test-run-lead` run can pick up via `test-runner` like
+any other case. Full detail: [factories/manual-qa/README.md § Audit
+mode](../../factories/manual-qa/README.md#audit-mode).
 
 ---
 

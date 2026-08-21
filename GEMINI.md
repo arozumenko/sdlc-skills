@@ -36,6 +36,7 @@ inside the factory that owns it (`factories/<id>/agents/<name>/`); only
 - `test-runner` — Executes one case against a running app via Playwright MCP, returns structured JSON
 - `test-reporter` — Turns run results into a Markdown report
 - `app-profiler` — Onboards a web app, writes the shared app profile
+- `qa-auditor` — Specialist web auditor: runs security/accessibility/privacy/performance/responsive/UX/SEO audit passes via Playwright MCP, reports findings, codifies notable ones into TC cases
 
 **Product management (`product-management` factory):**
 

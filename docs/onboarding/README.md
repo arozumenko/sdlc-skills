@@ -11,7 +11,7 @@ yours below. For the catalog, install paths, and architecture, see the root
 | Guide | Install | Who it's for |
 |---|---|---|
 | [**feature-development**](feature-development.md) | `--factory feature-development` | A cross-platform delivery team — BA, PM, tech-lead, QA, scout, and pickable dev roles (Python / JS / iOS / greenfield-Compose Android / test-automation). You're building features. |
-| [**manual-qa**](manual-qa.md) | `--factory manual-qa` | A standalone manual-QA team that authors Markdown cases and runs them **live** against a web or mobile app (Playwright / Appium / Mobitru). No test code generated. |
+| [**manual-qa**](manual-qa.md) | `--factory manual-qa` | A standalone manual-QA team that authors Markdown cases and runs them **live** against a web or mobile app (Playwright / Appium / Mobitru), plus specialist web audits (security/a11y/privacy/perf/UX/SEO). No test code generated. |
 | [**test-automation**](test-automation.md) | `--factory test-automation` | A TMS-driven automation pipeline — a lead (Tal) runs analyst → implementer → reviewer to turn TMS cases into merged, honest automated tests. |
 | [**product-management**](product-management.md) | `--factory product-management` | A Product Owner discovery team — Priya runs raw ask → problem → hypothesis → ratified outcome → prioritized bet, dispatching Sam for evidence, then hands off to engineering. Upstream of delivery; writes no code. |
 
