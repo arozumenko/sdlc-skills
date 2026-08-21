@@ -86,7 +86,7 @@ test('the playbook tells a lead running the loop by hand to use the same rule', 
   assert.match(p, /running by hand, you are the loop, and the contract is identical/);
   // The conflation that caused the bug is called out where it happened.
   assert.match(p, /It is not about review rounds/);
-  assert.match(p, /Implementer reruns/);
+  assert.match(p, /Builder reruns/);
 });
 
 // An agent that ends its turn waiting on a background job is not waiting — it
@@ -142,7 +142,7 @@ test('the sequential path gets the same gate run shape, not just the workflow', 
 
 test('the cross-slot rule is in the docs, so it holds without a workflow too', () => {
   const p = refs('orchestration-playbook.md');
-  assert.match(p, /Never idle on a background job — every slot, not just the implementer/);
+  assert.match(p, /Never idle on a background job — every slot, not just the builder/);
   assert.match(p, /a slot that idles looks exactly like a slot that is thinking/i);
   // The gate is named as the most exposed, since it is the least obvious.
   assert.match(p, /N consecutive\*\* suite runs/);

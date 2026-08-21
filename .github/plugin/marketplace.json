@@ -20,7 +20,7 @@
     {
       "name": "automation-scoping",
       "source": "./factories/test-automation/skills/automation-scoping",
-      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
+      "description": "Use when a scope of test cases (or a described backlog, before any cases even exist as files) needs sizing or a cost/time estimate BEFORE automation work starts — presales scoping, a proposal, \"how long/much to automate these N cases\", \"size these cases S/M/L/XL\", estimating the framework/CI/foundation work an engagement needs on top of its cases, sizing a new engagement, or recalibrating an estimate against a project's own delivery history. Produces a scoping report with a range and a stated confidence level, never a bare point number.",
       "version": "0.2.0"
     },
     {
@@ -204,6 +204,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "seeding-automation-project",
+      "source": "./factories/test-automation/skills/seeding-automation-project",
+      "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
+      "version": "0.2.0"
+    },
+    {
       "name": "session-retrospective",
       "source": "./factories/feature-development/skills/session-retrospective",
       "description": "Use when asked to run a retrospective, mine past sessions, or improve the team from what already happened — turning prior Claude Code conversations and sub-agent sessions into proposed memory and workflow updates. Used by scout.",
@@ -218,7 +224,7 @@
     {
       "name": "test-automation-implementation",
       "source": "./factories/test-automation/skills/test-automation-implementation",
-      "description": "Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test — the implementer slot of the test-automation pipeline. Six-phase loop (Absorb → Explore → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the Run Report template. Analyst counterpart: test-case-analysis; orchestration: test-automation-workflow.",
+      "description": "Use when a test case needs to become a green, framework-resident test — the build slot of the test-automation pipeline, from case to green test. Six-phase loop (Absorb → Investigate → Automate → Execute → Debug → Handoff), the 12 Hard Rules, the coverage declaration, the Run Report. Orchestration: test-automation-workflow.",
       "version": "0.2.0"
     },
     {
@@ -236,7 +242,7 @@
     {
       "name": "tokenomics",
       "source": "./factories/test-automation/skills/tokenomics",
-      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, or a local OTel sink/doctor; for a one-off deep audit of live transcripts use efficiency-audit instead.",
+      "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/automation/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, a local OTel sink/doctor, or hyperfactory dataset work — \"are we ready to submit tokenomics\", build/refresh the submission, the §7 checklist, anonymize the dataset; for a one-off deep audit of live transcripts use efficiency-audit instead.",
       "version": "0.2.0"
     },
     {

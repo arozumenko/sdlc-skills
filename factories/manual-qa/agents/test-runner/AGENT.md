@@ -6,6 +6,7 @@ color: red
 group: qa
 theme: {color: colour196, icon: "▶️", short_name: runner}
 aliases: [test-runner, runner]
+context-docs: manual-qa/app_profile.md
 skills: [playwright-testing, playwright-best-practices, verification-before-completion, systematic-debugging, mobile-testing]
 skills-on-demand: [visual-testing]
 metadata:

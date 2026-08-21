@@ -82,7 +82,7 @@ ${flags.length > 0 ? `**⚠ >40% delta, worth inspecting before applying**: ${fl
 ## This is a DRY RUN. Nothing has changed.
 
 Re-run with \`--apply\` to write \`.agents/estimation/complexity-taxonomy.json\`
-(project-local — never the bundle's shipped default) and append a dated entry
+(project-local — never the factory's shipped default) and append a dated entry
 to \`.agents/estimation/calibration-log.md\`.
 `;
 }

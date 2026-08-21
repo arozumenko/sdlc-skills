@@ -15,7 +15,7 @@ pipelines) against the **installed agent roster**. For any slot that
 has no dedicated agent installed, scout picks the best-matching
 installed agent and **records per-project routing overrides in
 `.agents/role-overrides.md`** for the routing agents — in this
-bundle, the orchestrator (`test-automation-lead`) — to consult at
+factory, the orchestrator (`test-automation-lead`) — to consult at
 dispatch time.
 
 Test-automation is the worked example — but the mechanism is general:
@@ -58,10 +58,9 @@ row wins; later rows emit warnings in the override file.
 | Code impl — iOS/Swift | `ios-dev` | `tech-lead` (cross-lang warning) | operator | — | blocker |
 | Code impl — Android/Kotlin | `android-dev` | `tech-lead` (cross-lang warning) | operator | — | blocker |
 | Code impl — other language | `tech-lead` | Language-adjacent dev | operator | — | blocker |
-| QA / verification | `qa-engineer` | — (weak substitutes) | operator | — | **blocker: install qa-engineer, or escalate to Step 7** |
-| Test-automation analyst | `qa-engineer` + `test-case-analysis` skill | `qa-engineer` alone (skill inlined) | — | — | blocker (same as QA) |
+| Case execution (provider=manual-qa) | manual-qa `test-runner` | — | — | — | **not substitutable** — unit outcome `needs-execution`; never self-execute under a manual-qa provider policy |
 | Test-automation implementer | `test-automation-engineer` | Language-matched dev | `tech-lead` (framework-drift warning) | operator | blocker |
-| Reviewer | `qa-engineer` (fresh session) | `tech-lead` + `code-review` | operator | — | operator |
+| Reviewer | `test-automation-engineer` (fresh dispatch + reviewer contract) | `tech-lead` + `code-review` | operator | — | operator |
 
 Language matching uses scout's primary-language detection from
 Step 0.5. Cross-language dev fallback emits a warning in the
@@ -114,8 +113,8 @@ re-run scout after installing the dedicated agents) to disable._
 
 ## Detected roster
 
-- Installed agents: `ba, project-manager, qa-engineer, tech-lead,
-  python-dev, scout`
+- Installed agents: `ba, project-manager, tech-lead, python-dev,
+  scout`
 - Project's primary language: TypeScript
 
 ## Substitute mappings
@@ -123,7 +122,7 @@ re-run scout after installing the dedicated agents) to disable._
 | Slot | Default | Substitute | Fallback tier | Notes |
 |---|---|---|---|---|
 | Test-automation implementer | `test-automation-engineer` | `python-dev` | fallback-1 | Cross-language: project is TypeScript, no js-dev installed |
-| Test-automation analyst | `qa-engineer` + `test-case-analysis` | `qa-engineer` alone | preferred (skill inlined) | OK — qa-engineer loads the skill at session start |
+| Reviewer | `test-automation-engineer` (fresh dispatch) | `tech-lead` + `code-review` | fallback-1 | Engineer not installed — tech-lead reviews under the reviewer contract |
 
 ## Blockers
 
@@ -138,7 +137,7 @@ context. The workflow skill's session-context list
 names it alongside `profile.md` / `workflow.md` / `testing.md` /
 `team-comms.md`, and `orchestration-playbook.md` § Slot defaults
 declares its mappings authoritative when the file is present. The
-orchestrator — `test-automation-lead` in this bundle, or whichever
+orchestrator — `test-automation-lead` in this factory, or whichever
 agent fills the slot per `.agents/team-comms.md` § Roster — reads
 it once at session start and resolves slot → agent at dispatch
 time.
@@ -176,8 +175,8 @@ to Step 6.8 (MCP inventory / `tools:` frontmatter).
 ## What workflow skills do (and don't do)
 
 Workflow skills (`test-automation-workflow`, `implement-feature`,
-`plan-feature`, `bugfix-workflow`) describe slots generically —
-"analyst", "implementer", "reviewer", etc. They **do not**
+`plan-feature`) describe slots generically —
+"implementer", "reviewer", etc. They **do not**
 reference per-project substitutions. The orchestrator
 (`test-automation-lead`) resolves slot → agent at handoff time by
 reading `.agents/role-overrides.md` when present, falling back to

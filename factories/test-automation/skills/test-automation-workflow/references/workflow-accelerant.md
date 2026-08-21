@@ -6,7 +6,7 @@ time: a batch on Claude Code goes through the canonical script below — a batch
 of ONE included — unless a § When NOT condition applies. Same slot contracts, same
 outcomes; what changes is who enforces the choreography: code, not your
 conscience. (Invoking the tool here is within its explicit-opt-in rule: the
-operator installed this bundle and handed you a batch — this skill's
+operator installed this factory and handed you a batch — this skill's
 instruction IS the opt-in.) On every other host (and whenever the tool is
 unavailable), run the sequential dispatches per the playbook — the contracts
 are identical, so nothing forks.
@@ -17,7 +17,7 @@ your whole context. The workflow replaces those with script code — units run s
 time (§ Who may run at once) — enforces the
 R2 cap / sequencing / exception routing as `if` statements, and survives
 crashes (`resumeFromRunId` replays completed agents from cache — a batch that
-dies at case 4 does not redo three live analyst runs).
+dies at case 4 does not redo three live runner sessions).
 
 ## The canonical script
 
@@ -33,40 +33,39 @@ Workflow({
     cases: [{ id: "TC-101", title: "…" }], // required — Intake is yours; snapshots already on disk
     // clusters: [["TC-1","TC-2","TC-3"]]  — pass them on flat batches too: units are the wall clock
     // root: "."                            — repo root override (rarely needed)
-    // agentTypes: { analyst, implementer, reviewer, gate } — defaults: qa-engineer /
-    //                                        test-automation-engineer / qa-engineer / test-automation-engineer
-    // workerModel / workerEffort           — analyst+implementer default: inherit session
+    // agentTypes: { runner, builder, reviewer, gate } — defaults: test-runner (manual-qa factory) /
+    //                                        test-automation-engineer for the other three
+    // workerModel / workerEffort           — builder default: inherit session
     // reviewerModel: null                  — frontmatter governs (no floor); override per run,
     //                                        or use reviewPanel for stakes
-    // extendImplementerModel: null         — opt-in per-case tiering: e.g. "haiku" for
-    //                                        extend-existing gap-fills (gate catches weakness either way)
-    // tiering: "auto"                      — 'off' restores always-analyst; auto routes mapped-surface
-    //                                        units to a combined analyse+build dispatch (rule 6 below)
-    // triageModel: "haiku"                 — the read-only routing dispatch's model
+    // triageModel: "haiku"                 — the read-only evidence-check dispatch's model
     // quotaResume: false                   — set true ONLY when resuming after an account-ceiling halt
     // fixRounds: 8                         — runaway backstop for the review/fix loop, not the control
     // mergeModel / reporterModel: "haiku"  — the two deliberate cheap-tier slots
+    // gateModel: null                      — gate agent tier; the script does the mechanics
+    //                                        (run, time, record), so haiku is viable — but the
+    //                                        blast-radius diff read is judgment, so default inherits
     // gateN: 3                             — consecutive deterministic greens the gate demands
     // gateCmd: null                        — suite command; null → the gate agent resolves it from .agents/testing.md
     // integrationBranch: "tests/batch-<slug>"
     // skipGate: false                      — true = stop after the last unit merges, no gate
     // reviewPanel: false                   — true = 3-lens static review panel, unanimous to approve
-    // breakerThreshold: 3                  — consecutive same-cause analyst parks that halt the front
-    // extendRateThreshold: 0.5             — extend+covered share that raises a quality flag
+    // breakerThreshold: 3                  — consecutive same-cause parks that halt the front
     // budgetReserve: 60000                 — stop admitting cases when budget.remaining() drops below this
   }
 })
 ```
 
-## The four phases
+## The phases
 
-`Analysis` → `Build` → `Gate` → `Report`, with analysis and build alternating
-per unit. There is no `Integrate` phase — units merge into the trunk as they
-finish. The last phase is the run's **only disk write**:
-`.agents/automation/<slug>/report.json` and `report.md`, one row per input case.
+Route (evidence check / runner) → `Build` → `Gate` → `Report`, with the
+per-unit steps alternating as the loop walks the units. There is no
+`Integrate` phase — units merge into the trunk as they finish. The last phase
+is the run's **only disk write**: `.agents/automation/<slug>/report.json` and
+`report.md`, one row per input case.
 
-**Reading `/workflows` while it runs.** `Analysis` and `Build` alternate as the
-loop walks the units, so both counters climb throughout rather than one
+**Reading `/workflows` while it runs.** The per-unit phases alternate as the
+loop walks the units, so their counters climb throughout rather than one
 finishing before the other starts. And the `❯` marker is the TUI's selection
 cursor, not the running phase — the right-hand pane describes whatever row you
 have selected, so `Report · Not started yet` is an answer about Report, not a
@@ -90,9 +89,9 @@ state-and-recovery sections — one home, not two.
      └─ …
 ```
 
-The trunk exists from the FIRST ANALYST — it is the known state everything
-branches from, so it cannot appear later. The first analyst creates and pushes
-it if it exists nowhere; every unit after that finds it. Two field reasons it
+The trunk exists from the FIRST UNIT — it is the known state everything
+branches from, so it cannot appear later. The first unit's builder creates and
+pushes it if it exists nowhere; every unit after that finds it. Two field reasons it
 cannot be deferred. The gate checks out `origin/<trunk>`, so a trunk that only
 appears at the end has to be pushed by the gate itself — a write its own
 contract forbids. And gating a branch while merging N case PRs to base
@@ -108,14 +107,14 @@ PR either way.
 > **Always return the tree to a known state, and always branch from it.**
 
 A single working tree has ONE state at a time while slots need different ones:
-an analyst wants the trunk, a reviewer wants the branch it is judging, an
-implementer wants its own. Nothing reconciles that except ordering.
+a runner or a merge wants the trunk, a reviewer wants the branch it is judging,
+a builder wants its own. Nothing reconciles that except ordering.
 
 | Slot | Runs |
 |---|---|
-| Analyst | one unit at a time, on the trunk — commits its own AFS + digest |
-| **Implementer** | one at a time, on a branch cut from the trunk |
-| Reviewer | after its own implementer, on that branch's diff |
+| Runner (`needs-execution` route) | one case at a time, on the trunk — writes only its own `reports/` |
+| **Builder** | one at a time, on a branch cut from the trunk — commits spec + surface cache |
+| Reviewer | after its own builder, on that branch's diff |
 | Merge back | immediately after review approves; the tree returns to the trunk |
 | Gate | once, on the trunk, after every unit has had its turn |
 | Report writer | once, at the end |
@@ -127,13 +126,13 @@ Why — with the field numbers (eight checkout aborts, 90 conflict hits, three
 git-surgery rescues in one session) and what serialising buys back in agent
 freedom — lives in playbook § ONE TREE, ONE MASTER. One home, not two.
 
-**One working tree; isolation comes from branches.** A per-implementer worktree
+**One working tree; isolation comes from branches.** A per-builder worktree
 carries only *tracked* files, so it arrives without `.env` and without
 installed dependencies. Measured on one campaign: 10 direct `.env.test`
 failures plus **413** occurrences of the misleading symptom it produces
 (`Invalid URL ''`, which reads as an auth bug), a dependency reinstall per
 worktree that stalled two entire workflows, and 40 `branch is already used by
-worktree` collisions. That tax is paid **per implementer**, for isolation that
+worktree` collisions. That tax is paid **per builder**, for isolation that
 sequencing already gives.
 
 **No worktrees anywhere in this pipeline.** Not as a default, not as an option:
@@ -144,7 +143,8 @@ exactly one writer at a time, and the sequence enforces it:
 
 ```
 per unit, strictly in turn:
-  analyse (trunk) → implement (branch cut from trunk) → review → merge back (trunk)
+  earn the evidence if the route needs it (runner, on the trunk)
+  → build (branch cut from trunk) → review → merge back (trunk)
 then once:
   gate (trunk; refuses a dirty tree) → report
 ```
@@ -153,8 +153,12 @@ Dropping the gate's worktree **removed** work rather than adding it: a worktree
 carries only tracked files, so the suite arrived there without its env file and
 without dependencies, and `gate-case.mjs` had to carry env-resolution, symlink
 repair and a `--fix-env` flag to undo that. The real checkout has all of it
-already. One guard replaces the lot: the gate **refuses to run on a dirty tree**,
-because checking a branch out would drag or lose work in progress.
+already. One guard replaces the lot — and it is **precise, not blanket**
+(reworked 2026-08-17): the gate refuses only dirt that matters — a dirty path
+among the files it is proving (the base…branch diff), or one git itself
+refuses to overwrite on checkout/merge (reported by exact path). Unrelated
+noise — logs, configs, other factories' state — never blocks; it rides the
+verdict record as `carriedDirt`.
 
 **The cost, stated plainly.** Gating no longer overlaps the next batch's build —
 wall clock goes from `max(build, gate)` to `build + gate`. That is real: in one
@@ -172,7 +176,7 @@ function of the args rather than of who finished first.
 One consequence worth knowing: only ONE slot drives the live environment at a
 time, so an env that could not take two clients no longer constrains anything.
 A **circuit breaker** halts the run after `breakerThreshold` consecutive
-same-cause analyst parks, so a dead environment stops costing after the third
+same-cause parks, so a dead environment stops costing after the third
 case rather than the tenth.
 
 **With builds sequenced, units are the wall clock** — which makes `clusters` the
@@ -182,10 +186,10 @@ unit on the chain, ≈ $14 instead of ≈ $69, and one review instead of five.
 
 ## The gate lives inside the run
 
-A **separate agent in the workflow** — not the implementer (who would be
+A **separate agent in the workflow** — not the builder (who would be
 certifying their own work), and not you — with a deliberately narrow contract:
-**N consecutive deterministic greens, a red anywhere ends the attempt, and it
-never merges, classifies, or fixes.** Mechanics are scripted
+**the coverage-grammar grep, then N consecutive deterministic greens; a red
+anywhere ends the attempt, and it never merges, classifies, or fixes.** Mechanics are scripted
 (`scripts/gate/gate-case.mjs`). The full doctrine — the two-count design (new
 specs N×, blast radius once), the three scripted rules, and the measured
 reason gating left the lead (12 vs 36 cases, 3h50m, 114 shell calls) — lives
@@ -261,49 +265,49 @@ see § Campaigns below.
 ## What the build workflow returns
 
 ```
-{ cases: [{id, outcome, note, findings[], branch?, pr?, afs?, gate?}, …],
-  totals: {automated, blocked, …},
+{ cases: [{id, outcome, coverage?, note, findings[], branch?, pr?, gate?}, …],
+  totals: {delivered, blocked, …},
   gate: {verdict, runs, seconds, failures[]},
   integration_branch, quality_flags, quota_halted,
-  report_written, report_path, analyzed, extend_cases, next }
+  report_written, report_path, extend_cases, next }
 ```
 
-`cases` is the whole story: one row per input case, its outcome, and any
-findings it produced. `next` is a one-line instruction for you. Three fields
-are diagnostics worth reading rather than skipping:
+`cases` is the whole story: one row per input case, its outcome, its coverage
+record (`{full, excluded[]}`), and any findings it produced. `next` is a
+one-line instruction for you. Three fields are diagnostics worth reading
+rather than skipping:
 
-- **`quality_flags`** — e.g. an extend+covered share above `extendRateThreshold`.
-  Mature suites legitimately run high extend rates, so this flags rather than
-  halts: blind-audit a sample (a second analyst re-analysing one or two) before
-  trusting the batch's coverage.
+- **`quality_flags`** — batch-level quality signals (e.g. a high share of
+  covered-elsewhere exclusions). These flag rather than halt: blind-audit a
+  sample (a second reviewer re-walking one or two) before trusting the
+  batch's coverage.
 - **`quota_halted`** — the run stopped on an account ceiling with nothing to
   repair. Remaining cases are `not-started`.
-- **`analyzed` / `extend_cases`** — feed the campaign conductor
-  (`preAnalyzed`) and your extend audit respectively.
+- **`extend_cases`** — feeds your extend audit.
 
-Then you merge the `automated` cases, route the findings, and replan
+Then you merge the `delivered` cases, route the findings, and replan
 everything else (playbook § The loop → Close).
 
 ## Division of labor
 
 | Who | Does |
 |---|---|
-| You (lead), before | Intake: TMS sweep, dedup, clustering, **case snapshots to `.agents/automation/<slug>/cases/<ID>.md`** (fetch-once-to-disk — analyst and reviewer read these instead of re-fetching) |
-| Workflow | One unit at a time: analyse (commits its AFS to the trunk) → implement on a branch cut from the trunk → static review → fix rounds until APPROVED, stopping only on `persists`/`external` (backstop 8) → merge back, tree returns to the trunk. Then one gate over the trunk, then the report |
-| You (lead), after | Read the report. Merge + mirror the `automated`; classify a red gate and route it; route the findings; `cleanup.mjs`; replan the remainder |
+| You (lead), before | Intake: TMS sweep, dedup, clustering + screening verdicts, route policy read, **case snapshots to `.agents/automation/<slug>/cases/<ID>.md`** (fetch-once-to-disk — builder and reviewer read these instead of re-fetching) |
+| Workflow | One unit at a time: earn the evidence if the route needs it (runner) → build on a branch cut from the trunk (spec + coverage declaration + surface cache) → static review → fix rounds until APPROVED, stopping only on `persists`/`external` (backstop 8) → merge back, tree returns to the trunk. Then one gate over the trunk, then the report |
+| You (lead), after | Read the report. Merge + mirror the `delivered` (coverage note in the back-write); classify a red gate and route it; route the findings; `cleanup.mjs`; replan the remainder |
 
 ## Prompt determinism is the resume contract (2026-07-24 — the expensive one)
 
 `resumeFromRunId` caches every `agent()` call keyed on the **exact (prompt,
 opts) pair**. So any value interpolated into a prompt that depends on *run
 timing* rather than on the args breaks the cache on every resume, and the agent
-re-runs live — paying again for work that was already done and, for an analyst,
+re-runs live — paying again for work that was already done and, for a runner,
 re-driving a real browser session.
 
 This is easy to introduce by accident and invisible until you measure it. An
 earlier revision of the build script handed out browser lanes from a counting
 semaphore (lane assigned by whoever finished first) and pasted the lane number
-into the analyst prompt. Lanes are gone with the concurrency that needed them,
+into the worker prompt. Lanes are gone with the concurrency that needed them,
 but the lesson is the reason every prompt today interpolates only args and
 worker results. Measured over one campaign, back when it happened:
 
@@ -311,8 +315,8 @@ worker results. Measured over one campaign, back when it happened:
 |---|---|
 | Analysed cases dispatched under ≥2 distinct lane numbers | **20 of 28** |
 | Cases analysed more than once | **35 of 53** |
-| Analyst dispatches for 53 cases | **106** |
-| Implementer dispatches for the same 53 | **95** |
+| Exploration dispatches for 53 cases | **106** |
+| Build dispatches for the same 53 | **95** |
 | Share of campaign spend that was replay + rework | **~60%** (~$890 of $1,489) |
 
 Per-case economics for that campaign: **$41 actual vs ~$17 for a clean single
@@ -357,7 +361,7 @@ prose. Keep these if you ever fork it:
    a finding list. Stabilize is bounded at 2 rounds instead, and correctly so:
    its fixer must return `fixed` or `blocked` **per cause**, so "silently not
    done" is not representable there, and its arbiter is an objective gate
-   rather than a reviewer's judgement. The R2 cap still binds implementer
+   rather than a reviewer's judgement. The R2 cap still binds builder
    *reruns* — a spec that will not go green against the same root cause twice
    is an objective wall. Round ceilings and the budget floor are backstops for
    a pathological pair, not the working control. At a real stop the case is
@@ -379,18 +383,38 @@ prose. Keep these if you ever fork it:
    makes access explicit and deterministic on every path.
    Both workers ship an inline browser-server definition (subagent-scoped,
    one at a time under the serial pipeline); the per-project lists are seeded
-   at Step 6.8 (`seeding-a-project` → agent-tools-wiring § Claude Code).
-6. **Analyst tiering — the standalone analyst is for novel ground**
-   (`tiering: 'auto'` default; `'off'` restores always-analyst). One cheap
-   triage dispatch (haiku, read-only) routes each unit: surfaces whose
-   `_surface.md` digest exists and whose steps read routine go to a
-   **combined** analyse+build slot — one implementer dispatch does both
-   halves, still executing the case live and still committing the AFS on the
-   trunk before building — everything else takes the standalone analyst.
-   Conservative twice over: triage routes to the analyst on any doubt, and
-   the combined slot returns `needs-analyst` before writing anything when
-   the ground turns out novel, falling back to the normal chain at the cost
-   of one dispatch.
+   at Step 6.8 (`seeding-automation-project` → agent-tools-wiring § Claude Code).
+6. **Routing is policy plus evidence, never improvisation.** The script reads
+   `.agents/testing.md § Execution provider` and checks the evidence per unit
+   (a cheap read-only triage dispatch — never the lead absorbing run
+   reports): provider `self` → every unit `combined`; provider `manual-qa` →
+   PASS run record + authored case file for every case in the unit →
+   **`manual-qa-verified`** (the build derives from that evidence, no live
+   re-run; run age does not matter; the run id becomes the execution
+   provenance), anything less → **`needs-execution`** (a `test-runner`
+   dispatch per case earns it: PASS → build, FAIL → `defect-found`,
+   BLOCKED → `blocked`). A runner dispatch that fails because the agent type
+   is unknown leaves the unit `needs-execution` in the report — the script
+   NEVER falls back to self-execution against policy. The builder's own
+   escape holds too: thin evidence → `needs-execution` return before any
+   write. The gate proves the result N× green whichever route ran. Playbook
+   § The loop, per unit carries the full rule.
+
+7. **A stalled slot costs its unit, never the run** (field-measured
+   2026-08-17, quota-throttled Bedrock). The harness stall-kills a subagent
+   whose model stream stops making progress and retries it blind; when every
+   attempt stalls, `agent()` THROWS (`agent stalled on all N attempts`)
+   rather than returning null — and uncaught, that throw killed a whole run
+   with its report unwritten while one slot burned 11 attempts. Every script
+   now catches it: the unit is recorded **`infra-stalled`** (an ENVIRONMENT
+   verdict — provider quota or stream stability, nothing about the case; see
+   playbook § A dispatched slot that stalls), consecutive stalls feed the
+   same breaker as agent-died, the batch continues, and the report always
+   lands. The other half is the workers' CHECKPOINT DISCIPLINE: a retry
+   inherits only what is committed, so build dispatches check
+   for a killed attempt's branch first and commit per milestone — which is
+   what makes the harness's blind retries incremental instead of 11×
+   from-scratch.
 
 ## Hooks & memory (verified 2026-07-20)
 
@@ -402,21 +426,21 @@ dispatch in the script names its agentType, and every worker prompt carries
 the self-load fallback (memory skill + `.agents/*.md`) because this hook
 behavior is version-observed, not documented contract.
 
-**Anything that touches the repository must be a named agent of this bundle.**
+**Anything that touches the repository must be a named agent of this factory.**
 Not a style rule — a correctness one, and it fails silently. Measured on one
 campaign: **1004 of 2123 units arrived as `workflow-subagent`**, i.e. with no
 resolvable role and therefore no role memory and no project briefing. Those
 particular ones were board clerks (since deleted) and it did not matter, but the
 same silence would hide a real worker: nothing errors, the agent simply knows
 nothing about the project it is editing. The shipped scripts name every dispatch
-— analyst, implementer, reviewer, gate, **integrator, report writer** — and
+— runner, builder, reviewer, gate, **integrator, report writer** — and
 `named-agents.test.mjs` fails the build if a new one forgets. Clerical dispatches
 that touch nothing may be anonymous; anything that merges, edits or commits may
 not.
 
 The same data settles a question worth knowing: **workflow-spawned agents WITH
 an `agentType` do resolve normally** — 380 of that campaign's workflow agents
-came through as `qa-engineer` / `test-automation-engineer`. The generic name is
+came through under their named types. The generic name is
 what an *omitted* `agentType` produces, never what the Workflow tool imposes.
 
 Two more observed facts the script accounts for: `args` may arrive as a
@@ -436,15 +460,15 @@ timestamps at all — the report writer and git supply them.
   resolve: a relative env symlink still points outside and resolves nowhere,
   which one campaign hit **10 times directly and 413 times as the misleading
   `Invalid URL ''` symptom**); the fact that a worktree sees **committed files
-  only** (which stranded **47 uncommitted AFS files** in the same campaign); and
-  `worktree.baseRef`, which silently branches from the repo's default branch
-  rather than your automation base unless set to `"head"`. In this checkout none
-  of that applies: the env file and the dependencies are simply there.
-  One rule from that era still stands on its own merits, because it serves the
-  reviewer rather than any worktree: reviewers read diffs by ref
-  (`git diff base...branch`) and never check anything out. (The AFS-commit rule
-  moved with the ownership again: the **analyst** commits its own AFS to the
-  trunk the moment it exists, because nothing else is in the tree while it
+  only** (which stranded **47 uncommitted analysis files** in the same
+  campaign); and `worktree.baseRef`, which silently branches from the repo's
+  default branch rather than your automation base unless set to `"head"`. In
+  this checkout none of that applies: the env file and the dependencies are
+  simply there. One rule from that era still stands on its own merits, because
+  it serves the reviewer rather than any worktree: reviewers read diffs by ref
+  (`git diff base...branch`) and never check anything out. (The commit rule
+  survives as the builder's: spec and surface cache are committed by exact
+  path the moment they exist, because nothing else is in the tree while it
   runs. Nothing sweeps orphans, because there are none.)
 - **`cleanup.mjs` still removes worktrees.** Not because the pipeline makes
   them, but because a project may still carry some from the earlier model or
@@ -456,9 +480,9 @@ timestamps at all — the report writer and git supply them.
   (no `gh`) authorizes nothing.
 - **`reviewPanel: true`** — turns the static review into the tool's
   perspective-diverse verify pattern: three reviewers with distinct lenses
-  (assertion strength / masking / coverage fidelity), unanimous APPROVED to
-  pass. ~2 extra reviewer dispatches per case; use for high-stakes batches or
-  a new implementer configuration.
+  (correctness / honesty-of-coverage / maintainability), unanimous APPROVED to
+  pass. ~2 extra reviewer dispatches per case; use for large or high-stakes
+  batches or a new builder configuration.
 - **`budget`** — if the operator sets a token target ("+500k"), the script
   hard-stops admitting new cases when `budget.remaining()` falls below
   `budgetReserve` and leaves the rest `not-started`. No target → no limit.
@@ -483,9 +507,9 @@ timestamps at all — the report writer and git supply them.
 - **Resume, two ways.** On a crash, kill, or operator pause (unpausing ENDS
   the run and the harness appends the exact resume call — invoke it as given,
   in the same session), re-invoke with the SAME scriptPath/args plus
-  `resumeFromRunId`: completed agents (including live analyst runs) replay
+  `resumeFromRunId`: completed agents (including live runner sessions) replay
   from cache; only the failed call onward re-runs. Same scriptPath means same
-  script BYTES — don't update the installed bundle between a pause/crash and
+  script BYTES — don't update the installed factory between a pause/crash and
   its resume, or every unit from the first changed prompt re-runs live.
   **The runId is context-fragile:** write it to disk the moment the Workflow
   call returns it (the campaign card, or the batch's dir) so a crash OR a
@@ -512,7 +536,7 @@ timestamps at all — the report writer and git supply them.
   editing the script: stable text first, case-variable text last, and don't
   vary agentTypes gratuitously.
 - **Measure before tuning further** — after the first real batch, run the
-  bundle's `efficiency-audit` skill (`usage-rollup.mjs`) over the session to
+  factory's `efficiency-audit` skill (`usage-rollup.mjs`) over the session to
   rank actual per-stage costs; let that data pick the next optimization, not
   intuition.
 
@@ -523,12 +547,11 @@ per [`campaign-planning.md`](campaign-planning.md): a dispatched planner
 proposes waves/clusters/foundation from the intake snapshots (the lead
 reviews the plan, never the case bodies), then
 [`../scripts/workflows/batch-campaign.workflow.mjs`](../scripts/workflows/batch-campaign.workflow.mjs)
-conducts heads-analysis → foundation (early-return for your mini-gate) →
+conducts the heads pass → foundation (early-return for your mini-gate) →
 waves, each wave a build child that integrates and gates itself and hands you
-one report. `analyzeOnly` and `preAnalyzed` exist for the conductor.
-**`clusters` does not** — every batch should carry it (campaign-planning.md
-§ Clustering): with builds sequenced, units are the wall clock, so grouping
-similar cases is the main lever a flat batch has.
+one report. **`clusters` is not conductor-only** — every batch should carry it
+(campaign-planning.md § Clustering): with builds sequenced, units are the wall
+clock, so grouping similar cases is the main lever a flat batch has.
 
 ## Extending the canonical workflows
 
@@ -547,7 +570,7 @@ gradient, and each step up needs more care:
    - **Fork to a durable home:** copy into the project's own space (e.g.
      `.claude/workflows/<name>.mjs`, invoked by name) — NEVER edit the
      installed skill copy, `--update` clobbers it. A variant that proves out
-     belongs upstream in the bundle; say so in your status report.
+     belongs upstream in the factory; say so in your status report.
    - **The invariants ride along, uncut.** These are not style preferences —
      each one is a failure this pipeline has already paid for:
      - **ONE TREE, ONE MASTER.** Nothing that writes runs concurrently with
@@ -556,7 +579,9 @@ gradient, and each step up needs more care:
        reviewers on a *finished* diff, writing nothing. `parallel()` /
        `pipeline()` over anything that touches the repository is the specific
        trap: it puts two `git checkout` in one tree.
-     - **Live execution per case**, amortized per cluster, never skipped.
+     - **Execution evidence per case** — manual-qa's record, a runner PASS, or
+       the automated test's own first green run — never invented, and never
+       silently self-executed when policy says manual-qa.
      - **Route-on-failure, never roll forward**, and **recover-never-repair**:
        no deleting files to unblock, no "fixing" a red result.
      - **Named `agentTypes`** on every dispatch — an anonymous one reaches the
@@ -583,7 +608,7 @@ gradient, and each step up needs more care:
    read the code rather than execute a case); build → review → integrate →
    gate is unchanged, and the outcome vocabulary already covers it. Each
    non-case unit carries a [tech-task brief](tech-task-brief.md) where the
-   AFS would be — the reviewer's triangulation artifact and the gate's run
+   case would be — the reviewer's walk artifact and the gate's run
    set. `batch-stabilize` is the shipped instance of that variation; copy
    its shape rather than inventing a new one.
 
@@ -642,7 +667,7 @@ it is not a new shape — it is the old bug.
   read a return per slot, plus the gate mechanics — each re-processing the whole
   context, against **2** for a workflow call and its report. Proportionally the
   saving is larger on one case than on five. The script degenerates cleanly:
-  one analyst lane, one build, an integration branch holding one case, one gate
+  one unit, one build, an integration branch holding one case, one gate
   run, one report.)
 - Unseeded project — self-orient first; the workflow assumes a seeded project,
   TMS adapter, and `.agents/testing.md` config.
@@ -659,8 +684,8 @@ because neither weakens the model:
 
 - **No journal.** `journal.jsonl` is a Workflow-runtime artifact; sequential
   dispatches produce none. It does not matter, because the durable evidence
-  was never the journal: an AFS committed to base means analysed, a branch
-  means built, a merged PR means landed. Recovery prefers exactly that evidence
+  was never the journal: a branch means the case was built, a merged PR means
+  it landed, the coverage declaration says what it covers. Recovery prefers exactly that evidence
   anyway — git wins over any journal or receipt wherever both can answer, since
   a merged PR is a fact and an agent's return is a claim. On a real interrupted
   campaign, git-only reconstruction produced the identical remainder. (Take care

@@ -116,7 +116,10 @@ human will install elsewhere — not code that executes in this repo.
 
 - Agents are **self-describing**: all metadata lives in `AGENT.md` frontmatter
   (`name`, `description`, `model`, `color`, `group`, `theme`, `aliases`,
-  `skills`, `skills-on-demand`, optional `mcpServers`). No separate agent
+  `skills`, `skills-on-demand`, optional `mcpServers`, optional
+  `context-docs`/`context-memory` — what the shared hooks inject for this
+  role; feeds the installer-generated `config-defaults.sh` roster, see
+  `hooks/README.md`). No separate agent
   registry. Both skill lists
   install; only `skills:` enters standing context (Claude preload, non-Claude
   injected inventory, Codex TOML). `skills-on-demand:` entries are installed

@@ -25,6 +25,14 @@ test('meta: canonical name and one phase — merging only', () => {
   assert.doesNotMatch(text, /Board close-out/);
 });
 
+// The AFS layer is gone: the sweep targets the surface cache, for the same two
+// reasons (probing knowledge otherwise lost; the gate refuses a dirty tree).
+test('leftover sweep targets the surface cache, not AFS', () => {
+  assert.match(text, /SWEEP THE LEFTOVER SURFACE CACHE FIRST/);
+  assert.match(text, /\.agents\/automation\/surface\//);
+  assert.doesNotMatch(text, /\bAFS\b|afs|test-specs|analyst|qa-engineer/i);
+});
+
 test('hard rules: never-delete, mechanical-only, gate stays out, writes no state', () => {
   assert.match(text, /never delete, rm, or checkout --ours\/--theirs/); // the rm -rf class, banned
   assert.match(text, /MECHANICAL/);

@@ -1,6 +1,6 @@
 # test-automation-engineer — "Axel"
 
-> Use when an Automation-Friendly Spec (AFS) needs to become a green, framework-resident test. Matches whatever framework, technology, and test type the project already uses (UI, API, mobile, performance, …; an installed skill if one fits, otherwise his own competence + the framework's docs), never masks product defects, and stops at the AFS boundary.
+> Use when a ready test case needs to become a green, framework-resident test. Investigates the case himself, matches whatever framework, technology, and test type the project already uses (UI, API, mobile, performance, …; an installed skill if one fits, otherwise his own competence + the framework's docs), declares coverage honestly, and never masks product defects. The case itself is read-only.
 
 An agent for the [sdlc-skills](../../README.md) toolkit. The agent definition lives in [`AGENT.md`](AGENT.md); this file is just how to install it.
 
@@ -38,9 +38,9 @@ For **GitHub Copilot**, agents must be flat files — use the CLI with `--target
 
 ## Skills this agent uses
 
-In this repo: `test-automation-workflow`, `playwright-testing`, `browser-verify`, `code-review`, `bugfix-workflow`, `git-workflow`, `completing-a-task`, `memory`.
+In this repo: `test-automation-implementation`, `test-automation-workflow`, `browser-verify`, `code-review`, `reproducing-issues`, `issue-tracking`, `git-workflow`, `completing-a-task`, `memory`.
 
-External †: `playwright-cli`, `tdd`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`.
+External †: `playwright-best-practices`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`.
 
 † External skills resolve from `skills.json` or your [superpowers](https://github.com/obra/superpowers) install; pending ones are skipped with a notice.
 

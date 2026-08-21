@@ -1018,7 +1018,7 @@ export const HELP = `usage: usage-rollup.mjs [flags]
   --mode <mode>             ccusage cost mode: auto|calculate|display
   --agent <host>            ccusage host filter for the fallback source (default claude)
   --ccusage-bin <bin>       ccusage binary (default: npx -> ccusage@latest)
-  --bundle <label>          Label to show in the report title
+  --factory <label>          Label to show in the report title
   --json                    Emit the full structured rollup as JSON instead of markdown
   --out <path>              Write the markdown rollup to a file
   --snapshot <path>         Also write a JSON snapshot for later diffing
@@ -1032,7 +1032,7 @@ export const HELP = `usage: usage-rollup.mjs [flags]
 
 const VALUE_FLAGS = new Set([
   'project-dir', 'tag', 'since', 'until', 'resolved', 'resolved-from', 'weight', 'exclude-session',
-  'mode', 'agent', 'ccusage-bin', 'bundle', 'out', 'snapshot', 'diff', 'host',
+  'mode', 'agent', 'ccusage-bin', 'factory', 'bundle', 'out', 'snapshot', 'diff', 'host',
 ]);
 const BOOL_FLAGS = new Set(['all-projects', 'json', 'online', 'offline', 'no-meter', 'no-ccusage', 'help']);
 // `--resolved-from` works with or without a path, so it is in both sets: bare,
@@ -1209,7 +1209,7 @@ async function main() {
   if (args.json) {
     process.stdout.write(snapshot() + '\n');
   } else {
-    const md = renderMarkdown(rollup, { resolved, label: args.bundle, weight, delivery });
+    const md = renderMarkdown(rollup, { resolved, label: args.factory ?? args.bundle, weight, delivery });
     if (args.out) writeFileSync(args.out, md);
     else process.stdout.write(md + '\n');
   }
@@ -1336,7 +1336,7 @@ async function runCopilot(cwd, args) {
     return;
   }
   const unpriced = parents.length - priced;
-  const md = renderMarkdown(rollup, { label: args.bundle, weight: 'total', pricer: 'GitHub Copilot', resolved, delivery }) +
+  const md = renderMarkdown(rollup, { label: args.factory ?? args.bundle, weight: 'total', pricer: 'GitHub Copilot', resolved, delivery }) +
     `\n\n## GitHub Copilot notes\n\n` +
     `- Roots read: ${roots.map((r) => `\`${r}\``).join(', ')}\n` +
     `- **AI credits: ${credits.toFixed(3)} ≈ $${usd.toFixed(2)}** ` +

@@ -63,6 +63,27 @@ SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
 LAST_DISPATCH_FILE="${STATE_DIR}/benchmark-last-dispatch-at${SID_SUFFIX}.txt"
 CCUSAGE_WAIT_DEBUG_LOG="${STATE_DIR}/benchmark-ccusage-wait-debug.log"
 
+# MULTI-FACTORY GUARD (2026-08-14): these hooks match on the TOOL (Agent), so
+# in a repo that also runs another factory (test-automation, feature-dev) they
+# fire for EVERY dispatched agent — and this session-scoped machinery would
+# spin up ccusage retry loops per foreign session and, worse, benchmark-stop
+# would emit a synthetic near-empty reports/metrics/RUN-*.json for each of
+# them (build-run-metrics has no foreign-session bail). So: initialize state
+# ONLY when the dispatched agent belongs to the manual-qa roster. Empty/absent
+# subagent_type (older builds) fails open to the old behavior. Once a
+# manual-qa run IS live (state file exists), keep refreshing the dispatch
+# timer for every dispatch — the premature-firing guard needs the timeline.
+MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter|qa-auditor)$'
+agent_type="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.tool_input?.subagent_type||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+if [ ! -f "$STATE_FILE" ] && [ -n "$agent_type" ] && ! printf '%s' "$agent_type" | grep -Eq "$MANUAL_QA_ROSTER"; then
+  exit 0   # another factory's session — none of this machinery is ours to run
+fi
+
 # Refresh on EVERY dispatch (ported 2026-07-31 from qa-project — see
 # benchmark-stop's own "PREMATURE-FIRING GUARD" comment for the full
 # incident writeup). Cheap unconditional write, independent of the

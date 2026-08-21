@@ -2,7 +2,10 @@
 # Tune what the hooks inject. NOT overwritten by package syncs (sync refreshes the
 # hook scripts, not this file). A real environment value overrides any setting here.
 
-# Shared project docs — space-separated base names (no .md). This is ALSO the
+# Shared project docs — space-separated base names (`.md` tolerated: `testing`
+# and `testing.md` mean the same; likewise the memory list below accepts
+# `snapshot` for `snapshot.md` — the wrong spelling must not silently vanish).
+# This is ALSO the
 # PRIORITY ORDER: for a CLI sub-agent (the only agent without the instruction-file
 # shelf) the docs are inlined into additionalContext in THIS order until the ~10KB
 # cap, then the rest become a read-list. Order is irrelevant for every other agent
@@ -14,6 +17,28 @@
 # project_briefing.md is the seeded per-role project briefing, injected after
 # SOUL/snapshot/MEMORY — kept in the default so it rides along at dispatch.
 #: "${SDLC_ROLE_MEMORY_FILES:=SOUL.md snapshot.md MEMORY.md project_briefing.md}"
+
+# PER-ROLE overrides — both lists above also exist in a per-role form:
+#   SDLC_SHARED_DOCS_<ROLE> / SDLC_ROLE_MEMORY_FILES_<ROLE>
+# where <ROLE> is the agent name UPPERCASED with dashes as underscores
+# (qa-engineer → QA_ENGINEER). Resolution per role: its override (this file,
+# sourced first — always wins) → the generated default (config-defaults.sh,
+# written by the installer with one pair of lines per INSTALLED agent) → for
+# roles in neither: NOTHING. That last part is roster mode — these hooks fire
+# for EVERY dispatched agent in the repo (they are shared across factories), so
+# a role nobody installed or listed (host builtins like Plan/Explore, anonymous
+# workflow agents, other tools' agents) is not sent context nobody chose for
+# it. Grant such a role here explicitly if you want it served. In a repo
+# without config-defaults.sh (older install) behavior is legacy allow-all:
+# every role inherits the globals.
+# The sentinel `__none__` means "NOTHING from that list" (works globally too).
+# It is a sentinel rather than an empty string because `${VAR:=}` cannot tell
+# empty from unset, and rather than `none` because that could be a real doc name.
+#: "${SDLC_SHARED_DOCS_TEST_RUNNER:=testing profile}"
+#: "${SDLC_ROLE_MEMORY_FILES_APP_PROFILER:=snapshot.md}"
+#: "${SDLC_SHARED_DOCS_QA_ENGINEER:=__none__}"
+#: "${SDLC_SHARED_DOCS_PLAN:=profile testing}"          # serve a host builtin
+#: "${SDLC_SHARED_DOCS_WORKFLOW_SUBAGENT:=profile}"     # serve anonymous workflow agents
 
 # additionalContext byte cap — the runtime drops payloads over ~10KB. (default 10240)
 #: "${SDLC_CTX_CAP:=10240}"

@@ -1,6 +1,6 @@
 ---
 name: Test Automation Team
-description: "Automation team that turns TMS cases into merged, honest automated tests via a serial batch pipeline — parallel analyst exploration, implement + static review per case, one N×-green hardening gate per batch."
+description: "Three-agent automation team (scout seeds, the lead routes and merges, the engineer builds and reviews) that compiles ready-made test cases — TMS or manual-qa-authored — into merged, honest automated tests: per-spec coverage contract, independent engineer-typed review, one N×-green hardening gate per batch."
 owner: Applied AI
 authors:
   - "Alexander Bychinskiy <Alexander_Bychinskiy@epam.com>"
@@ -14,9 +14,11 @@ use_cases:
 ---
 # Test Automation Team
 
-An automation team that turns TMS cases into merged, honest automated tests via
-a serial batch pipeline: parallel analyst exploration, implement + static review
-per case, and one N×-green hardening gate per batch.
+A three-agent automation team (scout seeds, the lead routes and merges, the
+engineer builds and reviews) that compiles ready-made test cases — from a TMS
+or authored by the manual-qa factory — into merged, honest automated tests:
+every case routed on execution evidence, built under the coverage contract,
+independently reviewed, and proven by one N×-green hardening gate per batch.
 
 ## Install
 

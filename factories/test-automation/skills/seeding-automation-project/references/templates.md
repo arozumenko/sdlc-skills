@@ -211,9 +211,9 @@ name that resolves to the credential at run time.
 
 ## Project systems
 
-_Captured during seeding-a-project Step 0.7 from operator input (or
+_Captured during seeding-automation-project Step 0.7 from operator input (or
 `Unconfirmed` when the operator didn't know yet — fill before the
-first test-case-analysis run)._
+first batch run)._
 
 ### Issue tracker
 - **System**: <github-issues | jira | gitlab-issues | azure-boards | linear | none>
@@ -239,7 +239,7 @@ first test-case-analysis run)._
 - **Space / database**: <ENG / QA-KB / ...>
 - **URL**: <base URL>
 
-### Bug filing (when QA discovers a defect during test-case-analysis)
+### Bug filing (when the pipeline discovers a defect)
 
 A ticket is always filed — every finding lands in a tracker so
 nothing slips through. The following fields configure *where* and
@@ -260,18 +260,18 @@ whether lightweight clarifications can bundle.
     (new findings added as comments on the existing per-case ticket).
     Real defects (reproducible bugs, blockers) still get their own
     tickets regardless — bundling only applies to the clarification-
-    weight tier. The bundling decision is the analyst's — they classify
-    each finding at filing time.
+    weight tier. The bundling decision is the filing agent's — they
+    classify each finding at filing time.
 - **Link originating case**: <yes | no> — should the ticket reference
   the TMS case ID that surfaced it?
 
 ### Test case storage
 - **Source of truth**: <tms | markdown | both-synced | none>
   - `tms` — cases live in the TMS only
-  - `markdown` — cases live as files under `test-specs/`
+  - `markdown` — cases live as files under `tasks/<suite>/`
   - `both-synced` — TMS is authoritative; markdown mirrors for
     git-tracking / offline access
-- **Markdown location**: `test-specs/` (or project-specific path)
+- **Markdown location**: `tasks/` (or project-specific path)
 
 ### Status reporting
 
@@ -329,7 +329,25 @@ orchestrator (merge gate) and the implementer (branch base)._
     campaign runs one final check of everything it delivered (see
     `test-automation-workflow` campaign-planning.md).
 
-### Additional notes
+### Reporting policy
+
+_Where the batch report goes at close. Read by the orchestrator's close
+step. The report itself is ALWAYS assembled by script
+(`work-scope.mjs close` renders `.agents/automation/<slug>/batch-report.md`
++ `.html` where the tokenomics scope contract is active) — this policy only
+decides whether and where a copy is DELIVERED._
+
+- **Publish batch report to**: <none | tracker-item | pr-comment | ASK>
+  - `none` *(default when absent — and the close flags the gap)* — the
+    report stays in the repo as files; nothing is posted anywhere.
+  - `tracker-item` — a dispatched cheap-tier publisher posts the report
+    (or its summary + link) as a comment on the batch's tracker item —
+    name the tracker and item convention here (e.g. "the GitHub issue the
+    batch was planned on", a Jira epic key pattern).
+  - `pr-comment` — posted on the batch's landing PR.
+- **Format**: <full-body | summary-with-link> — optional; defaults to
+  `summary-with-link` (totals + delivered list + drift flags, linking the
+  in-repo file) so tracker items stay readable.
 
 _Free-form way-of-work context that doesn't fit a structured field above —
 exceptions, timing constraints, who to loop in, tribal knowledge. Carried
@@ -557,8 +575,10 @@ Detected from codebase analysis. These are descriptive (what IS), not prescripti
 
 ## .agents/testing.md Template
 
-Scout's read by the analyst and implementer before they touch tests.
-**Treat the sections below as themes, not required fields.** Scout fills
+Read by the lead and engineer before they touch tests.
+**Treat the sections below as themes, not required fields** — except
+§ Execution provider, § Coverage idiom, § Knowledge routing, and
+§ Base URL mapping, which the batch pipeline requires. Scout fills
 what the repo actually evidences; unknown or absent topics are flagged
 under § Unconfirmed so agents know to ask the orchestrator
 (test-automation-lead) before improvising. Stay short — link to deeper
@@ -576,6 +596,36 @@ docs rather than restating them.
 - **Test type:** ui | api | mobile | perf | mixed — free text (on a
   mixed repo, note which directories are which)
 - **Why this stack** (only if non-obvious from the repo)
+
+## Execution provider
+- **Provider:** <manual-qa | self> — `manual-qa` when manual-qa personas
+  are in the host agent roster **and** `.agents/manual-qa/` exists;
+  `self` otherwise. Routes batch triage (verified / needs-execution /
+  combined); under `manual-qa` the pipeline never self-executes a case —
+  a missing run makes the unit `needs-execution`.
+
+## Coverage idiom
+- **Idiom:** <framework-native carrier — e.g. Playwright →
+  `test.step()` per case step + header comment; pytest → docstring +
+  markers; JUnit/REST-assured → `@DisplayName` + `@Tag`; k6 → `group()`>
+- The baseline comment grammar (`TC-<id> coverage:` / `TC-<id>
+  excluded:`) is always present regardless of idiom — it is what the
+  gate greps. Grammar + exclusion vocabulary:
+  `<skills root>/test-automation-workflow/references/coverage-contract.md`.
+
+## Knowledge routing
+| What | Where |
+|---|---|
+| Hot handles, waits, quirks (high churn) | `.agents/automation/surface/<feature>.md` — TA working cache |
+| Durable, verified, cross-role system facts | `.agents/knowledge/` via the knowledge-curation skill (admission tests apply) |
+| Process / personal lessons | `.agents/memory/<role>/` via the memory skill |
+| manual-qa's `.agents/manual-qa/**` | READ-ONLY warm start — before writing an app fact to the surface cache, check their knowledge/; if present, reference it, never copy |
+
+## Base URL mapping
+- Authored cases template `{{base_url}}` (manual-qa convention). This
+  project resolves it from `${<VAR_NAME>}` — record the actual var
+  (matches `.agents/profile.md` § Environment & access) so generated
+  code and test-runner dispatches point at the same target.
 
 ## Run commands
 - **Single test, local:** exact command (include env wrappers and
@@ -617,7 +667,7 @@ docs rather than restating them.
 ## Hooks, fixtures, and run-mode policy
 - **Auth fast-path for exploration** — how an agent gets an authenticated
   browser WITHOUT manual login: storage-state file path + the command that
-  refreshes it, or the login helper/fixture to run. Analysts use this to
+  refreshes it, or the login helper/fixture to run. Builders use this to
   fast-reach areas under test; scout captures it once for everyone.
 - **Auto-applied hooks** the framework wires in (authed session,
   base URL, browser context …) — name + where they live
@@ -626,8 +676,8 @@ docs rather than restating them.
 - **Serial vs parallel rule:** when does the project enforce serial
   mode (`test.describe.configure({ mode: 'serial' })` or equivalent)?
   Data dependency is the usual reason — document the rule explicitly so
-  the implementer applies it correctly when AFS test-data inventory
-  signals shared state.
+  the implementer applies it correctly when a case's test data is
+  shared.
 
 ## Locator strategy
 <!-- UI suites only — omit for API / perf / mobile projects -->
@@ -677,7 +727,7 @@ docs rather than restating them.
   trusted: intake, the gate (N runs regardless of size), and the mirror
   sweep are ~fixed per batch, so per-case overhead falls as M grows.
 - **Clustering** — the throughput lever, since units run one at a time and
-  the number of UNITS is the wall clock. A cluster is one analyst session over
+  the number of UNITS is the wall clock. A cluster is one build unit over
   ≤5 same-surface flow variants; note here any surface where clustering is
   known to work well or badly. (There is no concurrency knob: a batch never
   runs two writers against the one working tree.)
@@ -722,8 +772,8 @@ docs rather than restating them.
   any framework-version pitfalls]
 
 ## Unconfirmed
-- [Scout's flagged gaps — the implementer and analyst ask the
-  orchestrator / user before improvising on these]
+- [Scout's flagged gaps — the engineer asks the orchestrator / user
+  before improvising on these]
 ```
 
 ---
@@ -767,7 +817,7 @@ do here? Examples:
   "Design TileMap scenes and biome layouts in Godot scenes. No JS/TS.
    Level assets in assets/levels/. See gdd/world-design.md for biome specs."
 
-- qa-engineer on a GUT project:
+- test-automation-engineer on a GUT project:
   "Tests use GUT framework (Godot addon, not installed yet — see issue #42).
    Run from Godot editor or CLI. Phase 1 DoD checklist is in .agents/testing.md."
 

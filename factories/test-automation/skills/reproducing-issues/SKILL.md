@@ -40,7 +40,8 @@ repeatable — document the environment.
 
 ### 3. Reproduction attempts
 
-- **UI** → drive the browser with the `playwright-testing` or `browser-verify`
+- **UI** → drive the browser with the Playwright MCP (manual-qa's
+  `playwright-testing` skill on a co-install) or the `browser-verify`
   skill: navigate, snapshot for refs, follow the reported steps, screenshot
   the failure, capture console errors and network requests.
 - **API** → reproduce the failing request with `curl` or a small script;
@@ -88,7 +89,8 @@ tickets, skip the confirmation gate, or proceed to RCA when not confirmed.
 
 ## Related skills
 
-- **`bugfix-workflow`** orchestrates reproduce → fix → verify; this is its deep
-  "reproduce" methodology.
-- **`root-cause-analysis`** is the next step once a bug is CONFIRMED.
-- **`playwright-testing`** / **`browser-verify`** for UI reproduction.
+- Fixing is not this factory's job: once a bug is CONFIRMED, file it with the
+  evidence and walk away (`test-automation-implementation`
+  references/defect-filing.md). Dev-team factories carry the fix workflows
+  (`root-cause-analysis`, `bugfix-workflow`).
+- **`browser-verify`** for UI reproduction.

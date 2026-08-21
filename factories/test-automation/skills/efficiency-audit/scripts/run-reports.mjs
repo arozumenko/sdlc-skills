@@ -10,7 +10,7 @@
 //
 // What this module refuses to do is as important as what it does:
 //
-//   - It reports TWO denominators, never one. `automated` cases are the specs
+//   - It reports TWO denominators, never one. `delivered` cases are the specs
 //     that shipped; every case that entered the batch consumed analysis whether
 //     it shipped or not. $/delivered answers "what did a spec cost me";
 //     $/examined answers "what does putting a case through this cost". A single
@@ -39,11 +39,15 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join, basename, dirname } from 'node:path';
 
-// The one outcome that produced a spec. The other five (`already-covered`,
-// `out-of-scope`, `un-automatable`, `blocked`, `not-started`) are legitimate
-// endings that consumed real analysis and delivered no test — which is exactly
-// why they belong in the examined denominator and not the delivered one.
-export const DELIVERED = 'automated';
+// Outcomes that mean "a spec was produced". v2 vocabulary is 'delivered'
+// ('defect-found' = held on a ticketed product defect, still a delivered spec);
+// 'automated'/'merged-sanctioned-red' are the pre-v2 names kept for old
+// receipts. The other endings (`already-covered`, `out-of-scope`,
+// `un-automatable`, `blocked`, `needs-execution`, `infra-stalled`,
+// `not-started`) are legitimate endings that consumed real analysis and
+// delivered no test — which is exactly why they belong in the examined
+// denominator and not the delivered one.
+export const DELIVERED_OUTCOMES = ['delivered', 'defect-found', 'automated', 'merged-sanctioned-red'];
 
 /** Every report.json under a project's automation dir, plus direct paths. */
 export function findReports(target) {
@@ -146,7 +150,7 @@ export function readRunReports(paths) {
     batches: batches.map(({ cases, ...meta }) => ({ ...meta, caseCount: cases.length })),
     outcomes,
     casesEntered: latest.size,
-    delivered: outcomes[DELIVERED] ?? 0,
+    delivered: DELIVERED_OUTCOMES.reduce((n, o) => n + (outcomes[o] ?? 0), 0),
     reentered,
     branches: [...branches].sort(),
     window,
@@ -157,12 +161,11 @@ export function readRunReports(paths) {
 /**
  * How much of a rollup's spend can be tied to these batches by branch.
  *
- * This is a floor, deliberately, and the reason is structural: analysts are
- * forbidden from touching git (they write their AFS and leave it), so their
- * units sit on whatever branch the tree was on — usually the base. The
- * orchestrator likewise never leaves its own branch. So branch matching sees
- * implementers, reviewers and the gate, and is blind to the entire analysis
- * phase, which is a large share of a batch's cost.
+ * This is a floor, deliberately, and the reason is structural: the read-only
+ * dispatches — triage, review — never touch git, so their units sit on
+ * whatever branch the tree was on — usually the base. The orchestrator
+ * likewise never leaves its own branch. So branch matching sees builders and
+ * the gate, and is blind to the read-only share of a batch's cost.
  *
  * That makes it useless as an attribution mechanism and valuable as a DILUTION
  * check: if the units that demonstrably touched this batch's branches account
@@ -229,11 +232,11 @@ export function summarizeDelivery(delivery, costUsd, { rollupDays = [], coverage
     }
   }
   if (delivery.delivered === 0 && delivery.casesEntered > 0) {
-    warnings.push('no case reached `automated` — there is a cost per case examined, but nothing was delivered to divide by');
+    warnings.push('no case reached `delivered` — there is a cost per case examined, but nothing was delivered to divide by');
   }
   // Zero is the one coverage figure that needs no threshold to interpret. Some
-  // of a batch's cost is unmatchable by construction (analysts and the
-  // orchestrator never leave their branch), so a small share proves nothing —
+  // of a batch's cost is unmatchable by construction (the read-only dispatches
+  // and the orchestrator never leave their branch), so a small share proves nothing —
   // but not ONE priced unit sitting on a branch these reports name means the
   // join found no evidence at all that this spend paid for these cases. The
   // ratios above are then two unrelated numbers divided by each other.
@@ -258,7 +261,7 @@ export function renderDeliveryMarkdown(d) {
     + (d.reentered ? `  ·  ${d.reentered} re-entry(ies) folded (a case counts once, at its latest outcome)` : ''));
   const parts = Object.entries(d.outcomes).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`);
   if (parts.length) out.push(`- Outcomes: ${parts.join('  ·  ')}`);
-  out.push(`- **Cost per spec delivered: ${usd(d.perDelivered)}** (${d.delivered} automated)`);
+  out.push(`- **Cost per spec delivered: ${usd(d.perDelivered)}** (${d.delivered} delivered)`);
   out.push(`- Cost per case examined: ${usd(d.perExamined)} (${d.casesEntered} entered)`);
   out.push('');
   out.push('Both are the same dollars over different denominators, and they answer different questions:'
@@ -268,7 +271,7 @@ export function renderDeliveryMarkdown(d) {
     out.push('');
     out.push(`- Spend on branches these batches name: ${usd(coverage.matchedUsd)} of ${usd(coverage.totalUsd)}`
       + ` (${Math.round(coverage.share * 100)}%), ${coverage.matchedUnits} unit(s).`
-      + ' A floor: analysts never touch git, so their cost cannot be matched this way. Read it as a dilution check —'
+      + ' A floor: the read-only dispatches — triage, review — never touch git, so their cost cannot be matched this way. Read it as a dilution check —'
       + ' a low share means the window mostly paid for other work and the per-case figures above are diluted.');
   } else if (coverage && !coverage.comparable) {
     const why = coverage.branchesKnown === 0

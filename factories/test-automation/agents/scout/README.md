@@ -37,7 +37,9 @@ For **GitHub Copilot**, agents must be flat files — use the CLI with `--target
 
 ## Skills this agent uses
 
-`seeding-a-project`, `memory` — both in this repo.
+`seeding-automation-project`, `memory` — both in this repo.
+
+On demand: `automation-scoping`, `efficiency-audit`, `tokenomics`, `session-retrospective` — installed with the agent, loaded at the moment they apply.
 
 ## Contents
 

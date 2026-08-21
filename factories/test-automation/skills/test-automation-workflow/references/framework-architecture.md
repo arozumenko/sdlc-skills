@@ -48,7 +48,7 @@ New fixture infrastructure, a new abstraction-layer base (page-object base class
 
 ### 3. Mid-flow architectural escalation
 
-Analyst or implementer returns `needs-escalation` — an AFS or partial implementation surfaced a gap the existing conventions don't cover. Examples: a new shared auth-state pattern, a cross-cutting page-object refactor that can't stay local, a new test type that needs a new fixture primitive.
+A build dispatch returns `needs-escalation` — a case or partial implementation surfaced a gap the existing conventions don't cover. Examples: a new shared auth-state pattern, a cross-cutting page-object refactor that can't stay local, a new test type that needs a new fixture primitive.
 
 Pause the case. **Plan the resolution; update `.agents/testing.md` with the new convention; dispatch the implementer to execute.** Do not write the fixture / page-object / config change yourself — that's still the implementer's hands on the keyboard. Once the implementer ships and the change is merged, resume the paused case from where it stopped so the next case doesn't re-escalate for the same reason.
 

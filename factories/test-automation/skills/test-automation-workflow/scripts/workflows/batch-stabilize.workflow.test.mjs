@@ -91,3 +91,21 @@ test('classification is the lead\'s: this runs only after it', () => {
   assert.match(text, /already classified this as a TEST-CODE bug or a flake, so do not re-argue that/);
   assert.match(text, /A product defect goes to the tracker/);
 });
+
+// The investigation discipline is the reproducing-issues skill (kept,
+// on-demand) — the test-case-analysis skill is gone with the analyst slot.
+test('the diagnostician reproduces per reproducing-issues, on demand', () => {
+  assert.match(text, /reproducing-issues/);
+  assert.doesNotMatch(text, /test-case-analysis|qa-engineer|\bAFS\b|test-specs/);
+});
+
+// Same stall contract as the other scripts: a throw out of agent() becomes
+// the null every call site already handles, logged as an ENVIRONMENT fact.
+test('every dispatch is guarded: a stall becomes the null its site already handles', () => {
+  assert.match(text, /const guarded = async \(what, fn\)/);
+  assert.match(text, /infra-stalled \(environment — fix the provider before retrying\)/);
+  for (const site of ["guarded('diagnostician'", 'guarded(`fixer round', 'guarded(`re-gate round', 'guarded(`re-diagnose round']) {
+    assert.ok(text.includes(site), `unguarded dispatch: ${site}`);
+  }
+  assert.doesNotMatch(text, /^ *(?:const \w+|gate) = await agent\(/m);
+});

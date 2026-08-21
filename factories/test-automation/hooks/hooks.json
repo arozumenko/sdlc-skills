@@ -1,7 +1,7 @@
 {
   "SubagentStop": [
     {
-      "matcher": "test-automation-engineer|qa-engineer|test-automation-lead",
+      "matcher": "test-automation-engineer|test-automation-lead|test-runner",
       "hooks": [
         {
           "type": "command",

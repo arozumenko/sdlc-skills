@@ -9,8 +9,8 @@ an existing reporter mid-PR); this file carries the mechanics.
 
 | Tier | What to do | Authority |
 |---|---|---|
-| **In-test logging** — `test.step()` annotations, `console.log` for one-off noise, richer POM error messages | Add freely — local to the spec/POM, no config touched | Implementer's call |
-| **Additive reporter** — wire a SECONDARY reporter alongside the existing one (Playwright `reporter: [['html'], ['junit'], ['list']]`, pytest `-v` plugin, Cypress `mocha-multi-reporters`, custom log file utility) | Implementer adds in the PR; **PR description flags the addition explicitly** so the orchestrator reviews specifically for: existing reporter output unchanged, CI/TMS consumers still work, no significant runtime/disk cost | Implementer adds, the orchestrator reviews — never silent |
+| **In-test logging** — `test.step()` annotations, `console.log` for one-off noise, richer POM error messages | Add freely — local to the spec/POM, no config touched | Engineer's call |
+| **Additive reporter** — wire a SECONDARY reporter alongside the existing one (Playwright `reporter: [['html'], ['junit'], ['list']]`, pytest `-v` plugin, Cypress `mocha-multi-reporters`, custom log file utility) | Engineer adds in the PR; **PR description flags the addition explicitly** so the orchestrator reviews specifically for: existing reporter output unchanged, CI/TMS consumers still work, no significant runtime/disk cost | Engineer adds, the orchestrator reviews — never silent |
 | **Reporter replacement / removal** — swap `['junit']` for `['allure']`, change output schema, drop an existing reporter | Return `needs-escalation` to the orchestrator. Framework-scale decision; the existing reporter is almost certainly feeding TMS back-write or CI dashboards | the orchestrator only |
 
 **Hard rule: never remove or replace an existing reporter mid-PR.** The reporter contract is downstream-facing. Additive is reversible (one line removed and you're back to baseline); replacement breaks integrations silently. If the existing reporter is "wrong format" or "noisy," that's a `needs-escalation` escalation.
@@ -26,7 +26,7 @@ reporter: [
 ],
 ```
 
-The existing reporter's output file (`junit.xml` above) is unchanged, so anything parsing it (TMS adapter, CI pipeline, dashboard) keeps working. The stdout `['list']` gives the implementer richer console output during debug runs.
+The existing reporter's output file (`junit.xml` above) is unchanged, so anything parsing it (TMS adapter, CI pipeline, dashboard) keeps working. The stdout `['list']` gives the engineer richer console output during debug runs.
 
 #### TMS / result-reporting reporters — gate them
 

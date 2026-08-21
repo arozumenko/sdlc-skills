@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   findReports, readRunReports, branchCoverage, summarizeDelivery,
-  renderDeliveryMarkdown, DELIVERED,
+  renderDeliveryMarkdown, DELIVERED_OUTCOMES,
 } from './run-reports.mjs';
 
 /** Write one batch report and stamp its mtime (the only clock these have). */
@@ -56,21 +56,24 @@ test('findReports: campaign reports nested in sub-folders are found (field bug â
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('outcomes are counted from the rows, delivered = automated only', () => {
+test('outcomes are counted from the rows, delivered = the delivered set (v2 + legacy names)', () => {
   const root = tmp();
   try {
     batch(root, 'w1', [
-      { id: 'TC-1', outcome: 'automated', branch: 'tests/TC-1' },
-      { id: 'TC-2', outcome: 'automated', branch: 'tests/TC-2' },
+      { id: 'TC-1', outcome: 'delivered', branch: 'tests/TC-1' },
+      { id: 'TC-2', outcome: 'automated', branch: 'tests/TC-2' }, // legacy name, old receipt
       { id: 'TC-3', outcome: 'already-covered' },
       { id: 'TC-4', outcome: 'out-of-scope' },
       { id: 'TC-5', outcome: 'blocked' },
     ]);
     const d = readRunReports(findReports(root));
-    assert.equal(d.delivered, 2);
+    assert.equal(d.delivered, 2, 'v2 `delivered` and legacy `automated` both count');
     assert.equal(d.casesEntered, 5);
-    assert.equal(d.outcomes[DELIVERED], 2);
+    assert.equal(d.outcomes.delivered, 1);
+    assert.equal(d.outcomes.automated, 1);
     assert.equal(d.outcomes['already-covered'], 1);
+    assert.ok(['delivered', 'defect-found', 'automated', 'merged-sanctioned-red']
+      .every((o) => DELIVERED_OUTCOMES.includes(o)), 'legacy old-receipt names stay tolerated');
     // Branches come from both the rows and the integration branch, so the
     // coverage check can see the gate's work as well as each build's.
     assert.ok(d.branches.includes('tests/TC-1'));

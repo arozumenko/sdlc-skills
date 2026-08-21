@@ -661,6 +661,39 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
   return true;
 }
 
+// After any install, compare OTHER factories' installed hook scripts byte-for-
+// byte with THIS package's current copies. Installing factory A never touches
+// factory B's hooks — correct ownership-wise, but it silently strands B on
+// stale hooks when the package has since fixed them (field case: manual-qa's
+// benchmark hooks without the roster guard kept firing in test-automation
+// sessions long after the guard shipped). We only SIGNAL — a difference may
+// also be a deliberate local patch, so nothing is overwritten here.
+export function checkSiblingBundleHooks(targets, cwd = CWD, pkgRoot = PKG_ROOT) {
+  const stale = new Map(); // bundleId -> [script names]
+  for (const t of targets) {
+    const hooksRoot = join(cwd, t.dir, "hooks");
+    if (!existsSync(hooksRoot)) continue;
+    let entries;
+    try { entries = readdirSync(hooksRoot, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const pkgScripts = join(pkgRoot, "factories", e.name, "hooks", "scripts");
+      if (!existsSync(pkgScripts)) continue; // not a factory-owned dir (core hooks etc.)
+      for (const f of readdirSync(pkgScripts)) {
+        const installed = join(hooksRoot, e.name, f);
+        if (!existsSync(installed)) continue; // partial install — its own choice
+        try {
+          if (readFileSync(installed, "utf8") !== readFileSync(join(pkgScripts, f), "utf8")) {
+            if (!stale.has(e.name)) stale.set(e.name, new Set());
+            stale.get(e.name).add(f);
+          }
+        } catch { /* unreadable — skip */ }
+      }
+    }
+  }
+  return new Map([...stale].map(([k, v]) => [k, [...v].sort()]));
+}
+
 // ---------------------------------------------------------------------------
 // Core hooks — the repo-root hooks/ scripts that inject per-role memory and the
 // lean .agents/*.md project context at session/subagent start (these replaced
@@ -679,13 +712,139 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
 const CORE_HOOK_FILES = ["run-hook.cmd", "session-start", "agent-start", "lib.sh"];
 const CORE_HOOK_EXE = ["run-hook.cmd", "session-start", "agent-start"];
 
+// ---- per-role hook defaults (config-defaults.sh) ---------------------------
+// The shared hooks fire for EVERY dispatched agent in the repo. The generated
+// defaults file is the roster that decides who receives context: one pair of
+// lines per agent actually installed here. lib.sh treats the file's PRESENCE
+// as roster mode — a role with no per-role variable then gets NOTHING
+// (default-deny for host builtins, anonymous workflow agents, and whatever
+// else wanders in). Regenerated on every install from the installed agent
+// dirs (not this run's selection — an incremental install must not silently
+// mute the previously installed bundle's agents). User overrides live in
+// config.sh, sourced FIRST, so `: "${VAR:=…}"` lines here never beat them.
+
+// Installed agents from an agents dir, format-agnostic: directories
+// (Claude/Cursor/Windsurf → AGENT.md inside), flat `<name>.agent.md`
+// (Copilot), `<name>.toml` (Codex), loose `<name>.md`. Returns
+// [{name, file}], file = the definition to read frontmatter from (null when
+// a dir has no AGENT.md).
+export function readInstalledAgents(agentsDir) {
+  if (!existsSync(agentsDir)) return [];
+  const byName = new Map();
+  for (const e of readdirSync(agentsDir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
+    if (e.isDirectory()) {
+      const f = join(agentsDir, e.name, "AGENT.md");
+      byName.set(e.name, existsSync(f) ? f : null);
+    } else if (e.name.endsWith(".agent.md")) {
+      byName.set(e.name.slice(0, -".agent.md".length), join(agentsDir, e.name));
+    } else if (e.name.endsWith(".toml")) {
+      byName.set(e.name.slice(0, -".toml".length), join(agentsDir, e.name));
+    } else if (e.name.endsWith(".md")) {
+      byName.set(e.name.slice(0, -".md".length), join(agentsDir, e.name));
+    }
+  }
+  return [...byName.keys()].sort().map((name) => ({ name, file: byName.get(name) }));
+}
+
+export function listInstalledAgentNames(agentsDir) {
+  return readInstalledAgents(agentsDir).map((a) => a.name);
+}
+
+// Optional per-role context declaration in the agent definition itself —
+// agents are self-describing here, so "what does this role need injected"
+// lives in AGENT.md frontmatter, not in a central table:
+//   context-docs: manual-qa/app_profile     (space-separated; `none` = nothing)
+//   context-memory: snapshot.md MEMORY.md
+// Values feed the generated config-defaults.sh. Subpaths are fine — the hook
+// resolves each name against .agents/. The Copilot flatten preserves
+// frontmatter, and the Codex TOML transform re-emits the keys as comments, so
+// the installed artifact carries the declaration on every host.
+export function agentContextConfig(text, { toml = false } = {}) {
+  const scope = toml ? text : (text.match(/^---\n([\s\S]*?)\n---/) || [, ""])[1];
+  const grab = (key) => {
+    const re = toml
+      ? new RegExp(`^#\\s*${key}:\\s*(.+)$`, "m")
+      : new RegExp(`^${key}:\\s*(.+)$`, "m");
+    const m = scope.match(re);
+    if (!m) return null;
+    const v = m[1].trim().replace(/^["']|["']$/g, "");
+    return v === "none" ? "__none__" : v;
+  };
+  return { docs: grab("context-docs"), memory: grab("context-memory") };
+}
+
+// The default lists come from lib.sh (single source of truth) — parsed, not
+// duplicated, so a list change there flows into the next regeneration.
+export function hookDefaultLists(libSource) {
+  const grab = (name, fallback) =>
+    (libSource.match(new RegExp(`^${name}="([^"]*)"`, "m")) || [, fallback])[1];
+  return {
+    sharedDocs: grab("SDLC_SHARED_DOCS_DEFAULT", "testing profile workflow conventions role-overrides team-comms"),
+    memoryFiles: grab("SDLC_ROLE_MEMORY_FILES_DEFAULT", "SOUL.md RULES.md snapshot.md MEMORY.md project_briefing.md"),
+  };
+}
+
+const roleVarSuffix = (name) => name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+
+// A package update can change a role's shipped default (new frontmatter, new
+// list in lib.sh). That must not slip by silently — but it also must not be
+// treated as an error: config.sh overrides win regardless. So regeneration
+// DIFFS old vs new generated content and reports which roles' defaults moved.
+// Returns e.g. ["test-runner (docs)", "scout (memory)"].
+export function diffRoleDefaults(oldContent, newContent) {
+  const parse = (text) => {
+    const map = new Map();
+    const re = /^: "\$\{SDLC_(SHARED_DOCS|ROLE_MEMORY_FILES)_([A-Z0-9_]+):=(.*)\}"$/gm;
+    for (let m; (m = re.exec(text)); ) map.set(`${m[1]}_${m[2]}`, m[3]);
+    return map;
+  };
+  const before = parse(oldContent);
+  const after = parse(newContent);
+  const changed = [];
+  for (const [key, val] of after) {
+    if (before.has(key) && before.get(key) !== val) {
+      const [kind, suffix] = key.startsWith("SHARED_DOCS_")
+        ? ["docs", key.slice("SHARED_DOCS_".length)]
+        : ["memory", key.slice("ROLE_MEMORY_FILES_".length)];
+      changed.push(`${suffix.toLowerCase().replace(/_/g, "-")} (${kind})`);
+    }
+  }
+  return changed;
+}
+
+// `agents`: names, or {name, docs?, memory?} where docs/memory come from the
+// agent's own context-docs/context-memory frontmatter. A declared value is
+// written VERBATIM (that role opted out of the globals — a project-wide
+// SDLC_SHARED_DOCS should not drag e.g. manual-qa agents back onto docs their
+// author excluded); an undeclared one gets the global-passthrough form.
+export function buildRoleDefaultsFile(agents, lists) {
+  const lines = [
+    "# sdlc-skills per-role hook defaults — GENERATED, do not edit (regenerated on",
+    "# every install/update from the agents installed in this repo).",
+    "# Presence of this file = roster mode: a role with no per-role variable gets",
+    "# NOTHING from the shared hooks. Grant or tune roles in config.sh (sourced",
+    '# first, so its lines win), e.g.: : "${SDLC_SHARED_DOCS_MY_AGENT:=profile testing}"',
+    "",
+  ];
+  for (const a of agents) {
+    const { name, docs = null, memory = null } = typeof a === "string" ? { name: a } : a;
+    const suffix = roleVarSuffix(name);
+    lines.push(
+      `: "\${SDLC_SHARED_DOCS_${suffix}:=${docs ?? `\${SDLC_SHARED_DOCS:-${lists.sharedDocs}}`}}"`,
+      `: "\${SDLC_ROLE_MEMORY_FILES_${suffix}:=${memory ?? `\${SDLC_ROLE_MEMORY_FILES:-${lists.memoryFiles}}`}}"`,
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
 // Copy the four hook files into destDir together (they reference each other by
 // SCRIPT_DIR-relative path, so they must live side by side) and mark the
 // executables +x. Also seed config.sh from config.sh.example — but ONCE: the
 // scripts are always refreshed (force), whereas config.sh holds the project's
 // tunables (SDLC_SHARED_DOCS etc.) and must survive re-installs, so we copy it
 // only when it doesn't already exist. lib.sh sources it if present.
-function copyHookScripts(destDir) {
+function copyHookScripts(destDir, agentsDir = null) {
   const srcDir = join(PKG_ROOT, "hooks");
   if (!existsSync(srcDir)) return false;
   mkdirSync(destDir, { recursive: true });
@@ -703,6 +862,33 @@ function copyHookScripts(destDir) {
   const cfgExample = join(srcDir, "config.sh.example");
   const cfgDest = join(destDir, "config.sh");
   if (existsSync(cfgExample) && !existsSync(cfgDest)) cpSync(cfgExample, cfgDest);
+  // The generated per-role roster — always refreshed (unlike config.sh): it is
+  // machine state derived from the installed agents, not the user's tunables.
+  // No agents dir (or empty) → no file → lib.sh stays in legacy allow-all mode
+  // rather than muting every role in a repo we can't see agents for.
+  if (agentsDir) {
+    const installed = readInstalledAgents(agentsDir);
+    const defsDest = join(destDir, "config-defaults.sh");
+    if (installed.length) {
+      const lists = hookDefaultLists(readFileSync(join(srcDir, "lib.sh"), "utf8"));
+      const agents = installed.map(({ name, file }) => {
+        if (!file) return { name };
+        try {
+          const cfg = agentContextConfig(readFileSync(file, "utf8"), { toml: file.endsWith(".toml") });
+          return { name, docs: cfg.docs, memory: cfg.memory };
+        } catch { return { name }; }
+      });
+      const content = buildRoleDefaultsFile(agents, lists);
+      if (existsSync(defsDest)) {
+        const moved = diffRoleDefaults(readFileSync(defsDest, "utf8"), content);
+        if (moved.length)
+          console.log(`      ℹ hook context defaults changed: ${moved.join(", ")} — config.sh overrides still win`);
+      }
+      writeFileSync(defsDest, content);
+    } else if (existsSync(defsDest)) {
+      rmSync(defsDest); // agents gone → drop roster mode instead of deny-all
+    }
+  }
   return true;
 }
 
@@ -801,7 +987,7 @@ function installCoreHooks(targets) {
   for (const t of targets) {
     if (t.id === "claude") {
       const rel = ".claude/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       const cmd = `"\${CLAUDE_PROJECT_DIR}/${rel}/run-hook.cmd"`;
       const spec = {
         SessionStart: [
@@ -821,7 +1007,7 @@ function installCoreHooks(targets) {
         console.log(`      ✓ hooks Claude Code (.claude/settings.json)`);
     } else if (t.id === "cursor") {
       const rel = ".cursor/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Cursor's subagentStart is permission-only (no context injection) — wire
       // sessionStart only; per-role memory falls back to the `memory` skill.
       // For a CLI (non-plugin) project install CURSOR_PLUGIN_ROOT isn't set, so
@@ -833,7 +1019,7 @@ function installCoreHooks(targets) {
         console.log(`      ✓ hooks Cursor (.cursor/hooks.json)`);
     } else if (t.id === "copilot") {
       const rel = ".github/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Workspace event casing is event-specific in VS Code (verified live):
       //   - sessionStart fires as camelCase (both CLI and VS Code) → camelCase entry.
       //   - SubagentStart fires as PascalCase in VS Code, but camelCase in the CLI →
@@ -877,7 +1063,7 @@ function installCoreHooks(targets) {
       console.log(`      ℹ .github/instructions/*.instructions.md is generated per session — add to .gitignore yourself if you don't want it tracked`);
     } else if (t.id === "codex") {
       const rel = ".codex/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Codex uses Claude's nested SessionStart/SubagentStart shape. For a CLI
       // (non-plugin) project install PLUGIN_ROOT isn't set, so the command sets
       // CODEX_HOOK=1 to select the hookSpecificOutput emit shape. (Unix sh form;
@@ -1724,6 +1910,13 @@ function transformAgentForCodex(agentText, soulText, name) {
 
   const lines = [`name = ${tomlBasicString(name)}`, `description = ${tomlBasicString(description)}`];
   if (model) lines.push(`model = ${tomlBasicString(model)}`);
+  // Re-emit the agent's context declaration as comments — frontmatter dies in
+  // the TOML transform, but the hook-roster generator reads the INSTALLED
+  // file, so the declaration must ride along (agentContextConfig, toml mode).
+  for (const key of ["context-docs", "context-memory"]) {
+    const m = frontmatter.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
+    if (m) lines.push(`# ${key}: ${m[1].trim().replace(/^["']|["']$/g, "")}`);
+  }
   lines.push("", `developer_instructions = ${tomlMultiline(body.trim())}`);
 
   // Enable only the `skills:` list — the standing-context set. On-demand
@@ -2643,6 +2836,14 @@ async function main() {
     console.log(`\n  → hooks (memory + project-context injection)`);
     installCoreHooks(targets);
   }
+
+  // Other factories' hooks are never touched by this install — flag the ones
+  // that now lag behind the package so their fixes don't strand silently.
+  try {
+    for (const [id, files] of checkSiblingBundleHooks(targets)) {
+      console.log(`  ℹ factory '${id}': installed hooks differ from this package's version (${files.join(", ")}) — a stale fix or a local patch; refresh with: init --factory ${id} --update`);
+    }
+  } catch { /* advisory only — never blocks an install */ }
 
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
   if (factory && (Object.keys(factory.briefings).length || (factory._resolvedBriefings && Object.keys(factory._resolvedBriefings).length))) {

@@ -49,10 +49,9 @@ the top telling each runtime which section applies.
 
 | Role | `subagent_type` | Hand off… |
 |------|-----------------|-----------|
-<!-- one row per .claude/agents/ subdirectory, from AGENT.md name + description -->
+<!-- one row per .claude/agents/ subdirectory, from AGENT.md name + description — co-installed factories' personas (e.g. manual-qa's test-runner) get rows too -->
 | Test Automation Lead (orchestrator) | `test-automation-lead` | Pipeline routing, dispatch, merge gate |
-| QA Engineer | `qa-engineer` | Test-case analysis, review |
-| Test Automation Engineer | `test-automation-engineer` | Automation implementation |
+| Test Automation Engineer | `test-automation-engineer` | Automation implementation, review slot |
 | Scout | `scout` | Codebase onboarding, re-discovery |
 
 Use the `subagent_type` value exactly — it must match a directory name in
@@ -69,14 +68,14 @@ the `prompt`.
 **Single subagent:**
 
     Agent(
-      subagent_type="qa-engineer",
-      prompt="Analyst slot — analyse CASE-101 per the test-case-analysis skill. Context: <...>. Return the AFS path + status."
+      subagent_type="test-automation-engineer",
+      prompt="Build slot — automate TC-101 from tasks/auth/TC-101_login.md per the test-automation-workflow skill. Context: <...>. Return the IMPL result."
     )
 
 **Parallel subagents — launch in one assistant turn, multiple tool calls:**
 
-    Agent(subagent_type="scout",       prompt="Map the auth module. Report files, entry points, tech-debt, <200 words.")
-    Agent(subagent_type="qa-engineer",  prompt="Analyst slot — analyse CASE-102 per test-case-analysis. Return the AFS path + status.")
+    Agent(subagent_type="scout",                     prompt="Map the auth module. Report files, entry points, tech-debt, <200 words.")
+    Agent(subagent_type="test-automation-engineer",  prompt="Scoping pass — assess TC-102 per the automation-scoping skill. Return the verdict.")
 
 Both run concurrently; both results arrive on your next turn.
 
@@ -84,7 +83,7 @@ Both run concurrently; both results arrive on your next turn.
 
 | Situation | Hand off? |
 |---|---|
-| Need a result to continue (analyst writes the AFS → implementer automates → reviewer verdicts) | **Yes — subagent** |
+| Need a result to continue (engineer builds the spec → reviewer verdicts → gate) | **Yes — subagent** |
 | Parallel independent work | **Yes — multiple subagents in one turn** |
 | Quick research / investigation / planning by another persona | **Yes** |
 | Small task clearly inside your own role | **No — just do it** |
@@ -141,10 +140,9 @@ steps in the same reply.
 
 | Role | Copilot agent name | Hand off… |
 |------|--------------------|-----------|
-<!-- one row per .github/agents/ entry, from the agent file's frontmatter name + description -->
+<!-- one row per .github/agents/ entry, from the agent file's frontmatter name + description — co-installed factories' personas (e.g. manual-qa's test-runner) get rows too -->
 | Test Automation Lead (orchestrator) | `test-automation-lead` | Pipeline routing, dispatch, merge gate |
-| QA Engineer | `qa-engineer` | Test-case analysis, review |
-| Test Automation Engineer | `test-automation-engineer` | Automation implementation |
+| Test Automation Engineer | `test-automation-engineer` | Automation implementation, review slot |
 | Scout | `scout` | Codebase onboarding, re-discovery |
 
 Use the agent name exactly as it appears in the file's YAML frontmatter.
@@ -162,17 +160,17 @@ recognizes the pattern and dispatches under the hood.
    subagents must declare the capability in its YAML frontmatter:
 
        tools: ['agent', ...existing tools...]
-       agents: ['test-automation-lead', 'qa-engineer', 'test-automation-engineer', 'scout']
+       agents: ['test-automation-lead', 'test-automation-engineer', 'scout']
 
    The `agents:` list is a whitelist of names this agent is allowed to
    spawn. Scout wires this in at seed time.
 
 2. **Invocation is prose.** The runtime pattern-matches on your reply.
    Write it as an instruction, not as a function call.
-   - Correct: "Use the qa-engineer agent to analyse CASE-101 per the test-case-analysis skill and return the AFS path + status."
+   - Correct: "Use the test-automation-engineer agent to automate TC-101 from tasks/auth/TC-101_login.md per the test-automation-workflow skill and return the IMPL result."
    - Correct: "Have the Scout agent map the auth module and report in under 200 words."
    - Wrong: "Delegate the research step." (too vague — won't trigger)
-   - Wrong: `Agent(subagent_type="qa-engineer", prompt="…")` (Claude-only syntax — Copilot prints it as plain text)
+   - Wrong: `Agent(subagent_type="test-automation-engineer", prompt="…")` (Claude-only syntax — Copilot prints it as plain text)
 
 3. **`handoffs:` is user-driven, not programmatic.** Copilot's
    `handoffs:` frontmatter renders as buttons the user clicks to continue
@@ -182,18 +180,18 @@ recognizes the pattern and dispatches under the hood.
 
 **Single subagent (what you actually write in your reply):**
 
-> Use the `qa-engineer` agent to analyse CASE-101 per the
-> test-case-analysis skill. Context: <paste relevant facts>. Return
-> the AFS path + status.
+> Use the `test-automation-engineer` agent to automate TC-101 from
+> tasks/auth/TC-101_login.md per the test-automation-workflow skill.
+> Context: <paste relevant facts>. Branch: tests/TC-101-login. Return
+> the IMPL result.
 
 **Parallel subagents — list them in the same reply:**
 
 > Use the `scout` agent to map the auth module and report files, entry
 > points, and tech-debt in under 200 words.
 >
-> Use the `test-automation-engineer` agent to implement the AFS at
-> test-specs/auth/l1_login_CASE-101.md per the test-automation-workflow
-> skill. Branch: tests/CASE-101-login. Return the Run Report.
+> Use the `test-automation-engineer` agent to assess TC-102 per the
+> automation-scoping skill and return the verdict.
 
 Both trigger the Copilot `agent` tool and run to completion; both
 results land back in your next turn.
@@ -202,7 +200,7 @@ results land back in your next turn.
 
 | Situation | Hand off? |
 |---|---|
-| Need a result to continue (analyst writes the AFS → implementer automates → reviewer verdicts) | **Yes — subagent** |
+| Need a result to continue (engineer builds the spec → reviewer verdicts → gate) | **Yes — subagent** |
 | Parallel independent work | **Yes — list multiple in the same reply** |
 | Quick research / investigation / planning by another persona | **Yes** |
 | Small task clearly inside your own role | **No — just do it** |

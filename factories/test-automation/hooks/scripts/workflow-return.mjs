@@ -2,8 +2,8 @@
 // workflow-return.mjs — persist a workflow subagent's structured result.
 //
 // WHY. A dispatched agent's structured return exists in exactly one place: the
-// value it hands back. Its *payload* survives it — an analyst's AFS is on disk,
-// an implementer's commits are in git — but the record of what it concluded
+// value it hands back. Its *payload* survives it — a builder's spec file is on
+// disk, its commits are in git — but the record of what it concluded
 // dies with it. Field lesson, 2026-07-30: a foundation implementer built its
 // branch, committed, then stalled. The branch was complete and the workflow
 // knew nothing; a human had to notice and dispatch a rescue.
@@ -153,7 +153,13 @@ export function run(payload, { projectDir = process.cwd(), now = null } = {}) {
 
   const { runId, agentId } = idsFromTranscript(tp);
   const meta = sidecar(tp);
-  const dir = join(projectDir, '.agents', 'automation', '_returns', runId);
+  // Returns are working state written MID-RUN — on the telemetry side when it
+  // exists, so a branch switch (gate checkout) never stashes or loses them.
+  // Plain-dir fallback keeps repos without the telemetry area working as before.
+  const telRoot = join(projectDir, '.agents', 'telemetry');
+  const dir = existsSync(telRoot)
+    ? join(telRoot, 'automation', 'returns', runId)
+    : join(projectDir, '.agents', 'automation', '_returns', runId);
   const file = join(dir, `${agentId}.json`);
 
   const body = {

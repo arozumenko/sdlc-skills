@@ -1,6 +1,6 @@
 # test-automation-workflow
 
-> End-to-end test automation workflow — Explore, Specify, Implement, Review — over a pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
+> Batch pipeline from ready-made cases to merged tests — routed by execution evidence (manual-qa-verified / needs-execution / combined), built, statically reviewed against the coverage contract, N×-green gated — over a pluggable TMS (Zephyr/TestRail/Xray/Azure/markdown).
 
 A skill for the [sdlc-skills](../../README.md) toolkit. Full instructions live in [`SKILL.md`](SKILL.md); this file is just how to install it.
 

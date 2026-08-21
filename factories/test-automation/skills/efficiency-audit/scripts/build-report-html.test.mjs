@@ -26,7 +26,7 @@ const snap = (over = {}) => ({
 
 test('roles fold into pipeline slots, costliest first', () => {
   const slots = bySlot(snap().rollup.byRole);
-  assert.equal(slots[0].slot, 'implementer');
+  assert.equal(slots[0].slot, 'builder / reviewer');
   assert.equal(slots[0].costUsd, 60);
   assert.equal(slots[1].slot, SLOT_OF['qa-engineer']);
 });
@@ -149,7 +149,7 @@ test('the coverage floor is shown as a dilution check, not as attribution', () =
   const html = renderHtml(snap({ delivery }));
   assert.match(html, /30%/);
   assert.match(html, /floor/i);
-  assert.match(html, /analysts never touch git/i);
+  assert.match(html, /read-only dispatches \(triage, review\) never touch git/i);
 });
 
 test('delivery warnings surface on the page', () => {

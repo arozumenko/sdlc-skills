@@ -213,7 +213,7 @@ the start. Whichever mode, the metered total still matches native ccusage exactl
   sub-agent's role is the `agentType` in its `.meta.json` sidecar. Role-less
   sessions (ad-hoc interactive use) roll up as `unattributed` — expected, not an
   error. Override a role with `--tag <sessionId=role>`.
-- **No team/bundle mapping.** The skill deliberately does *not* map roles to
+- **No team/factory mapping.** The skill deliberately does *not* map roles to
   predefined teams — that would assume a fixed roster and break the moment a
   different agent set runs. It reports roles as they appear; *which* sessions to
   include is a scoping decision made with the user at invocation time.
@@ -273,10 +273,13 @@ reliable (worked recipe, field-verified 2026-08-05):
 
 1. The slot is named in the unit's **dispatch prompt** — the FIRST user
    message of its transcript. The batch workflows open every dispatch with a
-   marker: match `\b(Analyst|Combined|Reviewer|Implementer|Triage|Merge-back|Gate) slot`.
+   marker: match `\b(Build|Reviewer|Implementer|Triage|Defect-filing) slot`,
+   plus `Hardening gate` and `Merge unit` openers; test-runner dispatches
+   (execution provider manual-qa) open with `Execute the test case at`.
+   Pre-v2 transcripts also carry `Analyst slot` / `Combined slot`.
 2. **Scope the match to that first message only.** Skill documents loaded
-   later in the same transcript contain phrases like "§ Analyst slot contract"
-   — a whole-file match misclassifies implementers as analysts.
+   later in the same transcript contain phrases like "§ Reviewer slot
+   contract" — a whole-file match misclassifies builders as reviewers.
 3. Case attribution comes free from each unit's `gitBranch` in the `--json`
    ledger (`tests/<CASE>-…` / `tests/batch-<slug>`); dispatch prompts also
    carry the case ids.

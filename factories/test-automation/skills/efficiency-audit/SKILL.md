@@ -69,7 +69,21 @@ sessions — which is the `tokenomics` skill's ledger.
 ## Step 0 — clarify the scope first
 
 The hard part of an audit is *which sessions to count*, and that's a
-conversation, not an assumption. Before running, pin down with the user:
+conversation, not an assumption. **Offer options, don't interrogate**: when
+the ask is open-ended ("audit this", "what did we spend?"), put ONE question
+to the user with the standard audits as suggested options — on a host with a
+question tool (AskUserQuestion), use it; otherwise list them inline:
+
+1. **Period rollup** *(recommended default)* — this repo, a named window,
+   receipts join (`--since … --resolved-from`) → totals, by-role, $/case.
+2. **This batch's cost** — window aligned to one batch, `--resolved-from
+   .agents/automation/<slug>`.
+3. **Before/after** — a prior snapshot (or earlier window) vs now, both
+   deltas (§ Snapshots).
+4. **One session, deep** — a single session's sub-agent breakdown from the
+   `--json` ledger.
+
+What each needs pinned before running:
 
 - **Which project(s)?** This repo (default, from cwd), a specific transcript
   dir, or all projects (`--all-projects`).
@@ -81,7 +95,7 @@ conversation, not an assumption. Before running, pin down with the user:
   or an earlier window), and what shipped in each (for $/resolved-unit).
 
 There is **no fixed roster** — the skill reads whatever roles/agents actually
-ran (from the transcripts), so it works for any agent set or bundle. Don't map
+ran (from the transcripts), so it works for any agent set or factory. Don't map
 roles to predefined "teams"; report the roles as they appear.
 
 ## The procedure is a default route, not a cage
@@ -104,8 +118,13 @@ Concretely, where the shipped path runs out:
 **What must survive whichever route you take** — these are the reason the skill
 is trusted, and they do not bend:
 
-1. **Never compute a price.** Every dollar comes from the host's own meter. If
-   you cannot get one, the answer is "unavailable", never a plausible number.
+1. **Never compute a price yourself.** Every dollar comes from the host's own
+   meter — ccusage pricing each request *record* (exact model + cache split),
+   or Copilot's billed credits at the published conversion. Those are metered
+   and billed figures, and they're fine. What's forbidden is DERIVING dollars
+   from aggregate token counts with an assumed model/cache mix when no record
+   or billed figure exists — that guess looks plausible and silently corrupts
+   every comparison it enters. No record → "unavailable", never a number.
 2. **`n/a` is not `0`.** An unpriced unit, an unreadable git repo, an unknown
    count — report the ignorance. A zero claims something.
 3. **Two denominators, never one.** Any cost-per-case figure says which cases
@@ -192,8 +211,11 @@ ccusage's session figure.
 5. **Report honestly.** Every headline dollar is ccusage-metered. Flag the
    method, any fallback rows, and the caveats below.
 
-6. **For a page someone else will read** — a lead reviewing the release, a
-   manager asking what the pipeline costs — render the snapshot:
+6. **The page is part of the default deliverable, not an extra.** Unless the
+   user asked for one quick figure inline, finish the audit by rendering the
+   HTML report and handing over BOTH artifacts — the markdown rollup (the
+   working answer) and the page (what gets shown to a lead, attached to a
+   ticket, kept). An audit that ends as terminal scrollback wasn't delivered:
 
    ```
    node {skill}/scripts/usage-rollup.mjs --resolved-from .agents/automation --json > rollup.json
@@ -232,7 +254,7 @@ ccusage's session figure.
 | `--mode auto\|calculate\|display` | ccusage cost mode: `auto` (default, logged cost else LiteLLM), `display` (billing-faithful, logged only), `calculate` (always LiteLLM). |
 | `--agent <host>` | ccusage host filter for the fallback source (default `claude`). |
 | `--ccusage-bin <bin>` | ccusage binary to run (default `npx` → `ccusage@latest`). |
-| `--bundle <label>` | Label to show in the report title. |
+| `--factory <label>` | Label to show in the report title. |
 | `--json` | Emit the full structured rollup (incl. per-unit `ledger` with `models`, and `byProject`) instead of markdown. |
 | `--out <path>` | Write the markdown rollup to a file. |
 | `--snapshot <path>` | Also write a JSON snapshot for later diffing. |
@@ -288,8 +310,8 @@ delivered.
 
 **Check the coverage line before quoting either figure.** The join also reports
 how much of the window's spend sits on branches these batches name. That number
-is a **floor** — analysts are forbidden from touching git, so their cost can
-never be matched this way — which makes it useless as attribution and exactly
+is a **floor** — the read-only slots (triage, review) never touch git, so their
+cost can never be matched this way — which makes it useless as attribution and exactly
 right as a dilution check. If *no* priced unit matches, the report says so and
 tells you not to use the ratios: a quarter's spend divided by one batch's cases
 is a number that survives one question. Narrow `--since/--until` to the run.
@@ -329,8 +351,8 @@ ledger).
    deliver**, take the wall-clock span = latest `endedAt` − earliest `startedAt`
    across the case's units (active-minutes sums per-unit work; wall-clock is
    elapsed and reflects parallelism). That's the case's **metered cost, token
-   consumption, and time**. A test-automation case typically spans an analyst +
-   implementer(s) + reviewer sub-agent — sum them.
+   consumption, and time**. A test-automation case typically spans a builder +
+   reviewer (+ runner) dispatch set — sum them.
 
 3. **Confirm delivery / outcome — attempted vs landed.** Cost without an outcome
    is waste, which is exactly what an efficiency audit should surface. Check what
@@ -338,7 +360,7 @@ ledger).
    - **From the log:** grep the transcripts for `gh pr create` /
      `az repos pr create` (PR title + branch carry the key), `git commit`
      messages (`type(KEY): …`), and `Write`/`Edit` of deliverables (`tests/**`,
-     `*.spec.*`, `test-specs/**`).
+     `*.spec.*`).
    - **Against the live repo:** `git log --since <window> --until <window>`,
      `gh pr list --search …`, `az repos pr list` — the ground truth of what
      merged. Mark each case delivered vs attempted-only, and flag **rework**
@@ -363,7 +385,7 @@ ledger).
    ## Per case
    | case | cost | tokens | units (roles) | delivered | rework |
    |---|---|---|---|---|---|
-   | SCRUM-T532 | $18.55 | 42.7M | 5 (analyst, impl×3, reviewer) | PR #24 | 3 impl attempts |
+   | SCRUM-T532 | $18.55 | 42.7M | 5 (analyst, impl×3, reviewer — v1-era run) | PR #24 | 3 impl attempts |
 
    ## Shared / orchestration (not one case's cost)
    - <role> $X — how you handled it (separate line vs amortized across N cases).
