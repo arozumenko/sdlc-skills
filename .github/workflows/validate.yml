@@ -6,15 +6,15 @@ on:
   pull_request:
 
 jobs:
-  bundles:
+  factories:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Validate bundles
-        run: node bin/validate-bundles.mjs
+      - name: Validate factories
+        run: node bin/validate-factories.mjs
 
   skills:
     runs-on: ubuntu-latest
@@ -28,7 +28,7 @@ jobs:
       - name: Validate skills against the Agent Skills spec
         run: |
           status=0
-          for dir in skills/*/ bundles/*/skills/*/; do
+          for dir in skills/*/ factories/*/skills/*/; do
             if [ -f "$dir/SKILL.md" ]; then
               echo "::group::$dir"
               skills-ref validate "$dir" || status=1
@@ -48,4 +48,4 @@ jobs:
         with:
           node-version: "20"
       - name: Validate external (repo:) skill registry entries
-        run: node bin/validate-bundles.mjs --check-externals
+        run: node bin/validate-factories.mjs --check-externals

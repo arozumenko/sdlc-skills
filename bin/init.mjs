@@ -70,7 +70,7 @@ import {
   buildBriefingPlan,
   composeBriefing,
   briefingDescription,
-} from "./lib/bundle-selection.mjs";
+} from "./lib/factory-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 import { execSync, execFileSync } from "child_process";
@@ -172,40 +172,40 @@ function loadCatalog() {
 }
 
 // ---------------------------------------------------------------------------
-// Bundles — bundles/<id>/bundle.json describes a curated team: which shared
+// Factories — factories/<id>/factory.json describes a curated team: which shared
 // agents to install, any team-wide extra skills, per-role briefing overlays,
-// team instructions, and hooks. See bundles/SPEC.md. A bundle expands into
+// team instructions, and hooks. See factories/SPEC.md. A factory expands into
 // the normal agent/skill install path: its `agents` populate the agent
 // selection (so each agent's declared skills auto-resolve as usual) and its
-// `skills` are appended as extras. `localAgents` live in bundles/<id>/agents/
-// and install like shared agents but from the bundle dir. `localSkills` live
-// in bundles/<id>/skills/ and install like monorepo skills but from the
-// bundle dir — they don't need a skills.json entry and are scoped to the
-// bundle (an agent in another team that declares the same id would resolve
-// it against the global catalog, not this bundle's copy).
+// `skills` are appended as extras. `localAgents` live in factories/<id>/agents/
+// and install like shared agents but from the factory dir. `localSkills` live
+// in factories/<id>/skills/ and install like monorepo skills but from the
+// factory dir — they don't need a skills.json entry and are scoped to the
+// factory (an agent in another team that declares the same id would resolve
+// it against the global catalog, not this factory's copy).
 // ---------------------------------------------------------------------------
 
-function listBundles() {
-  const root = join(PKG_ROOT, "bundles");
+function listFactories() {
+  const root = join(PKG_ROOT, "factories");
   if (!existsSync(root)) return [];
   return readdirSync(root)
-    .filter((d) => existsSync(join(root, d, "bundle.json")))
+    .filter((d) => existsSync(join(root, d, "factory.json")))
     .sort();
 }
 
-function loadBundle(id) {
-  const dir = join(PKG_ROOT, "bundles", id);
-  const manifest = join(dir, "bundle.json");
+function loadFactory(id) {
+  const dir = join(PKG_ROOT, "factories", id);
+  const manifest = join(dir, "factory.json");
   if (!existsSync(manifest)) {
-    console.error(`  ! Unknown bundle: ${id}`);
-    console.error(`    Available bundles: ${listBundles().join(", ") || "(none)"}`);
+    console.error(`  ! Unknown factory: ${id}`);
+    console.error(`    Available factories: ${listFactories().join(", ") || "(none)"}`);
     process.exit(1);
   }
   let b;
   try {
     b = JSON.parse(readFileSync(manifest, "utf8"));
   } catch (err) {
-    console.error(`  ! Failed to parse bundles/${id}/bundle.json: ${err.message}`);
+    console.error(`  ! Failed to parse factories/${id}/factory.json: ${err.message}`);
     process.exit(1);
   }
   b.dir = dir;
@@ -215,7 +215,7 @@ function loadBundle(id) {
   b.localSkills = b.localSkills || [];
   b.briefings = b.briefings || {};
   b.skillOverlays = b.skillOverlays || {}; // role -> { add: [], remove: [] }
-  b.seed = b.seed || {}; // bundle-relative source → project-relative dest (reference files)
+  b.seed = b.seed || {}; // factory-relative source → project-relative dest (reference files)
   b.coreAgents = b.coreAgents || null; // present => devRole selection path
   b.devRoles = b.devRoles || null;     // { name: { label, platform, briefing?, skillOverlay? } }
   b.platforms = b.platforms || {};     // { id: { label, briefings{}, skillOverlays{} } }
@@ -223,7 +223,7 @@ function loadBundle(id) {
 }
 
 // Parse the `description` field out of a SKILL.md's YAML frontmatter. Used to
-// register bundle-local skills into the in-memory catalog so non-Claude
+// register factory-local skills into the in-memory catalog so non-Claude
 // targets get a proper description in their injected SKILLS section.
 function parseSkillDescription(skillMdPath) {
   if (!existsSync(skillMdPath)) return null;
@@ -239,16 +239,16 @@ function parseSkillDescription(skillMdPath) {
   return m ? m[1].replace(/^["']|["']$/g, "") : null;
 }
 
-// Validate a bundle against the catalog and resolve the skills its local
+// Validate a factory against the catalog and resolve the skills its local
 // agents declare. Returns { localAgents, extraSkillIds } and mutates
-// args.agents to include the bundle's shared agents.
-async function applyBundle(bundle, args, catalog) {
-  // ----- Flat dev-role selection (feature-development-style bundles) -----
+// args.agents to include the factory's shared agents.
+async function applyFactory(factory, args, catalog) {
+  // ----- Flat dev-role selection (feature-development-style factories) -----
   // When the manifest declares devRoles, the install roster is
   // coreAgents ∪ (picked dev roles). Selection is a flat, unrestricted
   // multi-select; the picked roles' platforms drive the core-role overlays.
-  if (bundle.devRoles) {
-    const devRoleNames = Object.keys(bundle.devRoles);
+  if (factory.devRoles) {
+    const devRoleNames = Object.keys(factory.devRoles);
     const sel = resolveDevRoleSelection({
       explicit: args.agents,
       devRoleNames,
@@ -257,10 +257,10 @@ async function applyBundle(bundle, args, catalog) {
     });
     // Core roles always install, so naming one in --agents is harmless — only
     // warn about names that match neither a dev role nor a core role.
-    const coreSet = new Set(bundle.coreAgents || []);
+    const coreSet = new Set(factory.coreAgents || []);
     const unknown = sel.unknown.filter((n) => !coreSet.has(n));
     if (unknown.length) {
-      console.error(`  ! --agents names not recognized for ${bundle.id}: ${unknown.join(", ")}`);
+      console.error(`  ! --agents names not recognized for ${factory.id}: ${unknown.join(", ")}`);
     }
     if (sel.unknown.length !== unknown.length) {
       console.log("  (core roles always install — no need to name them in --agents)");
@@ -273,7 +273,7 @@ async function applyBundle(bundle, args, catalog) {
       const roleItems = devRoleNames.map((r) => ({
         value: r,
         label: r,
-        desc: bundle.devRoles[r].label,
+        desc: factory.devRoles[r].label,
         default: false,
       }));
       const title = "Developer roles — pick at least one (space toggles, enter confirms):";
@@ -285,110 +285,110 @@ async function applyBundle(bundle, args, catalog) {
     } else {
       selected = sel.roles;
     }
-    // Dev roles install ONLY as bundle-local agents — clear them from the global
+    // Dev roles install ONLY as factory-local agents — clear them from the global
     // --agents path so they aren't also resolved against the global catalog. For
-    // a devRoles bundle bundle.agents is [], so the legacy union below is a no-op.
-    args.agents = [...bundle.agents];
+    // a devRoles factory factory.agents is [], so the legacy union below is a no-op.
+    args.agents = [...factory.agents];
     // Restrict the installed roster and pre-merge the overlays/briefings.
-    bundle.localAgents = [...new Set([...(bundle.coreAgents || []), ...selected])];
-    bundle.skillOverlays = buildOverlays(bundle, selected);
-    const bplan = buildBriefingPlan(bundle, selected);
-    bundle._resolvedBriefings = {};
+    factory.localAgents = [...new Set([...(factory.coreAgents || []), ...selected])];
+    factory.skillOverlays = buildOverlays(factory, selected);
+    const bplan = buildBriefingPlan(factory, selected);
+    factory._resolvedBriefings = {};
     for (const [role, entries] of Object.entries(bplan)) {
       const resolved = entries.map((e) => ({
         label: e.label,
-        content: readFileSync(join(bundle.dir, e.path), "utf8"),
+        content: readFileSync(join(factory.dir, e.path), "utf8"),
       }));
-      bundle._resolvedBriefings[role] = {
+      factory._resolvedBriefings[role] = {
         content: composeBriefing(resolved),
         description: briefingDescription(resolved),
       };
     }
     console.log(
-      `  Roster: ${bundle.coreAgents.length} core + ${selected.length} dev role(s)` +
+      `  Roster: ${factory.coreAgents.length} core + ${selected.length} dev role(s)` +
         (selected.length ? ` (${selected.join(", ")})` : " (none selected)")
     );
   }
 
-  const unknownShared = bundle.agents.filter((a) => !catalog.agents.includes(a));
+  const unknownShared = factory.agents.filter((a) => !catalog.agents.includes(a));
   if (unknownShared.length) {
     console.error(
-      `  ! Bundle ${bundle.id} references unknown agents: ${unknownShared.join(", ")}`
+      `  ! Factory ${factory.id} references unknown agents: ${unknownShared.join(", ")}`
     );
     console.error(`    Available agents: ${catalog.agents.join(", ")}`);
     process.exit(1);
   }
-  const bundleAgentsRoot = join(bundle.dir, "agents");
-  for (const la of bundle.localAgents) {
-    if (!existsSync(join(bundleAgentsRoot, la, "AGENT.md"))) {
+  const factoryAgentsRoot = join(factory.dir, "agents");
+  for (const la of factory.localAgents) {
+    if (!existsSync(join(factoryAgentsRoot, la, "AGENT.md"))) {
       console.error(
-        `  ! Bundle ${bundle.id} declares localAgent "${la}" but bundles/${bundle.id}/agents/${la}/AGENT.md is missing`
+        `  ! Factory ${factory.id} declares localAgent "${la}" but factories/${factory.id}/agents/${la}/AGENT.md is missing`
       );
       process.exit(1);
     }
   }
 
   // localSkills are the capability twin of localAgents: skill content shipped
-  // inside the bundle dir, not the global catalog. They install like monorepo
-  // skills but from bundles/<id>/skills/. Register each into the in-memory
+  // inside the factory dir, not the global catalog. They install like monorepo
+  // skills but from factories/<id>/skills/. Register each into the in-memory
   // catalog so (a) the unknown-id partition doesn't reject them and (b)
   // injected SKILLS sections pick up a real description.
-  const bundleSkillsRoot = join(bundle.dir, "skills");
-  for (const ls of bundle.localSkills) {
-    const skillMd = join(bundleSkillsRoot, ls, "SKILL.md");
+  const factorySkillsRoot = join(factory.dir, "skills");
+  for (const ls of factory.localSkills) {
+    const skillMd = join(factorySkillsRoot, ls, "SKILL.md");
     if (!existsSync(skillMd)) {
       console.error(
-        `  ! Bundle ${bundle.id} declares localSkill "${ls}" but bundles/${bundle.id}/skills/${ls}/SKILL.md is missing`
+        `  ! Factory ${factory.id} declares localSkill "${ls}" but factories/${factory.id}/skills/${ls}/SKILL.md is missing`
       );
       process.exit(1);
     }
     if (!registryEntry(catalog.registry, ls)) {
       catalog.registry.skills.push({
         id: ls,
-        bundle: bundle.id,
+        factory: factory.id,
         name: ls,
-        description: parseSkillDescription(skillMd) || `Bundle-local skill (${bundle.id})`,
+        description: parseSkillDescription(skillMd) || `Factory-local skill (${factory.id})`,
       });
     }
   }
-  const localSkillSet = new Set(bundle.localSkills);
+  const localSkillSet = new Set(factory.localSkills);
 
-  // Shared agents from the bundle join any explicit --agents selection.
+  // Shared agents from the factory join any explicit --agents selection.
   const explicit = args.agents || [];
-  args.agents = [...new Set([...explicit, ...bundle.agents])];
+  args.agents = [...new Set([...explicit, ...factory.agents])];
 
-  // Skills declared by local agents are resolved from the bundle dir (their
+  // Skills declared by local agents are resolved from the factory dir (their
   // AGENT.md lives there, not in the monorepo agents/).
   const localDeclared = new Set();
-  for (const la of bundle.localAgents) {
-    for (const s of parseAgentSkillDeps(la, bundleAgentsRoot)) localDeclared.add(s);
+  for (const la of factory.localAgents) {
+    for (const s of parseAgentSkillDeps(la, factoryAgentsRoot)) localDeclared.add(s);
   }
 
   // ----- Per-role skill overlays (the capability twin of briefings) -----
-  // A bundle tunes a shared agent's *skills* for its stack at setup:
+  // A factory tunes a shared agent's *skills* for its stack at setup:
   //   skillOverlays: { qa-engineer: { add: ["xcuitest"], remove: ["playwright-testing"] } }
   // The shared agent stays unforked — we rewrite only the installed copy's
   // `skills:` frontmatter (done in main, per target). Here we compute the
   // effective skill set so the install resolves the right union: removed
   // skills no agent still needs are dropped; added skills that resolve are
   // installed; added skills that don't exist yet are surfaced as "pending".
-  const overlays = bundle.skillOverlays;
-  // Overlays may target a shared agent (in args.agents) OR a bundle-local one
+  const overlays = factory.skillOverlays;
+  // Overlays may target a shared agent (in args.agents) OR a factory-local one
   // (via the symlink pattern, the same role can be in localAgents). Build the
   // combined roster once and validate/iterate against it.
-  const combinedRoster = [...new Set([...args.agents, ...bundle.localAgents])];
+  const combinedRoster = [...new Set([...args.agents, ...factory.localAgents])];
   for (const role of Object.keys(overlays)) {
     if (!combinedRoster.includes(role)) {
-      console.error(`  ! Bundle ${bundle.id} skillOverlay targets "${role}", not in the team`);
+      console.error(`  ! Factory ${factory.id} skillOverlay targets "${role}", not in the team`);
       process.exit(1);
     }
   }
   const declaredOf = (a) => {
-    // Bundle owns its agents — read declared skills from THIS bundle's copy
+    // Factory owns its agents — read declared skills from THIS factory's copy
     // when present, else resolve the agent's real location (orphan or another
-    // bundle). Top-level `agents/` no longer holds bundle agents.
-    if (existsSync(join(bundleAgentsRoot, a, "AGENT.md")))
-      return parseAgentSkillDeps(a, bundleAgentsRoot);
+    // factory). Top-level `agents/` no longer holds factory agents.
+    if (existsSync(join(factoryAgentsRoot, a, "AGENT.md")))
+      return parseAgentSkillDeps(a, factoryAgentsRoot);
     const r = resolveItem(catalog.index, "agents", a);
     return r ? parseAgentSkillDeps(r.name, join(r.dir, "agents")) : [];
   };
@@ -421,25 +421,25 @@ async function applyBundle(bundle, args, catalog) {
   // Skills that were declared somewhere but, after overlays, no agent needs.
   const droppable = new Set([...allDeclared].filter((s) => !neededByAny.has(s)));
 
-  // Skills satisfied by localSkills install from the bundle dir, not from the
+  // Skills satisfied by localSkills install from the factory dir, not from the
   // global catalog — strip them before partitioning so they aren't flagged as
   // unknown. The dedicated localSkills install loop in main() handles copying.
-  const extraSkillIds = [...new Set([...bundle.skills, ...localDeclared, ...resolvableAdds])]
+  const extraSkillIds = [...new Set([...factory.skills, ...localDeclared, ...resolvableAdds])]
     .filter((id) => !localSkillSet.has(id));
 
   console.log(
-    `  Bundle: ${bundle.title || bundle.id} — ${bundle.agents.length} shared agent(s)` +
-      (bundle.localAgents.length ? `, ${bundle.localAgents.length} local agent(s)` : "") +
-      (bundle.localSkills.length ? `, ${bundle.localSkills.length} local skill(s)` : "") +
+    `  Factory: ${factory.title || factory.id} — ${factory.agents.length} shared agent(s)` +
+      (factory.localAgents.length ? `, ${factory.localAgents.length} local agent(s)` : "") +
+      (factory.localSkills.length ? `, ${factory.localSkills.length} local skill(s)` : "") +
       (Object.keys(overlays).length ? `, ${Object.keys(overlays).length} skill overlay(s)` : "") +
       (extraSkillIds.length ? `, ${extraSkillIds.length} extra skill(s)` : "")
   );
 
   return {
-    localAgents: bundle.localAgents,
-    bundleAgentsRoot,
-    localSkills: bundle.localSkills,
-    bundleSkillsRoot,
+    localAgents: factory.localAgents,
+    factoryAgentsRoot,
+    localSkills: factory.localSkills,
+    factorySkillsRoot,
     extraSkillIds,
     overlays,
     effectiveByAgent,
@@ -452,24 +452,24 @@ async function applyBundle(bundle, args, catalog) {
 // (IDE-neutral — every agent reads .agents/, regardless of host). This is the
 // same slot scout fills at runtime with real, `type: project` project facts —
 // once it exists it is ALWAYS left in place, even under --update, because the
-// installer can't tell "still the generic bundle stub" from "scout already
+// installer can't tell "still the generic factory stub" from "scout already
 // seeded this with real project data." --update is for refreshing agent/skill
 // definitions, not for touching scout's output; re-run scout to refresh a
 // briefing on purpose. Each install also ensures a MEMORY.md index line.
-function installBriefings(bundle) {
+function installBriefings(factory) {
   let installed = 0;
   let skipped = 0;
-  // Resolved entries: [{ role, content, description }]. New bundles pre-resolve
-  // (merged/concatenated) in applyBundle; legacy bundles read role→path here.
+  // Resolved entries: [{ role, content, description }]. New factories pre-resolve
+  // (merged/concatenated) in applyFactory; legacy factories read role→path here.
   let entries;
-  if (bundle._resolvedBriefings) {
-    entries = Object.entries(bundle._resolvedBriefings).map(([role, v]) => ({ role, ...v }));
+  if (factory._resolvedBriefings) {
+    entries = Object.entries(factory._resolvedBriefings).map(([role, v]) => ({ role, ...v }));
   } else {
     entries = [];
-    for (const [role, rel] of Object.entries(bundle.briefings)) {
-      const src = join(bundle.dir, rel);
+    for (const [role, rel] of Object.entries(factory.briefings)) {
+      const src = join(factory.dir, rel);
       if (!existsSync(src)) {
-        console.log(`      ! briefing ${role} (missing in bundle: ${rel})`);
+        console.log(`      ! briefing ${role} (missing in factory: ${rel})`);
         continue;
       }
       const content = readFileSync(src, "utf8");
@@ -494,20 +494,20 @@ function installBriefings(bundle) {
   return { installed, skipped };
 }
 
-// Seed loose reference files/dirs a bundle ships into the project at a fixed
-// path. bundle.seed maps a bundle-relative source → a project-relative dest.
+// Seed loose reference files/dirs a factory ships into the project at a fixed
+// path. factory.seed maps a factory-relative source → a project-relative dest.
 // Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
 // left intact unless --update. On --update the dest is removed first (clean
-// replace), so files deleted from the bundle don't linger. Used for reference
+// replace), so files deleted from the factory don't linger. Used for reference
 // docs agents read at runtime: a subagent's cwd is the project root, so a
 // fixed project path is resolvable.
-function installSeed(bundle, update) {
+function installSeed(factory, update) {
   let installed = 0;
   let skipped = 0;
-  for (const [src, dest] of Object.entries(bundle.seed || {})) {
-    const srcPath = join(bundle.dir, src);
+  for (const [src, dest] of Object.entries(factory.seed || {})) {
+    const srcPath = join(factory.dir, src);
     if (!existsSync(srcPath)) {
-      console.log(`      ! seed ${src} (missing in bundle)`);
+      console.log(`      ! seed ${src} (missing in factory)`);
       continue;
     }
     const destPath = join(CWD, dest);
@@ -525,30 +525,36 @@ function installSeed(bundle, update) {
   return { installed, skipped };
 }
 
-// Splice a bundle's instructions.md into the project's root context files
-// inside <!-- BUNDLE:<id> START/END --> markers. The block is replaced in
+// Splice a factory's instructions.md into the project's root context files
+// inside <!-- FACTORY:<id> START/END --> markers. The block is replaced in
 // place on re-run (idempotent) — no --update needed. AGENTS.md (the full
 // team reference every agent reads) is created if missing; CLAUDE.md is
 // auto-loaded and scout-owned, so its block is only refreshed when the file
 // already exists — we never create or bloat a lean CLAUDE.md.
-function installInstructions(bundle) {
-  if (!bundle.instructions) return;
-  const src = join(bundle.dir, bundle.instructions);
+//
+// The matcher accepts BOTH the old `BUNDLE:<id>` marker and the current
+// `FACTORY:<id>` marker (pre-rename installs left the old form in place), but
+// always WRITES the new `FACTORY:<id>` form — so a project's block migrates to
+// the new marker the first time it's refreshed, and every write after that
+// only ever needs to match FACTORY again.
+function installInstructions(factory) {
+  if (!factory.instructions) return;
+  const src = join(factory.dir, factory.instructions);
   if (!existsSync(src)) {
-    console.log(`      ! instructions (missing in bundle: ${bundle.instructions})`);
+    console.log(`      ! instructions (missing in factory: ${factory.instructions})`);
     return;
   }
   const body = readFileSync(src, "utf8");
   for (const [file, createIfMissing] of [["AGENTS.md", true], ["CLAUDE.md", false]]) {
-    const status = spliceBundleBlock(join(CWD, file), bundle.id, body, createIfMissing);
+    const status = spliceFactoryBlock(join(CWD, file), factory.id, body, createIfMissing);
     if (status === "absent") console.log(`      — instructions ${file} (not present; skipped)`);
     else console.log(`      ✓ instructions ${file} (${status})`);
   }
 }
 
-function spliceBundleBlock(filePath, id, body, createIfMissing) {
-  const start = `<!-- BUNDLE:${id} START -->`;
-  const end = `<!-- BUNDLE:${id} END -->`;
+function spliceFactoryBlock(filePath, id, body, createIfMissing) {
+  const start = `<!-- FACTORY:${id} START -->`;
+  const end = `<!-- FACTORY:${id} END -->`;
   const block = `${start}\n${body.trim()}\n${end}`;
   if (!existsSync(filePath)) {
     if (!createIfMissing) return "absent";
@@ -558,7 +564,14 @@ function spliceBundleBlock(filePath, id, body, createIfMissing) {
   }
   const text = readFileSync(filePath, "utf8");
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`${esc(start)}[\\s\\S]*?${esc(end)}`);
+  // Match the OLD `BUNDLE:<id>` marker too — so a project installed before the
+  // rename still gets its block found and replaced (with the new FACTORY form).
+  // `id` must stay escaped: it's interpolated into a RegExp, and a factory id
+  // containing a regex-special char (e.g. ".") would otherwise change match
+  // semantics or throw.
+  const startRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} START -->`;
+  const endRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} END -->`;
+  const re = new RegExp(`${startRe}[\\s\\S]*?${endRe}`);
   if (re.test(text)) {
     const updated = text.replace(re, block);
     if (updated !== text) writeFileSync(filePath, updated);
@@ -568,18 +581,18 @@ function spliceBundleBlock(filePath, id, body, createIfMissing) {
   return "appended";
 }
 
-// Merge a bundle's hooks into each Claude target's settings.json. v1 is
+// Merge a factory's hooks into each Claude target's settings.json. v1 is
 // Claude-only — Cursor/Windsurf/Copilot hook formats differ, so they're
 // skipped with a notice. hooks.json is a Claude hooks object (event →
-// matcher-groups); the installer tags each injected group with `_bundle`
-// so a re-merge replaces exactly the bundle's groups (idempotent) while
-// leaving the user's and other bundles' hooks untouched. Scripts under
-// hooks/scripts/ are copied to <target>/hooks/<bundle-id>/ and chmod +x.
-function installHooks(bundle, targets) {
-  if (!bundle.hooks) return;
-  const hooksPath = join(bundle.dir, bundle.hooks);
+// matcher-groups); the installer tags each injected group with `_factory`
+// so a re-merge replaces exactly the factory's groups (idempotent) while
+// leaving the user's and other factories' hooks untouched. Scripts under
+// hooks/scripts/ are copied to <target>/hooks/<factory-id>/ and chmod +x.
+function installHooks(factory, targets) {
+  if (!factory.hooks) return;
+  const hooksPath = join(factory.dir, factory.hooks);
   if (!existsSync(hooksPath)) {
-    console.log(`      ! hooks (missing in bundle: ${bundle.hooks})`);
+    console.log(`      ! hooks (missing in factory: ${factory.hooks})`);
     return;
   }
   let hookSpec;
@@ -589,7 +602,7 @@ function installHooks(bundle, targets) {
     console.log(`      ! hooks (parse failed: ${err.message})`);
     return;
   }
-  const wanted = bundle.targets && bundle.targets.length ? bundle.targets : ["claude"];
+  const wanted = factory.targets && factory.targets.length ? factory.targets : ["claude"];
   const scriptsSrc = join(dirname(hooksPath), "scripts");
   for (const t of targets) {
     if (t.id !== "claude") {
@@ -599,7 +612,7 @@ function installHooks(bundle, targets) {
     if (!wanted.includes("claude")) continue;
 
     if (existsSync(scriptsSrc)) {
-      const scriptsDest = join(CWD, t.dir, "hooks", bundle.id);
+      const scriptsDest = join(CWD, t.dir, "hooks", factory.id);
       mkdirSync(scriptsDest, { recursive: true });
       copyTreeDereferenced(scriptsSrc, scriptsDest, { force: true });
       for (const f of readdirSync(scriptsDest)) {
@@ -614,13 +627,13 @@ function installHooks(bundle, targets) {
     const ok = mergeClaudeSettingsHooks(
       join(CWD, t.dir, "settings.json"),
       hookSpec,
-      bundle.id
+      factory.id
     );
     if (ok) console.log(`      ✓ hooks ${t.label} (settings.json)`);
   }
 }
 
-function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
+function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
   let settings = {};
   if (existsSync(settingsPath)) {
     const raw = readFileSync(settingsPath, "utf8");
@@ -636,13 +649,49 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
   for (const [event, groups] of Object.entries(hookSpec)) {
     if (!Array.isArray(groups)) continue;
     const existing = Array.isArray(settings.hooks[event]) ? settings.hooks[event] : [];
-    const kept = existing.filter((g) => !g || g._bundle !== bundleId); // drop our prior groups
-    const tagged = groups.map((g) => ({ ...g, _bundle: bundleId }));
+    // Drop our prior groups — match both the current `_factory` tag and the
+    // pre-rename `_bundle` tag, so a project hook-merged before the rename
+    // still gets its old groups replaced instead of duplicated.
+    const kept = existing.filter((g) => !g || (g._bundle !== factoryId && g._factory !== factoryId));
+    const tagged = groups.map((g) => ({ ...g, _factory: factoryId }));
     settings.hooks[event] = [...kept, ...tagged];
   }
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
   return true;
+}
+
+// After any install, compare OTHER factories' installed hook scripts byte-for-
+// byte with THIS package's current copies. Installing factory A never touches
+// factory B's hooks — correct ownership-wise, but it silently strands B on
+// stale hooks when the package has since fixed them (field case: manual-qa's
+// benchmark hooks without the roster guard kept firing in test-automation
+// sessions long after the guard shipped). We only SIGNAL — a difference may
+// also be a deliberate local patch, so nothing is overwritten here.
+export function checkSiblingBundleHooks(targets, cwd = CWD, pkgRoot = PKG_ROOT) {
+  const stale = new Map(); // bundleId -> [script names]
+  for (const t of targets) {
+    const hooksRoot = join(cwd, t.dir, "hooks");
+    if (!existsSync(hooksRoot)) continue;
+    let entries;
+    try { entries = readdirSync(hooksRoot, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const pkgScripts = join(pkgRoot, "factories", e.name, "hooks", "scripts");
+      if (!existsSync(pkgScripts)) continue; // not a factory-owned dir (core hooks etc.)
+      for (const f of readdirSync(pkgScripts)) {
+        const installed = join(hooksRoot, e.name, f);
+        if (!existsSync(installed)) continue; // partial install — its own choice
+        try {
+          if (readFileSync(installed, "utf8") !== readFileSync(join(pkgScripts, f), "utf8")) {
+            if (!stale.has(e.name)) stale.set(e.name, new Set());
+            stale.get(e.name).add(f);
+          }
+        } catch { /* unreadable — skip */ }
+      }
+    }
+  }
+  return new Map([...stale].map(([k, v]) => [k, [...v].sort()]));
 }
 
 // ---------------------------------------------------------------------------
@@ -663,13 +712,139 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, bundleId) {
 const CORE_HOOK_FILES = ["run-hook.cmd", "session-start", "agent-start", "lib.sh"];
 const CORE_HOOK_EXE = ["run-hook.cmd", "session-start", "agent-start"];
 
+// ---- per-role hook defaults (config-defaults.sh) ---------------------------
+// The shared hooks fire for EVERY dispatched agent in the repo. The generated
+// defaults file is the roster that decides who receives context: one pair of
+// lines per agent actually installed here. lib.sh treats the file's PRESENCE
+// as roster mode — a role with no per-role variable then gets NOTHING
+// (default-deny for host builtins, anonymous workflow agents, and whatever
+// else wanders in). Regenerated on every install from the installed agent
+// dirs (not this run's selection — an incremental install must not silently
+// mute the previously installed bundle's agents). User overrides live in
+// config.sh, sourced FIRST, so `: "${VAR:=…}"` lines here never beat them.
+
+// Installed agents from an agents dir, format-agnostic: directories
+// (Claude/Cursor/Windsurf → AGENT.md inside), flat `<name>.agent.md`
+// (Copilot), `<name>.toml` (Codex), loose `<name>.md`. Returns
+// [{name, file}], file = the definition to read frontmatter from (null when
+// a dir has no AGENT.md).
+export function readInstalledAgents(agentsDir) {
+  if (!existsSync(agentsDir)) return [];
+  const byName = new Map();
+  for (const e of readdirSync(agentsDir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
+    if (e.isDirectory()) {
+      const f = join(agentsDir, e.name, "AGENT.md");
+      byName.set(e.name, existsSync(f) ? f : null);
+    } else if (e.name.endsWith(".agent.md")) {
+      byName.set(e.name.slice(0, -".agent.md".length), join(agentsDir, e.name));
+    } else if (e.name.endsWith(".toml")) {
+      byName.set(e.name.slice(0, -".toml".length), join(agentsDir, e.name));
+    } else if (e.name.endsWith(".md")) {
+      byName.set(e.name.slice(0, -".md".length), join(agentsDir, e.name));
+    }
+  }
+  return [...byName.keys()].sort().map((name) => ({ name, file: byName.get(name) }));
+}
+
+export function listInstalledAgentNames(agentsDir) {
+  return readInstalledAgents(agentsDir).map((a) => a.name);
+}
+
+// Optional per-role context declaration in the agent definition itself —
+// agents are self-describing here, so "what does this role need injected"
+// lives in AGENT.md frontmatter, not in a central table:
+//   context-docs: manual-qa/app_profile     (space-separated; `none` = nothing)
+//   context-memory: snapshot.md MEMORY.md
+// Values feed the generated config-defaults.sh. Subpaths are fine — the hook
+// resolves each name against .agents/. The Copilot flatten preserves
+// frontmatter, and the Codex TOML transform re-emits the keys as comments, so
+// the installed artifact carries the declaration on every host.
+export function agentContextConfig(text, { toml = false } = {}) {
+  const scope = toml ? text : (text.match(/^---\n([\s\S]*?)\n---/) || [, ""])[1];
+  const grab = (key) => {
+    const re = toml
+      ? new RegExp(`^#\\s*${key}:\\s*(.+)$`, "m")
+      : new RegExp(`^${key}:\\s*(.+)$`, "m");
+    const m = scope.match(re);
+    if (!m) return null;
+    const v = m[1].trim().replace(/^["']|["']$/g, "");
+    return v === "none" ? "__none__" : v;
+  };
+  return { docs: grab("context-docs"), memory: grab("context-memory") };
+}
+
+// The default lists come from lib.sh (single source of truth) — parsed, not
+// duplicated, so a list change there flows into the next regeneration.
+export function hookDefaultLists(libSource) {
+  const grab = (name, fallback) =>
+    (libSource.match(new RegExp(`^${name}="([^"]*)"`, "m")) || [, fallback])[1];
+  return {
+    sharedDocs: grab("SDLC_SHARED_DOCS_DEFAULT", "testing profile workflow conventions role-overrides team-comms"),
+    memoryFiles: grab("SDLC_ROLE_MEMORY_FILES_DEFAULT", "SOUL.md RULES.md snapshot.md MEMORY.md project_briefing.md"),
+  };
+}
+
+const roleVarSuffix = (name) => name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+
+// A package update can change a role's shipped default (new frontmatter, new
+// list in lib.sh). That must not slip by silently — but it also must not be
+// treated as an error: config.sh overrides win regardless. So regeneration
+// DIFFS old vs new generated content and reports which roles' defaults moved.
+// Returns e.g. ["test-runner (docs)", "scout (memory)"].
+export function diffRoleDefaults(oldContent, newContent) {
+  const parse = (text) => {
+    const map = new Map();
+    const re = /^: "\$\{SDLC_(SHARED_DOCS|ROLE_MEMORY_FILES)_([A-Z0-9_]+):=(.*)\}"$/gm;
+    for (let m; (m = re.exec(text)); ) map.set(`${m[1]}_${m[2]}`, m[3]);
+    return map;
+  };
+  const before = parse(oldContent);
+  const after = parse(newContent);
+  const changed = [];
+  for (const [key, val] of after) {
+    if (before.has(key) && before.get(key) !== val) {
+      const [kind, suffix] = key.startsWith("SHARED_DOCS_")
+        ? ["docs", key.slice("SHARED_DOCS_".length)]
+        : ["memory", key.slice("ROLE_MEMORY_FILES_".length)];
+      changed.push(`${suffix.toLowerCase().replace(/_/g, "-")} (${kind})`);
+    }
+  }
+  return changed;
+}
+
+// `agents`: names, or {name, docs?, memory?} where docs/memory come from the
+// agent's own context-docs/context-memory frontmatter. A declared value is
+// written VERBATIM (that role opted out of the globals — a project-wide
+// SDLC_SHARED_DOCS should not drag e.g. manual-qa agents back onto docs their
+// author excluded); an undeclared one gets the global-passthrough form.
+export function buildRoleDefaultsFile(agents, lists) {
+  const lines = [
+    "# sdlc-skills per-role hook defaults — GENERATED, do not edit (regenerated on",
+    "# every install/update from the agents installed in this repo).",
+    "# Presence of this file = roster mode: a role with no per-role variable gets",
+    "# NOTHING from the shared hooks. Grant or tune roles in config.sh (sourced",
+    '# first, so its lines win), e.g.: : "${SDLC_SHARED_DOCS_MY_AGENT:=profile testing}"',
+    "",
+  ];
+  for (const a of agents) {
+    const { name, docs = null, memory = null } = typeof a === "string" ? { name: a } : a;
+    const suffix = roleVarSuffix(name);
+    lines.push(
+      `: "\${SDLC_SHARED_DOCS_${suffix}:=${docs ?? `\${SDLC_SHARED_DOCS:-${lists.sharedDocs}}`}}"`,
+      `: "\${SDLC_ROLE_MEMORY_FILES_${suffix}:=${memory ?? `\${SDLC_ROLE_MEMORY_FILES:-${lists.memoryFiles}}`}}"`,
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
 // Copy the four hook files into destDir together (they reference each other by
 // SCRIPT_DIR-relative path, so they must live side by side) and mark the
 // executables +x. Also seed config.sh from config.sh.example — but ONCE: the
 // scripts are always refreshed (force), whereas config.sh holds the project's
 // tunables (SDLC_SHARED_DOCS etc.) and must survive re-installs, so we copy it
 // only when it doesn't already exist. lib.sh sources it if present.
-function copyHookScripts(destDir) {
+function copyHookScripts(destDir, agentsDir = null) {
   const srcDir = join(PKG_ROOT, "hooks");
   if (!existsSync(srcDir)) return false;
   mkdirSync(destDir, { recursive: true });
@@ -687,6 +862,33 @@ function copyHookScripts(destDir) {
   const cfgExample = join(srcDir, "config.sh.example");
   const cfgDest = join(destDir, "config.sh");
   if (existsSync(cfgExample) && !existsSync(cfgDest)) cpSync(cfgExample, cfgDest);
+  // The generated per-role roster — always refreshed (unlike config.sh): it is
+  // machine state derived from the installed agents, not the user's tunables.
+  // No agents dir (or empty) → no file → lib.sh stays in legacy allow-all mode
+  // rather than muting every role in a repo we can't see agents for.
+  if (agentsDir) {
+    const installed = readInstalledAgents(agentsDir);
+    const defsDest = join(destDir, "config-defaults.sh");
+    if (installed.length) {
+      const lists = hookDefaultLists(readFileSync(join(srcDir, "lib.sh"), "utf8"));
+      const agents = installed.map(({ name, file }) => {
+        if (!file) return { name };
+        try {
+          const cfg = agentContextConfig(readFileSync(file, "utf8"), { toml: file.endsWith(".toml") });
+          return { name, docs: cfg.docs, memory: cfg.memory };
+        } catch { return { name }; }
+      });
+      const content = buildRoleDefaultsFile(agents, lists);
+      if (existsSync(defsDest)) {
+        const moved = diffRoleDefaults(readFileSync(defsDest, "utf8"), content);
+        if (moved.length)
+          console.log(`      ℹ hook context defaults changed: ${moved.join(", ")} — config.sh overrides still win`);
+      }
+      writeFileSync(defsDest, content);
+    } else if (existsSync(defsDest)) {
+      rmSync(defsDest); // agents gone → drop roster mode instead of deny-all
+    }
+  }
   return true;
 }
 
@@ -785,7 +987,7 @@ function installCoreHooks(targets) {
   for (const t of targets) {
     if (t.id === "claude") {
       const rel = ".claude/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       const cmd = `"\${CLAUDE_PROJECT_DIR}/${rel}/run-hook.cmd"`;
       const spec = {
         SessionStart: [
@@ -805,7 +1007,7 @@ function installCoreHooks(targets) {
         console.log(`      ✓ hooks Claude Code (.claude/settings.json)`);
     } else if (t.id === "cursor") {
       const rel = ".cursor/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Cursor's subagentStart is permission-only (no context injection) — wire
       // sessionStart only; per-role memory falls back to the `memory` skill.
       // For a CLI (non-plugin) project install CURSOR_PLUGIN_ROOT isn't set, so
@@ -817,7 +1019,7 @@ function installCoreHooks(targets) {
         console.log(`      ✓ hooks Cursor (.cursor/hooks.json)`);
     } else if (t.id === "copilot") {
       const rel = ".github/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Workspace event casing is event-specific in VS Code (verified live):
       //   - sessionStart fires as camelCase (both CLI and VS Code) → camelCase entry.
       //   - SubagentStart fires as PascalCase in VS Code, but camelCase in the CLI →
@@ -861,7 +1063,7 @@ function installCoreHooks(targets) {
       console.log(`      ℹ .github/instructions/*.instructions.md is generated per session — add to .gitignore yourself if you don't want it tracked`);
     } else if (t.id === "codex") {
       const rel = ".codex/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel));
+      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
       // Codex uses Claude's nested SessionStart/SubagentStart shape. For a CLI
       // (non-plugin) project install PLUGIN_ROOT isn't set, so the command sets
       // CODEX_HOOK=1 to select the hookSpecificOutput emit shape. (Unix sh form;
@@ -992,7 +1194,7 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
   }
   // Directory name for the installed skill, in three branches:
   //   1. SKILL.md exists and declares a usable `name:` → that name (parsed by
-  //      the shared lib/skill-md.mjs, the same parser bin/validate-bundles.mjs
+  //      the shared lib/skill-md.mjs, the same parser bin/validate-factories.mjs
   //      --check-externals uses, so the guard predicts this behavior exactly).
   //   2. SKILL.md exists but has no parseable `name:` → the registry
   //      `entry.id` (the initial value below), NOT the subdir basename.
@@ -1022,7 +1224,7 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
       if (parsedName !== entry.id) {
         console.error(
           `  ! ${entry.id}: upstream SKILL.md in ${entry.repo} declares name "${parsedName}", ` +
-            `not "${entry.id}" — installing as "${parsedName}". Any agent or bundle overlay that ` +
+            `not "${entry.id}" — installing as "${parsedName}". Any agent or factory overlay that ` +
             `references "${entry.id}" will NOT find it. Fix the skills.json id (or upstream) to match.`
         );
       }
@@ -1119,7 +1321,7 @@ export function inferSkillsFromAgents(agentNames, availableSkills, registry, ind
 // CLI parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = {
     all: false,
     update: false,
@@ -1127,7 +1329,7 @@ function parseArgs(argv) {
     agents: null, // null = unspecified, [] = none, [..] = explicit
     skills: null,
     targets: null,
-    bundle: null,
+    factory: null,
     symlink: false, // external skills: copy by default, symlink from cache if true
     interactive: false, // --interactive: pick quality-architect specialists/connectors/MCPs via a menu
     mcp: null, // --mcp <ids>: write these MCP servers non-interactively, in each target's native form
@@ -1140,7 +1342,9 @@ function parseArgs(argv) {
     else if (a === "--update") out.update = true;
     else if (a === "--symlink") out.symlink = true;
     else if (a === "--interactive" || a === "-i") out.interactive = true;
-    else if (a === "--bundle") out.bundle = (argv[++i] || "").trim();
+    // --bundle is a silent back-compat alias for --factory (pre-rename flag
+    // name) — same target field, no deprecation notice, identical behavior.
+    else if (a === "--factory" || a === "--bundle") out.factory = (argv[++i] || "").trim();
     else if (a === "--agents") out.agents = splitList(argv[++i]);
     else if (a === "--skills") out.skills = splitList(argv[++i]);
     else if (a === "--target") out.targets = splitList(argv[++i]);
@@ -1151,7 +1355,7 @@ function parseArgs(argv) {
     }
     // Anything else is unrecognized. Skip the leading `init` subcommand. A
     // common cause is a flag+value passed as a single shell token — e.g. zsh
-    // not word-splitting an unquoted variable: `init "--bundle feature-development"`.
+    // not word-splitting an unquoted variable: `init "--factory feature-development"`.
     else if (!(i === 0 && a === "init")) {
       out.unknown.push(a);
     }
@@ -1175,7 +1379,7 @@ function printHelp() {
     npx github:arozumenko/sdlc-skills init [options]
 
   Options:
-    --bundle <id>              Install a team bundle (a curated set of agents,
+    --factory <id>             Install a team factory (a curated set of agents,
                                skills, briefings, instructions, and hooks)
     --all                      Install every agent and every skill (no prompts)
     --agents <a,b,c|all>       Install only these agents (or all)
@@ -1186,7 +1390,7 @@ function printHelp() {
                                quality-architect, its QA specialists/connectors).
                                Applies to the quality-architect agent and the
                                test-automation / manual-qa / quality-engineering
-                               bundles. Needs a terminal.
+                               factories. Needs a terminal.
     --mcp <a,b,c>              Write these MCP servers non-interactively, each in
                                its target's native form (Claude .mcp.json; Copilot
                                .vscode/mcp.json + .copilot/mcp-config.json; Codex
@@ -1198,8 +1402,8 @@ function printHelp() {
     -h, --help                 Show this help
 
   Examples:
-    npx github:arozumenko/sdlc-skills init --bundle feature-development
-    npx github:arozumenko/sdlc-skills init --bundle feature-development --target claude
+    npx github:arozumenko/sdlc-skills init --factory feature-development
+    npx github:arozumenko/sdlc-skills init --factory feature-development --target claude
     npx github:arozumenko/sdlc-skills init --all
     npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
     npx github:arozumenko/sdlc-skills init --agents all --target claude --update
@@ -1212,7 +1416,7 @@ function printHelp() {
 
 function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // kind: "agents" | "skills"; target: {id, dir, label}
-  // srcRoot defaults to the monorepo; bundle-local agents pass their own dir.
+  // srcRoot defaults to the monorepo; factory-local agents pass their own dir.
   const src = join(srcRoot, kind, name);
   if (!existsSync(src)) return { status: "missing" };
 
@@ -1231,8 +1435,8 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   if (existsSync(dest) && !update) return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
-  // Deep-dereferenced copy — bundle-local agents/skills may be symlinks back
-  // into this repo's agents/ or skills/ (the symlink pattern lets a bundle
+  // Deep-dereferenced copy — factory-local agents/skills may be symlinks back
+  // into this repo's agents/ or skills/ (the symlink pattern lets a factory
   // "own" a shared item without forking it), and the source tree may contain
   // nested symlinks too (Node's cpSync({dereference:true}) doesn't recurse).
   copyTreeDereferenced(src, dest, { force: true });
@@ -1463,7 +1667,7 @@ export function applySkillOverlayToText(text, overlay) {
   return out;
 }
 
-// Apply a bundle's per-role skill overlay to an already-installed agent:
+// Apply a factory's per-role skill overlay to an already-installed agent:
 // rewrite its skill lines to the effective set. On Claude the `skills:` line
 // is the preload list (on-demand entries are installed only); on
 // Cursor/Windsurf we also regenerate the injected `skills:` inventory so it
@@ -1706,6 +1910,13 @@ function transformAgentForCodex(agentText, soulText, name) {
 
   const lines = [`name = ${tomlBasicString(name)}`, `description = ${tomlBasicString(description)}`];
   if (model) lines.push(`model = ${tomlBasicString(model)}`);
+  // Re-emit the agent's context declaration as comments — frontmatter dies in
+  // the TOML transform, but the hook-roster generator reads the INSTALLED
+  // file, so the declaration must ride along (agentContextConfig, toml mode).
+  for (const key of ["context-docs", "context-memory"]) {
+    const m = frontmatter.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
+    if (m) lines.push(`# ${key}: ${m[1].trim().replace(/^["']|["']$/g, "")}`);
+  }
   lines.push("", `developer_instructions = ${tomlMultiline(body.trim())}`);
 
   // Enable only the `skills:` list — the standing-context set. On-demand
@@ -1779,7 +1990,7 @@ async function interactivePick(catalog, args) {
     targets = choice === "__all__" ? detected : detected.filter((t) => t.id === choice);
   }
 
-  // Resolve agents (bare ids and qualified `bundle/name`), resolver-aware.
+  // Resolve agents (bare ids and qualified `factory/name`), resolver-aware.
   let agentsSelection;
   if (args.agents === null) agentsSelection = null;
   else if (args.agents.length === 0) agentsSelection = [];
@@ -2345,7 +2556,7 @@ function writeMcpSelections(targets, ids) {
 }
 
 // Re-write an installed agent's skill lines (`skills:` AND `skills-on-demand:`),
-// dropping `removeSet`. Composes on top of any bundle overlay already applied
+// dropping `removeSet`. Composes on top of any factory overlay already applied
 // (reads the installed copy).
 function trimInstalledAgentSkills(target, name, removeSet) {
   const f = target.id === "copilot"
@@ -2357,9 +2568,9 @@ function trimInstalledAgentSkills(target, name, removeSet) {
   if (rewritten !== null && rewritten !== text) writeFileSync(f, rewritten);
 }
 
-// QA/test bundles that get the interactive MCP-server picker even without the
+// QA/test factories that get the interactive MCP-server picker even without the
 // quality-architect agent (the specialist/connector menus stay agent-specific).
-const INTERACTIVE_BUNDLES = new Set(["test-automation", "manual-qa", "quality-engineering"]);
+const INTERACTIVE_FACTORIES = new Set(["test-automation", "manual-qa", "quality-engineering"]);
 
 // Interactive menus. When `qa` is true (quality-architect in the roster) the
 // specialist + connector menus run and unticked items are trimmed from Quinn;
@@ -2410,8 +2621,8 @@ async function main() {
   // into one shell token). A loud error beats the wrong install.
   if (args.unknown.length) {
     console.error(`\n  ! Unrecognized argument(s): ${args.unknown.map((t) => `"${t}"`).join(", ")}`);
-    console.error(`    Known flags: --agents <list> | --skills <list> | --bundle <id> | --target <list> | --all | --update | --symlink | --yes`);
-    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--bundle feature-development\`, not \`"--bundle feature-development"\`).`);
+    console.error(`    Known flags: --agents <list> | --skills <list> | --factory <id> | --target <list> | --all | --update | --symlink | --yes`);
+    console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--factory feature-development\`, not \`"--factory feature-development"\`).`);
     console.error(`    To install the entire catalog on purpose, use --all.\n`);
     process.exit(1);
   }
@@ -2430,23 +2641,23 @@ async function main() {
     return;
   }
 
-  // A --bundle expands into the agent/skill selection before resolution, so
-  // each bundle agent's declared skills auto-resolve through the normal path.
-  let bundle = null;
-  let bundlePlan = null;
-  if (args.bundle) {
-    bundle = loadBundle(args.bundle);
-    bundlePlan = await applyBundle(bundle, args, catalog);
+  // A --factory expands into the agent/skill selection before resolution, so
+  // each factory agent's declared skills auto-resolve through the normal path.
+  let factory = null;
+  let factoryPlan = null;
+  if (args.factory) {
+    factory = loadFactory(args.factory);
+    factoryPlan = await applyFactory(factory, args, catalog);
   }
 
   const { targets, agentsSelection, skillsSelection, externalSkills } =
     await interactivePick(catalog, args);
 
-  // Fold in the bundle's extra skills (team-wide extras + skills declared by
+  // Fold in the factory's extra skills (team-wide extras + skills declared by
   // local agents), partitioned into monorepo copies vs external clones.
-  if (bundlePlan && bundlePlan.extraSkillIds.length) {
+  if (factoryPlan && factoryPlan.extraSkillIds.length) {
     const { monorepo, external, unknown } = partitionSkillIds(
-      bundlePlan.extraSkillIds,
+      factoryPlan.extraSkillIds,
       catalog.skills,
       catalog.registry,
       catalog.index
@@ -2455,22 +2666,22 @@ async function main() {
     for (const e of external) if (!externalSkills.some((x) => x.id === e.id)) externalSkills.push(e);
     if (unknown.length) {
       console.log(
-        `\n  ! Bundle skills not in skills.json (skipped):\n    ${unknown.join(", ")}`
+        `\n  ! Factory skills not in skills.json (skipped):\n    ${unknown.join(", ")}`
       );
     }
   }
 
   // Per-role skill overlays: drop skills a `remove` orphaned (no agent needs
   // them after overlays), and surface `add` skills that aren't authored yet.
-  if (bundlePlan && bundlePlan.droppable && bundlePlan.droppable.size) {
+  if (factoryPlan && factoryPlan.droppable && factoryPlan.droppable.size) {
     for (let i = skillsSelection.length - 1; i >= 0; i--)
-      if (bundlePlan.droppable.has(skillsSelection[i])) skillsSelection.splice(i, 1);
+      if (factoryPlan.droppable.has(skillsSelection[i])) skillsSelection.splice(i, 1);
     for (let i = externalSkills.length - 1; i >= 0; i--)
-      if (bundlePlan.droppable.has(externalSkills[i].id)) externalSkills.splice(i, 1);
+      if (factoryPlan.droppable.has(externalSkills[i].id)) externalSkills.splice(i, 1);
   }
-  if (bundlePlan && bundlePlan.pendingAdds && bundlePlan.pendingAdds.length) {
+  if (factoryPlan && factoryPlan.pendingAdds && factoryPlan.pendingAdds.length) {
     console.log(
-      `\n  ! Skill overlay adds not yet in the catalog (pending content — author + register to enable):\n    ${bundlePlan.pendingAdds.join(", ")}`
+      `\n  ! Skill overlay adds not yet in the catalog (pending content — author + register to enable):\n    ${factoryPlan.pendingAdds.join(", ")}`
     );
   }
 
@@ -2479,11 +2690,11 @@ async function main() {
   let skipped = 0;
 
   // Interactive selection (opt-in). The MCP-server picker runs for the QA/test
-  // bundles too; the specialist/connector menus only when quality-architect is in.
+  // factories too; the specialist/connector menus only when quality-architect is in.
   const qaInRoster =
     (agentsSelection || []).includes("quality-architect") ||
-    (bundlePlan && (bundlePlan.localAgents || []).includes("quality-architect"));
-  const interactiveApplies = qaInRoster || (args.bundle && INTERACTIVE_BUNDLES.has(args.bundle));
+    (factoryPlan && (factoryPlan.localAgents || []).includes("quality-architect"));
+  const interactiveApplies = qaInRoster || (args.factory && INTERACTIVE_FACTORIES.has(args.factory));
   let qaPick = null;
   if (args.interactive && interactiveApplies) {
     if (!process.stdin.isTTY) {
@@ -2492,7 +2703,7 @@ async function main() {
       qaPick = await runInteractive(qaInRoster);
     }
   } else if (args.interactive) {
-    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / manual-qa / quality-engineering bundles — ignoring.");
+    console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / manual-qa / quality-engineering factories — ignoring.");
   }
 
   // Resolve where each standalone-selected agent/skill physically lives.
@@ -2502,7 +2713,7 @@ async function main() {
   for (const name of skillsSelection || []) skillSrc[name] = resolveItem(catalog.index, "skills", name);
   for (const [name, r] of [...Object.entries(agentSrc), ...Object.entries(skillSrc)]) {
     if (r && r.ambiguousAcross.length) {
-      console.log(`  • "${name}" exists in ${r.ambiguousAcross.join(", ")} — using ${r.bundle}. Qualify as <bundle>/${r.name} to pick another.`);
+      console.log(`  • "${name}" exists in ${r.ambiguousAcross.join(", ")} — using ${r.factory}. Qualify as <factory>/${r.name} to pick another.`);
     }
   }
 
@@ -2515,59 +2726,59 @@ async function main() {
       else if (res.status === "exists") { console.log(`      — agent  ${r.name} (exists; use --update)`); skipped++; }
       else { console.log(`      ! agent  ${r.name} (missing)`); }
     }
-    if (bundlePlan) {
-      for (const name of bundlePlan.localAgents) {
+    if (factoryPlan) {
+      for (const name of factoryPlan.localAgents) {
         const r = copyItem(
           "agents",
           name,
           t,
           args.update,
           catalog.registry,
-          bundle.dir
+          factory.dir
         );
         if (r.status === "installed") {
-          console.log(`      ✓ agent  ${name} (bundle-local)`);
+          console.log(`      ✓ agent  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
           console.log(`      — agent  ${name} (exists; use --update)`);
           skipped++;
         } else {
-          console.log(`      ! agent  ${name} (missing in bundle)`);
+          console.log(`      ! agent  ${name} (missing in factory)`);
         }
       }
-      for (const name of bundlePlan.localSkills) {
+      for (const name of factoryPlan.localSkills) {
         const r = copyItem(
           "skills",
           name,
           t,
           args.update,
           catalog.registry,
-          bundle.dir
+          factory.dir
         );
         if (r.status === "installed") {
-          console.log(`      ✓ skill  ${name} (bundle-local)`);
+          console.log(`      ✓ skill  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
           console.log(`      — skill  ${name} (exists; use --update)`);
           skipped++;
         } else {
-          console.log(`      ! skill  ${name} (missing in bundle)`);
+          console.log(`      ! skill  ${name} (missing in factory)`);
         }
       }
     }
     // Apply per-role skill overlays to the installed agents (capability tuning).
     // Adds are limited to the ones that resolved into the effective set at plan
     // time (pending adds — skills that don't exist yet — never reach the file).
-    if (bundlePlan && bundlePlan.overlays) {
-      for (const role of Object.keys(bundlePlan.overlays)) {
-        const planOv = bundlePlan.overlays[role] || {};
-        const eff = new Set(bundlePlan.effectiveByAgent[role] || []);
+    if (factoryPlan && factoryPlan.overlays) {
+      for (const role of Object.keys(factoryPlan.overlays)) {
+        const planOv = factoryPlan.overlays[role] || {};
+        const eff = new Set(factoryPlan.effectiveByAgent[role] || []);
         const overlay = {
           remove: planOv.remove || [],
           add: (planOv.add || []).filter((s) => eff.has(s)),
         };
         if (applySkillOverlay(t, role, overlay, catalog.registry)) {
-          const ov = bundlePlan.overlays[role];
+          const ov = factoryPlan.overlays[role];
           const bits = [];
           if (ov.add && ov.add.length) bits.push(`+${ov.add.join(",")}`);
           if (ov.remove && ov.remove.length) bits.push(`-${ov.remove.join(",")}`);
@@ -2616,42 +2827,50 @@ async function main() {
   }
 
   // Core hooks (per-role memory + lean .agents/*.md context injection) land in
-  // each selected runtime's native hook format. Every install, not just bundles.
+  // each selected runtime's native hook format. Every install, not just factories.
   // A bare `--mcp` run is MCP-only — the user just wants the server configs, not a
   // full project wiring — so skip the per-role memory/context hooks in that case.
   const mcpOnly =
-    args.mcp && args.mcp.length && args.agents === null && args.skills === null && !args.all && !args.bundle;
+    args.mcp && args.mcp.length && args.agents === null && args.skills === null && !args.all && !args.factory;
   if (!mcpOnly && existsSync(join(PKG_ROOT, "hooks"))) {
     console.log(`\n  → hooks (memory + project-context injection)`);
     installCoreHooks(targets);
   }
 
+  // Other factories' hooks are never touched by this install — flag the ones
+  // that now lag behind the package so their fixes don't strand silently.
+  try {
+    for (const [id, files] of checkSiblingBundleHooks(targets)) {
+      console.log(`  ℹ factory '${id}': installed hooks differ from this package's version (${files.join(", ")}) — a stale fix or a local patch; refresh with: init --factory ${id} --update`);
+    }
+  } catch { /* advisory only — never blocks an install */ }
+
   // Briefing overlays land once in .agents/ (IDE-neutral), not per target.
-  if (bundle && (Object.keys(bundle.briefings).length || (bundle._resolvedBriefings && Object.keys(bundle._resolvedBriefings).length))) {
+  if (factory && (Object.keys(factory.briefings).length || (factory._resolvedBriefings && Object.keys(factory._resolvedBriefings).length))) {
     console.log(`\n  → .agents/memory/ (shared, all IDEs)`);
-    const b = installBriefings(bundle);
+    const b = installBriefings(factory);
     installed += b.installed;
     skipped += b.skipped;
   }
 
   // Team instructions splice once into root context files (idempotent).
-  if (bundle && bundle.instructions) {
+  if (factory && factory.instructions) {
     console.log(`\n  → project root (team instructions)`);
-    installInstructions(bundle);
+    installInstructions(factory);
   }
 
   // Seed reference files into the project (idempotent; IDE-neutral).
-  if (bundle && bundle.seed && Object.keys(bundle.seed).length) {
+  if (factory && factory.seed && Object.keys(factory.seed).length) {
     console.log(`\n  → project (seed reference files)`);
-    const s = installSeed(bundle, args.update);
+    const s = installSeed(factory, args.update);
     installed += s.installed;
     skipped += s.skipped;
   }
 
   // Hooks merge into each Claude target's settings.json (idempotent).
-  if (bundle && bundle.hooks) {
+  if (factory && factory.hooks) {
     console.log(`\n  → hooks (settings.json)`);
-    installHooks(bundle, targets);
+    installHooks(factory, targets);
   }
 
   const launchNames = targets.map((t) => t.label).join(", ");

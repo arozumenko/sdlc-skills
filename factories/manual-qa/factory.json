@@ -1,0 +1,51 @@
+{
+  "id": "manual-qa",
+  "title": "Manual Testing Team",
+  "description": "Standalone agentic manual-QA team for web and mobile apps \u2014 onboard the app, author test cases, run them live, and report. Supports Playwright (web/PWA/hybrid), Appium MCP (native local), and Mobitru device farm (cloud real devices).",
+  "agents": [],
+  "localAgents": [
+    "app-profiler",
+    "test-sizer",
+    "test-author",
+    "test-run-lead",
+    "test-runner",
+    "test-reporter",
+    "qa-auditor"
+  ],
+  "localSkills": [
+    "playwright-testing",
+    "xlsx-reader",
+    "mobile-testing",
+    "security-audit",
+    "accessibility-audit",
+    "privacy-audit",
+    "performance-audit",
+    "responsive-audit",
+    "ux-audit",
+    "content-seo-audit"
+  ],
+  "skills": [
+    "memory",
+    "knowledge-curation"
+  ],
+  "skillOverlays": {
+    "app-profiler": {
+      "add": [
+        "mobile-testing"
+      ]
+    },
+    "test-runner": {
+      "add": [
+        "mobile-testing"
+      ]
+    }
+  },
+  "seed": {
+    "knowledge": ".agents/manual-qa/knowledge"
+  },
+  "instructions": "instructions.md",
+  "hooks": "hooks/hooks.json",
+  "targets": [
+    "claude"
+  ]
+}

@@ -1,6 +1,6 @@
 # Product Management — Onboarding
 
-The `product-management` bundle drops a **Product Owner discovery team** into a
+The `product-management` factory drops a **Product Owner discovery team** into a
 repo. It takes a raw ask — a feature request, a complaint, a market question, an
 idea — and runs it through a discovery loop until it comes out the other side as
 a **verified, prioritized hypothesis** anchored to a ratified outcome, ready to
@@ -8,9 +8,9 @@ hand off to engineering as groomed backlog work. Everything is plain Markdown
 under `docs/discovery/` — there is no vault, no database, and nothing runs
 against your application code.
 
-For the pipeline picture, roster, and the artifact conventions, read the bundle
+For the pipeline picture, roster, and the artifact conventions, read the factory
 README first — this guide assumes it and focuses on **adoption**:
-[`bundles/product-management/README.md`](../../bundles/product-management/README.md).
+[`factories/product-management/README.md`](../../factories/product-management/README.md).
 
 **Pick your path:**
 
@@ -34,7 +34,7 @@ You → product-owner (Priya) runs the loop end to end
 | Discovery lead | `product-owner` (Priya) | Owns the loop: triages intake, frames problems, drafts and ratifies outcomes, maps the opportunity tree, prioritizes, and **guards the promotion gate**. Dispatches Sam for evidence. |
 | Researcher | `discovery-researcher` (Sam) | Gathers and stress-tests evidence: stakeholder interviews, market/desk research, adversarial verification. Never decides what gets built — hands evidence back to Priya. |
 
-**There is no `scout` here.** The bundle seeds the empty `docs/discovery/`
+**There is no `scout` here.** The factory seeds the empty `docs/discovery/`
 workspace at install; `product-owner` orients from it plus whatever
 `.agents/*.md` and `docs/` your repo already has. Feasibility sign-off isn't a
 skill — when a bet needs an "is this buildable?" check, `product-owner`
@@ -76,7 +76,7 @@ Two things sharpen the loop but are optional:
 | **Tracker cross-check** in `journeys-to-hypotheses` | Your issue tracker named in `.agents/profile.md` (`gh` / `glab` on PATH). Degrades gracefully — with no tracker it just marks those columns n/a. |
 | **Market / desk research** in `deep-research` | Web access wired into your host so Sam can pull sources. |
 
-The bundle install (`--bundle`) currently targets **Claude Code**; other hosts
+The factory install (`--factory`) currently targets **Claude Code**; other hosts
 use the manual `--agents` form. Host-specific launch syntax and flags:
 [README.md](../../README.md).
 
@@ -87,18 +87,18 @@ use the manual `--agents` form. Host-specific launch syntax and flags:
 You have a raw ask, a complaint, or an idea — and nothing in `docs/discovery/`
 yet.
 
-### 1. Install the bundle
+### 1. Install the factory
 
 ```bash
 cd /path/to/your-repo
-npx github:arozumenko/sdlc-skills init --bundle product-management
+npx github:arozumenko/sdlc-skills init --factory product-management
 ```
 
 This installs the 2 agents into `.claude/agents/`, their 10 discovery skills
 (plus the reused `deep-research`, `brainstorming`, `verifying-outcomes`,
 `memory` and `knowledge-curation`), seeds the empty `docs/discovery/` scaffold, wires the context hooks,
 and splices the team conventions into `AGENTS.md` / `CLAUDE.md` under
-`<!-- BUNDLE:product-management -->`.
+`<!-- FACTORY:product-management -->`.
 
 For Copilot / Cursor / Windsurf, use the manual form:
 
@@ -164,7 +164,7 @@ Priya narrates that checklist and **refuses handoff** when any item is unmet.
 You already have user journeys, a requirements doc, or a rough backlog and want
 to reconcile them into a coherent, prioritized set of bets.
 
-1. **Install** the bundle (step 1 above).
+1. **Install** the factory (step 1 above).
 2. **Drop your journeys** into `docs/discovery/journeys/` (or paste them to
    Priya and let her file them), and any existing bets into
    `docs/discovery/hypotheses/`.
@@ -196,7 +196,7 @@ decides **what's worth building and why**; the dev team decides **how** and
 ships it. They share the repo but own different artifacts — discovery owns
 `docs/discovery/`; the dev team owns `src/` and the delivery pipeline.
 
-Install both bundles into the same repo (run each `--bundle` once). The handoff
+Install both factories into the same repo (run each `--factory` once). The handoff
 is a **role dispatch**, not a file convention: when a hypothesis clears the gate,
 `product-owner` hands it to **`ba` (Alex)**, who turns it into user stories with
 acceptance criteria, and `issue-tracking` files them. Alex reads the promoted
@@ -230,8 +230,8 @@ docs/discovery/
 └── _inbox/                         # gitignored — confidential/person-named raw material
 ```
 
-Three rules the team obeys (full detail in the bundle README and
-[`instructions.md`](../../bundles/product-management/instructions.md)):
+Three rules the team obeys (full detail in the factory README and
+[`instructions.md`](../../factories/product-management/instructions.md)):
 
 - **IDs are scanned, never reused** — `PRB-NNN` / `HYP-NNN` / `DEC-NNN`, the next
   free number found by scanning the folder.
@@ -259,7 +259,7 @@ Three rules the team obeys (full detail in the bundle README and
   configured in `.agents/profile.md`, so it degrades gracefully to n/a. Add your
   tracker there (and `gh`/`glab` on PATH) to enable the cross-check.
 - **Feasibility check asks for `tech-lead` and it isn't installed** → install the
-  `feature-development` bundle (which ships `tech-lead`), or get the read from a
+  `feature-development` factory (which ships `tech-lead`), or get the read from a
   qualified human. Either way it is recorded in the hypothesis's own `feasibility_read:`
   block — that is where `discovery-status` looks for it.
 - **Priya prioritizes on a gut-band bet** → `prioritize-bets` **warns, never
@@ -287,7 +287,7 @@ past chat; you decide when to re-run the loop and which bets to park.
 
 ```
 <project-root>/
-├── AGENTS.md / CLAUDE.md             # team conventions spliced under <!-- BUNDLE:product-management -->
+├── AGENTS.md / CLAUDE.md             # team conventions spliced under <!-- FACTORY:product-management -->
 ├── docs/discovery/                   # the discovery record — yours to keep
 │   ├── problems/  personas/  journeys/  hypotheses/
 │   ├── outcomes.md  decisions.md

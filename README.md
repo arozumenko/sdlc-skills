@@ -16,7 +16,7 @@ GitHub Copilot CLI, Windsurf, Codex).
 flowchart TB
     subgraph sdlc["sdlc-skills — content + install resolution"]
         direction TB
-        agents[/"bundles/<br/>agent + skill content"/]
+        agents[/"factories/<br/>agent + skill content"/]
         skills[/"orphan skills/<br/>standalone-only content"/]
         registry[("skills.json<br/>catalog: orphan + external")]
         installer(["bin/init.mjs<br/>npx installer"])
@@ -55,8 +55,8 @@ Agents are **self-describing** — each `AGENT.md` carries its own metadata
 (role, group, theme, aliases, skills, model). IDE plugin systems read it at
 install time. Nothing duplicated.
 
-Most agents and skills live inside bundles (`bundles/<id>/agents/` and
-`bundles/<id>/skills/`). The top-level `agents/` and `skills/` directories
+Most agents and skills live inside factories (`factories/<id>/agents/` and
+`factories/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
 and eight skills (`deep-research`, `gathering-context`, `verifying-outcomes`,
 `microsoft-365`, `obsidian-vault`, `tosca-automation`, `vividus`,
@@ -115,7 +115,7 @@ want to be happy).
 | **npx installer** ⭐ | ✅ Yes | Any IDE. Full catalog. One command. This is the happy path. |
 | Native IDE plugins | ❌ Monorepo only | You don't want Node installed. Trade-off: no external skills, manual team assembly. |
 
-> **Adopting a whole team?** Each bundle has a deep, scenario-based onboarding
+> **Adopting a whole team?** Each factory has a deep, scenario-based onboarding
 > guide under [`docs/onboarding/`](docs/onboarding/) — start at the
 > [index](docs/onboarding/README.md) to pick yours:
 > [feature-development](docs/onboarding/feature-development.md) (dev team),
@@ -143,12 +143,12 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 `.agent.md` for Copilot, TOML for Codex.
 
 ```bash
-# A team bundle — the whole team in one shot (agents, their skills,
-# per-role stack briefings, and team conventions). See bundles/SPEC.md.
-npx github:arozumenko/sdlc-skills init --bundle feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev, android-dev
-npx github:arozumenko/sdlc-skills init --bundle manual-qa     # manual-QA team (live browser testing via Playwright MCP)
-npx github:arozumenko/sdlc-skills init --bundle test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
-npx github:arozumenko/sdlc-skills init --bundle product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
+# A team factory — the whole team in one shot (agents, their skills,
+# per-role stack briefings, and team conventions). See factories/SPEC.md.
+npx github:arozumenko/sdlc-skills init --factory feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev, android-dev
+npx github:arozumenko/sdlc-skills init --factory manual-qa     # manual-QA team (live browser testing via Playwright MCP)
+npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
+npx github:arozumenko/sdlc-skills init --factory product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -167,22 +167,23 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 npx github:arozumenko/sdlc-skills init --all --update
 ```
 
-**Team bundles.** A bundle is a named team preset that installs a curated
+**Team factories.** A factory is a named team preset that installs a curated
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
 files** into the project — one command instead of hand-listing roles. Four
 ship today:
 
-| Bundle | Roster | What it's for |
+| Factory | Roster | What it's for |
 |---|---|---|
 | `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI), `android-dev` (greenfield Kotlin/Compose); core roles auto-tune per picked platforms. |
-| `manual-qa` | 6 bundle-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
-| `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + bundle-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
-| `product-management` | 2 bundle-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 bundle-local skills and seeds an empty `docs/discovery/` scaffold. |
+| `manual-qa` | 6 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
+| `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
+| `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
 
-See [`bundles/SPEC.md`](bundles/SPEC.md) and each bundle's `README.md` to
-author your own.
+See [`factories/SPEC.md`](factories/SPEC.md) and each factory's `README.md` to
+author your own. (`--bundle` still works as a silent back-compat alias for
+`--factory` — the flag used before this repo's factories rename.)
 
 Install locations:
 
@@ -252,7 +253,7 @@ original `model:` value. Full help: `init fix-copilot --help`.
 
 Each of these paths reads the native plugin manifest this repo ships and
 installs **only the monorepo content** — the orphan `skills/` entries plus the
-bundle-owned agents/skills the manifest points at. External skills (Matt
+factory-owned agents/skills the manifest points at. External skills (Matt
 Pocock's TDD, the superpowers skills, the twostraws Swift skills) are not
 fetched. If you want those, go back to path 1.
 
@@ -267,7 +268,7 @@ fetched. If you want those, go back to path 1.
 **Cursor native plugin** — `.cursor-plugin/plugin.json`
 
 Point Cursor's plugin manager at this repo URL; it reads the manifest
-and installs skills + agents from the discovered orphan and bundle dirs.
+and installs skills + agents from the discovered orphan and factory dirs.
 
 **Gemini CLI extension** — `gemini-extension.json` + `GEMINI.md`
 
@@ -287,14 +288,14 @@ cloned into your project.
 ### 3. agentskills.io / third-party consumption
 
 Every `SKILL.md` in this repo — the orphans under `skills/<name>/` and the
-bundle-owned skills under `bundles/<id>/skills/<name>/` — follows the
+factory-owned skills under `factories/<id>/skills/<name>/` — follows the
 [agentskills.io](https://agentskills.io) spec (`name` + `description`
 frontmatter). Any skill runtime (Vercel, custom frameworks, other IDEs) can
 point directly at a `SKILL.md` directory.
 
 ## Catalog
 
-### Agents (catalog across bundles)
+### Agents (catalog across factories)
 
 | Agent | Persona | Role |
 |---|---|---|
@@ -308,12 +309,12 @@ point directly at a `SKILL.md` directory.
 | `qa-engineer` | Sage | Tests PRs, reports findings, executes TMS cases and emits Automation-Friendly Specs via the `test-case-analysis` skill |
 | `test-automation-engineer` | Axel | Implements automation from AFS specs in the project's existing framework (Playwright / Cypress / pytest / JUnit / NUnit / WDIO) |
 | `scout` | Kit | Maps unfamiliar codebases — explores, documents patterns, flags risks |
-| `test-automation-lead` | Tal | Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and test-framework architecture (`test-automation` bundle) |
-| `product-owner` | Priya | Runs the discovery loop end to end — intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate (`product-management` bundle) |
-| `discovery-researcher` | Sam | Gathers and stress-tests evidence — stakeholder interviews, market/desk research, adversarial verification; dispatched by `product-owner` (`product-management` bundle) |
+| `test-automation-lead` | Tal | Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and test-framework architecture (`test-automation` factory) |
+| `product-owner` | Priya | Runs the discovery loop end to end — intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate (`product-management` factory) |
+| `discovery-researcher` | Sam | Gathers and stress-tests evidence — stakeholder interviews, market/desk research, adversarial verification; dispatched by `product-owner` (`product-management` factory) |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief (standalone orphan) |
 
-The **`manual-qa`** bundle ships a separate live-browser manual-QA team (functional
+The **`manual-qa`** factory ships a separate live-browser manual-QA team (functional
 roles rather than named personas), all driving a running app via Playwright MCP:
 
 | Agent | Role |
@@ -327,11 +328,11 @@ roles rather than named personas), all driving a running app via Playwright MCP:
 
 ### Skills
 
-Most skills are bundle-owned (under `bundles/<id>/skills/`). Eight orphan skills
+Most skills are factory-owned (under `factories/<id>/skills/`). Eight orphan skills
 live in the top-level `skills/` dir and are available standalone. The full set
-installable via bundles is listed below.
+installable via factories is listed below.
 
-**SDLC-coupled (9, bundle-owned):**
+**SDLC-coupled (9, factory-owned):**
 
 | Skill | What it does |
 |---|---|
@@ -342,16 +343,16 @@ installable via bundles is listed below.
 | `root-cause-analysis` | Trace a confirmed bug to its exact cause — execution-path tracing, classification, impact/regression (investigation only) |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
-| `seeding-a-project` | Scout's project onboarding / configuration flow |
+| `seeding-a-project` | Scout's project onboarding / configuration flow (feature-development factory; the test-automation factory's automation-specific variant is `seeding-automation-project`) |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Other skills (18, mix of bundle-owned and orphan):**
+**Other skills (18, mix of factory-owned and orphan):**
 
 | Skill | What it does |
 |---|---|
 | `code-review` | Structured code review checklist and reporting |
 | `session-retrospective` | Assisted reinforcement — distill lessons from a finished session into memory (feature-development, test-automation) |
-| `mobile-testing` | Manual mobile-app testing via Appium / device-farm sessions (manual-qa bundle) |
+| `mobile-testing` | Manual mobile-app testing via Appium / device-farm sessions (manual-qa factory) |
 | `git-workflow` | Branching, commits, PR conventions |
 | `playwright-testing` | E2E browser testing with Playwright |
 | `browser-verify` | Quick visual / smoke verification in a browser |
@@ -366,9 +367,9 @@ installable via bundles is listed below.
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
-| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Owned by the `manual-qa` bundle |
+| `xlsx-reader` | Read `.xlsx` spreadsheets (test cases, checklists, requirement matrices) into Markdown for agent ingestion. Owned by the `manual-qa` factory |
 
-**Product management (10, bundle-owned by `product-management`):**
+**Product management (10, factory-owned by `product-management`):**
 
 | Skill | What it does |
 |---|---|
@@ -473,17 +474,17 @@ sdlc-skills/
 │       └── scripts/            # optional helper scripts
 ├── bin/
 │   ├── init.mjs                # npx installer — resolves + fetches externals
-│   └── validate-bundles.mjs    # bundle manifest validator (CI + npm run validate:bundles)
-├── bundles/                    # team presets — one command installs a whole team
-│   ├── SPEC.md                 # bundle manifest spec
-│   └── <bundle-id>/            # feature-development, manual-qa, test-automation, product-management
-│       ├── bundle.json         # roster, briefings, skillOverlays, seed, instructions
+│   └── validate-factories.mjs    # factory manifest validator (CI + npm run validate:factories)
+├── factories/                    # team presets — one command installs a whole team
+│   ├── SPEC.md                 # factory manifest spec
+│   └── <factory-id>/            # feature-development, manual-qa, test-automation, product-management
+│       ├── factory.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
 │       ├── briefings/<role>.md # seeded into .agents/memory/<role>/
 │       ├── knowledge/          # reference docs seeded into the project (manual-qa)
-│       ├── agents/<name>/      # agents this bundle owns (real copies; divergence OK)
-│       └── skills/<name>/      # skills this bundle owns
+│       ├── agents/<name>/      # agents this factory owns (real copies; divergence OK)
+│       └── skills/<name>/      # skills this factory owns
 ├── skills.json                 # catalog: monorepo + external skill sources
 ├── AGENTS.md                   # generic / GitHub Copilot CLI fallback
 ├── GEMINI.md                   # Gemini CLI context file
@@ -495,14 +496,14 @@ sdlc-skills/
 
 ## Adding content
 
-1. **New bundle agent** → create `bundles/<bundle-id>/agents/<name>/AGENT.md`
+1. **New factory agent** → create `factories/<factory-id>/agents/<name>/AGENT.md`
    (with YAML frontmatter: `name`, `description`, `model`, `color`, `group`,
-   `theme`, `aliases`, `skills`) and a `SOUL.md`. Declare it in `bundle.json`
+   `theme`, `aliases`, `skills`) and a `SOUL.md`. Declare it in `factory.json`
    under `localAgents`. No separate registry needed.
-2. **New bundle skill** → create `bundles/<bundle-id>/skills/<name>/SKILL.md`
+2. **New factory skill** → create `factories/<factory-id>/skills/<name>/SKILL.md`
    with agentskills.io frontmatter (`name`, `description`). Declare it in
-   `bundle.json` under `localSkills`. No `skills.json` entry needed.
-3. **New orphan monorepo skill** (standalone, no bundle) → create
+   `factory.json` under `localSkills`. No `skills.json` entry needed.
+3. **New orphan monorepo skill** (standalone, no factory) → create
    `skills/<name>/SKILL.md`. Register in `skills.json` with
    `{"id": "<name>", "monorepo": "sdlc-skills", "name": "<name>"}`.
 4. **New external skill** → register in `skills.json` with
@@ -511,7 +512,14 @@ sdlc-skills/
 5. **Reference the new skill in an agent's `skills:` list** —
    the installer auto-resolves it on the next run.
 
-No build step, no generated manifests. The installer discovers bundle content
+Every factory ships a `FACTORY.md` catalog descriptor (YAML frontmatter:
+`name`, `description`, `owner`, `authors`, `sdlc_phase`, `support_level`,
+`use_cases`, optional `project_deployments`) — see
+[`factories/SPEC.md`](factories/SPEC.md) for the schema. Any agent or skill
+can opt out of the generated marketplace catalogs with `discoverable: false`
+in its own frontmatter; it still installs normally, it's just not listed.
+
+No build step, no generated manifests. The installer discovers factory content
 at runtime and reads `skills.json` for orphan/external skill resolution — add
 a folder or a registry entry, it shows up on the next `init` run.
 
@@ -528,7 +536,7 @@ re-distributes nothing, only catalogs and wires.
 - **[`appium/skills`](https://github.com/appium/skills)** — Appium. XCUITest and UiAutomator2 environment setup, real-device config, and troubleshooting. `feature-development` iOS + Android QA overlays. Apache-2.0.
 - **Chris Banes' Compose/Kotlin agent skills** — [`chrisbanes/skills`](https://github.com/chrisbanes/skills). `compose-state-and-effects`, `kotlin-concurrency-and-flow`, `compose-ui-testing-patterns`. Powers the `android-dev` agent. Apache-2.0.
 - **[`android/skills`](https://github.com/android/skills)** — official Google Android skills. `testing-setup` — used by the `feature-development` Android overlay and `android-dev`; `android-cli` — in no agent or overlay, opt-in only via an explicit `--skills android-cli`. Apache-2.0.
-- **Bundle-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
+- **Factory-overlay / QA skills** also fetched from [`currents-dev/playwright-best-practices-skill`](https://github.com/currents-dev/playwright-best-practices-skill) (Playwright selector/wait guidance), [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) (React best practices), and [`davila7/claude-code-templates`](https://github.com/davila7/claude-code-templates) (`fastmcp-server`) — see each repo for its license.
 
 Thanks to all maintainers.
 

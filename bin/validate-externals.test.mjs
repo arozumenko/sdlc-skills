@@ -6,7 +6,7 @@ import {
   checkExternals,
   parseValidateArgs,
   summarizeExternalResults,
-} from "./validate-bundles.mjs";
+} from "./validate-factories.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 
 // Fast retries in tests — the production default (300ms) would make this
@@ -267,19 +267,19 @@ test("checkExternals: an unexpected throw on one entry is contained as a FAIL an
 
 // --- parseValidateArgs: unknown-flag rejection -----------------------------
 //
-// A typo like `--check-external` used to fall through to bundle validation
+// A typo like `--check-external` used to fall through to factory validation
 // and exit 0 under a CI step named "Validate external skill registry
 // entries", having fetched nothing.
 
-test("parseValidateArgs: no args -> bundle validation", () => {
-  assert.deepEqual(parseValidateArgs([]), { mode: "bundles", unknown: [] });
+test("parseValidateArgs: no args -> factory validation", () => {
+  assert.deepEqual(parseValidateArgs([]), { mode: "factories", unknown: [] });
 });
 
 test("parseValidateArgs: --check-externals -> the externals check", () => {
   assert.deepEqual(parseValidateArgs(["--check-externals"]), { mode: "check-externals", unknown: [] });
 });
 
-test("parseValidateArgs: a mistyped flag is rejected, never silently downgraded to bundle validation", () => {
+test("parseValidateArgs: a mistyped flag is rejected, never silently downgraded to factory validation", () => {
   const p = parseValidateArgs(["--check-external"]);
   assert.equal(p.mode, "error");
   assert.deepEqual(p.unknown, ["--check-external"]);
@@ -300,7 +300,7 @@ test("parseValidateArgs: a bare positional argument is rejected too", () => {
 
 // --- extractSkillMdName: the contract both callers depend on ---------------
 //
-// init.mjs tests the result for truthiness; validate-bundles.mjs tests it for
+// init.mjs tests the result for truthiness; validate-factories.mjs tests it for
 // `=== null`. A "" return would make them disagree about the same document
 // (installer falls back to the id, guard FAILs), so empty must be null.
 

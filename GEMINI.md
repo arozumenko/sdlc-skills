@@ -7,10 +7,10 @@ for software delivery. Load what matches the task; don't bulk-load everything.
 
 When the task fits one of these roles, read the matching `AGENT.md` +
 `SOUL.md` and adopt the persona for the rest of the session. Each agent lives
-inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
+inside the factory that owns it (`factories/<id>/agents/<name>/`); only
 `personal-assistant` lives at the top-level `agents/`.
 
-**Feature delivery (`feature-development` bundle):**
+**Feature delivery (`feature-development` factory):**
 
 - `ba` — Business analyst (requirements, user stories, acceptance criteria)
 - `tech-lead` — Technical decomposition, interface design, code review
@@ -23,12 +23,12 @@ inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
 - `test-automation-engineer` — Implements automation from specs in the project's existing framework
 - `scout` — Unfamiliar-codebase exploration, `AGENTS.md`/`CLAUDE.md` authoring
 
-**Test automation (`test-automation` bundle):**
+**Test automation (`test-automation` factory):**
 
 - `test-automation-lead` — Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and framework architecture
 - plus `qa-engineer`, `test-automation-engineer`, `scout` (same roles as above)
 
-**Manual QA (`manual-qa` bundle):**
+**Manual QA (`manual-qa` factory):**
 
 - `test-run-lead` — Orchestrates a manual-QA run: assembles the suite, dispatches a runner per case, triggers the report
 - `test-author` — Turns rough ideas into formatted `TC-NNN` cases
@@ -37,7 +37,7 @@ inside the bundle that owns it (`bundles/<id>/agents/<name>/`); only
 - `test-reporter` — Turns run results into a Markdown report
 - `app-profiler` — Onboards a web app, writes the shared app profile
 
-**Product management (`product-management` bundle):**
+**Product management (`product-management` factory):**
 
 - `product-owner` (Priya) — Runs the discovery loop end to end: intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate
 - `discovery-researcher` (Sam) — Gathers and stress-tests evidence: stakeholder interviews, market/desk research, adversarial verification; dispatched by the product-owner
@@ -87,8 +87,8 @@ are capability definitions, not always-on context.
 | `microsoft-365` | Microsoft 365 (email / calendar / Teams) |
 | `seeding-a-project` | Generating `AGENTS.md` / `.agents/` docs / per-role memory briefings for a new project |
 
-Each skill lives under the bundle that owns it
-(`bundles/<id>/skills/<name>/SKILL.md`); the eight orphan skills
+Each skill lives under the factory that owns it
+(`factories/<id>/skills/<name>/SKILL.md`); the eight orphan skills
 (`deep-research`, `gathering-context`, `verifying-outcomes`, `microsoft-365`,
 `obsidian-vault`, `tosca-automation`, `vividus`, `xray-testing`) live at the
 top-level `skills/`.
@@ -113,7 +113,7 @@ way.
 
 ## Using skills in conversation
 
-- "Load the `deep-research` skill" → read its `SKILL.md` (under `skills/` for orphans, or the owning `bundles/<id>/skills/<name>/`).
-- "I'm starting as `ios-dev`" → read `bundles/feature-development/agents/ios-dev/AGENT.md` + `SOUL.md`.
-- "I'm starting as `android-dev`" → read `bundles/feature-development/agents/android-dev/AGENT.md` + `SOUL.md`.
+- "Load the `deep-research` skill" → read its `SKILL.md` (under `skills/` for orphans, or the owning `factories/<id>/skills/<name>/`).
+- "I'm starting as `ios-dev`" → read `factories/feature-development/agents/ios-dev/AGENT.md` + `SOUL.md`.
+- "I'm starting as `android-dev`" → read `factories/feature-development/agents/android-dev/AGENT.md` + `SOUL.md`.
 - Don't restate a skill's contents verbatim. Follow its workflow.

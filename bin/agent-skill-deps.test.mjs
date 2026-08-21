@@ -7,12 +7,12 @@ import { buildItemIndex, catalogIds } from "./lib/item-resolver.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("a bundle-owned agent's declared skills are inferred from its bundle copy", () => {
+test("a factory-owned agent's declared skills are inferred from its factory copy", () => {
   const index = buildItemIndex(ROOT);
   const skills = catalogIds(index, "skills");
   const registry = loadSkillRegistry();
   const { monorepo } = inferSkillsFromAgents(["scout"], skills, registry, index);
-  // scout (bundle-owned) declares these; before the fix the list was empty.
+  // scout (factory-owned) declares these; before the fix the list was empty.
   for (const s of ["seeding-a-project", "memory", "session-retrospective"]) {
     assert.ok(monorepo.includes(s), `expected scout dep "${s}" to resolve, got: ${monorepo.join(", ")}`);
   }

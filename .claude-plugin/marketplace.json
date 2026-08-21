@@ -13,61 +13,61 @@
     },
     {
       "name": "ba",
-      "source": "./bundles/feature-development/agents/ba",
+      "source": "./factories/feature-development/agents/ba",
       "description": "Business analyst agent — turns vague ideas into user stories with acceptance criteria.",
       "version": "0.2.0"
     },
     {
       "name": "tech-lead",
-      "source": "./bundles/feature-development/agents/tech-lead",
+      "source": "./factories/feature-development/agents/tech-lead",
       "description": "Tech lead agent — decomposes stories into dependency-ordered tasks, owns architecture decisions and code review.",
       "version": "0.2.0"
     },
     {
       "name": "project-manager",
-      "source": "./bundles/feature-development/agents/project-manager",
+      "source": "./factories/feature-development/agents/project-manager",
       "description": "Project manager agent — routes tasks to developers, coordinates team progress, owns the merge gate.",
       "version": "0.2.0"
     },
     {
       "name": "python-dev",
-      "source": "./bundles/feature-development/agents/python-dev",
+      "source": "./factories/feature-development/agents/python-dev",
       "description": "Python developer agent — implements Django, FastAPI, Flask services with TDD.",
       "version": "0.2.0"
     },
     {
       "name": "js-dev",
-      "source": "./bundles/feature-development/agents/js-dev",
+      "source": "./factories/feature-development/agents/js-dev",
       "description": "JavaScript/TypeScript developer agent — React, Next.js, Node services with TDD.",
       "version": "0.2.0"
     },
     {
       "name": "ios-dev",
-      "source": "./bundles/feature-development/agents/ios-dev",
+      "source": "./factories/feature-development/agents/ios-dev",
       "description": "iOS/Swift developer agent — SwiftUI, SwiftData, Swift Testing with TDD and no-simulator discipline.",
       "version": "0.2.0"
     },
     {
       "name": "android-dev",
-      "source": "./bundles/feature-development/agents/android-dev",
+      "source": "./factories/feature-development/agents/android-dev",
       "description": "Android/Kotlin developer agent — greenfield Jetpack Compose, Room/DataStore, Gradle/AGP with TDD and no-emulator discipline.",
       "version": "0.2.0"
     },
     {
       "name": "qa-engineer",
-      "source": "./bundles/feature-development/agents/qa-engineer",
+      "source": "./factories/feature-development/agents/qa-engineer",
       "description": "QA engineer agent — verifies features, reproduces bugs, writes E2E tests via Playwright.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-engineer",
-      "source": "./bundles/feature-development/agents/test-automation-engineer",
+      "source": "./factories/feature-development/agents/test-automation-engineer",
       "description": "Test automation engineer agent — turns automation-ready specs into green tests inside the project's existing framework (Playwright, Cypress, pytest, JUnit, NUnit, WDIO).",
       "version": "0.2.0"
     },
     {
       "name": "scout",
-      "source": "./bundles/feature-development/agents/scout",
+      "source": "./factories/feature-development/agents/scout",
       "description": "Codebase scout agent — maps unfamiliar repos, generates CLAUDE.md and project configuration.",
       "version": "0.2.0"
     },
@@ -79,49 +79,49 @@
     },
     {
       "name": "bugfix-workflow",
-      "source": "./bundles/feature-development/skills/bugfix-workflow",
+      "source": "./factories/feature-development/skills/bugfix-workflow",
       "description": "End-to-end bugfix workflow: reproduce → root cause → fix → regression test.",
       "version": "0.2.0"
     },
     {
       "name": "plan-feature",
-      "source": "./bundles/feature-development/skills/plan-feature",
+      "source": "./factories/feature-development/skills/plan-feature",
       "description": "Structured feature planning: requirements, investigation, feasibility, implementation plan.",
       "version": "0.2.0"
     },
     {
       "name": "implement-feature",
-      "source": "./bundles/feature-development/skills/implement-feature",
+      "source": "./factories/feature-development/skills/implement-feature",
       "description": "Feature implementation workflow: plan review, tests, implementation, verification, delivery.",
       "version": "0.2.0"
     },
     {
       "name": "code-review",
-      "source": "./bundles/feature-development/skills/code-review",
+      "source": "./factories/feature-development/skills/code-review",
       "description": "Structured code review for correctness, security, performance, and maintainability.",
       "version": "0.2.0"
     },
     {
       "name": "git-workflow",
-      "source": "./bundles/feature-development/skills/git-workflow",
+      "source": "./factories/feature-development/skills/git-workflow",
       "description": "Git operations: branching, commits, PRs, rebasing, cherry-picks, releases.",
       "version": "0.2.0"
     },
     {
       "name": "browser-verify",
-      "source": "./bundles/feature-development/skills/browser-verify",
+      "source": "./factories/feature-development/skills/browser-verify",
       "description": "Chrome DevTools Protocol browser automation — inspect, click, screenshot, verify UI.",
       "version": "0.2.0"
     },
     {
       "name": "playwright-testing",
-      "source": "./bundles/feature-development/skills/playwright-testing",
+      "source": "./factories/feature-development/skills/playwright-testing",
       "description": "UI/E2E test automation with Playwright MCP.",
       "version": "0.2.0"
     },
     {
       "name": "issue-tracking",
-      "source": "./bundles/feature-development/skills/issue-tracking",
+      "source": "./factories/feature-development/skills/issue-tracking",
       "description": "Create and manage issues in GitHub, Linear, or GitLab.",
       "version": "0.2.0"
     },
@@ -145,7 +145,7 @@
     },
     {
       "name": "memory",
-      "source": "./bundles/feature-development/skills/memory",
+      "source": "./factories/feature-development/skills/memory",
       "description": "Per-role persistent memory — facts, preferences, decisions, and daily log as plain markdown.",
       "version": "0.2.0"
     },
@@ -163,37 +163,37 @@
     },
     {
       "name": "efficiency-audit",
-      "source": "./bundles/test-automation/skills/efficiency-audit",
+      "source": "./factories/test-automation/skills/efficiency-audit",
       "description": "Per-project/session/role/day and per-sub-agent AI-agent cost & efficiency, metered by ccusage — separates orchestrator overhead from dispatched sub-agents (model-aware); snapshots + before/after diffs.",
       "version": "0.2.0"
     },
     {
       "name": "seeding-a-project",
-      "source": "./bundles/feature-development/skills/seeding-a-project",
+      "source": "./factories/feature-development/skills/seeding-a-project",
       "description": "Generate AGENTS.md, .agents/ project docs, and per-role memory briefings after codebase exploration.",
       "version": "0.2.0"
     },
     {
       "name": "session-retrospective",
-      "source": "./bundles/feature-development/skills/session-retrospective",
+      "source": "./factories/feature-development/skills/session-retrospective",
       "description": "Distill past Claude Code sessions (main + sub-agent) into evidenced, ack-gated memory and workflow improvements (used by scout).",
       "version": "0.2.0"
     },
     {
       "name": "completing-a-task",
-      "source": "./bundles/feature-development/skills/completing-a-task",
+      "source": "./factories/feature-development/skills/completing-a-task",
       "description": "Five-step task handoff protocol: commit → push → PR → comment → notify.",
       "version": "0.2.0"
     },
     {
       "name": "test-case-analysis",
-      "source": "./bundles/feature-development/skills/test-case-analysis",
+      "source": "./factories/feature-development/skills/test-case-analysis",
       "description": "Execute a TMS test case end-to-end, capture stable selectors, flag defects, and emit an Automation-Friendly Spec (AFS). Used by qa-engineer. Does not write automation code.",
       "version": "0.2.0"
     },
     {
       "name": "test-automation-workflow",
-      "source": "./bundles/feature-development/skills/test-automation-workflow",
+      "source": "./factories/feature-development/skills/test-automation-workflow",
       "description": "End-to-end test automation workflow: explore → specify → implement → review. Pluggable TMS adapters (Zephyr Scale, TestRail, Xray, Azure Test Plans, markdown).",
       "version": "0.2.0"
     },
@@ -205,121 +205,121 @@
     },
     {
       "name": "app-profiler",
-      "source": "./bundles/manual-qa/agents/app-profiler",
+      "source": "./factories/manual-qa/agents/app-profiler",
       "description": "Manual-QA onboarding agent — profiles a web app and writes the shared app_profile.md that every manual-qa agent reads.",
       "version": "0.2.0"
     },
     {
       "name": "test-run-lead",
-      "source": "./bundles/manual-qa/agents/test-run-lead",
+      "source": "./factories/manual-qa/agents/test-run-lead",
       "description": "Manual-QA run orchestrator — assembles the suite, dispatches a runner per case, triggers the report.",
       "version": "0.2.0"
     },
     {
       "name": "test-author",
-      "source": "./bundles/manual-qa/agents/test-author",
+      "source": "./factories/manual-qa/agents/test-author",
       "description": "Manual-QA authoring agent — turns rough ideas, bug reports, or stories into formatted TC-NNN cases.",
       "version": "0.2.0"
     },
     {
       "name": "test-sizer",
-      "source": "./bundles/manual-qa/agents/test-sizer",
+      "source": "./factories/manual-qa/agents/test-sizer",
       "description": "Manual-QA sizing agent — rates case size/complexity (S/M/L) before authoring and flags Large ones to split.",
       "version": "0.2.0"
     },
     {
       "name": "test-runner",
-      "source": "./bundles/manual-qa/agents/test-runner",
+      "source": "./factories/manual-qa/agents/test-runner",
       "description": "Manual-QA execution agent — runs one case against the running app via Playwright MCP and returns a structured JSON result.",
       "version": "0.2.0"
     },
     {
       "name": "test-reporter",
-      "source": "./bundles/manual-qa/agents/test-reporter",
+      "source": "./factories/manual-qa/agents/test-reporter",
       "description": "Manual-QA reporting agent — turns runner results into a Markdown run report.",
       "version": "0.2.0"
     },
     {
       "name": "xlsx-reader",
-      "source": "./bundles/manual-qa/skills/xlsx-reader",
+      "source": "./factories/manual-qa/skills/xlsx-reader",
       "description": "Read .xlsx/.xls spreadsheets (test cases, checklists, requirement matrices) into Markdown tables for agent ingestion.",
       "version": "0.2.0"
     },
     {
       "name": "mobile-testing",
-      "source": "./bundles/manual-qa/skills/mobile-testing",
+      "source": "./factories/manual-qa/skills/mobile-testing",
       "description": "Manual mobile-app testing via Appium / device-farm sessions — native local plus Mobitru cloud real devices.",
       "version": "0.2.0"
     },
     {
       "name": "product-owner",
-      "source": "./bundles/product-management/agents/product-owner",
+      "source": "./factories/product-management/agents/product-owner",
       "description": "Product Owner discovery-lead agent (Priya) — runs intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization; guards the promotion gate.",
       "version": "0.2.0"
     },
     {
       "name": "discovery-researcher",
-      "source": "./bundles/product-management/agents/discovery-researcher",
+      "source": "./factories/product-management/agents/discovery-researcher",
       "description": "Discovery research agent (Sam) — stakeholder interviews, market/desk research, and adversarial verification of hypotheses; dispatched by product-owner.",
       "version": "0.2.0"
     },
     {
       "name": "intake-triage",
-      "source": "./bundles/product-management/skills/intake-triage",
+      "source": "./factories/product-management/skills/intake-triage",
       "description": "Front door for raw asks — verdicts each Act Now / Plan Next / Collect More Signal / Decline-or-Defer and mints in-scope items as Problems.",
       "version": "0.2.0"
     },
     {
       "name": "define-personas",
-      "source": "./bundles/product-management/skills/define-personas",
+      "source": "./factories/product-management/skills/define-personas",
       "description": "Author and maintain canonical persona cards (surface, goals, pains, JTBD, evidence) referenced by stable slug.",
       "version": "0.2.0"
     },
     {
       "name": "define-outcomes",
-      "source": "./bundles/product-management/skills/define-outcomes",
+      "source": "./factories/product-management/skills/define-outcomes",
       "description": "Draft, stress-test, and ratify measurable outcome anchors (dated baseline + target + timeframe).",
       "version": "0.2.0"
     },
     {
       "name": "opportunity-tree",
-      "source": "./bundles/product-management/skills/opportunity-tree",
+      "source": "./factories/product-management/skills/opportunity-tree",
       "description": "Maintain the opportunity–solution tree over existing artifacts — the disguise test + Olsen scoring, regenerates the outcome-tree board.",
       "version": "0.2.0"
     },
     {
       "name": "journeys-to-hypotheses",
-      "source": "./bundles/product-management/skills/journeys-to-hypotheses",
+      "source": "./factories/product-management/skills/journeys-to-hypotheses",
       "description": "Convergence pass — classify each journey COVERED / GAP / OUT-OF-SCOPE and author missing Problem + Hypothesis stubs.",
       "version": "0.2.0"
     },
     {
       "name": "prioritize-bets",
-      "source": "./bundles/product-management/skills/prioritize-bets",
+      "source": "./factories/product-management/skills/prioritize-bets",
       "description": "Rank incubating/promotable hypotheses (RICE default; WSJF/ICE options); confidence derived from each bet's evidence band.",
       "version": "0.2.0"
     },
     {
       "name": "stakeholder-interview",
-      "source": "./bundles/product-management/skills/stakeholder-interview",
+      "source": "./factories/product-management/skills/stakeholder-interview",
       "description": "Prepare a value-of-information-ordered interview guide, or synthesize raw notes into evidence and propagate answers into hypotheses.",
       "version": "0.2.0"
     },
     {
       "name": "grill-decision",
-      "source": "./bundles/product-management/skills/grill-decision",
+      "source": "./factories/product-management/skills/grill-decision",
       "description": "Socratic one-question-at-a-time stress-test of a decision or hypothesis, capturing outcomes inline (DEC records, edits).",
       "version": "0.2.0"
     },
     {
       "name": "capture-learning",
-      "source": "./bundles/product-management/skills/capture-learning",
+      "source": "./factories/product-management/skills/capture-learning",
       "description": "Record a problem → outcome → lesson when a hypothesis closes or an experiment concludes.",
       "version": "0.2.0"
     },
     {
       "name": "discovery-status",
-      "source": "./bundles/product-management/skills/discovery-status",
+      "source": "./factories/product-management/skills/discovery-status",
       "description": "Read-only discovery pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item.",
       "version": "0.2.0"
     }

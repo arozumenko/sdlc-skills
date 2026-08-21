@@ -6,7 +6,7 @@
  * installed alone. That is a deliberate trade: self-containment in exchange for
  * a drift risk. This check pays the second half of that trade — silent
  * divergence between copies is exactly what has bitten this repo before (the
- * `memory` skill lived in two bundles and quietly diverged).
+ * `memory` skill lived in two factories and quietly diverged).
  *
  * Add a pair here whenever you duplicate an asset on purpose.
  */

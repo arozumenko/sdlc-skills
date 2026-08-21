@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# PreToolUse[Agent] hook — fires before every sub-agent call.
+# On the first call of a session: captures first_dispatch_at timestamp,
+# resolves a ccusage pre-snapshot, then creates the benchmark state file.
+# Subsequent calls are no-ops for THAT part (state file already exists) but
+# still refresh LAST_DISPATCH_FILE below — see its own comment for why.
+#
+# Files are scoped by session_id (2026-07-22 fix) — see benchmark-session-start
+# for why (prevents concurrent-session/test-fixture collisions).
+#
+# RETRY-FOR-SCOPING RACE (ported 2026-07-31 from qa-project, round 4):
+# benchmark-session-start now retry-waits for `ccusage session --json` to
+# actually contain this session's own entry before writing SESSION_PRE_FILE
+# — see ccusage-wait.sh for the timing evidence and why session-start's own
+# retry can still, legitimately, sometimes come back empty-handed (its retry
+# budget is bounded; the gap it's racing against isn't fully understood yet
+# — see that file).
+#
+# That means SESSION_PRE_FILE existing is NOT the same thing as it being
+# actually SCOPED — it may be session-start's own unscoped give-up snapshot.
+# Blindly `cp`-ing it forward (the old behavior) would propagate that failure
+# into this run's real metrics even though, empirically, a real dispatch
+# fires WAY later than session start (48s in the one real case measured so
+# far) — by which point the session has near-certainly already appeared in
+# ccusage (its own first usage entry showed up in ~2-3s in every real sample
+# collected). So: check whether SESSION_PRE_FILE is actually scoped before
+# trusting it; if not, this hook gets its OWN, much-later-timed shot via the
+# same retry helper rather than inheriting session-start's early failure.
+#
+# Both this hook and session-start are registered `async: true`, so a fast
+# orchestrator's first dispatch can also fire before session-start's own
+# retry loop has finished AT ALL (SESSION_PRE_FILE doesn't exist yet) — same
+# fix applies there too (see the `elif` below). Worst case this means two
+# independent `ccusage session --json` retry loops run briefly in parallel —
+# wasteful in CLI calls, not incorrect (each just converges to whatever it
+# finds); simpler than adding a separate "wait for the OTHER hook's file
+# instead" coordination layer for a race this narrow.
+set -euo pipefail
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+STATE_DIR="${PROJECT_DIR}/.claude"
+# ccusage-wait.sh lives next to this script (bundle-installed), not at
+# <project>/scripts/ — resolve self-relatively, same pattern benchmark-stop
+# already uses for build-run-metrics.mjs.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=ccusage-wait.sh
+. "${HOOK_DIR}/ccusage-wait.sh"
+
+payload="$(cat 2>/dev/null || true)"
+sid="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.session_id||p.sessionId||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+sid="${sid//[^A-Za-z0-9._-]/}"
+SID_SUFFIX="${sid:+-$sid}"
+
+STATE_FILE="${STATE_DIR}/benchmark-state${SID_SUFFIX}.json"
+TRACE_FILE="${STATE_DIR}/benchmark-tc-trace${SID_SUFFIX}.jsonl"
+PRE_FILE="${STATE_DIR}/benchmark-pre${SID_SUFFIX}.json"
+SESSION_PRE_FILE="${STATE_DIR}/benchmark-session-pre${SID_SUFFIX}.json"
+LAST_DISPATCH_FILE="${STATE_DIR}/benchmark-last-dispatch-at${SID_SUFFIX}.txt"
+CCUSAGE_WAIT_DEBUG_LOG="${STATE_DIR}/benchmark-ccusage-wait-debug.log"
+
+# MULTI-FACTORY GUARD (2026-08-14): these hooks match on the TOOL (Agent), so
+# in a repo that also runs another factory (test-automation, feature-dev) they
+# fire for EVERY dispatched agent — and this session-scoped machinery would
+# spin up ccusage retry loops per foreign session and, worse, benchmark-stop
+# would emit a synthetic near-empty reports/metrics/RUN-*.json for each of
+# them (build-run-metrics has no foreign-session bail). So: initialize state
+# ONLY when the dispatched agent belongs to the manual-qa roster. Empty/absent
+# subagent_type (older builds) fails open to the old behavior. Once a
+# manual-qa run IS live (state file exists), keep refreshing the dispatch
+# timer for every dispatch — the premature-firing guard needs the timeline.
+MANUAL_QA_ROSTER='^(app-profiler|test-sizer|test-author|test-run-lead|test-runner|test-reporter|qa-auditor)$'
+agent_type="$(printf '%s' "$payload" | node -e "
+  const c=[];process.stdin.on('data',d=>c.push(d));
+  process.stdin.on('end',()=>{
+    try{const p=JSON.parse(Buffer.concat(c).toString());
+    console.log(p.tool_input?.subagent_type||'');}catch{}process.exit(0);
+  });" 2>/dev/null || true)"
+if [ ! -f "$STATE_FILE" ] && [ -n "$agent_type" ] && ! printf '%s' "$agent_type" | grep -Eq "$MANUAL_QA_ROSTER"; then
+  exit 0   # another factory's session — none of this machinery is ours to run
+fi
+
+# Refresh on EVERY dispatch (ported 2026-07-31 from qa-project — see
+# benchmark-stop's own "PREMATURE-FIRING GUARD" comment for the full
+# incident writeup). Cheap unconditional write, independent of the
+# first-dispatch-only STATE_FILE init below: benchmark-stop uses "how long
+# since the most recent dispatch" to tell a genuine test-reporter completion
+# (always 40s+ in every real sample collected) apart from a premature
+# same-tool-call-cycle firing (always under 12s in every real sample
+# collected) — see that script.
+mkdir -p "$STATE_DIR"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$LAST_DISPATCH_FILE" 2>/dev/null || true
+
+# Only act on the first dispatch of this session for everything below.
+[ -f "$STATE_FILE" ] && exit 0
+
+mkdir -p "$STATE_DIR"
+: > "$TRACE_FILE"
+first_dispatch_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Prefer the snapshot benchmark-session-start already took at the session's
+# TRUE start — it covers any orchestration tokens spent before this first
+# dispatch (test-run-lead's own Glob / id-normalization / sizing-check /
+# Run-ID work). Fall back to capturing our own snapshot now (scoped only
+# from this dispatch onward, matching the old behavior) if session-start's
+# snapshot isn't there — e.g. that hook wasn't wired, or this project was
+# updated mid-session and only got the new benchmark-preflight.
+session_pre_is_scoped=0
+if [ -f "$SESSION_PRE_FILE" ] && [ -n "$sid" ]; then
+  if node -e "
+    try{
+      const p=JSON.parse(require('fs').readFileSync('${SESSION_PRE_FILE}','utf8'));
+      process.exit((p.session||[]).some(s=>s.period==='${sid}')?0:1);
+    }catch{process.exit(1);}
+  " 2>/dev/null; then
+    session_pre_is_scoped=1
+  fi
+fi
+
+if [ "$session_pre_is_scoped" = 1 ]; then
+  cp "$SESSION_PRE_FILE" "$PRE_FILE"
+elif [ -n "$sid" ]; then
+  # Either session-start hasn't written SESSION_PRE_FILE yet (race), or it
+  # did but gave up unscoped (see header note) — this hook's own, later
+  # timing gives it a much better real shot; retry fresh rather than
+  # inheriting session-start's outcome either way.
+  wait_for_scoped_ccusage "$sid" "$PRE_FILE" "$CCUSAGE_WAIT_DEBUG_LOG" "preflight-fallback" || true
+elif [ -f "$SESSION_PRE_FILE" ]; then
+  # No session_id to retry-match against, but session-start's snapshot
+  # (unscoped or not) is still better than nothing.
+  cp "$SESSION_PRE_FILE" "$PRE_FILE"
+else
+  # No session_id and no session-start snapshot at all -- nothing to
+  # retry-match against, one immediate snapshot as last resort.
+  ccusage_session_json > "$PRE_FILE" 2>/dev/null \
+    || printf '{}' > "$PRE_FILE"
+fi
+
+printf '{"first_dispatch_at":"%s","pre_file":"%s","trace_file":"%s"}\n' \
+  "$first_dispatch_at" "$PRE_FILE" "$TRACE_FILE" > "$STATE_FILE"
