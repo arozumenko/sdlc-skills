@@ -450,6 +450,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "design-taste-frontend",
+      "source": "./skills/design-taste-frontend",
+      "description": "Anti-slop frontend design skill — reads the brief, infers a design direction (VARIANCE / MOTION / DENSITY dials), and ships non-templated interfaces with real design systems, color/shape consistency locks, contrast math, an em-dash ban, and a strict pre-flight check. By leonxlnx (taste-skill). Used by the designer for design-intelligence rules on screen specs and, on a web TS/JS target, its code skeletons.",
+      "version": "0.2.0"
+    },
+    {
       "name": "dispatching-parallel-agents",
       "source": "./skills/dispatching-parallel-agents",
       "description": "Dispatch one focused agent per independent problem domain and run them concurrently — for 2+ tasks with no shared state or sequential dependencies (from obra/superpowers)",
@@ -561,6 +567,12 @@
       "name": "testing-setup",
       "source": "./skills/testing-setup",
       "description": "Analyze and set up a native Android testing strategy — install test libraries, scaffold harnesses for unit, UI, screenshot, and end-to-end tests (official Google Android skills, Apache-2.0)",
+      "version": "0.2.0"
+    },
+    {
+      "name": "ui-ux-pro-max",
+      "source": "./skills/ui-ux-pro-max",
+      "description": "Searchable UI/UX design intelligence — styles, product color palettes with reasoning, font pairings, UX/accessibility guidelines, icons, chart types across many stacks — queried locally via search.py (--domain color|ux|typography|style|product|…). By NextLevelBuilder. Used by the designer as a reference catalog for palette, type-scale, and UX decisions.",
       "version": "0.2.0"
     },
     {

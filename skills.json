@@ -267,6 +267,20 @@
       "ref": "main",
       "subdir": ".claude/skills/impeccable",
       "description": "Design critique + a deterministic anti-pattern detector (59 non-LLM rules over rendered UI) + live-browser iteration for AI-generated frontends — audit/polish/harden/animate/colorize/typeset playbooks. Apache-2.0, by Paul Bakaus. Used by the designer as a quality gate beside visual-testing."
+    },
+    {
+      "id": "design-taste-frontend",
+      "repo": "Leonxlnx/taste-skill",
+      "ref": "main",
+      "subdir": "skills/taste-skill",
+      "description": "Anti-slop frontend design skill — reads the brief, infers a design direction (VARIANCE / MOTION / DENSITY dials), and ships non-templated interfaces with real design systems, color/shape consistency locks, contrast math, an em-dash ban, and a strict pre-flight check. By leonxlnx (taste-skill). Used by the designer for design-intelligence rules on screen specs and, on a web TS/JS target, its code skeletons."
+    },
+    {
+      "id": "ui-ux-pro-max",
+      "repo": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "ref": "main",
+      "subdir": ".claude/skills/ui-ux-pro-max",
+      "description": "Searchable UI/UX design intelligence — styles, product color palettes with reasoning, font pairings, UX/accessibility guidelines, icons, chart types across many stacks — queried locally via search.py (--domain color|ux|typography|style|product|…). By NextLevelBuilder. Used by the designer as a reference catalog for palette, type-scale, and UX decisions."
     }
   ]
 }

@@ -15,7 +15,9 @@ own their `agents/` and `skills/` as real directories. Four factories ship:
 - **`test-automation`** — TMS-driven automation pipeline: test-automation-lead,
   qa-engineer, test-automation-engineer, Scout.
 - **`manual-qa`** — live-browser manual-QA team: test-run-lead, test-author,
-  test-sizer, test-runner, test-reporter, app-profiler.
+  test-sizer, test-runner, test-reporter, app-profiler, qa-auditor (specialist
+  web audits — security, accessibility, privacy, performance, responsive, UX,
+  SEO — with findings codified into regression TC cases).
 - **`product-management`** — Product Owner discovery pipeline: product-owner
   (Priya), discovery-researcher (Sam); 10 discovery skills seeding
   `docs/discovery/`.

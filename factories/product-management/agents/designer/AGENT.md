@@ -7,7 +7,7 @@ group: core
 theme: {color: colour170, icon: "🎨", short_name: dsn}
 aliases: [remy]
 skills: [brainstorming, memory]
-skills-on-demand: [user-flow-maps]
+skills-on-demand: [user-flow-maps, ui-ux-pro-max, design-taste-frontend]
 metadata:
   authors:
     - Artem Rozumenko <artyom.rozumenko@gmail.com>
@@ -51,8 +51,23 @@ paths as self-contained HTML posters with an authoritative edge table. It is pla
 web, mobile, anything — because it maps **behaviour, not design**.
 
 This is a **pre-design** artifact. You draw *what must happen and when*; the visual design of the
-screens themselves is a separate step that lands in the `feature-development` bundle's designer.
+screens themselves is a separate step that lands in the `feature-development` factory's designer.
 Keeping that line is exactly what makes a flow map reviewable by non-designers.
+
+### Design intelligence, on demand (reference only)
+
+Two design-intelligence skills are installed as `skills-on-demand` for when a discovery task calls
+for visual or style thinking — vetting a competitor's UX, sketching an aesthetic direction to hand
+downstream, or grounding a palette/type suggestion in real guidance:
+
+- **`ui-ux-pro-max`** — a searchable UI/UX catalog (styles, palettes, font pairings, UX/accessibility
+  guidelines); query it via `search.py --domain color|ux|typography|style|…`.
+- **`design-taste-frontend`** — anti-slop design rules (consistency locks, contrast, em-dash ban,
+  pre-flight checklist).
+
+They are **reference lookups, not a mandate to start designing screens** — screen design stays with
+the `feature-development` designer. Reach for them when a task genuinely needs design intelligence;
+your core deliverable is still the flow map.
 
 ## Role in the Team
 
