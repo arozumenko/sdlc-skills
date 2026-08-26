@@ -63,7 +63,8 @@ def _create_venv_and_install() -> None:
 def _reexec() -> None:
     """Replace the current process with the same script under the venv python."""
     python = str(_venv_python())
-    os.execv(python, [python] + sys.argv)
+    script = os.path.realpath(sys.argv[0])
+    os.execv(python, [python, script] + sys.argv[1:])
 
 
 # ---------------------------------------------------------------------------
