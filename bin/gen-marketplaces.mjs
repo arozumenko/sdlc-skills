@@ -136,7 +136,7 @@ function resolvedSource(resolved, kind) {
   if (resolved.factory === null) {
     return `./${kind}/${resolved.name}`;
   }
-  return `./factories/${resolved.factory}/${kind}/${resolved.name}`;
+  return `./bundles/${resolved.factory}/${kind}/${resolved.name}`;
 }
 
 /** External (repo:) skill entries from skills.json, keyed by id. */

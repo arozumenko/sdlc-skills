@@ -17,11 +17,11 @@ function fixture() {
   const pkg = join(root, 'pkg');
   const cwd = join(root, 'repo');
   // package ships two factories with hook scripts
-  mkdirSync(join(pkg, 'factories', 'manual-qa', 'hooks', 'scripts'), { recursive: true });
-  writeFileSync(join(pkg, 'factories', 'manual-qa', 'hooks', 'scripts', 'benchmark-tc'), 'NEW with roster guard');
-  writeFileSync(join(pkg, 'factories', 'manual-qa', 'hooks', 'scripts', 'benchmark-stop'), 'same');
-  mkdirSync(join(pkg, 'factories', 'test-automation', 'hooks', 'scripts'), { recursive: true });
-  writeFileSync(join(pkg, 'factories', 'test-automation', 'hooks', 'scripts', 'workflow-return.mjs'), 'fresh');
+  mkdirSync(join(pkg, 'bundles', 'manual-qa', 'hooks', 'scripts'), { recursive: true });
+  writeFileSync(join(pkg, 'bundles', 'manual-qa', 'hooks', 'scripts', 'benchmark-tc'), 'NEW with roster guard');
+  writeFileSync(join(pkg, 'bundles', 'manual-qa', 'hooks', 'scripts', 'benchmark-stop'), 'same');
+  mkdirSync(join(pkg, 'bundles', 'test-automation', 'hooks', 'scripts'), { recursive: true });
+  writeFileSync(join(pkg, 'bundles', 'test-automation', 'hooks', 'scripts', 'workflow-return.mjs'), 'fresh');
   // repo has both installed under .claude/hooks/<factory>/ — manual-qa is stale
   mkdirSync(join(cwd, '.claude', 'hooks', 'manual-qa'), { recursive: true });
   writeFileSync(join(cwd, '.claude', 'hooks', 'manual-qa', 'benchmark-tc'), 'OLD no guard');

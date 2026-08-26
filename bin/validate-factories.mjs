@@ -147,9 +147,9 @@ function loadSkillIds() {
 }
 
 function main() {
-  const factoriesRoot = join(PKG_ROOT, "factories");
+  const factoriesRoot = join(PKG_ROOT, "bundles");
   if (!existsSync(factoriesRoot)) {
-    console.log("No factories/ directory — nothing to validate.");
+    console.log("No bundles/ directory — nothing to validate.");
     return;
   }
   const agents = new Set(dirsWith("agents", "AGENT.md"));

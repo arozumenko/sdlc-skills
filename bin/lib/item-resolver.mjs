@@ -9,8 +9,12 @@ import { join } from "node:path";
 
 const MARKER = { agents: "AGENT.md", skills: "SKILL.md" };
 
+// The concept keeps the "factory" name (factory.json manifest, --factory flag),
+// but the containing folder was renamed to `bundles/`.
+const FACTORIES_DIR = "bundles";
+
 function factoryIds(root) {
-  const b = join(root, "factories");
+  const b = join(root, FACTORIES_DIR);
   if (!existsSync(b)) return [];
   return readdirSync(b)
     .filter((d) => existsSync(join(b, d, "factory.json")))
@@ -36,7 +40,7 @@ export function buildItemIndex(root) {
       (index[kind][name] ||= []).push({ factory: null, dir: root });
     }
     for (const id of factoryIds(root)) {
-      const fdir = join(root, "factories", id);
+      const fdir = join(root, FACTORIES_DIR, id);
       for (const name of dirsWithMarker(join(fdir, kind), kind)) {
         (index[kind][name] ||= []).push({ factory: id, dir: fdir });
       }

@@ -80,6 +80,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
 const CWD = process.cwd();
 
+// Directory (relative to PKG_ROOT) that physically holds the factories. The
+// concept and the `--factory` flag keep the "factory" name, and each factory
+// still carries a `factory.json` manifest + `FACTORY.md` descriptor — only the
+// containing folder was renamed to `bundles/`.
+const FACTORIES_DIR = "bundles";
+
 const TARGETS = [
   { id: "claude", dir: ".claude", label: "Claude Code" },
   { id: "cursor", dir: ".cursor", label: "Cursor" },
@@ -186,7 +192,7 @@ function loadCatalog() {
 // ---------------------------------------------------------------------------
 
 function listFactories() {
-  const root = join(PKG_ROOT, "factories");
+  const root = join(PKG_ROOT, FACTORIES_DIR);
   if (!existsSync(root)) return [];
   return readdirSync(root)
     .filter((d) => existsSync(join(root, d, "factory.json")))
@@ -194,7 +200,7 @@ function listFactories() {
 }
 
 function loadFactory(id) {
-  const dir = join(PKG_ROOT, "factories", id);
+  const dir = join(PKG_ROOT, FACTORIES_DIR, id);
   const manifest = join(dir, "factory.json");
   if (!existsSync(manifest)) {
     console.error(`  ! Unknown factory: ${id}`);
@@ -205,7 +211,7 @@ function loadFactory(id) {
   try {
     b = JSON.parse(readFileSync(manifest, "utf8"));
   } catch (err) {
-    console.error(`  ! Failed to parse factories/${id}/factory.json: ${err.message}`);
+    console.error(`  ! Failed to parse ${FACTORIES_DIR}/${id}/factory.json: ${err.message}`);
     process.exit(1);
   }
   b.dir = dir;
@@ -322,7 +328,7 @@ async function applyFactory(factory, args, catalog) {
   for (const la of factory.localAgents) {
     if (!existsSync(join(factoryAgentsRoot, la, "AGENT.md"))) {
       console.error(
-        `  ! Factory ${factory.id} declares localAgent "${la}" but factories/${factory.id}/agents/${la}/AGENT.md is missing`
+        `  ! Factory ${factory.id} declares localAgent "${la}" but ${FACTORIES_DIR}/${factory.id}/agents/${la}/AGENT.md is missing`
       );
       process.exit(1);
     }
@@ -338,7 +344,7 @@ async function applyFactory(factory, args, catalog) {
     const skillMd = join(factorySkillsRoot, ls, "SKILL.md");
     if (!existsSync(skillMd)) {
       console.error(
-        `  ! Factory ${factory.id} declares localSkill "${ls}" but factories/${factory.id}/skills/${ls}/SKILL.md is missing`
+        `  ! Factory ${factory.id} declares localSkill "${ls}" but ${FACTORIES_DIR}/${factory.id}/skills/${ls}/SKILL.md is missing`
       );
       process.exit(1);
     }
@@ -677,7 +683,7 @@ export function checkSiblingBundleHooks(targets, cwd = CWD, pkgRoot = PKG_ROOT) 
     try { entries = readdirSync(hooksRoot, { withFileTypes: true }); } catch { continue; }
     for (const e of entries) {
       if (!e.isDirectory()) continue;
-      const pkgScripts = join(pkgRoot, "factories", e.name, "hooks", "scripts");
+      const pkgScripts = join(pkgRoot, FACTORIES_DIR, e.name, "hooks", "scripts");
       if (!existsSync(pkgScripts)) continue; // not a factory-owned dir (core hooks etc.)
       for (const f of readdirSync(pkgScripts)) {
         const installed = join(hooksRoot, e.name, f);
