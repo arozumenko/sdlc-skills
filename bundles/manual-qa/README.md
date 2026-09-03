@@ -61,7 +61,11 @@ of this is automatic — you decide when to re-profile and which cases to
 keep. **The payoff:** runs get more reliable as the profile sharpens and the
 suite grows — the team builds a lasting QA memory of *this* app rather than a
 one-off pass. There is no mining of past chat or sub-agent transcripts;
-refinement comes from re-profiling the live app and curating the suite.
+refinement comes from re-profiling the live app and curating the suite. When
+you want a real number behind that trust rather than a feeling — before a
+wider rollout, or after tweaking `test-author`/`test-runner` — the optional
+`quality-evals` skill benchmarks either agent against a held-out answer key
+built for your own app (see [Self-evaluation](#self-evaluation) below).
 
 ### How it flows
 
@@ -144,6 +148,25 @@ which authors `TC-NNN` regression cases under `tasks/<suite>/` — ordinary
 suite cases a later `test-run-lead` run can pick up via `test-runner` like
 any other case.
 
+## Self-evaluation
+
+A different question from either case-driven runs or audits: "how accurate
+are these two agents, really, on my app?" `test-runner` decides PASS/FAIL
+against the live app; `test-author` decides how a rough idea becomes a
+formatted test case — both are judgment calls worth measuring before you
+trust them on real work, not just after. The optional
+[`skills/quality-evals/`](skills/quality-evals/) skill ports a
+held-out-answer-key evaluation methodology — a deterministic Tier A score
+plus a judged Tier B rubric for authoring, a single deterministic score for
+detection — so any team can build a small **gold suite** for their own app
+(a `bug_mode` taxonomy of known-good / disclosed-known-issue /
+blind-detection cases) and get a real `detection_accuracy_pct` or
+`authoring_fidelity_pct` back, instead of taking anyone's word for it.
+Dormant until invoked, same relationship the `test-automation` bundle's
+`tokenomics` skill has to ordinary automation work — see its
+[`README.md`](skills/quality-evals/README.md) for the full walkthrough,
+including the isolation rules that keep a self-authored eval honest.
+
 ## How this team works
 
 Onboard once with **app-profiler**, then drive **test-run-lead** — the single
@@ -168,7 +191,7 @@ across dev, staging, and prod.
 - **Instructions** — [`instructions.md`](instructions.md) → spliced into `AGENTS.md` / `CLAUDE.md`.
 - **Seeded knowledge** — [`knowledge/`](knowledge/) → `.agents/manual-qa/knowledge/` (test-case format guide, template, report format).
 - **Skills it pulls** — `playwright-testing`, `playwright-best-practices`, `verification-before-completion`, `systematic-debugging` (declared in the relevant agent frontmatter).
-- **Factory-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/), plus the 7 specialist audit skills — [`skills/security-audit/`](skills/security-audit/), [`skills/accessibility-audit/`](skills/accessibility-audit/), [`skills/privacy-audit/`](skills/privacy-audit/), [`skills/performance-audit/`](skills/performance-audit/), [`skills/responsive-audit/`](skills/responsive-audit/), [`skills/ux-audit/`](skills/ux-audit/), [`skills/content-seo-audit/`](skills/content-seo-audit/) — real directories this factory physically owns (declared in `localSkills`), installed when you install the factory. The audit skills are `skills-on-demand` on `qa-auditor` (see [Audit mode](#audit-mode)) rather than standing `skills:`. The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
+- **Factory-owned skills** — [`skills/playwright-testing/`](skills/playwright-testing/), [`skills/xlsx-reader/`](skills/xlsx-reader/), [`skills/mobile-testing/`](skills/mobile-testing/), [`skills/quality-evals/`](skills/quality-evals/), plus the 7 specialist audit skills — [`skills/security-audit/`](skills/security-audit/), [`skills/accessibility-audit/`](skills/accessibility-audit/), [`skills/privacy-audit/`](skills/privacy-audit/), [`skills/performance-audit/`](skills/performance-audit/), [`skills/responsive-audit/`](skills/responsive-audit/), [`skills/ux-audit/`](skills/ux-audit/), [`skills/content-seo-audit/`](skills/content-seo-audit/) — real directories this factory physically owns (declared in `localSkills`), installed when you install the factory. The audit skills are `skills-on-demand` on `qa-auditor` (see [Audit mode](#audit-mode)) rather than standing `skills:`. `quality-evals` (see [Self-evaluation](#self-evaluation)) is standalone — invoked directly via its own scripts, not attached to any agent's `skills:` list. The same id may exist in another factory or the top-level `skills/` catalog with different content — that's fine, there is no sync. Edit these copies directly.
 - **Briefings** — _(none)_.
 - **Hooks** — [`hooks/`](hooks/) → optional metrics-collection add-on
   (token/cost/timing/pass-rate per run), installed automatically alongside
