@@ -470,8 +470,13 @@ grades the output afterward.
 ## Testing this skill's own scripts
 
 ```bash
-node --test scripts/
+node --test scripts/*.test.mjs
 ```
+
+(On some Node versions, bare `node --test scripts/` fails with
+`Cannot find module '.../scripts'` instead of discovering the `*.test.mjs`
+files in that directory — pass the glob explicitly as shown above if you hit
+that.)
 
 Or, from the repo root: `npm test` (runs every `*.test.mjs` in the repo,
 including these).
