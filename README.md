@@ -473,6 +473,8 @@ sdlc-skills/
 │       ├── SKILL.md            # frontmatter: name + description
 │       ├── references/         # optional supporting docs
 │       └── scripts/            # optional helper scripts
+├── eval-inputs/                # reference-only content, not installed by any path
+│   └── manual-qa/ac-holdout/   # real acceptance-criteria inputs for the quality-evals skill's authoring track (question only — no gold/ground-truth)
 ├── bin/
 │   ├── init.mjs                # npx installer — resolves + fetches externals
 │   └── validate-factories.mjs    # factory manifest validator (CI + npm run validate:factories)

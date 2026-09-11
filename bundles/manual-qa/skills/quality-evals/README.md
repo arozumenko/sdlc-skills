@@ -322,6 +322,18 @@ Detection track has no analogous composite — `detection_accuracy_pct` and
 output) are the headline numbers, with `false_negatives` always called out
 on their own regardless of how good the overall percentage looks.
 
+## A larger real-world input set, if you want one
+
+The Widgetize example below is intentionally small and self-contained. If
+you'd rather pilot `test-author` against a bigger, real batch of
+acceptance-criteria inputs before writing your own, this monorepo also
+ships `eval-inputs/manual-qa/ac-holdout/` — 96 real AC inputs (not
+installed with this skill; read them directly from a checkout of this
+repo) spanning 5 public demo sites. These are inputs only — the gold
+test cases and ground truth they were built against are a separate,
+private corpus, available on request, precisely so grading against them
+stays meaningful. See `eval-inputs/README.md`.
+
 ## Worked example — "Widgetize," a placeholder app
 
 Neither of the tracks above needs a real target — here's a complete,
