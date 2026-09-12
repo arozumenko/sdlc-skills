@@ -22,7 +22,8 @@
     "performance-audit",
     "responsive-audit",
     "ux-audit",
-    "content-seo-audit"
+    "content-seo-audit",
+    "quality-evals"
   ],
   "skills": [
     "memory",
