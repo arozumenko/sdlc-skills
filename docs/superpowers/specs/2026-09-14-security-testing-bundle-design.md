@@ -1,6 +1,6 @@
 # security-testing bundle — design spec (v5)
 
-**Date:** 2026-09-15 (v5; v4 was the commit before 572055e; v3 028fab1, v2 9201e6b, v1 875f211)
+**Date:** 2026-09-15 (v5; v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
 **Status:** v5 draft; goal: no blocker or major findings open
@@ -68,7 +68,7 @@ Produces a **security assessment**, not a penetration test.
 | D15 | Approvals are unauthenticated records. **No `confirm` command exists.** |
 | D16 | Two evidence layers with keyed HMACs; identity keyed by content sensitivity (§6.5). |
 | D17 | Public verdicts only from `verify.mjs all`; multi-indicator ACK; regression observed independently of completeness (§6.4). |
-| D18 | Assessment scope is a **clean tree at `head_oid`**. `scope` refuses a dirty tree for `assessment`; `review` runs may be dirty and then store a private reconstructible snapshot (§6.2). |
+| D18 | Assessment scope is a **clean tree at `head_oid`**. `scope` refuses a dirty tree for `assessment`; `review` runs may be dirty and then store a private **redacted** snapshot plus HMACs of the originals (§6.2). |
 
 ## 4. Roster (`localAgents`)
 
