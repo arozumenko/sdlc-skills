@@ -1,9 +1,9 @@
-# security-testing bundle — design spec (v6)
+# security-testing bundle — design spec (v6.1)
 
 **Date:** 2026-09-15 (v6; v5 fd6e8c8, v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
-**Status:** v6 — reviewed, **approve with changes** (0 blockers, 0 majors); ready for M-1/M1
+**Status:** v6.1 — v6 reviewed **approve with changes** (0 blockers, 0 majors); v6.1 adds the planning amendments in §20 (representation choices the decomposition needed; none changes §2 or §3)
 **Inputs:** [market research](../notes/2026-09-14-security-testing-market-research.md),
 [secops comparison](../notes/2026-09-14-security-testing-secops-comparison.md),
 reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.md),
@@ -79,7 +79,7 @@ Produces a **security assessment**, not a penetration test.
 |---|---|---|---|---|
 | `security-lead` | sonnet | Orchestrator, only human-facing role. `engagement init`; dispatches specialists; `build-report`; `sign-off`; `publish` to tracker; prints hand-off prompts and stops; proposes acceptances. | `memory`, `security-engagement` | `risk-register`, `security-evidence`, `issue-tracking`, `dispatching-parallel-agents`, `verifying-outcomes` |
 | `threat-modeler` | opus | Code-derived DFD with a citation per element; STRIDE; mitigations as claims; dispositions (§6.10). Returns `MODEL_WRITTEN elements=<n> threats=<n> undisposed=<n>` after `tm-lint check`. | `memory`, `threat-modeling` | `security-test-planning`, `security-evidence`, `gathering-context`, `deep-research` |
-| `security-reviewer` | sonnet | Contracts `review`, `mitigation-review`, `fix-review`, each a fresh dispatch over a **review packet** (§6.4). Writes **assertions**; scripts derive states. | `memory`, `secure-code-review` | `security-evidence`, `systematic-debugging` |
+| `security-reviewer` | sonnet | Contracts `review` (claims over a scope packet), `vulnerability-review`, `mitigation-review`, `fix-review` (assertions over subject packets), each a fresh dispatch (§6.4). Writes claims and **assertions**; scripts derive states. | `memory`, `secure-code-review` | `security-evidence`, `systematic-debugging` |
 
 Frontmatter as v3 §4 (no `tools:`, no `context-memory`; `context-docs`
 lists engagement, finding schema, and for the lead the register view).
@@ -98,7 +98,7 @@ AGENT.md body rules:
 
 | id | Content | v |
 |---|---|---|
-| `security-evidence` | Schemas: `run`, `scope`, `finding`, `gate-result`, `coverage`, `packet`, `receipt`, `verify`, `run-manifest`, `register`, `register-event`, `finding-alias`, `proposal`, `admission`, `observation`, `import`, `export-manifest`, `sarif-mapping.v1`, `redaction-rules`. Scripts: `evidence.mjs` (`run init`, `scope`, `ingest <kind>`, `gate`, `coverage`, `packet`, `receipt`, `build-report`, `check`, `check-export`, `publish`, `engagement init|validate|baseline`, `sign-off`, `purge`), `verify.mjs all`, `register.mjs`, `tm-lint.mjs`, `plan.mjs`, plus `normalize.mjs`, `redact.mjs`, `canon.mjs`. Templates with required-inputs lists. | v1 |
+| `security-evidence` | Schemas: `run`, `scope`, `finding`, `gate-result`, `coverage`, `packet`, `receipt`, `verify`, `run-manifest`, `register`, `register-event`, `finding-alias`, `proposal`, `admission`, `observation`, `import`, `export-manifest`, `sarif-mapping.v1`, `redaction-rules`. Scripts: `evidence.mjs` (`run init`, `scope`, `ingest <kind>`, `gate`, `coverage`, `packet`, `receipt`, `build-report`, `check`, `check-export`, `publish`, `engagement init|validate|baseline`, `run snapshot register|verify|proposals`, `sign-off`, `purge`), `verify.mjs all`, `register.mjs`, `tm-lint.mjs`, `plan.mjs`, plus `normalize.mjs`, `redact.mjs`, `canon.mjs`. Templates with required-inputs lists. | v1 |
 | `security-engagement` | Prose: lead workflow, sign-off checklist, tracker rules, disclosure profiles explained. | v1 |
 | `secure-code-review` | Prose + references + fixtures + frozen eval harness. | v1 |
 | `threat-modeling` | Prose + references; `tm-lint` lives in `security-evidence`. | v1 |
@@ -127,7 +127,7 @@ whitespace, integers only (no floats anywhere in the schemas), strings NFC.
 | `packet.json` | `{subject_ids[], files[{path, side, oid, ranges, range_hmac}], policy_sha256}` | scope |
 | `receipt.json` | `{type, subject_id, packet_sha256, assertion, reviewer_run_id}` | packet |
 | `verify.json` | §6.4 | run, receipts |
-| `manifest.json` | `{inputs: {kind → sha256}, report_sha256, template, template_version, tool_version}` | all of the above |
+| `manifest.json` | `{inputs: {kind → sha256}, report_sha256, template, template_version, tool_version}` (`tool_version` read from `security-evidence/scripts/version.json`, a one-key file owned by the scripts) | all of the above |
 
 Order: `run init` → `scope` → `ingest`/agent findings → `gate` → `coverage`
 → `packet`/`receipt` → `build-report` (renders report, writes manifest,
@@ -165,8 +165,8 @@ directory; the template's **required-inputs list** is closed:
 
 | Template | Required inputs |
 |---|---|
-| `review` | run, scope, claimed, gate-result, coverage, examined declaration, packets, receipts (review), rejects, unlocated |
-| `assessment` | review inputs + engagement snapshot, threat-model, receipts (mitigation-review), observations, imports, verify runs, register events snapshot, proposals index |
+| `review` | run, scope, claimed, gate-result, coverage, examined declaration, packets, receipts (vulnerability-review; may be empty), rejects, unlocated |
+| `assessment` | review inputs + engagement snapshot, threat-model, receipts (mitigation-review), observations, imports, verify snapshots, register events snapshot, proposals index. **Every one of these is an artifact inside the assessment run directory**: `run init --kind assessment` writes explicit empty ones (`observations.json`, `imports.json`, `proposals-index.json` with `[]`; `threat-model.json` absent ⇒ `INCOMPLETE`), and `run snapshot register|verify|proposals --run <id>` copies the referenced artifacts (register events, each `verify.json` by hash, proposal index) **into** the run directory so `build-report` never reads outside it. |
 | `verify` | run, verify.json, fix-review packet, receipts (fix-review, ack) |
 | `threat-model` | run, threat-model, mitigation packets, receipts (mitigation-review), disposition references index |
 
@@ -182,7 +182,7 @@ recomputes it from):
 |---|---|
 | finding ids, states `CITATION_*` | `gate` re-run on claimed + scope |
 | coverage accounting and counts | `coverage` re-run on scope + examined declaration |
-| `REVIEW_*`, `MITIGATION_*` states | `receipt apply` over receipts + packets |
+| `REVIEW_*`, `MITIGATION_*` states | `receipt apply` over receipts + packets (no receipts ⇒ every accepted finding stays `CITATION_VERIFIED`, shown as "not independently reviewed") |
 | verify verdicts and history | `verify.mjs evaluate` over each `verify.json` raw results (pure function, no execution) |
 | register status, delta, unauthenticated-approval bucket | `register.mjs replay` over the events snapshot |
 | rejected and unlocated totals | rejects and unlocated artifacts |
@@ -201,15 +201,15 @@ re-validation is skipped and the result is `STRUCTURE-ONLY`, never
 
 ### 6.4 Packets, receipts, states, `verify.mjs all`
 
-**Packet** = the exact input set given to a reviewer: `{subject_ids, files[{path, side, oid, ranges, range_hmac}], policy_sha256}`; its hash is `packet_sha256`. Agents receive a packet path and read only what it lists; anything else they read is residual exposure.
+**Packet** = the exact input set given to a reviewer: `{kind: scope | subject, subject_ids[], files[{path, side, oid, ranges, range_hmac}], policy_sha256}`; its hash is `packet_sha256`. A **scope packet** (`kind: scope`, `subject_ids: []`) is built from `scope.json` **before** `gate` and is what the `review` contract receives to produce claims; a **subject packet** (`kind: subject`) is built from `gate-result.accepted` (or from a threat-model mitigation, or from a fix worktree) for the `vulnerability-review`, `mitigation-review` and `fix-review` contracts. Agents receive a packet path and read only what it lists; anything else they read is residual exposure. The `review` contract produces `findings.claimed.json` only; it never writes a receipt.
 
-**Receipt** `{type: review | mitigation-review | fix-review | ack, subject_id, packet_sha256, assertion, reviewer_run_id}`; `assertion` is a closed enum per type (`review: confirmed | refuted | indeterminate`; `mitigation-review: confirmed | gap | indeterminate`; `fix-review: not-refound | refound | indeterminate`; `ack: {indicator_id}`). `receipt validate` checks schema, that the packet exists and matches, and that `packet.files[].oid` equals the run's oids. `receipt apply` derives states:
+**Receipt** `{type: vulnerability-review | mitigation-review | fix-review | ack, subject_id, packet_sha256, assertion, reviewer_run_id}`; `assertion` is a closed enum per type (`vulnerability-review: confirmed | refuted | indeterminate`; `mitigation-review: confirmed | gap | indeterminate`; `fix-review: not-refound | refound | indeterminate`; `ack: {indicator_id}`). `receipt validate` checks schema, that the packet exists and matches, and that `packet.files[].oid` equals the run's oids. `receipt apply` derives states:
 
 | Prior state | Receipt | Derived |
 |---|---|---|
-| `CITATION_VERIFIED` | review confirmed / refuted / indeterminate | `REVIEW_CONFIRMED` / `REVIEW_REFUTED` / `REVIEW_INDETERMINATE` |
+| `CITATION_VERIFIED` | vulnerability-review confirmed / refuted / indeterminate (a **fresh** dispatch over a subject packet, never the instance that authored the claim) | `REVIEW_CONFIRMED` / `REVIEW_REFUTED` / `REVIEW_INDETERMINATE` |
 | `CITATION_FAILED` | any | unchanged (stays unverifiable; receipt recorded as `not-applied`) |
-| `REVIEW_REFUTED` | anything but a new review receipt on a new run | unchanged; `verify` refuses (`UNVERIFIED-REFUTED-FINDING`) |
+| `REVIEW_REFUTED` | anything but a new vulnerability-review receipt on a new run | unchanged; `verify` refuses (`UNVERIFIED-REFUTED-FINDING`) |
 | two receipts, same subject, same run, different assertions | — | `*_INDETERMINATE` |
 
 **`verify.mjs all --finding <id> --base <oid> --head <oid>`**:
@@ -240,9 +240,13 @@ re-validation is skipped and the result is `STRUCTURE-ONLY`, never
    with unavailable tests yields `UNVERIFIED-INDETERMINATE(tests)` **and**
    the `regression-observed` event, matching the §12 fixture); then the
    remaining rules in order:
-   - `refound_observed = (fix-review assertion == refound)`; if true and the
-     register row is `fixed`, the register event `regression-observed` is
-     emitted **regardless of every other check**.
+   - `refound_observed = (fix-review receipt validates and its assertion is
+     refound)`; a `refound` receipt that fails validation (oid mismatch,
+     wrong packet) is `not-applied` and is reported as such, not as an
+     observation (fixture: `refound` + not-applied ⇒
+     `UNVERIFIED-INDETERMINATE(fix-review)` and no event). If observed and
+     the register row is `fixed`, the register event `regression-observed`
+     is emitted **regardless of every other check**.
    - if any check is missing/malformed ⇒ `UNVERIFIED-INDETERMINATE(<check>)`
      (with `refound_observed` still recorded and shown)
    - `refound` ⇒ `REGRESSED` (row was `fixed`) or `UNVERIFIED-REFOUND`
@@ -357,7 +361,9 @@ regressed`; otherwise reject. Finding aliases (`finding-alias.jsonl`:
 `{from_id, to_id, reason, run_id}`) are separate from row supersession.
 
 Transitions: v3 §6.7 table minus `confirm`, plus `regression-observed`
-(informational event) and `alias`. Every approval-like field
+(informational event), `ticketed` (sets `ticket_url`; any status; from
+`ingest tracker-readback` only) and `alias`. `register.mjs render` writes
+`risk-register.md` (the lead's `context-docs` view) from the projection. Every approval-like field
 (`acceptance`, `false_positive`, `ack_refs`, execution authorization) is
 `{recorded_by, approved_by, approval_ref, authenticated: false}`; reports
 show one "unauthenticated approvals" bucket; open exposure is never reduced
@@ -366,12 +372,18 @@ by any of them.
 ### 6.9 Artifact policy, `engagement init`, publication
 
 `engagement init`:
+0. writes the knowledge templates if the seeded copies are absent; if
+   `engagement.md` is absent, writes the template copy and exits **2**
+   `EDIT-ENGAGEMENT-AND-RERUN` (nothing else happens on that run);
 1. writes the managed `.gitignore` block (exact patterns:
    `.agents/security-testing/private/`, `.agents/security-testing/ledger/`,
    `.agents/security-testing/runs/`, `.agents/security-testing/receipts/`,
    `.agents/security-testing/proposals/`, `.agents/security-testing/handoffs/`,
-   `.agents/security-testing/imports/`, `reports/security/`,
-   `tasks/security-*/`), idempotently between `# security-testing:begin/end`;
+   `.agents/security-testing/imports/`, `.agents/security-testing/register/`,
+   `reports/security/`, `tasks/security-*/`), idempotently between
+   `# security-testing:begin/end`; a `committed` entry in `artifact_policy`
+   removes that artifact's pattern from the block (that is how "commit by
+   policy" works);
 2. **fails (exit 4)** if `git ls-files` shows anything under those paths or
    if `git check-ignore -q` fails for a probe file in each;
 3. creates the key; 4. writes `private/baseline.json`: per-path HMAC of
@@ -380,7 +392,7 @@ by any of them.
    `engagement.md`), plus HEAD and index state, plus `ignored_count` per
    path (git-ignored files are outside the observation and are reported as
    excluded coverage at sign-off);
-5. writes knowledge templates if the seeded copies are absent.
+5. (moved to step 0).
 
 **Publication** is only `evidence.mjs publish --run <id> --profile <p> --to
 <destination>`; profiles: `redacted-report`, `full-report` (explicit),
@@ -390,8 +402,11 @@ only). Each writes `export-manifest.json` `{source_manifest_sha256,
 profile, profile_version, output_sha256}`. `check-export <export-manifest>
 [--source <run dir>]` re-applies the profile to the source and byte-compares
 (`VERIFIED-DERIVATIVE`) or, without the source, reports `LINKED-ONLY`.
-`purge --engagement <id>` deletes private, ledger, runs, imports; the
-consumer decides when.
+`purge --engagement <id>` deletes that engagement's `private/` content
+(keys, citations, snapshots, `baseline.<id>.json`), ledger, runs, receipts,
+imports; if the current key belongs to the purged engagement,
+`private/keys/current` is removed and the next `engagement init` creates a
+new key; the consumer decides when.
 
 ### 6.10 Threat dispositions
 
@@ -409,7 +424,7 @@ mitigated(mitigation_id with a MITIGATION_CONFIRMED derived state)`.
 | Ask | Command(s) | Needs installed |
 |---|---|---|
 | `engagement init` | `evidence.mjs engagement init` | `security-evidence` |
-| `review --base <ref>` | `run init --kind review` → `scope` → reviewer packet → `gate` → `coverage` → `build-report --template review` | `security-evidence` + `secure-code-review` |
+| `review --base <ref>` | `run init --kind review` → `scope` → `packet --kind scope` → reviewer (`review` contract → `findings.claimed.json`) → `gate` → `coverage` → optional `packet --kind subject` + fresh reviewer (`vulnerability-review`) → `build-report --template review` | `security-evidence` + `secure-code-review` |
 | `verify <finding> --base --head` | `verify.mjs all` | `security-evidence` + `secure-code-review` |
 | `check`, `check-export`, `sign-off`, register commands | `evidence.mjs …`, `register.mjs …` | `security-evidence` |
 | `threat-model` | `tm-lint` + threat-modeler | + `threat-modeling`, `threat-modeler` |
@@ -421,7 +436,7 @@ inventory), requires ≥ 1 `COMMITTED` assessment run (`NO-ASSESSMENT` ⇒ exit
 4), selects the latest by `seq`, and fails on: any `COMMITTED` run
 `INCONSISTENT`/`STRUCTURE-ONLY` (`CONSISTENT-REDACTED-ONLY` is accepted for
 `review`-kind runs and listed; it cannot occur for assessment runs); latest assessment not `CURRENT` at scope
-level; register `CORRUPT`; `anchor verify` mismatch when `--expect` given;
+level or its coverage `INDETERMINATE`; register `CORRUPT`; `anchor verify` mismatch when `--expect` given;
 dispositions per policy; tracked files under managed paths. It **lists**
 (informational): incomplete runs, per-path working-tree changes since
 baseline, unauthenticated approvals.
@@ -446,7 +461,9 @@ classification: admitted-heuristic | admitted-reviewed | proposal, lint_hits,
 assumptions: {base_url_host, account}, target_policy_sha256}`. The lint is
 a heuristic over step text (allowed-operation grammar + forbidden-pattern
 list); **unknown effects ⇒ proposal**. `admitted-reviewed` requires a
-reviewer assertion receipt on the case packet. The claim is "admitted by
+`vulnerability-review`-type receipt on the case packet with assertion
+`confirmed` (meaning "confirmed passive"); `refuted` or `indeterminate`
+leaves the case a proposal. The claim is "admitted by
 lint or by review", never "safe".
 
 ### 9.2 manual-qa
@@ -480,8 +497,14 @@ per assertion; tests may be built before `VERIFIED`.
 
 ### 9.4 Proposals, feature-development, tracker
 
-As v3 §9.4–§9.5, with tracker writes through `publish --profile tracker`
-and read-back through `ingest tracker-readback`.
+As v3 §9.4–§9.5, with this precision: scripts have no tracker access.
+`publish --profile tracker` produces the **validated, redacted payload
+file** (`handoffs/<finding-id>.ticket.json`); the lead posts it through the
+`issue-tracking` skill, then runs `ingest tracker-readback` on the tracker's
+response, which writes the `ticket_url` onto the register row (event
+`ticketed`). Dedupe has two layers: the script dedupes against the register
+and prior imports; the lead searches the live tracker by fingerprint via
+`issue-tracking` before posting. The bundle promises the first layer only.
 
 ## 10. Files and manifests
 
@@ -635,3 +658,17 @@ core hooks install regardless of `targets` (D4); `memory` and
 | M2 offline external cache | **resolved**: local bare fixture remotes via `SDLC_SKILLS_CACHE_DIR`; network rewrite guard | §12 |
 | M3 transitive input closure | **resolved**: closure rule; `verify` and `threat-model` inputs extended | §6.3 |
 | M4 replacement-import fixture | **resolved**: distinguishes `import_sha256` vs `original_hmac` changes | §12 |
+
+## 20. v6.1 planning amendments (representation choices surfaced by decomposition)
+
+None changes §2 or §3. Each was needed because Rio's task decomposition and
+the plan critic found the spec left a representation open in a way that
+made the flow unschedulable.
+
+| # | Amendment | Where |
+|---|---|---|
+| P1 | Two packet kinds: scope packet (before `gate`, for the `review` contract that produces claims) and subject packet (for `vulnerability-review`, `mitigation-review`, `fix-review`). Receipt type `review` renamed `vulnerability-review`; the claim author never writes a receipt. | §4, §6.1, §6.3, §6.4, §7 |
+| P2 | Assessment required inputs are all artifacts inside the run directory: `run init --kind assessment` writes explicit empty ones; `run snapshot register|verify|proposals` copies referenced artifacts in. | §5, §6.3 |
+| P3 | `engagement init` step 0 writes templates and, when `engagement.md` is absent, the template copy, then exits 2 `EDIT-ENGAGEMENT-AND-RERUN`; baseline runs only with an `engagement.md` present. Register directory is under the managed ignore block; `artifact_policy: committed` removes a pattern. `purge` scope stated. | §6.9 |
+| P4 | Tracker publication is a two-layer contract: script produces the payload and dedupes against register/imports; the lead posts via `issue-tracking` and dedupes against the live tracker; `ingest tracker-readback` emits `ticketed`. | §6.8, §9.4 |
+| P5 | `ticketed` transition, `register.mjs render`, `tool_version` from `version.json`, `INDETERMINATE` coverage blocks sign-off, `admitted-reviewed` needs assertion `confirmed`, `refound` not-applied fixture. | §6.1, §6.4, §6.8, §7, §9.1 |
