@@ -1,9 +1,9 @@
-# security-testing bundle — design spec (v5)
+# security-testing bundle — design spec (v6)
 
 **Date:** 2026-09-15 (v5; v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
-**Status:** v5 draft; goal: no blocker or major findings open
+**Status:** v6 draft; goal: no blocker or major findings open
 **Inputs:** [market research](../notes/2026-09-14-security-testing-market-research.md),
 [secops comparison](../notes/2026-09-14-security-testing-secops-comparison.md),
 reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.md),
@@ -11,8 +11,9 @@ reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.
 [v2 B](../notes/2026-09-14-security-testing-spec-v2-adversarial-review-codex-2.md),
 [v3](../notes/2026-09-15-security-testing-spec-v3-adversarial-review-codex.md),
 [v4](../notes/2026-09-15-security-testing-spec-v4-adversarial-review-codex.md)
-(0 blockers, 5 majors). §17 maps v3 F1–F20 to v4 changes; §18 maps v4
-R1–R5 and the minors to v5 changes.
+(0 blockers, 5 majors), [v5](../notes/2026-09-15-security-testing-spec-v5-adversarial-review-codex.md)
+(0 blockers, 1 major). §17 maps v3 F1–F20 to v4; §18 maps v4 R1–R5 to v5;
+§19 maps v5 N1 and M1–M4 to v6.
 
 **Sources of truth for repo claims.** `bin/lib/item-resolver.mjs`
 (`FACTORIES_DIR = "bundles"`); `bin/validate-factories.mjs` (empty `agents`
@@ -40,7 +41,7 @@ Produces a **security assessment**, not a penetration test.
 | Can promise (script, on canonical-pipeline outputs) | Cannot promise |
 |---|---|
 | **Consistency and re-derivation.** For a run directory carrying a `COMMITTED` marker, `check` recomputes from the recorded inputs every derived value the report displays (§6.3 derivation table) and byte-compares the rendered report. | Origin. A consistent set can be authored by anyone with write access. `check` prints `ORIGIN: unauthenticated` unless a consumer-held digest is supplied. |
-| **Integrity against the recorded snapshot** (`base_oid`/`head_oid` per citation side) and **drift against the current tree**, at citation and scope level. | That a model read what it declared examined. |
+| **Integrity against the recorded snapshot** (`base_oid`/`head_oid` per citation side) and **drift against the current tree**, at citation and scope level. For `side: snapshot` citations (dirty files in `review` runs only; assessment runs are clean-tree), original-content revalidation is possible only while the working file still matches the recorded HMAC; afterwards the result is `CONSISTENT-REDACTED-ONLY` (the redacted snapshot matches its recorded hash; the original HMAC is compared as recorded, not re-derived). | That a model read what it declared examined; original bytes of a dirty file after it changes. |
 | **Tests execute from a validated test-start snapshot**: the tree is compared to `head_oid` after dependency installation; tracked changes fail the run unless the operator record allows them, in which case the verdict names the derived snapshot, not `head_oid`. | Test meaningfulness; class closed at the sink; suppression detection beyond lexical indicators. |
 | **Bounded redaction before any persistence, including under `private/`**: no artifact this bundle writes contains original bytes that match a redaction rule; reconstruction needs are met with redacted bytes plus keyed HMACs of the originals. **No publishable artifact carries a plain hash whose preimage contains protected content** (identity is keyed whenever the cited content matches a rule, regardless of finding class). | Detection of secrets outside the rule list. |
 | **Only admitted cases are written to the hand-off suite**, a directory that contains nothing else. | That a QA runner refuses a case handed to it directly. |
@@ -140,9 +141,12 @@ listed by `sign-off` as such. Retry = new `seq`; nothing is rewritten.
   a dirty tree and stores, for every dirty/untracked in-scope file, its
   **redacted** content under `private/snapshots/<run>/<path>` and the HMAC
   of its original bytes in `scope.payload.snapshot`. Order: read → HMAC →
-  redact → persist. `check --integrity` for `side: snapshot` compares the
-  redacted bytes and, when the working file is unchanged, re-derives the
-  HMAC from it; original bytes are never on disk.
+  redact → persist. `check --integrity` for `side: snapshot` yields `CONSISTENT` when the
+  redacted snapshot matches its recorded hash **and** the working file still
+  matches the recorded original HMAC; `CONSISTENT-REDACTED-ONLY` when only
+  the former holds (the original is gone; nothing can re-derive it);
+  `INCONSISTENT` when the redacted snapshot does not match. Original bytes
+  are never on disk.
 - Normalisation and range rules as v3 §6.1 (newline-preserving, `end - start
   + 1 ≤ 40`, primary ranges ⊆ admitted ranges, typed citations flagged
   `context`, occurrence recomputed by `gate`).
@@ -161,10 +165,13 @@ directory; the template's **required-inputs list** is closed:
 |---|---|
 | `review` | run, scope, claimed, gate-result, coverage, examined declaration, packets, receipts (review), rejects, unlocated |
 | `assessment` | review inputs + engagement snapshot, threat-model, receipts (mitigation-review), observations, imports, verify runs, register events snapshot, proposals index |
-| `verify` | run, verify.json, receipts (fix-review, ack) |
-| `threat-model` | run, threat-model, receipts (mitigation-review) |
+| `verify` | run, verify.json, fix-review packet, receipts (fix-review, ack) |
+| `threat-model` | run, threat-model, mitigation packets, receipts (mitigation-review), disposition references index |
 
-A missing required input ⇒ exit 3 `INCOMPLETE(<input>)`; no report.
+Required inputs are **transitively closed**: every artifact an input
+references by hash (packets from receipts, scope from gate, imports from
+observations) is itself required. A missing required input ⇒ exit 3
+`INCOMPLETE(<input>)`; no report.
 
 **Derivation table** (each value the report displays and where `check`
 recomputes it from):
@@ -181,7 +188,8 @@ recomputes it from):
 | rendered report bytes | deterministic renderer over the same inputs |
 
 `check <run dir | manifest> [--integrity] [--drift] [--trusted-digest <sha256>]`
-→ `CONSISTENT | INCONSISTENT(<field>)`; `CURRENT | CITATION-DRIFTED(n) |
+→ `CONSISTENT | CONSISTENT-REDACTED-ONLY(n citations) | INCONSISTENT(<field>)`
+(the middle result is possible only for `review`-kind runs); `CURRENT | CITATION-DRIFTED(n) |
 SCOPE-DRIFTED(n files)` (scope drift = per-file HMAC of every in-scope file
 vs `scope.json`); `ORIGIN: unauthenticated | matches supplied digest`
 (compared against the **recomputed** manifest hash, never the sidecar);
@@ -224,7 +232,12 @@ re-validation is skipped and the result is `STRUCTURE-ONLY`, never
 6. `fix-review` packet built from the worktree; receipt from a fresh
    reviewer.
 7. **Evaluate** (`verify.mjs evaluate` is a pure function over the raw
-   results; `all` calls it and it is what `check` re-runs):
+   results; `all` calls it and it is what `check` re-runs). Precedence:
+   `refound_observed` is recorded first and unconditionally; then
+   completeness (any missing check ⇒ indeterminate, so a valid `refound`
+   with unavailable tests yields `UNVERIFIED-INDETERMINATE(tests)` **and**
+   the `regression-observed` event, matching the §12 fixture); then the
+   remaining rules in order:
    - `refound_observed = (fix-review assertion == refound)`; if true and the
      register row is `fixed`, the register event `regression-observed` is
      emitted **regardless of every other check**.
@@ -273,9 +286,12 @@ Register consumes: `VERIFIED` ⇒ `fixed` (`ack_refs` on the row);
   `context_redacted`. Fixtures include a non-secret-class finding citing
   `password=1234`.
 - Replay: with the key, `check` re-derives `source_hmac` from the recorded
-  side and compares it, together with the recorded `claimed_hmac`, against
-  the private record (the original claim is not stored, so it is compared,
-  never recomputed); without the key, `STRUCTURE-ONLY`.
+  side (`git show` for `base`/`head`; the working file for `snapshot` while
+  it still matches) and compares it, together with the recorded
+  `claimed_hmac`, against the private record (the original claim is not
+  stored, so it is compared, never recomputed). When a `snapshot` original
+  is no longer available the citation is `CONSISTENT-REDACTED-ONLY`; without
+  the key, `STRUCTURE-ONLY`.
 - Redaction is one function (`redact.mjs`, versioned rules) applied by every
   writer to every string, recursively, including rejection reasons, logs,
   tracker bodies, hand-off prompts. Guarantee bounded to the rule list.
@@ -401,7 +417,8 @@ mitigated(mitigation_id with a MITIGATION_CONFIRMED derived state)`.
 `sign-off --engagement <id>` reads `ledger/index.json` (authoritative run
 inventory), requires ≥ 1 `COMMITTED` assessment run (`NO-ASSESSMENT` ⇒ exit
 4), selects the latest by `seq`, and fails on: any `COMMITTED` run
-`INCONSISTENT`/`STRUCTURE-ONLY`; latest assessment not `CURRENT` at scope
+`INCONSISTENT`/`STRUCTURE-ONLY` (`CONSISTENT-REDACTED-ONLY` is accepted for
+`review`-kind runs and listed; it cannot occur for assessment runs); latest assessment not `CURRENT` at scope
 level; register `CORRUPT`; `anchor verify` mismatch when `--expect` given;
 dispositions per policy; tracked files under managed paths. It **lists**
 (informational): incomplete runs, per-path working-tree changes since
@@ -504,19 +521,24 @@ finding citing `password=1234` ⇒ keyed id, no plain hash anywhere in
 publishable artifacts; replay with and without key; repeated `engagement
 init` reuses the key, `--rotate` adds one; dirty tracked and untracked
 baseline changes listed per path; same-path audit report replacement ⇒
-different `import_sha256`; extra TC placed in the admitted suite by hand ⇒
+different `import_sha256` when non-redacted content changed, and a
+different `original_hmac` when only redacted-away content changed; extra TC placed in the admitted suite by hand ⇒
 `sign-off` lists it as unadmitted (suite hash vs admissions); interrupted
 append ⇒ rebuild; truncated log + projection vs `anchor verify` ⇒
 `TRUNCATED`; `side: base` citation passes integrity; assessment on dirty
 tree refused; supersede without equivalence or transfer rejected;
 `check-export` `VERIFIED-DERIVATIVE` and `LINKED-ONLY`.
 
-Installed end-to-end (`npm test`, temp dir, no network): the installer is
-pointed at a fixture registry directory (the existing cache-path override)
-holding the top-level `memory` and `knowledge-curation` skills and stub
-copies of the externals the full roster names
-(`dispatching-parallel-agents`, `verifying-outcomes`, `systematic-debugging`,
-`issue-tracking`), so nothing is cloned. (a) full bundle: `engagement init →
+Installed end-to-end (`npm test`, temp dir, no network): `SDLC_SKILLS_CACHE_DIR`
+points at a temp cache in which each external the M1 roster names
+(`systematic-debugging`) is pre-populated as a git clone whose `origin`
+remote is a **local bare fixture repository**, so the installer's `git
+fetch origin <ref>` resolves to a file path and never reaches the network;
+`memory`, `knowledge-curation`, `verifying-outcomes` are monorepo skills and
+`issue-tracking` resolves to the feature-development bundle copy via the
+item index. The test asserts no `https://` fetch by running with
+`GIT_CONFIG_GLOBAL` pointing at a config that rewrites `https://github.com/`
+to an unreachable local path. (a) full bundle: `engagement init →
 run init --kind assessment → scope → ingest sarif → gate → coverage →
 packet/receipt → build-report --template assessment → check → verify all
 (fixture repo) → register → sign-off` with `require_dispositions: none`,
@@ -529,7 +551,10 @@ positive tests + `indeterminate` fix-review ⇒
 `UNVERIFIED-INDETERMINATE(fix-review)`; changed ignored product file ⇒
 listed as excluded coverage, not as a change; dirty review snapshot of a
 file containing `password=1234` ⇒ snapshot bytes redacted, HMAC present,
-no original bytes anywhere under `.agents/security-testing/`.
+no original bytes anywhere under `.agents/security-testing/`; then the
+working file is changed and `check --integrity` with the key ⇒
+`CONSISTENT-REDACTED-ONLY(1)` and `sign-off` still passes for that
+review run.
 
 Model evals: frozen harness as v3.
 
@@ -597,3 +622,13 @@ core hooks install regardless of `targets` (D4); `memory` and
 | R4 manual-qa report is Markdown | **resolved**: adapter consumes `reports/RUN-*.md` per `test-run-report-format.md`; fixture | §6.6, §12 |
 | R5 inherited "exact checkout" wording | **resolved**: `factory.json` description and `FACTORY.md` use_cases written out; no catalog text may say "exact checkout" | §10 |
 | minors | transitive inputs listed; replay wording corrected; multiple ACK receipts exempted; sensitive indicator ids keyed; external fixtures provisioned in the E2E; E2E sign-off expectations stated; §15 word-absence claim removed | §6.3, §6.4, §6.5, §12, §15 |
+
+## 19. v5 findings → v6
+
+| Finding | Resolution | Where |
+|---|---|---|
+| N1 historical replay of redacted dirty snapshots | **resolved by contract**: third integrity result `CONSISTENT-REDACTED-ONLY` for `snapshot` citations whose original is gone; §2 states the limit; sign-off accepts it for review runs; assessment runs cannot have snapshot citations; four-step fixture | §2, §6.2, §6.3, §6.5, §7, §12 |
+| M1 evaluator precedence vs fixture | **resolved**: precedence stated (`refound_observed` first, completeness second) | §6.4 |
+| M2 offline external cache | **resolved**: local bare fixture remotes via `SDLC_SKILLS_CACHE_DIR`; network rewrite guard | §12 |
+| M3 transitive input closure | **resolved**: closure rule; `verify` and `threat-model` inputs extended | §6.3 |
+| M4 replacement-import fixture | **resolved**: distinguishes `import_sha256` vs `original_hmac` changes | §12 |
