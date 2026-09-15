@@ -1,17 +1,18 @@
-# security-testing bundle — design spec (v4)
+# security-testing bundle — design spec (v5)
 
-**Date:** 2026-09-15 (v4; v3 028fab1, v2 9201e6b, v1 875f211)
+**Date:** 2026-09-15 (v5; v4 was the commit before 572055e; v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
-**Status:** v4 draft; goal of this round: no blocker or major findings open
+**Status:** v5 draft; goal: no blocker or major findings open
 **Inputs:** [market research](../notes/2026-09-14-security-testing-market-research.md),
 [secops comparison](../notes/2026-09-14-security-testing-secops-comparison.md),
 reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.md),
 [v2 A](../notes/2026-09-14-security-testing-spec-v2-adversarial-review-codex.md),
 [v2 B](../notes/2026-09-14-security-testing-spec-v2-adversarial-review-codex-2.md),
-[v3](../notes/2026-09-15-security-testing-spec-v3-adversarial-review-codex.md).
-§17 maps every v3 finding (F1–F20) to its v4 change and states, per finding,
-whether v4 **resolves** it with a contract or **removes** the capability.
+[v3](../notes/2026-09-15-security-testing-spec-v3-adversarial-review-codex.md),
+[v4](../notes/2026-09-15-security-testing-spec-v4-adversarial-review-codex.md)
+(0 blockers, 5 majors). §17 maps v3 F1–F20 to v4 changes; §18 maps v4
+R1–R5 and the minors to v5 changes.
 
 **Sources of truth for repo claims.** `bin/lib/item-resolver.mjs`
 (`FACTORIES_DIR = "bundles"`); `bin/validate-factories.mjs` (empty `agents`
@@ -41,10 +42,10 @@ Produces a **security assessment**, not a penetration test.
 | **Consistency and re-derivation.** For a run directory carrying a `COMMITTED` marker, `check` recomputes from the recorded inputs every derived value the report displays (§6.3 derivation table) and byte-compares the rendered report. | Origin. A consistent set can be authored by anyone with write access. `check` prints `ORIGIN: unauthenticated` unless a consumer-held digest is supplied. |
 | **Integrity against the recorded snapshot** (`base_oid`/`head_oid` per citation side) and **drift against the current tree**, at citation and scope level. | That a model read what it declared examined. |
 | **Tests execute from a validated test-start snapshot**: the tree is compared to `head_oid` after dependency installation; tracked changes fail the run unless the operator record allows them, in which case the verdict names the derived snapshot, not `head_oid`. | Test meaningfulness; class closed at the sink; suppression detection beyond lexical indicators. |
-| **Bounded redaction** before any persistence; **no publishable artifact carries a plain hash whose preimage contains protected content** (identity is keyed whenever the cited content matches a redaction rule, regardless of finding class). | Detection of secrets outside the rule list. |
+| **Bounded redaction before any persistence, including under `private/`**: no artifact this bundle writes contains original bytes that match a redaction rule; reconstruction needs are met with redacted bytes plus keyed HMACs of the originals. **No publishable artifact carries a plain hash whose preimage contains protected content** (identity is keyed whenever the cited content matches a rule, regardless of finding class). | Detection of secrets outside the rule list. |
 | **Only admitted cases are written to the hand-off suite**, a directory that contains nothing else. | That a QA runner refuses a case handed to it directly. |
 | **Every approval-like record is stored and reported as unauthenticated.** There is no confirmed state. | That any human approved anything. |
-| **Per-path observation of working-tree changes** between `engagement init` and `sign-off` for tracked and untracked files under scope and product paths. | Attribution of a change to a role. |
+| **Per-path observation of working-tree changes** between `engagement init` and `sign-off` for tracked files and **non-ignored** untracked files under scope and product paths; the count of ignored files under those paths is recorded so the excluded coverage is visible. | Attribution of a change to a role; changes to git-ignored files. |
 
 ## 3. Decisions (locked)
 
@@ -136,9 +137,12 @@ listed by `sign-off` as such. Retry = new `seq`; nothing is rewritten.
 
 - `run init --kind assessment` requires a clean tree (`git status
   --porcelain` empty); otherwise exit 3 `DIRTY-TREE`. `--kind review` allows
-  a dirty tree and stores every dirty/untracked in-scope file's content under
-  `private/snapshots/<run>/<path>` with its HMAC in `scope.payload.snapshot`,
-  so `check --integrity` can reconstruct it.
+  a dirty tree and stores, for every dirty/untracked in-scope file, its
+  **redacted** content under `private/snapshots/<run>/<path>` and the HMAC
+  of its original bytes in `scope.payload.snapshot`. Order: read → HMAC →
+  redact → persist. `check --integrity` for `side: snapshot` compares the
+  redacted bytes and, when the working file is unchanged, re-derives the
+  HMAC from it; original bytes are never on disk.
 - Normalisation and range rules as v3 §6.1 (newline-preserving, `end - start
   + 1 ≤ 40`, primary ranges ⊆ admitted ranges, typed citations flagged
   `context`, occurrence recomputed by `gate`).
@@ -155,7 +159,7 @@ directory; the template's **required-inputs list** is closed:
 
 | Template | Required inputs |
 |---|---|
-| `review` | run, scope, claimed, gate-result, coverage, receipts (review), rejects, unlocated |
+| `review` | run, scope, claimed, gate-result, coverage, examined declaration, packets, receipts (review), rejects, unlocated |
 | `assessment` | review inputs + engagement snapshot, threat-model, receipts (mitigation-review), observations, imports, verify runs, register events snapshot, proposals index |
 | `verify` | run, verify.json, receipts (fix-review, ack) |
 | `threat-model` | run, threat-model, receipts (mitigation-review) |
@@ -227,13 +231,21 @@ re-validation is skipped and the result is `STRUCTURE-ONLY`, never
    - if any check is missing/malformed ⇒ `UNVERIFIED-INDETERMINATE(<check>)`
      (with `refound_observed` still recorded and shown)
    - `refound` ⇒ `REGRESSED` (row was `fixed`) or `UNVERIFIED-REFOUND`
+   - fix-review receipt absent, not applied, or assertion `indeterminate`
+     ⇒ `UNVERIFIED-INDETERMINATE(fix-review)`; **`VERIFIED` requires an
+     applied `not-refound` assertion**
    - `branch ≠ COMMITTED` ⇒ `UNVERIFIED-NOT-COMMITTED`
    - tests `FAIL | NO_TEST_SURFACE | INDETERMINATE` ⇒ corresponding `UNVERIFIED-*`
    - `deletion_only` ⇒ `UNVERIFIED-SUPPRESSION(deletion-only)` (never waivable)
    - for every indicator without an `ack` receipt whose `indicator_id`
      matches and whose `packet_sha256` is the fix-review packet ⇒
      `UNVERIFIED-SUPPRESSION(<n unacked>)`
-   - otherwise `VERIFIED` (with `ack_refs[]` if any).
+   - otherwise (`COMMITTED`, `TESTS_PASS`, no `deletion_only`, every
+     indicator acked, applied `not-refound`) `VERIFIED` (with `ack_refs[]`).
+   Multiple `ack` receipts are expected (one per indicator) and are exempt
+   from the conflicting-assertions rule, which applies per `(type,
+   subject_id, run)` to the other three types only. An indicator id whose
+   line content matches a redaction rule uses the keyed identity of §6.5.
 8. `verify.json` payload: all raw results, argv hashes, resolved executable
    hash, `tree_before`, `tested_tree`, install counts, receipt hashes,
    evaluation output. Line: `VERDICT <token> finding=<id> base=<oid>
@@ -260,9 +272,10 @@ Register consumes: `VERIFIED` ⇒ `fixed` (`ack_refs` on the row);
   Secret-class findings are the same path with `snippet_redacted` replaced by
   `context_redacted`. Fixtures include a non-secret-class finding citing
   `password=1234`.
-- Replay: with the key, `check` recomputes `claimed_hmac` from the private
-  record and `source_hmac` from the recorded side; without the key,
-  `STRUCTURE-ONLY`.
+- Replay: with the key, `check` re-derives `source_hmac` from the recorded
+  side and compares it, together with the recorded `claimed_hmac`, against
+  the private record (the original claim is not stored, so it is compared,
+  never recomputed); without the key, `STRUCTURE-ONLY`.
 - Redaction is one function (`redact.mjs`, versioned rules) applied by every
   writer to every string, recursively, including rejection reasons, logs,
   tracker bodies, hand-off prompts. Guarantee bounded to the rule list.
@@ -277,13 +290,15 @@ Register consumes: `VERIFIED` ⇒ `fixed` (`ack_refs` on the row);
 | `ingest doc` | in-scope path | path | content |
 | `ingest case` | manual-qa TC frontmatter | ids, `requirements` | steps |
 | `ingest audit` | qa-auditor report Markdown + its JSON block | finding titles, URLs (host ∈ `targets.browser`) | evidence text |
-| `ingest qa-run` | manual-qa run report JSON | case ids, results, run id, `base_url` (host ∈ `targets.browser`) | free text |
+| `ingest qa-run` | manual-qa run report **Markdown** `reports/RUN-YYYY-MM-DD-NNN.md` per `test-run-report-format.md`: frontmatter (`run_id`, `suite`, `environment`, `date`) and the `## Results` table (`ID`, `Title`, `Size`, `Status` with `PASS|FAIL|BLOCKED`, `Steps`, `Wall Clock`); the fixture is that format verbatim | `run_id`, case ids, status tokens, `environment` (host ∈ `targets.browser`), suite | titles, failure narratives; screenshots referenced by path, never copied |
 | `ingest ta-report` | `.agents/automation/<slug>/report.json` | unit outcomes, `coverage`, exclusions, `findings[]`, `recovery_basis` if present, test paths | free text |
 | `ingest tracker-readback` | tracker JSON after a mutation | the fields the mutation set | everything else |
 
-Every import is **snapshotted**: the artifact bytes are copied to
-`ledger/<run>/imports/<sha256>` and every derived record carries
-`import_sha256` + record index as its locator. `engagement.md targets:`
+Every import is **snapshotted as redacted canonical bytes**: the artifact
+is read, HMAC'd (`original_hmac`), redacted, then written to
+`ledger/<run>/imports/<sha256 of the redacted bytes>`; every derived record
+carries `import_sha256` (redacted identity) + `original_hmac` + record index
+as its locator. Original bytes are never persisted by this bundle. `engagement.md targets:`
 (`tracker`, `browser`, `repo`) is the destination/authority policy,
 separate from source scope.
 
@@ -344,7 +359,9 @@ by any of them.
 3. creates the key; 4. writes `private/baseline.json`: per-path HMAC of
    working-tree content for every tracked file and every non-ignored
    untracked file under `scope_paths` and `product_paths` (from
-   `engagement.md`), plus HEAD and index state;
+   `engagement.md`), plus HEAD and index state, plus `ignored_count` per
+   path (git-ignored files are outside the observation and are reported as
+   excluded coverage at sign-off);
 5. writes knowledge templates if the seeded copies are absent.
 
 **Publication** is only `evidence.mjs publish --run <id> --profile <p> --to
@@ -449,10 +466,21 @@ and read-back through `ingest tracker-readback`.
 
 ## 10. Files and manifests
 
-Final `factory.json`: v3 §10 unchanged. **M1 `factory.json`**:
+Final `factory.json` `description`: "Threat-led, read-only security testing
+team: code-derived STRIDE threat model, evidence-gated secure code review
+with re-checkable citations, passive security cases for the manual-qa and
+test-automation bundles, fix verification from a validated test-start
+snapshot, and a residual-risk register." Other fields as v3 §10.
+`FACTORY.md` `use_cases`: "Code-derived STRIDE threat model with file:line
+citations"; "Evidence-gated secure code review whose citations anyone with
+the repo can re-check"; "Passive security cases in manual-qa format,
+proposals for active testing"; "Fix verification from a validated
+test-start snapshot with a script-emitted verdict"; "Residual-risk register
+with unauthenticated acceptance records and expiry". No catalog or manifest
+text may say "exact checkout". **M1 `factory.json`**:
 `localAgents: ["security-reviewer"]`, `localSkills: ["security-evidence",
 "secure-code-review", "security-engagement"]` (engagement is prose; its
-scripts are in `security-evidence`), one briefing. `FACTORY.md`: v3 §10.
+scripts are in `security-evidence`), one briefing. `FACTORY.md` frontmatter otherwise as v3 §10.
 `instructions.md`: role-scoped as v3. `security-evidence/scripts/`:
 `evidence.mjs`, `verify.mjs`, `register.mjs`, `tm-lint.mjs`, `plan.mjs`,
 `normalize.mjs`, `redact.mjs`, `canon.mjs`, each with `*.test.mjs`.
@@ -483,11 +511,25 @@ append ⇒ rebuild; truncated log + projection vs `anchor verify` ⇒
 tree refused; supersede without equivalence or transfer rejected;
 `check-export` `VERIFIED-DERIVATIVE` and `LINKED-ONLY`.
 
-Installed end-to-end (`npm test`, temp dir, no network — `memory` and
-`knowledge-curation` are monorepo skills): (a) full bundle: `engagement init
-→ run init → scope → ingest sarif → gate → coverage → packet/receipt →
-build-report → check → verify all → register → sign-off`; (b) two-skill
-install: same minus threat-model/plan, expecting no `UNGATED`.
+Installed end-to-end (`npm test`, temp dir, no network): the installer is
+pointed at a fixture registry directory (the existing cache-path override)
+holding the top-level `memory` and `knowledge-curation` skills and stub
+copies of the externals the full roster names
+(`dispatching-parallel-agents`, `verifying-outcomes`, `systematic-debugging`,
+`issue-tracking`), so nothing is cloned. (a) full bundle: `engagement init →
+run init --kind assessment → scope → ingest sarif → gate → coverage →
+packet/receipt → build-report --template assessment → check → verify all
+(fixture repo) → register → sign-off` with `require_dispositions: none`,
+expecting exit 0. (b) two-skill install: `engagement init → run init --kind
+review → … → build-report --template review → check → verify all →
+sign-off`, expecting `sign-off` exit 4 `NO-ASSESSMENT` (a review path never
+produces an assessment run) and no `UNGATED` banner. Additional fixtures:
+manual-qa run report in its real Markdown format through `ingest qa-run`;
+positive tests + `indeterminate` fix-review ⇒
+`UNVERIFIED-INDETERMINATE(fix-review)`; changed ignored product file ⇒
+listed as excluded coverage, not as a change; dirty review snapshot of a
+file containing `password=1234` ⇒ snapshot bytes redacted, HMAC present,
+no original bytes anywhere under `.agents/security-testing/`.
 
 Model evals: frozen harness as v3.
 
@@ -511,9 +553,7 @@ LINDDUN licence; `execution-authorization` ownership.
 ## 15. Consistency check against §2
 
 Each §2 left-column row names its script in §6/§7; each right-column row
-appears in §8; the words "unforgeable", "proves the model read", "human
-approved", "never edited", "all secrets", "confirmed" do not appear outside
-this sentence and §17.
+appears in §8. Any later sentence that exceeds §2 is a defect.
 
 ## 16. Repo facts relied on that the reviewer should re-verify
 
@@ -532,17 +572,28 @@ core hooks install regardless of `targets` (D4); `memory` and
 | F4 replay across redaction/key | **resolved**: private citation record written before discard; `STRUCTURE-ONLY` without key; key ids, `O_EXCL`, rotation | §6.5, §6.3 |
 | F5 tested bytes | **resolved by narrowing + contract**: post-install tree comparison; `tested_tree` in verdict; executable hash; promise reworded | §2, §6.4 |
 | F6 multi-indicator, regression masked | **resolved**: indicator set, per-indicator ACK, deletion never waivable, `regression-observed` independent of completeness | §6.4 |
-| F7 receipt contradiction, packet | **resolved**: assertions vs derived states, packet schema, transition table, duplicates ⇒ indeterminate | §4, §6.4 |
+| F7 receipt contradiction, packet | **resolved** (v5 closes R1: `VERIFIED` requires an applied `not-refound`) | §4, §6.4 |
 | F8 `confirm` | **removed**: no confirm; all approvals `authenticated: false`; one bucket | D15, §6.8 |
 | F9 supersede exposure, recovery, anchor, aliases | **resolved**: equivalence or transfer, rebuild vs corrupt rule, `anchor verify`, alias log | §6.8 |
 | F10 first-write, check-ignore, publication, retention | **resolved**: init fails closed, exact patterns, `publish` only path, `purge` | §6.9 |
-| F11 baseline, inventory | **resolved**: per-path content baseline incl. untracked; `ledger/index.json`; `NO-ASSESSMENT` | §6.9, §7 |
+| F11 baseline, inventory | **resolved** (v5 closes R3: §2 narrowed to non-ignored untracked; ignored count reported) | §2, §6.9, §7 |
 | F12 admission vs lead glob | **resolved**: admission record, unknown ⇒ proposal, dedicated admitted suite | §9.1–§9.2 |
-| F13 adapters, targets, SARIF matrix | **resolved**: adapter table with validation/trust columns, `targets` policy, fallback matrix | §6.6–§6.7 |
+| F13 adapters, targets, SARIF matrix | **resolved** (v5 closes R4: `ingest qa-run` consumes the real Markdown report) | §6.6–§6.7 |
 | F14 import identity, TA recovery | **resolved**: import snapshots + locators, `delivered-unwitnessed`, case hash from admission | §6.6, §9.2–§9.3 |
 | F15 `tested` by existence | **resolved**: `executed(observation)` vs `planned`, relationship validation, sign-off policy | §6.10 |
 | F16 standalone/M1 impossible | **resolved**: all scripts in `security-evidence`; init writes templates; M1 includes register; two E2E paths | D1, D12, §7, §10, §12–13 |
 | F17 fixtures | **resolved**: listed | §12 |
-| F18 wording | **resolved** | D4, §6.3, §8, §15 |
+| F18 wording | **resolved** (v5 closes R5: catalog and manifest wording rewritten) | D4, §6.3, §8, §10 |
 | F19 base citations, dirty scope, scope drift | **resolved**: side-aware resolution, clean-tree assessment, private snapshot for review, scope-level drift | D18, §6.2, §6.3 |
 | F20 publication, trusted digest, export check | **resolved**: `COMMITTED` marker, incomplete runs, recomputed digest, `check-export` | §6.1, §6.3, §6.9 |
+
+## 18. v4 findings → v5
+
+| R | Resolution | Where |
+|---|---|---|
+| R1 indeterminate review reaches `VERIFIED` | **resolved**: `VERIFIED` requires an applied `not-refound`; absent/unapplied/indeterminate ⇒ `UNVERIFIED-INDETERMINATE(fix-review)`; fixture | §6.4, §12 |
+| R2 original bytes under `private/` and in imports | **resolved by contract**: snapshots and imports persist redacted bytes + HMAC of originals; §2 now says "including under `private/`"; order read → HMAC → redact → persist | §2, §6.2, §6.6 |
+| R3 baseline excludes ignored untracked files | **resolved by narrowing**: §2 promises non-ignored untracked; `ignored_count` recorded and reported | §2, §6.9 |
+| R4 manual-qa report is Markdown | **resolved**: adapter consumes `reports/RUN-*.md` per `test-run-report-format.md`; fixture | §6.6, §12 |
+| R5 inherited "exact checkout" wording | **resolved**: `factory.json` description and `FACTORY.md` use_cases written out; no catalog text may say "exact checkout" | §10 |
+| minors | transitive inputs listed; replay wording corrected; multiple ACK receipts exempted; sensitive indicator ids keyed; external fixtures provisioned in the E2E; E2E sign-off expectations stated; §15 word-absence claim removed | §6.3, §6.4, §6.5, §12, §15 |
