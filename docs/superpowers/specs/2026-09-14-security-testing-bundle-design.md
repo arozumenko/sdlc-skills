@@ -1,9 +1,9 @@
 # security-testing bundle — design spec (v6)
 
-**Date:** 2026-09-15 (v5; v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
+**Date:** 2026-09-15 (v6; v5 fd6e8c8, v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
-**Status:** v6 draft; goal: no blocker or major findings open
+**Status:** v6 — reviewed, **approve with changes** (0 blockers, 0 majors); ready for M-1/M1
 **Inputs:** [market research](../notes/2026-09-14-security-testing-market-research.md),
 [secops comparison](../notes/2026-09-14-security-testing-secops-comparison.md),
 reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.md),
@@ -12,8 +12,10 @@ reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.
 [v3](../notes/2026-09-15-security-testing-spec-v3-adversarial-review-codex.md),
 [v4](../notes/2026-09-15-security-testing-spec-v4-adversarial-review-codex.md)
 (0 blockers, 5 majors), [v5](../notes/2026-09-15-security-testing-spec-v5-adversarial-review-codex.md)
-(0 blockers, 1 major). §17 maps v3 F1–F20 to v4; §18 maps v4 R1–R5 to v5;
-§19 maps v5 N1 and M1–M4 to v6.
+(0 blockers, 1 major), [v6](../notes/2026-09-15-security-testing-spec-v6-adversarial-review-codex.md)
+(approve with changes; 0 blockers, 0 majors, 2 minors applied in place).
+§17 maps v3 F1–F20 to v4; §18 maps v4 R1–R5 to v5; §19 maps v5 N1 and
+M1–M4 to v6.
 
 **Sources of truth for repo claims.** `bin/lib/item-resolver.mjs`
 (`FACTORIES_DIR = "bundles"`); `bin/validate-factories.mjs` (empty `agents`
@@ -553,8 +555,9 @@ listed as excluded coverage, not as a change; dirty review snapshot of a
 file containing `password=1234` ⇒ snapshot bytes redacted, HMAC present,
 no original bytes anywhere under `.agents/security-testing/`; then the
 working file is changed and `check --integrity` with the key ⇒
-`CONSISTENT-REDACTED-ONLY(1)` and `sign-off` still passes for that
-review run.
+`CONSISTENT-REDACTED-ONLY(1)`; with a current, clean, `COMMITTED`
+assessment run present after the mutation and every other §7 condition
+satisfied, `sign-off` exits 0 and lists that review run's result.
 
 Model evals: frozen harness as v3.
 
