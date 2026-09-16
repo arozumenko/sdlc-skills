@@ -14,9 +14,10 @@ import {
   resolveRef,
   SchemaError,
   SCHEMA_DIR,
-  SCHEMA_NAMES,
+  schemaNames,
   SCHEMA_ALIASES,
   SUPPORTED_KEYWORDS,
+  ANNOTATION_KEYWORDS,
   ENVELOPE_KINDS,
   RECEIPT_FORBIDDEN_KEYS,
 } from "./schema.mjs";
@@ -310,8 +311,9 @@ test("engagement: artifact_policy.private is rejected", () => {
   // hosts: no scheme, no path
   assert.ok(validate("engagement", { ...okEngagement(), targets: { ...okEngagement().targets, tracker: ["https://github.com"] } }).length > 0);
   assert.ok(validate("engagement", { ...okEngagement(), targets: { ...okEngagement().targets, browser: ["a.example.com/path"] } }).length > 0);
-  // execute_project_tests.argv needs at least one token; sign_off enum closed
+  // execute_project_tests.argv (and install.argv) need at least one token; sign_off enum closed
   assert.ok(validate("engagement", { ...okEngagement(), execute_project_tests: { argv: [] } }).length > 0);
+  assert.ok(validate("engagement", { ...okEngagement(), execute_project_tests: { argv: ["npm", "test"], install: { argv: [] } } }).length > 0);
   assert.deepEqual(validate("engagement", { ...okEngagement(), execute_project_tests: { argv: ["npm", "test"], timeout_s: 300, install: { argv: ["npm", "ci"], allow_tracked_changes: false } } }), []);
   assert.deepEqual(validate("engagement", { ...okEngagement(), sign_off: { require_dispositions: "executed-or-ticketed" } }), []);
   assert.ok(validate("engagement", { ...okEngagement(), sign_off: { require_dispositions: "some" } }).length > 0);
@@ -365,6 +367,7 @@ test("admission: receipt_sha256 required iff admitted-reviewed", () => {
 // ---------------------------------------------------------------------------
 
 test("every shape above has a fixture that validates and a mutated fixture that fails", () => {
+  const SCHEMA_NAMES = schemaNames();
   assert.ok(SCHEMA_NAMES.length >= 35, `expected every shape to be addressable, got ${SCHEMA_NAMES.length}`);
   for (const name of SCHEMA_NAMES) {
     const okPath = join(FIXTURES, `${name}.ok.json`);
@@ -414,11 +417,33 @@ test("unsupported keyword throws", () => {
   assert.throws(() => load({ $ref: "#/$defs/Missing" }), (e) => e instanceof SchemaError && /Missing/.test(e.message));
   assert.throws(() => load({ type: "object", additionalProperties: false, properties: { a: { $defs: {} } } }), SchemaError);
   assert.throws(() => load({ type: "string", pattern: "(" }), SchemaError);
+  // $ref chains: walk() resolves one hop, so A→B must be refused at load —
+  // otherwise `validate(s, "str")` against A would return [] (accept-anything).
+  assert.throws(
+    () => load({ $ref: "#/$defs/A", $defs: { A: { $ref: "#/$defs/B" }, B: { type: "integer" } } }),
+    (e) => e instanceof SchemaError && /chains are not supported/.test(e.message),
+  );
+  // $ref with sibling validation keywords: walk() would drop `minItems` silently.
+  assert.throws(
+    () => load({ type: "object", additionalProperties: false, properties: { r: { $ref: "#/$defs/R", minItems: 1 } }, $defs: { R: { type: "array" } } }),
+    (e) => e instanceof SchemaError && /sibling keywords \(found minItems\)/.test(e.message),
+  );
+  // …but annotations next to a $ref are fine, and a root $ref beside $defs is
+  // exactly what the alias mechanism synthesises.
+  const annotated = load({ $ref: "#/$defs/R", $comment: "root alias", $defs: { R: { type: "integer", description: "an int" } } });
+  assert.deepEqual(validate(annotated, 1), []);
+  assert.equal(validate(annotated, "x").length, 1);
   assert.throws(() => validate("no-such-schema", {}), (e) => e instanceof SchemaError && /no-such-schema/.test(e.message));
+  // only roots that went through loadSchema() (and so through check()) may validate
+  assert.throws(() => validate({ type: "string", minLength: 1 }, ""), (e) => e instanceof SchemaError && /loadSchema/.test(e.message));
+  assert.throws(() => validate({ type: "string" }, "fine-but-unchecked"), SchemaError);
   assert.deepEqual([...SUPPORTED_KEYWORDS].sort(), [
     "$ref", "additionalProperties", "const", "enum", "items", "maxItems", "maximum", "minItems", "minimum",
     "oneOf", "pattern", "patternProperties", "properties", "required", "type",
   ]);
+  // the ignored set is a contract too: annotations only, never a validation keyword
+  assert.deepEqual([...ANNOTATION_KEYWORDS].sort(), ["$comment", "$id", "$schema", "description", "title"]);
+  assert.ok(ANNOTATION_KEYWORDS.every((k) => !SUPPORTED_KEYWORDS.includes(k)));
 });
 
 test("validator: types, enum, const, bounds, pattern, patternProperties, oneOf exactly-one, error paths", () => {

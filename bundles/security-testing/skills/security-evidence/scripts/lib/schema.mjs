@@ -6,8 +6,10 @@
 // required, properties, patternProperties, additionalProperties (false only),
 // enum, const, items, minItems, maxItems, minimum, maximum, pattern,
 // oneOf (exactly one alternative must match), $ref (to #/$defs/<Name> in the
-// same document only). Annotation keys ($schema, $id, $comment, title,
-// description) are ignored; $defs is allowed at the document root only.
+// same document only; a $ref node carries no sibling validation keywords and
+// its target is never itself a $ref). Annotation keys ($schema, $id,
+// $comment, title, description) are ignored; $defs is allowed at the
+// document root only.
 //
 // Leaf module: imports only node:fs, node:path, node:url.
 
@@ -42,7 +44,9 @@ export const SUPPORTED_KEYWORDS = Object.freeze([
   "$ref",
 ]);
 
-const ANNOTATION_KEYWORDS = Object.freeze(["$schema", "$id", "$comment", "title", "description"]);
+// Keys the checker ignores: pure annotations, never validation. Pinned in the
+// test next to SUPPORTED_KEYWORDS so the ignored set is a deliberate contract.
+export const ANNOTATION_KEYWORDS = Object.freeze(["$schema", "$id", "$comment", "title", "description"]);
 const TYPES = Object.freeze(["object", "array", "string", "integer", "boolean", "null"]);
 const REF_RE = /^#\/\$defs\/([A-Za-z0-9_-]+)$/;
 
@@ -96,21 +100,26 @@ export const SCHEMA_ALIASES = Object.freeze({
   dispositions: { file: "threat-model", def: "Dispositions" },
 });
 
-function schemaFileNames() {
-  return readdirSync(SCHEMA_DIR)
-    .filter((f) => f.endsWith(".schema.json"))
-    .map((f) => f.slice(0, -".schema.json".length))
-    .sort();
+// schemaNames() → every name `validate()` accepts: one per schema file plus
+// the aliases. A function (not an import-time constant) so importing this
+// leaf module never touches disk until a schema is asked for.
+let namesCache;
+export function schemaNames() {
+  if (!namesCache) {
+    const files = readdirSync(SCHEMA_DIR)
+      .filter((f) => f.endsWith(".schema.json"))
+      .map((f) => f.slice(0, -".schema.json".length));
+    namesCache = Object.freeze([...new Set([...files, ...Object.keys(SCHEMA_ALIASES)])].sort());
+  }
+  return namesCache;
 }
-
-// Every name `validate()` accepts: one per schema file plus the aliases.
-export const SCHEMA_NAMES = Object.freeze([...new Set([...schemaFileNames(), ...Object.keys(SCHEMA_ALIASES)])].sort());
 
 // ---------------------------------------------------------------------------
 // Loading and compile-time checks
 // ---------------------------------------------------------------------------
 
 const cache = new Map(); // name → checked root schema
+const checkedRoots = new WeakSet(); // every root loadSchema() has returned
 const regexCache = new Map(); // pattern source → RegExp
 
 function regexFor(source) {
@@ -153,6 +162,13 @@ function check(node, root, where) {
     const m = typeof node.$ref === "string" ? REF_RE.exec(node.$ref) : null;
     if (!m) throw new SchemaError(`${where}: $ref must point at #/$defs/<Name> in the same document (got ${JSON.stringify(node.$ref)})`);
     if (!root.$defs || !isPlainObject(root.$defs[m[1]])) throw new SchemaError(`${where}: $ref to missing definition ${m[1]}`);
+    // walk() replaces a $ref node by its target wholesale, so sibling
+    // validation keywords would be dropped silently — refuse them at load.
+    const extra = Object.keys(node).filter((k) => k !== "$ref" && k !== "$defs" && !ANNOTATION_KEYWORDS.includes(k));
+    if (extra.length) throw new SchemaError(`${where}: $ref must not carry sibling keywords (found ${extra.join(",")})`);
+    // walk() resolves exactly one hop; a target that is itself a $ref would
+    // validate as accept-anything — refuse chains at load.
+    if ("$ref" in root.$defs[m[1]]) throw new SchemaError(`${where}: $ref target ${m[1]} is itself a $ref (chains are not supported)`);
   }
   if ("required" in node && !(Array.isArray(node.required) && node.required.every((k) => typeof k === "string"))) {
     throw new SchemaError(`${where}: required must be an array of strings`);
@@ -215,8 +231,9 @@ const GROUP_ROOT_KEYS = Object.freeze(["$defs", "$ref", ...ANNOTATION_KEYWORDS])
 //   SCHEMA_ALIASES, or `{name, schema}` for an inline document (tests).
 export function loadSchema(name) {
   if (isPlainObject(name)) {
-    const { name: inlineName, schema } = name;
+    const { schema } = name;
     check(schema, schema, "#");
+    checkedRoots.add(schema);
     return schema;
   }
   if (typeof name !== "string") throw new SchemaError(`schema name must be a string (got ${typeof name})`);
@@ -238,6 +255,7 @@ export function loadSchema(name) {
     root = readSchemaFile(name);
   }
   check(root, root, "#");
+  checkedRoots.add(root);
   cache.set(name, root);
   return root;
 }
@@ -334,9 +352,16 @@ function walk(schema, root, value, path, errors) {
 
 // validate(schemaName, value) → string[] of errors (empty = valid).
 //   schemaName: a name accepted by loadSchema, or a root schema object it
-//   returned.
+//   returned. Any other object throws: only checked roots may validate, so
+//   an unchecked schema can never under-check a value.
 export function validate(schemaName, value) {
-  const root = isPlainObject(schemaName) ? schemaName : loadSchema(schemaName);
+  let root;
+  if (isPlainObject(schemaName)) {
+    if (!checkedRoots.has(schemaName)) throw new SchemaError("validate: schema object must be one returned by loadSchema()");
+    root = schemaName;
+  } else {
+    root = loadSchema(schemaName);
+  }
   const errors = [];
   walk(root, root, value, "$", errors);
   return errors;
