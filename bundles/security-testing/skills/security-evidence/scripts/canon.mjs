@@ -21,8 +21,10 @@
 //   artifactId(payload)      sha256Hex(canonical(payload))
 //   writeArtifact(path, a)   redactDeep(payload) (unless {prered: true}), then
 //                            self_sha256 over the *redacted* payload (G-4), then
-//                            tmp + rename; nothing touches disk if redaction or
-//                            canonicalisation throws
+//                            tmp + rename ({exclusive: true}: tmp + link + unlink,
+//                            so an existing file is an atomic EEXIST — write-once
+//                            run files, G-10); nothing touches disk if redaction
+//                            or canonicalisation throws
 //   readArtifact(path)       parseStrict, shape check, optional kind check,
 //                            recompute self_sha256 — mismatch ⇒ IntegrityError
 //
@@ -41,7 +43,7 @@
 // the caller's `now()`), no child process (G-6), no network (G-14).
 
 import { createHash, createHmac } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, basename } from "node:path";
 import { DEFAULT_RULES, redactDeep } from "./redact.mjs";
 
@@ -524,13 +526,20 @@ let tmpCounter = 0;
  * TypeError or a CanonError leaves no file and no tmp file behind. The file
  * is the canonical bytes of `{envelope, payload}` plus one trailing LF.
  * The caller's objects are never mutated; the returned artifact is what is on
- * disk (`envelope.self_sha256` is the value to print after `WROTE`).
+ * disk (`envelope.self_sha256` is the value to print after `WROTE` — hand
+ * this return value to ctx.wrote, never the makeEnvelope result).
+ *
+ * `exclusive: true` makes the write write-once (G-10: run files are created
+ * once): the tmp file is `linkSync`ed to `path` — the kernel refuses with
+ * `EEXIST` when `path` exists, atomically, with no check-then-write window —
+ * and the tmp name is unlinked afterwards. The EEXIST propagates with its
+ * `code` so a caller can turn it into its own token (`SNAPSHOT-EXISTS`, …).
  * @param {string} path
  * @param {{envelope: object, payload: object}} artifact
- * @param {{prered?: boolean}} [options]
+ * @param {{prered?: boolean, exclusive?: boolean}} [options]
  * @returns {{envelope: object, payload: object}}
  */
-export function writeArtifact(path, artifact, { prered = false } = {}) {
+export function writeArtifact(path, artifact, { prered = false, exclusive = false } = {}) {
   const where = "writeArtifact";
   if (artifact === null || typeof artifact !== "object" || Array.isArray(artifact)) throw new CanonError(`${where}: artifact must be {envelope, payload}`);
   for (const key of Object.keys(artifact)) {
@@ -557,11 +566,13 @@ export function writeArtifact(path, artifact, { prered = false } = {}) {
   const tmp = join(dirname(path), `.${basename(path)}.tmp-${process.pid}-${++tmpCounter}`);
   try {
     writeFileSync(tmp, bytes, { flag: "wx" });
-    renameSync(tmp, path);
+    if (exclusive) linkSync(tmp, path); // EEXIST from the kernel when path exists
+    else renameSync(tmp, path);
   } catch (err) {
     rmSync(tmp, { force: true });
     throw err;
   }
+  if (exclusive) rmSync(tmp, { force: true });
   return written;
 }
 
