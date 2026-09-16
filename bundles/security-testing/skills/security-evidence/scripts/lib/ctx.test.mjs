@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cleanupAll, initRepo, tmpDir, SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
 import { artifactId, makeEnvelope, parseStrict, writeArtifact } from "../canon.mjs";
@@ -222,6 +222,35 @@ test("input(cmd, p): a user-typed path resolves against the invocation cwd, must
 
   assert.throws(() => nested.input("check", ""), (e) => e instanceof CliError && e.token === "USAGE(check: a file path is required)");
   assert.throws(() => nested.input("", "x"), TypeError);
+});
+
+test("input(cmd, p) realpaths the target before the containment check (TASK-015; macOS /var vs /private/var): a symlinked spelling of an inside file passes, a symlink escaping the tree is refused", () => {
+  const repo = initRepo();
+  mkdirSync(join(repo, "sub"));
+  writeFileSync(join(repo, "sub", "in.json"), "{}\n");
+  const elsewhere = tmpDir();
+  writeFileSync(join(elsewhere, "out.json"), "{}\n");
+
+  // an alias of the tree from outside it: lexically outside root, really inside
+  const alias = join(elsewhere, "alias");
+  symlinkSync(repo, alias);
+  const viaRoot = createContext({ root: repo }, { cwd: elsewhere, env: {} });
+  assert.equal(viaRoot.input("ingest", join(alias, "sub", "in.json")), join(repo, "sub", "in.json"), "resolved to the on-disk path under root");
+  const fromAlias = createContext({ root: repo }, { cwd: join(alias, "sub"), env: {} });
+  assert.equal(fromAlias.input("ingest", "in.json"), join(repo, "sub", "in.json"), "cwd spelled through the alias");
+  // a file that does not exist yet under an aliased directory still resolves (the parent's realpath + its name)
+  assert.equal(viaRoot.input("ingest", join(alias, "sub", "new.json")), join(repo, "sub", "new.json"));
+
+  // a symlink inside the tree pointing out of it: lexically inside root, really outside
+  symlinkSync(elsewhere, join(repo, "escape"));
+  const nested = createContext({}, { cwd: join(repo, "sub"), env: {} });
+  const outside = (ctx, p) => assert.throws(() => ctx.input("ingest", p), (e) => e instanceof CliError && e.code === 2 && e.token === `USAGE(ingest: cannot read ${p} (outside the work tree))`);
+  outside(nested, "../escape/out.json");
+  outside(nested, join(repo, "escape", "out.json"));
+  outside(nested, "../escape/new.json");
+  symlinkSync(join(elsewhere, "out.json"), join(repo, "sub", "link.json"));
+  outside(nested, "link.json");
+  assert.equal(nested.input("ingest", "in.json"), join(repo, "sub", "in.json"), "a real file next to the symlink is unaffected");
 });
 
 test("key(): null without a current key; {key_id, bytes} from private/keys; keyById; malformed ids are refused", () => {
