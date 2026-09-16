@@ -83,6 +83,16 @@ test("register transition formatters (TASK-029)", () => {
   assert.throws(() => tokens.checked(-1), /expired/);
 });
 
+test("consume-verdict tokens (TASK-030)", () => {
+  assert.equal(tokens.NO_ROW, "NO-ROW");
+  const verify = "a".repeat(64);
+  assert.equal(tokens.consumed({ verdict: "VERIFIED", row: "R-0001", verify }), `CONSUMED VERIFIED row=R-0001 verify=${verify}`);
+  assert.equal(tokens.consumed({ verdict: "UNVERIFIED-SUPPRESSION(2 unacked)", row: "R-0042", verify }), `CONSUMED UNVERIFIED-SUPPRESSION(2 unacked) row=R-0042 verify=${verify}`);
+  assert.throws(() => tokens.consumed({ verdict: "CONFIRMED", row: "R-0001", verify }), /closed vocabulary/);
+  assert.throws(() => tokens.consumed({ verdict: "VERIFIED", row: "R-1", verify }), /R-nnnn/);
+  assert.throws(() => tokens.consumed({ verdict: "VERIFIED", row: "R-0001", verify: "abc" }), /sha256/);
+});
+
 test("formatters", () => {
   assert.equal(tokens.incomplete("scope"), "INCOMPLETE(scope)");
   assert.equal(tokens.inconsistent("gate-result"), "INCONSISTENT(gate-result)");
