@@ -130,6 +130,15 @@ test("assessment on dirty tree refused: exit 3 DIRTY-TREE, ledger untouched, not
   assert.equal(u.code, 3);
   assert.equal(u.stdout, "DIRTY-TREE\n");
   assert.ok(!existsSync(ledgerIndex(repo)));
+
+  // a rename into a managed path whose source is scoped: the row is dirt and
+  // the diagnostic names both sides (the scoped side would otherwise be hidden)
+  const wide = readyRepo({ record: { ...defaultRecord(), scope_paths: ["."], product_paths: [] } });
+  mkdirSync(join(wide, "reports", "security"), { recursive: true });
+  git(wide, ["mv", "-k", "src/app.js", "reports/security/app.js"]);
+  const mv = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: wide, env: ENV });
+  assert.equal(mv.code, 3, mv.stdout + mv.stderr);
+  assert.match(mv.stderr, /\bR {2}reports\/security\/app\.js <- src\/app\.js$/m);
 });
 
 test("P6: dirt outside scope_paths ∪ product_paths and the bundle's managed paths never count", async () => {
@@ -308,6 +317,10 @@ test("--base defaults to head for assessment|threat-model and is required for re
   assert.equal(t.head, parent);
   assert.equal(t.base, parent);
   assert.equal(t.run_id, `${parent.slice(0, 12)}-0001`);
+  // D18: an assessment's --head may name HEAD by any spelling, never another commit.
+  const as = await runScript("evidence", ["run", "init", "--kind", "assessment", "--head", "HEAD"], { cwd: repo, env: ENV });
+  assert.equal(as.code, 0, as.stderr);
+  assert.deepEqual([parseRunLine(as.stdout).base, parseRunLine(as.stdout).head], [head, head]);
   const rv = await runScript("evidence", ["run", "init", "--kind", "review", "--base", "HEAD~1", "--head", "HEAD"], { cwd: repo, env: ENV });
   assert.equal(rv.code, 0, rv.stderr);
   assert.deepEqual([parseRunLine(rv.stdout).base, parseRunLine(rv.stdout).head], [parent, head]);
@@ -322,6 +335,7 @@ test("usage: missing/unknown --kind, unknown ref, unknown flag, stray positional
     [["run", "init", "--kind", "audit"], /^USAGE\(run init: --kind/],
     [["run", "init", "--kind", "review", "--base", "no-such-ref"], /^USAGE\(run init: --base/],
     [["run", "init", "--kind", "assessment", "--head", "no-such-ref"], /^USAGE\(run init: --head/],
+    [["run", "init", "--kind", "assessment", "--head", "HEAD~1"], /^USAGE\(run init: --head must be HEAD for assessment\)$/m],
     [["run", "init", "--kind", "assessment", "--nope"], /^USAGE\(run init: unknown flag/],
     [["run", "init", "--kind", "assessment", "extra"], /^USAGE\(run init: unexpected/],
   ];

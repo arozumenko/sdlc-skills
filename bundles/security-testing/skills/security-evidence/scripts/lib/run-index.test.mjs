@@ -103,3 +103,16 @@ test("appendIndex refuses a tampered index (self_sha256 mismatch ⇒ IntegrityEr
   writeFileSync(join(dir, "imports.json"), JSON.stringify({ envelope: art.envelope, payload: { imports: [{ kind: "x", import_sha256: "1".repeat(64), original_hmac: "2".repeat(64) }] } }));
   await assert.rejects(appendIndex(ctx, RUN_ID, "imports", { kind: "sarif", import_sha256: "1".repeat(64), original_hmac: "2".repeat(64) }), (err) => err.name === "IntegrityError");
 });
+
+test("appendIndex refuses a hash-consistent but off-shape index (list key missing / not an array) ⇒ exit 5 INCONSISTENT(<file>), not a TypeError", async () => {
+  const ctx = ctxFor(initRepo());
+  const dir = join(ctx.st, "runs", RUN_ID);
+  mkdirSync(dir, { recursive: true });
+  const entry = { kind: "sarif", import_sha256: "1".repeat(64), original_hmac: "2".repeat(64) };
+  for (const payload of [{ imports: "nope" }, { observations: [] }]) {
+    writeArtifact(join(dir, "imports.json"), makeEnvelope({ ...head, kind: "imports-index" }, payload));
+    const before = readFileSync(join(dir, "imports.json"), "utf8");
+    await assert.rejects(appendIndex(ctx, RUN_ID, "imports", entry), (err) => err instanceof CliError && err.code === 5 && err.token === "INCONSISTENT(imports.json)");
+    assert.equal(readFileSync(join(dir, "imports.json"), "utf8"), before, "index untouched");
+  }
+});

@@ -10,7 +10,9 @@
 //      — `engagement init` is the only command that creates a key, D13: a key
 //      minted here could land in a repo whose private/ is not yet ignored);
 //      `--head` (default HEAD) and `--base` (required for review|verify, else
-//      = head) resolved to 40-hex oids (2 USAGE on an unknown ref);
+//      = head) resolved to 40-hex oids (2 USAGE on an unknown ref; 2 USAGE
+//      when an assessment's `--head` is not HEAD — D18 pins the clean tree
+//      to head_oid and the working tree can only be compared against HEAD);
 //   2. assessment only: the clean-tree check (3 DIRTY-TREE) — before any
 //      allocation, so a refused assessment consumes no seq;
 //   3. ledger.allocateRun under the ledger lock ⇒ {seq, run_id};
@@ -176,11 +178,15 @@ async function init(argv, ctx) {
   if (key === null) throw new CliError(EXIT.USAGE, KEY_UNAVAILABLE);
   const head_oid = resolveRef(ctx, "--head", flags.head ?? "HEAD");
   const base_oid = flags.base === undefined ? head_oid : resolveRef(ctx, "--base", flags.base);
+  // D18: an assessment is a clean tree AT head_oid, and the only tree this
+  // process can compare is the working tree against HEAD — so for assessment
+  // `--head` must resolve to HEAD, else citations resolve at an unchecked oid.
+  if (kind === "assessment" && head_oid !== resolveRef(ctx, "--head", "HEAD")) throw usageError(COMMAND, "--head must be HEAD for assessment");
 
   if (kind === "assessment") {
     const dirt = assessmentDirt(ctx, record);
     if (dirt.length > 0) {
-      ctx.log(`run init: ${dirt.length} dirty path(s) under the assessed paths:`, ...dirt.map((row) => `${row.xy} ${row.path}`));
+      ctx.log(`run init: ${dirt.length} dirty path(s) under the assessed paths:`, ...dirt.map((row) => `${row.xy} ${row.path}${row.orig === undefined ? "" : ` <- ${row.orig}`}`));
       throw new CliError(EXIT.INDETERMINATE, DIRTY_TREE);
     }
   }

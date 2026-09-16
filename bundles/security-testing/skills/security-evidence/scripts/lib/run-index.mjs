@@ -33,10 +33,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { makeEnvelope, readArtifact, writeArtifact } from "../canon.mjs";
-import { CliError, EXIT } from "./exit.mjs";
+import { CliError, EXIT, integrityFailure } from "./exit.mjs";
 import { RUN_ID, withRunLock } from "./ledger.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, RUN_COMMITTED, incomplete } from "./tokens.mjs";
+import { COMMITTED, RUN_COMMITTED, incomplete, inconsistent } from "./tokens.mjs";
 
 /** `name → {file, kind, key}` for the three TL-14 index files, in plan §3.2 order. */
 export const INDEXES = Object.freeze({
@@ -100,6 +100,9 @@ export async function appendIndex(ctx, run_id, name, entry) {
     if (existsSync(join(dir, COMMITTED))) throw new CliError(EXIT.USAGE, RUN_COMMITTED);
     if (!existsSync(path)) throw new CliError(EXIT.INDETERMINATE, incomplete(name));
     const current = readArtifact(path, { kind });
+    // A hash-consistent but off-shape index (list key missing or not an
+    // array) is a bad artifact (exit-5 class), not a TypeError from the spread.
+    if (validate(kind, current.payload).length > 0) throw integrityFailure(inconsistent(file));
     const payload = { [key]: [...current.payload[key], entry] };
     const errors = validate(kind, payload);
     if (errors.length > 0) throw new TypeError(`appendIndex: entry is off-schema for ${kind}: ${errors[0]}`);
