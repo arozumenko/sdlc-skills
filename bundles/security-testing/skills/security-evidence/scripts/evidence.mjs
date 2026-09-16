@@ -43,7 +43,7 @@ const COMMANDS = {
   // check: () => import("./lib/cmd-check.mjs"),             // TASK-025
   // publish: () => import("./lib/cmd-publish.mjs"),         // TASK-031
   // "check-export": () => import("./lib/cmd-check-export.mjs"), // TASK-031
-  // purge: () => import("./lib/cmd-purge.mjs"),             // TASK-032
+  purge: () => import("./lib/cmd-purge.mjs"), // TASK-032
   // "sign-off": () => import("./lib/cmd-sign-off.mjs"),     // TASK-033
 };
 
