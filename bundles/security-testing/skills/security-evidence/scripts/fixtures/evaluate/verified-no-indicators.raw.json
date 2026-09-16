@@ -1,0 +1,38 @@
+{
+  "finding_id": "e4f11868a2f499b2461912d380030b9846be6c6bde157f8504576e4167f7297b",
+  "base_oid": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "head_oid": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "branch": "COMMITTED",
+  "tree_before": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "install": {
+    "ran": false,
+    "allow_tracked_changes": false,
+    "tracked_changes": [],
+    "untracked_count": 0,
+    "untracked_bytes": 0
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "TESTS_PASS",
+    "argv_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "executable_path": "/usr/local/bin/npm",
+    "executable_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_redacted": "> test\n\n12 passing\n"
+  },
+  "packet_sha256": "9414dcf94a7cb49912203dad1a15be894023ec0a744dfdcdcdafb288e37d8a5f",
+  "receipts": [
+    {
+      "sha256": "262245a84164c2627251ab6cd575bc4efcf3e3cb8c539f0cb2ad56583204d88b",
+      "type": "fix-review",
+      "assertion": "not-refound",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "accepted"
+}
