@@ -505,3 +505,44 @@ export function packetLine({ relPath, sha256, kind, files }) {
  * so the token names the task that ships it. TASK-021 deletes this row.
  */
 export const NOT_IMPLEMENTED_SUBJECT_PACKET = "NOT-IMPLEMENTED(TASK-021)";
+// --- gate (TASK-019; plan §4.1 row `gate`, §5 TASK-019; spec §6.1 gate-result, §6.5, TL-15) ---
+
+/** `gate` citation states — the only two a finding can carry (spec §6.5; finding.schema.json `state`). */
+export const CITATION_VERIFIED = "CITATION_VERIFIED";
+export const CITATION_FAILED = "CITATION_FAILED";
+
+/**
+ * `GATE accepted=<n> unverifiable=<n> rejected=<n> unlocated=<n>` — the first
+ * line of `evidence.mjs gate`; four WROTE lines follow (findings.claimed.json,
+ * gate-result.json, rejects.json, unlocated.json, in write order). `rejected`
+ * counts gate's own rejections (adapter-level rejections stay in the import
+ * records); `unlocated` counts the candidates copied from the import records.
+ */
+export function gateLine({ accepted, unverifiable, rejected, unlocated }) {
+  return `GATE accepted=${requireCount("gateLine", "accepted", accepted)} unverifiable=${requireCount("gateLine", "unverifiable", unverifiable)} rejected=${requireCount("gateLine", "rejected", rejected)} unlocated=${requireCount("gateLine", "unlocated", unlocated)}`;
+}
+
+/** `CLAIMS-PACKET-MISMATCH(<file>)` — exit 2 (TL-15): the claims file's `packet_sha256` is not a `kind: scope` packet of the run (or its `scope_sha256` is not the run's scope). `<file>` is the path as the user typed it. */
+export function claimsPacketMismatch(file) {
+  if (typeof file !== "string" || file === "" || file.includes("\n")) throw new TypeError("claimsPacketMismatch: file must be a one-line path");
+  return `CLAIMS-PACKET-MISMATCH(${file})`;
+}
+
+/** `GATE-EXISTS` — exit 2: the run already has its gate artifacts (write-once, G-10; retry = new seq). Not spelled by the spec; the SCOPE-EXISTS shape. */
+export const GATE_EXISTS = "GATE-EXISTS";
+
+// `rejects.json` reasons that are gate's own (the five cite.checkRange reasons
+// above are recorded there too). Not stdout tokens: they key
+// `gate-result.rejected_counts` and the report displays them — spelled once (G-13).
+/** G-7: a claim carrying `id`, `state` or another forbidden key (schema.RECEIPT_FORBIDDEN_KEYS) — the agent tried to write an identity or a state. */
+export const GATE_AGENT_WROTE_ID = "agent-wrote-id";
+/** a claim that is not a finding.schema.json Claim — `priority` / `confidence` missing or off-range (never defaulted), a snippet that normalises to nothing, an unknown field. */
+export const GATE_CLAIM_INVALID = "claim-invalid";
+/** a `base` citation of a scope file that has no blob at `base_oid` (the file was added after base). */
+export const GATE_PATH_NOT_AT_SIDE = "PATH-NOT-AT-SIDE";
+/** a range that runs past the last normalised line of the file at its side: a `base` primary citation past the base blob, or a typed citation past its file. */
+export const GATE_RANGE_OUTSIDE_FILE = "RANGE-OUTSIDE-FILE";
+/** the file at the cited side is not UTF-8, so its lines cannot be numbered or compared. */
+export const GATE_FILE_NOT_TEXT = "FILE-NOT-TEXT";
+/** a second candidate with the identity of one already gated (same path, class, snippet, occurrence): one finding, one entry; a CITATION_VERIFIED candidate outranks a CITATION_FAILED one, else the first wins. */
+export const GATE_DUPLICATE_ID = "duplicate-id";
