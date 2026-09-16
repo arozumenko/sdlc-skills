@@ -15,6 +15,17 @@ test("constants are exactly the spec's spellings", () => {
   assert.equal(tokens.CORRUPT, "CORRUPT");
   assert.equal(tokens.COMMITTED, "COMMITTED");
   assert.equal(tokens.POLICY_INVALID_PRIVATE, "POLICY-INVALID(private)");
+  assert.equal(tokens.KEY_AVAILABLE, "KEY: available");
+  assert.equal(tokens.KEY_UNAVAILABLE, "KEY: unavailable");
+});
+
+test("keyLine: `KEY: <key_id> created|reused|rotated` (TASK-009)", () => {
+  assert.equal(tokens.keyLine("k0123456789ab", "created"), "KEY: k0123456789ab created");
+  assert.equal(tokens.keyLine("k0123456789ab", "reused"), "KEY: k0123456789ab reused");
+  assert.equal(tokens.keyLine("k0123456789ab", "rotated"), "KEY: k0123456789ab rotated");
+  assert.throws(() => tokens.keyLine("k0123456789ab", "renewed"), /created\|reused\|rotated/);
+  assert.throws(() => tokens.keyLine("0123456789ab", "created"), /key_id/);
+  assert.throws(() => tokens.keyLine("../x", "created"), /key_id/);
 });
 
 test("formatters", () => {
