@@ -73,15 +73,12 @@
 // SCOPE-EXISTS / KEY: unavailable; 3 DIRTY-TREE; 5 when run.json or
 // engagement.json is not the artifact it claims to be (readArtifact).
 //
-// `assessmentDirt` is imported from cmd-run.mjs: the plan (§6, TASK-012
-// review 3) routes both it and the block stripper into `lib/clean-tree.mjs`
-// / `ignore-block.mjs`, but neither module existed on the base when this
-// landed, so the import points at the one definition there is. Switch the
-// specifier when TASK-008 ships the module; nothing else here changes.
+// `assessmentDirt` comes from lib/clean-tree.mjs (TASK-008 moved it out of
+// cmd-run.mjs after this task was cut; the import was switched at merge).
 //
 // Imports: node:fs (existsSync, lstatSync, readFileSync — every write is
 // canon.writeArtifact or fsx.writeAtomic), node:path, ../canon.mjs,
-// ../normalize.mjs, ../redact.mjs, ./argv.mjs, ./cmd-run.mjs
+// ../normalize.mjs, ../redact.mjs, ./argv.mjs, ./clean-tree.mjs
 // (assessmentDirt), ./exit.mjs, ./fsx.mjs, ./git.mjs (the one place git
 // runs, G-6), ./ledger.mjs (RUN_ID), ./run-index.mjs (runDir), ./schema.mjs,
 // ./tokens.mjs. No network (G-14), no clock (G-1: created_at is ctx.now()).
@@ -94,7 +91,7 @@ import { hmacHex, makeEnvelope, readArtifact, sha256Hex, writeArtifact } from ".
 import { EncodingError, normalizeText } from "../normalize.mjs";
 import { DEFAULT_RULES, redactString } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
-import { assessmentDirt } from "./cmd-run.mjs";
+import { assessmentDirt } from "./clean-tree.mjs";
 import { CliError, EXIT, usageError } from "./exit.mjs";
 import { writeAtomic } from "./fsx.mjs";
 import { blobOid, git, lsFiles, revParse, showBytes } from "./git.mjs";
