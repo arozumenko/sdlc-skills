@@ -402,6 +402,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "threat-modeling",
+      "source": "./bundles/security-testing/skills/threat-modeling",
+      "description": "Use when building or updating the code-derived threat model of a security engagement with the security-testing bundle — a data-flow diagram whose every element cites code, STRIDE threats per element, mitigations written as claims to be reviewed, and one disposition per threat that `tm-lint.mjs check` validates against the artifact it names. The threat-modeler's standing skill; the script it names lives in the security-evidence skill installed next to it.",
+      "version": "0.2.0"
+    },
+    {
       "name": "tokenomics",
       "source": "./bundles/test-automation/skills/tokenomics",
       "description": "Optional always-on usage telemetry for agent teams — hooks capture every session's tokens, cost, time, activity and named case ids into a git-committed ledger (.agents/telemetry/automation/), covering Claude Code, Copilot CLI AND the VS Code Copilot sidebar, so the data survives transcript expiry and accumulates across the whole team; a report joins it with the pipeline's own report.json receipts to answer how much automating each batch of cases cost. Use when the user wants continuous/team-wide usage tracking, \"enable telemetry\", cost-per-case over time, a team usage report, a local OTel sink/doctor, or hyperfactory dataset work — \"are we ready to submit tokenomics\", build/refresh the submission, the §7 checklist, anonymize the dataset; for a one-off deep audit of live transcripts use efficiency-audit instead.",

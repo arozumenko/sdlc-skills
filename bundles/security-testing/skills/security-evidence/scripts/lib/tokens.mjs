@@ -927,3 +927,31 @@ export function dispositionEntry(id, kind) {
   if (kind !== "undisposed" && kind !== "planned") throw new TypeError(`dispositionEntry: kind must be undisposed|planned, got ${String(kind)}`);
   return `  ${id} ${kind}`;
 }
+
+// --- tm-lint check | render (TASK-039; plan §4.4, §5 TASK-039; spec §6.10, D14; PM rulings R1 / R2 after M1) ---
+// `check` prints TM-INVALID (exit 4) for the first structural or relationship
+// failure — in place of the M1 stub's SCHEMA-INVALID(threat-model: …) — or the
+// TM line (exit 0) followed by the WROTE lines of the snapshot and the
+// dispositions index. A run that already holds a DIFFERENT snapshot answers
+// with SNAPSHOT_EXISTS (TASK-058's token; write-once, G-10: retry = new seq).
+/** The locus a TM-INVALID names: an element id, a threat id (a mitigation is named through its threat), a positional `elements[n]` / `threats[n]` when the id itself is off-shape, or `model` for a root-level error. */
+const TM_LOCUS = /^(?:E-[0-9]{3}|T-[0-9]{3}|elements\[[0-9]+\]|threats\[[0-9]+\]|model)$/;
+/** `TM-INVALID(<threat|element>: <reason>)` — exit 4 (plan §4.4). */
+export function tmInvalid(locus, reason) {
+  if (typeof locus !== "string" || !TM_LOCUS.test(locus)) throw new TypeError(`tmInvalid: locus must be an element id, a threat id, elements[n], threats[n] or model, got ${String(locus)}`);
+  if (typeof reason !== "string" || reason.length === 0 || /[\r\n]/.test(reason)) throw new TypeError("tmInvalid: reason must be a non-empty one-line string");
+  return `TM-INVALID(${locus}: ${reason})`;
+}
+/** PM ruling R2: a citation on a file the run recorded at `snapshot` (a dirty review file) — the model must be built on a clean (assessment) run; no head→snapshot mapping. */
+export const TM_DIRTY_CITATION = "cites a dirty file; build the model on an assessment run";
+/** `TM elements=<n> threats=<n> undisposed=<n>` — the linted model's counts (plan §4.4; the threat-modeler's MODEL_WRITTEN line repeats them). */
+export function tmLine({ elements, threats, undisposed } = {}) {
+  return `TM elements=${requireCount("tmLine", "elements", elements)} threats=${requireCount("tmLine", "threats", threats)} undisposed=${requireCount("tmLine", "undisposed", undisposed)}`;
+}
+/** `RENDER <repo-relative path> elements=<n> threats=<n>` — `tm-lint.mjs render` wrote `<run>/threat-model.md` (a Markdown view, not an enveloped artifact, so not `WROTE`; the register's RENDER line is the precedent). */
+export function tmRendered({ relPath, elements, threats } = {}) {
+  requireRepoRelative("tmRendered", relPath);
+  return `RENDER ${relPath} elements=${requireCount("tmRendered", "elements", elements)} threats=${requireCount("tmRendered", "threats", threats)}`;
+}
+/** `RENDER-EXISTS` — exit 2: `<run>/threat-model.md` is already there with different content (the mitigation states moved after it was written); the view is write-once (G-10) — the report is `build-report --template threat-model`'s. */
+export const RENDER_EXISTS = "RENDER-EXISTS";
