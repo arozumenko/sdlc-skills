@@ -14,8 +14,8 @@ A factory composes five things:
 
 | Layer | Where it comes from |
 |---|---|
-| **Agents** | owned by the factory under `factories/<id>/agents/` |
-| **Skills** | auto-pulled from each agent's `skills:` + `skills-on-demand:` frontmatter (both install; only `skills:` enters standing context — on-demand entries are installed on disk only and loaded when the agent's prose calls for one), plus any team-wide extras the factory declares; factory-local skills live under `factories/<id>/skills/` |
+| **Agents** | owned by the factory under `bundles/<id>/agents/` |
+| **Skills** | auto-pulled from each agent's `skills:` + `skills-on-demand:` frontmatter (both install; only `skills:` enters standing context — on-demand entries are installed on disk only and loaded when the agent's prose calls for one), plus any team-wide extras the factory declares; factory-local skills live under `bundles/<id>/skills/` |
 | **Instructions** | a team-level guidance file the factory ships |
 | **Briefings** | per-role *stack overlays* the factory seeds into each role's memory |
 | **Hooks** | IDE automation (Claude `settings.json`), v1 Claude-only |
@@ -71,8 +71,8 @@ behavior.
 ## Factory-owned content
 
 Each factory physically owns its `agents/` and `skills/` directories — real
-files, authored and maintained directly under `factories/<id>/agents/<name>/`
-and `factories/<id>/skills/<name>/`. The same agent or skill id may appear in
+files, authored and maintained directly under `bundles/<id>/agents/<name>/`
+and `bundles/<id>/skills/<name>/`. The same agent or skill id may appear in
 several factories with different content; divergence across factories is allowed
 and expected (hand-editing a factory's copy to suit the team is normal).
 
@@ -81,7 +81,7 @@ is the source of truth for its content.
 
 Agents and skills are declared in the manifest via `localAgents` /
 `localSkills`. The factory's own dir is self-documenting —
-`ls factories/feature-development/agents/` shows the full roster as real
+`ls bundles/feature-development/agents/` shows the full roster as real
 directories, indexable by tools that don't follow symlinks.
 
 **Standalone install resolution.** `--agents <name>` / `--skills <id>` check,
@@ -93,7 +93,7 @@ qualified form `--agents <factory>/<name>` or `--skills <factory>/<id>`.
 ## Directory layout
 
 ```
-factories/<id>/
+bundles/<id>/
 ├── FACTORY.md                required — structured catalog descriptor (name/description/owner frontmatter)
 ├── README.md                required — the team's front-door doc (roster, install, how it works)
 ├── factory.json              required — the manifest
@@ -190,19 +190,19 @@ leaves the item discoverable.
   "seed": { "knowledge": ".agents/manual-qa/knowledge" }, // optional, factory-relative src → project-relative dest
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
-  "localAgents": [],                         // agents this factory owns (under factories/<id>/agents/)
-  "localSkills": [],                         // skills this factory owns (under factories/<id>/skills/; no skills.json entry needed)
+  "localAgents": [],                         // agents this factory owns (under bundles/<id>/agents/)
+  "localSkills": [],                         // skills this factory owns (under bundles/<id>/skills/; no skills.json entry needed)
   "targets": ["claude"]                      // IDE targets that get HOOKS (agents/skills/briefings install everywhere)
 }
 ```
 
 ## Install behavior (`bin/init.mjs`)
 
-1. **Resolve** — read `factories/<id>/factory.json`; merge `agents[]` into the
+1. **Resolve** — read `bundles/<id>/factory.json`; merge `agents[]` into the
    agent install list (existing logic auto-pulls each agent's declared
    skills); append `skills[]`; install `localAgents` from
-   `factories/<id>/agents/`; install `localSkills` from
-   `factories/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
+   `bundles/<id>/agents/`; install `localSkills` from
+   `bundles/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
    any agent in the factory that declares it in `skills:` frontmatter, with no
    `skills.json` entry needed — the description is read from each
    `SKILL.md` so non-Claude targets still get a populated SKILLS section.
@@ -301,7 +301,7 @@ order. Three conventions keep it that way:
   `automation/`). A factory adopting durable telemetry later adds its own
   subfolder and rides the same branch and sync machinery — never a second
   submodule or a second branch. Setup and mechanics:
-  `factories/test-automation/skills/tokenomics/`.
+  `bundles/test-automation/skills/tokenomics/`.
 
 ## Idempotency & validation
 
@@ -313,8 +313,8 @@ order. Three conventions keep it that way:
   `name`/`description`/`owner`/`authors`/`sdlc_phase` frontmatter (`sdlc_phase`
   a single scalar, `support_level` one of the three enum values when present,
   risky unquoted values rejected), `agents[]` is non-empty and every entry exists
-  under `factories/<id>/agents/`, every `briefings` role is in `agents[]` and its file
-  exists, every `skills[]` id resolves in `skills.json`/`factories/<id>/skills/`,
+  under `bundles/<id>/agents/`, every `briefings` role is in `agents[]` and its file
+  exists, every `skills[]` id resolves in `skills.json`/`bundles/<id>/skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each
   `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
   `SKILL.md`, and every `seed` source path exists.

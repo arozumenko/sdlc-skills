@@ -13,10 +13,13 @@
 : "${SDLC_SHARED_DOCS:=testing profile workflow conventions role-overrides team-comms}"
 
 # Role memory files injected from .agents/memory/<role>/ (space-separated).
-# SOUL.md is the persona — injected only under Copilot (Claude/Codex get it via @-import).
+# Order is priority: the inline loop takes files while they fit the cap and
+# spills the rest to a read-list. SOUL.md (persona) is injected on every host;
+# RULES.md sits second so hard behavioural rules outrank the memory index.
 # project_briefing.md is the seeded per-role project briefing, injected after
-# SOUL/snapshot/MEMORY — kept in the default so it rides along at dispatch.
-#: "${SDLC_ROLE_MEMORY_FILES:=SOUL.md snapshot.md MEMORY.md project_briefing.md}"
+# SOUL/RULES/snapshot/MEMORY — kept in the default so it rides along at dispatch.
+# Default mirrors SDLC_ROLE_MEMORY_FILES_DEFAULT in hooks/lib.sh.
+#: "${SDLC_ROLE_MEMORY_FILES:=SOUL.md RULES.md snapshot.md MEMORY.md project_briefing.md}"
 
 # PER-ROLE overrides — both lists above also exist in a per-role form:
 #   SDLC_SHARED_DOCS_<ROLE> / SDLC_ROLE_MEMORY_FILES_<ROLE>
