@@ -85,7 +85,7 @@ test("no engagement.md ⇒ ENGAGEMENT-MISSING (2), nothing written", async () =>
   assert.equal(existsSync(join(ctx.st, "private", "baseline.eng-1.json")), false);
 });
 
-test("argv: no flags, no positionals ⇒ USAGE(baseline: …) exit 2 before anything is read or written", async () => {
+test("argv: takes no flags and no positionals — any given ⇒ USAGE(baseline: …) exit 2 before anything is read or written", async () => {
   const { ctx, out } = initialised();
   await assert.rejects(run(["extra"], ctx), (e) => e instanceof CliError && e.code === 2 && /^USAGE\(baseline: unexpected argument extra\)$/.test(e.token));
   await assert.rejects(run(["--rotate"], ctx), (e) => e instanceof CliError && e.code === 2 && /^USAGE\(baseline: unknown flag --rotate\)$/.test(e.token));

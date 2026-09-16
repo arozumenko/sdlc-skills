@@ -27,6 +27,16 @@
 // canon.writeArtifact is tmp+rename, so a re-run replaces it atomically
 // (plan §4.1: "atomic overwrite"). `purge` deletes it with the engagement.
 //
+// Persisted form: observe() returns its entries already through redactDeep,
+// so computeBaseline's payload equals artifact.payload for `entries` and
+// `ignored_count` and diffBaseline compares like with like. `engagement_id`
+// is the one payload string returned as the record spells it — an id that
+// matches a secret rule is a broken engagement anyway (its key file, baseline
+// file and envelope would all disagree), so it is not re-spelled here.
+// `head_oid` needs a commit: on an unborn branch revParse's GitError escapes
+// as exit 1 INTERNAL, not a usage token (every downstream command needs a
+// commit too; TASK-008's pipeline may turn it into a token).
+//
 //   observedPaths(record)          → scope_paths ∪ product_paths, deduplicated, first-appearance order
 //   baselinePath(ctx, eid)         → <st>/private/baseline.<eid>.json (eid NFC; refuses an id that cannot name a file)
 //   computeBaseline(ctx)           → payload   — CliError 2 ENGAGEMENT-MISSING without engagement.md;
@@ -60,6 +70,7 @@
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { hmacHex, makeEnvelope, readArtifact, sha256Hex, writeArtifact } from "../canon.mjs";
+import { redactDeep } from "../redact.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
 import { lsFiles, revParse } from "./git.mjs";
 import { validate } from "./schema.mjs";
@@ -131,7 +142,13 @@ function workingBytes(root, path) {
 /**
  * The observation itself: HMAC per observed file and the ignored count per
  * configured path. Shared by computeBaseline and diffBaseline so the two can
- * never disagree about what "observed" means.
+ * never disagree about what "observed" means. Returned in its *persisted*
+ * form: canon.writeArtifact redacts every string of the payload, keys
+ * included (G-4), so a path whose spelling matches a redaction rule is stored
+ * as `<REDACTED:…>`; redacting here — once, the same way — keeps the fresh
+ * observation comparable with the artifact read back from disk (otherwise
+ * diffBaseline would list such a file as removed+added on an unchanged tree
+ * and never as changed). The HMAC hex values and counts match no rule.
  * @returns {{entries: Record<string, string>, ignored_count: Record<string, number>}}
  */
 function observe(ctx, keyBytes, paths) {
@@ -147,13 +164,13 @@ function observe(ctx, keyBytes, paths) {
     const bytes = workingBytes(ctx.root, path);
     if (bytes !== null) entries[path] = hmacHex(keyBytes, bytes);
   }
-  return { entries, ignored_count };
+  return redactDeep({ entries, ignored_count });
 }
 
 /** The current key or the exit-2 refusal: a baseline without a key has no identity to record. */
 function requireCurrentKey(ctx) {
   const key = ctx.key();
-  if (key === null) throw usageError(COMMAND, "no engagement key; run engagement init first");
+  if (key === null) throw usageError(COMMAND, "no usable engagement key; run engagement init first");
   return key;
 }
 

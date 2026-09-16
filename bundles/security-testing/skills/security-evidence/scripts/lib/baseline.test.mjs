@@ -245,8 +245,29 @@ test("engagement_id that cannot name a file ⇒ ENGAGEMENT-INVALID, nothing writ
   ensureKey(ctx, { engagement_id: "../escape" });
   assert.throws(() => stepBaseline(ctx), (e) => e instanceof CliError && e.code === 2 && /^ENGAGEMENT-INVALID\(\$\.engagement_id/.test(e.token));
   assert.throws(() => baselinePath(ctx, "a/b"), (e) => e instanceof CliError && e.code === 2);
-  assert.equal(existsSync(join(repo, ".agents", "baseline.escape.json")), false);
   assert.equal(readdirSync(join(ctx.st, "private")).filter((n) => n.startsWith("baseline.")).length, 0);
+});
+
+test("a path whose spelling matches a redaction rule is stored redacted and still diffs like any other file", () => {
+  const { repo, ctx } = fixture();
+  const secretish = "src/AKIAIOSFODNN7EXAMPLE.txt"; // aws-key rule matches the file name itself
+  writeFileSync(join(repo, secretish), "v1\n");
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-q", "-m", "secretish name"]);
+
+  const first = stepBaseline(ctx);
+  const stored = Object.keys(first.artifact.payload.entries).find((k) => k.includes("<REDACTED:"));
+  assert.ok(stored !== undefined && !stored.includes("AKIA"), "G-4: the raw path never reaches disk");
+  assert.deepEqual(first.payload, first.artifact.payload, "computeBaseline returns the persisted form");
+  assert.equal(first.files, 6);
+
+  const read = readBaseline(ctx, "eng-1");
+  assert.deepEqual(diffBaseline(ctx, read), { changed: [], added: [], removed: [], ignored_counts: { "src/": 2, "package.json": 0 } }, "unchanged tree ⇒ empty diff, redacted key or not");
+
+  writeFileSync(join(repo, secretish), "v2\n");
+  assert.deepEqual(diffBaseline(ctx, read).changed, [stored], "a content change to that file is `changed`, under the stored spelling");
+  rmSync(join(repo, secretish));
+  assert.deepEqual(diffBaseline(ctx, read).removed, [stored]);
 });
 
 test("guardrails: content is HMAC-keyed, index is the only plain sha256; git only through lib/git.mjs; no clock, no network, no second write path", () => {
