@@ -51,6 +51,20 @@ export function templatesLine({ written, present }) {
   return `TEMPLATES: ${parts.join(" ")}`;
 }
 
+// --- keys (TASK-009; spec §6.5, plan §4.1 engagement init / validate, check) ----
+export const KEY_AVAILABLE = "KEY: available"; // engagement validate, check
+export const KEY_UNAVAILABLE = "KEY: unavailable"; // the recorded key_id has no file ⇒ STRUCTURE-ONLY
+
+const KEY_STATUSES = Object.freeze(["created", "reused", "rotated"]);
+/** `k` + 12 hex chars (TL-9). The one copy keys.mjs re-exports as KEY_ID_PATTERN; ctx.mjs still carries its own (TASK-008 to fold). */
+export const KEY_ID = /^k[0-9a-f]{12}$/;
+/** `KEY: <key_id> created|reused|rotated` — engagement init step 3, from keys.ensureKey's `{key_id, status}`. */
+export function keyLine(key_id, status) {
+  if (typeof key_id !== "string" || !KEY_ID.test(key_id)) throw new TypeError(`keyLine: key_id must be k + 12 hex chars, got ${String(key_id)}`);
+  if (!KEY_STATUSES.includes(status)) throw new TypeError(`keyLine: status must be created|reused|rotated, got ${String(status)}`);
+  return `KEY: ${key_id} ${status}`;
+}
+
 /** `INCOMPLETE(<name>)` — exit 3 (required input missing). */
 export const incomplete = (name) => `INCOMPLETE(${name})`;
 /** `INCONSISTENT(<field>)` — exit 5 (check, build-report). */
