@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "r.default-warning", "defaultConfiguration": { "level": "warning" } }, { "id": "r.no-default" } ] } },
+      "results": [
+        { "ruleId": "r.default-warning", "ruleIndex": 0, "message": { "text": "level absent, rule says warning" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4, "snippet": { "text": "x" } } } } ] },
+        { "ruleId": "r.no-default", "ruleIndex": 1, "message": { "text": "level absent, rule has no default" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 5, "endLine": 5, "snippet": { "text": "x" } } } } ] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "semanticVersion": "2.18.0",
+          "rules": [
+            { "id": "js/xss", "shortDescription": { "text": "Client-side cross-site scripting" }, "defaultConfiguration": { "level": "error" }, "properties": { "tags": [ "security", "external/cwe/cwe-079", "external/cwe/cwe-116" ] } },
+            { "id": "js/hardcoded-credentials", "shortDescription": { "text": "Hard-coded credentials" }, "defaultConfiguration": { "level": "warning" }, "properties": { "tags": [ "security", "external/cwe/cwe-259", "external/cwe/cwe-321", "external/cwe/cwe-798" ] } },
+            { "id": "js/weak-cryptographic-algorithm", "shortDescription": { "text": "Weak crypto" }, "defaultConfiguration": { "level": "warning" }, "properties": { "tags": [ "security", "external/cwe/cwe-327" ] } }
+          ]
+        }
+      },
+      "results": [
+        { "ruleId": "js/xss", "ruleIndex": 0, "message": { "text": "flows to innerHTML" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4 } } } ], "codeFlows": [ { "threadFlows": [ { "locations": [ { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/other.js" }, "region": { "startLine": 1 } } } } ] } ] } ], "relatedLocations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/other.js" }, "region": { "startLine": 2 } } } ] },
+        { "ruleId": "js/hardcoded-credentials", "ruleIndex": 1, "message": { "text": "credential" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 9, "endLine": 9 } } } ] },
+        { "ruleId": "js/weak-cryptographic-algorithm", "ruleIndex": 2, "message": { "text": "md5" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 1, "endLine": 1 } } } ] }
+      ]
+    }
+  ]
+}

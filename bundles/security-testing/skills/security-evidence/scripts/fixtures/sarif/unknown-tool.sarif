@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "MyScanner", "version": "0.1", "rules": [ { "id": "MS001", "properties": { "tags": [ "CWE-79" ] } }, { "id": "javascript.express.sqli.tainted-sql-string" } ] } },
+      "results": [
+        { "ruleId": "MS001", "ruleIndex": 0, "level": "error", "message": { "text": "tagged" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4, "snippet": { "text": "x" } } } } ] },
+        { "ruleId": "javascript.express.sqli.tainted-sql-string", "ruleIndex": 1, "level": "error", "message": { "text": "a semgrep-shaped rule id from an unknown tool" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4, "snippet": { "text": "x" } } } } ] }
+      ]
+    }
+  ]
+}

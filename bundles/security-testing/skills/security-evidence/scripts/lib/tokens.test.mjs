@@ -137,6 +137,16 @@ test("formatters", () => {
   assert.throws(() => tokens.verdictLine({ verdict: "MAYBE", finding: "f".repeat(64), base: "b".repeat(40), head: "c".repeat(40), tested_tree: "same-as-head", verify: "d".repeat(64) }), /verdict/);
 });
 
+test("ingest sarif rows (TASK-016): rejection reasons, recorded fallbacks and the two unlocated reasons are spelled once", () => {
+  const rejects = [tokens.SARIF_RULE_MISSING, tokens.SARIF_RULE_MISMATCH, tokens.SARIF_LEVEL_INVALID, tokens.SARIF_REGION_MALFORMED, tokens.SARIF_REGION_OUTSIDE_FILE, tokens.SARIF_REGION_BLANK, tokens.SARIF_FILE_NOT_TEXT];
+  assert.deepEqual(rejects, ["rule-missing", "rule-mismatch", "level-invalid", "region-malformed", "region-outside-file", "region-blank", "file-not-text"]);
+  const recorded = [tokens.SARIF_UNKNOWN_TOOL, tokens.SARIF_RULE_NOT_IN_METADATA, tokens.SARIF_RULE_DEFAULT_LEVEL_INVALID, tokens.SARIF_LEVEL_FROM_RULE_DEFAULT, tokens.SARIF_LEVEL_ABSENT, tokens.SARIF_ENDLINE_DEFAULTED, tokens.SARIF_SNIPPET_FROM_SIDE];
+  assert.deepEqual(recorded, ["unknown-tool", "rule-not-in-metadata", "rule-default-level-invalid", "level-from-rule-default", "level-absent", "endline-defaulted", "snippet-from-side"]);
+  assert.equal(tokens.UNLOCATED_NO_LOCATION, "no-location");
+  assert.equal(tokens.UNLOCATED_OUT_OF_SCOPE, "out-of-scope");
+  assert.equal(new Set([...rejects, ...recorded]).size, rejects.length + recorded.length, "a reason never doubles as a fallback note");
+});
+
 test("G-13: the forbidden strings never appear under scripts/ (fixtures and tests excluded)", () => {
   assert.deepEqual(tokens.FORBIDDEN_STRINGS, ["UNGATED", "exact checkout"]);
   const offenders = [];

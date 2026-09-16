@@ -436,3 +436,46 @@ export function readbackMismatch(field) {
   if (!READBACK_FIELDS.includes(field)) throw new TypeError(`readbackMismatch: field ${String(field)} is outside the closed vocabulary`);
   return `READBACK: MISMATCH(${field})`;
 }
+// --- ingest sarif (TASK-016; spec §6.6 row `sarif`, §6.7 fallback matrix, D6) ---
+// Not stdout tokens: the adapter records them in the import record
+// (`rejected[].reason`, `unlocated[].reason`, `trusted.recorded[]`) and the
+// report displays them (US-010 AC-3 "rejections are counted by reason and
+// displayed") — spelled once here (G-13). lib/ingest/_sarif.mjs groups them
+// as REJECT / RECORDED for its callers.
+
+// `rejected[].reason`: a result the §6.7 matrix rejects — counted, never dropped.
+/** neither a usable `ruleId` (non-empty string) nor a usable `ruleIndex` (an index into `rules[]`) */
+export const SARIF_RULE_MISSING = "rule-missing";
+/** §6.7 "ruleIndex and ruleId disagree" */
+export const SARIF_RULE_MISMATCH = "rule-mismatch";
+/** `level` present but outside `error|warning|note|none` */
+export const SARIF_LEVEL_INVALID = "level-invalid";
+/** §6.7 "malformed region": `startLine`/`endLine` not integers ≥ 1, `endLine < startLine`, or a snippet that is not `{text: string}` */
+export const SARIF_REGION_MALFORMED = "region-malformed";
+/** the region names a raw line past the end of the file at the recorded side */
+export const SARIF_REGION_OUTSIDE_FILE = "region-outside-file";
+/** every raw line of the region is blank — there is no normalised line to cite */
+export const SARIF_REGION_BLANK = "region-blank";
+/** the scope file's bytes are not UTF-8, so its lines cannot be numbered */
+export const SARIF_FILE_NOT_TEXT = "file-not-text";
+
+// `trusted.recorded[]` of a located SARIF record: the §6.7 fallbacks taken, in evaluation order.
+/** §6.7 "unknown tool … recorded": class from tags only, `default_confidence` */
+export const SARIF_UNKNOWN_TOOL = "unknown-tool";
+/** the result's `ruleId` names no `rules[]` entry: no tags, no default level */
+export const SARIF_RULE_NOT_IN_METADATA = "rule-not-in-metadata";
+/** the rule's `defaultConfiguration.level` is outside the vocabulary and was treated as absent */
+export const SARIF_RULE_DEFAULT_LEVEL_INVALID = "rule-default-level-invalid";
+/** §6.7 "level absent ⇒ rule defaultConfiguration.level" */
+export const SARIF_LEVEL_FROM_RULE_DEFAULT = "level-from-rule-default";
+/** §6.7 "… absent ⇒ p3" */
+export const SARIF_LEVEL_ABSENT = "level-absent";
+/** §6.7 "startLine present, endLine absent ⇒ endLine = startLine" */
+export const SARIF_ENDLINE_DEFAULTED = "endline-defaulted";
+/** §6.7 "region present, snippet absent ⇒ snippet read from the recorded side" */
+export const SARIF_SNIPPET_FROM_SIDE = "snippet-from-side";
+
+/** `unlocated[].reason` (import.schema.json Candidate enum): §6.7 row 1 — no physicalLocation, URI not canonicalisable inside the repo, or no line region. */
+export const UNLOCATED_NO_LOCATION = "no-location";
+/** `unlocated[].reason`: §6.7 row 2 — a canonical in-repo path that is not a `scope.files[]` entry. */
+export const UNLOCATED_OUT_OF_SCOPE = "out-of-scope";

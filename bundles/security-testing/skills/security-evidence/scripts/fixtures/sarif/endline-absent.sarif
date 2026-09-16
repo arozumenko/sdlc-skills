@@ -1,0 +1,11 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "javascript.express.sqli.tainted-sql-string" } ] } },
+      "results": [
+        { "ruleId": "javascript.express.sqli.tainted-sql-string", "level": "warning", "message": { "text": "one-line region" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "snippet": { "text": "  const q = \"SELECT * FROM users WHERE id = \" + req.query.id;" } } } } ] }
+      ]
+    }
+  ]
+}
