@@ -231,6 +231,19 @@ test("ingest tracker-readback rows (TASK-017): `READBACK: ok | MISMATCH(<field>)
   assert.throws(() => tokens.readbackMismatch(""), /closed vocabulary/);
 });
 
+test("packet rows (TASK-057): `PACKET <path> sha256=<h> kind=<k> files=<n>`; the subject stub token; the kind copy agrees with packet-core", async () => {
+  const { PACKET_KINDS } = await import("./packet-core.mjs");
+  const sha = "a".repeat(64);
+  assert.equal(tokens.packetLine({ relPath: ".agents/security-testing/runs/0123456789ab-0001/packets/x.json", sha256: sha, kind: "scope", files: 2 }), `PACKET .agents/security-testing/runs/0123456789ab-0001/packets/x.json sha256=${sha} kind=scope files=2`);
+  for (const kind of PACKET_KINDS) assert.doesNotThrow(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind, files: 0 }), kind);
+  assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind: "review", files: 0 }), /closed vocabulary/);
+  assert.throws(() => tokens.packetLine({ relPath: "/abs/p.json", sha256: sha, kind: "scope", files: 0 }), /repo-relative/);
+  assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: "zz", kind: "scope", files: 0 }), /sha256/);
+  assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind: "scope", files: -1 }), /files/);
+  assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind: "scope", files: 1.5 }), /files/);
+  assert.equal(tokens.NOT_IMPLEMENTED_SUBJECT_PACKET, "NOT-IMPLEMENTED(TASK-021)");
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;

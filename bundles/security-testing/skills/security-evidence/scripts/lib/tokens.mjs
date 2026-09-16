@@ -479,3 +479,29 @@ export const SARIF_SNIPPET_FROM_SIDE = "snippet-from-side";
 export const UNLOCATED_NO_LOCATION = "no-location";
 /** `unlocated[].reason`: §6.7 row 2 — a canonical in-repo path that is not a `scope.files[]` entry. */
 export const UNLOCATED_OUT_OF_SCOPE = "out-of-scope";
+
+// --- packet (TASK-057; plan §4.1 row `packet`, spec §6.4 / P1, TL-15) -------------
+
+/** packet.schema.json `kind` vocabulary — tokens.mjs is a leaf, so this is its own copy (packet-core.PACKET_KINDS is the module's; packet-core.test pins them equal). */
+const PACKET_KIND_LIST = Object.freeze(["scope", "subject"]);
+
+/**
+ * `PACKET <repo-relative path> sha256=<packet_sha256> kind=<scope|subject> files=<n>`
+ * — the first line of `evidence.mjs packet`; the WROTE line follows. The sha
+ * is the packet's identity and the file's name (`<run>/packets/<sha>.json`):
+ * what a claims / examined / receipt file names as `packet_sha256`.
+ */
+export function packetLine({ relPath, sha256, kind, files }) {
+  requireRepoRelative("packetLine", relPath);
+  if (!SHA256.test(sha256)) throw new TypeError(`packetLine: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
+  if (!PACKET_KIND_LIST.includes(kind)) throw new TypeError(`packetLine: kind ${String(kind)} is outside the closed vocabulary`);
+  return `PACKET ${relPath} sha256=${sha256} kind=${kind} files=${requireCount("packetLine", "files", files)}`;
+}
+
+/**
+ * `NOT-IMPLEMENTED(TASK-021)` — exit 2: `packet --kind subject` until TASK-021
+ * lands (plan §5 TASK-057: "returns 2 NOT-IMPLEMENTED until then"). Not the
+ * M2|M3 `notImplemented(milestone)` form: the subject packet is an M1 task,
+ * so the token names the task that ships it. TASK-021 deletes this row.
+ */
+export const NOT_IMPLEMENTED_SUBJECT_PACKET = "NOT-IMPLEMENTED(TASK-021)";
