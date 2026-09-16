@@ -28,7 +28,7 @@ jobs:
       - name: Validate skills against the Agent Skills spec
         run: |
           status=0
-          for dir in skills/*/ factories/*/skills/*/; do
+          for dir in skills/*/ bundles/*/skills/*/; do
             if [ -f "$dir/SKILL.md" ]; then
               echo "::group::$dir"
               skills-ref validate "$dir" || status=1

@@ -10,7 +10,7 @@ them into any AI IDE via `bin/init.mjs` (the npx installer) or per-host native
 plugin manifests. There is no build step — the installer discovers content at
 runtime.
 
-**Content lives in factories.** Each factory (`factories/<id>/`) physically owns its
+**Content lives in factories.** Each factory (`bundles/<id>/`) physically owns its
 `agents/` and `skills/` directories — real copies, not mirrors. The same agent
 or skill id may appear in several factories with different content (intentional
 divergence is normal). Top-level `agents/` and `skills/` hold only the
@@ -21,15 +21,17 @@ standalone-only "orphan" content not belonging to any factory: one agent
 plus the 28 external (`repo:`) skills fetched from upstream at install time.
 
 Read `README.md` for the full catalog and install paths, `AGENTS.md` for the
-consumer-facing summary, and `factories/SPEC.md` before touching factories.
+consumer-facing summary, and `bundles/SPEC.md` before touching factories.
 
 ## Commands
 
 ```bash
 npm test                       # node --test (runs *.test.mjs anywhere in tree)
-npm run validate               # validate:factories + validate:marketplaces — run before committing
-npm run validate:factories       # bin/validate-factories.mjs — factory.json manifests
+npm run validate               # validate:factories && validate:marketplaces && validate:externals && validate:dupes — run before committing
+npm run validate:factories     # bin/validate-factories.mjs — factory.json manifests
 npm run validate:marketplaces  # gen-marketplaces.mjs --check — fails if generated manifests are stale
+npm run validate:externals     # validate-factories.mjs --check-externals — fetches every skills.json repo: entry upstream; needs network
+npm run validate:dupes         # check-skill-dupes.mjs — intentionally duplicated skill files must not drift
 npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .github/plugin marketplaces
 
 # Run a single test file
@@ -41,7 +43,7 @@ node bin/init.mjs init --factory feature-development --target claude --yes
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-factories.mjs` and validates
-every `skills/*/SKILL.md` and `factories/*/skills/*/SKILL.md` against the
+every `skills/*/SKILL.md` and `bundles/*/skills/*/SKILL.md` against the
 agentskills.io spec via `skills-ref`.
 
 ## Architecture
@@ -67,7 +69,7 @@ TOML for Codex (`writeCodexAgent`). Claude Code preloads skill content from
 frontmatter; for the others, `injectSkillsSection` writes a bracketed
 `SKILLS-INJECTED` block into the agent file (idempotent on `--update`).
 
-**Factories** (`factories/<id>/`) are team presets installed with `--factory`. Each
+**Factories** (`bundles/<id>/`) are team presets installed with `--factory`. Each
 factory **physically owns** its `agents/` and `skills/` as real directories —
 there is no sync and no cross-factory equality requirement. The same id may
 differ across factories by design. A factory tunes the *installed copy* via two
@@ -76,7 +78,7 @@ parallel overlays: `briefings/<role>.md` (behavior → seeded into
 `factory.json` (capability → rewrites the installed agent's `skills:` add/remove).
 It also splices `instructions.md` into a `<!-- FACTORY:<id> -->` block in
 `AGENTS.md`/`CLAUDE.md` and seeds `knowledge/` reference docs. See
-`factories/SPEC.md` for the full spec.
+`bundles/SPEC.md` for the full spec.
 
 **Hooks** (`hooks/`) inject context at session/subagent start because Claude's
 `@import` doesn't work in subagent files, on other IDEs, or across
@@ -102,7 +104,7 @@ YAML frontmatter: `name`, `description`, `owner`, `authors` (list of
 optional `project_deployments` (omit the key when N/A; an explicit `[]` is a
 distinct "not disclosed" sentinel). `bin/validate-factories.mjs` enforces the
 required fields, the `sdlc_phase`/`support_level` shape, and quoting of risky
-unquoted values. See `factories/SPEC.md` for the full schema.
+unquoted values. See `bundles/SPEC.md` for the full schema.
 
 ## What runs where: nothing ships from this repo at runtime
 

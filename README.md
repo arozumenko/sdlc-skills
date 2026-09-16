@@ -16,7 +16,7 @@ GitHub Copilot CLI, Windsurf, Codex).
 flowchart TB
     subgraph sdlc["sdlc-skills — content + install resolution"]
         direction TB
-        agents[/"factories/<br/>agent + skill content"/]
+        agents[/"bundles/<br/>agent + skill content"/]
         skills[/"orphan skills/<br/>standalone-only content"/]
         registry[("skills.json<br/>catalog: orphan + external")]
         installer(["bin/init.mjs<br/>npx installer"])
@@ -55,8 +55,8 @@ Agents are **self-describing** — each `AGENT.md` carries its own metadata
 (role, group, theme, aliases, skills, model). IDE plugin systems read it at
 install time. Nothing duplicated.
 
-Most agents and skills live inside factories (`factories/<id>/agents/` and
-`factories/<id>/skills/`). The top-level `agents/` and `skills/` directories
+Most agents and skills live inside factories (`bundles/<id>/agents/` and
+`bundles/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
 and eight skills (`deep-research`, `gathering-context`, `verifying-outcomes`,
 `microsoft-365`, `obsidian-vault`, `tosca-automation`, `vividus`,
@@ -144,7 +144,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 
 ```bash
 # A team factory — the whole team in one shot (agents, their skills,
-# per-role stack briefings, and team conventions). See factories/SPEC.md.
+# per-role stack briefings, and team conventions). See bundles/SPEC.md.
 npx github:arozumenko/sdlc-skills init --factory feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev, android-dev
 npx github:arozumenko/sdlc-skills init --factory manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
@@ -181,7 +181,7 @@ ship today:
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
 
-See [`factories/SPEC.md`](factories/SPEC.md) and each factory's `README.md` to
+See [`bundles/SPEC.md`](bundles/SPEC.md) and each factory's `README.md` to
 author your own. (`--bundle` still works as a silent back-compat alias for
 `--factory` — the flag used before this repo's factories rename.)
 
@@ -288,7 +288,7 @@ cloned into your project.
 ### 3. agentskills.io / third-party consumption
 
 Every `SKILL.md` in this repo — the orphans under `skills/<name>/` and the
-factory-owned skills under `factories/<id>/skills/<name>/` — follows the
+factory-owned skills under `bundles/<id>/skills/<name>/` — follows the
 [agentskills.io](https://agentskills.io) spec (`name` + `description`
 frontmatter). Any skill runtime (Vercel, custom frameworks, other IDEs) can
 point directly at a `SKILL.md` directory.
@@ -329,7 +329,7 @@ roles rather than named personas), all driving a running app via Playwright MCP:
 
 ### Skills
 
-Most skills are factory-owned (under `factories/<id>/skills/`). Eight orphan skills
+Most skills are factory-owned (under `bundles/<id>/skills/`). Eight orphan skills
 live in the top-level `skills/` dir and are available standalone. The full set
 installable via factories is listed below.
 
@@ -478,7 +478,7 @@ sdlc-skills/
 ├── bin/
 │   ├── init.mjs                # npx installer — resolves + fetches externals
 │   └── validate-factories.mjs    # factory manifest validator (CI + npm run validate:factories)
-├── factories/                    # team presets — one command installs a whole team
+├── bundles/                      # team presets — one command installs a whole team
 │   ├── SPEC.md                 # factory manifest spec
 │   └── <factory-id>/            # feature-development, manual-qa, test-automation, product-management
 │       ├── factory.json         # roster, briefings, skillOverlays, seed, instructions
@@ -499,11 +499,11 @@ sdlc-skills/
 
 ## Adding content
 
-1. **New factory agent** → create `factories/<factory-id>/agents/<name>/AGENT.md`
+1. **New factory agent** → create `bundles/<factory-id>/agents/<name>/AGENT.md`
    (with YAML frontmatter: `name`, `description`, `model`, `color`, `group`,
    `theme`, `aliases`, `skills`) and a `SOUL.md`. Declare it in `factory.json`
    under `localAgents`. No separate registry needed.
-2. **New factory skill** → create `factories/<factory-id>/skills/<name>/SKILL.md`
+2. **New factory skill** → create `bundles/<factory-id>/skills/<name>/SKILL.md`
    with agentskills.io frontmatter (`name`, `description`). Declare it in
    `factory.json` under `localSkills`. No `skills.json` entry needed.
 3. **New orphan monorepo skill** (standalone, no factory) → create
@@ -518,7 +518,7 @@ sdlc-skills/
 Every factory ships a `FACTORY.md` catalog descriptor (YAML frontmatter:
 `name`, `description`, `owner`, `authors`, `sdlc_phase`, `support_level`,
 `use_cases`, optional `project_deployments`) — see
-[`factories/SPEC.md`](factories/SPEC.md) for the schema. Any agent or skill
+[`bundles/SPEC.md`](bundles/SPEC.md) for the schema. Any agent or skill
 can opt out of the generated marketplace catalogs with `discoverable: false`
 in its own frontmatter; it still installs normally, it's just not listed.
 
