@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
 import * as tokens from "./tokens.mjs";
+import { RUN_KINDS, runIdOf } from "./ledger.mjs";
 
 test("constants are exactly the spec's spellings", () => {
   assert.equal(tokens.DIRTY_TREE, "DIRTY-TREE");
@@ -53,6 +54,22 @@ test("register formatters (TASK-028)", () => {
   assert.throws(() => tokens.count("confirmed", { p0: 0, p1: 0, p2: 0, p3: 0 }), /status/);
   assert.deepEqual(tokens.REGISTER_STATUSES, ["open", "accepted", "fixed", "regressed", "false-positive", "superseded"]);
   assert.deepEqual(tokens.REGISTER_PRIORITIES, ["p0", "p1", "p2", "p3"]);
+});
+
+test("runLine (TASK-012): exact shape; its private id/kind vocabulary agrees with ledger.mjs", () => {
+  const oid = "0123456789abcdef".repeat(3).slice(0, 40);
+  const other = "f".repeat(40);
+  assert.equal(tokens.runLine({ run_id: "0123456789ab-0001", seq: 1, kind: "assessment", base: oid, head: oid }), `RUN 0123456789ab-0001 seq=1 kind=assessment base=${oid} head=${oid}`);
+  assert.equal(tokens.runLine({ run_id: runIdOf(other, 42), seq: 42, kind: "review", base: oid, head: other }), `RUN ffffffffffff-0042 seq=42 kind=review base=${oid} head=${other}`);
+  // tokens.mjs is a leaf and carries its own copy of the run-id shape and the
+  // kind list: every ledger-minted id and every ledger kind must pass, so the
+  // copies cannot drift from ledger.RUN_ID / ledger.RUN_KINDS.
+  for (const kind of RUN_KINDS) assert.doesNotThrow(() => tokens.runLine({ run_id: runIdOf(oid, 9999), seq: 9999, kind, base: oid, head: oid }), kind);
+  assert.throws(() => tokens.runLine({ run_id: "0123456789ab-0001", seq: 1, kind: "audit", base: oid, head: oid }), /closed vocabulary/);
+  assert.throws(() => tokens.runLine({ run_id: "0123456789ab-001", seq: 1, kind: "assessment", base: oid, head: oid }), /run_id/);
+  assert.throws(() => tokens.runLine({ run_id: "0123456789AB-0001", seq: 1, kind: "assessment", base: oid, head: oid }), /run_id/);
+  assert.throws(() => tokens.runLine({ run_id: "0123456789ab-0001", seq: 0, kind: "assessment", base: oid, head: oid }), /seq/);
+  assert.throws(() => tokens.runLine({ run_id: "0123456789ab-0001", seq: 1, kind: "assessment", base: oid.slice(1), head: oid }), /oids/);
 });
 
 test("formatters", () => {

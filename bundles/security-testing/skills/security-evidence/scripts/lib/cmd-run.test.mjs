@@ -11,6 +11,7 @@ import { cleanupAll, git, initRepo, runScript } from "../fixtures/cli/harness.mj
 import { createContext } from "./ctx.mjs";
 import { defaultRecord, TEMPLATE_PATHS } from "./engagement.mjs";
 import { ensureKey } from "./keys.mjs";
+import { runIdOf } from "./ledger.mjs";
 import { validate } from "./schema.mjs";
 
 after(cleanupAll);
@@ -155,6 +156,42 @@ test("P6: dirt outside scope_paths ∪ product_paths and the bundle's managed pa
   assert.equal(dirty.code, 3, ".gitignore changed outside the managed block is dirt");
   assert.equal(dirty.stdout, "DIRTY-TREE\n");
   assert.equal(readIndex(whole).length, 1, "the refused init left the ledger alone");
+
+  // a committed .gitignore whose last line has no LF: the block writer must add
+  // the newline (or a blank separator) to attach the block — never dirt
+  for (const [label, atHead, working] of [
+    ["no trailing LF at HEAD", "node_modules/", `node_modules/\n${IGNORE_BLOCK}`],
+    ["blank separator before the block", "node_modules/\n", `node_modules/\n\n${IGNORE_BLOCK}`],
+    ["CRLF file", "node_modules/\r\n", `node_modules/\r\n${IGNORE_BLOCK.replaceAll("\n", "\r\n")}`],
+  ]) {
+    const repo = initRepo();
+    writeFileSync(join(repo, ".gitignore"), atHead);
+    git(repo, ["add", ".gitignore"]);
+    git(repo, ["commit", "-q", "-m", "gitignore"]);
+    writeFileSync(join(repo, ".gitignore"), working);
+    const st = join(repo, ST);
+    mkdirSync(st, { recursive: true });
+    const record = { ...defaultRecord(), scope_paths: ["."], product_paths: [] };
+    writeFileSync(join(st, "engagement.md"), engagementMd(record));
+    ensureKey(createContext({ root: repo }, { env: { ...process.env, ...ENV } }), { engagement_id: record.engagement_id });
+    const r = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
+    assert.equal(r.code, 0, `${label}: ${r.stdout}${r.stderr}`);
+    // …but a real pattern added next to the block is still dirt
+    writeFileSync(join(repo, ".gitignore"), `${working}dist/\n`);
+    const d = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
+    assert.equal(d.code, 3, `${label}: pattern outside the block`);
+  }
+});
+
+test("a run file already present for the freshly allocated seq: exit 5 INCONSISTENT(runs/<id>), no RUN line above the token", async () => {
+  const repo = readyRepo();
+  const head = git(repo, ["rev-parse", "HEAD"]);
+  const next = runIdOf(head, 1);
+  mkdirSync(join(repo, ST, "runs", next), { recursive: true });
+  writeFileSync(join(repo, ST, "runs", next, "run.json"), "{}\n");
+  const r = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
+  assert.equal(r.code, 5, r.stdout + r.stderr);
+  assert.equal(r.stdout, `INCONSISTENT(runs/${next})\n`, "the failure token is the only stdout line");
 });
 
 test("review on the same dirty tree allocates", async () => {

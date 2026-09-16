@@ -44,7 +44,7 @@
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { makeEnvelope } from "../canon.mjs";
+import { makeEnvelope, writeArtifact } from "../canon.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
 import { GitError, blobOid, revParse, showBytes, statusPorcelain } from "./git.mjs";
@@ -86,7 +86,21 @@ export function stripManagedBlock(text) {
   return out.join("\n");
 }
 
-/** True when the working `.gitignore` differs from HEAD's only by the managed block. */
+/**
+ * The lines of a `.gitignore` that mean something to git, after the managed
+ * block is stripped: CR dropped, blank lines dropped. Blank lines are
+ * separators with no effect on matching, and the block writer has to add the
+ * newline (or a blank separator) that attaches the block to a file whose last
+ * line had no LF — that whitespace is part of the block's edit, not dirt.
+ */
+function ignoreLinesOf(text) {
+  return stripManagedBlock(text)
+    .split("\n")
+    .map((line) => line.replace(/\r$/, ""))
+    .filter((line) => line.trim() !== "");
+}
+
+/** True when the working `.gitignore` differs from HEAD's only by the managed block (and the whitespace that attaches it). */
 function gitignoreOnlyManagedBlock(ctx) {
   const atHead = blobOid(ctx.root, "HEAD", GITIGNORE) === null ? "" : showBytes(ctx.root, "HEAD", GITIGNORE).toString("utf8");
   let working;
@@ -96,7 +110,9 @@ function gitignoreOnlyManagedBlock(ctx) {
     if (err.code !== "ENOENT") throw err;
     working = "";
   }
-  return stripManagedBlock(atHead) === stripManagedBlock(working);
+  const a = ignoreLinesOf(atHead);
+  const b = ignoreLinesOf(working);
+  return a.length === b.length && a.every((line, i) => line === b[i]);
 }
 
 /**
@@ -132,9 +148,10 @@ function resolveRef(ctx, flag, ref) {
   }
 }
 
+/** Write-once, silently: the caller prints the RUN line and every WROTE line only after all writes succeed. */
 function writeOnce(ctx, run_id, path, artifact) {
   try {
-    return ctx.writeArtifact(path, artifact, { exclusive: true });
+    return writeArtifact(ctx.abs(path), artifact, { exclusive: true });
   } catch (err) {
     // A freshly allocated seq whose run file already exists: the ledger and
     // runs/ disagree, which is an integrity failure, not a usage error.
@@ -175,19 +192,25 @@ async function init(argv, ctx) {
   if (errors.length > 0) throw new Error(`run init: run.json payload is off-schema: ${errors[0]}`);
   const head = { schema_version: SCHEMA_VERSION, run_id, engagement_id, key_id: key.key_id, now: ctx.now };
 
-  ctx.out(runLine({ run_id, seq, kind, base: base_oid, head: head_oid }));
-  writeOnce(ctx, run_id, join(dir, "run.json"), makeEnvelope({ ...head, kind: "run" }, payload));
-  writeOnce(ctx, run_id, join(dir, "engagement.json"), makeEnvelope({ ...head, kind: "engagement" }, record));
+  // Every artifact lands before anything is printed, so a failed write (EEXIST
+  // ⇒ 5 INCONSISTENT(runs/<id>)) never leaves a RUN line above the failure token.
+  const written = [
+    [join(dir, "run.json"), writeOnce(ctx, run_id, join(dir, "run.json"), makeEnvelope({ ...head, kind: "run" }, payload))],
+    [join(dir, "engagement.json"), writeOnce(ctx, run_id, join(dir, "engagement.json"), makeEnvelope({ ...head, kind: "engagement" }, record))],
+  ];
   if (kind === "assessment") {
-    let written;
+    let indexes;
     try {
-      written = writeEmptyIndexes(ctx, head);
+      indexes = writeEmptyIndexes(ctx, head);
     } catch (err) {
       if (err.code === "EEXIST") throw integrityFailure(inconsistent(`runs/${run_id}`), err);
       throw err;
     }
-    for (const [name, { file }] of Object.entries(INDEXES)) ctx.wrote(join(dir, file), written[name]);
+    for (const [name, { file }] of Object.entries(INDEXES)) written.push([join(dir, file), indexes[name]]);
   }
+
+  ctx.out(runLine({ run_id, seq, kind, base: base_oid, head: head_oid }));
+  for (const [path, artifact] of written) ctx.wrote(path, artifact);
   return EXIT.OK;
 }
 

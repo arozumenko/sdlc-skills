@@ -1258,3 +1258,14 @@ Recorded by the TASK-006 implementer so the file-ownership record is honest and 
 | TASK-015 (first cmd with real file inputs) | `ctx.input()`: realpath the target before the `relative()` containment check, or document the lexical-only guarantee (macOS `/var` vs `/private/var`). |
 | TASK-028 | `cli.test.mjs` `--help` guard reads USAGE via a source regex; when `register.mjs` builds USAGE from `tokens.mjs` rows, change the guard to import the module's USAGE. Also fix register usage text: neither-flag ⇒ exit 2 `EQUIVALENCE-REQUIRED`. |
 | TASK-008 | `ctx.parseEngagementBlock` now delegates to TASK-007's `parseEngagementMd` (done in TASK-006 round 3); TASK-008 builds `cmd-engagement.mjs` on that single parser. |
+
+### Follow-ups from TASK-012 review 1 (Rio, 2026-09-16)
+
+Recorded by the TASK-012 implementer. The P6 `.gitignore` comparison now works on git-significant lines (block stripped, CR dropped, blank lines dropped) rather than bytes, so the LF or blank separator the block writer adds to attach the block never trips `DIRTY-TREE`; `run init` writes every artifact before it prints `RUN` and the `WROTE` lines.
+
+| Owner | Follow-up from review |
+|---|---|
+| TASK-002/005 (before G6) | `SCHEMA_VERSION = 1` is a module-local constant in `cmd-run.mjs`, the first enveloped-artifact writer; TASK-013 `scope`, TASK-015 `ingest` and TASK-019 `gate` each need the same value. Export one constant (`canon.mjs` or `lib/schema.mjs`) and switch `cmd-run.mjs` to it, so a bump is one edit. |
+| TASK-008 | `stripManagedBlock` (and the `# security-testing:begin/end` markers) live in `cmd-run.mjs` until the ignore-block module exists; fold them into `ignore-block.mjs` and have `cmd-run.mjs` import them — one definition of the block's edges. |
+| TASK-023 (manifest/build-report) | `run-index.appendIndex` rewrites tmp+rename, leaving a transient `.<file>.tmp-<pid>-<n>` under `<run>/` while it runs (TL-14, by design), and `fsx.walk()` does not hide dotfiles. Walk the run under `withRunLock` or skip `.`-prefixed entries, otherwise a concurrent append can surface in a manifest. |
+| TASK-007 / TASK-013 | `scope_paths` / `product_paths` go straight to `git status -- <paths>` (and will to `scope`) as pathspecs; `engagement.schema.json` accepts any string, so a `:`-prefixed value is pathspec magic (`:!src` excludes). Operator-authored, not a security issue — either reject a leading `:` in the parser or document that the paths are git pathspecs. |
