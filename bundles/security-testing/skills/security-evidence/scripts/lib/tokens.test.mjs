@@ -328,9 +328,23 @@ test("receipt rows (TASK-022): the six derived states, the not-applied reasons, 
   assert.throws(() => tokens.conflictsLine(1.5), /n/);
 });
 
+test("build-report rows (TASK-023): REPORT_TEMPLATES, REPORT <path>, MANIFEST sha256=<h>, the report wordings and the ORIGIN line", () => {
+  assert.deepEqual(tokens.REPORT_TEMPLATES, ["review", "assessment", "verify", "threat-model"]);
+  assert.equal(tokens.reportLine(".agents/security-testing/runs/abcdef012345-0001/report.md"), "REPORT .agents/security-testing/runs/abcdef012345-0001/report.md");
+  assert.throws(() => tokens.reportLine("/abs/report.md"), /repo-relative/);
+  assert.throws(() => tokens.reportLine("../report.md"), /repo-relative/);
+  const sha = "a".repeat(64);
+  assert.equal(tokens.manifestLine(sha), `MANIFEST sha256=${sha}`);
+  assert.throws(() => tokens.manifestLine("zz"), /sha256/);
+  assert.equal(tokens.NOT_ASSESSED, "unknown / not assessed");
+  assert.equal(tokens.NOT_INDEPENDENTLY_REVIEWED, "not independently reviewed");
+  assert.equal(tokens.ORIGIN_UNAUTHENTICATED, "ORIGIN: unauthenticated");
+  assert.equal(tokens.COMMITTED, "COMMITTED");
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
-    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;
+    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || value instanceof RegExp) continue;
     assert.ok(typeof value === "string" || typeof value === "function", `${name}: ${typeof value}`);
     if (typeof value === "string") assert.doesNotMatch(value, /\n/, name);
   }
