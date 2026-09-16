@@ -43,12 +43,26 @@
 //      nothing deleted (a purge must never remove content git still holds);
 //   4. without --yes: one `PURGE <path>` line per planned path, then
 //      2 USAGE(purge: --yes is required …);
-//   5. with --yes: delete run trees first (runs/, ledger/<id>, receipts/,
-//      snapshots/, citations/), then the ledger index under its lock, then
-//      the baseline and imports/, then the keys under the keys lock (files,
-//      index rows, `current` when it names a purged key). Every deletion is
-//      fsx.rmTree (idempotent), so a re-run after an interruption finishes
-//      the job and reports what was still there.
+//   5. with --yes: per run the satellite trees first (ledger/<id>, the run
+//      lock, receipts/<id>, snapshots/<id>, citations/<id>), then imports/,
+//      then — under ledger/index.lock/ — the ledger entries and, last of
+//      all for a run, runs/<id> itself; then the baseline, then the keys
+//      under the keys lock (files, index rows, `current` when it names a
+//      purged key). runs/<id>/run.json goes LAST because it is the only
+//      record attributing a run to the engagement (ledger entries carry no
+//      engagement_id): an interruption anywhere before it leaves a run the
+//      re-run still attributes, so every satellite is reached again. The
+//      same rule holds inside dropKeys (files, then the index rows that
+//      attribute them) and for imports/ (removed before anything planPurge's
+//      "had material" test looks at). Every deletion is fsx.rmTree
+//      (idempotent), so a re-run after an interruption finishes the job and
+//      reports what was still there. Removing runs/<id> under the allocation
+//      lock keeps a concurrent `run init` from allocating into a directory
+//      this purge is emptying.
+//
+// The plan is computed outside the keys/ledger locks and execute() acts on
+// it: a key minted or a run allocated for the engagement between the two
+// (an in-process window, same operator) survives and is a re-run's to take.
 //
 // stdout: `PURGED runs=<n> keys=<n> current-key=removed|kept` (tokens.purged)
 // — `runs` counts run ids, `keys` counts key rows (a row whose file is
@@ -151,14 +165,22 @@ function refuseTracked(ctx) {
   if (listed.length > 0) throw new CliError(EXIT.FAIL, tracked(listed[0]));
 }
 
-/** Drop the entries naming `runs` from ledger/index.json, under the allocation lock; untouched when nothing names them. */
-async function dropLedgerEntries(ctx, runs) {
+/**
+ * Drop the entries naming `runs` from ledger/index.json (untouched when
+ * nothing names them) and remove the run directories — both under the
+ * allocation lock, so a concurrent `run init` cannot allocate into a
+ * directory this purge is removing. runs/<id> (run.json, the attribution
+ * record) goes after the index rewrite and after every satellite execute()
+ * already removed: an interrupted purge leaves a run the re-run attributes.
+ */
+async function dropRuns(ctx, runs) {
   if (runs.length === 0) return;
   const gone = new Set(runs);
   await withLock(ledgerPaths(ctx).lock, () => {
     const entries = readLedgerIndex(ctx);
     const kept = entries.filter((e) => !gone.has(e.run_id));
     if (kept.length !== entries.length) writeAtomic(ledgerPaths(ctx).index, indexBytes(kept));
+    for (const run_id of runs) rmTree(runDir(ctx, run_id));
   });
 }
 
@@ -177,17 +199,18 @@ async function dropKeys(ctx, keys) {
 }
 
 async function execute(ctx, plan) {
+  // Satellites first; the attribution records (run.json, key index rows)
+  // last — the header's order, item 5.
   for (const run_id of plan.runs) {
-    rmTree(runDir(ctx, run_id));
     rmTree(join(ledgerPaths(ctx).dir, run_id));
     rmTree(runLockPath(ctx, run_id));
     rmTree(join(ctx.st, "receipts", run_id));
     rmTree(join(ctx.st, "private", "snapshots", run_id));
     rmTree(join(ctx.st, "private", "citations", run_id));
   }
-  await dropLedgerEntries(ctx, plan.runs);
-  rmTree(baselinePath(ctx, plan.engagement_id));
   if (plan.paths.includes(join(ctx.st, "imports"))) rmTree(join(ctx.st, "imports"));
+  await dropRuns(ctx, plan.runs);
+  rmTree(baselinePath(ctx, plan.engagement_id));
   await dropKeys(ctx, plan.keys);
   for (const path of plan.paths) ctx.log(`purge: removed ${ctx.rel(path)}`);
 }

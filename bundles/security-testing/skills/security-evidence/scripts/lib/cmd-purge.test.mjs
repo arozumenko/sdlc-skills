@@ -5,7 +5,7 @@
 // the other" is asserted against material the bundle itself wrote.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseStrict } from "../canon.mjs";
 import { cleanupAll, git, initRepo, runScript } from "../fixtures/cli/harness.mjs";
@@ -310,6 +310,68 @@ test("a run directory whose run.json is not the artifact it claims to be ⇒ exi
   assert.equal(r.stdout, `INCONSISTENT(runs/${b.run_id})\n`);
   assert.ok(existsSync(a.files.run), "a run that cannot be attributed blocks the purge before anything is deleted");
   assert.ok(existsSync(a.files.key));
+});
+
+test("interrupted purge: run.json goes last, so a re-run still attributes the leftovers and finishes the job", async () => {
+  const { repo, st, a, b, shared } = await twoEngagements();
+  // The furthest a correctly ordered execute() gets before the attribution
+  // record: every satellite tree of A and imports/ are gone, runs/<id> (with
+  // run.json) and the ledger index entry remain.
+  for (const p of [
+    join(st, "ledger", a.run_id),
+    join(st, "receipts", a.run_id),
+    join(st, "private", "snapshots", a.run_id),
+    join(st, "private", "citations", a.run_id),
+    join(st, "imports"),
+  ]) rmSync(p, { recursive: true, force: true });
+  assert.ok(existsSync(a.files.run), "fixture: run.json is what survives the interruption");
+  assert.equal(readLedgerIndex(ctxOf(repo)).length, 2, "fixture: the ledger entry survived too");
+
+  const r = await runScript("evidence", ["purge", "--engagement", a.eid, "--yes"], { cwd: repo, env: ENV });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  const { runs, keys } = purgedLine(r.stdout);
+  assert.equal(runs, 1, "the run is still attributable, so the re-run counts it");
+  assert.equal(keys, 1);
+  assert.ok(!existsSync(join(st, "runs", a.run_id)), "runs/<id> gone on the re-run");
+  assert.ok(!existsSync(a.files.baseline));
+  assert.ok(!existsSync(a.files.key));
+  assert.deepEqual(readLedgerIndex(ctxOf(repo)).map((e) => e.run_id), [b.run_id], "A's ledger entry dropped on the re-run");
+  for (const [name, path] of Object.entries(b.files)) assert.ok(existsSync(path), `B's ${name} untouched`);
+  assert.ok(!existsSync(shared.imports));
+});
+
+// A real mid-cleanup failure: `<st>/ledger/` made read-only so removing
+// `ledger/<id>` throws (exit 1 INTERNAL). The attribution record must still
+// be there afterwards — an order that deleted runs/<id> first would have
+// orphaned receipts/, citations/ and the ledger entry beyond purge's reach.
+// chmod is a no-op for this purpose on Windows and for root.
+const CAN_DENY = process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() !== 0;
+test("purge that fails mid-cleanup keeps run.json (attribution) and the ledger entry, so the re-run reaches everything", { skip: !CAN_DENY }, async () => {
+  const { repo, st, a, b } = await twoEngagements();
+  const ledger = join(st, "ledger");
+  chmodSync(ledger, 0o555);
+  try {
+    const r = await runScript("evidence", ["purge", "--engagement", a.eid, "--yes"], { cwd: repo, env: ENV });
+    assert.equal(r.code, 1, `interrupted purge is INTERNAL: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /^PURGED /m, "no success token from a purge that did not finish");
+    assert.ok(existsSync(a.files.run), "runs/<id>/run.json — the attribution record — survives the interruption");
+    assert.ok(existsSync(a.files.receipt), "receipts/<id> not orphaned: still attributable through run.json");
+    assert.ok(existsSync(a.files.citation));
+    assert.ok(existsSync(a.files.snapshot));
+    assert.equal(readLedgerIndex(ctxOf(repo)).length, 2, "ledger index untouched");
+    assert.deepEqual(keysOf(ctxOf(repo), a.eid), [a.key_id], "keys untouched: they come after the run trees");
+  } finally {
+    chmodSync(ledger, 0o755);
+  }
+
+  const again = await runScript("evidence", ["purge", "--engagement", a.eid, "--yes"], { cwd: repo, env: ENV });
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(purgedLine(again.stdout).runs, 1, "the re-run attributes the run and finishes");
+  for (const path of Object.values(a.files)) assert.ok(!existsSync(path), `${path} gone after the re-run`);
+  assert.ok(!existsSync(join(st, "ledger", a.run_id)));
+  assert.ok(!existsSync(join(st, "receipts", a.run_id)));
+  assert.deepEqual(readLedgerIndex(ctxOf(repo)).map((e) => e.run_id), [b.run_id]);
+  for (const [name, path] of Object.entries(b.files)) assert.ok(existsSync(path), `B's ${name} untouched`);
 });
 
 test("cmd-purge imports: no child process of its own, no network, no .gitignore writer (G-5, G-6, G-14)", () => {
