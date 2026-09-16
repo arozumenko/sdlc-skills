@@ -828,3 +828,102 @@ export const consistentRedactedOnly = (n) => `CONSISTENT-REDACTED-ONLY(${require
 export const citationDrifted = (n) => `CITATION-DRIFTED(${requirePositive("citationDrifted", n)})`;
 /** `SCOPE-DRIFTED(<n> files)` — line 2: `n` in-scope files differ from scope.json's per-file record. */
 export const scopeDrifted = (n) => `SCOPE-DRIFTED(${requirePositive("scopeDrifted", n)} files)`;
+
+// --- sign-off (TASK-033; plan §4.1 row `sign-off`, §5 TASK-033; spec §7 closed table, §2 last row, §6.10, §12) ---
+// The verdict line(s) come first, then the seven listings in plan §4.1 order
+// (RUNS, INCOMPLETE, CHANGES-SINCE-BASELINE, EXCLUDED-COVERAGE,
+// UNAUTHENTICATED-APPROVALS, UNADMITTED, DISPOSITIONS). A listing is a header
+// line followed by two-space-indented entries; `not observed` / `not
+// evaluated` headers carry no entries.
+const THREAT_ID = /^T-[0-9]{3}$/;
+const CHANGE_KINDS = Object.freeze(["changed", "added", "removed"]);
+function requireRunId(where, run_id) {
+  if (typeof run_id !== "string" || !RUN_ID_SHAPE.test(run_id)) throw new TypeError(`${where}: run_id must be <12 hex>-<4 digits>, got ${String(run_id)}`);
+  return run_id;
+}
+function requireRunKind(where, kind) {
+  if (!RUN_KIND_LIST.includes(kind)) throw new TypeError(`${where}: kind ${String(kind)} is outside the closed vocabulary`);
+  return kind;
+}
+function requireSeq(where, seq) {
+  if (!Number.isInteger(seq) || seq < 1) throw new TypeError(`${where}: seq must be a positive integer, got ${String(seq)}`);
+  return seq;
+}
+/** `SIGN-OFF: OK` — exit 0: no fail condition of spec §7 holds. */
+export const SIGN_OFF_OK = "SIGN-OFF: OK";
+/** `SIGN-OFF: FAIL(<cause>)[ run=<run_id>]` — one line per fail condition (spec §7 "…"), exit 4; `run_id` names the run for the per-run causes. */
+export function signOffFail(cause, run_id) {
+  if (typeof cause !== "string" || cause.length === 0 || /[\r\n]/.test(cause)) throw new TypeError("signOffFail: cause must be a non-empty one-line token");
+  return run_id === undefined ? `SIGN-OFF: FAIL(${cause})` : `SIGN-OFF: FAIL(${cause}) run=${requireRunId("signOffFail", run_id)}`;
+}
+/** `COVERAGE-INDETERMINATE(<run>)` — the latest assessment's coverage.json carries `indeterminate: true` (D3, P5; US-014 AC-3). */
+export const coverageIndeterminate = (run_id) => `COVERAGE-INDETERMINATE(${requireRunId("coverageIndeterminate", run_id)})`;
+/** `DISPOSITIONS(<threat ids>)` — `sign_off.require_dispositions: all` and these threats are `undisposed` or `planned` (spec §6.10). */
+export function dispositionsBlocking(ids) {
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === "string" && THREAT_ID.test(id))) throw new TypeError("dispositionsBlocking: one or more threat ids (T-nnn) are required");
+  return `DISPOSITIONS(${ids.join(", ")})`;
+}
+/** `RUNS: <n>` — COMMITTED runs of the engagement the ledger lists, each checked in-process. */
+export const runsHeader = (n) => `RUNS: ${requireCount("runsHeader", "n", n)}`;
+/** `  <run_id> seq=<n> kind=<k> <consistency token>[ <drift token>]` — one per COMMITTED run; the drift token only on the latest assessment. */
+export function runsEntry({ run_id, seq, kind, consistency, drift = null }) {
+  requireRunId("runsEntry", run_id);
+  requireSeq("runsEntry", seq);
+  requireRunKind("runsEntry", kind);
+  if (typeof consistency !== "string" || consistency.length === 0) throw new TypeError("runsEntry: consistency token is required");
+  if (drift !== null && (typeof drift !== "string" || drift.length === 0)) throw new TypeError("runsEntry: drift must be a token or null");
+  return `  ${run_id} seq=${seq} kind=${kind} ${consistency}${drift === null ? "" : ` ${drift}`}`;
+}
+/** `INCOMPLETE: <n>` — ledger-listed runs without a COMMITTED marker (spec §6.1; informational). */
+export const incompleteHeader = (n) => `INCOMPLETE: ${requireCount("incompleteHeader", "n", n)}`;
+/** `  <run_id> seq=<n> kind=<k>` — one per incomplete run. */
+export function incompleteEntry({ run_id, seq, kind }) {
+  return `  ${requireRunId("incompleteEntry", run_id)} seq=${requireSeq("incompleteEntry", seq)} kind=${requireRunKind("incompleteEntry", kind)}`;
+}
+/** `CHANGES-SINCE-BASELINE: <n>` — paths whose working-tree content differs from the baseline (spec §2 last row; observed, not attributed). */
+export const changesHeader = (n) => `CHANGES-SINCE-BASELINE: ${requireCount("changesHeader", "n", n)}`;
+/** `CHANGES-SINCE-BASELINE: not observed` — no baseline for the engagement, or its key no longer loads (the reason is on stderr). */
+export const CHANGES_NOT_OBSERVED = "CHANGES-SINCE-BASELINE: not observed";
+/** `  changed|added|removed <path>` — one per changed path. */
+export function changeEntry(kind, relPath) {
+  if (!CHANGE_KINDS.includes(kind)) throw new TypeError(`changeEntry: kind must be one of ${CHANGE_KINDS.join("|")}, got ${String(kind)}`);
+  requireRepoRelative("changeEntry", relPath);
+  return `  ${kind} ${relPath}`;
+}
+/** `EXCLUDED-COVERAGE: ignored=<n>` — git-ignored files under the observed paths, summed (spec §2 last row: the excluded coverage is visible). */
+export const excludedCoverageHeader = (n) => `EXCLUDED-COVERAGE: ignored=${requireCount("excludedCoverageHeader", "n", n)}`;
+/** `EXCLUDED-COVERAGE: not observed` — paired with CHANGES_NOT_OBSERVED. */
+export const EXCLUDED_COVERAGE_NOT_OBSERVED = "EXCLUDED-COVERAGE: not observed";
+/** `  <configured path> ignored=<n>` — one per configured path (scope_paths ∪ product_paths), zeros included. */
+export function excludedCoverageEntry(path, n) {
+  if (typeof path !== "string" || path.length === 0 || /[\r\n]/.test(path)) throw new TypeError("excludedCoverageEntry: path must be a non-empty one-line string");
+  return `  ${path} ignored=${requireCount("excludedCoverageEntry", "n", n)}`;
+}
+/** `UNAUTHENTICATED-APPROVALS: <n>` — the register's one approval bucket (D15, G-8): acceptances, false-positive closures and ack references, all unauthenticated. */
+export const approvalsHeader = (n) => `UNAUTHENTICATED-APPROVALS: ${requireCount("approvalsHeader", "n", n)}`;
+/** `UNAUTHENTICATED-APPROVALS: not observed` — the register is CORRUPT; there is no projection to count. */
+export const APPROVALS_NOT_OBSERVED = "UNAUTHENTICATED-APPROVALS: not observed";
+const APPROVAL_KINDS = Object.freeze(["acceptance", "false_positive", "ack_refs"]);
+/** `  <row_id> status=<status> <kind>[,<kind>]` — one per register row carrying an approval-like record. */
+export function approvalEntry({ id, status, kinds }) {
+  if (typeof id !== "string" || !ROW_ID.test(id)) throw new TypeError(`approvalEntry: id must be R-nnnn, got ${String(id)}`);
+  if (!REGISTER_STATUSES.includes(status)) throw new TypeError(`approvalEntry: status ${String(status)} is outside the closed vocabulary`);
+  if (!Array.isArray(kinds) || kinds.length === 0 || !kinds.every((k) => APPROVAL_KINDS.includes(k))) throw new TypeError(`approvalEntry: kinds must name one or more of ${APPROVAL_KINDS.join("|")}`);
+  return `  ${id} status=${status} ${kinds.join(",")}`;
+}
+/** `UNADMITTED: not evaluated` — the admitted-suite comparison is M3 (TASK-043; US-025 AC-6). */
+export const UNADMITTED_NOT_EVALUATED = "UNADMITTED: not evaluated";
+/** `DISPOSITIONS: not evaluated` — `sign_off.require_dispositions: none`, or no assessment run to read a threat model from. */
+export const DISPOSITIONS_NOT_EVALUATED = "DISPOSITIONS: not evaluated";
+const DISPOSITION_POLICIES = Object.freeze(["executed-or-ticketed", "all"]);
+/** `DISPOSITIONS: <n> undisposed-or-planned policy=<executed-or-ticketed|all>` — the threats of the latest assessment's model still `undisposed` or `planned` (spec §6.10). */
+export function dispositionsHeader(n, policy) {
+  if (!DISPOSITION_POLICIES.includes(policy)) throw new TypeError(`dispositionsHeader: policy must be one of ${DISPOSITION_POLICIES.join("|")}, got ${String(policy)}`);
+  return `DISPOSITIONS: ${requireCount("dispositionsHeader", "n", n)} undisposed-or-planned policy=${policy}`;
+}
+/** `  <threat id> <undisposed|planned>` — one per listed threat. */
+export function dispositionEntry(id, kind) {
+  if (typeof id !== "string" || !THREAT_ID.test(id)) throw new TypeError(`dispositionEntry: id must be T-nnn, got ${String(id)}`);
+  if (kind !== "undisposed" && kind !== "planned") throw new TypeError(`dispositionEntry: kind must be undisposed|planned, got ${String(kind)}`);
+  return `  ${id} ${kind}`;
+}
