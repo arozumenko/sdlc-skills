@@ -231,7 +231,7 @@ test("ingest tracker-readback rows (TASK-017): `READBACK: ok | MISMATCH(<field>)
   assert.throws(() => tokens.readbackMismatch(""), /closed vocabulary/);
 });
 
-test("packet rows (TASK-057): `PACKET <path> sha256=<h> kind=<k> files=<n>`; the subject stub token; the kind copy agrees with packet-core", async () => {
+test("packet rows (TASK-057): `PACKET <path> sha256=<h> kind=<k> files=<n>`; the kind copy agrees with packet-core", async () => {
   const { PACKET_KINDS } = await import("./packet-core.mjs");
   const sha = "a".repeat(64);
   assert.equal(tokens.packetLine({ relPath: ".agents/security-testing/runs/0123456789ab-0001/packets/x.json", sha256: sha, kind: "scope", files: 2 }), `PACKET .agents/security-testing/runs/0123456789ab-0001/packets/x.json sha256=${sha} kind=scope files=2`);
@@ -241,7 +241,15 @@ test("packet rows (TASK-057): `PACKET <path> sha256=<h> kind=<k> files=<n>`; the
   assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: "zz", kind: "scope", files: 0 }), /sha256/);
   assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind: "scope", files: -1 }), /files/);
   assert.throws(() => tokens.packetLine({ relPath: "p.json", sha256: sha, kind: "scope", files: 1.5 }), /files/);
-  assert.equal(tokens.NOT_IMPLEMENTED_SUBJECT_PACKET, "NOT-IMPLEMENTED(TASK-021)");
+  assert.ok(!("NOT_IMPLEMENTED_SUBJECT_PACKET" in tokens), "the TASK-057 stub row left with TASK-021");
+});
+
+test("packet --kind subject rows (TASK-021): `UNVERIFIABLE-SUBJECT(<id>)` over a finding id only", () => {
+  const id = "b".repeat(64);
+  assert.equal(tokens.unverifiableSubject(id), `UNVERIFIABLE-SUBJECT(${id})`);
+  assert.throws(() => tokens.unverifiableSubject("M-001"), /finding id/);
+  assert.throws(() => tokens.unverifiableSubject(id.toUpperCase()), /finding id/);
+  assert.throws(() => tokens.unverifiableSubject(""), /finding id/);
 });
 
 test("gate rows (TASK-019): the two citation states, `GATE accepted=<n> unverifiable=<n> rejected=<n> unlocated=<n>`, CLAIMS-PACKET-MISMATCH(<file>), GATE-EXISTS and gate's own rejection reasons", () => {
