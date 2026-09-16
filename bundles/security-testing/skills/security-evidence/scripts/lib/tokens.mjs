@@ -283,3 +283,18 @@ export function notIgnored(pattern) {
   if (typeof pattern !== "string" || pattern.length === 0 || pattern.includes("\n")) throw new TypeError(`notIgnored: pattern must be a non-empty single line, got ${String(pattern)}`);
   return `NOT-IGNORED(${pattern})`;
 }
+
+// --- scope (TASK-013; plan §4.1 row `scope`, spec §6.2, D18 / P6) -------------
+
+/** `SCOPE-EXISTS` — exit 2: `scope` refuses a run that already has a scope.json (G-10: write-once; retry = new seq). Parallel to `run snapshot`'s SNAPSHOT-EXISTS. */
+export const SCOPE_EXISTS = "SCOPE-EXISTS";
+
+/**
+ * `SCOPE files=<n> ranges=<n> skipped=<n> snapshot=<n>` — the first line of
+ * `scope`; the WROTE line follows. `ranges` is the number of admitted range
+ * entries summed over every file (an empty file admits none), `snapshot` the
+ * number of dirty/untracked review files stored redacted under private/.
+ */
+export function scopeLine({ files, ranges, skipped, snapshot }) {
+  return `SCOPE files=${requireCount("scopeLine", "files", files)} ranges=${requireCount("scopeLine", "ranges", ranges)} skipped=${requireCount("scopeLine", "skipped", skipped)} snapshot=${requireCount("scopeLine", "snapshot", snapshot)}`;
+}
