@@ -1,0 +1,214 @@
+# Security engagement
+
+This file is the engagement record for the `security-testing` bundle. It was
+written by `evidence.mjs engagement init` (step 0) because no
+`.agents/security-testing/engagement.md` existed. **Edit the JSON block below,
+then run `engagement init` again.** Until you do, every command that needs the
+record exits `2 ENGAGEMENT-MISSING` (file absent) or
+`2 ENGAGEMENT-INVALID(<reason>)` (file present, block wrong).
+
+The prose in this file is yours: keep notes, links, the people involved,
+anything. The scripts read **only** the one fenced block tagged
+`json engagement` — there must be exactly one, it must be strict JSON (no
+comments, no trailing commas, no duplicate keys, integers only), and it must
+validate against `security-evidence/references/engagement.schema.json`.
+`run init` snapshots the parsed block into `<run>/engagement.json`, so a run
+always carries the record it was started with.
+
+## The record
+
+```json engagement
+{
+  "engagement_id": "eng-2026-001",
+  "slug": "my-product",
+  "scope_paths": ["src/"],
+  "product_paths": ["src/", "package.json", "package-lock.json"],
+  "targets": {
+    "tracker": ["github.com"],
+    "browser": ["staging.example.com"],
+    "repo": "my-org/my-product"
+  },
+  "base_url": "https://staging.example.com",
+  "execute_project_tests": {
+    "argv": ["npm", "test"],
+    "timeout_s": 600,
+    "install": {
+      "argv": ["npm", "ci"],
+      "allow_tracked_changes": false
+    }
+  },
+  "sign_off": {
+    "require_dispositions": "executed-or-ticketed"
+  },
+  "artifact_policy": {
+    "ledger": "local",
+    "runs": "local",
+    "receipts": "local",
+    "proposals": "local",
+    "handoffs": "local",
+    "imports": "local",
+    "register": "local",
+    "reports": "local",
+    "cases": "local"
+  }
+}
+```
+
+## Field by field
+
+### `engagement_id` (required)
+
+Free-form string. Every artifact envelope, the register anchor
+(`<engagement_id>:<seq>:<chain_sha256>`), the private baseline
+(`private/baseline.<engagement_id>.json`) and `purge --engagement <id>` are
+keyed by it. Pick something stable for the life of the engagement; start a
+new id for a new engagement rather than editing an old one.
+
+### `slug` (required, `^[a-z0-9-]+$`)
+
+Lower-case, digits and hyphens. Used in paths the bundle publishes to:
+`tasks/security-<slug>-admitted/` (the hand-off suite) and
+`.agents/security-testing/handoffs/<slug>.md`.
+
+### `scope_paths` and `product_paths` (required, may be `[]`)
+
+Repo-relative path prefixes (`src/`, `services/api/`) or files
+(`package.json`). Both lists are unions of prefixes; a path is "under" the
+list when it starts with one of them.
+
+- `scope_paths` — what the reviewers look at. `scope` enumerates tracked
+  files under these prefixes (plus anything you `--include`) into
+  `scope.json`; findings must cite files inside it.
+- `product_paths` — what counts as the product. Usually a superset of
+  `scope_paths`: build files, lockfiles, config the review does not read but
+  a change to which would matter.
+
+Together, `scope_paths ∪ product_paths` are the paths the **assessment
+cleanliness check** covers (spec D18, amendment P6). `run init --kind
+assessment` and `scope` require `git status --porcelain -- <scope_paths>
+<product_paths>` to be empty after excluding the bundle's own managed paths
+(`.agents/security-testing/**`, `reports/security/`, `tasks/security-*/`,
+and the managed block in the root `.gitignore`); anything else dirty under
+the assessed paths exits `3 DIRTY-TREE`. Files the engagement itself creates
+— this file, the `knowledge/` templates, the rendered `risk-register.md`,
+the `.gitignore` block — never count as dirt. Citations resolve at
+`head_oid`, which is why the assessed paths must be clean: a citation into
+an uncommitted edit could not be re-validated by anyone else.
+
+The same union is what the **baseline** observes (`engagement init` step 4
+and `sign-off`): a per-path HMAC of every tracked file and every
+non-ignored untracked file under these paths, plus the count of git-ignored
+files per path so the excluded coverage is visible in the sign-off output
+(`CHANGES-SINCE-BASELINE:`, `EXCLUDED-COVERAGE:`). Paths outside the union
+are not observed at all.
+
+`review` and `verify` runs do not require a clean tree; a dirty in-scope
+file in a `review` run is stored as a redacted private snapshot with an HMAC
+of the original.
+
+### `targets` (required: `tracker`, `browser`, `repo`)
+
+The destination and authority policy (spec §6.6), separate from source
+scope. Every host entry is a **bare hostname** with an optional port
+(`^[a-z0-9.-]+(:[0-9]+)?$`): no scheme, no path, no user, lower-case.
+`https://github.com` is rejected; `github.com` and
+`jira.internal.example:8443` are accepted.
+
+- `tracker` — hosts an imported ticket or PR URL may point at (`ingest
+  ticket`, `ingest pr`, `ingest tracker-readback`) and the only hosts a
+  `ticketed` register event may name. A URL on any other host is inert
+  text.
+- `browser` — hosts a QA run report, an audit report or a passive case may
+  reference (`ingest qa-run`, `ingest audit`, `plan admit`); an observation
+  whose environment is elsewhere is recorded as `unknown`.
+- `repo` — the `owner/name` of this repository as the tracker knows it, used
+  when the `tracker` publication profile builds ticket payloads.
+
+### `base_url` (optional)
+
+The full URL (scheme included — this is not a host entry) that admitted
+passive cases are written against and that the `handoff` publication profile
+prints. Its host should appear in `targets.browser`.
+
+### `execute_project_tests` (optional)
+
+The **operator record** for `verify.mjs all`, and the only place a test
+command can come from — argv never comes from a ticket, a PR body, a SARIF
+file or any other imported text. Its authorship is unverified: whoever can
+edit this file decides what `verify` runs, so treat edits to this section
+like edits to CI configuration.
+
+- `argv` — the test command as an argv array, spawned with `shell: false`
+  in a detached worktree of `head_oid`, minimal environment (`PATH HOME LANG
+  TERM=dumb CI=1 NO_COLOR=1`), output capped at 64 KiB and redacted. The
+  first token must be one of `npm npx pnpm yarn node python python3 pytest
+  go cargo mvn ./gradlew gradle make dotnet`; no token may contain shell
+  metacharacters or be `-e`, `--eval`, `-c`, `exec`. Omit the whole key and
+  `verify` records `NO_TEST_SURFACE`.
+- `timeout_s` — integer seconds; default `600`. On expiry the whole process
+  group gets `SIGTERM`, then `SIGKILL` after 5 s, and the tests are
+  `TESTS_INDETERMINATE(timeout)`.
+- `install.argv` — run before the tests (dependency installation). After it
+  runs, every tracked file is compared to `head_oid`; a tracked change makes
+  the tests `TESTS_INDETERMINATE(install-modified-tree)` unless
+  `install.allow_tracked_changes` is `true`, in which case the verdict names
+  the HMAC of the tested tree (`tested_tree=<hmac>`) instead of
+  `same-as-head`. Untracked files the install creates are recorded by count
+  and size only.
+
+### `sign_off` (optional)
+
+`require_dispositions` controls which threat dispositions block `sign-off`:
+
+| value | effect at `sign-off` |
+|---|---|
+| `executed-or-ticketed` | **default** — every `undisposed` or `planned` threat is listed under `DISPOSITIONS:`; the listing is informational and does not fail sign-off. A threat counts as disposed when it is `executed`, `ticketed`, `accepted` or `mitigated`, each relationship validated by `tm-lint check`, not merely present |
+| `all` | any `undisposed` or `planned` threat fails sign-off: `4 DISPOSITIONS(<threat ids>)` |
+| `none` | dispositions are not evaluated (`DISPOSITIONS: not evaluated`); use this for an engagement without a threat model |
+
+Omitting `sign_off` means `executed-or-ticketed`.
+
+### `artifact_policy` (optional)
+
+Every security artifact is local by default: `engagement init` step 1 writes
+a managed block into the root `.gitignore` (between `# security-testing:begin`
+and `# security-testing:end`) with one pattern per artifact directory, and
+step 2 fails (`4 TRACKED(<path>)` / `4 NOT-IGNORED(<path>)`) if git tracks
+or does not ignore any of them. Set a key to `committed` to remove that
+directory's pattern from the block — that is how "commit by policy" works.
+
+| key | pattern removed when `committed` |
+|---|---|
+| `ledger` | `.agents/security-testing/ledger/` |
+| `runs` | `.agents/security-testing/runs/` |
+| `receipts` | `.agents/security-testing/receipts/` |
+| `proposals` | `.agents/security-testing/proposals/` |
+| `handoffs` | `.agents/security-testing/handoffs/` |
+| `imports` | `.agents/security-testing/imports/` |
+| `register` | `.agents/security-testing/register/` |
+| `reports` | `reports/security/` |
+| `cases` | `tasks/security-*/` |
+
+There is **no `private` key**: `.agents/security-testing/private/` holds the
+HMAC keys, citation records, redacted snapshots and the baseline, and can
+never be un-ignored by policy. A record that names `artifact_policy.private`
+is refused with `2 POLICY-INVALID(private)` before anything is written.
+Committing `runs` or `reports` shares redacted artifacts only; original
+bytes never leave `private/`.
+
+This file (`engagement.md`), `risk-register.md` and `threat-model.json` are
+outside the managed block and are committed by your normal policy.
+
+## After editing
+
+```
+node <skills dir>/security-evidence/scripts/evidence.mjs engagement init
+node <skills dir>/security-evidence/scripts/evidence.mjs engagement validate
+```
+
+(`<skills dir>` is where your host installs skills — `.claude/skills/` on
+Claude Code; see the bundle README for the other hosts.)
+
+`init` prints `TEMPLATES:`, `ENGAGEMENT: present`, `IGNORE-BLOCK:`, `KEY:` and
+`BASELINE:` lines; `validate` re-checks the block, the ignore block, tracking,
+the key and the baseline without writing anything.
