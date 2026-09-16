@@ -390,3 +390,13 @@ export function snapshotProposals(n) {
   if (!Number.isInteger(n) || n < 0) throw new TypeError(`snapshotProposals: n must be a non-negative integer, got ${String(n)}`);
   return `SNAPSHOT proposals n=${n}`;
 }
+
+// --- register render (TASK-059; plan §4.3 `render`, spec §6.8 / P5) -----------
+
+/** `RENDER <repo-relative path> rows=<n> seq=<n>` — `register.mjs render` wrote the Markdown view (not an enveloped artifact, so not `WROTE`). */
+export function rendered({ relPath, rows, seq }) {
+  requireRepoRelative("rendered", relPath);
+  if (!Number.isInteger(rows) || rows < 0) throw new TypeError(`rendered: rows must be a non-negative integer, got ${String(rows)}`);
+  if (!Number.isInteger(seq) || seq < 0) throw new TypeError(`rendered: seq must be a non-negative integer, got ${String(seq)}`);
+  return `RENDER ${relPath} rows=${rows} seq=${seq}`;
+}

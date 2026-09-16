@@ -195,6 +195,16 @@ test("purge formatters (TASK-032)", () => {
   assert.throws(() => tokens.tracked("/abs"), /repo-relative/);
 });
 
+test("rendered: `RENDER <repo-relative path> rows=<n> seq=<n>` (TASK-059)", () => {
+  assert.equal(tokens.rendered({ relPath: ".agents/security-testing/risk-register.md", rows: 3, seq: 7 }), "RENDER .agents/security-testing/risk-register.md rows=3 seq=7");
+  assert.equal(tokens.rendered({ relPath: "reports/security/register.md", rows: 0, seq: 0 }), "RENDER reports/security/register.md rows=0 seq=0");
+  assert.throws(() => tokens.rendered({ relPath: "/abs/risk-register.md", rows: 1, seq: 1 }), /repo-relative/);
+  assert.throws(() => tokens.rendered({ relPath: "../risk-register.md", rows: 1, seq: 1 }), /repo-relative/);
+  assert.throws(() => tokens.rendered({ relPath: "x.md", rows: -1, seq: 1 }), /rows/);
+  assert.throws(() => tokens.rendered({ relPath: "x.md", rows: 1, seq: -1 }), /seq/);
+  assert.throws(() => tokens.rendered({ relPath: "x.md", rows: 1.5, seq: 1 }), /rows/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
