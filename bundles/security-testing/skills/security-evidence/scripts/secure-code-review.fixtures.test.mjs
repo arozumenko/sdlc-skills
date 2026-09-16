@@ -19,6 +19,7 @@ import { hmacHex, parseStrict, readArtifact, sha256Hex } from "./canon.mjs";
 import { cleanupAll, git, runScript } from "./fixtures/cli/harness.mjs";
 import { ENV, ST, readyRepo, runDir } from "./fixtures/ingest/setup.mjs";
 import { redactString } from "./redact.mjs";
+import { STANDALONE_SEQUENCE } from "./fixtures/e2e/helpers.mjs";
 import { fixtureRevision, promptSha256 } from "../../secure-code-review/scripts/score-findings.mjs";
 
 after(cleanupAll);
@@ -174,21 +175,6 @@ test("harness.json pins the six fields", () => {
   assert.ok(existsSync(join(SKILL_DIR, "evals", "runs", ".gitkeep")));
   assert.ok(existsSync(join(SKILL_DIR, "evals", "README.md")));
 });
-
-/** The eleven command names of the human-driven two-skill sequence, in the order TASK-038 path (b) runs them. */
-export const STANDALONE_SEQUENCE = Object.freeze([
-  "evidence.mjs engagement init",
-  "evidence.mjs run init",
-  "evidence.mjs scope",
-  "evidence.mjs packet",
-  "evidence.mjs gate",
-  "evidence.mjs coverage",
-  "evidence.mjs receipt validate",
-  "evidence.mjs build-report",
-  "evidence.mjs check",
-  "verify.mjs all",
-  "evidence.mjs sign-off",
-]);
 
 test("SKILL.md standalone section lists the commands in the order of TASK-038 path (b)", () => {
   const md = readFileSync(join(SKILL_DIR, "SKILL.md"), "utf8");
