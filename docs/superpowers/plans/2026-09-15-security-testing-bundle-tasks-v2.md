@@ -1613,3 +1613,16 @@ Reviewer nits from Rio's PASS review of TASK-037 (`task/task-037`), recorded ver
 | TASK-037 follow-up | TASK-037: Dev deviation note miscounts: references/ holds 27 `*.schema.json`, not 28; the shipped SKILL.md schema index names all 27 (the test pins every file present), so only the deviation text is off. |
 | TASK-037 follow-up / TASK-038 | TASK-037: Deviation claim 'the codex target install also exits 0' is not in manifest.test.mjs (only the claude-target seed test runs); the PM-log NOTES.md item is confirmed by the claude run alone, which is what the plan asked for. TASK-038 E2E should cover the other targets if it does not already. |
 | PM (integration) / TASK-052 | TASK-037: PM (integration): task/task-037 is cut at 28ecfde (spec/plan tips), so the two-dot diff is exactly the ten intended files — no merge-base artifact this time. `.claude-plugin/marketplace.json` (hand-curated, still on `factories/` paths) carries no security-testing entry; plan §5 TASK-052 owns catalog rows, not this task. |
+
+### PM log additions (after G19)
+
+Reviewer nits from Rio's PASS review of TASK-038 (`task/task-038`), recorded verbatim.
+
+| Owner | Note |
+|---|---|
+| TASK-038 follow-up | TASK-038: e2e.test.mjs:198 (`offline provisioning` test) provisions a second full path-(a) consumer that `buildPathA` provisions again ~1s later; the provisioning assertions (monorepo byte-equality, cache-clone origin, no https) hold on the pathA fixture too — reuse `pathA()` and drop one installer run. Owner: TASK-038 follow-up, cosmetic. |
+| TASK-038 follow-up | TASK-038: e2e.test.mjs:556 `assert.deepEqual(fixReview, { sha256: fixReview.sha256, … })` self-compares the hash; pin `assert.match(fixReview.sha256, HEX64)` instead so the field is actually checked. Owner: TASK-038 follow-up. |
+| TASK-038 follow-up / TASK-048 | TASK-038: fixtures/e2e/helpers.mjs:187 `commandName` positional heuristic assumes every `--flag` consumes the next token, so a boolean flag followed by a positional (e.g. `check --integrity <path>`) drops the positional; harmless for every spelling the E2E uses (paths precede flags, sub detection is a closed list) but worth a comment or a boolean-flag allowlist before TASK-048 extends the sequence. |
+| TASK-039 / TASK-042 | TASK-038: e2e.test.mjs:636 STUB_TESTED_BY allowlist (lib/cmd-tm-lint.mjs, lib/cmd-plan.mjs) is honest (entry-script import + sibling test checked, stub existence pinned) but is a TL-1 exception: TASK-039 and TASK-042 must delete their row when the real sibling test lands — route as a note into both dispatches. |
+| TASK-037 follow-up / docs | TASK-038: Spec §12 literal 'no original bytes anywhere under .agents/security-testing/' holds until the lead copies the raw SARIF into reserved `<st>/imports/`; the E2E correctly pins `imports/semgrep.sarif` as the sole carrier and every bundle-written file clean. Suggest one README 'Not guaranteed' line (operator raw drops under `imports/` are not redacted) — owner TASK-037 follow-up / docs, not this task. |
+| TASK-027 follow-up / TASK-006 | TASK-038: Dev-reported out-of-ownership leftovers stand as routed: lib/git.test.mjs worktree-retry flake (TASK-027 follow-up) and fixtures/cli/harness.mjs leaking one sec-gitconfig-* dir per importing test file without after(cleanupAll) (TASK-006). Confirmed the E2E itself leaves zero sdlc-offline-* dirs after a full run. |
