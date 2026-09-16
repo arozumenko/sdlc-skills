@@ -1,0 +1,11 @@
+{
+  "id": "kb-path-traversal-join",
+  "kind": "known-bad",
+  "contract": "review",
+  "description": "A route parameter joined onto a fixed uploads directory and streamed back. path.join normalises but does not confine: ../ segments escape UPLOADS. One finding of class path-traversal over the join and the read, with typed source and sink citations; the presence check on line 6 is a control that does not confine.",
+  "packet": {
+    "files": [
+      { "path": "src/files.js", "side": "head", "ranges": [[1, 10]] }
+    ]
+  }
+}

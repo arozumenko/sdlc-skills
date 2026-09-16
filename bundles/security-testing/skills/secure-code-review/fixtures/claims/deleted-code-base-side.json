@@ -1,0 +1,21 @@
+{
+  "scope_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "packet_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "findings": [
+    {
+      "title": "Ownership check requireOwner removed between base and head; deleteAccount is no longer guarded by it",
+      "class": "authz",
+      "priority": "p1",
+      "confidence": 8,
+      "path": "src/auth.js",
+      "side": "base",
+      "lines": [6, 9],
+      "snippet": "export function requireOwner(req, res, next) {\n  if (req.session.userId !== req.params.id) return res.status(403).end();\n  return next();\n}",
+      "cwe": "CWE-285",
+      "description": "The cited lines exist only at base: head's src/auth.js keeps requireUser (authentication) but drops requireOwner (authorisation), and nothing at head replaces the userId-equals-params.id comparison before accounts.remove. The citation is side: base because the evidence is the code that was removed; check --drift skips base citations by design (deleted code has no current counterpart).",
+      "impact": "Any authenticated user can delete any account by id.",
+      "prerequisites": "The route wiring for deleteAccount no longer applies an ownership middleware (verify in the router, outside this packet).",
+      "remediation": "Restore an ownership check before accounts.remove, or apply it at the route."
+    }
+  ]
+}

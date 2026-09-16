@@ -1,0 +1,10 @@
+{
+  "packet_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "declared": [
+    { "path": "src/app.js", "ranges": [[1, 7]] },
+    { "path": "src/auth.js", "ranges": [[1, 8]] },
+    { "path": "src/config.js", "ranges": [[1, 7]] },
+    { "path": "src/pool.js", "ranges": [[1, 11]] },
+    { "path": "src/users.js", "ranges": [[1, 11]] }
+  ]
+}

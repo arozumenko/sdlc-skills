@@ -1,0 +1,19 @@
+{
+  "harness_version": 1,
+  "prompt_sha256": "dd5e70d4caec79b044531e98fb3782f8777407efd47fc4c1445583b714bc534f",
+  "prompt_files": ["SKILL.md", "references/taxonomy.md", "references/refutation-criteria.md", "references/do-not-flag.md", "evals/prompt.md"],
+  "model_id": "claude-sonnet-5",
+  "sampling": { "temperature": 0, "top_p": 1, "max_tokens": 16000 },
+  "thinking": { "type": "adaptive" },
+  "effort": "high",
+  "fixture_revision": "9a5ef6d579486c7a9c3c2b36759fe1f92d5e0afac2020f7f12d59729b7b18969",
+  "output_selection": "first",
+  "matching": {
+    "assertion_exact": true,
+    "class_exact": true,
+    "path_exact": true,
+    "lines": "overlap",
+    "typed_citations_required": true
+  },
+  "notes": "model_id is the security-reviewer agent's `model: sonnet` resolved to the current-generation id. prompt_sha256 and fixture_revision are `node scripts/score-findings.mjs digest`; the fixtures test fails when either drifts from the files on disk."
+}
