@@ -28,6 +28,9 @@ test("formatters", () => {
   assert.throws(() => tokens.notImplemented("M1"), /M2\|M3/);
   assert.equal(tokens.wrote(".agents/security-testing/runs/r/scope.json", "a".repeat(64)), `WROTE .agents/security-testing/runs/r/scope.json sha256=${"a".repeat(64)}`);
   assert.throws(() => tokens.wrote("/abs/path", "a".repeat(64)), /repo-relative/);
+  assert.throws(() => tokens.wrote("../outside.json", "a".repeat(64)), /inside the repo/);
+  assert.throws(() => tokens.wrote("..", "a".repeat(64)), /inside the repo/);
+  assert.equal(tokens.wrote("..hidden/x.json", "a".repeat(64)), `WROTE ..hidden/x.json sha256=${"a".repeat(64)}`, "a name merely starting with dots is a name");
   assert.throws(() => tokens.wrote("x.json", "nope"), /sha256/);
   assert.equal(
     tokens.verdictLine({ verdict: "VERIFIED", finding: "f".repeat(64), base: "b".repeat(40), head: "c".repeat(40), tested_tree: "same-as-head", verify: "d".repeat(64) }),

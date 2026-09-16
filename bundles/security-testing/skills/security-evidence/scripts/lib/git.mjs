@@ -16,7 +16,7 @@
 // Imports only node:*. No clock (G-1), no network (G-14).
 
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 /** git could not run, or a typed helper met a state it cannot report as data. */
 export class GitError extends Error {
@@ -180,7 +180,7 @@ export function blobOid(root, oid, path) {
  * @throws {GitError} when absent
  */
 export function showBytes(root, oid, path) {
-  return must(root, ["cat-file", "blob", `${oid}:${path}`], { encoding: "buffer" }).stdout;
+  return must(root, ["cat-file", "blob", "--end-of-options", `${oid}:${path}`], { encoding: "buffer" }).stdout;
 }
 
 /**
@@ -277,7 +277,7 @@ export function diffUnified(root, base, head, path) {
  * @returns {boolean}
  */
 export function mergeBaseIsAncestor(root, ancestor, descendant) {
-  const r = git(root, ["merge-base", "--is-ancestor", ancestor, descendant]);
+  const r = git(root, ["merge-base", "--is-ancestor", "--end-of-options", ancestor, descendant]);
   if (r.code === 0) return true;
   if (r.code === 1) return false;
   throw new GitError(`git merge-base --is-ancestor failed (${r.code}): ${r.stderr.trim()}`, { code: r.code, stderr: r.stderr });
@@ -285,12 +285,20 @@ export function mergeBaseIsAncestor(root, ancestor, descendant) {
 
 /**
  * Detached checkout of `oid` into `dir` (a new linked work tree).
+ *
+ * `git worktree add` runs the consumer's `post-checkout` hook. The scripts
+ * check out into an OS temp dir to test a fix (TASK-027), and a hook there
+ * would run consumer code with the tree in an undefined state before the
+ * test step's own controls (allowlist, bounded output, minimal env) apply —
+ * so hooks are pointed at a path that cannot exist: `<dir>/.no-hooks` is
+ * inside the not-yet-created work tree, and git treats a missing hook as
+ * no hook. `-c` must precede the subcommand.
  * @param {string} root
  * @param {string} dir absolute, must not exist
  * @param {string} oid
  */
 export function worktreeAdd(root, dir, oid) {
-  must(root, ["worktree", "add", "--detach", "--", dir, oid]);
+  must(root, ["-c", `core.hooksPath=${join(dir, ".no-hooks")}`, "worktree", "add", "--detach", "--", dir, oid]);
 }
 
 /**

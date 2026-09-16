@@ -75,14 +75,19 @@ function now(env) {
  * `<oid>:<path>` against the top level, so a nested root would list one file
  * and hash another, and ctx.rel() would yield `../…` paths. Compared after
  * realpath (macOS /var → /private/var) so a symlinked spelling of the top
- * level is still the top level.
+ * level is still the top level. `realpathSync.native`, not `realpathSync`:
+ * the JS implementation resolves symlinks but keeps the caller's letter
+ * case, while git's toplevel comes from getcwd() and carries the on-disk
+ * spelling — on a case-insensitive file system (APFS, NTFS) `--root ~/Dev/Repo`
+ * for `~/dev/repo` would otherwise fail the equality and refuse a valid
+ * invocation. realpath(3) returns the on-disk spelling, matching git.
  */
 function resolveRoot(flags, cwd) {
   if (flags.root !== undefined) {
     const root = resolve(cwd, flags.root);
     const top = toplevel(root);
     if (top === null) throw new CliError(EXIT.USAGE, NOT_A_WORK_TREE);
-    if (realpathSync(root) !== top) throw usageError("--root", "must be the top level of a git work tree");
+    if (realpathSync.native(root) !== top) throw usageError("--root", "must be the top level of a git work tree");
     return top;
   }
   const top = toplevel(cwd);

@@ -191,6 +191,36 @@ test("diffNameOnly / diffUnified: a ref beginning with `-` is a revision, never 
   assert.throws(() => diffUnified(repo, "--stat", head), (e) => e instanceof GitError);
 });
 
+test("every argv that takes a revision carries --end-of-options (a ref beginning with `-` is data, never a flag)", () => {
+  const src = readFileSync(join(SCRIPTS_DIR, "lib", "git.mjs"), "utf8");
+  const revTaking = ["rev-parse", "cat-file", "diff", "merge-base"];
+  const seen = new Set();
+  for (const line of src.split("\n")) {
+    const m = line.match(/(?:\b(?:git|must)\(\w+,|\bconst argv =)\s*\[\s*"([a-z-]+)"/); // executed argv only, not a GitError's diagnostic argv
+    if (!m || !revTaking.includes(m[1])) continue;
+    if (line.includes('"--show-toplevel"')) continue; // toplevel(): no revision argument
+    seen.add(m[1]);
+    assert.match(line, /"--end-of-options"/, `git ${m[1]} argv without --end-of-options: ${line.trim()}`);
+  }
+  assert.deepEqual([...seen].sort(), revTaking.sort(), "every rev-taking subcommand is covered by the guard");
+});
+
+test("worktreeAdd: the consumer's post-checkout hook does not run in the new work tree", () => {
+  const repo = initRepo();
+  const head = revParse(repo, "HEAD");
+  const hook = join(repo, ".git", "hooks", "post-checkout");
+  mkdirSync(join(repo, ".git", "hooks"), { recursive: true });
+  writeFileSync(hook, "#!/bin/sh\ntouch hook-ran\n", { mode: 0o755 });
+  // Positive control: the hook is live for an ordinary checkout in the repo.
+  fixtureGit(repo, ["checkout", "-q", "--detach", head]);
+  assert.equal(existsSync(join(repo, "hook-ran")), true, "control: post-checkout fires on a plain checkout");
+  const dir = join(tmpDir(), "wt");
+  worktreeAdd(repo, dir, head);
+  assert.equal(existsSync(join(dir, "hook-ran")), false, "the hook must not run for the verify worktree");
+  assert.equal(existsSync(join(dir, ".no-hooks")), false, "nothing is created at the hooks path");
+  worktreeRemove(repo, dir);
+});
+
 test("worktreeAdd / worktreeRemove: detached checkout at an oid, removed cleanly", () => {
   const repo = initRepo();
   const head = revParse(repo, "HEAD");

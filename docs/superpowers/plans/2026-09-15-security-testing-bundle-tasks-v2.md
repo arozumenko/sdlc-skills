@@ -1226,3 +1226,16 @@ Recorded by Max so they are not lost; Rio applies them in place before the named
 | G13 | Add `ticket-payload` and `ta-units` shapes to TASK-005's schema list (payload-only or enveloped — state which); TASK-021 owns `packet --kind subject --type case` and TASK-042 lists `cmd-packet.mjs`; candidate (pre-admission) case file location stated. |
 | G19 | TASK-038 path (a): `register add` before verify pass 2. |
 | now | Stories file: US-030 AC-1 split by milestone; US-024 AC-1 (receipts purged); US-015 receipt type `vulnerability-review`; US-028 four contracts; US-016 AC-2 verify-snapshots; US-004 ten ignore patterns. Alex to amend. |
+
+### Follow-ups from TASK-006 review 2 (Rio, 2026-09-16)
+
+Recorded by the TASK-006 implementer so the file-ownership record is honest and later tasks do not rediscover these mid-task.
+
+| Before | Fix |
+|---|---|
+| G3 (TASK-002 follow-up) | TASK-006 edited `canon.mjs` although its edit list does not name it (G-15): `writeArtifact(path, artifact, {exclusive: true})` — write-once tmp + link + unlink, EEXIST from the kernel — was added, additive, owning `canon.test.mjs` extended, accepted in review 1. Ownership of that option is TASK-002's. |
+| G5 (TASK-012) | The first write-once run-file writer uses `canon.writeArtifact(…, {exclusive: true})` for enveloped artifacts, **not** `fsx.writeExclusive` (raw bytes only: keys, markers). The `ledger/index.lock/` and `<run>/.lock/` locks keep the `fsx` `staleMs` default of 60 s — never lower it (both theft windows are named in the `fsx.mjs` header). Lock dirs live **outside** any tree `fsx.walk()` lists (`<st>/ledger/index.lock/` is fine; a lock under `<run>/` would surface a transient `.probe-*` / `.stale-*` entry in a concurrent manifest build). |
+| G3 (TASK-007) | `ctx.engagement()` delegates to `engagement.parseEngagementMd` in one line; TASK-007 **deletes** `ctx.parseEngagementBlock`, the `ENGAGEMENT_FENCE` regex and the `POLICY-INVALID(private)` check from `ctx.mjs` — one parser, not two. |
+| G4 (TASK-028) | `register.mjs` usage text carries exit-4 prose (`TRANSITION-REJECTED(<event>: <from>)` / `--subject-equivalent …`) written before `tokens.mjs` had the rows; TASK-028 adds the rows and rewrites the usage line from them. |
+| G14 (TASK-027) | Decided in TASK-006 review 2: `git.worktreeAdd` runs `-c core.hooksPath=<dir>/.no-hooks worktree add --detach`, so the consumer's `post-checkout` hook never runs in the verify worktree (guarded by `git.test.mjs`). TASK-027 relies on this and must not re-enable hooks; consumer code runs only through the `tests` step's controls. |
+| G16 (TASK-039) | The M1 `tm-lint check` stub prints the invented `2 SCHEMA-INVALID(threat-model: …)`; TASK-039 replaces it with the §4.4 spelling `4 TM-INVALID(<threat\|element>: <reason>)` and drops the `schemaInvalid` call from `cmd-tm-lint.mjs` (`cmd-plan.mjs` keeps `SCHEMA-INVALID(proposal: …)` until the plan task that owns `admit` spells its own). |

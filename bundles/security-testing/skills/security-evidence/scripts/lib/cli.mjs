@@ -40,7 +40,9 @@ export function parseGlobalFlags(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--") {
-      rest.push(...argv.slice(i + 1));
+      // Forwarded, not swallowed: the command's own parser (lib/argv.mjs)
+      // honours `--` too, so a positional beginning with `--` can reach it.
+      rest.push("--", ...argv.slice(i + 1));
       break;
     }
     if (arg === "--help" || arg === "-h") {

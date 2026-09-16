@@ -58,6 +58,11 @@ export function wrote(relPath, sha256) {
   if (typeof relPath !== "string" || relPath.length === 0 || relPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(relPath)) {
     throw new TypeError(`wrote: path must be repo-relative, got ${String(relPath)}`);
   }
+  // ctx.rel() yields `../…` for a path outside root (or a symlinked spelling
+  // of root); a WROTE line must never name a file outside the consumer repo.
+  if (relPath === ".." || relPath.startsWith("../")) {
+    throw new TypeError(`wrote: path must be inside the repo, got ${String(relPath)}`);
+  }
   if (!SHA256.test(sha256)) throw new TypeError(`wrote: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
   return `WROTE ${relPath} sha256=${sha256}`;
 }

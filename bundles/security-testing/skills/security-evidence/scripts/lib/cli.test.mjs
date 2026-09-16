@@ -27,7 +27,7 @@ test("parseGlobalFlags: --root/--actor/--quiet/--help anywhere; `--` ends flag p
     rest: ["scope", "--run", "x"],
   });
   assert.deepEqual(parseGlobalFlags(["check", "-h"]).flags.help, true);
-  assert.deepEqual(parseGlobalFlags(["check", "--", "--root", "kept"]).rest, ["check", "--root", "kept"]);
+  assert.deepEqual(parseGlobalFlags(["check", "--", "--root", "kept"]).rest, ["check", "--", "--root", "kept"], "the separator is forwarded to the command parser");
   assert.deepEqual(parseGlobalFlags([]).rest, []);
   assert.throws(() => parseGlobalFlags(["--root"]), (e) => e instanceof CliError && e.code === 2 && /--root/.test(e.token));
   assert.throws(() => parseGlobalFlags(["--actor", "--quiet"]), (e) => e instanceof CliError && e.code === 2);

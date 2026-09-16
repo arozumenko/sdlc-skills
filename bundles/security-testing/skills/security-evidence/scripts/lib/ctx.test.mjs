@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cleanupAll, initRepo, tmpDir, SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
 import { artifactId, makeEnvelope, parseStrict, writeArtifact } from "../canon.mjs";
@@ -81,6 +81,21 @@ test("--root must be the top level of a work tree (TL-2): a nested dir ⇒ USAGE
   assert.equal(dot.rel(join(repo, "pkg", "src", "app.js")), "pkg/src/app.js");
   const viaSymlinkFreePath = createContext({ root: join(repo, "pkg", "..") }, { cwd: tmpDir(), env: {} });
   assert.equal(viaSymlinkFreePath.root, repo, "a path that normalises to the top level is the top level");
+});
+
+test("--root spelled with a different letter case is still the top level on a case-insensitive fs (realpathSync.native, not realpathSync)", () => {
+  const repo = initRepo();
+  const swapped = repo.replace(/sec-repo-/, "SEC-REPO-");
+  assert.notEqual(swapped, repo, "the fixture prefix must be present to case-swap");
+  if (existsSync(swapped)) {
+    // APFS / NTFS: git's toplevel is the on-disk spelling; the JS realpathSync
+    // would keep the caller's case and refuse this valid invocation.
+    const ctx = createContext({ root: swapped }, { cwd: tmpDir(), env: {} });
+    assert.equal(ctx.root, repo);
+  } else {
+    // case-sensitive fs: the swapped spelling does not exist ⇒ not a work tree
+    assert.throws(() => createContext({ root: swapped }, { cwd: tmpDir(), env: {} }), (e) => e instanceof CliError && e.code === 2 && e.token === "NOT-A-WORK-TREE");
+  }
 });
 
 test("root = --root or the toplevel of cwd; st = <root>/.agents/security-testing; rel()/abs() are repo-relative", () => {

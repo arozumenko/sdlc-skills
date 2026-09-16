@@ -16,11 +16,22 @@
 // the others see ENOENT — nobody can rm a lock a rival just re-created.
 // Consequence, by design: a *legitimate* holder that keeps the lock for more
 // than 60 s (staleMs) will have it stolen; keep critical sections short or
-// raise staleMs for the call. Staleness is judged with the
+// raise staleMs for the call. A second, narrower window: between isStale()
+// judging the lock abandoned and renameSync() taking it, the old holder can
+// release and a new holder re-take it — the mtime is then fresh but the
+// decision was already made, and the new holder is stolen from. Both windows
+// shrink with a long staleMs and short critical sections; callers must not
+// lower staleMs (TASK-012's ledger lock included). Staleness is judged with the
 // file system's clock — the mtime of a probe file written next to the lock —
 // so this module never reads the wall clock (G-1 keeps that read inside
 // ctx.now()). Elapsed time for the timeout is `performance.now()`, a
 // monotonic counter, not a clock.
+//
+// Transient names this module creates beside a lock or a target file:
+// `<lockDir>.probe-*` (fsNowMs), `<lockDir>.stale-*` (reclaim) and the
+// writeAtomic tmp file. walk() does not hide them — a manifest built
+// concurrently would list one — so keep lock dirs outside walked trees
+// (`<st>/ledger/index.lock/` is fine; a lock under `<run>/` is not).
 //
 // Imports only node:*. No child process (G-6), no network (G-14).
 
