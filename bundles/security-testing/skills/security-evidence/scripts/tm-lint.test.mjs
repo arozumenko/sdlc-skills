@@ -9,6 +9,12 @@ after(cleanupAll);
 const OK_MODEL = join(SCRIPTS_DIR, "fixtures", "schemas", "threat-model.ok.json");
 const BAD_MODEL = join(SCRIPTS_DIR, "fixtures", "schemas", "threat-model.bad.json");
 
+/** Copy a schema fixture into the repo (inputs must live under root) and return its repo-relative name. */
+function modelIn(repo, fixture, name = "tm.json") {
+  writeFileSync(join(repo, name), readFileSync(fixture));
+  return name;
+}
+
 test("no command ⇒ usage, exit 2", async () => {
   const r = await runScript("tm-lint", [], { cwd: tmpDir() });
   assert.equal(r.code, 2);
@@ -42,7 +48,7 @@ test("check without --run ⇒ usage error, exit 2", async () => {
 
 test("tm-lint check on a schema-invalid model ⇒ exit 2 naming the schema error before NOT-IMPLEMENTED", async () => {
   const repo = initRepo();
-  const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", BAD_MODEL], { cwd: repo });
+  const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", modelIn(repo, BAD_MODEL)], { cwd: repo });
   assert.equal(r.code, 2);
   const lines = r.stdout.trimEnd().split("\n");
   assert.equal(lines[0], "SCHEMA-INVALID(threat-model: $.elements[0].id: does not match pattern ^E-[0-9]{3}$)");
@@ -51,9 +57,29 @@ test("tm-lint check on a schema-invalid model ⇒ exit 2 naming the schema error
 
 test("check on a schema-valid model ⇒ NOT-IMPLEMENTED(M2), exit 2 (M1 ships shape only)", async () => {
   const repo = initRepo();
-  const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", OK_MODEL], { cwd: repo });
+  const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", modelIn(repo, OK_MODEL)], { cwd: repo });
   assert.equal(r.code, 2);
   assert.equal(r.stdout, "NOT-IMPLEMENTED(M2)\n");
+});
+
+test("check --model <relative> from a nested cwd reads the file the user pointed at (cwd-relative, not root-relative)", async () => {
+  const repo = initRepo();
+  mkdirSync(join(repo, "sub"));
+  modelIn(repo, OK_MODEL, join("sub", "tm.json"));
+  writeFileSync(join(repo, "tm.json"), "{not json", "utf8"); // a root-relative resolution would read this one
+  const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", "tm.json"], { cwd: join(repo, "sub") });
+  assert.equal(r.stdout, "NOT-IMPLEMENTED(M2)\n", "the valid model under sub/ was read");
+  assert.equal(r.code, 2);
+});
+
+test("check --model outside the work tree ⇒ USAGE, exit 2 — an absolute path elsewhere and a relative climb alike", async () => {
+  const repo = initRepo();
+  const abs = await runScript("tm-lint", ["check", "--run", "abc", "--model", OK_MODEL], { cwd: repo });
+  assert.equal(abs.code, 2);
+  assert.equal(abs.stdout, `USAGE(check: cannot read ${OK_MODEL} (outside the work tree))\n`);
+  const climb = await runScript("tm-lint", ["check", "--run", "abc", "--model", "../tm.json"], { cwd: repo });
+  assert.equal(climb.code, 2);
+  assert.equal(climb.stdout, "USAGE(check: cannot read ../tm.json (outside the work tree))\n");
 });
 
 test("check defaults --model to <st>/threat-model.json and validates it when present", async () => {

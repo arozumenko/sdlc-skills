@@ -34,6 +34,18 @@ test("unknown command ⇒ exit 2", async () => {
   assert.match(r.stderr, /unknown command "execute"/);
 });
 
+test("admit / propose refuse an input file outside the work tree with USAGE (inputs resolve against cwd, must lie under root)", async () => {
+  const repo = initRepo();
+  const elsewhere = tmpDir();
+  const proposal = proposalMd(elsewhere, OK_PROPOSAL);
+  const propose = await runScript("plan", ["propose", "--run", "abc", proposal], { cwd: repo });
+  assert.equal(propose.code, 2);
+  assert.equal(propose.stdout, `USAGE(propose: cannot read ${proposal} (outside the work tree))\n`, "the echoed path must survive redaction (prose leads, path follows)");
+  const admit = await runScript("plan", ["admit", "--run", "abc", "../case.md"], { cwd: repo });
+  assert.equal(admit.code, 2);
+  assert.equal(admit.stdout, "USAGE(admit: cannot read ../case.md (outside the work tree))\n");
+});
+
 test("admit validates argv, then NOT-IMPLEMENTED(M3)", async () => {
   const repo = initRepo();
   writeFileSync(join(repo, "case.md"), "# case\n");

@@ -16,7 +16,7 @@
 // Imports only node:*. No clock (G-1), no network (G-14).
 
 import { execFileSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 /** git could not run, or a typed helper met a state it cannot report as data. */
 export class GitError extends Error {
@@ -256,7 +256,10 @@ export function diffNameOnly(root, base, head, { paths = [] } = {}) {
 
 /**
  * Unified diff between two commits, optionally for one path. Colour, external
- * diff drivers and textconv are off so the output is the bytes git compares.
+ * diff drivers and textconv are off so the output is the bytes git compares;
+ * the `a/` `b/` header prefixes and the short submodule format are pinned so
+ * a consumer's `diff.noprefix`, `diff.mnemonicPrefix` or `diff.submodule`
+ * cannot change the `+++ b/<path>` line or the hunk body a parser keys on.
  * @param {string} root
  * @param {string} base
  * @param {string} head
@@ -264,7 +267,7 @@ export function diffNameOnly(root, base, head, { paths = [] } = {}) {
  * @returns {string}
  */
 export function diffUnified(root, base, head, path) {
-  const argv = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--end-of-options", base, head];
+  const argv = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", "--submodule=short", "--end-of-options", base, head];
   if (path !== undefined) argv.push("--", path);
   return must(root, argv).stdout;
 }
@@ -298,6 +301,9 @@ export function mergeBaseIsAncestor(root, ancestor, descendant) {
  * @param {string} oid
  */
 export function worktreeAdd(root, dir, oid) {
+  // A relative core.hooksPath is resolved by git against the work tree, so
+  // only an absolute `dir` makes `<dir>/.no-hooks` provably non-existent.
+  if (!isAbsolute(dir)) throw new TypeError(`worktreeAdd: dir must be absolute, got ${dir}`);
   must(root, ["-c", `core.hooksPath=${join(dir, ".no-hooks")}`, "worktree", "add", "--detach", "--", dir, oid]);
 }
 

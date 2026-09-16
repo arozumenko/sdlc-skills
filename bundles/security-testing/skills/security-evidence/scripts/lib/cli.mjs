@@ -26,6 +26,11 @@ import { CliError, EXIT, exitCodeFor, usageError } from "./exit.mjs";
 export { parseCommandArgv } from "./argv.mjs";
 import { redactString } from "../redact.mjs";
 
+// Known limitation, noted rather than fixed (TASK-006 review 3): the global
+// value flags are consumed wherever they appear, including as the *value* of
+// a command flag — `register add --title --root` swallows the next token as
+// --root's value. A title spelled `--root` is pathological; `--` before the
+// command argv is the escape hatch (see below).
 const VALUE_FLAGS = Object.freeze(["--root", "--actor"]);
 
 /**

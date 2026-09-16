@@ -1,8 +1,8 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupAll, initRepo, tmpDir } from "../fixtures/cli/harness.mjs";
+import { cleanupAll, initRepo, runScript, tmpDir, SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
 import { IntegrityError } from "../canon.mjs";
 import { CliError } from "./exit.mjs";
 import { main, parseGlobalFlags } from "./cli.mjs";
@@ -116,6 +116,20 @@ test("main() never rejects: a non-CliError raised before run() (command loader, 
   assert.equal(await main(app(async () => 0), ["--root", join(repo, "pkg"), "foo"], { cwd: repo, env: {}, ...s }), 2);
   assert.equal(s.stdout.text, "USAGE(--root: must be the top level of a git work tree)\n");
   assert.equal(s.stderr.text, "");
+});
+
+test("every entry script's --help prints its USAGE literal byte-for-byte: no redaction rule may fire on static usage text (G-4 stays absolute; the text is reworded instead)", async () => {
+  const cwd = tmpDir();
+  for (const name of ["evidence", "verify", "register", "tm-lint", "plan"]) {
+    const src = readFileSync(join(SCRIPTS_DIR, `${name}.mjs`), "utf8");
+    const m = src.match(/^const USAGE = `([\s\S]*?)`;$/m);
+    assert.ok(m, `${name}.mjs: USAGE literal found`);
+    const r = await runScript(name, ["--help"], { cwd });
+    assert.equal(r.code, 0, `${name} --help exit`);
+    assert.doesNotMatch(r.stdout, /<REDACTED:/, `${name}.mjs --help: a redaction rule fired on the usage text — reword the example`);
+    assert.equal(r.stdout, m[1], `${name}.mjs --help must equal its USAGE literal`);
+    assert.equal(r.stderr, "", `${name} --help is silent on stderr`);
+  }
 });
 
 test("the subcommand stays at the head of the command argv; the cmd module routes it", async () => {

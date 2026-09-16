@@ -8,7 +8,7 @@ const USAGE = `usage: verify.mjs [--root <dir>] [--actor <name>] [--quiet] <comm
 commands
   all --finding <id> --base <oid> --head <oid> [--receipts <dir>] [--timeout-s <n>]
         allocate a verify-kind run, execute steps 1-6a, evaluate, write <run>/verify.json,
-        build the verify report; last line: VERDICT <token> finding=<id> base=<oid> head=<oid> tested_tree=<hmac|same-as-head> verify=<sha256>
+        build the verify report; last line: VERDICT <verdict> finding=<id> base=<oid> head=<oid> tested_tree=<hmac|same-as-head> verify=<sha256>
   evaluate <verify.json> | --raw <json>
         pure verdict function over recorded results; prints {verdict, refound_observed, ack_refs, events}
 

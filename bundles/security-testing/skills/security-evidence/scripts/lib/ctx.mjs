@@ -3,7 +3,7 @@
 //   ctx = {
 //     root, st, cwd, actor, quiet,
 //     now()            ISO-8601 — SECURITY_EVIDENCE_NOW when set (TL-11); the only clock read in scripts/ (G-1)
-//     engagement()     lazy: <st>/engagement.md's ```json engagement block, parseStrict + schema (TL-5); cached
+//     engagement()     lazy: engagement.parseEngagementMd over <st>/engagement.md (TL-5; TASK-007 owns the parser); cached
 //     key()            lazy: {key_id, bytes} of private/keys/current, or null (TL-9); cached
 //     keyById(id)      {key_id, bytes} or null
 //     toolVersion()    scripts/version.json → tool_version (P5; the only reader)
@@ -11,8 +11,20 @@
 //     out(line)        stdout result token, one line, redacted (G-4)
 //     wrote(path, a)   prints `WROTE <rel> sha256=<a.envelope.self_sha256>` after checking `a` is what is on disk
 //     writeArtifact()  canon.writeArtifact + wrote(), so a caller cannot print the wrong identity
-//     rel(p) / abs(p)  repo-relative posix path / absolute path under root
+//     rel(p) / abs(p)  repo-relative posix path / absolute path under root — for repo-LAYOUT
+//                      paths the scripts spell themselves (<st>/…, ledger/…), never for argv
+//     input(cmd, p)    absolute path of a file the USER typed on the command line: resolved
+//                      against the invocation cwd (what the user pointed at), then required
+//                      to lie inside root — outside ⇒ USAGE(<cmd>: cannot read <p> (outside the work tree))
 //   }
+//
+// The two path bases, stated once so every command picks the same one:
+//   abs()   root-relative — the scripts' own layout is spelled relative to the
+//           consumer root whatever directory the user invoked from;
+//   input() cwd-relative — `--model tm.json` from repo/sub/ means repo/sub/tm.json,
+//           exactly as every other CLI reads a relative argument. Inputs must
+//           still live under root: the artifacts record inputs by repo-relative
+//           path and a file outside the work tree has no such name.
 //
 // Every string that leaves the process passes redact.mjs here (G-4): out()
 // and log() are the only writers to stdout/stderr — a `console.log` anywhere
@@ -30,10 +42,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactId, parseStrict, readArtifact, writeArtifact as canonWriteArtifact } from "../canon.mjs";
 import { redactString } from "../redact.mjs";
-import { validate } from "./schema.mjs";
+import { parseEngagementMd } from "./engagement.mjs";
 import { toplevel } from "./git.mjs";
 import { CliError, EXIT, usageError } from "./exit.mjs";
-import { ENGAGEMENT_MISSING, NOT_A_WORK_TREE, POLICY_INVALID_PRIVATE, engagementInvalid, inconsistent, wrote as wroteToken } from "./tokens.mjs";
+import { ENGAGEMENT_MISSING, NOT_A_WORK_TREE, inconsistent, wrote as wroteToken } from "./tokens.mjs";
 
 const SCRIPTS_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 export const VERSION_PATH = join(SCRIPTS_DIR, "version.json");
@@ -41,7 +53,6 @@ export const ST_REL = join(".agents", "security-testing");
 
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const KEY_ID = /^k[0-9a-f]{12}$/;
-const ENGAGEMENT_FENCE = /^```json engagement[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gm;
 
 function redactLine(s) {
   return redactString(s).text;
@@ -96,32 +107,6 @@ function resolveRoot(flags, cwd) {
 }
 
 /**
- * Parse the TL-5 machine record out of engagement.md: exactly one fenced
- * ```json engagement block, read with parseStrict, validated against the
- * engagement schema; `artifact_policy.private` is refused first (TL-13).
- * @param {string} text
- * @returns {object}
- * @throws {CliError} 2 ENGAGEMENT-INVALID(...) | POLICY-INVALID(private)
- */
-export function parseEngagementBlock(text) {
-  const blocks = [...text.matchAll(ENGAGEMENT_FENCE)].map((m) => m[1]);
-  if (blocks.length === 0) throw new CliError(EXIT.USAGE, engagementInvalid("no ```json engagement block"));
-  if (blocks.length > 1) throw new CliError(EXIT.USAGE, engagementInvalid(`${blocks.length} json engagement blocks; exactly one is allowed`));
-  let record;
-  try {
-    record = parseStrict(blocks[0]);
-  } catch (err) {
-    throw new CliError(EXIT.USAGE, engagementInvalid(redactLine(err.message)), { cause: err });
-  }
-  if (record !== null && typeof record === "object" && !Array.isArray(record) && record.artifact_policy && typeof record.artifact_policy === "object" && Object.hasOwn(record.artifact_policy, "private")) {
-    throw new CliError(EXIT.USAGE, POLICY_INVALID_PRIVATE);
-  }
-  const errors = validate("engagement", record);
-  if (errors.length) throw new CliError(EXIT.USAGE, engagementInvalid(redactLine(errors[0])));
-  return record;
-}
-
-/**
  * Build the command context.
  * @param {{root?: string, actor?: string, quiet?: boolean}} flags global flags (plan §3.1)
  * @param {{cwd?: string, env?: NodeJS.ProcessEnv, stdout?: {write(s: string): unknown}, stderr?: {write(s: string): unknown}}} [io]
@@ -143,6 +128,22 @@ export function createContext(flags = {}, { cwd = process.cwd(), env = process.e
     return sep === "/" ? r : r.split(sep).join("/");
   };
   const abs = (p) => (isAbsolute(p) ? p : resolve(root, p));
+
+  // realpath(3) once so a symlinked spelling of cwd (macOS /var → /private/var)
+  // compares against root — itself git's realpath'd toplevel — like with like.
+  let inputBase;
+  const input = (command, p) => {
+    if (typeof command !== "string" || command === "") throw new TypeError("ctx.input: command name is required");
+    if (typeof p !== "string" || p === "") throw usageError(command, "a file path is required");
+    inputBase ??= realpathSync.native(cwd);
+    const target = resolve(inputBase, p);
+    const inside = relative(root, target);
+    // Prose first, path second: a token whose value *starts* with a long
+    // absolute path reads as `<cmd>: <high-entropy>` to redact.mjs (G-4) and
+    // would leave the process as <REDACTED:high-entropy-assign>.
+    if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) throw usageError(command, `cannot read ${p} (outside the work tree)`);
+    return target;
+  };
 
   const out = (line) => {
     if (typeof line !== "string") throw new TypeError("ctx.out: line must be a string");
@@ -184,14 +185,14 @@ export function createContext(flags = {}, { cwd = process.cwd(), env = process.e
 
   const engagement = () => {
     if (engagementCache !== undefined) return engagementCache;
-    let text;
+    let bytes;
     try {
-      text = readFileSync(join(st, "engagement.md"), "utf8");
+      bytes = readFileSync(join(st, "engagement.md"));
     } catch (err) {
       if (err.code === "ENOENT") throw new CliError(EXIT.USAGE, ENGAGEMENT_MISSING);
       throw err;
     }
-    engagementCache = parseEngagementBlock(text);
+    engagementCache = parseEngagementMd(bytes);
     return engagementCache;
   };
 
@@ -240,5 +241,6 @@ export function createContext(flags = {}, { cwd = process.cwd(), env = process.e
     writeArtifact,
     rel,
     abs,
+    input,
   });
 }

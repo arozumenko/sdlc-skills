@@ -18,6 +18,15 @@
 //   single home of that classification; `check`, `sign-off`, `run snapshot`
 //   and the dispatcher's catch all call it rather than re-deriving it.
 //
+//   The dispatcher cannot tell a CanonError from readArtifact (integrity ⇒ 5)
+//   apart from a CanonError from parseStrict over a USER-SUPPLIED input file
+//   (malformed input ⇒ 2): both carry the same name. So every command must
+//   catch parse errors over its own inputs (`--model`, `<proposal.md>`,
+//   `--raw`, `--claims`, an ingested report) and turn them into its exit-2
+//   token itself; only reads of the bundle's own artifacts may let a
+//   CanonError escape to the dispatcher. cmd-tm-lint / cmd-plan show the
+//   shape (`try { parseStrict } catch { ctx.out(<token>); return EXIT.USAGE }`).
+//
 // Classification is by `err.name` only. canon.mjs sets `this.name` on both
 // classes, and importing canon here (→ redact.mjs → rules read from disk at
 // import) would make every pure core that throws a CliError pull crypto+fs

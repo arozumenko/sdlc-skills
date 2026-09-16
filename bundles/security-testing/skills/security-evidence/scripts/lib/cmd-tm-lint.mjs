@@ -9,6 +9,10 @@
 //   check  --run <id> [--model <path>=<st>/threat-model.json]
 //   render --run <id>
 //
+// `--model <path>` is a user-typed path: ctx.input() resolves it against the
+// invocation cwd and refuses a file outside the work tree (USAGE). The
+// default `<st>/threat-model.json` is absolute under root and passes through.
+//
 // Exports one `{run(argv, ctx)}` per subcommand; the entry script's table
 // picks the one it dispatches to.
 
@@ -28,13 +32,13 @@ import { notImplemented, schemaInvalid } from "./tokens.mjs";
  * @param {object} ctx
  * @param {string} command for the USAGE token
  * @param {string} schemaName
- * @param {string} path
+ * @param {string} path as the user typed it (cwd-relative) or absolute
  * @returns {number | null}
  */
 export function validateJsonFile(ctx, command, schemaName, path) {
   let bytes;
   try {
-    bytes = readFileSync(ctx.abs(path));
+    bytes = readFileSync(ctx.input(command, path));
   } catch (err) {
     if (err.code === "ENOENT" || err.code === "EISDIR" || err.code === "EACCES") throw usageError(command, `cannot read ${path}`);
     throw err;

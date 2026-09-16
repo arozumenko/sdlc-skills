@@ -53,8 +53,14 @@ test("every child process is spawned with shell:false and an argv array", () => 
       assert.doesNotMatch(m[3].trim(), /^`/, `${rel}: template literal argv in ${m[1]}`);
       assert.doesNotMatch(m[3].trim(), /^["']/, `${rel}: string argv in ${m[1]}`);
     }
-    // G-14: no network anywhere under scripts/
-    assert.doesNotMatch(src, /\bfetch\s*\(|["']node:https?["']|["']https?["']|["']node:net["']|["']node:dns["']/, `${rel}: network API`);
+    // G-14: no network anywhere under scripts/. Import specifiers are checked
+    // as specifiers and the body with its string literals blanked, so a test
+    // that names the banned APIs in its own guard list is not a violation.
+    for (const m of src.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      assert.doesNotMatch(m[1], /^(?:node:)?(?:https?|net|dns)$/, `${rel}: network import ${m[1]}`);
+    }
+    const body = src.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, '""');
+    assert.doesNotMatch(body, /\bfetch\s*\(/, `${rel}: network API`);
   }
 });
 
@@ -219,6 +225,33 @@ test("worktreeAdd: the consumer's post-checkout hook does not run in the new wor
   assert.equal(existsSync(join(dir, "hook-ran")), false, "the hook must not run for the verify worktree");
   assert.equal(existsSync(join(dir, ".no-hooks")), false, "nothing is created at the hooks path");
   worktreeRemove(repo, dir);
+});
+
+test("worktreeAdd refuses a relative dir: a relative core.hooksPath would resolve against the work tree", () => {
+  const repo = initRepo();
+  const head = revParse(repo, "HEAD");
+  assert.throws(() => worktreeAdd(repo, "wt", head), /must be absolute/);
+  assert.doesNotMatch(fixtureGit(repo, ["worktree", "list"]), /wt/, "nothing was created");
+});
+
+test("diffUnified pins the a/ b/ header prefixes against a consumer's diff.noprefix / diff.mnemonicPrefix", () => {
+  const repo = initRepo();
+  const base = revParse(repo, "HEAD");
+  writeFileSync(join(repo, "src", "app.js"), "export const a = 2;\n");
+  fixtureGit(repo, ["commit", "-qam", "change"]);
+  const head = revParse(repo, "HEAD");
+  const pinned = /^--- a\/src\/app\.js\n\+\+\+ b\/src\/app\.js$/m;
+  assert.match(diffUnified(repo, base, head, "src/app.js"), pinned, "default config");
+  fixtureGit(repo, ["config", "diff.noprefix", "true"]);
+  assert.match(fixtureGit(repo, ["diff", base, head]), /^--- src\/app\.js$/m, "control: the repo config does change plain git diff");
+  assert.match(diffUnified(repo, base, head, "src/app.js"), pinned, "diff.noprefix=true");
+  fixtureGit(repo, ["config", "diff.noprefix", "false"]);
+  // mnemonicPrefix only relabels sides that are the index or the work tree
+  // (i/ w/ c/); commit-vs-commit stays a/ b/ today — pinned regardless.
+  fixtureGit(repo, ["config", "diff.mnemonicPrefix", "true"]);
+  assert.match(diffUnified(repo, base, head, "src/app.js"), pinned, "diff.mnemonicPrefix=true");
+  fixtureGit(repo, ["config", "diff.submodule", "log"]);
+  assert.match(diffUnified(repo, base, head, "src/app.js"), pinned, "diff.submodule=log leaves a plain file diff alone");
 });
 
 test("worktreeAdd / worktreeRemove: detached checkout at an oid, removed cleanly", () => {

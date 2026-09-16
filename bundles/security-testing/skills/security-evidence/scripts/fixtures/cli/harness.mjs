@@ -8,6 +8,14 @@
 //   tmpDir(prefix?)                    → mkdtemp under os.tmpdir()
 //   cleanupAll()                       → removes every dir tmpDir/initRepo created
 //   SCRIPTS_DIR                        → absolute path of scripts/
+//   HERMETIC_GITCONFIG                 → the empty global config every child sees
+//
+// Hermetic git: every git the harness spawns — its own `git()` and the five
+// scripts under test (lib/git.mjs whitelists GIT_CONFIG_GLOBAL through) —
+// runs with GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL pointing at an empty
+// file the harness owns, so a developer's ~/.gitconfig (core.hooksPath,
+// commit.gpgsign, diff.noprefix, a malformed line …) can never change what a
+// test observes. The suite's verdict must not depend on the machine.
 
 import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -18,6 +26,10 @@ import { fileURLToPath } from "node:url";
 export const SCRIPTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const created = [];
+
+export const HERMETIC_GITCONFIG = join(mkdtempSync(join(tmpdir(), "sec-gitconfig-")), "gitconfig");
+writeFileSync(HERMETIC_GITCONFIG, "");
+created.push(dirname(HERMETIC_GITCONFIG));
 
 export function tmpDir(prefix = "sec-cli-") {
   // realpath: on macOS tmpdir() is a symlink (/var → /private/var) and git
@@ -38,6 +50,7 @@ const GIT_ENV = {
   LC_ALL: "C",
   TERM: "dumb",
   GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: HERMETIC_GITCONFIG,
   GIT_TERMINAL_PROMPT: "0",
   GIT_AUTHOR_NAME: "fixture",
   GIT_AUTHOR_EMAIL: "fixture@example.invalid",
@@ -88,7 +101,15 @@ export function runScript(name, args, { cwd, env = {}, timeoutMs = 30_000 }) {
       [script, ...args],
       {
         cwd: resolve(cwd),
-        env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: "C", TERM: "dumb", ...env },
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          LANG: "C",
+          TERM: "dumb",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: HERMETIC_GITCONFIG,
+          ...env,
+        },
         shell: false,
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,

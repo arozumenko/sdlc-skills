@@ -164,7 +164,7 @@ test("wrote() takes writeArtifact's returned artifact (post-redaction self_sha25
   assert.equal(out2.out.text, `WROTE .agents/security-testing/runs/r/coverage.json sha256=${w2.envelope.self_sha256}\n`);
 });
 
-test("engagement(): missing ⇒ ENGAGEMENT-MISSING (2); parsed lazily from the json engagement block and cached; invalid ⇒ ENGAGEMENT-INVALID", () => {
+test("engagement(): missing ⇒ ENGAGEMENT-MISSING (2); delegated to engagement.parseEngagementMd (TASK-007's wording) and cached; invalid ⇒ ENGAGEMENT-INVALID", () => {
   const repo = initRepo();
   const missing = ctxIn(repo).ctx;
   assert.throws(() => missing.engagement(), (e) => e instanceof CliError && e.code === 2 && e.token === "ENGAGEMENT-MISSING");
@@ -184,11 +184,44 @@ test("engagement(): missing ⇒ ENGAGEMENT-MISSING (2); parsed lazily from the j
 
   const st = join(repo, ".agents", "security-testing");
   writeFileSync(join(st, "engagement.md"), "# no block\n");
-  assert.throws(() => ctxIn(repo).ctx.engagement(), (e) => e instanceof CliError && /^ENGAGEMENT-INVALID\(no ```json engagement block\)$/.test(e.token));
+  assert.throws(() => ctxIn(repo).ctx.engagement(), (e) => e instanceof CliError && /^ENGAGEMENT-INVALID\(no json engagement block\)$/.test(e.token));
   writeFileSync(join(st, "engagement.md"), "```json engagement\n{\"a\":1,\"a\":2}\n```\n");
   assert.throws(() => ctxIn(repo).ctx.engagement(), (e) => e instanceof CliError && /^ENGAGEMENT-INVALID\(duplicate key "a"/.test(e.token));
   writeFileSync(join(st, "engagement.md"), "```json engagement\n{}\n```\n\n```json engagement\n{}\n```\n");
-  assert.throws(() => ctxIn(repo).ctx.engagement(), (e) => e instanceof CliError && /^ENGAGEMENT-INVALID\(2 json engagement blocks/.test(e.token));
+  assert.throws(() => ctxIn(repo).ctx.engagement(), (e) => e instanceof CliError && /^ENGAGEMENT-INVALID\(more than one json engagement block/.test(e.token));
+});
+
+test("ctx.mjs carries no engagement parser of its own: one parser, TASK-007's", () => {
+  const src = readFileSync(join(SCRIPTS_DIR, "lib", "ctx.mjs"), "utf8");
+  assert.match(src, /from "\.\/engagement\.mjs"/);
+  assert.doesNotMatch(src, /parseEngagementBlock|ENGAGEMENT_FENCE|json engagement/);
+  assert.doesNotMatch(src, /POLICY_INVALID_PRIVATE|engagementInvalid/, "the tokens belong to the parser, not to ctx");
+});
+
+test("input(cmd, p): a user-typed path resolves against the invocation cwd, must lie inside root; abs(p) stays repo-layout", () => {
+  const repo = initRepo();
+  mkdirSync(join(repo, "sub"));
+  const nested = createContext({}, { cwd: join(repo, "sub"), env: {} });
+  assert.equal(nested.input("check", "tm.json"), join(repo, "sub", "tm.json"), "cwd-relative, not root-relative");
+  assert.equal(nested.input("check", "../x.json"), join(repo, "x.json"), "may climb inside the tree");
+  assert.equal(nested.input("check", join(repo, "x.json")), join(repo, "x.json"), "absolute passes through");
+  assert.equal(nested.input("check", "..foo"), join(repo, "sub", "..foo"), "a name starting with .. is not a climb");
+  assert.equal(nested.abs("tm.json"), join(repo, "tm.json"), "abs() is root-relative");
+
+  const outside = (ctx, p, command = "check") =>
+    assert.throws(() => ctx.input(command, p), (e) => e instanceof CliError && e.code === 2 && e.token === `USAGE(${command}: cannot read ${p} (outside the work tree))`);
+  outside(nested, "../../x.json");
+  outside(nested, "/etc/passwd", "admit");
+  const elsewhere = tmpDir();
+  outside(nested, join(elsewhere, "x.json"));
+
+  // --root moves root, not the user's cwd: from a dir outside the tree every relative input is outside.
+  const viaRoot = createContext({ root: repo }, { cwd: elsewhere, env: {} });
+  outside(viaRoot, "tm.json");
+  assert.equal(viaRoot.input("check", join(repo, "sub", "tm.json")), join(repo, "sub", "tm.json"), "an absolute path under root is fine from anywhere");
+
+  assert.throws(() => nested.input("check", ""), (e) => e instanceof CliError && e.token === "USAGE(check: a file path is required)");
+  assert.throws(() => nested.input("", "x"), TypeError);
 });
 
 test("key(): null without a current key; {key_id, bytes} from private/keys; keyById; malformed ids are refused", () => {

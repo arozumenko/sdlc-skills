@@ -22,34 +22,17 @@
 //       knowledge-templates.ensureTemplates (TASK-011) installs into
 //       <st>/knowledge/ when the bundle `seed` did not.
 //
-// Imports only ../canon.mjs, ./schema.mjs and node:path/url: no fs writes,
-// no child process (G-6), no network (G-14), no clock (G-1).
+// Imports only ../canon.mjs, ./schema.mjs, ./exit.mjs (CliError, the one
+// class the dispatcher maps to an exit code), ./tokens.mjs (the result
+// strings, G-13) and node:path/url: no fs writes, no child process (G-6),
+// no network (G-14), no clock (G-1).
 
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict, CanonError } from "../canon.mjs";
 import { validate } from "./schema.mjs";
-
-// TODO(TASK-006 merge): `CliError` belongs to lib/exit.mjs (plan §3.3). That
-// module lands in the same dependency group as this one, so this file carries
-// a shape-identical definition until it exists; the merge replaces the class
-// below with `import { CliError } from "./exit.mjs";` and nothing else
-// changes. The dispatcher maps a thrown CliError to `process.exitCode =
-// err.code` and prints `err.token` — with two classes in the tree that
-// mapping would miss ours, so the swap is not optional.
-/** A command-level failure: `code` is the process exit code (plan §3.1), `token` the exact result string printed. */
-export class CliError extends Error {
-  /**
-   * @param {number} code exit code per lib/exit.mjs EXIT
-   * @param {string} token result token, exactly as the spec spells it
-   */
-  constructor(code, token) {
-    super(token);
-    this.name = "CliError";
-    this.code = code;
-    this.token = token;
-  }
-}
+import { CliError, EXIT } from "./exit.mjs";
+import { POLICY_INVALID_PRIVATE, engagementInvalid } from "./tokens.mjs";
 
 /** File name of the engagement record under `<st>/`. */
 export const ENGAGEMENT_FILE = "engagement.md";
@@ -199,7 +182,7 @@ export function parseEngagementMd(input) {
   // `private` is not a policy key at all — refused before schema validation so
   // the token names the policy, not a generic unknown-key error.
   if (isPlainObject(record.artifact_policy) && Object.hasOwn(record.artifact_policy, "private")) {
-    throw new CliError(2, "POLICY-INVALID(private)");
+    throw new CliError(EXIT.USAGE, POLICY_INVALID_PRIVATE);
   }
 
   const errors = validate("engagement", record);
@@ -208,7 +191,7 @@ export function parseEngagementMd(input) {
 }
 
 function invalid(reason) {
-  return new CliError(2, `ENGAGEMENT-INVALID(${reason})`);
+  return new CliError(EXIT.USAGE, engagementInvalid(reason));
 }
 
 function isPlainObject(value) {

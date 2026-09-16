@@ -15,6 +15,10 @@
 // parseStrict. Stdlib-only leaves no YAML parser; the fence keeps the
 // machine record strict and the prose free.
 //
+// `<case.md>` / `<proposal.md>` are user-typed paths: ctx.input() resolves
+// them against the invocation cwd and refuses a file outside the work tree
+// (USAGE).
+//
 // Exports one `{run(argv, ctx)}` per subcommand.
 
 import { readFileSync } from "node:fs";
@@ -29,7 +33,7 @@ const PROPOSAL_FENCE = /^```json proposal[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gm
 
 function readText(command, ctx, path) {
   try {
-    return readFileSync(ctx.abs(path), "utf8");
+    return readFileSync(ctx.input(command, path), "utf8");
   } catch (err) {
     if (err.code === "ENOENT" || err.code === "EISDIR" || err.code === "EACCES") throw usageError(command, `cannot read ${path}`);
     throw err;

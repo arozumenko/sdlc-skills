@@ -13,12 +13,12 @@ import {
   parseEngagementMd,
   defaultRecord,
   findEngagementBlock,
-  CliError,
   ENGAGEMENT_FILE,
   KNOWLEDGE_FILES,
   TEMPLATE_DIR,
   TEMPLATE_PATHS,
 } from "./engagement.mjs";
+import { CliError } from "./exit.mjs";
 import { loadSchema, validate } from "./schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
