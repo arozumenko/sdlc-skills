@@ -274,6 +274,33 @@ export const BASELINE_PRESENT = "BASELINE: present";
 /** validate: no baseline file for this engagement. */
 export const BASELINE_ABSENT = "BASELINE: absent";
 /** `TRACKED(<path>)` — exit 4 (step 2): a tracked file under a managed path; `path` is repo-relative. */
+// --- purge (TASK-032; plan §4.1 row `purge`, spec §6.9 / P3) ------------------
+
+const CURRENT_KEY_OUTCOMES = Object.freeze(["removed", "kept"]);
+
+/**
+ * `PURGED runs=<n> keys=<n> current-key=removed|kept` — the one stdout line
+ * of a `purge --yes` that ran: run ids deleted, key rows (keys/index.json)
+ * deleted, and whether `keys/current` named one of them and was removed.
+ */
+export function purged({ runs, keys, current_key }) {
+  if (!Number.isInteger(runs) || runs < 0) throw new TypeError(`purged: runs must be a non-negative integer, got ${String(runs)}`);
+  if (!Number.isInteger(keys) || keys < 0) throw new TypeError(`purged: keys must be a non-negative integer, got ${String(keys)}`);
+  if (!CURRENT_KEY_OUTCOMES.includes(current_key)) throw new TypeError(`purged: current_key must be removed|kept, got ${String(current_key)}`);
+  return `PURGED runs=${runs} keys=${keys} current-key=${current_key}`;
+}
+
+/** `PURGE <repo-relative path>` — one line per path the plan would delete (printed without `--yes`, before the exit-2 token). */
+export function purgePlan(relPath) {
+  requireRepoRelative("purgePlan", relPath);
+  return `PURGE ${relPath}`;
+}
+
+/**
+ * `TRACKED(<repo-relative path>)` — exit 4: a file git tracks under a
+ * managed-ignored destination (spec §6.9 step 2 for `engagement init`;
+ * `purge` refuses over the same condition before deleting anything).
+ */
 export function tracked(relPath) {
   requireRepoRelative("tracked", relPath);
   return `TRACKED(${relPath})`;

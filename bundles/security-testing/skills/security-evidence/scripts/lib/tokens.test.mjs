@@ -166,6 +166,19 @@ test("scope rows (TASK-013): SCOPE-EXISTS and `SCOPE files=<n> ranges=<n> skippe
   assert.throws(() => tokens.scopeLine({ files: 1, ranges: 0, skipped: 0 }), /snapshot/);
 });
 
+test("purge formatters (TASK-032)", () => {
+  assert.equal(tokens.purged({ runs: 2, keys: 1, current_key: "removed" }), "PURGED runs=2 keys=1 current-key=removed");
+  assert.equal(tokens.purged({ runs: 0, keys: 0, current_key: "kept" }), "PURGED runs=0 keys=0 current-key=kept");
+  assert.throws(() => tokens.purged({ runs: -1, keys: 0, current_key: "kept" }), /runs/);
+  assert.throws(() => tokens.purged({ runs: 0, keys: 1.5, current_key: "kept" }), /keys/);
+  assert.throws(() => tokens.purged({ runs: 0, keys: 0, current_key: "deleted" }), /removed\|kept/);
+  assert.equal(tokens.purgePlan(".agents/security-testing/runs/0123456789ab-0001"), "PURGE .agents/security-testing/runs/0123456789ab-0001");
+  assert.throws(() => tokens.purgePlan("/abs"), /repo-relative/);
+  assert.throws(() => tokens.purgePlan("../out"), /repo-relative/);
+  assert.equal(tokens.tracked(".agents/security-testing/private/keys/k0123456789ab"), "TRACKED(.agents/security-testing/private/keys/k0123456789ab)");
+  assert.throws(() => tokens.tracked("/abs"), /repo-relative/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
