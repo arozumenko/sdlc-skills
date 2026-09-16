@@ -1,0 +1,35 @@
+{
+  "finding_id": "9a0b866b58cdfe8614b3319cef0e2543586813e2fe3658246a2cfd7e0ec4e512",
+  "base_oid": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "head_oid": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "branch": "COMMITTED",
+  "tree_before": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "install": {
+    "ran": false,
+    "allow_tracked_changes": false,
+    "tracked_changes": [],
+    "untracked_count": 0,
+    "untracked_bytes": 0
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "NO_TEST_SURFACE",
+    "reason": "execute_project_tests absent from engagement.md",
+    "timed_out": false,
+    "output_redacted": ""
+  },
+  "packet_sha256": "3e0417f7bd1221331df1acb8ef321b496f120a8c8af83cc1236d1c73866d1036",
+  "receipts": [
+    {
+      "sha256": "172bb3b30cd1c217eed5021e7682cb47117f4b2779fb02c7db0c5bfeeb524f37",
+      "type": "fix-review",
+      "assertion": "not-refound",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "open"
+}
