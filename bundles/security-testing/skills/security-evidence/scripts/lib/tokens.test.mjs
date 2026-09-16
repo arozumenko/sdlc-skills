@@ -430,3 +430,13 @@ test("check rows (TASK-025; spec §6.3, plan §4.1 row `check`): the four result
   assert.equal(tokens.inconsistent("snapshot:src/app.js"), "INCONSISTENT(snapshot:src/app.js)");
   assert.equal(tokens.incomplete(tokens.COMMITTED), "INCOMPLETE(COMMITTED)");
 });
+
+test("tracker read-back → ticketed rows (TASK-045; plan §4.1 row `ingest`, §5 TASK-045): `TICKETED <R-id> <url>` and the no-row variant of READBACK: ok", () => {
+  assert.equal(tokens.READBACK_OK_NO_ROW, "READBACK: ok (no register row)");
+  assert.ok(tokens.READBACK_OK_NO_ROW.startsWith(tokens.READBACK_OK), "the variant extends the ok line; a reader matching `READBACK: ok` still sees it");
+  assert.equal(tokens.ticketedLine({ row: "R-0007", url: "https://github.com/o/r/issues/7" }), "TICKETED R-0007 https://github.com/o/r/issues/7");
+  assert.throws(() => tokens.ticketedLine({ row: "R-7", url: "https://github.com/o/r/issues/7" }), /R-nnnn/);
+  assert.throws(() => tokens.ticketedLine({ row: "R-0007", url: "" }), /url/);
+  assert.throws(() => tokens.ticketedLine({ row: "R-0007", url: "two\nlines" }), /url/);
+  assert.throws(() => tokens.ticketedLine({ row: "R-0007", url: "with space" }), /url/);
+});

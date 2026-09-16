@@ -109,6 +109,41 @@ test("plan: every accepted finding is a candidate; a register row with ticket_ur
   assert.equal(second.ids.injection, ids.injection, "same key, same bytes ⇒ same id across repos");
 });
 
+test("plan treats alias-linked subjects as one finding (TASK-045): a row ticketed under an old id, or an open ticket naming it, dedupes the re-keyed id — undirected and transitive; a threat row never links", async () => {
+  const { repo, run_id, dir, ids } = await committedReviewRun({
+    repo: readyRepo(),
+    before: async (r, id, gated) => {
+      await ingestTicket(r, id, { id: 9, url: "https://github.com/my-org/my-product/issues/9", state: "open", title: "dup", body: "already tracked: " + "e".repeat(64) });
+    },
+  });
+  const source = loadSource(dir, { command: "publish" });
+  const oldId = "d".repeat(64);
+  const olderId = "a".repeat(64);
+  const rowId = await registerAdd(repo, olderId, "app export", run_id);
+  const ctx = ctxFor(repo);
+  await append(ctx, { row_id: rowId, event: "ticketed", payload: { ticket_url: "https://github.com/my-org/my-product/issues/3", import_sha256: "c".repeat(64) }, ref: run_id });
+  const { projection } = await openRegister(ctx);
+  // no alias log ⇒ the old rule: nothing links, `app` is posted
+  assert.deepEqual(plan(source, projection).deduped, []);
+  assert.deepEqual(plan(source, projection, []).deduped, []);
+  // olderId —alias→ oldId —alias→ app (transitive, written in either direction); "e" —alias→ secret (the open ticket names the alias)
+  const aliases = [
+    { from_id: oldId, to_id: olderId, reason: "r", run_id, seq: 1, prev_sha256: "0".repeat(64) },
+    { from_id: ids.app, to_id: oldId, reason: "r", run_id, seq: 2, prev_sha256: "1".repeat(64) },
+    { from_id: "e".repeat(64), to_id: ids.secret, reason: "r", run_id, seq: 3, prev_sha256: "2".repeat(64) },
+  ];
+  const linked = plan(source, projection, aliases);
+  assert.deepEqual(linked.deduped, [
+    { finding_id: ids.app, existing: "https://github.com/my-org/my-product/issues/3" },
+    { finding_id: ids.secret, existing: "https://github.com/my-org/my-product/issues/9" },
+  ].sort((a, b) => (a.finding_id < b.finding_id ? -1 : 1)));
+  assert.deepEqual(linked.tickets, [ids.injection]);
+  assert.deepEqual(linked.candidates, [ids.app, ids.secret, ids.injection].sort(), "candidates are unchanged: dedupe withholds, never removes");
+  // a chain that does not reach a ticketed row dedupes nothing
+  assert.deepEqual(plan(source, projection, [{ from_id: ids.injection, to_id: "f".repeat(64), reason: "r", run_id, seq: 1, prev_sha256: "0".repeat(64) }]).deduped, []);
+  assert.throws(() => plan(source, projection, "not a list"), /aliases/);
+});
+
 test("plan and payloads read nothing but the source: the run directory is untouched", async () => {
   const { dir, ids } = await committedReviewRun();
   const before = readFileSync(join(dir, "COMMITTED"), "utf8");

@@ -28,10 +28,13 @@
 //      (2 USAGE otherwise), and every artifact read must be what it claims
 //      to be (5 INCONSISTENT(<file>)).
 //   4. profile — lib/profiles/<name>.mjs `apply(source, register, opts)` →
-//      the output set. For `tracker`, `plan(source, projection)` first: the
-//      register is read through readEvents + replay (chain-verified, 5
-//      CORRUPT on a break; no lock, no projection rewrite — publish reads
-//      the register and never writes it), then one apply per finding left.
+//      the output set. For `tracker`, `plan(source, projection, aliases)`
+//      first: the register is read through readEvents + replay and the
+//      alias log through readAliases (both chain-verified, 5 CORRUPT on a
+//      break; no lock, no projection rewrite — publish reads the register
+//      and never writes it; the aliases make a re-keyed finding whose old
+//      id was ticketed one finding, TASK-045), then one apply per finding
+//      left.
 //   5. writes — every output name is checked against the destination first
 //      (an existing file with different bytes ⇒ 2 USAGE, nothing written:
 //      publish never clobbers a file it did not derive), then each new file
@@ -60,7 +63,7 @@
 // reads and stats only; writes go through ./fsx.mjs writeAtomic and
 // ctx.writeArtifact), node:path, ../canon.mjs (artifactId, makeEnvelope,
 // readArtifact, sha256Hex), ../redact.mjs (redactString), ./argv.mjs, ./exit.mjs, ./fsx.mjs, ./ledger.mjs
-// (RUN_ID), ./profiles/*, ./register-core.mjs (readEvents, replay),
+// (RUN_ID), ./profiles/*, ./register-core.mjs (readAliases, readEvents, replay),
 // ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs. No child process
 // (G-6), no network (G-14), no clock (G-1: created_at is ctx.now()).
 
@@ -75,7 +78,7 @@ import { RUN_ID } from "./ledger.mjs";
 import { loadSource } from "./profiles/_source.mjs";
 import { exportIdentity, manifestNameFor, profileModule, requireOutputs } from "./profiles/index.mjs";
 import { plan as trackerPlan } from "./profiles/tracker.mjs";
-import { readEvents, replay } from "./register-core.mjs";
+import { readAliases, readEvents, replay } from "./register-core.mjs";
 import { runDir } from "./run-index.mjs";
 import { validate } from "./schema.mjs";
 import { CORRUPT, PUBLISH_PROFILES, dedupeLine, nextPost, notImplemented, publishedLine } from "./tokens.mjs";
@@ -245,7 +248,7 @@ export async function run(argv, ctx) {
   }
 
   const projection = readProjection(ctx);
-  const planned = trackerPlan(source, projection);
+  const planned = trackerPlan(source, projection, readAliases(ctx));
   const posted = [];
   for (const finding_id of planned.tickets) {
     const outputs = mod.apply(source, null, { ...opts, finding_id });

@@ -25,11 +25,12 @@
 //                     NEVER `snippet` and never `snippet_redacted`: a ticket
 //                     lives in a foreign system, and a code snippet — plain
 //                     or redacted — is not what a tracker body is for.
-//   fix_prompt        a stub here; TASK-045's lib/fix-prompt.mjs replaces it.
-//                     Names the finding, the range, the bugfix-workflow skill
-//                     and the exact verify command the developer reports back
-//                     with (`--base` = the run's head_oid, where the finding
-//                     was observed; `--head` = the fix commit, unknown here).
+//   fix_prompt        lib/fix-prompt.mjs (TASK-045): routes the developer to
+//                     the bugfix-workflow skill with the finding, the range,
+//                     `context_redacted` and the exact verify command they
+//                     report back with (`--base` = the run's head_oid, where
+//                     the finding was observed; `--head` = the fix commit,
+//                     unknown here).
 //   fingerprint       sha256(path\0class): the coarse search key for the
 //                     lead's second-layer dedupe (§9.4 "searches the live
 //                     tracker by fingerprint") — same file, same class ⇒ same
@@ -37,23 +38,33 @@
 //                     over a path and a class name, never over content (G-2).
 //
 // First-layer dedupe (`plan`): a finding is skipped when
-//   (a) a register row with `subject == finding_id` carries a `ticket_url`
-//       (whatever its status — the row was ticketed by a read-back), or
+//   (a) a register row whose subject is the finding id — or an id linked to
+//       it through finding-alias.jsonl (TASK-045: alias equivalence is
+//       undirected and transitive, register-transitions.aliasLinked; a
+//       re-keyed finding whose old id was ticketed is one finding, not a
+//       new post) — carries a `ticket_url` (whatever its status — the row
+//       was ticketed by a read-back), or
 //   (b) a `ticket` import record of the run has `trusted.state` equal to
 //       `open` (compared case-insensitively — the tracker's spelling is kept
 //       verbatim in the record, TASK-017) and its inert title or body
-//       contains the finding id. Inert text is data, not an instruction:
-//       the only effect it can have here is to *withhold* a post.
+//       contains the finding id or an alias-linked id. Inert text is data,
+//       not an instruction: the only effect it can have here is to
+//       *withhold* a post.
 // The register is the durable cross-run memory (a read-back from any run
 // lands there); imports are the run's own `ingest/*.json` (TL-3 boundary).
-// `apply` never consults the register: check-export re-applies the profile
-// later, after read-backs have changed it.
+// The alias lines come from the caller (cmd-publish reads them with
+// register-core.readAliases, chain-verified, no lock); `plan` never reads a
+// file. `apply` never consults the register: check-export re-applies the
+// profile later, after read-backs have changed it.
 //
 // Pure (G-9): imports ../../canon.mjs (canonical, sha256Hex), ../../redact.mjs
-// (redactDeep, redactString) and ../tokens.mjs. No fs, no git, no clock.
+// (redactDeep, redactString), ../fix-prompt.mjs, ../register-transitions.mjs
+// (aliasLinked) and ../tokens.mjs. No fs, no git, no clock.
 
 import { canonical, sha256Hex } from "../../canon.mjs";
 import { redactDeep, redactString } from "../../redact.mjs";
+import { fixPrompt } from "../fix-prompt.mjs";
+import { aliasLinked } from "../register-transitions.mjs";
 import { NOT_ASSESSED } from "../tokens.mjs";
 
 export const PROFILE = "tracker";
@@ -86,15 +97,6 @@ export function fingerprintOf(path, cls) {
   return sha256Hex(Buffer.from(`${path}\0${cls}`, "utf8"));
 }
 
-/** The M1 stub; TASK-045's generator (lib/fix-prompt.mjs) replaces it. */
-export function fixPromptStub({ finding_id, class: cls, priority, path, lines, base_oid }) {
-  return [
-    `Load the bugfix-workflow skill for security finding ${finding_id} (${cls}, ${priority}) at ${path}:${lines[0]}-${lines[1]}.`,
-    "Fix the cause at the cited range; never edit tests, ignore files or suppression config to make it pass.",
-    `Report back with the exact command: verify.mjs all --finding ${finding_id} --base ${base_oid} --head <fix-commit>`,
-  ].join(" ");
-}
-
 function contextOf(finding) {
   const parts = [];
   if (typeof finding.context_redacted === "string" && finding.context_redacted !== "") parts.push(finding.context_redacted);
@@ -111,6 +113,7 @@ function contextOf(finding) {
 export function payloadFor(source, finding) {
   if (finding === null || typeof finding !== "object" || !SHA256.test(finding.id)) throw new TypeError("payloadFor: finding must be a gated finding");
   const base = { finding_id: finding.id, class: finding.class, priority: finding.priority, path: finding.path, lines: [finding.lines[0], finding.lines[1]] };
+  const context_redacted = contextOf(finding);
   return redactDeep({
     finding_id: finding.id,
     title: finding.title,
@@ -118,8 +121,8 @@ export function payloadFor(source, finding) {
     priority: finding.priority,
     path: finding.path,
     lines: base.lines,
-    context_redacted: contextOf(finding),
-    fix_prompt: fixPromptStub({ ...base, base_oid: source.run.payload.head_oid }),
+    context_redacted,
+    fix_prompt: fixPrompt({ ...base, context_redacted, base_oid: source.run.payload.head_oid }),
     fingerprint: fingerprintOf(finding.path, finding.class),
   });
 }
@@ -144,21 +147,26 @@ function textNames(value, id) {
  * First-layer dedupe (see the header).
  * @param {import("./_source.mjs").Source} source
  * @param {{rows: Record<string, object>} | null} register the register projection, or null
+ * @param {object[]} [aliases] finding-alias.jsonl lines (register-core.readAliases); absent ⇒ ids link only to themselves
  * @returns {{candidates: string[], tickets: string[], deduped: {finding_id: string, existing: string}[]}}
  */
-export function plan(source, register) {
+export function plan(source, register, aliases = []) {
+  if (!Array.isArray(aliases)) throw new TypeError("tracker.plan: aliases must be an array of alias lines");
   const rows = register === null || register === undefined ? [] : Object.values(register.rows ?? {});
   const tickets = (source.imports ?? []).filter((i) => i.payload.kind === "ticket").flatMap((i) => i.payload.records);
   const candidates = acceptedIds(source);
   const deduped = [];
   const keep = [];
   for (const id of candidates) {
-    const row = rows.find((r) => r.subject === id && typeof r.ticket_url === "string" && r.ticket_url !== "");
+    // the finding and every id alias-linked to it are one finding (undirected, transitive)
+    const sameFinding = (subject) => typeof subject === "string" && SHA256.test(subject) && aliasLinked(aliases, subject, id);
+    const row = rows.find((r) => sameFinding(r.subject) && typeof r.ticket_url === "string" && r.ticket_url !== "");
     if (row) {
       deduped.push({ finding_id: id, existing: row.ticket_url });
       continue;
     }
-    const open = tickets.find((rec) => typeof rec.trusted?.state === "string" && rec.trusted.state.toLowerCase() === "open" && (textNames(rec.inert?.title, id) || textNames(rec.inert?.body, id)));
+    const equivalentIds = [id, ...aliasIdsOf(aliases).filter((other) => other !== id && aliasLinked(aliases, other, id))];
+    const open = tickets.find((rec) => typeof rec.trusted?.state === "string" && rec.trusted.state.toLowerCase() === "open" && equivalentIds.some((x) => textNames(rec.inert?.title, x) || textNames(rec.inert?.body, x)));
     if (open) {
       deduped.push({ finding_id: id, existing: open.trusted.url });
       continue;
@@ -166,6 +174,16 @@ export function plan(source, register) {
     keep.push(id);
   }
   return { candidates, tickets: keep, deduped };
+}
+
+/** Every id the alias log names, once. */
+function aliasIdsOf(aliases) {
+  const ids = new Set();
+  for (const a of aliases) {
+    if (typeof a?.from_id === "string") ids.add(a.from_id);
+    if (typeof a?.to_id === "string") ids.add(a.to_id);
+  }
+  return [...ids];
 }
 
 /**
