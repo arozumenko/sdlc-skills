@@ -254,3 +254,16 @@ export function checked(expired) {
   if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
   return `CHECK expired=${expired}`;
 }
+
+// --- consume-verdict (TASK-030; plan §4.3, spec §6.4 last paragraph) -----------
+
+/** `NO-ROW` — exit 2: the register has no live row whose subject is the verify artifact's finding id (the lead adds rows). */
+export const NO_ROW = "NO-ROW";
+
+/** `CONSUMED <verdict> row=<R-id> verify=<sha256>` — the first line of `register.mjs consume-verdict`; one ROW line per appended event follows. */
+export function consumed({ verdict, row: id, verify }) {
+  if (!VERDICT_PATTERN.test(verdict)) throw new TypeError(`consumed: verdict ${String(verdict)} is outside the closed vocabulary`);
+  if (!ROW_ID.test(id)) throw new TypeError(`consumed: row must be R-nnnn, got ${String(id)}`);
+  if (!SHA256.test(verify)) throw new TypeError(`consumed: verify must be a sha256, got ${String(verify)}`);
+  return `CONSUMED ${verdict} row=${id} verify=${verify}`;
+}

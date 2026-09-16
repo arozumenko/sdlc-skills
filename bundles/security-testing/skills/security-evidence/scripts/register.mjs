@@ -20,7 +20,7 @@ const COMMANDS = {
   supersede: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("supersede")), // TASK-029
   alias: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("alias")), // TASK-029
   transition: () => import("./lib/cmd-register-transition.mjs"), // TASK-029 (ticketed and the other emitter-only events are refused here)
-  // "consume-verdict": () => import("./lib/cmd-consume-verdict.mjs"), // TASK-030
+  "consume-verdict": () => import("./lib/cmd-register-consume.mjs"), // TASK-030
   // render: () => import("./lib/cmd-register-render.mjs"), // TASK-059
 };
 
