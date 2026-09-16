@@ -61,9 +61,12 @@ const EMPTY_MODEL = Object.freeze({ elements: [], threats: [] });
 /**
  * One run of `kind` through the real pipeline up to COMMITTED: scope,
  * scope packet, gate over `claims`, coverage over `declared`, and — for an
- * assessment — the planted threat model plus the register snapshot.
+ * assessment — the threat model (planted as the snapshot, or linted by the
+ * real `tm-lint check` when `lint` is set, which also writes the
+ * dispositions index), an optionally planted `dispositions.json` (`index`:
+ * the rows, Dispositions shape) and the register snapshot.
  */
-async function committedRun(repo, kind, { claims = [claim()], declared = [{ path: "src/app.js", ranges: [[1, 1]] }], model = EMPTY_MODEL } = {}) {
+async function committedRun(repo, kind, { claims = [claim()], declared = [{ path: "src/app.js", ranges: [[1, 1]] }], model = EMPTY_MODEL, index = null, lint = false } = {}) {
   const run_id = await initRun(repo, kind);
   const dir = runDir(repo, run_id);
   ok(await evidence(repo, ["scope", "--run", run_id]), "scope");
@@ -74,7 +77,13 @@ async function committedRun(repo, kind, { claims = [claim()], declared = [{ path
   const examined = drop(repo, run_id, "examined-1.json", { packet_sha256: packet, declared });
   ok(await evidence(repo, ["coverage", "--run", run_id, "--examined", examined]), "coverage");
   if (kind === "assessment") {
-    writeArtifact(join(dir, "threat-model.json"), makeEnvelope(headFor(repo, run_id, "threat-model"), model), { exclusive: true });
+    if (lint) {
+      const modelFile = drop(repo, run_id, "model.json", model);
+      ok(await runScript("tm-lint", ["check", "--run", run_id, "--model", modelFile], { cwd: repo, env: ENV }), "tm-lint check");
+    } else {
+      writeArtifact(join(dir, "threat-model.json"), makeEnvelope(headFor(repo, run_id, "threat-model"), model), { exclusive: true });
+    }
+    if (index !== null) writeArtifact(join(dir, "dispositions.json"), makeEnvelope(headFor(repo, run_id, "dispositions"), { dispositions: index }), { exclusive: true });
     ok(await evidence(repo, ["run", "snapshot", "register", "--run", run_id]), "snapshot register");
   }
   ok(await evidence(repo, ["build-report", "--run", run_id, "--template", kind]), `build-report ${kind}`);
@@ -349,16 +358,27 @@ test("tracked change / untracked change listed per path (observed, not attribute
   assert.ok(!r.stdout.includes("debug.log"), "an ignored file is counted, never named");
 });
 
-// --- dispositions (M1: policy read; relationship validation is TASK-041's) ------------------------------
+// --- dispositions (TASK-041: the policy over `<run>/dispositions.json`, tm-lint check's script-derived index; spec §6.10, US-033) ---
 
+const CITE = Object.freeze({ path: "src/app.js", side: "head", lines: [1, 1] });
+const TICKET = "https://tracker.example/1";
+/** Four threats, one per policy-relevant kind; the agent's `disposition.kind` is an assertion the index either validated or not (G-7). */
 const THREAT_MODEL = Object.freeze({
-  elements: [{ id: "E-001", kind: "process", name: "app", citation: { path: "src/app.js", side: "head", lines: [1, 1] } }],
+  elements: [{ id: "E-001", kind: "process", name: "app", citation: CITE }],
   threats: [
     { id: "T-001", element_id: "E-001", stride: "S", title: "spoofed caller", mitigations: [], disposition: { kind: "undisposed" } },
-    { id: "T-002", element_id: "E-001", stride: "T", title: "tampered config", mitigations: [], disposition: { kind: "planned", ref: "active-probe" } },
-    { id: "T-003", element_id: "E-001", stride: "I", title: "leaked log", mitigations: [], disposition: { kind: "ticketed", ref: "https://tracker.example/1" } },
+    { id: "T-002", element_id: "E-001", stride: "T", title: "tampered config", mitigations: [], disposition: { kind: "planned", ref: "P-001" } },
+    { id: "T-003", element_id: "E-001", stride: "I", title: "leaked log", mitigations: [], disposition: { kind: "ticketed", ref: TICKET } },
+    { id: "T-004", element_id: "E-001", stride: "E", title: "escalated role", mitigations: [{ id: "M-001", claim: "role checked server-side", citation: CITE }], disposition: { kind: "mitigated", ref: "M-001" } },
   ],
 });
+/** The index `tm-lint check` would derive for THREAT_MODEL once every relationship validated (references/threat-model.schema.json, Dispositions). */
+const INDEX = Object.freeze([
+  { threat_id: "T-001", kind: "undisposed", ref: "", resolved_via: "none" },
+  { threat_id: "T-002", kind: "planned", ref: "P-001", resolved_via: "proposal" },
+  { threat_id: "T-003", kind: "ticketed", ref: TICKET, resolved_via: "tracker-readback" },
+  { threat_id: "T-004", kind: "mitigated", ref: "M-001", resolved_via: "receipt" },
+]);
 
 function setPolicy(repo, require_dispositions) {
   const record = defaultRecord();
@@ -367,32 +387,141 @@ function setPolicy(repo, require_dispositions) {
   writeFileSync(join(repo, ST, "engagement.md"), engagementMd(record));
 }
 
-test("require_dispositions: `none` ⇒ not evaluated; absent or `executed-or-ticketed` ⇒ undisposed/planned listed, exit 0; `all` ⇒ exit 4 DISPOSITIONS(<threat ids>) (spec §6.10, engagement.md.template)", async () => {
+/** A repo with one COMMITTED assessment carrying THREAT_MODEL as its snapshot and, unless `index: null`, INDEX as its dispositions index. */
+async function dispositionsRepo({ index = INDEX, model = THREAT_MODEL, lint = false } = {}) {
   const repo = readyRepo();
   ok(await evidence(repo, ["engagement", "baseline"]), "baseline");
-  await committedRun(repo, "assessment", { model: THREAT_MODEL });
+  const run = await committedRun(repo, "assessment", { model, index, lint });
+  return { repo, ...run };
+}
 
-  setPolicy(repo, "none");
-  let r = await signOffCli(repo);
-  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
-  assert.ok(lines(r.stdout).includes("DISPOSITIONS: not evaluated"));
-  assert.ok(!r.stdout.includes("T-001"));
+const dispositionsBlock = (stdout) => {
+  const out = lines(stdout);
+  const at = out.findIndex((l) => l.startsWith("DISPOSITIONS:"));
+  assert.ok(at > 0, stdout);
+  return out.slice(at);
+};
 
+test("default policy lists undisposed/planned and exits 0: the list comes from dispositions.json, so a validated `ticketed`/`mitigated` is not listed (US-033 AC-1)", async () => {
+  const { repo, run_id } = await dispositionsRepo();
   for (const policy of [undefined, "executed-or-ticketed"]) {
     setPolicy(repo, policy);
-    r = await signOffCli(repo);
+    const r = await signOffCli(repo);
     assert.equal(r.code, 0, `${policy}: ${r.stdout}${r.stderr}`);
-    const out = lines(r.stdout);
-    const at = out.indexOf("DISPOSITIONS: 2 undisposed-or-planned policy=executed-or-ticketed");
-    assert.ok(at > 0, `${policy}: ${r.stdout}`);
-    assert.deepEqual(out.slice(at + 1), ["  T-001 undisposed", "  T-002 planned"]);
+    assert.equal(lines(r.stdout)[0], "SIGN-OFF: OK");
+    assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 2 undisposed-or-planned policy=executed-or-ticketed", "  T-001 undisposed", "  T-002 planned"]);
   }
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.deepEqual(result.dispositions, { policy: "executed-or-ticketed", evaluated: true, linted: true, listed: [{ id: "T-001", kind: "undisposed" }, { id: "T-002", kind: "planned" }] });
+  assert.equal(result.latest, run_id);
+});
 
+test("all ⇒ exit 4 naming threat ids: DISPOSITIONS(<threat ids>) over the index's undisposed/planned rows, the listing still printed (US-033 AC-2)", async () => {
+  const { repo } = await dispositionsRepo();
+  setPolicy(repo, "all");
+  const r = await signOffCli(repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(DISPOSITIONS(T-001, T-002))"]);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 2 undisposed-or-planned policy=all", "  T-001 undisposed", "  T-002 planned"]);
+});
+
+test("none ⇒ not evaluated: no DISPOSITIONS fail, no threat named, the index not even read (US-033 AC-3)", async () => {
+  const { repo } = await dispositionsRepo({ index: null }); // absent index: would list every threat under any other policy
+  setPolicy(repo, "none");
+  const r = await signOffCli(repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: not evaluated"]);
+  assert.ok(!r.stdout.includes("T-00") && !r.stderr.includes("not linted"));
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.deepEqual(result.dispositions, { policy: "none", evaluated: false, linted: false, listed: [] });
+});
+
+test("absent dispositions.json ⇒ every threat of the snapshot counts as undisposed — the agent's unvalidated `ticketed`/`mitigated` assertions never dispose anything (G-7; PM log after G20)", async () => {
+  const { repo, run_id } = await dispositionsRepo({ index: null });
+  setPolicy(repo, undefined);
+  let r = await signOffCli(repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 4 undisposed-or-planned policy=executed-or-ticketed", "  T-001 undisposed", "  T-002 undisposed", "  T-003 undisposed", "  T-004 undisposed"]);
+  assert.match(r.stderr, new RegExp(`sign-off: runs/${run_id} has no dispositions\\.json .*not linted`), "the reason is on stderr");
+  assert.ok(!r.stderr.includes(repo), "no absolute path on stderr");
   setPolicy(repo, "all");
   r = await signOffCli(repo);
   assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
-  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(DISPOSITIONS(T-001, T-002))"]);
-  assert.ok(lines(r.stdout).includes("DISPOSITIONS: 2 undisposed-or-planned policy=all"));
+  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(DISPOSITIONS(T-001, T-002, T-003, T-004))"]);
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.equal(result.dispositions.linted, false);
+  assert.equal(result.dispositions.evaluated, true);
+  // a snapshot without threats has nothing to dispose: nothing listed, nothing on stderr
+  const empty = await dispositionsRepo({ index: null, model: EMPTY_MODEL });
+  setPolicy(empty.repo, "all");
+  r = await signOffCli(empty.repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 0 undisposed-or-planned policy=all"]);
+});
+
+test("the index the real `tm-lint check` writes is the one sign-off reads (R1: script-derived, never agent-authored)", async () => {
+  const model = { elements: THREAT_MODEL.elements, threats: [THREAT_MODEL.threats[0], { ...THREAT_MODEL.threats[3], disposition: { kind: "undisposed" } }] };
+  const { repo, dir } = await dispositionsRepo({ index: null, model, lint: true });
+  assert.ok(existsSync(join(dir, "dispositions.json")), "tm-lint check wrote the index");
+  assert.equal(readArtifact(join(dir, "dispositions.json"), { kind: "dispositions" }).payload.dispositions.length, 2);
+  setPolicy(repo, "all");
+  const r = await signOffCli(repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(DISPOSITIONS(T-001, T-004))"]);
+  assert.ok(!r.stderr.includes("not linted"));
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.equal(result.dispositions.linted, true);
+});
+
+test("a dispositions.json that is not the snapshot's index (rows for other threats, or a tampered envelope) ⇒ exit 4 INCONSISTENT(dispositions) run=<id>, DISPOSITIONS not evaluated", async () => {
+  // rows that do not match the snapshot's threats one-to-one
+  const stale = await dispositionsRepo({ index: [INDEX[0], INDEX[1], INDEX[2]] });
+  let r = await signOffCli(stale.repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions)) run=${stale.run_id}`]);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: not evaluated"]);
+  assert.ok(!r.stderr.includes(stale.repo), "no absolute path on stderr");
+  // a row whose kind is not the snapshot's assertion
+  const rekinded = await dispositionsRepo({ index: [{ ...INDEX[0], kind: "executed", ref: "O-0123456789ab", resolved_via: "observation" }, INDEX[1], INDEX[2], INDEX[3]] });
+  r = await signOffCli(rekinded.repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions)) run=${rekinded.run_id}`]);
+  // the file rewritten after the fact
+  const tampered = await dispositionsRepo();
+  writeFileSync(join(tampered.dir, "dispositions.json"), '{"envelope":{},"payload":{"dispositions":[]}}\n');
+  r = await signOffCli(tampered.repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions)) run=${tampered.run_id}`]);
+});
+
+// --- run kind: the ledger entry must agree with run.json's template (PM log after G16; fail-closed) --------
+
+function rekindLedger(repo, run_id, kind) {
+  const path = join(repo, ST, "ledger", "index.json");
+  const entries = JSON.parse(readFileSync(path, "utf8"));
+  entries.find((e) => e.run_id === run_id).kind = kind;
+  writeFileSync(path, `${JSON.stringify(entries)}\n`);
+}
+
+test("a ledger entry whose kind is not run.json's template ⇒ exit 4 INCONSISTENT(runs/<id>) run=<id>, the run never taken as the latest assessment, no ENOENT, no absolute path on stderr", async () => {
+  // a review run relabelled `assessment`: it must not become the latest assessment (its threat-model.json does not exist)
+  const repo = readyRepo();
+  ok(await evidence(repo, ["engagement", "baseline"]), "baseline");
+  const review = await committedRun(repo, "review");
+  rekindLedger(repo, review.run_id, "assessment");
+  let r = await signOffCli(repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(NO-ASSESSMENT)", `SIGN-OFF: FAIL(INCONSISTENT(runs/${review.run_id})) run=${review.run_id}`]);
+  assert.equal(runsEntry(r.stdout, review.run_id), `  ${review.run_id} seq=1 kind=assessment INCONSISTENT(runs/${review.run_id})`, "listed under the ledger's kind, with the cross-check's verdict");
+  assert.ok(!r.stderr.includes(repo) && !r.stderr.includes("ENOENT"), r.stderr);
+  assert.match(r.stderr, new RegExp(`sign-off: runs/${review.run_id} is listed as assessment but run\\.json says review`));
+  assert.ok(lines(r.stdout).includes("DISPOSITIONS: not evaluated"));
+  // an assessment relabelled `review`: the same cause, and it is no longer an assessment either
+  const fx = await signedRepo();
+  rekindLedger(fx.repo, fx.run_id, "review");
+  r = await signOffCli(fx.repo);
+  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
+  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(NO-ASSESSMENT)", `SIGN-OFF: FAIL(INCONSISTENT(runs/${fx.run_id})) run=${fx.run_id}`]);
 });
 
 // --- the exported contract TASK-035's test reads --------------------------------------------------------

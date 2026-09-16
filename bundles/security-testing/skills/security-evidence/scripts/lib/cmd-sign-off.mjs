@@ -1,7 +1,8 @@
 // lib/cmd-sign-off.mjs — `evidence.mjs sign-off --engagement <id> [--expect
-// <anchor>]` (TASK-033; plan §4.1 row `sign-off`, §5 TASK-033; spec §7
-// closed table, §2 last row, §6.8, §6.9 step 2, §6.10, §12; US-025 AC-1…AC-5,
-// US-006 AC-2…AC-4, US-014 AC-3). Reads only; writes nothing of its own (the
+// <anchor>]` (TASK-033, disposition policy TASK-041; plan §4.1 row
+// `sign-off`, §5 TASK-033 / TASK-041; spec §7 closed table, §2 last row,
+// §6.8, §6.9 step 2, §6.10, §12; US-025 AC-1…AC-5, US-006 AC-2…AC-4, US-014
+// AC-3, US-033 AC-1…AC-3). Reads only; writes nothing of its own (the
 // register's recovery rule may rebuild `projection.json`, as it does on every
 // register command — §6.8). Every line leaves through ctx.out (G-4).
 //
@@ -10,7 +11,13 @@
 // not list is never looked at; a listed run without a COMMITTED marker is
 // incomplete and only listed (spec §6.1). A COMMITTED run whose run.json
 // names another engagement is not this engagement's and is skipped (noted on
-// stderr) — `purge` attributes the same way.
+// stderr) — `purge` attributes the same way. A COMMITTED run whose readable
+// run.json carries a `template` other than the ledger entry's `kind` is kept
+// under the ledger's kind, never checked and never taken as an assessment:
+// its RUNS entry and a fail line read INCONSISTENT(runs/<id>) (PM log after
+// G16 — the ledger is inventory, the run's own record is the kind; only a
+// rewritten index disagrees, and a review run relabelled `assessment` must
+// not be read for a threat model it never had).
 //
 // Verdict, then listings. stdout, in this order (plan §4.1):
 //
@@ -39,7 +46,12 @@
 //                                 CONSISTENT-REDACTED-ONLY is accepted for a
 //                                 `review` run and listed as such (spec §7, N1);
 //                                 for any other kind it is a fail — check already
-//                                 refuses it for assessments (INCONSISTENT(snapshot))
+//                                 refuses it for assessments (INCONSISTENT(snapshot)).
+//                                 INCONSISTENT(runs/<id>) is also the ledger-kind
+//                                 cross-check's cause (header above), and
+//                                 INCONSISTENT(threat-model | dispositions) the
+//                                 latest assessment's snapshot or index not being
+//                                 what tm-lint check wrote (below)
 //   SCOPE-DRIFTED(<n> files) run= the latest COMMITTED assessment (by seq) checked
 //                                 with --drift is not CURRENT at scope level
 //                                 (`drift.scope_drifted > 0`; PM log after G14). Drift
@@ -53,8 +65,10 @@
 //   TRUNCATED | DIVERGED          `--expect` given and register-fold.anchorVerify is
 //                                 not MATCH
 //   DISPOSITIONS(<threat ids>)    `sign_off.require_dispositions: all` and the latest
-//                                 assessment's `<run>/threat-model.json` has a threat
-//                                 whose disposition is `undisposed` or `planned`
+//                                 assessment has a threat still `undisposed` or
+//                                 `planned` per its `<run>/dispositions.json` — the
+//                                 index `tm-lint check` derived (R1) — or, when that
+//                                 index is absent, any threat at all (below)
 //   TRACKED(<path>)               ignore-block.probeManagedPaths (spec §6.9 step 2,
 //                                 fail-closed as `engagement init`): git tracks a file
 //                                 under an active managed path — the first such path
@@ -68,10 +82,26 @@
 //   dispositions   `require_dispositions` absent ⇒ `executed-or-ticketed`
 //                  (spec §6.10 default, the template's wording, render.mjs's
 //                  reading) — NOT `none` as plan §5 TASK-033 has it; spec wins
-//                  (§20). `none` ⇒ not evaluated. `executed-or-ticketed` lists
-//                  undisposed/planned threats, informational. `all` fails on
-//                  them. M1 reads `disposition.kind` from the model only; the
-//                  relationship validation (`tm-lint check`) is TASK-041's.
+//                  (§20). `none` ⇒ not evaluated (nothing read). Otherwise the
+//                  kinds come from the latest assessment's
+//                  `<run>/dispositions.json`, one row per snapshot threat, each
+//                  row's kind the snapshot's assertion that `tm-lint check`
+//                  validated (TASK-039, R1; Dispositions in
+//                  references/threat-model.schema.json). `executed-or-ticketed`
+//                  lists the undisposed/planned rows, informational; `all`
+//                  fails on them. The snapshot's own `disposition.kind` is never
+//                  read as a disposition (G-7: scripts derive, agents assert):
+//                  without an index (`check` failed a relationship after the
+//                  snapshot was written, or was never run) every threat of the
+//                  snapshot counts as `undisposed` — listed, and blocking under
+//                  `all` — with the reason on stderr (`linted: false` in the
+//                  result). An index that is not the snapshot's — a tampered
+//                  envelope, rows that are not the snapshot's threats one-to-one
+//                  in order, a row whose kind is not the snapshot's assertion —
+//                  is INCONSISTENT(dispositions) run=<id> and the policy is not
+//                  evaluated; a snapshot that cannot be read is
+//                  INCONSISTENT(threat-model) run=<id> likewise (both fail-closed,
+//                  neither prints a path). Only the latest assessment is read.
 //   not-ignored    a managed pattern whose probe file git does not ignore is
 //                  noted on stderr only: spec §7 fails on TRACKED files, and the
 //                  listings are a closed set too.
@@ -92,7 +122,8 @@
 //
 // Imports: node:fs (existsSync — reads only), node:path, ../canon.mjs
 // (readArtifact), ./argv.mjs, ./baseline.mjs (readBaseline, diffBaseline,
-// observedPaths), ./cmd-check.mjs (checkRun), ./exit.mjs, ./ignore-block.mjs
+// observedPaths), ./cmd-check.mjs (checkRun), ./cmd-tm-lint.mjs (the
+// snapshot and index file names — the writer's own constants), ./exit.mjs, ./ignore-block.mjs
 // (probeManagedPaths), ./ledger.mjs (readIndex), ./register-core.mjs
 // (openRegister), ./register-fold.mjs (anchorVerify, parseAnchor, summarize),
 // ./run-index.mjs (runDir), ./tokens.mjs. No child process of its own (G-6:
@@ -104,6 +135,7 @@ import { readArtifact } from "../canon.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { diffBaseline, observedPaths, readBaseline } from "./baseline.mjs";
 import { checkRun } from "./cmd-check.mjs";
+import { DISPOSITIONS_FILE, SNAPSHOT_FILE } from "./cmd-tm-lint.mjs";
 import { CliError, EXIT, isIntegrityFailure, usageError } from "./exit.mjs";
 import { probeManagedPaths } from "./ignore-block.mjs";
 import { readIndex } from "./ledger.mjs";
@@ -116,6 +148,7 @@ import {
   CHANGES_NOT_OBSERVED,
   COMMITTED,
   CORRUPT,
+  DISPOSITION_KINDS,
   DISPOSITIONS_NOT_EVALUATED,
   EXCLUDED_COVERAGE_NOT_OBSERVED,
   KEY_UNAVAILABLE,
@@ -176,7 +209,9 @@ const LISTED_DISPOSITIONS = Object.freeze(["undisposed", "planned"]);
  * the incomplete ones. Attribution is `runs/<id>/run.json`'s engagement_id;
  * a COMMITTED run whose run.json cannot be read stays in the committed list
  * (checkRun names what is wrong with it) — only a readable record naming
- * another engagement takes a run out.
+ * another engagement takes a run out. A readable run.json whose `template`
+ * is not the ledger entry's `kind` marks the run `kind_mismatch` (header):
+ * it stays listed under the ledger's kind and is failed, never checked.
  */
 function inventory(ctx, engagement_id) {
   const committed = [];
@@ -188,9 +223,14 @@ function inventory(ctx, engagement_id) {
       continue;
     }
     let other = null;
+    let kind_mismatch = false;
     try {
       const run = readArtifact(join(dir, "run.json"), { kind: "run" });
       if (run.payload.engagement_id !== engagement_id) other = run.payload.engagement_id;
+      else if (run.payload.template !== entry.kind) {
+        kind_mismatch = true;
+        ctx.log(`${COMMAND}: runs/${entry.run_id} is listed as ${entry.kind} but run.json says ${String(run.payload.template)} — inconsistent`);
+      }
     } catch (err) {
       if (!isIntegrityFailure(err) && err.code !== "ENOENT") throw err;
       // unreadable or missing: left to checkRun, which reports it as inconsistent
@@ -199,28 +239,34 @@ function inventory(ctx, engagement_id) {
       ctx.log(`${COMMAND}: runs/${entry.run_id} belongs to engagement ${other} — skipped`);
       continue;
     }
-    committed.push({ run_id: entry.run_id, seq: entry.seq, kind: entry.kind, dir });
+    committed.push({ run_id: entry.run_id, seq: entry.seq, kind: entry.kind, dir, kind_mismatch });
   }
   return { committed, incomplete };
 }
 
-/** checkRun, with anything it throws folded into an inconsistent result for that run (header: "check throws"). */
+/** The check result of a run that cannot be checked: INCONSISTENT(runs/<id>), nothing else known. */
+function inconsistentRun(run) {
+  const field = `runs/${run.run_id}`;
+  return {
+    run_id: run.run_id,
+    template: null,
+    dir: run.dir,
+    code: EXIT.INTEGRITY,
+    consistency: { token: inconsistent(field), status: "inconsistent", field, redacted_only: 0, checked: { citations: 0, packets: 0, receipts: 0 } },
+    drift: null,
+    origin: null,
+    key: null,
+  };
+}
+
+/** checkRun, with a kind mismatch (never checked) and anything checkRun throws folded into an inconsistent result for that run (header: "check throws"). */
 function checkOrInconsistent(ctx, run, opts) {
+  if (run.kind_mismatch) return inconsistentRun(run);
   try {
     return checkRun(ctx, run.dir, opts);
   } catch (err) {
     ctx.log(`${COMMAND}: check of runs/${run.run_id} could not complete: ${err instanceof CliError ? err.token : err.name}`);
-    const token = inconsistent(`runs/${run.run_id}`);
-    return {
-      run_id: run.run_id,
-      template: null,
-      dir: run.dir,
-      code: EXIT.INTEGRITY,
-      consistency: { token, status: "inconsistent", field: `runs/${run.run_id}`, redacted_only: 0, checked: { citations: 0, packets: 0, receipts: 0 } },
-      drift: null,
-      origin: null,
-      key: null,
-    };
+    return inconsistentRun(run);
   }
 }
 
@@ -237,10 +283,45 @@ function dispositionPolicy(record) {
   return s !== null && typeof s === "object" && typeof s.require_dispositions === "string" ? s.require_dispositions : DEFAULT_DISPOSITION_POLICY;
 }
 
-/** The latest assessment's threats still `undisposed` or `planned`, in model order. */
-function listedThreats(dir) {
-  const model = readArtifact(join(dir, "threat-model.json"), { kind: "threat-model" }).payload;
-  return model.threats.filter((t) => LISTED_DISPOSITIONS.includes(t.disposition.kind)).map((t) => ({ id: t.id, kind: t.disposition.kind }));
+/** An artifact of the latest assessment, or `null` when absent; a tampered one (integrity, canon, kind mismatch) is `undefined` — the caller names the field. */
+function readRunArtifact(dir, file, kind) {
+  try {
+    return readArtifact(join(dir, file), { kind });
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    if (isIntegrityFailure(err)) return undefined;
+    throw err;
+  }
+}
+
+/** One index row per snapshot threat, in order, each carrying the snapshot's own assertion as its kind (what tm-lint-core.lintDispositions derives; R1). */
+function indexMatchesSnapshot(rows, threats) {
+  if (!Array.isArray(rows) || rows.length !== threats.length) return false;
+  return rows.every((row, i) => row !== null && typeof row === "object" && row.threat_id === threats[i].id && DISPOSITION_KINDS.includes(row.kind) && row.kind === threats[i].disposition?.kind);
+}
+
+/**
+ * The latest assessment's threats still `undisposed` or `planned`, in
+ * snapshot order, read from `<run>/dispositions.json` (header:
+ * "dispositions"). Without an index every snapshot threat is `undisposed`.
+ * @returns {{listed: {id: string, kind: string}[], linted: boolean, inconsistent: null | "threat-model" | "dispositions"}}
+ */
+function listedThreats(ctx, run) {
+  const snapshot = readRunArtifact(run.dir, SNAPSHOT_FILE, "threat-model");
+  if (snapshot === null || snapshot === undefined) return { listed: [], linted: false, inconsistent: "threat-model" };
+  const threats = snapshot.payload.threats;
+  if (!Array.isArray(threats)) return { listed: [], linted: false, inconsistent: "threat-model" };
+  const index = readRunArtifact(run.dir, DISPOSITIONS_FILE, "dispositions");
+  if (index === null) {
+    if (threats.length > 0) ctx.log(`${COMMAND}: runs/${run.run_id} has no ${DISPOSITIONS_FILE} (tm-lint check did not validate its model) — not linted: every threat counts as undisposed`);
+    return { listed: threats.map((t) => ({ id: t.id, kind: "undisposed" })), linted: false, inconsistent: null };
+  }
+  const rows = index === undefined ? undefined : index.payload.dispositions;
+  if (!indexMatchesSnapshot(rows, threats)) {
+    ctx.log(`${COMMAND}: runs/${run.run_id}/${DISPOSITIONS_FILE} is not the index tm-lint check derives from the run's snapshot`);
+    return { listed: [], linted: false, inconsistent: "dispositions" };
+  }
+  return { listed: rows.filter((r) => LISTED_DISPOSITIONS.includes(r.kind)).map((r) => ({ id: r.threat_id, kind: r.kind })), linted: true, inconsistent: null };
 }
 
 // --- approvals -----------------------------------------------------------------------------
@@ -264,7 +345,7 @@ function approvalRows(projection) {
  * Evaluate the sign-off (see the header). Prints nothing.
  * @param {object} ctx
  * @param {{engagement_id: string, expect?: string | null}} opts `expect` is a parsed-valid anchor string or null
- * @returns {{code: number, ok: boolean, engagement_id: string, causes: {cause: string, run_id: string | null}[], runs: {run_id: string, seq: number, kind: string, check: object}[], incomplete: {run_id: string, seq: number, kind: string}[], latest: string | null, baseline: null | {changed: string[], added: string[], removed: string[], ignored_counts: Record<string, number>}, register: {corrupt: boolean, anchor: string | null, approvals: null | {count: number, rows: {id: string, status: string, kinds: string[]}[]}}, dispositions: {policy: string, evaluated: boolean, listed: {id: string, kind: string}[]}, tracked: string[]}}
+ * @returns {{code: number, ok: boolean, engagement_id: string, causes: {cause: string, run_id: string | null}[], runs: {run_id: string, seq: number, kind: string, check: object}[], incomplete: {run_id: string, seq: number, kind: string}[], latest: string | null, baseline: null | {changed: string[], added: string[], removed: string[], ignored_counts: Record<string, number>}, register: {corrupt: boolean, anchor: string | null, approvals: null | {count: number, rows: {id: string, status: string, kinds: string[]}[]}}, dispositions: {policy: string, evaluated: boolean, linted: boolean, listed: {id: string, kind: string}[]}, tracked: string[]}}
  * @throws {CliError} 2 USAGE (the id is not engagement.md's) · 2 ENGAGEMENT-MISSING · 5 INCONSISTENT(ledger/index.json)
  */
 export async function signOff(ctx, { engagement_id, expect = null } = {}) {
@@ -278,7 +359,7 @@ export async function signOff(ctx, { engagement_id, expect = null } = {}) {
 
   // 1. inventory; the latest COMMITTED assessment by seq
   const { committed, incomplete } = inventory(ctx, engagement_id);
-  const assessments = committed.filter((r) => r.kind === "assessment");
+  const assessments = committed.filter((r) => r.kind === "assessment" && !r.kind_mismatch);
   const latest = assessments.length === 0 ? null : assessments[assessments.length - 1];
   if (latest === null) fail(NO_ASSESSMENT);
 
@@ -315,13 +396,20 @@ export async function signOff(ctx, { engagement_id, expect = null } = {}) {
     register.approvals = { count: summarize(projection).unauthenticated_approvals, rows: approvalRows(projection) };
   }
 
-  // 4. dispositions per policy, over the latest assessment's model
+  // 4. dispositions per policy, over the latest assessment's index (tm-lint check's dispositions.json)
   const policy = dispositionPolicy(record);
   const latestConsistent = latest !== null && runs.find((r) => r.run_id === latest.run_id).check.consistency.status !== "inconsistent";
-  const dispositions = { policy, evaluated: policy !== "none" && latestConsistent, listed: [] };
+  const dispositions = { policy, evaluated: policy !== "none" && latestConsistent, linted: false, listed: [] };
   if (dispositions.evaluated) {
-    dispositions.listed = listedThreats(latest.dir);
-    if (policy === "all" && dispositions.listed.length > 0) fail(dispositionsBlocking(dispositions.listed.map((t) => t.id)));
+    const read = listedThreats(ctx, latest);
+    if (read.inconsistent !== null) {
+      dispositions.evaluated = false;
+      fail(inconsistent(read.inconsistent), latest.run_id);
+    } else {
+      dispositions.linted = read.linted;
+      dispositions.listed = read.listed;
+      if (policy === "all" && dispositions.listed.length > 0) fail(dispositionsBlocking(dispositions.listed.map((t) => t.id)));
+    }
   }
 
   // 5. tracked files under managed paths (fail-closed, spec §6.9 step 2)
