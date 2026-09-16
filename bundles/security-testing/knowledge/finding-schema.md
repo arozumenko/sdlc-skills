@@ -13,8 +13,11 @@ schema wins.
 a `state`, an `occurrence` or a `source` — those are assigned by
 `evidence.mjs gate` after it re-resolves every citation against the run's
 scope. An agent writes a **Claim**: a finding minus those four fields. A
-claims file that carries any of them is rejected whole (`agent-wrote-id`)
-and never reaches the report. The same rule holds for receipts: they carry
+claim that carries an `id` or a `state` is rejected (reason
+`agent-wrote-id` in `rejects.json`) and never reaches the report; the other
+claims in the same file are still admitted. The whole file is refused only
+when its `packet_sha256` is not a scope packet of the run
+(`2 CLAIMS-PACKET-MISMATCH(<file>)`). The same rule holds for receipts: they carry
 an `assertion`, and the derived state comes from `receipt apply`.
 
 ## The Claim (what a reviewer writes)
@@ -119,7 +122,10 @@ Precedence: `refound_observed` is recorded first and unconditionally
 (`regression-observed` event when the row was `fixed`), then completeness
 (any missing check ⇒ `UNVERIFIED-INDETERMINATE(<check>)` even when a valid
 `refound` exists), then the rest in the order of the table. Every
-`UNVERIFIED-*` verdict exits `0`: the verdict is the result, not an error.
+**emitted** verdict exits `0`, the `UNVERIFIED-*` ones included: the verdict
+is the result, not an error. `UNVERIFIED-REFUTED-FINDING` is the one
+exception because it is a refusal, not a verdict — no run is allocated and
+the exit is `4`.
 
 ## Register statuses
 

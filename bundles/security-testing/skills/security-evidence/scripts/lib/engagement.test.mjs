@@ -329,8 +329,34 @@ test("report-reading-guide.md explains every check token and the ORIGIN line", (
 
 test("engagement.mjs imports only canon, schema and node:path/url — no fs writes, no child process, no network, no clock", () => {
   const imports = [...SELF.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]).sort();
-  assert.deepEqual(imports, ["../canon.mjs", "./schema.mjs", "node:path", "node:url"]);
+  // ./exit.mjs and ./tokens.mjs are TASK-006's; they become allowed (and required) once they exist — see the merge tripwire below.
+  assert.deepEqual(imports.filter((i) => i !== "./exit.mjs" && i !== "./tokens.mjs"), ["../canon.mjs", "./schema.mjs", "node:path", "node:url"]);
   assert.doesNotMatch(SELF, /node:child_process|node:http|node:net|node:dns|\bfetch\(|Date\.now|new Date\(/);
   assert.doesNotMatch(SELF, /writeFileSync|appendFileSync|console\.log/);
   assert.doesNotMatch(SELF, /UNGATED|exact checkout/);
+});
+
+// ---------------------------------------------------------------------------
+// TASK-006 merge tripwire. TASK-006 (same group G3) owns lib/exit.mjs (CliError)
+// and lib/tokens.mjs (result strings, G-13). Until they exist this module
+// carries a shape-identical CliError and formats its two tokens inline; the
+// moment they exist the shim MUST go, or the dispatcher's `instanceof CliError`
+// mapping misses ours and ENGAGEMENT-INVALID / POLICY-INVALID exit 1 instead
+// of 2. This test turns that TODO into a red suite at merge time.
+
+test("merge tripwire: once lib/exit.mjs exists, CliError is imported from it and the local shim is gone", () => {
+  const definesShim = /^export class CliError\b/m.test(SELF);
+  const importsExit = /^import \{[^}]*\bCliError\b[^}]*\} from "\.\/exit\.mjs";$/m.test(SELF);
+  if (existsSync(join(HERE, "exit.mjs"))) {
+    assert.ok(importsExit, "lib/exit.mjs exists: engagement.mjs must `import { CliError } from \"./exit.mjs\"`");
+    assert.ok(!definesShim, "lib/exit.mjs exists: drop the local `export class CliError` shim (two classes ⇒ instanceof mismatch ⇒ exit 1)");
+  } else {
+    assert.ok(definesShim && !importsExit, "lib/exit.mjs absent: keep the local shim until TASK-006 lands");
+  }
+});
+
+test("merge tripwire: once lib/tokens.mjs exists, no result token is formatted inline (G-13)", () => {
+  if (!existsSync(join(HERE, "tokens.mjs"))) return;
+  assert.ok(/from "\.\/tokens\.mjs";$/m.test(SELF), "lib/tokens.mjs exists: engagement.mjs must take its tokens from it");
+  assert.doesNotMatch(SELF, /["`]ENGAGEMENT-INVALID\(|["`]POLICY-INVALID\(/, "ENGAGEMENT-INVALID / POLICY-INVALID must be lib/tokens.mjs rows, not inline strings");
 });

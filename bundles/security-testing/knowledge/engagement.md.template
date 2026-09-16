@@ -3,9 +3,12 @@
 This file is the engagement record for the `security-testing` bundle. It was
 written by `evidence.mjs engagement init` (step 0) because no
 `.agents/security-testing/engagement.md` existed. **Edit the JSON block below,
-then run `engagement init` again.** Until you do, every command that needs the
-record exits `2 ENGAGEMENT-MISSING` (file absent) or
-`2 ENGAGEMENT-INVALID(<reason>)` (file present, block wrong).
+then run `engagement init` again.** The example record is deliberately valid
+so the parser can be checked against it — nothing refuses the placeholder
+values, so an unedited file would key an engagement called `eng-2026-001`
+for a product called `my-product`. Once the file exists, a command that needs
+the record exits `2 ENGAGEMENT-INVALID(<reason>)` when the block is wrong;
+`2 ENGAGEMENT-MISSING` is only for the file being absent.
 
 The prose in this file is yours: keep notes, links, the people involved,
 anything. The scripts read **only** the one fenced block tagged
@@ -143,7 +146,8 @@ like edits to CI configuration.
   TERM=dumb CI=1 NO_COLOR=1`), output capped at 64 KiB and redacted. The
   first token must be one of `npm npx pnpm yarn node python python3 pytest
   go cargo mvn ./gradlew gradle make dotnet`; no token may contain shell
-  metacharacters or be `-e`, `--eval`, `-c`, `exec`. Omit the whole key and
+  metacharacters or be `-e`, `--eval`, `-c`, `exec`; `run-script` or `run`
+  is refused unless the token after it is `test`. Omit the whole key and
   `verify` records `NO_TEST_SURFACE`.
 - `timeout_s` — integer seconds; default `600`. On expiry the whole process
   group gets `SIGTERM`, then `SIGKILL` after 5 s, and the tests are

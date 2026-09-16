@@ -123,6 +123,10 @@ const OPEN_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*json[ \t]+engagement[ \t]*$/;
  * Throws CliError(2, ENGAGEMENT-INVALID(…)) for an unterminated fence or a
  * second block: both make "the record" ambiguous, so neither is silently
  * picked.
+ * Enclosing fences are not tracked: a literal `json engagement` opener inside
+ * another fenced block (a ```markdown example, say) counts as a block, so a
+ * file with the real record plus such an example fails closed as "more than
+ * one" rather than either being picked.
  * @param {string} text
  * @returns {{text: string, startLine: number, endLine: number} | null}
  */
