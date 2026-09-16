@@ -12,8 +12,14 @@ const COMMANDS = {
   replay: () => import("./lib/cmd-register-replay.mjs"), // TASK-028
   status: () => import("./lib/cmd-register-status.mjs"), // TASK-028
   anchor: () => import("./lib/cmd-register-anchor.mjs"), // TASK-028
-  // accept / revoke / check / close-false-positive / reopen / supersede / alias / transition
-  //   → () => import("./lib/cmd-register-transition.mjs")  // TASK-029
+  accept: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("accept")), // TASK-029
+  revoke: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("revoke")), // TASK-029
+  check: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("check")), // TASK-029
+  "close-false-positive": () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("close-false-positive")), // TASK-029
+  reopen: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("reopen")), // TASK-029
+  supersede: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("supersede")), // TASK-029
+  alias: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("alias")), // TASK-029
+  transition: () => import("./lib/cmd-register-transition.mjs"), // TASK-029 (ticketed and the other emitter-only events are refused here)
   // "consume-verdict": () => import("./lib/cmd-consume-verdict.mjs"), // TASK-030
   // render: () => import("./lib/cmd-register-render.mjs"), // TASK-059
 };

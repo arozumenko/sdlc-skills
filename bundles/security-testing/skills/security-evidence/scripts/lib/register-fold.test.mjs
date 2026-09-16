@@ -142,13 +142,17 @@ test("replay verifies the chain first and rejects what the fold does not know", 
   dup[1].prev_sha256 = eventSha256(dup[0]);
   assert.throws(() => replay(dup, EID), (e) => e instanceof TransitionError && e.event === "add" && e.from === "open");
 
-  // TASK-029 owns every other event; until then the fold refuses them
+  // the table (TASK-029, register-transitions.mjs): accept from open folds; revoke from open does not
   const accept = structuredClone(events);
   accept[1].event = "accept";
   accept[1].row_id = "R-0001";
   accept[1].payload = { recorded_by: "lead", approved_by: "cto", approval_ref: "ref", authenticated: false, until: "2026-12-31" };
   accept[1].prev_sha256 = eventSha256(accept[0]);
-  assert.throws(() => replay(accept, EID), (e) => e instanceof TransitionError && e.event === "accept");
+  assert.equal(replay(accept, EID).rows["R-0001"].status, "accepted");
+  const revoke = structuredClone(accept);
+  revoke[1].event = "revoke";
+  revoke[1].payload = { recorded_by: "lead", approved_by: "cto", approval_ref: "ref", authenticated: false };
+  assert.throws(() => replay(revoke, EID), (e) => e instanceof TransitionError && e.event === "revoke" && e.from === "open");
 
   // add payload is exactly the row fields the command sets
   const extra = structuredClone(events);
@@ -194,7 +198,7 @@ test("anchorVerify: MATCH on the exact state, TRUNCATED when the log is shorter 
 // ---------------------------------------------------------------------------
 // status summary
 
-test("summarize: counts by status × priority (zeros included), open_exposure = open + regressed, approvals never subtract", () => {
+test("summarize: counts by status × priority (zeros included), open_exposure = open + regressed + accepted + false-positive (an approval never subtracts, spec §6.8; TASK-029)", () => {
   const p = replay(chain(["a", "b", "c"]), EID);
   p.rows["R-0002"].priority = "p0";
   p.rows["R-0003"].status = "accepted";
@@ -206,7 +210,7 @@ test("summarize: counts by status × priority (zeros included), open_exposure = 
   for (const status of STATUSES) assert.deepEqual(Object.keys(s.counts[status]), PRIORITIES);
   assert.deepEqual(s.counts.open, { p0: 1, p1: 1, p2: 0, p3: 0 });
   assert.deepEqual(s.counts.accepted, { p0: 0, p1: 1, p2: 0, p3: 0 });
-  assert.deepEqual(s.open_exposure, { p0: 1, p1: 1, p2: 0, p3: 0 });
+  assert.deepEqual(s.open_exposure, { p0: 1, p1: 2, p2: 0, p3: 0 }, "the accepted row stays in exposure");
   assert.equal(s.unauthenticated_approvals, 2, "one accepted row + one row with ack_refs");
   assert.equal(s.rows, p.rows);
 
@@ -220,7 +224,7 @@ test("summarize: counts by status × priority (zeros included), open_exposure = 
 
 test("pure: register-fold.mjs imports no fs, child process, git or clock", () => {
   const imports = [...SELF.matchAll(/^\s*import\b[^;]*?from\s+["']([^"']+)["']/gm)].map((m) => m[1]);
-  assert.deepEqual(imports.sort(), ["../canon.mjs", "./tokens.mjs"]);
+  assert.deepEqual(imports.sort(), ["../canon.mjs", "./register-transitions.mjs", "./tokens.mjs"]);
   for (const banned of ["node:fs", "node:child_process", "git.mjs", "fs/promises", "child_process", "Date.now", "new Date", "Math.random", "process."]) {
     assert.ok(!SELF.includes(banned), `register-fold.mjs must not reference ${banned}`);
   }

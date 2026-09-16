@@ -201,3 +201,24 @@ export function count(status, counts) {
 
 /** G-13: strings that must never appear under scripts/ (grep-guarded by tokens.test.mjs). */
 export const FORBIDDEN_STRINGS = Object.freeze(["UNGATED", "exact checkout"]);
+
+// --- register transitions (TASK-029; plan §4.3, spec §6.8) --------------------
+
+/** `EMITTER-ONLY(<event>)` — exit 2: the generic `transition` verb refuses an event only a script step appends (ticketed, fixed, …). */
+export const emitterOnly = (event) => `EMITTER-ONLY(${event})`;
+
+/** `NOT-EQUIVALENT(<R-id>: <R-id>)` — exit 4: `supersede --subject-equivalent` where the subjects are neither the same id nor alias-linked. */
+export const notEquivalent = (source, target) => `NOT-EQUIVALENT(${source}: ${target})`;
+
+/** `ALIAS from=<finding_id> to=<finding_id> seq=<n>` — `register.mjs alias` appended a line to finding-alias.jsonl. */
+export function aliased({ from_id, to_id, seq }) {
+  if (!SHA256.test(from_id) || !SHA256.test(to_id)) throw new TypeError("aliased: from_id and to_id must be finding ids (sha256)");
+  if (!Number.isInteger(seq) || seq < 1) throw new TypeError(`aliased: seq must be a positive integer, got ${String(seq)}`);
+  return `ALIAS from=${from_id} to=${to_id} seq=${seq}`;
+}
+
+/** `CHECK expired=<n>` — the last line of `register.mjs check`, after one ROW line per expired acceptance. */
+export function checked(expired) {
+  if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
+  return `CHECK expired=${expired}`;
+}
