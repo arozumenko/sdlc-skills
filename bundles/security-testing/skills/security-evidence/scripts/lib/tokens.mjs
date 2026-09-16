@@ -202,6 +202,20 @@ export function count(status, counts) {
 /** G-13: strings that must never appear under scripts/ (grep-guarded by tokens.test.mjs). */
 export const FORBIDDEN_STRINGS = Object.freeze(["UNGATED", "exact checkout"]);
 
+// --- run init (TASK-012; plan §4.1 row `run init`, TL-9) ----------------------
+
+const RUN_ID_SHAPE = /^[0-9a-f]{12}-[0-9]{4}$/;
+const RUN_KIND_LIST = Object.freeze(["assessment", "review", "verify", "threat-model"]);
+
+/** `RUN <run_id> seq=<n> kind=<k> base=<oid> head=<oid>` — the first line of `run init`; the WROTE lines follow. */
+export function runLine({ run_id, seq, kind, base, head }) {
+  if (typeof run_id !== "string" || !RUN_ID_SHAPE.test(run_id)) throw new TypeError(`runLine: run_id must be <12 hex>-<4 digits>, got ${String(run_id)}`);
+  if (!Number.isInteger(seq) || seq < 1) throw new TypeError(`runLine: seq must be a positive integer, got ${String(seq)}`);
+  if (!RUN_KIND_LIST.includes(kind)) throw new TypeError(`runLine: kind ${String(kind)} is outside the closed vocabulary`);
+  if (!OID.test(base) || !OID.test(head)) throw new TypeError("runLine: base and head must be 40-hex oids");
+  return `RUN ${run_id} seq=${seq} kind=${kind} base=${base} head=${head}`;
+}
+
 // --- baseline (TASK-010; spec §6.9 step 4, plan §4.1 engagement init / baseline) ---
 
 function requireCount(where, name, n) {

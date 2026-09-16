@@ -32,7 +32,7 @@ env         SECURITY_EVIDENCE_NOW (fixed created_at) · SECURITY_EVIDENCE_ACTOR 
 // One line per command; the module is loaded only when its command runs.
 const COMMANDS = {
   // engagement: () => import("./lib/cmd-engagement.mjs"),   // TASK-008
-  // run: () => import("./lib/cmd-run.mjs"),                 // TASK-012 / TASK-058
+  run: () => import("./lib/cmd-run.mjs"), // TASK-012 (init) / TASK-058 (snapshot)
   // scope: () => import("./lib/cmd-scope.mjs"),             // TASK-013
   // ingest: () => import("./lib/cmd-ingest.mjs"),           // TASK-015
   // gate: () => import("./lib/cmd-gate.mjs"),               // TASK-019
