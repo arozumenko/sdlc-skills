@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "max_range": 40,
+  "sides": [
+    "base",
+    "head",
+    "snapshot"
+  ],
+  "typed_citation_rule": "context-allowed-outside-admitted",
+  "redaction_version": 1
+}
