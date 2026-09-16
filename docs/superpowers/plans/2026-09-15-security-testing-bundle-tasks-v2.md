@@ -1249,3 +1249,12 @@ Recorded by the TASK-006 implementer so the file-ownership record is honest and 
 | G3 (TASK-026 follow-up) | `cmd-evaluate.mjs` reads `<verify.json>` with `readArtifact(file)` straight from argv (process-cwd-relative, no root containment) — it landed before `ctx.input()` existed. The owner of the next `verify.mjs` change (TASK-027) switches it to `ctx.input("evaluate", file)`; behaviour for relative paths is unchanged, paths outside the tree become `USAGE`. |
 | G14 (TASK-027) | `git.diffUnified` pins `--src-prefix=a/ --dst-prefix=b/ --submodule=short` (with `--no-color --no-ext-diff --no-textconv --no-renames`), so a consumer's `diff.noprefix` / `diff.mnemonicPrefix` / `diff.submodule` cannot change the `+++ b/<path>` line or the hunk body the suppression scanner keys on (guarded by `git.test.mjs`). `git.worktreeAdd` now refuses a relative `dir` (a relative `core.hooksPath` resolves against the work tree). |
 | all test-writing tasks | The CLI harness (`fixtures/cli/harness.mjs`) is hermetic: its own `git()` and every `runScript` child run with `GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL` pointing at a harness-owned empty file (`HERMETIC_GITCONFIG`), guarded by `fixtures/cli/harness.test.mjs` under a hostile `~/.gitconfig`. A test that needs a git config value sets it in the fixture repo (`git(repo, ["config", …])`), never in HOME. |
+
+### PM log additions (2026-09-16, after G3)
+
+| Owner | Follow-up from review |
+|---|---|
+| TASK-027 | Wire `evaluate` into `verify.mjs` COMMANDS (TASK-026 merged it; entry still commented out) and switch `cmd-evaluate.mjs` to `ctx.input()`. |
+| TASK-015 (first cmd with real file inputs) | `ctx.input()`: realpath the target before the `relative()` containment check, or document the lexical-only guarantee (macOS `/var` vs `/private/var`). |
+| TASK-028 | `cli.test.mjs` `--help` guard reads USAGE via a source regex; when `register.mjs` builds USAGE from `tokens.mjs` rows, change the guard to import the module's USAGE. Also fix register usage text: neither-flag ⇒ exit 2 `EQUIVALENCE-REQUIRED`. |
+| TASK-008 | `ctx.parseEngagementBlock` now delegates to TASK-007's `parseEngagementMd` (done in TASK-006 round 3); TASK-008 builds `cmd-engagement.mjs` on that single parser. |
