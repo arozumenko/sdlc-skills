@@ -1,7 +1,7 @@
 // lib/cmd-run.mjs — `evidence.mjs run init --kind assessment|review|verify|
 // threat-model [--base <ref>] [--head <ref>]` (TASK-012; plan §4.1 row
-// `run init`; spec §6.1, §6.2, D18 / P6, P2). `run snapshot …` is TASK-058
-// and joins this module then.
+// `run init`; spec §6.1, §6.2, D18 / P6, P2). `run snapshot …` (TASK-058)
+// lives in lib/cmd-run-snapshot.mjs and is dispatched from SUBCOMMANDS below.
 //
 // Order, so a refusal leaves nothing behind (spec §12 "allocation before
 // inputs"; §4.1 "DIRTY-TREE … ledger untouched"):
@@ -224,7 +224,10 @@ async function init(argv, ctx) {
   return EXIT.OK;
 }
 
-const SUBCOMMANDS = Object.freeze({ init });
+const SUBCOMMANDS = Object.freeze({
+  init,
+  snapshot: (argv, ctx) => import("./cmd-run-snapshot.mjs").then((m) => m.run(argv, ctx)), // TASK-058
+});
 
 /**
  * @param {string[]} argv after `run`

@@ -254,3 +254,34 @@ export function checked(expired) {
   if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
   return `CHECK expired=${expired}`;
 }
+
+// --- run snapshot (TASK-058; plan §4.1 rows `run snapshot register|verify|proposals`, spec P2) ---
+
+/** Exit 2: the run already holds this snapshot (`register-events.json`, or `verify-snapshots/<id>/`) — write-once, G-10. */
+export const SNAPSHOT_EXISTS = "SNAPSHOT-EXISTS";
+
+/** `KIND(<kind>)` — exit 2: `run snapshot` on a run whose kind is not `assessment`. */
+export function kindRefused(kind) {
+  if (!RUN_KIND_LIST.includes(kind)) throw new TypeError(`kindRefused: kind ${String(kind)} is outside the closed vocabulary`);
+  return `KIND(${kind})`;
+}
+
+/** `SNAPSHOT register events=<n> chain=<sha256>` — the register log as copied into the run; the WROTE line follows. */
+export function snapshotRegister({ events, chain_sha256 }) {
+  if (!Number.isInteger(events) || events < 0) throw new TypeError(`snapshotRegister: events must be a non-negative integer, got ${String(events)}`);
+  if (!SHA256.test(chain_sha256)) throw new TypeError(`snapshotRegister: chain must be 64 lowercase hex chars, got ${String(chain_sha256)}`);
+  return `SNAPSHOT register events=${events} chain=${chain_sha256}`;
+}
+
+/** `SNAPSHOT verify from=<verify_run_id> sha256=<verify self_sha256>` — one per `--from`, after its files are copied and re-verified. */
+export function snapshotVerify({ from, sha256 }) {
+  if (typeof from !== "string" || !RUN_ID_SHAPE.test(from)) throw new TypeError(`snapshotVerify: from must be <12 hex>-<4 digits>, got ${String(from)}`);
+  if (!SHA256.test(sha256)) throw new TypeError(`snapshotVerify: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
+  return `SNAPSHOT verify from=${from} sha256=${sha256}`;
+}
+
+/** `SNAPSHOT proposals n=<n>` — the proposals index was rewritten with n entries; the WROTE line follows. */
+export function snapshotProposals(n) {
+  if (!Number.isInteger(n) || n < 0) throw new TypeError(`snapshotProposals: n must be a non-negative integer, got ${String(n)}`);
+  return `SNAPSHOT proposals n=${n}`;
+}

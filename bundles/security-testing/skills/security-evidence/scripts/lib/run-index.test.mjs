@@ -8,7 +8,7 @@ import { makeEnvelope, readArtifact, writeArtifact } from "../canon.mjs";
 import { cleanupAll, initRepo } from "../fixtures/cli/harness.mjs";
 import { createContext } from "./ctx.mjs";
 import { CliError } from "./exit.mjs";
-import { INDEXES, appendIndex, writeEmptyIndexes } from "./run-index.mjs";
+import { INDEXES, appendIndex, replaceIndex, writeEmptyIndexes } from "./run-index.mjs";
 
 after(cleanupAll);
 
@@ -115,4 +115,42 @@ test("appendIndex refuses a hash-consistent but off-shape index (list key missin
     await assert.rejects(appendIndex(ctx, RUN_ID, "imports", entry), (err) => err instanceof CliError && err.code === 5 && err.token === "INCONSISTENT(imports.json)");
     assert.equal(readFileSync(join(dir, "imports.json"), "utf8"), before, "index untouched");
   }
+});
+
+// --- TASK-058: replaceIndex — `run snapshot proposals` rewrites the whole list (TL-14) ---
+
+test("replaceIndex (TASK-058): rewrites the list wholesale under the run lock; same refusals as appendIndex", async () => {
+  const ctx = ctxFor(initRepo());
+  writeEmptyIndexes(ctx, head);
+  const dir = join(ctx.st, "runs", RUN_ID);
+  const path = join(dir, "proposals-index.json");
+  const p = (n) => ({ id: `P-00${n}`, sha256: String(n).repeat(64), path: `.agents/security-testing/proposals/P-00${n}.proposal.md` });
+  await appendIndex(ctx, RUN_ID, "proposals", p(1));
+
+  const later = createContext({ root: ctx.root }, { env: { SECURITY_EVIDENCE_NOW: "2026-09-16T12:00:00Z" } });
+  const written = await replaceIndex(later, RUN_ID, "proposals", [p(2), p(3)]);
+  const after1 = readArtifact(path, { kind: "proposals-index" });
+  assert.deepEqual(after1.payload, { proposals: [p(2), p(3)] }, "replaced, not appended");
+  assert.equal(after1.envelope.self_sha256, written.envelope.self_sha256);
+  assert.equal(after1.envelope.created_at, "2026-09-16T12:00:00Z");
+  assert.equal(after1.envelope.key_id, KEY_ID, "the run's key_id is carried");
+
+  await replaceIndex(later, RUN_ID, "proposals", []);
+  assert.deepEqual(readArtifact(path).payload, { proposals: [] }, "an empty list is a valid rewrite");
+  assert.deepEqual(readdirSync(dir).filter((n) => n.startsWith(".")), [], "no tmp file inside the run");
+  assert.ok(!existsSync(join(ctx.st, "ledger", `${RUN_ID}.lock`)), "run lock released");
+
+  // refusals: not an array / off-schema entry (file untouched), unknown name, COMMITTED, missing index
+  const bytes = readFileSync(path, "utf8");
+  await assert.rejects(replaceIndex(ctx, RUN_ID, "proposals", { id: "P-001" }), /array/);
+  await assert.rejects(replaceIndex(ctx, RUN_ID, "proposals", [{ id: "P-001" }]), /proposals-index/);
+  await assert.rejects(replaceIndex(ctx, RUN_ID, "findings", []), /index name/);
+  assert.equal(readFileSync(path, "utf8"), bytes);
+  writeFileSync(join(dir, "COMMITTED"), `${"a".repeat(64)}\n`);
+  await assert.rejects(replaceIndex(ctx, RUN_ID, "proposals", [p(1)]), (err) => err instanceof CliError && err.code === 2 && err.token === "RUN-COMMITTED");
+  assert.equal(readFileSync(path, "utf8"), bytes);
+
+  const other = ctxFor(initRepo());
+  mkdirSync(join(other.st, "runs", RUN_ID), { recursive: true });
+  await assert.rejects(replaceIndex(other, RUN_ID, "proposals", []), (err) => err instanceof CliError && err.code === 3 && err.token === "INCOMPLETE(proposals)");
 });
