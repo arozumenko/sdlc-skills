@@ -1,0 +1,65 @@
+{
+  "redaction_version": 1,
+  "rules": [
+    {
+      "class": "aws-key",
+      "pattern": "(?<![A-Za-z0-9])(?:AKIA|ASIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA)[A-Z0-9]{16}(?![A-Za-z0-9])",
+      "flags": "g",
+      "replacement": "<REDACTED:aws-key>"
+    },
+    {
+      "class": "gcp-key",
+      "pattern": "(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35,}",
+      "flags": "g",
+      "replacement": "<REDACTED:gcp-key>"
+    },
+    {
+      "class": "azure-key",
+      "pattern": "(?<![A-Za-z0-9_])(?:AccountKey|SharedAccessKey|SharedAccessSignature)\\s*=\\s*[A-Za-z0-9+/%_-]{40,}={0,2}",
+      "flags": "gi",
+      "replacement": "<REDACTED:azure-key>"
+    },
+    {
+      "class": "jwt",
+      "pattern": "(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*",
+      "flags": "g",
+      "replacement": "<REDACTED:jwt>"
+    },
+    {
+      "class": "pem-block",
+      "pattern": "-----BEGIN [A-Z0-9 ]*-----[\\s\\S]*?(?:-----END [A-Z0-9 ]*-----|(?![\\s\\S]))",
+      "flags": "g",
+      "replacement": "<REDACTED:pem-block>"
+    },
+    {
+      "class": "password-assign",
+      "pattern": "(?<![A-Za-z0-9_-])(?<!<REDACTED:)[A-Za-z0-9_-]*(?:password|passwd|pwd)\\s*(?:[\"']\\s*(?:\\]\\s*)?)?(?:(?:(?:\\?[ \\t]*)?:[ \\t]*[A-Za-z_][A-Za-z0-9_.]*(?:<[^<>\\n]{0,80}>)?(?:\\[\\])?\\??(?:[ \\t]*\\|[ \\t]*[A-Za-z_][A-Za-z0-9_.]*)*[ \\t]*)?(?:=>|:=|!==?|={1,3}|:)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?:\\.equals(?:IgnoreCase)?\\s*)?\\(\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<![\"']\\s*,)\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<=\\([ \\t]*[\"'][A-Za-z0-9_-]{0,64}[\"'][ \\t]*,)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|(?<=<[A-Za-z0-9_:.-]{0,64})[ \\t]*>[^<\\r\\n]+|(?<=[ \\t])value[ \\t]*=[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|\\r?\\n[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?<![A-Za-z0-9_-])--[A-Za-z0-9_-]{0,64})[ \\t]+(?!-)(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?:^|\\n)[ \\t]{0,16}ENV[ \\t]{1,16}[A-Za-z0-9_-]{0,64})[ \\t]+(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+))",
+      "flags": "gi",
+      "replacement": "<REDACTED:password-assign>"
+    },
+    {
+      "class": "secret-assign",
+      "pattern": "(?<![A-Za-z0-9_-])(?<!<REDACTED:)(?:[A-Za-z0-9_-]*secret[A-Za-z0-9_-]*|[A-Za-z0-9_-]*private[_-]?key)\\s*(?:[\"']\\s*(?:\\]\\s*)?)?(?:(?:(?:\\?[ \\t]*)?:[ \\t]*[A-Za-z_][A-Za-z0-9_.]*(?:<[^<>\\n]{0,80}>)?(?:\\[\\])?\\??(?:[ \\t]*\\|[ \\t]*[A-Za-z_][A-Za-z0-9_.]*)*[ \\t]*)?(?:=>|:=|!==?|={1,3}|:)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?:\\.equals(?:IgnoreCase)?\\s*)?\\(\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<![\"']\\s*,)\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<=\\([ \\t]*[\"'][A-Za-z0-9_-]{0,64}[\"'][ \\t]*,)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|(?<=<[A-Za-z0-9_:.-]{0,64})[ \\t]*>[^<\\r\\n]+|(?<=[ \\t])value[ \\t]*=[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|\\r?\\n[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?<![A-Za-z0-9_-])--[A-Za-z0-9_-]{0,64})[ \\t]+(?!-)(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?:^|\\n)[ \\t]{0,16}ENV[ \\t]{1,16}[A-Za-z0-9_-]{0,64})[ \\t]+(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+))",
+      "flags": "gi",
+      "replacement": "<REDACTED:secret-assign>"
+    },
+    {
+      "class": "token-assign",
+      "pattern": "(?<![A-Za-z0-9_-])(?<!<REDACTED:)(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|[A-Za-z0-9_-]*access[_-]?key)\\s*(?:[\"']\\s*(?:\\]\\s*)?)?(?:(?:(?:\\?[ \\t]*)?:[ \\t]*[A-Za-z_][A-Za-z0-9_.]*(?:<[^<>\\n]{0,80}>)?(?:\\[\\])?\\??(?:[ \\t]*\\|[ \\t]*[A-Za-z_][A-Za-z0-9_.]*)*[ \\t]*)?(?:=>|:=|!==?|={1,3}|:)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?:\\.equals(?:IgnoreCase)?\\s*)?\\(\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<![\"']\\s*,)\\s*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,(?<=\\([ \\t]*[\"'][A-Za-z0-9_-]{0,64}[\"'][ \\t]*,)[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|(?<=<[A-Za-z0-9_:.-]{0,64})[ \\t]*>[^<\\r\\n]+|(?<=[ \\t])value[ \\t]*=[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`)|,[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|\\r?\\n[ \\t]*\"?value\"?[ \\t]*:[ \\t]*(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?<![A-Za-z0-9_-])--[A-Za-z0-9_-]{0,64})[ \\t]+(?!-)(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+)|(?<=[A-Za-z0-9_-])(?<=(?:^|\\n)[ \\t]{0,16}ENV[ \\t]{1,16}[A-Za-z0-9_-]{0,64})[ \\t]+(?:\"(?:[^\"\\\\\\n]|\\\\.)+\"|'(?:[^'\\\\\\n]|\\\\.)+'|`(?:[^`\\\\\\n]|\\\\.)+`|(?!(?:string|str|bool|boolean|int|integer|number|float|any|unknown|object|null|none|nil|undefined|true|false|required|optional)(?![A-Za-z0-9_-]))[^\\s\"'`,;&<{\\[|>][^\\s\"'`,;&<]*|[|>][-+0-9]*[ \\t]*\\r?\\n(?:[ \\t]+[^\\r\\n]*\\r?\\n?)+))",
+      "flags": "gi",
+      "replacement": "<REDACTED:token-assign>"
+    },
+    {
+      "class": "bearer",
+      "pattern": "(?<![A-Za-z0-9])Bearer\\s+(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{16,}",
+      "flags": "gi",
+      "replacement": "<REDACTED:bearer>"
+    },
+    {
+      "class": "high-entropy-assign",
+      "pattern": "(?<![A-Za-z0-9_-])(?<!<REDACTED:)[A-Za-z_][A-Za-z0-9_-]{2,}\\s*(?:[\"']\\s*)?(?:=>|:=|!==?|={1,3}|:)\\s*[\"'`]?(?!//)(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*[A-Z])(?=[A-Za-z0-9+/_-]*[0-9])[A-Za-z0-9+/_-]{32,}={0,2}[\"'`]?",
+      "flags": "g",
+      "replacement": "<REDACTED:high-entropy-assign>"
+    }
+  ]
+}

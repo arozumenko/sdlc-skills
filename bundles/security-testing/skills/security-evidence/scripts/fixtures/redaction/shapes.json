@@ -1,0 +1,572 @@
+{
+  "$comment": "Adversarial shapes for redaction-rules.json (TASK-004). `secrets`: after redactString the `secret` literal must not survive and matches() on the output must be false. `benign`: matches() must be false and the text must survive unchanged. Consumed by redact.test.mjs.",
+  "secrets": [
+    {
+      "shape": "json: double-quoted, trailing comma",
+      "input": "  \"password\": \"hunter2\",",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "json: api_key no spaces",
+      "input": "{\"api_key\":\"sk-live-abc123\"}",
+      "secret": "sk-live-abc123"
+    },
+    {
+      "shape": "json: client_secret last member",
+      "input": "{\"client_secret\": \"s3cr3t-v4lue\"}",
+      "secret": "s3cr3t-v4lue"
+    },
+    {
+      "shape": "json: escaped quote inside the value",
+      "input": "\"password\": \"a\\\"b1234\"",
+      "secret": "b1234"
+    },
+    {
+      "shape": "json: escaped backslash then quote",
+      "input": "\"password\": \"tail\\\\\"",
+      "secret": "tail"
+    },
+    {
+      "shape": "json: k8s env name/value pair on one line",
+      "input": "{\"name\": \"DB_PASSWORD\", \"value\": \"hunter2\"}",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "json: token holding a jwt",
+      "input": "\"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\"",
+      "secret": "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    },
+    {
+      "shape": "yaml: unquoted scalar",
+      "input": "password: hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "yaml: indented, single-quoted, comment after",
+      "input": "    api_token: 'ghp_16C7e42F292c6912E7710c838347Ae178B4a'  # rotate me",
+      "secret": "ghp_16C7e42F292c6912E7710c838347Ae178B4a"
+    },
+    {
+      "shape": "yaml: docker-compose environment list item",
+      "input": "      - DB_PASSWORD=hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "yaml: docker-compose environment map",
+      "input": "      POSTGRES_PASSWORD: \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "yaml: k8s env name/value block",
+      "input": "env:\n  - name: DB_PASSWORD\n    value: hunter2\n  - name: PORT\n    value: \"5432\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "yaml: k8s env name/value block, quoted name, CRLF",
+      "input": "env:\r\n  - name: \"API_TOKEN\"\r\n    value: \"ghp_abc123\"\r\n",
+      "secret": "ghp_abc123"
+    },
+    {
+      "shape": "yaml: secret_key with trailing CRLF",
+      "input": "secret_key: s3cr3t\r\nnext: 1\r\n",
+      "secret": "s3cr3t"
+    },
+    {
+      "shape": "toml: double-quoted with spaces around =",
+      "input": "password = \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "toml: table-qualified key",
+      "input": "[database]\nuser = \"app\"\npassword = 'hunter2'\n",
+      "secret": "hunter2"
+    },
+    {
+      "shape": ".env: bare",
+      "input": "DB_PASSWORD=hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": ".env: double-quoted with CRLF",
+      "input": "DB_PASSWORD=\"hunter2\"\r\nDB_HOST=localhost\r\n",
+      "secret": "hunter2"
+    },
+    {
+      "shape": ".env: value containing = and #",
+      "input": "JWT_SECRET=abc=def#ghi",
+      "secret": "abc=def#ghi"
+    },
+    {
+      "shape": "shell: export bare",
+      "input": "export DB_PASSWORD=hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "shell: export double-quoted",
+      "input": "export AWS_SECRET_ACCESS_KEY=\"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"",
+      "secret": "wJalrXUtnFEMI"
+    },
+    {
+      "shape": "shell: cli flag with =",
+      "input": "mysql -u root --password=hunter2 app",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "shell: cli flag space-separated",
+      "input": "mysql -u root --password hunter2 app",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "php: hash-rocket single-quoted, trailing comma",
+      "input": "    'password' => 'hunter2',",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "php: hash-rocket double-quoted",
+      "input": "    \"api_token\" => \"ghp_abc123\",",
+      "secret": "ghp_abc123"
+    },
+    {
+      "shape": "php: variable assignment with semicolon",
+      "input": "$password = 'hunter2';",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "php: array index assignment",
+      "input": "$config['password'] = 'hunter2';",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "php: object property",
+      "input": "$this->password = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "ruby: symbol key",
+      "input": "  password: 'hunter2',",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "ruby: symbol hash-rocket",
+      "input": "  :password => \"hunter2\",",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "ruby: escaped single quote in value",
+      "input": "password: 'it\\'s1'",
+      "secret": "it\\'s1"
+    },
+    {
+      "shape": "go: short declaration",
+      "input": "password := \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "go: struct literal field",
+      "input": "\tPassword: \"hunter2\",",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "go: const with backtick raw string",
+      "input": "const apiKey = `sk-raw-abc123`",
+      "secret": "sk-raw-abc123"
+    },
+    {
+      "shape": "go: client_secret short declaration",
+      "input": "client_secret := \"s3cr3t\"",
+      "secret": "s3cr3t"
+    },
+    {
+      "shape": "python: module constant",
+      "input": "PASSWORD = \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "python: kwarg no spaces",
+      "input": "connect(host=\"db\", password=\"hunter2\")",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "python: dict literal",
+      "input": "creds = {\"password\": \"hunter2\"}",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "python: type-annotated with initializer",
+      "input": "password: str = \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "python: os.environ index assignment",
+      "input": "os.environ[\"API_KEY\"] = \"sk-abc123\"",
+      "secret": "sk-abc123"
+    },
+    {
+      "shape": "python: compare against literal",
+      "input": "if password == 'admin123':",
+      "secret": "admin123"
+    },
+    {
+      "shape": "js: const",
+      "input": "const password = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "js: let single-quoted",
+      "input": "let apiKey = 'sk-abc123';",
+      "secret": "sk-abc123"
+    },
+    {
+      "shape": "js: object literal",
+      "input": "  { user: 'app', password: 'hunter2' }",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "js: template literal",
+      "input": "const token = `ghp_abc 123`;",
+      "secret": "ghp_abc 123"
+    },
+    {
+      "shape": "js: strict equality compare",
+      "input": "if (password === \"admin123\") {",
+      "secret": "admin123"
+    },
+    {
+      "shape": "js: inequality compare",
+      "input": "if (password !== \"admin123\") return;",
+      "secret": "admin123"
+    },
+    {
+      "shape": "ts: typed field with initializer",
+      "input": "  private password: string = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "ts: optional typed field with initializer",
+      "input": "  apiKey?: string = 'sk-abc123';",
+      "secret": "sk-abc123"
+    },
+    {
+      "shape": "js: bracket assignment",
+      "input": "config[\"password\"] = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "java: field",
+      "input": "    private static final String PASSWORD = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "java: setter call with literal",
+      "input": "    ds.setPassword(\"hunter2\");",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "java: builder call with literal",
+      "input": "    .password(\"hunter2\")",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "kotlin: val with type",
+      "input": "val apiToken: String = \"ghp_abc123\"",
+      "secret": "ghp_abc123"
+    },
+    {
+      "shape": "csharp: field",
+      "input": "    string password = \"hunter2\";",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "csharp: object initializer",
+      "input": "    new Creds { Password = \"hunter2\", User = \"app\" };",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "csharp: connection string",
+      "input": "\"Server=db;Database=app;User Id=app;Password=hunter2;\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "url: query string followed by &",
+      "input": "GET /login?user=app&password=hunter2&next=%2F HTTP/1.1",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "url: query string url-encoded, last param",
+      "input": "https://example.com/cb?access_token=ya29.a0Af%2Bx123",
+      "secret": "ya29.a0Af%2Bx123"
+    },
+    {
+      "shape": "http: bearer header",
+      "input": "Authorization: Bearer AbCdEf0123456789GhIjKlMnOpQrStUv",
+      "secret": "AbCdEf0123456789GhIjKlMnOpQrStUv"
+    },
+    {
+      "shape": "http: x-api-key header, CRLF",
+      "input": "Host: api.example.com\r\nX-Api-Key: 5f4dcc3b5aa765d61d8327deb882cf99\r\n\r\n",
+      "secret": "5f4dcc3b5aa765d61d8327deb882cf99"
+    },
+    {
+      "shape": "http: x-auth-token header",
+      "input": "X-Auth-Token: 0123456789abcdef",
+      "secret": "0123456789abcdef"
+    },
+    {
+      "shape": "http: cookie with session token",
+      "input": "Cookie: session_token=abc123def; theme=dark",
+      "secret": "abc123def"
+    },
+    {
+      "shape": "http: curl -H bearer",
+      "input": "curl -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\" https://api.example.com",
+      "secret": "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    },
+    {
+      "shape": "docker: ENV instruction",
+      "input": "ENV DB_PASSWORD=hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "docker: ENV legacy space form",
+      "input": "ENV DB_PASSWORD hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "docker: ARG with default",
+      "input": "ARG NPM_TOKEN=npm_abc123",
+      "secret": "npm_abc123"
+    },
+    {
+      "shape": "k8s: stringData map",
+      "input": "stringData:\n  password: hunter2\n",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "aws: access key id in env",
+      "input": "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
+      "secret": "AKIAIOSFODNN7EXAMPLE"
+    },
+    {
+      "shape": "gcp: api key in url",
+      "input": "https://maps.googleapis.com/maps/api/js?key=AIzaSyA-1234567890abcdefghijklmnopqrstu",
+      "secret": "AIzaSyA-1234567890abcdefghijklmnopqrstu"
+    },
+    {
+      "shape": "pem: yaml block scalar",
+      "input": "tls.key: |\n  -----BEGIN PRIVATE KEY-----\n  MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n  -----END PRIVATE KEY-----\n",
+      "secret": "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7"
+    },
+    {
+      "shape": "high-entropy: signing key with := operator",
+      "input": "signingKey := \"sK9v2Lq8mZ1xR4tY7wB0nC3jH6pF5dG2aE8uV1iO\"",
+      "secret": "sK9v2Lq8mZ1xR4tY7wB0nC3jH6pF5dG2aE8uV1iO"
+    },
+    {
+      "shape": "high-entropy: hash-rocket",
+      "input": "'hmac' => 'sK9v2Lq8mZ1xR4tY7wB0nC3jH6pF5dG2aE8uV1iO',",
+      "secret": "sK9v2Lq8mZ1xR4tY7wB0nC3jH6pF5dG2aE8uV1iO"
+    },
+    {
+      "shape": "xml: element text (maven settings.xml)",
+      "input": "    <server>\n      <id>nexus</id>\n      <username>deploy</username>\n      <password>hunter2</password>\n    </server>",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "xml: key/value attribute pair (web.config)",
+      "input": "    <add key=\"password\" value=\"hunter2\" />",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "java: map put with quoted key",
+      "input": "    headers.put(\"X-Api-Key\", \"5f4dcc3b5aa765d61d8327deb882cf99\");",
+      "secret": "5f4dcc3b5aa765d61d8327deb882cf99"
+    },
+    {
+      "shape": "java: properties setProperty",
+      "input": "    props.setProperty(\"password\", \"hunter2\");",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "java: equals compare",
+      "input": "    if (password.equals(\"admin123\")) {",
+      "secret": "admin123"
+    },
+    {
+      "shape": "c: strcmp compare",
+      "input": "    if (strcmp(password, \"admin123\") == 0)",
+      "secret": "admin123"
+    },
+    {
+      "shape": "properties: dotted key",
+      "input": "spring.datasource.password=hunter2",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "yaml: block scalar",
+      "input": "password: |\n  hunter2\nnext: 1\n",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "ts: union-typed field with initializer",
+      "input": "  token: string | null = \"ghp_abc123\";",
+      "secret": "ghp_abc123"
+    },
+    {
+      "shape": "kotlin: nullable typed with initializer",
+      "input": "  var password: String? = \"hunter2\"",
+      "secret": "hunter2"
+    },
+    {
+      "shape": "github-actions: env with literal",
+      "input": "env:\n  NPM_TOKEN: npm_abc123\n",
+      "secret": "npm_abc123"
+    },
+    {
+      "shape": "shell: cli api-key flag space-separated",
+      "input": "openai --api-key sk-abc123 models list",
+      "secret": "sk-abc123"
+    }
+  ],
+  "benign": [
+    {
+      "shape": "prose: password word",
+      "input": "Users must reset their password every 90 days."
+    },
+    {
+      "shape": "prose: token and secret words",
+      "input": "The token endpoint returns 401; the secret rotation runbook is in docs/."
+    },
+    {
+      "shape": "prose: mentions an assignment in words",
+      "input": "Setting the password is done via the admin UI, not the config file."
+    },
+    {
+      "shape": "identifier: password_reset_url",
+      "input": "password_reset_url = https://example.com/reset"
+    },
+    {
+      "shape": "identifier: token_count",
+      "input": "token_count = 3"
+    },
+    {
+      "shape": "identifier: max_tokens",
+      "input": "max_tokens=4096 temperature=0.2"
+    },
+    {
+      "shape": "identifier: secrets.md path",
+      "input": "See secrets.md and tokenizer.ts for details"
+    },
+    {
+      "shape": "identifier: password_hash column",
+      "input": "password_hash_algorithm=argon2id"
+    },
+    {
+      "shape": "header: bearer authentication required",
+      "input": "Bearer authentication required"
+    },
+    {
+      "shape": "header: www-authenticate challenge",
+      "input": "WWW-Authenticate: Bearer realm=\"api\", error=\"invalid_token\""
+    },
+    {
+      "shape": "header: bearer placeholder",
+      "input": "Authorization: Bearer <token>"
+    },
+    {
+      "shape": "ts: interface field type",
+      "input": "interface User { email: string; password: string; }"
+    },
+    {
+      "shape": "ts: optional field type",
+      "input": "  apiKey?: string;"
+    },
+    {
+      "shape": "python: type annotation only",
+      "input": "password: str"
+    },
+    {
+      "shape": "json-schema: password property object",
+      "input": "\"password\": { \"type\": \"string\", \"minLength\": 12 }"
+    },
+    {
+      "shape": "openapi: token array",
+      "input": "tokens: ["
+    },
+    {
+      "shape": "yaml: password null",
+      "input": "password: null"
+    },
+    {
+      "shape": "js: boolean flag",
+      "input": "const requirePassword = true;"
+    },
+    {
+      "shape": "js: shorthand property",
+      "input": "  return { username, password };"
+    },
+    {
+      "shape": "js: getter call",
+      "input": "  const hashed = hash(user.getPassword());"
+    },
+    {
+      "shape": "helm: template reference",
+      "input": "  password: {{ .Values.db.password }}"
+    },
+    {
+      "shape": "k8s: secretKeyRef",
+      "input": "  - name: DB_PASSWORD\n    valueFrom:\n      secretKeyRef:\n        name: db\n        key: password"
+    },
+    {
+      "shape": "html: input type password",
+      "input": "<input type=\"password\" name=\"password\" />"
+    },
+    {
+      "shape": "sql: column list",
+      "input": "SELECT id, password_hash FROM users WHERE token_expires_at > now()"
+    },
+    {
+      "shape": "git: hex digest after key",
+      "input": "resolved=9fceb02d0ae598e95dc970b74767f19372d61af8"
+    },
+    {
+      "shape": "test: form field list",
+      "input": "fields = ['username', 'password', 'email']"
+    },
+    {
+      "shape": "html: label for password",
+      "input": "<label for=\"password\">Password</label>"
+    },
+    {
+      "shape": "html: form input with empty value",
+      "input": "<input type=\"password\" name=\"password\" value=\"\" />"
+    },
+    {
+      "shape": ".env.example: empty quoted",
+      "input": "DB_PASSWORD=\"\""
+    },
+    {
+      "shape": "yaml: empty single-quoted",
+      "input": "password: ''"
+    },
+    {
+      "shape": "java: setter with empty string",
+      "input": "    ds.setPassword(\"\");"
+    },
+    {
+      "shape": "i18n: describe block title",
+      "input": "describe(\"password\", () => {"
+    },
+    {
+      "shape": "js: equals against variable",
+      "input": "  if (password.equals(other)) return;"
+    },
+    {
+      "shape": "prose: password > 8 chars",
+      "input": "Rule: password > 8 chars, token < 1h TTL"
+    },
+    {
+      "shape": "xml: empty element",
+      "input": "<password></password>"
+    }
+  ]
+}
