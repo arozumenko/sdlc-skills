@@ -31,13 +31,27 @@
 //
 //   ensureKey(ctx, {rotate?, engagement_id}) → {key_id, created, status}
 //       status ∈ created | reused | rotated — the word `KEY: <key_id> …`
-//       prints (tokens.keyLine). `rotated` = rotate requested and `current`
-//       named a key before the call; a rotate with no key yet is `created`.
+//       prints (tokens.keyLine). `rotated` = rotate requested and reuse
+//       would have happened without it (this engagement's key, file
+//       present); a rotate with no key yet, a lost file, or another
+//       engagement's `current` is `created` — nothing of this engagement's
+//       was rotated.
 //   loadKey(ctx, key_id)      → Buffer | null   (ctx.keyById; malformed id ⇒ CliError 5)
 //   currentKeyId(ctx)         → key_id | null   (the pointer as written, file present or not)
 //   keysOf(ctx, engagement_id) → key_id[]       (bytewise key_id order, as index.json is written)
 //   readIndex(ctx)            → {key_id → {engagement_id, created_at}}
 //   keyIdOf(bytes), keysDir(ctx), KEY_BYTES, KEY_ID_PATTERN
+//
+// engagement_id is NFC-normalised at the boundary (ensureKey, keysOf):
+// index.json is written through canon.canonical(), which NFC-normalises
+// every string, so a decomposed id (engagement.schema.json allows any
+// string; parseEngagementMd does not normalise) would otherwise never match
+// the row it wrote — every init would mint a new key and purge would miss
+// the engagement's rows. Both spellings name the same engagement here.
+//
+// KEY_ID_PATTERN is tokens.KEY_ID re-exported: tokens.mjs cannot import this
+// module (cycle), so the regex lives there. ctx.mjs keeps its own copy
+// (G-15: not this task's file) — a note for TASK-008 to import tokens.KEY_ID.
 //
 // Ordering note for the same process: `ctx.key()` caches its answer for the
 // life of a ctx (TASK-006). A writer that reads `ctx.key()` *before*
@@ -64,12 +78,12 @@ import { join } from "node:path";
 import { canonical, parseStrict, sha256Hex } from "../canon.mjs";
 import { CliError, EXIT } from "./exit.mjs";
 import { withLockSync, writeAtomic, writeExclusive } from "./fsx.mjs";
-import { inconsistent } from "./tokens.mjs";
+import { KEY_ID, inconsistent } from "./tokens.mjs";
 
 /** Key material length in bytes (TL-9). */
 export const KEY_BYTES = 32;
 /** `k` + the first 12 hex chars of sha256(bytes) (TL-9); the same shape ctx.keyById accepts. */
-export const KEY_ID_PATTERN = /^k[0-9a-f]{12}$/;
+export const KEY_ID_PATTERN = KEY_ID;
 
 const CURRENT_FILE = "current";
 const INDEX_FILE = "index.json";
@@ -85,14 +99,16 @@ export function keyIdOf(bytes) {
   return `k${sha256Hex(bytes).slice(0, 12)}`;
 }
 
+/** The id as index.json stores it (NFC, via canon.canonical); non-strings and "" are refused. */
 function requireEngagementId(engagement_id) {
   if (typeof engagement_id !== "string" || engagement_id === "") throw new TypeError("ensureKey: engagement_id must be a non-empty string");
-  return engagement_id;
+  return engagement_id.normalize("NFC");
 }
 
-function readTextOrNull(path) {
+/** File contents, or null on ENOENT — the one "absent" test, so no exists/read race. */
+function readOrNull(path, encoding) {
   try {
-    return readFileSync(path, "utf8");
+    return readFileSync(path, encoding);
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
@@ -106,7 +122,7 @@ function readTextOrNull(path) {
  * @returns {string | null}
  */
 export function currentKeyId(ctx) {
-  const text = readTextOrNull(join(keysDir(ctx), CURRENT_FILE));
+  const text = readOrNull(join(keysDir(ctx), CURRENT_FILE), "utf8");
   if (text === null) return null;
   const id = text.trim();
   if (!KEY_ID_PATTERN.test(id)) throw new CliError(EXIT.INTEGRITY, inconsistent(`keys/${CURRENT_FILE}`));
@@ -133,12 +149,13 @@ function isPlainRecord(value) {
  * without both strings, duplicate keys, a float) ⇒ CliError 5.
  */
 export function readIndex(ctx) {
-  const path = join(keysDir(ctx), INDEX_FILE);
-  if (!existsSync(path)) return {};
+  // Bytes, not a decoded string: parseStrict's strict UTF-8 decode is part of the check.
+  const bytes = readOrNull(join(keysDir(ctx), INDEX_FILE));
+  if (bytes === null) return {};
   const fail = () => new CliError(EXIT.INTEGRITY, inconsistent(`keys/${INDEX_FILE}`));
   let raw;
   try {
-    raw = parseStrict(readFileSync(path));
+    raw = parseStrict(bytes);
   } catch (err) {
     throw fail();
   }
@@ -158,8 +175,9 @@ export function readIndex(ctx) {
  * @returns {string[]}
  */
 export function keysOf(ctx, engagement_id) {
+  const wanted = typeof engagement_id === "string" ? engagement_id.normalize("NFC") : engagement_id;
   return Object.entries(readIndex(ctx))
-    .filter(([, row]) => row.engagement_id === engagement_id)
+    .filter(([, row]) => row.engagement_id === wanted)
     .map(([id]) => id);
 }
 
@@ -185,8 +203,8 @@ function writeCurrent(ctx, key_id) {
  * @throws {TypeError} without an engagement_id
  * @throws {CliError} 5 when `current` or `index.json` is malformed
  */
-export function ensureKey(ctx, { rotate = false, engagement_id } = {}) {
-  requireEngagementId(engagement_id);
+export function ensureKey(ctx, { rotate = false, engagement_id: rawId } = {}) {
+  const engagement_id = requireEngagementId(rawId);
   const dir = keysDir(ctx);
   return withLockSync(join(ctx.st, "private", "keys.lock"), () => {
     const current = currentKeyId(ctx);
@@ -194,14 +212,14 @@ export function ensureKey(ctx, { rotate = false, engagement_id } = {}) {
     // Reuse is decided by `current` alone: index.json keeps no creation order
     // (canonical JSON sorts by key_id) and created_at can tie, so an older
     // key of this engagement is never picked over the one a rotation chose.
-    if (!rotate && current !== null && index[current]?.engagement_id === engagement_id && existsSync(join(dir, current))) {
-      return { key_id: current, created: false, status: "reused" };
-    }
+    const reusable = current !== null && index[current]?.engagement_id === engagement_id && existsSync(join(dir, current));
+    if (!rotate && reusable) return { key_id: current, created: false, status: "reused" };
     const bytes = randomBytes(KEY_BYTES);
     const key_id = keyIdOf(bytes);
     writeExclusive(join(dir, key_id), bytes, KEY_MODE);
     writeIndex(ctx, { ...index, [key_id]: { engagement_id, created_at: ctx.now() } });
     writeCurrent(ctx, key_id);
-    return { key_id, created: true, status: rotate && current !== null ? "rotated" : "created" };
+    // `rotated` means exactly "reuse would have happened without --rotate".
+    return { key_id, created: true, status: rotate && reusable ? "rotated" : "created" };
   });
 }

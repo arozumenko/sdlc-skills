@@ -220,6 +220,48 @@ test("every status ensureKey returns prints through tokens.keyLine", () => {
   assert.equal(fresh.status, "created", "--rotate with no key yet creates, it does not rotate");
 });
 
+test("a non-NFC engagement_id is reused and listed like its NFC form", () => {
+  const repo = initRepo();
+  const ctx = ctxIn(repo);
+  const nfc = "eng-caf\u00e9"; // é precomposed
+  const nfd = "eng-cafe\u0301"; // e + combining acute — what a macOS path paste yields
+  assert.notEqual(nfc, nfd, "the two spellings differ bytewise");
+  assert.equal(nfd.normalize("NFC"), nfc);
+
+  const first = ensureKey(ctx, { engagement_id: nfd });
+  assert.equal(first.status, "created");
+  assert.deepEqual(ensureKey(ctx, { engagement_id: nfd }), { key_id: first.key_id, created: false, status: "reused" }, "spec §6.5 exists ⇒ reuse holds for the decomposed spelling");
+  assert.deepEqual(ensureKey(ctx, { engagement_id: nfc }), { key_id: first.key_id, created: false, status: "reused" }, "the NFC spelling names the same engagement");
+  assert.deepEqual(keysOf(ctx, nfd), [first.key_id], "purge (TASK-032) finds the row under the id engagement.md carries");
+  assert.deepEqual(keysOf(ctx, nfc), [first.key_id]);
+  assert.deepEqual(keyFiles(repo), [first.key_id], "exactly one key file on disk");
+  assert.equal(readIndex(ctx)[first.key_id].engagement_id, nfc, "the row is stored NFC, as canonical() writes it");
+  assert.equal(currentKeyId(ctx), first.key_id, "current was never repointed");
+
+  const rotated = ensureKey(ctx, { rotate: true, engagement_id: nfd });
+  assert.equal(rotated.status, "rotated", "rotate under the decomposed spelling rotates this engagement's key");
+  assert.deepEqual(keysOf(ctx, nfc), [first.key_id, rotated.key_id].sort());
+});
+
+test("status `rotated` means reuse would have happened without --rotate", () => {
+  const repo = initRepo();
+  const ctx = ctxIn(repo);
+  const b = ensureKey(ctx, { engagement_id: "eng-2" });
+  // current names eng-2's key: eng-1 --rotate rotates nothing of eng-1's.
+  const a = ensureKey(ctx, { rotate: true, engagement_id: "eng-1" });
+  assert.equal(a.created, true);
+  assert.equal(a.status, "created", "another engagement's current ⇒ created, not rotated");
+  assert.deepEqual(keysOf(ctx, "eng-2"), [b.key_id], "eng-2's row is untouched");
+
+  // current names eng-1's key but the file is lost: nothing to rotate either.
+  rmSync(join(keysDir(ctx), a.key_id));
+  const lost = ensureKey(ctx, { rotate: true, engagement_id: "eng-1" });
+  assert.equal(lost.status, "created", "a lost key file ⇒ created");
+
+  // current names eng-1's key and the file exists: the one case that rotates.
+  assert.equal(ensureKey(ctx, { rotate: true, engagement_id: "eng-1" }).status, "rotated");
+});
+
 test("ensureKey argument checks", () => {
   const repo = initRepo();
   const ctx = ctxIn(repo);
