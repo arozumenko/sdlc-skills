@@ -15,6 +15,32 @@ test("constants are exactly the spec's spellings", () => {
   assert.equal(tokens.CORRUPT, "CORRUPT");
   assert.equal(tokens.COMMITTED, "COMMITTED");
   assert.equal(tokens.POLICY_INVALID_PRIVATE, "POLICY-INVALID(private)");
+  // TASK-028 rows (register, plan §4.3 / spec §6.8)
+  assert.equal(tokens.EQUIVALENCE_REQUIRED, "EQUIVALENCE-REQUIRED");
+  assert.equal(tokens.ANCHOR_MATCH, "MATCH");
+  assert.equal(tokens.ANCHOR_TRUNCATED, "TRUNCATED");
+  assert.equal(tokens.ANCHOR_DIVERGED, "DIVERGED");
+});
+
+test("register formatters (TASK-028)", () => {
+  assert.equal(tokens.transitionRejected("accept", "fixed"), "TRANSITION-REJECTED(accept: fixed)");
+  assert.equal(tokens.row({ id: "R-0001", status: "open", priority: "p1", seq: 1 }), "ROW R-0001 status=open priority=p1 seq=1");
+  assert.throws(() => tokens.row({ id: "R-1", status: "open", priority: "p1", seq: 1 }), /id/);
+  assert.throws(() => tokens.row({ id: "R-0001", status: "confirmed", priority: "p1", seq: 1 }), /status/);
+  assert.throws(() => tokens.row({ id: "R-0001", status: "open", priority: "p9", seq: 1 }), /priority/);
+  assert.throws(() => tokens.row({ id: "R-0001", status: "open", priority: "p1", seq: -1 }), /seq/);
+  assert.equal(tokens.replayed({ seq: 2, rows: 2, chain_sha256: "c".repeat(64) }), `REPLAY seq=2 rows=2 chain=${"c".repeat(64)}`);
+  assert.throws(() => tokens.replayed({ seq: 2, rows: 2, chain_sha256: "zz" }), /chain/);
+  assert.equal(tokens.projection(".agents/security-testing/register/projection.json"), "PROJECTION .agents/security-testing/register/projection.json");
+  assert.throws(() => tokens.projection("/abs"), /repo-relative/);
+  assert.equal(tokens.statusLine({ rows: 3, seq: 4 }), "STATUS rows=3 seq=4");
+  assert.equal(tokens.openExposure({ p0: 1, p1: 2, p2: 0, p3: 0 }), "OPEN-EXPOSURE p0=1 p1=2 p2=0 p3=0");
+  assert.throws(() => tokens.openExposure({ p0: 1 }), /p1/);
+  assert.equal(tokens.approvals(2), "APPROVALS unauthenticated=2");
+  assert.equal(tokens.count("open", { p0: 1, p1: 2, p2: 0, p3: 0 }), "COUNT open p0=1 p1=2 p2=0 p3=0");
+  assert.throws(() => tokens.count("confirmed", { p0: 0, p1: 0, p2: 0, p3: 0 }), /status/);
+  assert.deepEqual(tokens.REGISTER_STATUSES, ["open", "accepted", "fixed", "regressed", "false-positive", "superseded"]);
+  assert.deepEqual(tokens.REGISTER_PRIORITIES, ["p0", "p1", "p2", "p3"]);
 });
 
 test("formatters", () => {
@@ -68,7 +94,7 @@ test("G-13: the forbidden strings never appear under scripts/ (fixtures and test
 
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
-    if (name === "FORBIDDEN_STRINGS" || value instanceof RegExp) continue;
+    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
     assert.ok(typeof value === "string" || typeof value === "function", `${name}: ${typeof value}`);
     if (typeof value === "string") assert.doesNotMatch(value, /\n/, name);
   }

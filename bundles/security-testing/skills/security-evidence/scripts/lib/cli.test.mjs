@@ -118,16 +118,24 @@ test("main() never rejects: a non-CliError raised before run() (command loader, 
   assert.equal(s.stderr.text, "");
 });
 
-test("every entry script's --help prints its USAGE literal byte-for-byte: no redaction rule may fire on static usage text (G-4 stays absolute; the text is reworded instead)", async () => {
+test("every entry script's --help prints its USAGE byte-for-byte: no redaction rule may fire on static usage text (G-4 stays absolute; the text is reworded instead)", async () => {
   const cwd = tmpDir();
-  for (const name of ["evidence", "verify", "register", "tm-lint", "plan"]) {
+  // register.mjs builds its usage from tokens.mjs rows in lib/register-usage.mjs
+  // (TASK-028), so the guard imports that module's USAGE; the other four keep
+  // a literal in the entry script.
+  const usageOf = async (name) => {
+    if (name === "register") return (await import("./register-usage.mjs")).USAGE;
     const src = readFileSync(join(SCRIPTS_DIR, `${name}.mjs`), "utf8");
     const m = src.match(/^const USAGE = `([\s\S]*?)`;$/m);
     assert.ok(m, `${name}.mjs: USAGE literal found`);
+    return m[1];
+  };
+  for (const name of ["evidence", "verify", "register", "tm-lint", "plan"]) {
+    const usage = await usageOf(name);
     const r = await runScript(name, ["--help"], { cwd });
     assert.equal(r.code, 0, `${name} --help exit`);
     assert.doesNotMatch(r.stdout, /<REDACTED:/, `${name}.mjs --help: a redaction rule fired on the usage text — reword the example`);
-    assert.equal(r.stdout, m[1], `${name}.mjs --help must equal its USAGE literal`);
+    assert.equal(r.stdout, usage, `${name}.mjs --help must equal its USAGE`);
     assert.equal(r.stderr, "", `${name} --help is silent on stderr`);
   }
 });
