@@ -289,6 +289,45 @@ test("coverage rows (TASK-020): EXAMINED-PACKET-MISMATCH, COVERAGE-EXISTS, `COVE
   assert.throws(() => tokens.coverageLine({ examined: 1, skipped: 0 }), /scanner/);
 });
 
+test("receipt rows (TASK-022): the six derived states, the not-applied reasons, REJECTED(<reason>) and its reasons, the RECEIPT / STATE / not-applied / conflicts lines", () => {
+  assert.equal(tokens.REVIEW_CONFIRMED, "REVIEW_CONFIRMED");
+  assert.equal(tokens.REVIEW_REFUTED, "REVIEW_REFUTED");
+  assert.equal(tokens.REVIEW_INDETERMINATE, "REVIEW_INDETERMINATE");
+  assert.equal(tokens.MITIGATION_CONFIRMED, "MITIGATION_CONFIRMED");
+  assert.equal(tokens.MITIGATION_GAP, "MITIGATION_GAP");
+  assert.equal(tokens.MITIGATION_INDETERMINATE, "MITIGATION_INDETERMINATE");
+  assert.deepEqual(
+    [tokens.NOT_APPLIED_PACKET_UNKNOWN, tokens.NOT_APPLIED_SUBJECT_NOT_IN_PACKET, tokens.NOT_APPLIED_CITATION_FAILED, tokens.NOT_APPLIED_SUBJECT_IS_FINDING, tokens.NOT_APPLIED_REVIEW_REFUTED],
+    ["packet-unknown", "subject-not-in-packet", "citation-failed", "subject-is-finding", "review-refuted"],
+  );
+  assert.equal(tokens.rejected("unknown packet"), "REJECTED(unknown packet)");
+  assert.throws(() => tokens.rejected(""), /reason/);
+  assert.throws(() => tokens.rejected("a\nb"), /reason/);
+  assert.equal(tokens.receiptSchemaReason("x is required"), "schema: x is required");
+  assert.equal(tokens.receiptForbiddenReason("state"), "forbidden field state");
+  assert.equal(tokens.RECEIPT_UNKNOWN_PACKET, "unknown packet");
+  assert.equal(tokens.RECEIPT_SCOPE_PACKET, "scope packet");
+  assert.equal(tokens.RECEIPT_PACKET_SHA_MISMATCH, "packet_sha256 mismatch");
+  assert.equal(tokens.RECEIPT_SUBJECT_NOT_IN_PACKET, "subject_id not in packet.subject_ids");
+  assert.equal(tokens.RECEIPT_RUN_MISMATCH, "reviewer_run_id != run");
+  assert.equal(tokens.receiptOidMismatch("src/db.js"), "oid mismatch src/db.js");
+  assert.throws(() => tokens.receiptOidMismatch(""), /path/);
+  const sha = "a".repeat(64);
+  assert.equal(tokens.receiptLine({ sha256: sha, type: "vulnerability-review", subject: "b".repeat(64) }), `RECEIPT admitted sha256=${sha} type=vulnerability-review subject=${"b".repeat(64)}`);
+  assert.equal(tokens.receiptLine({ sha256: sha, type: "mitigation-review", subject: "M-001" }), `RECEIPT admitted sha256=${sha} type=mitigation-review subject=M-001`);
+  assert.throws(() => tokens.receiptLine({ sha256: "zz", type: "ack", subject: "M-001" }), /sha256/);
+  assert.throws(() => tokens.receiptLine({ sha256: sha, type: "review", subject: "M-001" }), /type/);
+  assert.throws(() => tokens.receiptLine({ sha256: sha, type: "ack", subject: "M 001" }), /subject/);
+  assert.equal(tokens.stateLine("M-001", "MITIGATION_GAP"), "STATE M-001 MITIGATION_GAP");
+  assert.equal(tokens.stateLine(sha, "CITATION_VERIFIED"), `STATE ${sha} CITATION_VERIFIED`);
+  assert.throws(() => tokens.stateLine(sha, "CONFIRMED"), /state/);
+  assert.throws(() => tokens.stateLine("", "REVIEW_CONFIRMED"), /subject/);
+  assert.equal(tokens.notAppliedLine(0), "not-applied: 0");
+  assert.equal(tokens.conflictsLine(2), "conflicts: 2");
+  assert.throws(() => tokens.notAppliedLine(-1), /n/);
+  assert.throws(() => tokens.conflictsLine(1.5), /n/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;
