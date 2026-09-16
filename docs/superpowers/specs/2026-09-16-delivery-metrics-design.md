@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-16
 **Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
-**Branch:** feat/security-testing-bundle-spec (spec only; implementation branches off `main`)
+**Branch:** feat/delivery-metrics-spec (worktree off `main`; spec only)
 **Status:** v2 — round 1 `needs-changes` addressed: 23 resolved (6 blockers, 16 majors, 1 minor), 0 rejected; four findings resolved by narrowing; ready for round 2 (§19.1).
 **Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`; review `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v1-adversarial-review-codex.md`; house style `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md` §17–§20.
 
