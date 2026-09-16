@@ -671,3 +671,23 @@ export function stateLine(subject, state) {
 export const notAppliedLine = (n) => `not-applied: ${requireCount("notAppliedLine", "n", n)}`;
 /** `conflicts: <n>` — the last line of `receipt apply`. */
 export const conflictsLine = (n) => `conflicts: ${requireCount("conflictsLine", "n", n)}`;
+
+// --- build-report (TASK-023; plan §4.1 row `build-report`, spec §6.3) ------
+/** The four report templates (run-manifest.schema.json `template` enum), in spec §6.3 order. */
+export const REPORT_TEMPLATES = Object.freeze(["review", "assessment", "verify", "threat-model"]);
+/** `REPORT <repo-relative path>` — the first line of `build-report`. */
+export function reportLine(relPath) {
+  requireRepoRelative("reportLine", relPath);
+  return `REPORT ${relPath}`;
+}
+/** `MANIFEST sha256=<self_sha256>` — the manifest's identity, also the content of the COMMITTED marker. */
+export function manifestLine(sha256) {
+  if (!SHA256.test(sha256)) throw new TypeError(`manifestLine: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
+  return `MANIFEST sha256=${sha256}`;
+}
+/** Report cell for a field the inputs do not carry (spec §11: `unknown / not assessed` allowed, blank forbidden). */
+export const NOT_ASSESSED = "unknown / not assessed";
+/** Report wording for an accepted finding with no applied vulnerability-review receipt (spec §6.3 derivation table). */
+export const NOT_INDEPENDENTLY_REVIEWED = "not independently reviewed";
+/** `ORIGIN: unauthenticated` — the report's chain-of-custody line and `check`'s default origin (spec §2, §6.3). */
+export const ORIGIN_UNAUTHENTICATED = "ORIGIN: unauthenticated";
