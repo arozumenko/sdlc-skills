@@ -22,11 +22,19 @@
 // anchorVerify(projection, s) → MATCH | TRUNCATED | DIVERGED (tokens.mjs)
 // summarize(projection)       → {counts, open_exposure, unauthenticated_approvals, rows}
 //
-// Transitions. TASK-029 ships the full table in lib/register-transitions.mjs
-// and switches `foldEvent` to `applyTransition`; until then the fold knows
-// exactly one event, `add`, and refuses every other (event, from) pair with
-// a TransitionError — the same error the command layer turns into
-// `TRANSITION-REJECTED(<event>: <from>)`.
+// Transitions. The table is lib/register-transitions.mjs (TASK-029);
+// `foldEvent` is its `applyEvent`, and every (event, from) pair outside the
+// table is a TransitionError — the same error the command layer turns into
+// `TRANSITION-REJECTED(<event>: <from>)`. TransitionError, emptyRow and the
+// add-payload vocabulary are re-exported here so TASK-028's callers keep
+// their import path.
+//
+// Open exposure (spec §6.8, D15, G-8): a row leaves exposure only through a
+// script verdict (`fixed`) or a supersession (`superseded`, whose exposure
+// moves to the target by equivalence or transfer). An acceptance or a
+// false-positive record is an unauthenticated approval — it lands in the one
+// approvals bucket and the row stays in open_exposure. Nothing here ever
+// subtracts an approval from exposure.
 //
 // anchorVerify semantics (representation choice, stated here because the
 // spec fixes only the three tokens): the anchor is a fingerprint of one exact
@@ -37,16 +45,15 @@
 // (print a fresh anchor after the last register change).
 
 import { canonical, sha256Hex } from "../canon.mjs";
+import { ADD_PAYLOAD_KEYS, SUBJECT_KINDS, TransitionError, applyEvent, emptyRow } from "./register-transitions.mjs";
 import { ANCHOR_DIVERGED, ANCHOR_MATCH, ANCHOR_TRUNCATED, REGISTER_PRIORITIES, REGISTER_STATUSES } from "./tokens.mjs";
+
+export { ADD_PAYLOAD_KEYS, SUBJECT_KINDS, TransitionError, emptyRow };
 
 export const GENESIS_SHA256 = "0".repeat(64);
 export const EVENT_KEYS = Object.freeze(["seq", "prev_sha256", "ts", "actor", "row_id", "event", "payload", "ref"]);
 export const STATUSES = REGISTER_STATUSES;
 export const PRIORITIES = REGISTER_PRIORITIES;
-export const SUBJECT_KINDS = Object.freeze(["finding", "threat"]);
-
-/** The fields `add` sets; every other Row field starts empty (emptyRow). */
-export const ADD_PAYLOAD_KEYS = Object.freeze(["subject", "subject_kind", "title", "priority", "owner", "first_seen_run"]);
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const ANCHOR = /^(.+):(0|[1-9][0-9]*):([0-9a-f]{64})$/;
@@ -62,21 +69,6 @@ export class ChainError extends Error {
     this.name = "ChainError";
     this.seq = seq;
     this.reason = reason;
-  }
-}
-
-/** An (event, from) pair outside the transition table, or a payload the transition does not accept. */
-export class TransitionError extends Error {
-  /**
-   * @param {string} event
-   * @param {string} from the row's current status, or "-" for no row
-   * @param {string} [detail]
-   */
-  constructor(event, from, detail) {
-    super(detail ? `${event} from ${from}: ${detail}` : `${event} from ${from}`);
-    this.name = "TransitionError";
-    this.event = event;
-    this.from = from;
   }
 }
 
@@ -127,41 +119,6 @@ export function verifyChain(events) {
 }
 
 /**
- * A Row with every schema field present and empty, ready for `add`'s fields.
- * @param {string} id R-nnnn
- * @returns {object}
- */
-export function emptyRow(id) {
-  return {
-    id,
-    subject: "",
-    subject_kind: "finding",
-    title: "",
-    status: "open",
-    priority: "p3",
-    owner: "",
-    first_seen_run: "",
-    last_verified_run: "",
-    ticket_url: "",
-    test_refs: [],
-    proposal_refs: [],
-    ack_refs: [],
-    rationale: "",
-    supersedes: "",
-    superseded_by: "",
-  };
-}
-
-function checkAddPayload(payload) {
-  const keys = Object.keys(payload);
-  for (const k of keys) if (!ADD_PAYLOAD_KEYS.includes(k)) throw new TransitionError("add", "-", `payload key ${JSON.stringify(k)} is not a field add sets`);
-  for (const k of ADD_PAYLOAD_KEYS) if (typeof payload[k] !== "string") throw new TransitionError("add", "-", `payload.${k} must be a string`);
-  if (payload.subject.length === 0) throw new TransitionError("add", "-", "payload.subject must be non-empty");
-  if (!SUBJECT_KINDS.includes(payload.subject_kind)) throw new TransitionError("add", "-", `payload.subject_kind ${JSON.stringify(payload.subject_kind)} is not finding|threat`);
-  if (!PRIORITIES.includes(payload.priority)) throw new TransitionError("add", "-", `payload.priority ${JSON.stringify(payload.priority)} is not p0|p1|p2|p3`);
-}
-
-/**
  * The id `add` gives the next row: rows + 1, zero-padded to four. Computed
  * from the projection the event is appended to, so it is reproducible from
  * the log and — when append() evaluates it under the lock — race-free.
@@ -175,20 +132,15 @@ export function nextRowId(projection) {
 }
 
 /**
- * Apply one event to the row map (pure; returns a new map). Only `add` until
- * TASK-029 replaces this with register-transitions.applyTransition.
+ * Apply one event to the row map (pure; returns a new map) through the
+ * transition table (register-transitions.applyEvent).
  * @param {Record<string, object>} rows
  * @param {object} event a chain-verified event
  * @returns {Record<string, object>}
  * @throws {TransitionError}
  */
 export function foldEvent(rows, event) {
-  const existing = rows[event.row_id];
-  const from = existing === undefined ? "-" : existing.status;
-  if (event.event !== "add") throw new TransitionError(event.event, from);
-  if (existing !== undefined) throw new TransitionError("add", from);
-  checkAddPayload(event.payload);
-  return { ...rows, [event.row_id]: { ...emptyRow(event.row_id), ...event.payload, status: "open" } };
+  return applyEvent(rows, event);
 }
 
 /**
@@ -249,11 +201,16 @@ export function anchorVerify(projection, expect) {
 
 const zeroByPriority = () => Object.fromEntries(PRIORITIES.map((p) => [p, 0]));
 
+/** Statuses that carry open exposure: everything a script verdict or a supersession has not closed (header). */
+export const EXPOSED_STATUSES = Object.freeze(["open", "regressed", "accepted", "false-positive"]);
+
 /**
  * The `status` view: counts by status × priority (every cell present),
- * open_exposure = open + regressed by priority, unauthenticated_approvals =
- * rows with status accepted + rows with status false-positive + rows with a
- * non-empty ack_refs. Nothing is ever subtracted from open_exposure (G-8).
+ * open_exposure = open + regressed + accepted + false-positive by priority
+ * (EXPOSED_STATUSES: an approval never takes a row out of exposure, spec
+ * §6.8), unauthenticated_approvals = rows with status accepted + rows with
+ * status false-positive + rows with a non-empty ack_refs. Nothing is ever
+ * subtracted from open_exposure (G-8).
  * @param {{rows: Record<string, object>}} projection
  * @returns {{counts: Record<string, Record<string, number>>, open_exposure: Record<string, number>, unauthenticated_approvals: number, rows: Record<string, object>}}
  */
@@ -269,6 +226,6 @@ export function summarize(projection) {
     if (Array.isArray(row.ack_refs) && row.ack_refs.length > 0) unauthenticated_approvals += 1;
   }
   const open_exposure = zeroByPriority();
-  for (const p of PRIORITIES) open_exposure[p] = counts.open[p] + counts.regressed[p];
+  for (const p of PRIORITIES) open_exposure[p] = EXPOSED_STATUSES.reduce((n, s) => n + counts[s][p], 0);
   return { counts, open_exposure, unauthenticated_approvals, rows: projection.rows };
 }

@@ -215,3 +215,42 @@ export function runLine({ run_id, seq, kind, base, head }) {
   if (!OID.test(base) || !OID.test(head)) throw new TypeError("runLine: base and head must be 40-hex oids");
   return `RUN ${run_id} seq=${seq} kind=${kind} base=${base} head=${head}`;
 }
+
+// --- baseline (TASK-010; spec §6.9 step 4, plan §4.1 engagement init / baseline) ---
+
+function requireCount(where, name, n) {
+  if (!Number.isInteger(n) || n < 0) throw new TypeError(`${where}: ${name} must be a non-negative integer, got ${String(n)}`);
+  return n;
+}
+
+/**
+ * `BASELINE: <n> files ignored=<n>` — `engagement init` step 4 and
+ * `engagement baseline`: observed files (tracked + non-ignored untracked under
+ * scope_paths ∪ product_paths) and the summed per-path count of ignored files
+ * left outside the observation (§2 last row: the excluded coverage is visible).
+ * `files` is always the literal word, so the line parses the same for 1.
+ */
+export function baselineLine({ files, ignored }) {
+  return `BASELINE: ${requireCount("baselineLine", "files", files)} files ignored=${requireCount("baselineLine", "ignored", ignored)}`;
+}
+
+// --- register transitions (TASK-029; plan §4.3, spec §6.8) --------------------
+
+/** `EMITTER-ONLY(<event>)` — exit 2: the generic `transition` verb refuses an event only a script step appends (ticketed, fixed, …). */
+export const emitterOnly = (event) => `EMITTER-ONLY(${event})`;
+
+/** `NOT-EQUIVALENT(<R-id>: <R-id>)` — exit 4: `supersede --subject-equivalent` where the subjects are neither the same id nor alias-linked. */
+export const notEquivalent = (source, target) => `NOT-EQUIVALENT(${source}: ${target})`;
+
+/** `ALIAS from=<finding_id> to=<finding_id> seq=<n>` — `register.mjs alias` appended a line to finding-alias.jsonl. */
+export function aliased({ from_id, to_id, seq }) {
+  if (!SHA256.test(from_id) || !SHA256.test(to_id)) throw new TypeError("aliased: from_id and to_id must be finding ids (sha256)");
+  if (!Number.isInteger(seq) || seq < 1) throw new TypeError(`aliased: seq must be a positive integer, got ${String(seq)}`);
+  return `ALIAS from=${from_id} to=${to_id} seq=${seq}`;
+}
+
+/** `CHECK expired=<n>` — the last line of `register.mjs check`, after one ROW line per expired acceptance. */
+export function checked(expired) {
+  if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
+  return `CHECK expired=${expired}`;
+}

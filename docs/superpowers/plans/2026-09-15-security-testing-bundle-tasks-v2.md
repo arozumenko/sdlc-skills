@@ -269,7 +269,7 @@ Finding lookup: ledger runs newest-first → `gate-result.accepted[]` contains t
 | `add` | `--subject <finding_id|threat_id> --priority p0|p1|p2|p3 --title <t> --run <run_id> [--owner <o>]` | new row `R-nnnn` status `open` |
 | `accept <R-id>` | `--until <YYYY-MM-DD> --approved-by <who> --approval-ref <ref>` | `open|regressed → accepted`; acceptance record `{recorded_by: actor, approved_by, approval_ref, until, authenticated: false}`; both flags mandatory (exit 2) |
 | `revoke <R-id>` | `--approved-by --approval-ref` | `accepted → open` |
-| `check` | — | every `accepted` row with `until` (UTC, exclusive) < today ⇒ `open`, event `acceptance-expired` |
+| `check` | — | every `accepted` row with `until` (UTC calendar day) < today ⇒ `open`, event `acceptance-expired` — lapses at 00:00 UTC of the day after `until`; on the `until` day itself the acceptance still stands |
 | `close-false-positive <R-id>` | `--approved-by --approval-ref` | `open → false-positive` |
 | `reopen <R-id>` | `--reason <r>` | `false-positive → open` |
 | `supersede <R-id>` | `--by <R-id> (--subject-equivalent | --transfer-exposure)` | §6.8; cycle or self ⇒ exit 2; neither flag ⇒ exit 2 `EQUIVALENCE-REQUIRED`; `--subject-equivalent` without same subject or alias link ⇒ exit 4 |
@@ -277,7 +277,7 @@ Finding lookup: ledger runs newest-first → `gate-result.accepted[]` contains t
 | `consume-verdict <verify.json>` | — | `VERIFIED ⇒ fixed` (+`ack_refs`, `last_verified_run`); `REGRESSED ⇒ regressed`; `UNVERIFIED-* ⇒ verify-observed` event only; `regression-observed` whenever `evaluation.refound_observed && row.status == fixed` (TASK-030) |
 | `render` | `[--out <path>=<st>/risk-register.md]` | writes the Markdown view from the projection (TASK-059); deterministic |
 | `transition <event> <R-id> [flags]` | generic form; the verbs above are aliases; **`ticketed` is not accepted here** (only `ingest tracker-readback` appends it) |
-| `status` | `[--json]` | counts by status × priority, `open_exposure` (open+regressed by priority), `unauthenticated_approvals` (accepted + false-positive + rows with ack_refs), never subtracting |
+| `status` | `[--json]` | counts by status × priority, `open_exposure` (open+regressed+accepted+false-positive by priority — `EXPOSED_STATUSES` in `register-fold.mjs`; an unauthenticated approval never leaves exposure, spec §6.8 / G-8), `unauthenticated_approvals` (accepted + false-positive + rows with ack_refs), never subtracting |
 | `replay` | `[--write]` | rebuild projection from log; `--write` persists |
 | `anchor print` / `anchor verify --expect <eid:seq:hash>` | | `MATCH | TRUNCATED | DIVERGED` |
 | `confirm` | — | **does not exist** — unknown command, exit 2 (US-021 AC-2) |
@@ -1279,3 +1279,12 @@ Recorded by the TASK-012 implementer. Blocking item fixed: `stripManagedBlock` n
 | TL reading before G6 (TASK-013 `scope`) | `run init --kind assessment --head <ref>` accepts a ref other than HEAD, but the clean-tree check (D18/P6) compares the working tree against HEAD/index while citations later resolve at `head_oid` — a clean tree at HEAD says nothing about `HEAD~1`. §4.1 allows `--head` for every kind, so this is a spec gap. Options: refuse `--head` ≠ HEAD for assessment (exit 2 USAGE) in `run init`, or have `scope` (which re-runs `assessmentDirt`) enforce it. Decide before TASK-013 lands. |
 | TL-9 / spec | `allocateRun` at seq 9999 throws inside `index.lock/` ⇒ exit 1 INTERNAL; lock released, `index.json` unchanged, no corruption. Operator-facing limit (four digits, one ledger per `<st>`), not an internal bug — worth a CliError 4 with a token once the spec names one. The cap is noted in the `ledger.mjs` header. |
 | TASK-008 (`engagement validate`) | When HEAD's `.gitignore` holds only the managed block and the working file is deleted, both sides reduce to `[]` ⇒ `run init` judges the tree clean. Deleting the block re-exposes `private/` to git — that is `engagement validate`'s `IGNORE-BLOCK: stale` concern, not `run init`'s; make sure validate covers the deleted-file shape. |
+
+### PM log additions (2026-09-16, after TASK-029 review 1)
+
+| Owner | Follow-up from review |
+|---|---|
+| TASK-030, TASK-046, TASK-059 | `open_exposure` is open+regressed+accepted+false-positive (`EXPOSED_STATUSES`), not the "open+regressed" the §4.3 `status` row used to say (row amended above); read the `register-fold.mjs` header before consuming `status --json`. An `acceptance` / `false_positive` record is present only while the row's status is `accepted` / `false-positive` (a `superseded` row may keep one as history) — read the approval state from `status`, never from the record's presence (`register-transitions.mjs` header). |
+| TASK-058 | `run snapshot register` must copy `finding-alias.jsonl` alongside `events.jsonl`: a rewritten LAST alias line is otherwise unwitnessed by any projection or anchor, and the alias log is exactly what makes `supersede --subject-equivalent` pass. |
+| TASK-033 (anchor) / TASK-005 (schema) | Consider witnessing the alias chain in the anchor (`<eid>:<seq>:<chain>:<alias_chain>`) or an `alias_chain_sha256` field on the projection — the latter is a `register.schema.json` change (Projection is `additionalProperties: false`). |
+| TASK-028 (if a batch append ever lands) | `register check` computes the expired set after `openRegister()` releases the lock, then appends one row per lock hold; two concurrent `check`s (or a `revoke` racing a `check`) make the loser exit 4 `TRANSITION-REJECTED(acceptance-expired: open)` after having appended some rows — benign (each append folds first), but `check` should switch to a batch append if one is added. |

@@ -72,6 +72,17 @@ test("runLine (TASK-012): exact shape; its private id/kind vocabulary agrees wit
   assert.throws(() => tokens.runLine({ run_id: "0123456789ab-0001", seq: 1, kind: "assessment", base: oid.slice(1), head: oid }), /oids/);
 });
 
+test("register transition formatters (TASK-029)", () => {
+  assert.equal(tokens.emitterOnly("ticketed"), "EMITTER-ONLY(ticketed)");
+  assert.equal(tokens.notEquivalent("R-0001", "R-0002"), "NOT-EQUIVALENT(R-0001: R-0002)");
+  assert.equal(tokens.aliased({ from_id: "a".repeat(64), to_id: "b".repeat(64), seq: 3 }), `ALIAS from=${"a".repeat(64)} to=${"b".repeat(64)} seq=3`);
+  assert.throws(() => tokens.aliased({ from_id: "T-001", to_id: "b".repeat(64), seq: 1 }), /finding ids/);
+  assert.throws(() => tokens.aliased({ from_id: "a".repeat(64), to_id: "b".repeat(64), seq: 0 }), /seq/);
+  assert.equal(tokens.checked(0), "CHECK expired=0");
+  assert.equal(tokens.checked(2), "CHECK expired=2");
+  assert.throws(() => tokens.checked(-1), /expired/);
+});
+
 test("formatters", () => {
   assert.equal(tokens.incomplete("scope"), "INCOMPLETE(scope)");
   assert.equal(tokens.inconsistent("gate-result"), "INCONSISTENT(gate-result)");
@@ -125,6 +136,14 @@ test("G-13: the forbidden strings never appear under scripts/ (fixtures and test
   };
   visit(SCRIPTS_DIR);
   assert.deepEqual(offenders, []);
+});
+
+test("baselineLine: `BASELINE: <n> files ignored=<n>` (TASK-010)", () => {
+  assert.equal(tokens.baselineLine({ files: 12, ignored: 3 }), "BASELINE: 12 files ignored=3");
+  assert.equal(tokens.baselineLine({ files: 0, ignored: 0 }), "BASELINE: 0 files ignored=0");
+  assert.throws(() => tokens.baselineLine({ files: -1, ignored: 0 }), /files/);
+  assert.throws(() => tokens.baselineLine({ files: 1, ignored: 1.5 }), /ignored/);
+  assert.throws(() => tokens.baselineLine({ files: "1", ignored: 0 }), /files/);
 });
 
 test("every exported token is a string constant or a function; every constant is one line", () => {

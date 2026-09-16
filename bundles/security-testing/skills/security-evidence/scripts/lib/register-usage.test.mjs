@@ -16,6 +16,11 @@ test("USAGE starts with the usage line, ends with a newline, and spells its resu
     assert.ok(USAGE.includes(token), `usage names ${token}`);
   }
   assert.match(USAGE, /neither flag/, "supersede with neither flag ⇒ EQUIVALENCE-REQUIRED (PM log, after G3)");
+  // TASK-029 rows
+  assert.ok(USAGE.includes("EMITTER-ONLY(<event>)"), "transition refuses emitter-only events");
+  assert.ok(USAGE.includes("NOT-EQUIVALENT(<R-id>: <R-id>)"), "--subject-equivalent without a link");
+  assert.match(USAGE, /authenticated: false/, "D15: the usage says what an approval record is");
+  assert.doesNotMatch(USAGE, /authenticated: true/);
   assert.match(USAGE, /exit codes\s+0 ok · 2 usage/);
   assert.match(USAGE, /· 5 CORRUPT/);
 });
