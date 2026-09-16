@@ -590,3 +590,84 @@ export function unverifiableSubject(id) {
   if (!SHA256.test(id)) throw new TypeError(`unverifiableSubject: id must be a finding id (64 lowercase hex chars), got ${String(id)}`);
   return `UNVERIFIABLE-SUBJECT(${id})`;
 }
+
+// --- receipt validate | apply + states (TASK-022; plan §4.1 rows `receipt validate|apply`, §5 TASK-022; spec §6.4 receipt table, §6.3 derivation row `REVIEW_*, MITIGATION_*`) ---
+
+// Derived states (states.mjs; spec §6.4 table). CITATION_VERIFIED / CITATION_FAILED
+// are gate's (above); these six are receipt apply's. `*_INDETERMINATE` is also
+// what conflicting same-run assertions derive.
+export const REVIEW_CONFIRMED = "REVIEW_CONFIRMED";
+export const REVIEW_REFUTED = "REVIEW_REFUTED";
+export const REVIEW_INDETERMINATE = "REVIEW_INDETERMINATE";
+export const MITIGATION_CONFIRMED = "MITIGATION_CONFIRMED";
+export const MITIGATION_GAP = "MITIGATION_GAP";
+export const MITIGATION_INDETERMINATE = "MITIGATION_INDETERMINATE";
+
+// `not_applied[].reason` (states.applyReceipts). Not stdout tokens: `receipt
+// apply --json` and the report display them — spelled once (G-13).
+/** the receipt's `packet_sha256` names no packet of the set. */
+export const NOT_APPLIED_PACKET_UNKNOWN = "packet-unknown";
+/** the named packet does not list `subject_id` (a scope packet lists no subject at all). */
+export const NOT_APPLIED_SUBJECT_NOT_IN_PACKET = "subject-not-in-packet";
+/** spec §6.4 row 2: the subject is a CITATION_FAILED finding — it stays unverifiable, whatever the receipt says. */
+export const NOT_APPLIED_CITATION_FAILED = "citation-failed";
+/** a mitigation-review receipt whose subject is a gate finding: mitigation states live on threat-model mitigations only and never promote a finding. */
+export const NOT_APPLIED_SUBJECT_IS_FINDING = "subject-is-finding";
+/** spec §6.4 row 3: a fix-review or ack receipt on a REVIEW_REFUTED finding changes nothing (`verify` refuses such a finding). */
+export const NOT_APPLIED_REVIEW_REFUTED = "review-refuted";
+
+/**
+ * `REJECTED(<reason>)` — exit 4: `receipt validate` refused the drop-box file.
+ * The reasons (plan §4.1): `schema: <err>`, `forbidden field <name>`,
+ * `unknown packet`, `scope packet`, `packet_sha256 mismatch`, `subject_id not
+ * in packet.subject_ids`, `reviewer_run_id != run`, `oid mismatch <path>` —
+ * the plan's `∉` / `≠` spelled in ASCII so the token greps.
+ */
+export function rejected(reason) {
+  if (typeof reason !== "string" || reason.length === 0 || reason.includes("\n")) throw new TypeError("rejected: reason must be a non-empty single line");
+  return `REJECTED(${reason})`;
+}
+/** `schema: <err>` — the file is not strict JSON or not a receipt.schema.json receipt (the first error). */
+export const receiptSchemaReason = (err) => `schema: ${err}`;
+/** `forbidden field <name>` — the receipt carries an id, a state or another schema.RECEIPT_FORBIDDEN_KEYS key anywhere (US-015 AC-7, G-7). */
+export const receiptForbiddenReason = (name) => `forbidden field ${name}`;
+/** `unknown packet` — `packet_sha256` names no `<run>/packets/<sha>.json`. */
+export const RECEIPT_UNKNOWN_PACKET = "unknown packet";
+/** `scope packet` — the named packet is `kind: scope`; only a subject packet is a receipt target (P1). */
+export const RECEIPT_SCOPE_PACKET = "scope packet";
+/** `packet_sha256 mismatch` — the packet file exists but its `self_sha256` is not the name the receipt cites. */
+export const RECEIPT_PACKET_SHA_MISMATCH = "packet_sha256 mismatch";
+/** `subject_id not in packet.subject_ids`. */
+export const RECEIPT_SUBJECT_NOT_IN_PACKET = "subject_id not in packet.subject_ids";
+/** `reviewer_run_id != run` — the receipt names another run (or no run at all). */
+export const RECEIPT_RUN_MISMATCH = "reviewer_run_id != run";
+/** `oid mismatch <path>` — a `packet.files[]` entry's oid is not the blob at the run's head/base oid (or the scope's snapshot `redacted_sha256`). */
+export function receiptOidMismatch(path) {
+  if (typeof path !== "string" || path.length === 0 || path.includes("\n")) throw new TypeError("receiptOidMismatch: path must be a non-empty single line");
+  return `oid mismatch ${path}`;
+}
+
+const RECEIPT_TYPE_LIST = Object.freeze(["vulnerability-review", "mitigation-review", "fix-review", "ack"]);
+/**
+ * `RECEIPT admitted sha256=<h> type=<t> subject=<id>` — the first line of
+ * `receipt validate`; the WROTE line follows with the same sha (the receipt's
+ * identity and its file name under `<run>/receipts/`).
+ */
+export function receiptLine({ sha256, type, subject }) {
+  if (!SHA256.test(sha256)) throw new TypeError(`receiptLine: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
+  if (!RECEIPT_TYPE_LIST.includes(type)) throw new TypeError(`receiptLine: type ${String(type)} is outside the closed vocabulary`);
+  if (typeof subject !== "string" || subject.length === 0 || /\s/.test(subject)) throw new TypeError(`receiptLine: subject must be a non-empty id without whitespace, got ${String(subject)}`);
+  return `RECEIPT admitted sha256=${sha256} type=${type} subject=${subject}`;
+}
+
+const STATE_LIST = Object.freeze([CITATION_VERIFIED, CITATION_FAILED, REVIEW_CONFIRMED, REVIEW_REFUTED, REVIEW_INDETERMINATE, MITIGATION_CONFIRMED, MITIGATION_GAP, MITIGATION_INDETERMINATE]);
+/** `STATE <subject_id> <state>` — one line per subject of `receipt apply`'s table (findings, then mitigations; each sorted by id). */
+export function stateLine(subject, state) {
+  if (typeof subject !== "string" || subject.length === 0 || /\s/.test(subject)) throw new TypeError(`stateLine: subject must be a non-empty id without whitespace, got ${String(subject)}`);
+  if (!STATE_LIST.includes(state)) throw new TypeError(`stateLine: state ${String(state)} is outside the closed vocabulary`);
+  return `STATE ${subject} ${state}`;
+}
+/** `not-applied: <n>` — after the table (plan §4.1). */
+export const notAppliedLine = (n) => `not-applied: ${requireCount("notAppliedLine", "n", n)}`;
+/** `conflicts: <n>` — the last line of `receipt apply`. */
+export const conflictsLine = (n) => `conflicts: ${requireCount("conflictsLine", "n", n)}`;
