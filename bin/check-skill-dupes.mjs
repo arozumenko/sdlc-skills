@@ -27,6 +27,21 @@ const GROUPS = [
     "skills/knowledge-curation/templates/bases/memory-curated.base",
     "skills/memory/templates/bases/memory-curated.base",
   ],
+  // security-testing knowledge files: the bundle `seed` installs the canonical
+  // copies; `security-evidence` ships its own so `engagement init` step 0 can
+  // write them in a standalone (--skills) install that has no seed (TASK-007).
+  [
+    "bundles/security-testing/knowledge/engagement.md.template",
+    "bundles/security-testing/skills/security-evidence/templates/knowledge/engagement.md.template",
+  ],
+  [
+    "bundles/security-testing/knowledge/finding-schema.md",
+    "bundles/security-testing/skills/security-evidence/templates/knowledge/finding-schema.md",
+  ],
+  [
+    "bundles/security-testing/knowledge/report-reading-guide.md",
+    "bundles/security-testing/skills/security-evidence/templates/knowledge/report-reading-guide.md",
+  ],
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
