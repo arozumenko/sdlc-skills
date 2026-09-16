@@ -1,494 +1,568 @@
-# delivery-metrics — design spec (v1)
+# delivery-metrics — design spec (v2)
 
 **Date:** 2026-09-16
-**Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed by any factory via `factory.json` `skills[]`)
+**Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
 **Branch:** feat/security-testing-bundle-spec (spec only; implementation branches off `main`)
-**Status:** v1 — design approved section by section in brainstorming (§1 placement/hierarchy, §2 data model/capture, §3 metrics/report/plan); awaiting adversarial review rounds (codex `gpt-6-astra`), recorded in §19+
-**Inputs:** research notes [`docs/superpowers/notes/2026-09-16-delivery-metrics-research-01…08`](../notes/): tokenomics internals, feature-development harness lifecycle, test-automation estimates/receipts, repo standards, dm-kb AI-maturity Performance Tracking rubric + `wpse-maturity` instrument, industry delivery metrics (DORA 2024/2025, Kanban Guide 2025, Flow Framework, SPACE, Jørgensen / Shepperd–MacDonell estimation accuracy), vendor data models (Jira/ADO/Linear/LinearB/Swarmia/Faros/four-keys/OTel CI-CD), and the critic's contradiction list (C1–C23) and gap list (G1–G30).
+**Status:** v2 — round 1 `needs-changes` addressed: 23 resolved (6 blockers, 16 majors, 1 minor), 0 rejected; four findings resolved by narrowing; ready for round 2 (§19.1).
+**Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`; review `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v1-adversarial-review-codex.md`; house style `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md` §17–§20.
 
-**Sources of truth for repo claims.** `bundles/SPEC.md:291-304` (roster-guard rule for shared-event hooks; one shared telemetry submodule, "one subfolder per factory"); `skills.json:246-257` (orphan `monorepo` entry shape); `bundles/feature-development/factory.json:166-169` and `bundles/test-automation/factory.json:11-14` (`skills: ["memory","knowledge-curation"]` — the orphan-attachment precedent); `bundles/test-automation/skills/tokenomics/scripts/install-hooks.mjs:33,79-110,145-155` (marker `_tokenomics`, Claude `SessionEnd/SessionStart/PreToolUse/Stop/SubagentStop` splices, Copilot `.github/hooks/tokenomics.json` with `sessionStart/sessionEnd/subagentStart/agentStop`); `hooks/telemetry-capture.mjs:187,316,440-447,613,1359-1367` (`startTs` parsed per transcript but not written to the dispatch line; `.meta.json` `description` → `deriveLabel`; `STAGE_MARKER`; hook payload keys `session_id`, `agent_id`, `transcript_path` = PARENT transcript); `scripts/batch-cost.mjs:344,382,431,583-586` (`estMin: num(r.estimated_active_minutes ?? r.est_min)`, `MIN_CLASS_N = 5`, `estVsActualMin`, `cases[].direct.activeMin`); `automation-scoping/scripts/score-cases.mjs:466` (emits `estMin` — the key `batch-cost.mjs:344` does not read); `tokenomics/templates/factory-profile.template.json:8` (`work_item_level: "batch"`) vs `scripts/build-tokenomics-export.mjs:66,105` (`?? 'feature'`); `scripts/team-report.mjs:106-114` (`isoWeek` in **local** time); `bundles/feature-development/agents/tech-lead/AGENT.md:181-201` (task template: `**Story:** · **Assigned to:** · **Depends on:** · **Complexity:** S / M / L`); `agents/project-manager/AGENT.md:95,229-243` (merge = `gh pr merge --squash --delete-branch`, strategy from `.agents/profile.md § Automation PR policy`, default squash); `agents/js-dev/AGENT.md:185` ("Don't give time estimates."); `bundles/feature-development/instructions.md:95` ("Mission state belongs on the work board, not in either memory layer" — the only use of "mission", undefined); `bundles/test-automation/agents/scout/AGENT.md:11,105` (`skills-on-demand: [… tokenomics …]`, the onboarding opt-in question); `.gitignore:34` (`docs/superpowers/` ignored; 19 files force-tracked on this branch — specs are committed with `git add -f`). Known doc drift: `CLAUDE.md`/`README.md`/`AGENTS.md` say eight orphan skills and 28 externals; the tree has eleven and 30 — M-1 fixes them.
+**Source aliases.** `TOK` = `bundles/test-automation/skills/tokenomics`; `TAW` = `bundles/test-automation/skills/test-automation-workflow`; `AS` = `bundles/test-automation/skills/automation-scoping`; `R03` = `docs/superpowers/notes/2026-09-16-delivery-metrics-research-03-test-automation-estimates-and-receipts.md`; `R05` = `docs/superpowers/notes/2026-09-16-delivery-metrics-research-05-dm-kb-ai-maturity-delivery-performance.md`; `R06` = `docs/superpowers/notes/2026-09-16-delivery-metrics-research-06-industry-delivery-metrics.md`. Alias citations expand to these real files; proposed delivery schemas below are requirements, not existing repo fields.
+
+**Sources of truth for repo claims.** `bundles/SPEC.md:291-304` requires roster admission and one shared telemetry submodule. `skills.json:246-257`, `bundles/feature-development/factory.json:166-169`, `bundles/test-automation/factory.json:11-14` establish orphan registration/attachment. `TOK/scripts/install-hooks.mjs:145-158` registers Copilot `sessionStart`, `sessionEnd`, `subagentStart`, `subagentStop`, `agentStop`; registration does not prove payload fields. `TOK/hooks/telemetry-capture.mjs:187,328-333,440-447,608-620,1359-1367` establishes transcript clocks, metadata, full-message label derivation and parent-transcript fallback. Its repo selection at `:1339` uses argument/environment/cwd, not a main-worktree walk. `TOK/scripts/install-hooks.mjs:305-311` does not ignore delivery transients; `TOK/hooks/telemetry-capture.mjs:1473` stages the entire submodule. `.gitignore:34` ignores `docs/superpowers/`; `git ls-files docs/superpowers` currently returns 29 tracked paths, without proving how they were added. §16 provides the remaining anchors.
 
 ## 1. Purpose
 
-A **delivery performance tracker for the harness** — the cadence-and-cycle-time
-sibling of `tokenomics`. Where tokenomics answers *what did this cost* from a
-git-committed usage ledger, `delivery-metrics` answers *how fast did we deliver
-it, and how did that compare with what we said* from a git-committed **event
-ledger** keyed to the harness's own work items — campaign → mission → task →
-case — across the feature-development and test-automation factories. It records
-declared estimates as history, derives flow-time / throughput / quality /
-estimate-accuracy figures **only from system-sourced events** (hooks, CLI calls
-made at the moment a state changes, git history), labels every proxy as a proxy,
-and never estimates a duration, a count, or a dollar itself. Output is a
-report a project manager reads and a JSON an AI-maturity assessor can consume
-under the "Performance Tracking" dimension (L2 tracked → L3 governed).
+A delivery performance tracker for the harness: the cadence-and-cycle-time sibling of `tokenomics`. It answers how long delivery took and how that compared with declared commitments, using an append-only event ledger keyed to campaign → mission → task → case across feature-development and test-automation. It derives flow, throughput, quality and estimate-accuracy figures from recorded evidence, labels proxies, and never generates estimates, dollars or synthetic counts. Reports serve a PM and the AI-maturity Performance Tracking instrument; a calibration table supplies measured reference ranges for a planner to consult, never writes estimates for them.
 
 ## 2. What the skill can and cannot promise
 
-| Can promise (script, on the records it owns or reads) | Cannot promise |
+| Can promise (on records it owns or reads) | Cannot promise |
 |---|---|
-| One append-only event per state transition of a registered work item, with `at`, `source`, and the raw word the factory used | That every transition is captured on hosts without hooks — there the CLI and the git backfill are the capture, and coverage is printed |
-| Durable per-item **dispatch start** on Claude Code and Copilot CLI (from the sub-agent transcript's first stamp / `subagentStop` event), which git cannot give | Dispatch start for history that predates the hooks — reported as `commit_to_done`, never as cycle time |
-| `cycle_time`, `lead_time`, `commit_to_done`, `time_blocked`, `work_item_age`, `throughput`, `velocity`, `wip`, `mission_turnaround`, `review_rounds`, `first_pass_rate`, `cancelled_share`, `unattributed_share`, `work_ratio`, `hit_rate`, `schedule_variance`, a per-class `calibration` table — each with start/stop event, unit, `n`, source, denominator, baseline slot | Any DORA metric (no deploy signal), flow efficiency (no defined active signal in feature-development), benefit-based ROI, per-person or per-agent productivity scores |
-| Estimates as **recorded declared inputs** with provenance (who/when/scale/tier), revisions kept as history, originals used by default | An estimate of its own; a default where none was declared (absent = "not estimated", never 0 or 1) |
-| A join to tokenomics records on `session` + `agentId` + `label` + the plan's id catalogue, quoting tokenomics' `activeMin` / `costUsd` with tokenomics' own honesty labels | Recomputing dollars or active minutes; running without tokenomics is fully supported, the cost columns are simply absent |
-| A git backfill for `created`, `first_commit`, `review_returned`, `done` in both the local-branch mode (`merge task/task-NNN` subjects) and the PR mode (`gh pr view --json`), stamped `source: git` | Deriving `dispatched`, `cancelled`, `blocked` from git (they leave no trace) |
-| Reports that are reproducible from an archived JSON (`--from-json`) with `generated_at`, `cutoff`, `git_sha`, `is_working_tree` | Uploads, dashboards, or any network call (`gh` is the one optional external, honest `null` without it) |
+| Append-only source observations with occurrence identity, corrections, timestamp, provenance and raw factory outcome | Complete capture; absent evidence stays unknown with coverage |
+| Durable Claude dispatch start/end when an admitted, bound child transcript is readable | Copilot automatic capture or live pending start markers in this release; starts before capture existed |
+| `cycle_time`, `lead_time`, `commit_to_done`, `time_to_merge`, `time_in_review`, `time_blocked`, `work_item_age`, `throughput`, `velocity`, `wip`, `mission_turnaround`, review/first-pass metrics, cancellation/reopen/coverage, accuracy, schedule variance and calibration, each with population, unit, evidence and denominator | DORA, flow efficiency, benefit ROI, per-person/per-agent scores, forecasts or a Little’s Law comparison |
+| Declared ranged estimates with proposer, named human acceptance, timestamp, tier and immutable revisions | Treating unaccepted AI proposals as commitments or missing estimates as defaults |
+| Quoted tokenomics batch/case `cost.json` values, generation-bound with snapshot provenance and allocation labels | Recomputing dollars/active minutes, folding raw live/session logs, feature-task cost attribution without an aggregate |
+| Generation-bound git backfill for creation, first commit, rework proxies and completion; mapped PRs additionally supply observed reviews | Deriving dispatch, block or cancellation from git, or fix activity proving review failure |
+| Reproducible archived JSON rendering, pinned source hashes/SHAs, cutoff and caveats | Uploads/dashboards; network use beyond opted-in telemetry git sync and optional `gh` backfill |
 
 ## 3. Decisions (locked)
 
 | # | Decision |
 |---|---|
-| D1 | **Orphan top-level skill** `skills/delivery-metrics/`, registered in `skills.json` (`monorepo: sdlc-skills`), added to `feature-development/factory.json` and `test-automation/factory.json` `skills[]`. Self-contained: it may **read** tokenomics records but never `import` tokenomics code (a feature-development install has none). (§4) |
-| D2 | Four canonical levels `campaign → mission → task → case`; `story` (`US-NNN`) is a tag on tasks. "mission" is defined here as *the gated/merged delivery increment* and maps to feature-development dependency group `Gn` (or milestone `Mn`, planner's choice), test-automation wave/flat batch, manual-qa run. (§5) |
-| D3 | Records live only under `.agents/telemetry/delivery/` on the shared self-referential `telemetry` submodule/branch (SPEC.md:297-304 — the "one subfolder per factory" wording is amended by this spec to "one subfolder per factory **or cross-factory concern**", P-0 in §20). Never inside `automation/`. Working transients under `.agents/telemetry/delivery/` with names the inner `.gitignore` globs already cover. (§6.1) |
-| D4 | **Store events, derive timestamps.** The ledger is `events-<user>.jsonl`, one line per transition, append-only, per-user file; `startedAt`/`doneAt`-style columns exist only in reports. (§6.2) |
-| D5 | Closed `event` vocabulary of twelve words; the factory's own word travels in `raw`. Idempotency `key = plan|ref|event|disc`; readers dedup by key (greatest `at`, then last in file order). (§6.2) |
-| D6 | **Source precedence, not union**: for each `(ref, event)` the timeline takes events from the highest-precedence source that has any — `cli` > `automation-sync` > `hook` > `git`. Prevents double-counted review rounds and competing `done` clocks. Coverage per source is printed. (§6.9) |
-| D7 | Cycle time = first `dispatched` → first `done` (first-entry rule; re-entry via `reopened` does not reset, it increments `reopen_count`). `time_blocked` = Σ intervals (sum rule). No ADO-style clear-on-backward. (§6.9, §6.10) |
-| D8 | When `dispatched` is absent the interval `first_commit → done` is reported **as `commit_to_done`**, never as cycle time. PR open→merge, when available, is `time_to_merge` with the label "PR open to merge — not lead time, not cycle time". (§6.10) |
-| D9 | Estimates are **declared inputs**: `{unit, low, high, tier, class?, by, at, basis?}`; first `estimated` event is the original; later ones are revisions; reports use the original unless `--latest-estimate`. Units: `h` (elapsed calendar hours) for tasks/missions/campaigns in feature-development; `active_min` for test-automation cases (compared with tokenomics' `activeMin`, never with calendar time). A ranged estimate is compared at its midpoint for ratio statistics and at its band for `hit_rate`; the report says so. (§6.4) |
-| D10 | Durations: ledger `at` in UTC ISO-8601 with milliseconds; computed in seconds; reported in hours (2 dp). Headline aggregation median + P85 (nearest-rank), P90 also emitted for the assessor; P85 only when `n ≥ 7`, median only when `n ≥ 5`, always min–max + `n`. Never a mean headline. (§6.10) |
-| D11 | Weeks are **UTC ISO weeks** (`YYYY-Www`); `throughput` is zero-filled from observation start to cutoff with the partial week flagged; `velocity` = median of whole weeks, `MIN_WHOLE_WEEKS = 3` else `null` with a derived caveat. tokenomics' local-time `isoWeek` is a known divergence, noted in the report. (§6.10) |
-| D12 | Zero-duration rule: items with `cycle_time ≤ profile.zeroDurationSec` (default 60) are excluded from duration statistics, kept in throughput, and the count/% is printed; 100 % excluded → "not observable — authored retrospectively". (§6.10) |
-| D13 | **No ranking.** Segmentation by level, size class, role, model, factory is emitted; `byPerson` / per-agent leaderboards are not. The `user` field on every line is attribution mechanics for the merge-conflict-free file layout, not a report dimension. (§6.11) |
-| D14 | Every speed or volume figure is printed beside its quality pair (`review_rounds`, `first_pass_rate`, `cancelled_share`, tokenomics gate/outcome drift when present). (§6.11) |
-| D15 | Hooks are **opt-in** via the skill's own `scripts/install-hooks.mjs` (marker `_delivery`, own `.github/hooks/delivery.json`, own managed `.gitignore` block, `--remove`, `--doctor`, `--local`, `--host claude\|copilot`, idempotent). Installing the skill never starts capture. (§6.6) |
-| D16 | Shared-event guard: every hook exits 0 within its first statements unless the repo has at least one plan with `status: open` under `.agents/telemetry/delivery/plans/`. This is the cross-factory equivalent of the roster guard; fail-open on any read error. (§6.6) |
-| D17 | Hook capture is **one async `SubagentStop`/`subagentStop` hook** emitting both `dispatched` (at = the sub-agent transcript's first stamp) and `dispatch_ended`; an optional async `PreToolUse Agent\|Workflow` (`subagentStart` on Copilot) marker gives live WIP/age. No `SessionStart` injection, no `Stop` gate in v1 (the git backfill and `status` cover missed CLI calls). (§6.6) |
-| D18 | Item resolution from a dispatch: (1) description / prompt first line matched against the open plans' **id catalogue**; (2) the dispatch cwd's branch (`task/task-NNN`, `tests/<ID>-…`, `tests/batch-<wave>`); (3) `ref: null`, `unattributed: true`. One event per resolved ref (a cluster dispatch yields one `dispatched` per case). (§6.6) |
-| D19 | Plan registration input is a fenced ```` ```json delivery-plan ```` block (canonical) that the tech-lead's plan file and the campaign card carry verbatim; a markdown importer over `#### TASK-NNN` / `**Complexity:**` / §1 groups exists as a `--dry-run`-first convenience and is labelled `basis: markdown-import`. Re-registration appends delta events (`created`, `estimated`, `cancelled`); it never rewrites history. (§6.3) |
-| D20 | The plan's id catalogue is also published for tokenomics: `plans/<plan_id>.json` `catalogue[]` — tokenomics may read it at M3 to attribute cost to `TASK-NNN` (today its `matchIds` knows only receipt ids). This spec does not modify tokenomics beyond the M-1 amendments in §13. (§6.12) |
-| D21 | Exit codes: `0` ok · `1` internal error (uncaught) · `2` usage / bad input / unknown command · `3` not measurable (no open plan, no events in window — output still explains what is missing). No exit `4/5` (nothing to verify or hash). (§6.5) |
-| D22 | The calibration snapshot (`calibration/<date>.json` + append-only `calibration-log.md`) is a **reference table the planner reads**; the tracker never writes an estimate into a plan. (§6.11) |
-| D23 | Test files sit beside scripts (`*.test.mjs`, tokenomics precedent) and are installed; fixtures under `fixtures/`. Copies of other bundles' formats are pinned in `bin/check-skill-dupes.mjs` `GROUPS`. (§12) |
+| D1 | **Orphan** `skills/delivery-metrics/`; attach through both factories’ `skills[]`. Self-contained stdlib ESM; may read tokenomics artifacts but never import its code. |
+| D2 | Canonical hierarchy campaign → mission → task → case; story is a tag. Mission = delivery increment, feature group/milestone or automation wave/flat batch (§5). |
+| D3 | Records under `.agents/telemetry/delivery/` on the shared self-referential telemetry submodule/branch; never inside `automation/`. Owned inner/root ignore blocks protect transients, including upgrades. P-0 amends factory-only folder wording. |
+| D4 | Store observations, derive transitions. Append-only `events-<user>.jsonl`; per-user files reduce conflicts, not a guarantee of conflict-free shared state (§6.1). |
+| D5 | Closed vocabulary in §6.2; separate logical occurrence from source observation; immutable corrections and deterministic dedup, never discard another source at append time. |
+| D6 | For the **same occurrence and clock basis**, select `cli > automation-sync > hook > git`. Different occurrences survive; scope/gate/receipt proxies never compete with observed clocks. Unbound equivalence is unknown, not guessed. |
+| D7 | Cycle time = first observed build dispatch → first qualifying completion. Reopen preserves first completion/throughput; current state and current-open age replay separately. Block duration is interval union (§6.9). |
+| D8 | Missing dispatch gives `commit_to_done`, never cycle time. PR open→merge is `time_to_merge`, labelled “PR open to merge — not story lead time, not cycle time.” |
+| D9 | Estimates are declared ranged inputs, with separate proposer/human acceptance. Original = first accepted revision; latest = latest accepted before measured start/cutoff. Units `h` / `active_min` never mix; midpoint ratios and band hit rates are descriptive (§6.4). |
+| D10 | UTC ms ledger timestamps, seconds internally, hours (2 dp) in reports. Nearest-rank median when n≥5, P85 when n≥7, P90 when n≥10; always min–max and n. Never a mean duration headline. |
+| D11 | UTC ISO weeks; zero-filled through effective end, partials flagged. Velocity = median whole-week throughput, minimum 3 whole weeks, else null with derived caveat. |
+| D12 | No blanket short-duration exclusion. Validate each metric; retain real sub-minute work and confirmed zero blocked time. Only proven same-commit retrospective lead-time proxies are excluded (§6.10). |
+| D13 | Segment by level, class, role, model, factory and mission; no `byPerson` or per-agent leaderboard. User attribution is storage mechanics. |
+| D14 | Every speed/volume stratum includes quality evidence and its reviewed/eligible/done denominators, or explicit unknown; missing review cannot imply success. |
+| D15 | Hooks opt-in through owned `_delivery` installer, `--remove`, `--doctor`, `--local`, `--host claude`. Semantic owned-entry removal preserves later user edits. Installing the skill never enables capture. |
+| D16 | Hook admission requires open plan, role membership in its participating factory roster union, and session/plan binding. Legacy missing type relaxes only the role test. P-1 records the scoped cross-factory rule. |
+| D17 | One async Claude `SubagentStop` reads correlated child transcript start/end. Missing evidence stays unknown. Copilot capture and live start markers parked (§18); CLI/git remain cross-host. No SessionStart injection or Stop gate. |
+| D18 | Resolve within bound generation: metadata description, full-first-message stage label, bound branch alias; ambiguous ids → unattributed. Cluster dispatch starts a task, not automatically each case (§6.6). |
+| D19 | Canonical fenced `json delivery-plan`; markdown importer requires dry-run review. Stable run/item identities, explicit version migration and recoverable transactional registration (§6.3). |
+| D20 | Publish generation-qualified `catalogue[]` in plan views; task-cost consumption is future work. Current cost adapter quotes existing batch/case exports only (§6.12). |
+| D21 | CLI exits: 0 success, 1 internal error, 2 invalid input/identity/conflict, 3 not measurable with explanation. Hook failures always exit 0 and appear in doctor diagnostics. |
+| D22 | Calibration = immutable measured reference snapshot, never an estimate writer. Plan views and calibration index are rebuildable from committed transactions. |
+| D23 | Tests beside scripts, installed; fixtures under `fixtures/`. Verbatim copied formats get duplicate checks; transformations record their provenance (§12). |
 
 ## 4. Placement and roles
 
 | Where | What |
 |---|---|
-| `skills/delivery-metrics/` | `SKILL.md`, `README.md`, `scripts/` (`delivery.mjs`, `install-hooks.mjs`, `lib/*.mjs`), `hooks/` (`dispatch-hook.mjs`), `templates/` (`delivery-plan.template.json`, `profile.template.json`, `plan-block.template.md`), `references/` (`metrics.md`, `event-model.md`, `plan-block.md`, `calibration.md`), `fixtures/` |
-| `skills.json` | `{ "id": "delivery-metrics", "monorepo": "sdlc-skills", "name": "delivery-metrics", "description": … }` |
-| `bundles/feature-development/factory.json` `skills[]` | add `"delivery-metrics"` |
-| `bundles/test-automation/factory.json` `skills[]` | add `"delivery-metrics"` |
-| `skills-on-demand:` | `project-manager`, `tech-lead` (feature-development); `test-automation-lead`, `scout` (test-automation); `scout` (feature-development). Never `skills:` — nothing enters standing context. |
-| Briefings / instructions | `bundles/feature-development/instructions.md` gains a "Delivery tracking" paragraph naming the three CLI moments (§9.1); `bundles/test-automation/skills/test-automation-workflow/references/orchestration-playbook.md` § Intake/§ Close name `delivery.mjs sync --automation` beside `work-scope.mjs close` (§9.2). |
-| Scout | Onboarding asks once whether the team wants delivery tracking (exactly the tokenomics question at `scout/AGENT.md:105`); yes → `install-hooks.mjs`; the seed report records the decision. |
+| `skills/delivery-metrics/` | SKILL.md, README.md, scripts/lib, hooks, templates, references, fixtures (§10) |
+| `skills.json` | `{id: "delivery-metrics", monorepo: "sdlc-skills", name: "delivery-metrics", description: …}` |
+| Both factory `skills[]` | Add `delivery-metrics` |
+| `skills-on-demand:` | feature-development PM, tech-lead, scout; test-automation lead and scout; never standing `skills:` |
+| Instructions/playbook | Explicit registration, bindings, transitions and reporting moments (§9) |
+| Scout | Ask once whether to enable delivery capture; yes runs installer, seed report records choice |
 
-`SKILL.md` frontmatter: `name: delivery-metrics`, `description` (≤ 1024 chars, trigger-phrase style; names `tokenomics` as the cost neighbour and `automation-scoping` as the estimate neighbour), `license: Apache-2.0`, `compatibility` (≤ 500, quoted), `metadata.authors`, `metadata.version: "0.1.0"`. No other keys.
+Frontmatter: `name: delivery-metrics`, trigger-oriented `description` ≤1024 chars, `license: Apache-2.0`, quoted `compatibility` ≤500 chars, `metadata.authors`, `metadata.version: "0.1.0"`. No `tools:` key or extra keys. Installing through any host supplies CLI capability; only Claude automatic capture is specified here.
 
 ## 5. Vocabulary and work-item hierarchy
 
-| Level | Definition | feature-development | test-automation | manual-qa |
-|---|---|---|---|---|
-| `campaign` | the backlog under one plan; one `plan_id` per plan version | epic / spec + plan file (`docs/superpowers/plans/<date>-<slug>-tasks*.md`) | campaign (`plan.campaign`, card `.agents/automation/campaigns/<slug>.md`) | — |
-| `mission` | a gated/merged delivery increment inside a campaign | dependency group `Gn` (observed merge unit) or milestone `Mn` — the plan block says which | wave (`plan.waves[].slug`, branch `tests/batch-<wave>`) or flat batch | run `RUN-YYYY-MM-DD-NNN` |
-| `task` | the dispatch-and-review unit | `TASK-NNN` (branch `task/task-NNN`, commit prefix, merge subject) | unit: cluster or solo build (branch `tests/<ID>-…`) | — |
-| `case` | the verified leaf | — (acceptance criteria are not work items) | case (TMS id, opaque) | TC |
-| `story` (tag) | value slice for roll-ups | `US-NNN` | — | — |
+| Level | feature-development | test-automation | manual-qa (unwired) |
+|---|---|---|---|
+| campaign | spec/backlog under stable campaign run | campaign card’s approved plan | — |
+| mission | `Gn` group or `Mn` milestone, declared by plan | wave or flat batch | run |
+| task | `TASK-NNN`, dispatch/review/integration unit | cluster or solo build unit | — |
+| case | — (acceptance criteria are not items) | TMS id, opaque | TC |
+| story tag | `US-NNN` | — | — |
 
-**Identity.** `plan_id = <campaign-slug>/<plan-version>` (e.g. `security-testing-bundle/v2`). Item `ref` is unique **within a plan**: task `TASK-023`; mission `G12`; case `<mission>/<caseId>` (case ids repeat across generations, so the mission prefix is mandatory); campaign ref = the plan's `campaign.id`. The fully qualified form `plan_id:ref` is what reports print. `parent` chains live in the plan record, not on events.
+**Identity.** Explicit stable `campaign_id` and `run_id` allocated once; rerun gets a new run. `plan_id = <campaign_id>/<run_id>/<version>`. Card State/Log edits never mint identities; hash only canonical plan JSON (sorted object keys, original array order) for change detection. Each item has immutable `item_id`, display `ref`, `level`, `parent_item_id`, generation and validity interval. Full ref = `plan_id:ref`; case ref = `<mission>/<task>/<caseId>`, with TMS `case_id` separately preserved. Bare ids require uniqueness within a bound plan/mission, not merely one open plan.
 
-**Words this spec does not use as levels:** "batch" (means "flat wave" in test-automation and "merge batch" in feature-development — the report says `mission`), "group" (feature-development plan text — `mission`), "board", "cadence" as a metric name (§6.10 defines it as a group of three metrics). Forbidden vocabulary (CLAUDE.md): octobots, dual-mode, markers/taskbox/relay.
+Version registration declares `supersedes` and an injective old→new item mapping. Unchanged work keeps stable ids/history; removed work remains tombstones. Splits/merges create new identities with lineage, never copied completions. A recut claiming existing work without mapping fails `MIGRATION-REQUIRED`. Reports across versions union stable ids once; independent reruns are distinct. Git/scope/sizing/cost joins require explicit generation and epoch binding. Concurrent `TASK-001` plans or reused `TC-1` alone cannot be joined.
 
-**Mapping to tokenomics' export.** `work_item_level` ∈ `campaign|mission|task|case` — the existing template says `"batch"` and the code defaults to `'feature'`; M-1 aligns both to this list (`batch → mission`, `feature → task`).
+**Parentage.** Exactly one parent per version; no cycles. Campaign→mission→task→case; feature tasks may be leaves. Automation clusters are tasks containing their cases; solo cases get one-case tasks, never cases directly under waves. Membership, role/class and parent changes are effective-dated; historical metrics use the version at their endpoint.
+
+**Rollups.** Container start = earliest eligible descendant build start, labelled `derived-child-start`. A cluster task dispatch is observed task start, not per-case start. Container completion requires every required child terminal, at least one delivered child, and the container’s integration boundary evidenced. Completion time = latest child terminal/integration time, not earliest child done. Cancelled children produce `partial-cancelled` with counts; all-cancelled container is cancelled, never delivered. Missing/unknown child keeps parent open. Missions need landing to bound base; campaign requires all missions terminal. Explicit parent done cannot hide unfinished children (`PARENT-INCOMPLETE`). Feature task done is task integration; automation task done is unit integration plus terminal case dispositions, distinct from mission landing.
+
+Child reopen or scope addition reopens ancestors at its effective time; preserve their first completion, retain later episodes for state/schedule reporting. Mission ordering uses explicit `sequence` and optional `predecessor`, never inferred array adjacency for concurrent missions. Turnaround = successor start − predecessor last completion before that start. If predecessor remains open or overlaps, emit null gap plus overlap duration when measurable, never a negative turnaround.
+
+Example: W has cluster K(A,B) and solo S(C). K starts 09:00, S 10:00; A/B accepted and K integrated at 11:00; C blocked. W/campaign remain open, mission throughput 0. C accepted and S integrated 12:00, W lands 13:00: W completes 13:00, child-derived elapsed 4 h. Case cycles stay unknown without individual starts. If C instead explicitly cancels and W lands, W is partial-cancelled, 2 delivered/3 registered. A second unfinished wave keeps campaign schedule variance null.
+
+Tokenomics export vocabulary alignment remains planned: `work_item_level` should use campaign/mission/task/case; `batch → mission`, `feature → task` (§13). “Batch”, “group” and “board” are not additional levels; cadence names only the metric group in §6.10.
 
 ## 6. Contracts
 
 ### 6.1 Records and paths
 
-```
-.agents/telemetry/delivery/                 # on the shared `telemetry` submodule/branch
-  plans/<plan_id>.json                      # registered work-item tree + catalogue (D19, D20)
-  events-<user>.jsonl                       # the ledger — one line per transition (D4)
-  profile.json                              # team-owned settings + baseline slots (§6.11)
-  calibration/<YYYY-MM-DD>.json             # snapshots written by `report --calibrate` (D22)
-  calibration-log.md                        # append-only, one entry per snapshot
-  reports/<plan_id>.html                    # last rendered page (overwritten; optional)
-  .pending-<session>-<n>.json               # PreToolUse marker (transient; gitignored)
-  .lock/                                    # append lock dir (transient; gitignored)
-```
+Proposed paths under `.agents/telemetry/delivery/`:
 
-`<plan_id>` in file names has `/` replaced by `__`. `<user>` is tokenomics' `whoAmI` rule re-implemented (git `user.email` local-part, else `$USER`), so both ledgers agree on the same person. Plain-dir fallback (no submodule yet): the same paths under a plain `.agents/telemetry/` directory, with the skill's managed root `.gitignore` block:
+| Path | Contract |
+|---|---|
+| `events-<user>.jsonl` | append-only observations with transaction id |
+| `transactions/<uuid>.json` | immutable committed manifest: parent heads, full plan/profile changes, observation ids/hashes |
+| `plans/<encoded-plan-id>.json` | atomic rebuildable catalogue/version view |
+| `profile.json` | team-owned configuration updated transactionally |
+| `calibration/<date>-<uuid>.json`, `calibration-log.md` | immutable snapshot plus rebuildable index |
+| `imports/<sha256>.json` | immutable source snapshots for adapter evidence |
+| `reports/`, `.pending-*`, `.lock/`, `.txn/` | transients; never staged |
 
-```gitignore
-# >>> delivery-metrics (managed) — transients only; plans/events/calibration stay COMMITTED
-.agents/telemetry/delivery/.pending-*
-.agents/telemetry/delivery/.lock/
-.agents/telemetry/delivery/reports/
-# <<< delivery-metrics
-```
+Encode path segments reversibly, percent-encoding `/` and `%`; do not replace slash with ambiguous underscores. `<user>` matches `TOK/hooks/telemetry-capture.mjs:75-94`: git `user.name`, else `os.userInfo().username`, else email local-part, else `unknown`; lowercase, replace runs of non-`[a-z0-9]` with `-`, trim edge hyphens, empty→`unknown`. Read all user files; identity changes do not duplicate observations. Slug collisions are possible attribution collisions, not observation-identity collisions.
 
-Every writer appends under `.lock/` (mkdir-lock, `staleMs` 60 s, same shape as the security-testing `fsx` lock) and writes with `O_APPEND` — one line, one `write()` — so two hooks racing on one file cannot interleave. Sync to the `telemetry` branch is tokenomics' concern when it is installed (its `syncTelemetry` runs `git add -A` on the submodule root, which covers `delivery/`); when tokenomics is **not** installed, `delivery.mjs` performs the same best-effort commit-and-push of `.agents/telemetry` at the end of `event`, `plan register`, `sync`, `backfill` (`DELIVERY_NO_SYNC=1` disables; offline just waits for the next call). `install-hooks.mjs` installs the submodule exactly as tokenomics does when it is absent (same `.gitmodules` entry, same branch — never a second one; the two installers detect each other's work by the `.gitmodules` path and do nothing twice).
+Install owned `# >>> delivery-metrics` / `# <<< delivery-metrics` blocks in the **telemetry root** `.gitignore`: `/delivery/.pending-*`, `/delivery/.lock/`, `/delivery/.txn/`, `/delivery/reports/`; main-checkout equivalents use `.agents/telemetry/` prefix. Upgrade existing tokenomics installations without replacing their rules. Main-root rules do not protect submodule content; current inner globs cover only live/scopes (`TOK/scripts/install-hooks.mjs:305-311`). Doctor must use `git check-ignore` in the actual owning repo and a disposable index staging check. Remove transient tracked entries from the index only through a surfaced repair, never assume ignores untrack them.
+
+**Transaction protocol.** All writers, snapshot readers and shared sync acquire one telemetry-root lock in its git metadata directory; plain-dir fallback uses delivery `.lock/`. Owner = machine id, pid, nonce, acquisition time and heartbeat. Never reclaim merely because 60 s elapsed: dead same-machine pid permits recovery, live/foreign/indeterminate owner yields `LOCK-BUSY`. Lock spans recovery, diff, revision allocation, fsynced append and commit manifest. Intent/full snapshots go in `.txn/<uuid>/`; observations carry `txn_id`; publish immutable manifest by atomic rename **after** every expected observation/hash is durable; atomically rebuild views afterward. Readers ignore uncommitted observations. Crash before commit resumes intent, appends only missing observations and commits; after commit rebuilds views. Retry token + input digest identifies registration; different input under same token fails `ID-CONFLICT`.
+
+M-1 amends tokenomics shared sync to take this lock before staging/merge; its current `git add -A` and best-effort merge are at `TOK/hooks/telemetry-capture.mjs:1464-1488`. Every delivery mutation, including stop hooks, requests sync after releasing its transaction lock; sync reacquires the shared lock, recovers, rebuilds, stages and commits. Sync ownership depends on **active compatible capability**, not installed files: dormant tokenomics never suppresses delivery sync. If active tokenomics sync lacks compatibility, automatic delivery writes pause with doctor `SYNC-INCOMPATIBLE` until upgrade. `DELIVERY_NO_SYNC=1` suppresses remote sync only; offline keeps local committed observations for retry. Bootstrap reuses the shared `.agents/telemetry` submodule and `telemetry` branch, never a second one.
+
+Remote concurrent transactions form a parent-linked DAG. Union identical observations/manifests and rebuild views. Divergent changes to the same plan/profile head are `CONFLICT`, not last-writer-wins. Failed git merge is aborted while retaining local commits and fetched head; doctor lists both. `plan reconcile --heads <ids> --from <f>` / `profile set --heads <ids> --from <f>` creates an explicit resolution transaction with both parents. Reports exclude unresolved affected plans with coverage reason, other plans remain usable; calibration index rebuilds from immutable snapshots. No per-user merge-conflict-free claim for shared mutable files.
 
 ### 6.2 Event line
 
 ```json
-{"v":1,"at":"2026-09-16T15:05:38.412Z","user":"daniel_sallai","host":"claude",
- "plan":"security-testing-bundle/v2","ref":"TASK-023","level":"task",
- "event":"done","disc":"0","key":"security-testing-bundle/v2|TASK-023|done|0",
- "source":"git","session":null,"agentId":null,"label":null,"role":null,
- "raw":"merge task/task-023 (Rio: PASS)",
- "meta":{"git_sha":"cd2dce7","is_working_tree":false,"verdict":"PASS","story":"US-021","mission":"G12"}}
-```
-
-| Field | Type | Rule |
-|---|---|---|
-| `v` | 1 | schema version; a reader refusing an unknown `v` prints the line's key and skips it (never aborts a report) |
-| `at` | ISO-8601 UTC, ms | when the transition happened — **not** when the line was written (`meta.recorded_at` carries that when they differ, e.g. `event done --sha`) |
-| `user`, `host` | string | attribution; `host ∈ claude \| copilot \| copilot-vscode \| cli \| git` |
-| `plan`, `ref`, `level` | string | §5; `ref: null` allowed only with `meta.unattributed: true` (hook could not resolve — counted, never joined) |
-| `event` | enum | `created · estimated · dispatched · dispatch_ended · first_commit · review_requested · review_returned · done · cancelled · blocked · unblocked · reopened` |
-| `disc` | string | discriminator: `"0"` for singletons; revision ordinal for `estimated`/`created` re-registration; `agentId` for hook-emitted `dispatched`/`dispatch_ended`; round number `N` for git-derived `review_returned`; interval ordinal for `blocked`/`unblocked` |
-| `key` | string | `plan\|ref\|event\|disc` — idempotency (D5) |
-| `source` | enum | `cli · hook · git · automation-sync` (D6) |
-| `session`, `agentId`, `label`, `role` | string/null | join handles to tokenomics (§6.12); `label` = dispatch description truncated to 120 chars, ids only when `profile.capturePrompts` is false (default) |
-| `raw` | string/null | the factory's own word: `delivered`, `defect-found`, `Rio: PASS`, `CHANGES_REQUESTED`, `address review 2` |
-| `estimate` | object | only on `estimated` (§6.4) |
-| `meta` | object | open; conventional keys `git_sha`, `is_working_tree`, `recorded_at`, `verdict`, `story`, `mission`, `stage`, `unattributed`, `pr`, `round` |
-
-Reader rules: parse every `events-*.jsonl` under `delivery/`; drop unparsable lines with a count; dedup by `key` keeping the greatest `at` (ties: last in file order); sort by `at`. A `plan` with no `plans/<plan_id>.json` is reported as `orphan-events` and excluded from metrics (its events are listed under "unregistered").
-
-### 6.3 Plan registration
-
-The canonical input is a fenced block the planner writes into the plan artefact (tech-lead's tasks file; the campaign card's plan section) so the estimate is reviewed where the plan is reviewed:
-
-````markdown
-```json delivery-plan
-{
-  "plan": "security-testing-bundle/v2",
-  "factory": "feature-development",
-  "campaign": { "id": "security-testing-bundle", "title": "security-testing bundle v1",
-                "estimate": { "unit": "h", "low": 120, "high": 200, "tier": "budgetary" } },
-  "mission_kind": "group",
-  "missions": [
-    { "id": "G12", "title": "build-report + secure-code-review",
-      "estimate": { "unit": "h", "low": 2, "high": 5, "tier": "budgetary" },
-      "tasks": [
-        { "id": "TASK-023", "story": "US-021", "class": "M", "role": "js-dev",
-          "estimate": { "unit": "h", "low": 1, "high": 3, "tier": "budgetary" } },
-        { "id": "TASK-034", "story": "US-030", "class": "L", "role": "js-dev",
-          "estimate": { "unit": "h", "low": 2, "high": 4, "tier": "ROM" } }
-      ] }
-  ],
-  "estimated_by": "tech-lead", "estimated_at": "2026-09-16T08:00:00Z"
-}
-```
-````
-
-`delivery.mjs plan register --from <file.md|file.json> [--plan <id>]`:
-
-1. Reads the block (or a bare JSON file). Schema-validates (`lib/schema.mjs`, hand-rolled subset as in the security-testing scripts: required keys, enums, types) → exit `2 SCHEMA-INVALID(<path>)`.
-2. Writes/updates `plans/<plan_id>.json`: `{ plan, factory, status: "open", registered_at, campaign, mission_kind, missions[], catalogue: [every ref with its level, parent, story, class, role], versions: [{ at, git_sha, digest }] }`.
-3. Appends events: `created` for every item not previously in the catalogue (`at` = `--created-at` if given, else the plan file's first git commit time when `--from` is a tracked file, else now — `meta.basis` says which); `estimated` for every item whose `estimate` differs from its last recorded estimate (`disc` = revision ordinal); `cancelled` (`raw: "removed-from-plan"`) for catalogue items missing from the new block unless `--keep-missing`.
-4. Prints `PLAN <plan_id> items=<n> created=<a> estimated=<b> cancelled=<c>` and, per level, how many items carry an estimate — the "unestimated count named rather than imputed" rule.
-
-`plan close --plan <id>` sets `status: closed` (hooks stop guarding it as open; reports still include it). `plan list` / `plan show`.
-
-**Markdown importer** (`--from <tasks.md>` without a block): parses `#### TASK-NNN:` headings, `**Story:**`, `**Complexity:**`, `**Assigned to:**`, and the `§1 Execution plan` `G<n>` lines; produces the same JSON with `mission_kind: "group"`, no `estimate` objects, `meta.basis: "markdown-import"`; always prints the derived block first and requires `--yes` to register (D19). Test-automation plans register from the campaign card's plan JSON (`campaign`, `waves[].slug`, `waves[].caseIds`, `clusters`) via `sync --automation` (§6.8), never by hand.
-
-### 6.4 Estimates
-
-```json
-{ "unit": "h", "low": 1, "high": 3, "tier": "budgetary", "class": "M",
-  "by": "tech-lead", "at": "2026-09-16T08:00:00Z", "basis": "delivery-plan block" }
+{"v":2,"at":"2026-09-16T11:00:00.000Z","recorded_at":"2026-09-16T13:00:00.000Z",
+ "user":"daniel-sallai","host":"cli","plan":"security-testing-bundle/run-1/v2",
+ "item_id":"task-023-generation-1","ref":"TASK-023","level":"task","event":"done",
+ "transition_id":"task-023-generation-1/done/episode-1","source":"cli",
+ "source_record_id":"correction-17","observation_id":"cli:correction-17:done:task-023-generation-1",
+ "revision":0,"txn_id":"txn-17","basis":"observed","session":null,"agentId":null,
+ "raw":"merged","meta":{"git_sha":"<full-sha>"}}
 ```
 
 | Field | Rule |
 |---|---|
-| `unit` | `h` (elapsed calendar hours — the unit of `cycle_time`) or `active_min` (agent active minutes — compared only with tokenomics' `activeMin`); `d` is rejected (working-day ambiguity) |
-| `low`, `high` | numbers, `low ≤ high`; a single number is written as `low = high` and flagged `point: true` in reports (the repo doctrine is ranges — `automation-scoping/SKILL.md:28`) |
-| `tier` | `ROM · budgetary · calibrated` (automation-scoping's vocabulary); `calibrated` requires `basis` naming the calibration snapshot |
-| `class` | the size class the factory already uses (`S/M/L` feature-development, `XS…XL` test-automation) — the reference class for the calibration table; kept ordinal, never mapped to points |
-| `by`, `at` | who declared it and when (event `at` = this `at`) |
+| `v`, `at`, `recorded_at` | schema 2; UTC ISO ms, occurrence versus capture time; reject invalid dates |
+| `plan`, `item_id`, `ref`, `level` | generation-bound catalogue; null item/ref only for admitted-but-unattributed dispatch |
+| `event` | `created`, `estimated`, `dispatched`, `dispatch_ended`, `first_commit`, `review_requested`, `review_returned`, `review_approved`, `review_history`, `done`, `cancelled`, `blocked`, `unblocked`, `reopened`, `scope_declared`, `gate_observed`, `outcome_observed`, `rework_observed` |
+| `transition_id` | stable item + event + occurrence token; lifecycle episode, review id or blocked interval as appropriate; no singleton done/reopened |
+| `source` | `cli`, `automation-sync`, `hook`, `git`; D6 within equivalent occurrence/basis |
+| `source_record_id`, `observation_id`, `revision` | durable upstream id or CLI retry token; observation tuple includes source, source record, item and event; integer revision ≥0 |
+| `basis` | `observed`, `derived-child`, `scope-proxy`, `gate-proxy`, `receipt-proxy`, `plan-commit`; never silently mix populations |
+| `session`, `agentId`, `role`, `label` | nullable, host-qualified handles; persist ids only by default (`capturePrompts: false`) |
+| `raw`, `estimate`, `meta` | raw factory vocabulary; estimate per §6.4; evidence path/hash, generation/episode/interval/review binding, and optional supersedes pointer |
 
-Statistics (§6.10) use the **midpoint** `(low+high)/2` for `work_ratio`, the band for `hit_rate`, and print both facts. Revisions: a new `estimated` event with `disc = n+1`; `original` = `disc 0`; `--latest-estimate` switches the ratio base and says so in the envelope. Absent estimate → the item is excluded from estimate metrics and counted in `unestimated` per level.
+Identities encode tuples without delimiter collisions; example strings above illustrate meaning. Compare semantic payload before allocating capture envelope: retry ignores newly generated recorded_at/txn_id and reuses the stored envelope. Same observation/revision with identical semantic payload is `SKIP`; different payload is `ID-CONFLICT`. Conflicting persisted bytes under one identity/revision remain a reader error. Corrections append higher revision and `meta.supersedes` pointing to the prior revision, and may move `at` earlier. Another source’s observation must never prevent an append.
+
+Reader: validate committed manifests → parse/version-check (corruption/unknown versions counted) → collapse exact duplicates across files → highest valid revision per observation → group equivalent transitions → D6 source selection → deterministic effective-time replay. Same-revision conflicts are excluded as `CONFLICT`; filename/line ordering never decides. Adapter evidence binds fallback and authoritative occurrence through merge SHA, PR/review id, dispatch identity or explicit `--transition`; without equivalence, quarantine as `AMBIGUOUS-TRANSITION`, never infer distinct completions or nearest-time matches.
+
+Sort selected occurrences by `at`, then explicit episode/causal order, then observation id. Same-time predecessor pairs require causal references (created before start, blocked before its unblock, done before its reopen); unresolved incompatible ties are invalid, not arbitrary state changes. Corrections apply before cutoff filtering: this is corrected effective-time history at the pinned input snapshot, not knowledge-as-of capture time. Orphan-plan events are listed as unregistered and excluded from metrics.
+
+### 6.3 Plan registration
+
+Canonical planner block (field defaults inherited by contained estimates):
+
+````markdown
+```json delivery-plan
+{
+  "plan":"security-testing-bundle/run-1/v2",
+  "campaign_id":"security-testing-bundle","run_id":"run-1",
+  "factory":"feature-development","observation_start":"2026-09-16T08:00:00Z",
+  "source_epoch":{"from":"2026-09-16T08:00:00Z","until":null,"integration_ref":"main"},
+  "campaign":{"id":"security-testing-bundle","title":"security-testing bundle",
+              "estimate":{"unit":"h","low":120,"high":200,"tier":"budgetary"}},
+  "mission_kind":"group",
+  "missions":[{"id":"G12","sequence":12,"estimate":{"unit":"h","low":2,"high":5,"tier":"budgetary"},
+    "tasks":[{"id":"TASK-023","story":"US-021","class":"M","role":"js-dev",
+              "estimate":{"unit":"h","low":1,"high":3,"tier":"budgetary"}}]}],
+  "proposed_by":{"kind":"agent","id":"tech-lead"},
+  "proposed_at":"2026-09-16T08:00:00Z","acceptance":null
+}
+```
+````
+
+`plan register --from <file.md|file.json> --id <retry-token>`:
+
+1. Validate schema, epoch, explicit observation start, unique tree, migration and estimate provenance (`lib/schema.mjs`, hand-rolled); errors exit 2. Allocate stable item ids once where absent and return the completed block. Subsequent imports match only within that run.
+2. Under §6.1 transaction lock, diff last committed plan, allocate revisions and stage full next version/catalogue. Catalogue rows: `{item_id, ref, level, parent_item_id, story, class, role, generation, valid_from, valid_until}`. Retain source-file path/hash, tombstones, immutable version snapshots, participating roster snapshots and branch/PR/session/scope/sizing/cost bindings. Effective time = `--at`, else now; historical migration requires explicit effective time.
+3. Append created for new items (`--created-at`, else first source-plan commit containing that item, else now; basis explicit), estimated for changed proposal/acceptance, cancelled for removed active items unless `--keep-missing`. Removing already delivered work changes scope only, never cancels its past completion. Re-addition reuses item id and explicitly reopens; scope additions reopen ancestors (§5).
+4. Publish committed manifest then atomic views. Print `PLAN <id> items=<n> created=<a> estimated=<b> cancelled=<c>` with accepted/proposed/unestimated per level. Retry recovers the same transaction, never loses created after a catalogue-only crash.
+
+`plan close` transactionally ends capture eligibility, not delivery state. `plan list/show` expose versions, scope and bindings. Markdown importer reads `#### TASK-NNN`, Story/Complexity/Assigned-to and execution `Gn` group lines; produces no estimates, `basis: markdown-import`, prints block and requires `--yes` after dry-run. Automation uses its campaign plan JSON or flat-batch registration (§6.8). Explicit `observation_start`/epoch is required before registering imported history; no earliest-new-item inference.
+
+`plan bind --from <bindings.json>` stores validated effective-dated associations: session/host→plan/mission, branch→item/integration ref, item→PR/repository, scope/scoring/cost snapshot→generation and exact item map. Overlapping ambiguous bindings fail; outside epoch is unattributed. Binding changes preserve old versions for cutoff replay.
+
+### 6.4 Estimates
+
+```json
+{"unit":"h","low":1,"high":3,"tier":"budgetary","class":"M",
+ "proposed_by":{"kind":"agent","id":"tech-lead"},"proposed_at":"2026-09-16T08:00:00Z",
+ "acceptance":{"human":"Daniel Sallai","at":"2026-09-16T08:30:00Z",
+   "evidence":"<reviewed-plan-locator>","estimate_digest":"<sha256>","authenticated":false},
+ "basis":{"kind":"delivery-plan","source":"<path>","digest":"<sha256>"}}
+```
+
+Unit `h` = elapsed calendar hours; `active_min` = tokenomics direct active minutes; reject ambiguous working-day `d`. Finite nonnegative bounds, low≤high; equal bounds flag `point: true`. Tier `ROM|budgetary|calibrated|unknown`; calibrated requires pinned snapshot path/hash/reference population. Optional probability strictly 0<p<1, never inferred from prose. Class remains ordinal, never points.
+
+Proposal and human acceptance are distinct immutable revisions. Acceptance names a human and evidence, binds the exact estimate digest; role name alone is not human ownership. It is recorded attribution, not authenticated identity. Original commitment = first accepted revision; changed range/unit/tier needs renewed acceptance. Unaccepted proposals stay visible and excluded as `unaccepted`. Acceptance after measured start is `late-accepted`, excluded from predictive accuracy; latest policy selects latest accepted **before start and cutoff**. This applies the human-ownership requirement in `R05:234` without pretending agent plans are human commitments.
+
+**`automation-scoping-v1` import.** Preserve exact `estMin`, `lowMin`, `highMin`, `confidence`, source path/hash and time basis plus scorer/taxonomy/calibration hashes when available. Bounds→active_min, size→class. Do not parse confidence into tier: explicit reviewed-plan tier else unknown, even if confidence text says calibrated without a snapshot. Source labels are descriptive bands and may carry reasons (`AS/scripts/score-cases.mjs:381-388,466-472`; `R03:120-140`). Commit/mtime is proposal-record time, not acceptance. Sizing joins require generation/case bindings.
+
+`work_ratio = actual / midpoint`; zero midpoint→null/count. `MRE = abs(actual-midpoint)/actual`; MdMRE = median MRE, PRED(25) = share MRE≤.25; zero actual excluded from MRE/PRED with count, retained for MAE. `hit_rate` = range inclusion, excluding point estimates. Unknown probability permits descriptive hit rate only, no interval-coverage calibration claim. Proxies, missing actuals, mismatched units, unaccepted/late estimates, provisional/drift/stale costs have distinct exclusions. Parent schedule comparisons use the declared mission/campaign boundary and label derived-child timing separately; they do not enter measured cycle calibration.
 
 ### 6.5 CLI — `scripts/delivery.mjs`
 
 | Command | Effect | Exit |
 |---|---|---|
-| `plan register --from <f> [--plan <id>] [--created-at <iso>] [--keep-missing] [--dry-run] [--yes]` | §6.3 | 0 / 2 |
-| `plan close\|list\|show [--plan <id>]` | plan status | 0 / 3 |
-| `event <ref> <event> [--plan <id>] [--at <iso>] [--sha <sha>] [--raw <s>] [--round <n>] [--note <s>]` | append one line, `source: cli`; `--sha` sets `at` = committer date and `meta.git_sha`; `--plan` may be omitted when exactly one plan is open; `<ref>` may be `TASK-023` or `plan:ref` | 0 / 2 / 3 |
-| `event --batch <jsonl>` | many lines at once (the PM closing a mission) | 0 / 2 |
-| `status [--plan <id>]` | per open plan: items by state, WIP, open ages vs P85 line, unattributed dispatches, missing events the git backfill could fill; the PM's "Delivery" status line (§11) | 0 / 3 |
-| `backfill --git [--plan <id>] [--since <iso>] [--pr] [--dry-run]` | §6.7 | 0 / 2 / 3 |
-| `sync --automation [--plan <id>] [--dry-run]` | §6.8 | 0 / 2 / 3 |
-| `report [--plan <id>…] [--since --until --cutoff <iso>] [--level …] [--class …] [--json\|--html] [--out <f>] [--from-json <f>] [--latest-estimate] [--calibrate]` | §6.10–6.11 | 0 / 3 |
-| `doctor` | same checks as `install-hooks.mjs --doctor` | 0 |
+| `plan register --from <f> --id <token> [--plan <id>] [--at <iso>] [--created-at <iso>] [--keep-missing] [--dry-run] [--yes]` | §6.3 | 0/2 |
+| `plan close\|list\|show [--plan <id>]` | capture status/views | 0/2/3 |
+| `plan bind --plan <id> --from <bindings.json> --id <token>` | effective-dated associations | 0/2 |
+| `plan reconcile --heads <ids> --from <f> --id <token>` / `profile set --from <f> --id <token> [--heads <ids>]` | transactional shared-state updates | 0/2 |
+| `event <ref> <event> --id <token> --transition <occurrence> [--plan <id>] [--at <iso>] [--sha <sha>] [--pr <n>] [--revision <n> --supersedes <observation>] [--interval <id>] [--raw <s>] [--note <s>]` | CLI observation; identity/revision mandatory for retry/correction | 0/2/3 |
+| `event --batch <jsonl> --id <token>` | atomic batch; identities on every row | 0/2 |
+| `status [--plan <id>]` | current states, WIP/age, unknown coverage and capture diagnostics | 0/3 |
+| `backfill --git --plan <id> --head <sha> [--since <iso>] [--cutoff <iso>] [--pr] [--dry-run]` | pinned history (§6.7) | 0/2/3 |
+| `sync --automation [--plan <id>] [--dry-run]` | adapter snapshots/observations | 0/2/3 |
+| `report [--plan <id>…] [--since <iso>] [--until <iso>] [--cutoff <iso>] [--level …] [--class …] [--json\|--html] [--out <f>] [--from-json <f>] [--latest-estimate] [--calibrate]` | §6.9–6.11 | 0/2/3 |
+| `doctor` | installer/capture/sync health | 0 |
 
-Output tokens on stdout (one per line, greppable): `PLAN …`, `EVENT <key> <at>`, `SKIP <key> (exists)`, `BACKFILL events=<n> skipped=<m> source=git`, `SYNC events=<n> …`, `REPORT <path>`, `STATUS …`. Errors on stderr as `<CODE>(<detail>)`: `USAGE(...)`, `SCHEMA-INVALID(...)`, `NO-PLAN`, `NO-EVENTS(window)`, `AMBIGUOUS-PLAN(<a>,<b>)`.
+`--sha` uses committer timestamp and records full SHA; supplying differing `--at` requires explicit correction, never silently picks one. Bare ref resolves only through unique bound plan context. Event-specific payloads such as review completeness, gate proof and acceptance use schema-validated `event --batch` / `plan bind`, not invented extra flags.
+
+stdout tokens: `PLAN …`, `EVENT <observation_id> <at>`, `SKIP <observation_id> (exists)`, `BACKFILL events=<n> skipped=<m>`, `SYNC …`, `REPORT <path>`, `STATUS …`. stderr one `<CODE>(<detail>)`: `USAGE`, `SCHEMA-INVALID`, `ID-CONFLICT`, `INVALID-TRANSITION`, `AMBIGUOUS-PLAN`, `AMBIGUOUS-TRANSITION`, `MIGRATION-REQUIRED`, `LOCK-BUSY`, `CONFLICT`, `SYNC-INCOMPATIBLE` exit 2; `NO-PLAN`, `NO-EVENTS` exit 3 with explanatory output. Internal failures exit 1. `--round <n>` remains an optional human-readable review-round label, not an occurrence/idempotency key. Report zero counts remain measurable; no events in the window does not mean failure if carried-in state/covered zero-throughput weeks exist. `--from-json` prohibits recomputation flags and preserves the archive.
 
 ### 6.6 Hooks
 
-`scripts/install-hooks.mjs [--host claude|copilot] [--local] [--remove] [--doctor [--fix]]` — tokenomics' installer shape with marker `_delivery` on every spliced group:
+`install-hooks.mjs [--host claude] [--local] [--remove] [--doctor [--fix]]`: one `_delivery` Claude `SubagentStop` group, matcher `*`, async, timeout 30, `node hooks/dispatch-hook.mjs --stop`. Unsupported host exits 2 `UNSUPPORTED-HOST`. No Copilot hooks/live markers in this release (F6, §18).
 
-| Host | Event | Command | Flags |
-|---|---|---|---|
-| Claude Code | `SubagentStop` (matcher `*`) | `node hooks/dispatch-hook.mjs --stop` | `async: true`, `timeout: 30` |
-| Claude Code | `PreToolUse` (matcher `Agent\|Workflow`) | `node hooks/dispatch-hook.mjs --mark` | `async: true`, `timeout: 5` |
-| Copilot CLI | `subagentStop` | `node hooks/dispatch-hook.mjs --stop` | in `.github/hooks/delivery.json` |
-| Copilot CLI | `subagentStart` | `node hooks/dispatch-hook.mjs --mark` | idem |
+Read stdin bounded to 64 KiB, no stdout, failures exit 0. Resolve checkout through git worktree metadata, not path truncation; SPIKE-1 must pin main/worktree behavior before M2. This is a new adapter; tokenomics simply selects argument/env/cwd (`TOK/hooks/telemetry-capture.mjs:1339`). Admission requires open bound plan and role in the union of **that plan’s participating** factory rosters. `plan bind` stores `{host, session, plan, mission?, scope?, branches[], roles[]}`. Known foreign role exits without unattributed delivery events; legacy missing type passes role check only and counts `unknown-role`, binding still required (`bundles/SPEC.md:291-297`). Unbound dispatch is a capture diagnostic, outside delivery denominators.
 
-`dispatch-hook.mjs` rules (all hosts): read stdin bounded (64 KiB); **first** check the guard (D16) — `plans/*.json` with `status: open` in the repo resolved from `CLAUDE_PROJECT_DIR` / `cwd` (walk up to the `.git` of the main checkout when inside `.claude/worktrees/…`, the same resolution tokenomics uses; the M1 spike below pins the actual `cwd` seen from a Workflow dispatch); no open plan → exit 0 silently; never print to stdout; never exit non-zero; every failure path is a `try/catch` that exits 0.
+Claude correlation key = `(host, session_id, agent_id)`, never role/time. Existing keys are checked at `TOK/hooks/telemetry-capture.mjs:1359-1367`. Prefer supplied validated `agent_transcript_path` **only after SPIKE-1 pins host fixtures**; legacy fallback resolves matching child beneath parent `transcript_path`’s `subagents/` with its `.meta.json`. Validate session/path association; two same-role children must stay separate. Parse first/last valid timestamps; absent/partial transcript yields unknown-start/incomplete-end diagnostics, no synthetic duration. Later capture can revise a partial observation; no complete-end claim without completion evidence.
 
-`--stop` (Claude): payload `session_id`, `agent_id`, `transcript_path` (parent). Locate the sub-agent transcript by `agent_id` under the parent's `subagents/` dir and its `.meta.json` (`agentType`, `description`); parse the first and last timestamps (~1 s, the transcript is alive at this moment — tokenomics field lesson); resolve refs (D18) from `description`, then the first user message's first line, then the branch of the dispatch cwd when `meta` carries one; classify `meta.stage` with a copy of tokenomics' `STAGE_MARKER` regex (`implement|build → build`, `review → review`, `fix round|address review → fix`, `gate|mini-gate → gate`, `merge → merge`, else `other`); emit per resolved ref `dispatched {at: firstTs, disc: agent_id, role: agentType, label, session}` and `dispatch_ended {at: lastTs, disc: agent_id, …}`; `stage: review` additionally emits `review_requested {disc: agent_id}`; `stage: fix` additionally emits `review_returned {disc: agent_id}`; no ref → one `dispatched` + `dispatch_ended` with `ref: null, meta.unattributed: true`. Delete any `.pending-<session>-*.json` marker for this agent.
-`--stop` (Copilot): `subagentStop` payload carries the agent name and timestamps (`subagent.completed` fields as tokenomics reads them at `telemetry-capture.mjs:520-527`); same emission, `host: copilot`.
+Resolve metadata description, else tokenomics-style stage label from **full first user message**, slicing at `STAGE_MARKER` (`TOK/hooks/telemetry-capture.mjs:608-620`), else bound branch aliases. Resolve before persistence truncation. Explicit qualified member lists can attribute several refs; ambiguous ids yield one unattributed dispatch pair. Cluster dispatch observes task start; per-case starts need individual evidence, otherwise record scope-proxy activity only. Stage classifier: implement/build→build, review→review, fix round/address review→fix, gate/mini-gate→gate, merge→merge, else other. All stages count dispatch activity; only observed build starts enter cycle time.
 
-`--mark`: write `.pending-<session>-<n>.json` `{at, session, label, refs[]}` (Claude payload `tool_input.description`/`prompt` first line; Copilot `subagentStart` agent name + prompt). `status` reads pending markers as in-flight WIP; `--stop` consumes them; a marker older than 24 h is swept by the next `status`/`report` and counted as `dispatch-without-stop` (never converted into an event).
+Emit start/end with source identity containing host/session/agent/event/item. Review-stage request is a request **proxy**, not proof of complete review history. Fix stage emits `rework_observed`, never `review_returned`; independent review outcome supplies return/approval. Same reread SKIP; corrected/grown transcript appends revision. After transaction, request §6.1 sync even with dormant tokenomics installed.
 
-Workflow-tool dispatches (`.meta.json` has no `description`): resolution falls to the first user message's first line — the orchestration prompts of both factories already start with the case/task ids (`telemetry-capture.mjs:609-612`); the M1 wiring (§9) makes this an explicit rule in the feature-development PM/tech-lead prose ("the first line of every dispatch prompt names the `TASK-NNN`").
+Remove only owned hook groups/blocks, preserve unrelated entries and edits made after install; formatting may change. Delete owned files only if no user content remains. Never remove ledger/submodule data; retain ignore protection while transients remain, report owned remnants. Doctor checks compatibility, rosters/bindings, transcript capability and actual ignores. Byte-for-byte pre-install restoration is not promised.
 
 ### 6.7 Git backfill
 
-`backfill --git` derives events the hooks and CLI missed, for history and for hostless hosts. Reads `plans/<plan_id>.json` for the catalogue and the plan's source file path (recorded at registration). For each ref, from `git log --format=%H%x1f%ct%x1f%s%x1f%P --all` filtered by the id (word-bounded; case-sensitive):
+Require registered generation, source epoch `[from,until)`, integration ref and immutable `--head` on that ref. Persist selected heads/refs/cutoff and imported PR hashes. Do not scan `--all`. `--since` limits new observations, not report replay. Canonical refs case-sensitive; normalize only bound aliases including `task/task-023 → TASK-023`; resolve merge alias **before** ref filtering.
 
-| Event | Derivation | `disc` / `raw` |
-|---|---|---|
-| `created` | committer date of the first commit touching the plan file that contains the ref (one stamp for all items of that plan version — printed as a caveat: "plan-tracked creation") | `0` / `plan-commit` |
-| `first_commit` | earliest non-merge commit whose subject starts with `<ref>:` or whose branch (`refs/heads/task/task-NNN`, `tests/<ID>-…`, `tests/batch-<wave>`, when the ref still exists) contains it | `0` / subject |
-| `review_returned` | each commit with subject `<ref>: address review <N>` | `N` / subject |
-| `done` (local mode) | merge commit whose subject matches `merge <branch> (…PASS…)` where `<branch>` resolves to the ref, or whose second parent's first-parent chain contains the ref's commits | `0` / subject |
-| `done` (PR mode, `--pr`) | `gh pr list --state merged --search "<ref>" --json number,title,body,headRefName,createdAt,mergedAt,reviews`; a PR whose `headRefName` or title/body names the ref → `done {at: mergedAt, meta.pr}`, `review_requested {at: createdAt}`, `review_returned` per `CHANGES_REQUESTED` review (`disc` = review ordinal); `gh` missing or unauthenticated → `null` with `BACKFILL pr=unavailable` printed, never a failure | `0` / `pr#<n>` |
+| Event | Evidence |
+|---|---|
+| created | first pinned source-plan commit containing item in this generation; shared stamp labelled plan-commit |
+| first_commit | earliest nonmerge `<ref>:` commit in bound unit history/epoch, reachable from pinned integration head or explicit pinned unit ref |
+| rework_observed | `<ref>: address review N`, source id SHA; not a review outcome |
+| local done | first-parent merge on bound integration ref, registered branch alias, second-parent evidence from that generation; no arbitrary ancestor-containing fallback |
+| PR done | persisted `{plan,item_id,repository,pr,head_ref,base_ref,episode}` mapping; paginated retrieval verifies merge into bound base within epoch/cutoff |
+| PR reviews | stable upstream review ids/results with complete pagination and review-history bounds; PR creation supplies time_to_merge, not a review request |
 
-Never derived: `dispatched`, `cancelled`, `blocked` (D6 makes the absence explicit in coverage). Each line: `source: git`, `meta.git_sha`, `meta.is_working_tree` (true when the sha is only in the working clone's local branches). Idempotent: an existing key is `SKIP`ped. `--since` bounds the log walk; `--dry-run` prints the lines without appending.
+PM binds PR when opening it; legacy branch-based discovery may propose a unique head/base match for confirmation. Never require task text in title/body. Missing `gh`, auth, pagination or binding → unavailable/partial, not complete history. First merge maps to episode 1; later merge needs explicit reopen/episode binding or quarantine. Repository+full SHA/review id form source identity. D6 retains lower-priority evidence. Repeat backfill SKIPs same observation/revision only. Squash/deleted branches must work through PR mapping (`bundles/feature-development/agents/project-manager/AGENT.md:95`).
+
+Golden uses a self-contained generated temp git repository with fixed dates, refs/head in fixture manifest; it models the research snapshot, never current moving branch totals. Later merges/reused ids cannot change pinned output.
 
 ### 6.8 test-automation sync adapter
 
-`sync --automation` reads the factory's existing records and emits events (`source: automation-sync`, `host: cli`); it never writes into `.agents/automation/` or `automation/`:
+Read existing records, snapshot bytes into delivery imports, emit automation-sync observations. Only delivery artifacts are written; shared git sync separately owns repository metadata. Campaign/run identity is explicit; hash canonical approved Plan JSON only, not card State/Log (`TAW/references/campaign-planning.md:254-280`). Flat batches need run identity too. Clusters→tasks→cases, solo→one-case task; ambiguous membership is invalid.
 
-| Input | Events |
+| Input | Observation |
 |---|---|
-| `.agents/automation/campaigns/<slug>.md` plan JSON, or `.agents/automation/<batch>/run.json` / `report.json` `batch` for flat batches | plan registration (`plan_id = <campaign>/<card-digest-short>`, `mission_kind: "wave"`, tasks = units from `clusters` + solo cases, cases under their wave) |
-| `.agents/estimation/<scope>-scored.json` `cases[] {id, size, sp, estMin, lowMin, highMin, confidence}` | `estimated {unit: active_min, low: lowMin, high: highMin, tier: <confidence→tier map, printed>, class: size, by: "automation-scoping", at: file's first git commit time else mtime with meta.basis: "mtime"}` |
-| telemetry `automation/scopes/*.json` (`declaredAt`, `batch`, `cases[]`, `outcomes[id].at`) | `dispatched` per case at `declaredAt` **only when no hook `dispatched` exists** (precedence D6 handles it) with `raw: "scope-declared"` — labelled a proxy for the wave, not per case; `done`/`cancelled` per case at `outcomes[id].at` with `raw` = the outcome word |
-| `.agents/automation/<batch>/gate-runs.jsonl` `{at, branch, verdict}` | wave `done` at the first `green` for `tests/batch-<wave>`; wave `review_returned` per non-green run (`disc` = run ordinal) |
-| `report.json` `cases[].outcome` (closed vocabulary) | `done` for `delivered\|defect-found\|automated\|merged-sanctioned-red` and `cancelled` for `blocked\|un-automatable\|not-started\|infra-stalled` **at receipt mtime with `meta.basis: "receipt-mtime"`** — the lowest-confidence clock, used only when neither scope outcomes nor gate runs exist for the case, and flagged (`meta.clock: "receipt"`) |
-| git | `done` for a unit at the merge of `tests/<ID>-…` into `tests/batch-<wave>` (local) — through `backfill --git`, not here |
+| Campaign plan or flat batch run/receipt | stable bound tree registration |
+| Bound `.agents/estimation/<scope>-scored.json` | proposal via automation-scoping-v1, acceptance separate |
+| `.agents/telemetry/automation/scopes/*.json` | scope_declared at declaredAt as scope-proxy; outcomes[id].at as raw outcome_observed with generation/session |
+| Both `.agents/telemetry/automation/gate-runs/<slug>.jsonl` and `.agents/automation/<slug>/gate-runs.jsonl` | canonical-row-hash dedup copied records, gate_observed; never first-green→done |
+| Bound report.json cases[].outcome | outcome snapshot; mtime receipt-proxy, never delivery timestamp |
+| Bound unit/trunk merge or mapped PR | task integration / mission landing evidence, requiring child/gate rules below |
 
-The `done` clock precedence per case is therefore: CLI > `outcomes[id].at` > gate green (wave-level) > receipt mtime; the report prints the distribution of which clock won (`done_clock: {scope: n, gate: n, receipt: n}`).
+Existing gate fields: `{at, branch, base, baseRef?, spec?, n, verdict, consecutiveGreen, seconds[], coverage?}` (`TAW/scripts/gate/gate-case.mjs:191-221`; `R03:425`). Workflow runs separate `--n 1` calls, then lands trunk separately (`TAW/references/orchestration-playbook.md:200-210`). These logs lack tested SHA/sequence id. **New delivery binding**, supplied by lead, is `{run_id, mission, tested_sha, base_sha, required_n, ordered_gate_row_hashes[], covered_case_ids[], evidence}`; it is declared provenance, not a claimed existing payload. Without it gate completeness is unknown.
+
+Within one bound sequence require distinct run hashes, tested revision/base and coverage set; positive required_n explicitly declared. Count consecutive successful runs: one-run row contributes one; multi-run row requires n/consecutiveGreen/seconds length consistency. Red/incomplete/invalid coverage resets streak; changed code/base resets sequence. Later red invalidates earlier qualifying streak. `gated_at` = final qualifying green of latest valid sequence. Pending merge is gated, not done. Landing must name tested revision or explicitly verified equivalent squash tree/base; content changes require another gate.
+
+Case done requires delivered disposition (`delivered`, `defect-found`, legacy `automated`, `merged-sanctioned-red`), bound generation membership, individual accepted outcome evidence and task integration. Scope timestamp qualifies only if evidence confirms acceptance at that boundary; otherwise retain outcome_observed. `blocked`, `not-started`, `infra-stalled` remain unresolved; `un-automatable` cancels only with explicit removal decision. Gate green never delivers all cases. Covered delivered receipt plus final gate may provide a **gate-proxy completion observation**, excluded from measured cycles, accuracy and observed throughput; proxy counts remain visible. Receipt mtime never supplies done.
+
+Equivalent observed acceptance precedence: CLI > bound automation scope > hook > git, with §6.2 corrections. Gate/receipt proxies remain separate. `done_clock` reports cli, scope-observed, integration, derived-child, gate-proxy, receipt-proxy, unknown as distinct populations. `scope_to_done` is mission declaration→observed landing proxy, never per-case cycle/calibration. Sync-before-hook and hook-before-sync must produce identical populations. Scope outcomes are mutable latest values (`TOK/scripts/work-scope.mjs:74-90`); missing past outcomes remain unknown, not reconstructed from current state.
 
 ### 6.9 Timeline derivation
 
-Per item, from the deduped, source-selected (D6) events:
+`end = min(until,cutoff)`, cutoff defaults generated-at, until defaults cutoff, since defaults earliest explicit selected-plan observation_start. Validate since<end. Intervals UTC half-open `[since,end)`; envelope records requested/effective bounds. Replay **all** corrected committed history with effective at<end, including earlier plan versions, before filtering cohorts. Future events cannot change cutoff state. Later recorded corrections affect historical output only through a changed pinned input snapshot (§6.2).
 
-```
-planned ──dispatched|first_commit──▶ in_progress ──review_requested──▶ in_review
-   │                                     ▲                                │
-   │                                     └────────review_returned─────────┘
-   │                                     │
-   ├──cancelled──▶ cancelled             ├──done──▶ done ──reopened──▶ in_progress (reopen_count++)
-   └──done (no start)──▶ done            └──cancelled──▶ cancelled
-blocked / unblocked: overlay intervals on any state (unclosed interval closes at done|cancelled|cutoff and is flagged)
-```
+| Transition | Validation/effect |
+|---|---|
+| created | planned once per stable item |
+| observed build dispatched / first_commit | planned→in_progress; first_commit gives separately labelled WIP proxy, never cycle start |
+| observed review_requested | in_review; proxy request stays activity only |
+| review_returned / review_approved | explicit review id/result required; returned→in_progress, approval alone not done |
+| done / cancelled | closes current episode; duplicate occurrence must be retry or correction |
+| reopened | done/cancelled→in_progress, new episode id; repeat cycles allowed |
+| blocked / unblocked | pair interval token in open episode; unmatched unblocked invalid; union overlapping valid intervals without double count |
 
-Derived per item: `created_at` (first `created`), `estimate` (original / latest), `started_at` (first `dispatched`; else `null`), `first_commit_at`, `in_review_at` (first `review_requested`), `review_rounds` (count of `review_returned`, source-selected), `done_at` (first `done`), `cancelled_at`, `blocked_intervals[]`, `reopen_count`, `dispatch_count`, `dispatches[] {agentId, role, stage, from, to}`, `unattributed: false`. Items with `done` but no `created` are `done-unplanned` (counted). A `done` earlier than `started_at` is a data defect printed as `clock-skew` and the item is excluded from duration statistics.
+CLI rejects invalid transitions; imported invalid/ambiguous histories are quarantined and counted. Open block closes at terminal event or end, flagged right-censored. No captured blocks is not confirmed zero: block completeness must be explicitly declared with history bounds/evidence in metadata; complete empty history→0, otherwise unknown. Parent state follows §5.
+
+Derived first start/completion, latest completion, current episode/state, reopen count, dispatches, intervals and coverage. Throughput counts each stable item’s **first** qualifying completion once; recompletions separate. Current-open age begins latest reopen, else first observed build start; absent both→unknown. Closing items have no open age. Reopen/scope additions preserve first parent completion. Negative duration excludes affected metric only (`clock-skew`), never erases throughput.
+
+**Review observability.** `review_history` carries `{episode, from, through, complete, evidence_ids[]}` from fully retrieved history or explicit reviewer/PM evidence. First-pass requires complete history from first review request through first completion, at least one final approval, and all outcomes. No request→unknown unless explicit history evidence identifies its start. Partial/missing histories yield review_rounds null, observed failures shown only as lower bound. Fix dispatch/commit counts are rework_proxy. `first_pass_rate = complete approved histories with zero returns / complete approved histories`. Print reviewed (at least one result), eligible (complete approved), done and unknown/partial counts. Disabling capture never turns unknown into success.
+
+**Cohorts/windows.** Duration/quality/accuracy completion cohort = first completions in `[since,end)`, full earlier lifecycle. WIP/age = state immediately before end; creation cohort supplies cancelled_share (currently cancelled among items created in window / that cohort). Parent-derived and observed leaf strata never mix. Every intersecting UTC ISO week appears, zero-filled; whole iff Monday 00:00≥since and next Monday≤end, with declared observation coverage for the full week. For aggregated plans use their common covered interval for velocity, or emit per-plan velocities rather than silently zero-fill uncovered time. Carried-in starts/blocks supply opening WIP and later completions even when no new items are created. Sum partial+whole completion bins = cohort size. Source coverage remains explicit; declared observation start does not prove complete capture (`R05:220-247`).
 
 ### 6.10 Metrics
 
-All durations in hours (2 dp) from ms-resolution stamps; `n` beside every figure; median needs `n ≥ 5`, P85 `n ≥ 7` (nearest-rank: `sorted[ceil(q·n) − 1]`), otherwise the report prints the sorted values and min–max. Per level, per plan, and across plans in the window; segmented by `class`, `role`, `factory`, `mission`.
+Durations seconds internally, hours 2 dp in output; compute before rounding. Median/P85/P90 floors per D10; below floor show sorted samples, min–max and n. Per level/plan/class/factory/mission, across versions by stable identity; optional role/model segmentation only when known, no allocation invented for mixed-role parents.
 
-| Group | Metric | Start → stop | Unit / aggregation | Notes |
-|---|---|---|---|---|
-| Flow Time | `cycle_time` | first `dispatched` → first `done` | h; median, P85, P90, min–max, n | the headline; per level and per class |
-| | `commit_to_done` | `first_commit` → first `done` | h; same | only for items without `dispatched`; **never merged** into `cycle_time` (D8) |
-| | `lead_time` | first `created` → first `done` | h; same | label "plan-tracked, not idea-to-done"; caveat when `created` is a plan-commit stamp shared by all items |
-| | `time_to_merge` | PR `createdAt` → `mergedAt` | h; same | PR mode only; label "PR open to merge — not lead time, not cycle time" |
-| | `time_in_review` | first `review_requested` → `done` | h | with `review_rounds` beside it |
-| | `time_blocked` | Σ (`unblocked` − `blocked`) | h | sum rule; not subtracted from `cycle_time` |
-| | `work_item_age` | first `dispatched` → cutoff, for items not done/cancelled | h per item | listed against the P85 `cycle_time` line of the same level/class |
-| Throughput | `throughput` | count of `done` per UTC ISO week per level | items/week series | zero-filled from observation start (earliest `created` in window) to cutoff; partial week flagged |
-| | `velocity` | median of `throughput` over whole weeks | items/week | `MIN_WHOLE_WEEKS = 3` else `null` + caveat; mean also emitted, never headlined |
-| | `wip` | items in `in_progress`/`in_review` at each week boundary | count series | Little's-law sanity line: `wip ÷ throughput` vs `cycle_time` median |
-| | `mission_turnaround` | last `done` of mission *n* → first `dispatched` of mission *n+1* | h; median, min–max, n | the "between increments" gap |
-| | **cadence** | = {`throughput`, `velocity`, `mission_turnaround`} | — | the word is only ever this group |
-| Quality | `review_rounds` | count of `review_returned` before `done` | distribution; `first_pass_rate` = share with 0 | source-selected (D6) |
-| | `cancelled_share` | `cancelled` ÷ `created` | % with n | |
-| | `reopen_count` | Σ `reopened` | count | |
-| | `unattributed_share` | dispatches with `ref: null` ÷ all hook dispatches | % with n | coverage honesty |
-| | `coverage` | per event kind: share of done items having it, by source | table | e.g. `dispatched: hook 61 %, none 39 %` |
-| Estimates | `work_ratio` | actual ÷ estimate midpoint, same unit (h vs h; `active_min` vs tokenomics `activeMin`) | per item; MdMRE, PRED(25), MAE, ratio distribution per class and tier | never MMRE alone; `unestimated` count printed |
-| | `hit_rate` | share of items with `low ≤ actual ≤ high` | % per tier, n | only where a range exists; `point: true` items excluded and counted |
-| | `schedule_variance` | mission/campaign: estimated `[low, high]` vs actual elapsed (`first dispatched → last done`), plus `scope_added`/`scope_removed` counts since original registration | h, count | |
-| | `calibration` | per (factory, level, class): `{n, p50_h, p85_h, min, max, sample_window}` | table | written to `calibration/<date>.json` with `--calibrate` (D22) |
-| Cost (join) | `active_min`, `cost_usd` | tokenomics' figures per item | quoted | only when records exist; tokenomics' labels (`measured`, `allocation`, `tokens-only`, `PROVISIONAL`, `DRIFT`) reproduced verbatim (§6.12) |
+| Group | Metric | Definition / denominator | Caveat |
+|---|---|---|---|
+| Flow Time | cycle_time | first observed build start→first qualifying completion | measured task/case; child-derived parents separate |
+| | commit_to_done | first_commit→first completion, only without observed dispatch | never blended into cycle |
+| | lead_time | first created→first completion | plan-tracked, not idea-to-done |
+| | time_to_merge | PR createdAt→mergedAt | PR open to merge — not story lead time/cycle |
+| | time_in_review | first observed review request→first completion | incomplete/proxy request → unknown |
+| | time_blocked | union block intervals clipped to window | complete history or censored observed lower bound |
+| | work_item_age | current-open start→end | compare same class/level observed P85; unknown start null |
+| | scope_to_done | mission scope declaration→observed landing | supplementary scope proxy only |
+| Throughput | throughput | stable items first completed per UTC ISO week | zero-fill/coverage/partials §6.9 |
+| | velocity | median whole-week throughput, minimum 3 weeks | null with derived caveat otherwise; mean may be secondary |
+| | wip | current in_progress/in_review, including blocked overlay, at boundaries/end | observed versus first-commit-proxy split; no Little’s Law line |
+| | mission_turnaround | explicit successor start minus predecessor completion | overlap/unknown null and counted (§5) |
+| | cadence | throughput + velocity + mission_turnaround | grouping, not another metric |
+| Quality | review_rounds / first_pass_rate | complete history failure count / zero-return share of eligible histories | reviewed/eligible/done plus unknown denominators |
+| | rework_proxy | distinct fix dispatches and address-review commits | separate counts, no claim they are identical rounds |
+| | cancelled_share | current cancellations in creation cohort / cohort size | empty denominator null |
+| | reopen_count | valid reopen occurrences in window | does not add throughput |
+| | unattributed_share | admitted bound dispatches with no resolved item / admitted bound dispatches | dedup host/session/agent, not per-item fanout |
+| | coverage | done items with each event/basis; review/block completeness | proxies, quarantines, unknown and source shares explicit |
+| Estimates | work_ratio, MdMRE, PRED(25), MAE | accepted estimate versus comparable actual (§6.4) | class/tier denominators, unestimated/unaccepted/excluded counts |
+| | hit_rate | share low≤actual≤high | ranged only; descriptive without probability |
+| | schedule_variance | accepted mission/campaign range vs first-completion elapsed; actual−high / actual−low band | derived-child basis named; scope added/removed since registration; current episode elapsed separately |
+| | calibration | observed-cycle `{n,p50_h,p85_h,min,max,sample_window}` by factory/level/class | immutable reference snapshot; no proxy/parent population |
+| Cost | active_min, cost_usd | quoted bound export direct/loaded/totals (§6.12) | allocation, freshness, provisional/drift visible |
 
-Zero-duration rule (D12) applies to every Flow Time metric. Items with `clock-skew` are excluded and counted.
+**D12 validity.** Missing cycle time does not exclude valid commit_to_done. Genuine 30-second cycles, short reviews and confirmed zero blocked time remain. For lead_time only, same source commit for created/completion **plus** elapsed≤profile.zeroDurationSec marks `retrospective-plan-proxy`, excluded with evidence/count. Short duration alone cannot prove retrospective authorship. Zero actual/estimate handling per §6.4; zero-denominator rates null. Gate/receipt completion proxy counts never enter observed throughput. Calibration obeys percentile floors and contains only observed, valid cycles, with event references and window.
 
 ### 6.11 Report envelope and formats
 
-Every output — markdown (default), `--json`, `--html` — carries:
-
 ```json
-{ "generated_at": "…", "cutoff": "…", "window": {"since": "…", "until": "…"},
-  "git_sha": "…", "is_working_tree": true, "plans": ["…"],
-  "sources": {"events_files": [...], "plans": [...], "tokenomics": "present|absent", "gh": "present|absent"},
-  "policy": {"weeks": "UTC ISO", "percentile": "nearest-rank", "zeroDurationSec": 60, "minWholeWeeks": 3, "estimate_base": "original|latest"},
-  "coverage": {...}, "caveats": ["velocity: 2 whole weeks < 3 — null", "created: plan-commit stamp shared by 59 items", "..."],
-  "baselines": {"cycle_time_task_h": null, "throughput_task_per_week": null, "...": null} }
+{"generated_at":"…","cutoff":"…","window":{"since":"…","until":"…","effective_end":"…"},
+ "git_sha":"…","is_working_tree":true,"plans":["…"],
+ "sources":{"transactions":["…"],"files":[{"path":"…","sha256":"…"}],"tokenomics":"present|absent","gh":"present|absent"},
+ "policy":{"weeks":"UTC ISO","percentile":"nearest-rank","minWholeWeeks":3,
+   "zeroDurationSec":60,"estimate_base":"original|latest-before-start","history":"corrected-effective-time"},
+ "coverage":{},"caveats":[],"baselines":{"cycle_time_task_h":null,"throughput_task_per_week":null}}
 ```
 
-`caveats[]` are generated from the numbers (n, week keys, coverage shares) — never static text. `baselines` come from `profile.json` `baselines` (team-owned; `null` by default and shown as "no baseline", never a number the tracker invented). Sections in order: **Flow Time · Throughput · Quality · Estimates · Cost (if present) · Coverage & caveats · Open items (WIP, ages)**. `--json` is the assessor-facing export and the input of `--from-json` (re-render without recomputation; "JSON not rewritten"). `--html` is a self-contained page with the same chrome conventions as tokenomics' (own CSS; no imports). No `byPerson` anywhere (D13).
+Also pin binding versions, adapter/schema versions, observation start, whole-week keys, requested/effective bounds and input SHA/ref set. Every metric has numerator/denominator, eligible/unknown/excluded counts, basis and evidence locators (ledger path:line; imported snapshot path/hash). Dynamic caveats derive from counts/week keys/coverage, not static pasted claims. Unknown is explicit, never blank. Review completeness and block observability are distinct coverage fields. Baselines team-owned null by default, shown as “no baseline”, never invented.
 
-`profile.json` (template shipped):
+Markdown default, JSON assessor export, self-contained HTML (own CSS; no tokenomics imports). Ordered sections: Flow Time · Throughput · Quality · Estimates · Cost if present · Coverage & caveats · Open items. `--from-json` re-renders archived metadata/data without recomputation or JSON rewrite. `--calibrate` writes immutable snapshot and transactionally rebuilds calibration-log; newest compatible snapshot selected by manifest, never glob-order guess.
 
-```json
-{ "capturePrompts": false, "zeroDurationSec": 60, "minWholeWeeks": 3,
-  "baselines": { "cycle_time_task_h": null, "cycle_time_mission_h": null, "throughput_task_per_week": null,
-                 "first_pass_rate": null, "hit_rate": null },
-  "tokenomics": "auto" }
-```
+Profile template: `{capturePrompts:false, zeroDurationSec:60, minWholeWeeks:3, baselines:{cycle_time_task_h:null, cycle_time_mission_h:null, throughput_task_per_week:null, first_pass_rate:null, hit_rate:null}, tokenomics:"auto"}`. Explicit tokenomics path may override discovery. Profile updates are transactions; archived reports pin the version. UTC week computation deliberately differs from tokenomics’ local-calendar `isoWeek` (`TOK/scripts/team-report.mjs:106-114`); print the divergence when quoting neighbouring reports. No `byPerson` anywhere.
 
 ### 6.12 Join to tokenomics
 
-When `.agents/telemetry/automation/` exists (or `profile.tokenomics: "path"`): read `usage-*.jsonl`, `live/*.jsonl`, and `.agents/automation/**/cost.json` **with the tracker's own reader** (no import); join dispatches by `session` + `agentId`, then by `label`/`cases[]` containing a catalogue ref; quote per item `activeMin` and `costUsd` (`direct` and `loaded`, with tokenomics' labels) and per plan the batch totals. Never recompute. Publish the catalogue (D20) so tokenomics' `matchIds` can, at M3, attribute feature-development cost to `TASK-NNN` — that change is an amendment to tokenomics, listed in §13 as M-1/M3 work, not silently assumed.
+**Resolved by narrowing (F13):** self-contained reader quotes **existing batch/case cost.json only**; raw usage/live folding, task cost allocation and catalogue-driven task attribution parked (§18). Tokenomics session dedup is host:id, latest endedAt then capturedAt (`TOK/scripts/team-report.mjs:62-73`); future dispatch joins must be `(host,session,agentId)` plus generation.
+
+`plan bind` associates receipt snapshot with `{run_id, mission_item_id, source_path, sha256, generated_at, case_map, source_manifest}`. Case map exact/injective within generation. Source manifest pins batch receipt/scopes/gates/relevant usage/live/sizing input hashes **at export generation**; M3 adds this provenance wrapper to tokenomics export. Existing receipts lacking wrapper may be quoted as historical snapshots (`freshness: unknown`) but excluded from accuracy. Delivery compares hashes only; changed/missing inputs→stale/unknown and suggests regeneration by tokenomics, never recomputes. It does not sum raw live/final/resumed records.
+
+Quote totals.activeMin/costUsd, cases[].direct.activeMin/costUsd and cases[].loaded.activeMin/costUsd (`TOK/scripts/batch-cost.mjs:583-586,617-625,645-660`). Direct/loaded side by side, loaded labelled allocation; never sum both or redistribute overhead. Direct itself can include an even share of multi-case dispatches (`:565-568`), so no invented “individually measured” claim. Accuracy uses direct activeMin only, fresh attributable nonprovisional/nondrift export. Carry sources.liveNote, cost sources, coverage, records.gateDrift/outcomeDrift, stats.note (`:645-707`) with snapshot hash. Missing dollars null/tokens-only, not zero; provisional/drift visible, excluded from accuracy.
+
+One active bound snapshot per mission at cutoff; supersession references old digest, never adds snapshots. Snapshot generated after cutoff excluded unless explicitly bound as later correction and labelled corrected history. Missing aggregate→no cost columns plus coverage reason. No tokenomics code import, per-person slice or scalar honesty label guessed from a dispatch row.
 
 ## 7. Entry points and dependencies
 
-| Ask | Command(s) | Needs installed |
+| Ask | Command family | Needs |
 |---|---|---|
-| "register the plan / record our estimates" | `delivery.mjs plan register --from <tasks.md>` | the skill |
-| "task merged / mission closed / task cancelled" | `delivery.mjs event <ref> done --sha <sha>` · `event <ref> cancelled --raw …` | the skill |
-| "how are we doing" | `delivery.mjs status` | the skill |
-| "fill in history" | `delivery.mjs backfill --git [--pr]` | git; `gh` optional |
-| "sync the automation campaign" | `delivery.mjs sync --automation` | test-automation records on disk |
-| "delivery report / assessor export / calibration table" | `delivery.mjs report [--json] [--html] [--calibrate]` | the skill; tokenomics optional |
-| "enable automatic capture" | `install-hooks.mjs [--host …]` | Claude Code or Copilot CLI |
-| "is capture healthy" | `install-hooks.mjs --doctor` | — |
+| Register plan/estimates | plan register (identity flags §6.5) | skill |
+| Record task merged/cancelled/block/reopen | event with retry + occurrence ids | skill, recorded evidence |
+| Bind dispatch/PR/gate/cost | plan bind | source artifact |
+| Status/report/calibration | status / report | skill; optional cost export |
+| Fill history | backfill --git --plan --head; optional --pr | git; gh optional |
+| Sync automation | sync --automation | local automation records |
+| Enable automatic capture | install-hooks.mjs --host claude | Claude, compatible shared sync |
+| Health/removal | install-hooks.mjs --doctor / --remove | skill |
 
 ## 8. Guarantees and Not guaranteed
 
-README wording. **Guaranteed:** every number in a report traces to event lines in git with a `source`; estimates are what a named person declared at a named time; no figure is estimated, defaulted, or averaged into a headline; proxies are named as proxies; nothing leaves the repo. **Not guaranteed:** completeness of capture on hosts without hooks (coverage is printed instead); comparability across teams (segment, never rank); anything DORA (there is no deploy event); an "idea-to-done" lead time (creation is plan-tracked).
+Every figure traces to committed observations or pinned imported snapshots; commitment estimates carry named human acceptance, proposals remain separate. No invented durations/default estimates/baselines/cost, proxies remain named. Data stays in the repository except the expressly opted-in repository telemetry git sync and optional PR reads. No completeness guarantee on unsupported/unbound capture; coverage is printed. No cross-team ranking/comparability claim, DORA, idea-to-done lead time, forecasting, or authenticated-human assertion.
 
 ## 9. Hand-offs
 
 ### 9.1 feature-development
 
-- `tech-lead/AGENT.md` § 3 "Create Technical Tasks": the task template keeps `**Complexity:**` and the decomposition document gains the ```` ```json delivery-plan ```` block (template in `references/plan-block.md`) with a ranged elapsed-hours estimate per task and per group/milestone, `tier` named; § 5 "Handoff to PM" adds `delivery.mjs plan register --from <plan file>`. The estimate stays the tech-lead's number — devs are still told not to estimate (`js-dev/AGENT.md:185` unchanged).
-- `project-manager/AGENT.md`: § Merging approved PRs step 5 adds `delivery.mjs event <ref> done --sha <merge sha>` (PR mode: `--pr <n>`); § Handling Blockers adds `event <ref> blocked|unblocked`; a task dropped from scope → `event <ref> cancelled --raw <why>`; § Status Report Format gains a `### Delivery` line = `delivery.mjs status` output; "the first line of every dispatch prompt names the `TASK-NNN`" is added to § Execution mode.
-- `instructions.md`: a "Delivery tracking" paragraph naming the three moments (plan registered → merges/cancellations recorded → report at mission close); "Mission state belongs on the work board" is reworded to name the tracker as the board's record of transitions.
-- `scout`: the opt-in question (§4).
+- Tech-lead task decomposition keeps Complexity and adds canonical plan block with proposed task/mission/campaign ranges; human accepts exact digests before commitment metrics. Handoff runs plan register with retry token. Existing task template fields are at `bundles/feature-development/agents/tech-lead/AGENT.md:181-201`.
+- PM binds plan/session/roster, branch and task↔PR when opening work. Dispatch stage labels name qualified ids; no first-line assumption. Merge/cancel/block/unblock/reopen calls supply occurrence/retry/interval ids. Record explicit review outcomes/history, never count fix dispatch as review result. Status Report gains `### Delivery` from status.
+- Instructions name registration→transition capture→mission-close report, explicit human ownership and bindings; work board uses this ledger as transition record.
+- Scout records the opt-in choice and runs installer only when requested.
 
 ### 9.2 test-automation
 
-- `orchestration-playbook.md` § Intake: `delivery.mjs sync --automation` after the intake sweep registers the campaign plan; § Close: `sync --automation` before `work-scope.mjs close` so the wave's `done` is on disk; `test-automation-lead` `skills-on-demand` gains `delivery-metrics`.
-- `automation-scoping` § Mode 4: consult `delivery/calibration/<latest>.json` `cycle_time` p50/p85 per class as the elapsed-time reference beside its own minute calibration (a pointer; Mode 4's minute recalibration is unchanged).
+- Intake sync registers stable campaign/run/tree; bind scope/scoring generations and sessions before capture. Both automation and feature Workflow prompts retain full-message stage labels with qualified ids.
+- Before scope close, bind gate required-N sequence/tested/base revision and individual case dispositions, then sync to retain evidence. After observed trunk landing, sync again for mission done. Manual/pending merge remains open; closing a scope does not complete a mission.
+- Automation-scoping Mode 4 may consult latest compatible delivery calibration snapshot via calibration-log beside its minute calibration; elapsed hours and active minutes stay separate. Preserve scorer confidence; explicit tier/acceptance/provenance per §6.4. Lead/scout gain on-demand skill.
 
 ### 9.3 manual-qa
 
-Not wired at v1: its runs (`RUN-*.md`) can be registered as missions through the markdown importer if a team wants it; parked in §18.
+No native wiring; a team may register a run as a mission through the markdown importer by adding the canonical delivery-plan block to its RUN document. Native run-field inference and host wiring remain parked (§18); unrelated manual-QA dispatches cannot pollute delivery capture.
 
-### 9.4 AI-maturity assessor (dm-kb `wpse-maturity`)
+### 9.4 AI-maturity assessor
 
-`report --json` is the instrument input: metric names grouped Flow Time / Throughput / Quality, each with `n`, `source`, denominator, baseline slot, and the labels the vault's validator expects ("PR open to merge — not story lead time"; "plan-tracked duration, not idea-to-done"). A dated review entry is the team's to write; the tracker's per-period snapshot is what the entry cites.
+JSON groups Flow Time/Throughput/Quality with n, source, denominators, baselines and named proxy labels. Team authors its dated review entry; the tracker supplies immutable reference snapshots, never claims governance from missing reviews or authors the assessment itself (`R05:228-247`).
 
 ## 10. Files and manifests
 
 ```
 skills/delivery-metrics/
   SKILL.md  README.md
-  scripts/delivery.mjs            + delivery.test.mjs
-  scripts/install-hooks.mjs       + install-hooks.test.mjs
-  scripts/lib/paths.mjs           (delivery dir, user id, lock)            + test
-  scripts/lib/events.mjs          (append, read, dedup, key)               + test
-  scripts/lib/plan.mjs            (block parse, schema, catalogue, delta)  + test
-  scripts/lib/plan-markdown.mjs   (importer)                               + test
-  scripts/lib/resolve.mjs         (ref resolution, stage classifier)       + test
-  scripts/lib/timeline.mjs        (state machine, source precedence)       + test
-  scripts/lib/metrics.mjs         (every metric; pure)                     + test
-  scripts/lib/report.mjs          (envelope, markdown, json, html)         + test
-  scripts/lib/git-backfill.mjs                                             + test (temp repo)
-  scripts/lib/automation-sync.mjs                                          + test (fixtures pinned in check-skill-dupes GROUPS)
-  scripts/lib/tokenomics-join.mjs                                          + test
-  hooks/dispatch-hook.mjs                                                  + test (stdin payloads, fake transcript dirs)
-  templates/delivery-plan.template.json  templates/profile.template.json  templates/plan-block.template.md
-  references/event-model.md  references/metrics.md  references/plan-block.md  references/calibration.md
-  fixtures/security-testing-v2/   (anonymised 33-task dataset: plan block + events; the golden report)
-  fixtures/automation/            (verbatim report.json / scopes / gate-runs examples from test-automation)
+  scripts/delivery.mjs                      + delivery.test.mjs
+  scripts/install-hooks.mjs                 + install-hooks.test.mjs
+  scripts/lib/paths.mjs                     + test
+  scripts/lib/schema.mjs                    + test
+  scripts/lib/transactions.mjs              + test (recover, reconcile, shared lock/sync)
+  scripts/lib/events.mjs                    + test (observation/occurrence/revision)
+  scripts/lib/plan.mjs                      + test (identity, versions, bindings, delta)
+  scripts/lib/plan-markdown.mjs             + test
+  scripts/lib/resolve.mjs                   + test (full-message, roster/generation)
+  scripts/lib/timeline.mjs                  + test
+  scripts/lib/metrics.mjs                   + test
+  scripts/lib/report.mjs                    + test
+  scripts/lib/git-backfill.mjs              + test (fixed temp repository)
+  scripts/lib/automation-sync.mjs           + test
+  scripts/lib/tokenomics-join.mjs           + test (export-only)
+  hooks/dispatch-hook.mjs                   + test (Claude payloads/child transcripts)
+  templates/delivery-plan.template.json  templates/profile.template.json
+  templates/plan-block.template.md  templates/bindings.template.json
+  references/event-model.md  references/metrics.md
+  references/plan-block.md  references/calibration.md  references/host-capabilities.md
+  fixtures/security-testing-v2/             (59 registered, 33 done; fixed-date git builder + manifest + golden)
+  fixtures/automation/                      (scorer, scopes, receipts, both gate paths + bound sequences)
+  fixtures/hosts/                           (Claude Agent/Workflow, concurrent children, main/worktree)
+  fixtures/tokenomics/                      (exports/provenance; live/final/resumed/stale variants)
 ```
 
-Manifests: `skills.json` entry; both `factory.json` `skills[]`; `npm run gen:marketplaces`; `.claude-plugin/marketplace.json` hand-curated entry (decide at M1 review); `bin/check-skill-dupes.mjs` GROUPS for `fixtures/automation/*` ↔ their test-automation sources.
+Manifest work: skills.json orphan entry, both factories’ skills[], generated marketplaces via `npm run gen:marketplaces`, hand-curated Claude entry decision at M1, duplicate GROUPS for verbatim fixtures and any copied label/identity rules. Adapted fixtures list source revision/hash and transformation, not falsely byte-equal GROUPS. Existing catalog count documentation is refreshed from actual registry at implementation, not frozen counts from v1.
 
 ## 11. Report structure
 
-Markdown: title + envelope line (`generated_at · cutoff · sha · window · plans`); **Flow Time** table (level × {n, median, P85, P90, min–max}) with `commit_to_done` and `lead_time` rows labelled; **Throughput** (weekly series with partial flag, `velocity` or its caveat, `mission_turnaround`); **Quality** (`review_rounds` distribution, `first_pass_rate`, `cancelled_share`, `reopen_count`, `unattributed_share`); **Estimates** (per class: n, `MdMRE`, `PRED(25)`, `hit_rate` per tier, unestimated count; mission/campaign `schedule_variance`; calibration table); **Cost** (only with tokenomics); **Coverage & caveats**; **Open items** (WIP by state, ages vs P85). `unknown / not measured` allowed, blank forbidden. `status` prints the one-screen subset a PM pastes into `### Delivery`.
+Title/envelope (generated-at, cutoff, SHA, window, plans); Flow Time observed/derived/proxy tables with n and floors; Throughput series/partials/velocity/mission gaps; Quality complete review distribution, first-pass reviewed/eligible/done, unknowns and rework proxies; Estimates accepted/unaccepted/unestimated, accuracy, scope variance and reference ranges; optional quoted Cost; Coverage/caveats and conflicts; Open items with WIP basis and ages. Unknown/not measured allowed, blank forbidden. Status is the PM’s one-screen subset. Exports never silently drop proxy/unknown populations to improve headline quality.
 
 ## 12. Tests
 
-Deterministic `node --test`, offline, temp dirs:
+Deterministic offline stdlib ESM `node --test`, temp directories; fixtures pin source path, revision/hash and compatibility version. Verbatim copies use duplicate checks; transformed inputs declare transformations.
 
-- `events.test.mjs`: append under lock from two processes → no interleaving; dedup by key keeps greatest `at`; unknown `v` skipped with count; unparsable line counted.
-- `plan.test.mjs`: block extraction from markdown; schema errors → `SCHEMA-INVALID(path)`; delta registration emits exactly the changed items; `--keep-missing`; catalogue content.
-- `plan-markdown.test.mjs`: the security-testing tasks-v2 fixture → 59 tasks, groups G0–G29, stories mapped, no estimates, `basis: markdown-import`.
-- `resolve.test.mjs`: description / first-line / branch resolution; cluster label → n refs; Workflow dispatch (no description); nothing → `null`; stage classifier table.
-- `timeline.test.mjs`: state machine; source precedence (cli beats git `review_returned` counts; hook `dispatched` beats scope `declaredAt`); reopen; blocked overlay with unclosed interval; clock-skew exclusion.
-- `metrics.test.mjs`: every metric against hand-computed values on a 12-item fixture; percentile floors; zero-duration exclusion; UTC ISO weeks across a year boundary; whole-week rule; `velocity` null below 3 weeks; `work_ratio` midpoint + `hit_rate`; `schedule_variance` scope delta.
-- `report.test.mjs`: envelope fields; caveats derived (change n → caveat changes); `--from-json` byte-equal render; no `byPerson` key anywhere; baseline null rendered as "no baseline".
-- `git-backfill.test.mjs`: temp repo replaying the local-branch pattern (`TASK-NNN:` commits, `address review N`, `merge task/task-NNN (Rio: PASS)`), then a squash-merge repo with a stubbed `gh` on `PATH` returning fixture JSON; idempotent second run → all `SKIP`.
-- `automation-sync.test.mjs`: fixtures → events; `done` clock precedence and `done_clock` distribution; `estMin/lowMin/highMin` mapping; never writes outside `delivery/`.
-- `dispatch-hook.test.mjs`: guard (no open plan → exit 0, no write); Claude payload with a fake `subagents/` dir → `dispatched` + `dispatch_ended` with `at` from the transcript; review/fix stage extra events; unattributed path; malformed stdin → exit 0; Copilot payload.
-- `install-hooks.test.mjs`: splice/remove idempotent on `settings.json` and `.github/hooks/delivery.json`; `_delivery` marker; gitignore block replaced in place; `--doctor` output; coexistence with an existing `_tokenomics` splice (neither touches the other).
-- Golden: `fixtures/security-testing-v2` → `report --json` byte-equal to the committed golden (the pinned numbers: 33 done tasks, 11 with `review_rounds ≥ 1`, `commit_to_done` medians per class, 59 registered tasks, 30 `Gn` missions).
-- Repo gates: `npm test && npm run validate` (incl. `validate:marketplaces`, `validate:dupes`); `skills-ref validate skills/delivery-metrics`; install smoke `node bin/init.mjs init --factory feature-development --target claude --yes` and `--target copilot` place the skill and nothing else changes.
+| Group | Required counterexamples / expected behavior |
+|---|---|
+| events/timeline (F1,F11) | Git done 12:00 then CLI correction 11:00, both orders → CLI selected, git retained; cross-file order invariant; same id/revision changed bytes fails; unknown schema/corruption counted; two reopens/three completions→throughput 1, reopen count 2; repeated block pairs, causal ties and retries |
+| identity/plan (F4,F12) | concurrent TASK-001 plans/reused TC-1 never cross-join; card Log-only edit same identity; v1→v2 migration conserves totals; §5 mixed cluster/solo fixture, partial/all cancellation/missing child, scope addition, overlap |
+| transactions (F14) | concurrent registration; crash before/mid append, after commit/before view rename recovers once; no lost created; live lock not stolen by timeout; remote plan/profile divergence preserved, explicit reconcile; delivery-only sync with dormant tokenomics; incompatible active sync refuses capture |
+| automation (F2,F3,F15) | hook/sync both orders same populations; cluster no invented case start; both gate locations dedup; green/red/green with required 3 incomplete; three greens pending merge gated only; telemetry-only logs before close; changed tested SHA resets; receipt mtime never done; unknown tier preserves real scorer confidence |
+| review (F5) | no evidence→unknown, partial→lower bound, confirmed complete first-pass→zero rounds with eligible=1; fix dispatch/commit changes proxy only; incomplete PR pagination never complete |
+| host/resolve (F6,F8,F9) | actual pinned Agent/Workflow payloads, two same-role children; boilerplate then stage ids, no description/useful branch resolves bound plan; missing transcript unknown; foreign manual-QA with open plan writes no delivery events; missing type still needs binding; malformed/no plan exits 0; Copilot install unsupported |
+| window/metrics (F10,F17,F18) | no-creation window with old completions, carried-in blocks, exact Monday cutoff, future events excluded, common-coverage aggregation, whole/partial conservation and percentile floors; all-git retains commit_to_done with cycle unknown; genuine 30 s cycle/confirmed zero block retained; same-commit evidence excludes only retrospective lead proxy; no Little’s Law line |
+| estimates (F15–F17) | proposal→acceptance→revision, each exact digest; missing human/late acceptance excluded; calibrated pinned basis, no probability from confidence; zero midpoint/actual and unit mismatch; hand-computed midpoint ratio/range hit-rate |
+| git (F19) | fixed-date graph, lowercase merge alias before filtering, unrelated ancestor merge rejected, epoch-bound joins, mapped squash PR no id in title/body, pagination; later branch growth leaves golden unchanged; second backfill all SKIP |
+| cost (F13) | raw live/final/resumed inputs never add to receipt; stale/missing manifest excluded from accuracy; reused ids/run mismatch refused; direct/loaded/overhead not double-counted; provisional/drift/token-only preserved; no fabricated feature-task aggregate |
+| installer/identity (F7,F20,F21) | existing telemetry inner block upgraded; git check-ignore + disposable-index add -A protect every transient but retain plans/events; unusual formatting, repeated install/remove, intervening user edits, tokenomics groups preserved; whoAmI name/email/OS/punctuation/rename fixtures |
+| report | every metric hand-computed on 12-item data, archive re-render without recompute, dynamic caveats, source locators/binding versions and effective windows, baseline null, no byPerson or proxy contamination |
+
+Golden fixed fixture: 59 registered tasks, 30 Gn missions, 33 first-completed tasks, 11 with address-review **rework proxies**; observed review-round/first-pass histories unknown, no observed cycle. Per-class commit_to_done values derive from hand-checked fixed fixture timestamps. Never assert these totals for the moving implementation branch.
+
+Implementation gates: `npm test && npm run validate` including marketplace/dupe checks; `skills-ref validate skills/delivery-metrics`; installer smokes `node bin/init.mjs init --factory feature-development --target claude --yes` and `--factory test-automation --target copilot --yes` place orphan skill without capture. This spec-only revision checks text/diff consistency; delivery implementation tests do not yet exist.
 
 ## 13. Plan
 
 | # | Milestone | Capability |
 |---|---|---|
-| M-1 | Docs + tokenomics amendments (one PR) | fix "eight orphan skills / 28 externals" in `CLAUDE.md`/`README.md`/`AGENTS.md`; amend `bundles/SPEC.md:297-304` wording (P-0); tokenomics: `batch-cost.mjs:344` also reads `estMin`; `captureDispatches` writes `startedAt` from `startTs` on the live dispatch line (one line, makes dispatch start available to tokenomics' own reports too); `work_item_level` template/code aligned to `campaign\|mission\|task\|case`; `SPIKE-1` hook-input probe: record what `cwd`/`CLAUDE_PROJECT_DIR`/`.meta.json` a Workflow-tool dispatch and an Agent-tool dispatch present to `SubagentStop`, inside and outside `.claude/worktrees/` |
-| M1 | Core | `lib/paths, events, plan, plan-markdown, resolve, timeline, metrics, report` + `delivery.mjs plan/event/status/report/backfill --git`; SKILL.md/README; manifests; golden fixture; feature-development wiring (§9.1); scout opt-in |
-| M2 | Hooks | `dispatch-hook.mjs`, `install-hooks.mjs` (Claude + Copilot, `--doctor/--remove/--local`), submodule bootstrap when tokenomics is absent, best-effort sync |
-| M3 | test-automation | `automation-sync.mjs`, `sync --automation`, `hit_rate`/`work_ratio` on `active_min`, `--calibrate` snapshot + `calibration-log.md`, playbook wiring (§9.2); tokenomics reads the catalogue (amendment PR to tokenomics `matchIds`) |
-| M4 | Presentation + forecast | `--html` page; `--from-json`; `--pr` backfill via `gh`; Monte Carlo "when will this campaign finish" at P50/P85/P95 from weekly `throughput`, only when ≥ 11 whole-week samples, else "not enough data" |
+| M-1 | Compatibility amendments | P-0/P-1; shared lock/sync compatibility in tokenomics; preserve v1 amendments to estMin lookup, startedAt emission and work_item_level alignment; refresh catalog docs; SPIKE-1 real Claude Agent/Workflow child-path, concurrent and main/worktree fixtures |
+| M1 | Core | schemas, transactions/recovery, identity/migration/bindings, observations/timeline/metrics/report, CLI/git backfill; fixtures/manifests; feature handoffs/human acceptance and scout opt-in |
+| M2 | Claude hooks | SPIKE-1 capability fixtures prerequisite; guard/binding/full-message resolution, installer/doctor/semantic remove, bootstrap/ignore upgrades/shared sync; no Copilot/live markers |
+| M3 | Automation | bound plan/scoring/outcomes, required-N gate proof/landing, pinned batch/case cost-export provenance wrapper, calibration/reference log and playbook; no raw/task-cost reader |
+| M4 | Presentation + PR history | self-contained HTML, archived JSON, mapped paginated gh backfill; no forecasting |
 
-Each milestone ships with its tests and passes the §12 repo gates; M1 is usable alone (CLI + git backfill on any host).
+Each milestone includes its tests and §12 gates; M1 CLI/git usable on any host without hooks or tokenomics. M-1’s retained compatibility changes require source checks at implementation (§16); this spec edit does not modify those files.
 
 ## 14. Open questions
 
-1. `SPIKE-1` result may force the guard/resolution path in §6.6 to read the main checkout from inside a worktree differently than tokenomics does — the spec pins the *behaviour* (guard, resolution order), not the path arithmetic.
-2. Whether `.claude-plugin/marketplace.json` (hand-curated) should list the skill — maintainer's call at M1 review.
-3. Copilot CLI `subagentStop` payload timestamps — verify against the current hooks reference at M2; if absent, `dispatched.at` on Copilot falls back to the `subagentStart` marker time (`meta.basis: "start-marker"`).
+1. SPIKE-1 must pin Claude direct-child path availability and legacy fallback in linked worktrees. Unsupported shapes stay unknown; M2 cannot promise coverage before concurrent-dispatch fixtures pass.
+2. Hand-curated Claude marketplace entry remains a maintainer decision at M1 review.
+3. Copilot needs a separate store adapter spec: `TOK/hooks/telemetry-capture.mjs:502-527` reads session events.jsonl, correlates data.toolCallId and completed-event durationMs. Those are **not hook payload fields**; no speculative stop/start fallback ships (§18).
 
 ## 15. Consistency check against §2
 
-Each §2 left-column row names its command in §6.5–6.8 and its metric in §6.10; each right-column row appears verbatim in §8 or §18. Any later sentence that exceeds §2 is a defect. D6 (source precedence) and D8 (`commit_to_done` naming) are the two rules the reviewer should test every metric against.
+| Promise / changed decisions | Contracts → implementation → checks |
+|---|---|
+| Lossless observation/occurrence/revision D4–D7 | §6.1–6.3/6.9 → transactions/events/timeline M1 → F1/F4/F11/F14 tests, AC-4/11 |
+| Claude only, roster/session binding D15–D18 | §6.6/9 → hosts/installer M2 → F6/F8/F9/F21 tests, AC-2/4/5 |
+| Honest gate/scope/parent clocks D2/D6/D7 | §5/6.8–6.10 → automation/timeline M3 → F2/F3/F12 tests, AC-8/12 |
+| Accepted ranged inputs, valid zeros D9/D12/D22 | §6.4/6.10/9 → metrics/calibration → F15–F17 tests, AC-10/13 |
+| Existing batch/case cost only D1/D20 | §6.12 → tokenomics-join/export provenance M3 → F13 tests, AC-14 |
+| Cutoff/cohorts/bounded history | §6.7/6.9–6.11 → git/report M1/M4 → F10/F19 tests, AC-3/7/15 |
+| Facts-only, no forecast/Little’s Law | §2/8/11/13/18 → F18/F22 tests, AC-6 |
+
+§2 and §3 change in this round; each affected finding is marked in §19.1. Orphan placement, hierarchy, ledger location, source ordering, opt-in hooks, git backfill, declared ranges, no ranking and no DORA remain. Source ordering is within equivalent observations, never proxy versus measured clocks. Removed capabilities are explicitly parked (§18); no milestone silently restores them.
 
 ## 16. Repo facts relied on that the reviewer should re-verify
 
-- `bundles/SPEC.md:297-304` wording "one subfolder per factory" (P-0 amends it).
-- `telemetry-capture.mjs:187,440-447` — `startTs` exists per sub-agent transcript and is dropped at the live line.
-- `.meta.json` carries `description` for Agent-tool dispatches only (`telemetry-capture.mjs:328-333`; Workflow dispatches: `agentType` only).
-- `project-manager/AGENT.md:95` squash + delete-branch → no merge commit, no branch: PR-mode backfill is the only git path there.
-- `.gitignore:34` ignores `docs/superpowers/`; this spec is force-added like the security-testing files.
-- `skills.json` orphan entries have exactly `{id, monorepo, name, description}`.
+- `bundles/SPEC.md:291-297` roster/legacy policy, `:298-304` shared folder wording (P-0/P-1).
+- `TOK/hooks/telemetry-capture.mjs:75-94` identity; `:187,440-447` start exists but live line writes end only; `:328-333,608-620` metadata/full-message; `:1339` direct repo selection; `:502-527` Copilot store adapter.
+- `TOK/scripts/install-hooks.mjs:145-158` Copilot registrations; `:305-311` inner ignores; `:517-532` ignore rewriting not byte-preserving.
+- `TAW/scripts/gate/gate-case.mjs:191-221` both log paths/fields; `TAW/references/orchestration-playbook.md:200-210` separate N calls then landing.
+- `TAW/references/campaign-planning.md:254-280` mutable State/Log versus approved Plan.
+- `TOK/scripts/batch-cost.mjs:439-459,565-586,617-625,645-707` generation guard, allocation/export/provenance; `TOK/scripts/team-report.mjs:62-73` host-qualified dedup.
+- Retained M-1 amendments: `TOK/scripts/batch-cost.mjs:344` reads estimated_active_minutes/est_min, not scorer estMin; `TOK/templates/factory-profile.template.json:8` says batch while `TOK/scripts/build-tokenomics-export.mjs:66,105` defaults feature; `TOK/hooks/telemetry-capture.mjs:187,440-447` supplies startTs for the proposed startedAt field.
+- `AS/scripts/score-cases.mjs:381-388,466-472` confidence/bounds; `TOK/scripts/work-scope.mjs:59-101` declaration and mutable outcomes.
+- `bundles/feature-development/agents/tech-lead/AGENT.md:181-201` task template; `bundles/feature-development/agents/project-manager/AGENT.md:95` squash/delete branch.
+- Research: `R05:220-247` measured start/windows/human ownership/honesty; `R03:120-140,425-429` confidence/clock granularity; `R06:293,321` stability requirement/forecast separate feature. Critic inferences fix-dispatch→failed-review and first-green→done are corrected contracts, not facts to copy.
 
 ## 17. Acceptance criteria
 
-- **AC-1** `npm test && npm run validate` green on the implementation branch, including `validate:marketplaces` and `validate:dupes`; `skills-ref validate` passes on `skills/delivery-metrics/SKILL.md`; no `tools:` key anywhere; `name` equals the directory.
-- **AC-2** `node bin/init.mjs init --factory feature-development --target claude --yes` and `--factory test-automation --target copilot --yes` install `delivery-metrics` next to `memory`; no hook is wired until `install-hooks.mjs` runs; `--remove` restores the pre-install state byte-for-byte (settings, hooks json, gitignore block).
-- **AC-3** Registering the security-testing v2 plan from its markdown, running `backfill --git` on this branch, and `report --json` reproduce the committed golden: 33 `done` tasks, per-class `commit_to_done` medians, review-round distribution, 59 registered tasks, 30 missions; `cycle_time` is **absent** (no `dispatched` events) and the report says so in `coverage`.
-- **AC-4** With hooks installed on Claude Code, one Agent-tool dispatch whose description names `TASK-023` yields exactly one `dispatched` and one `dispatch_ended` line with `at` from the transcript, `disc` = agent id, and re-firing the hook appends nothing (`SKIP`).
-- **AC-5** A repo with no open plan: every hook exits 0 without writing; a malformed payload exits 0.
-- **AC-6** No report output contains `byPerson`, a mean as the first duration figure, a percentile whose `n` is below its floor, or a numeric baseline the profile did not declare.
-- **AC-7** `report --from-json <f>` renders byte-identically to the run that produced `<f>`.
-- **AC-8** `sync --automation` on the pinned fixtures writes only under `delivery/`, and the `done_clock` distribution in the report matches the fixture's known clocks.
-- **AC-9** Every metric in §6.10 has a unit test with hand-computed expected values; every CLI error path prints one `<CODE>(<detail>)` line and the exit code in §6.5.
-- **AC-10** `work_ratio` and `hit_rate` are computed only when estimate and actual share a unit; a mismatched pair is counted under `unit-mismatch` and printed.
+- **AC-1** Implementation passes npm test/validate, marketplace/dupe and skills-ref gates; frontmatter §4, no tools key.
+- **AC-2** Both factory installer smokes place skill without hooks. Claude install/remove preserves unrelated/later edits semantically; inner ignores protect every transient under shared staging.
+- **AC-3** Fixed-date temp-git golden: 59 tasks, 30 missions, 33 first completions, 11 rework-proxy items; review completeness/cycle unknown, valid commit_to_done retained; later branch growth unchanged.
+- **AC-4** Bound concurrent Claude Agent/Workflow fixtures correlate host/session/agent independently; retries SKIP. Earlier CLI correction wins both arrival orders with git retained.
+- **AC-5** No open plan, foreign role, unbound session, malformed payload or unreadable child cannot generate attributed delivery; hooks exit 0. Legacy missing type relaxes role only; Copilot installer exits unsupported.
+- **AC-6** No byPerson, mean duration headline, below-floor percentile, invented baseline, forecast or Little’s Law comparison; every volume/speed stratum includes quality or explicit unknown denominators.
+- **AC-7** Archived JSON re-renders same content/metadata without recomputation or rewrite.
+- **AC-8** Automation writes delivery artifacts only; two gate paths dedup, bound required-N proof and landing for mission done; proxies never enter observed case cycles/throughput; hook/sync order invariant.
+- **AC-9** Every metric hand-computed and CLI error path code/exit asserted.
+- **AC-10** Accuracy requires timely human-accepted same-unit estimate/comparable actual; zero denominators, points, unknown tiers/probabilities, late/unaccepted/unit mismatch counted.
+- **AC-11** Crash/retry/concurrency preserves exactly one created occurrence; remote conflicts retain both heads. Two reopen cycles retain first throughput 1 and correct current age.
+- **AC-12** §5 mixed hierarchy, partial/all cancellation, missing child, scope reopen and overlap rules tested; parent/proxy samples separate.
+- **AC-13** No review evidence yields null first-pass. Sub-minute cycles/confirmed zero block survive; retrospective lead exclusion requires evidence. Calibration excludes proxies.
+- **AC-14** Generation-bound cost, preserved direct/loaded/freshness/provisional/drift; stale/missing wrapper cannot enter accuracy; no raw live/final/resumed addition.
+- **AC-15** Historical replay carries prior starts/blocks, excludes future state, supports no-creation windows and whole/partial conservation; migration counts each stable delivery once.
+- **AC-16** Shared sync honors active compatible capability/lock/offline retry; dormant tokenomics does not suppress delivery sync. Exact whoAmI compatibility fixtures pass.
 
 ## 18. Not in scope / parking lot
 
-- DORA four keys; flow efficiency; benefit-based ROI; per-person or per-agent productivity; dashboards, uploads, OTel export (the JSONL is sink-agnostic by design — same stance as tokenomics).
-- manual-qa wiring; Cursor/Kiro/Codex hooks (CLI + git backfill cover them); story-point velocity; time-in-status heatmaps.
-- A `Stop` gate nagging for undeclared plans (tokenomics has one for scope; revisit after M2 field use).
-- Automatic PR-mode `done` from a merge webhook — no runtime in this repo.
+- DORA, flow efficiency, benefit ROI, per-person/per-agent productivity, dashboards/uploads/OTel export, story-point velocity and time-in-status heatmaps.
+- Native manual-qa wiring and automatic run-field inference; RUN markdown with a canonical block remains registerable (§9.3). Cursor/Kiro/Codex hooks remain out; CLI/git support them. Stop gate for undeclared plans remains future work. Automatic merge webhook capture remains out.
+- **F6, resolved by narrowing:** Copilot automatic hook/store capture and live pending start-marker WIP/age on either host. Requires documented host fields, durable correlation/race handling and concurrent fixtures before restoration; CLI/git remain.
+- **F13, resolved by narrowing:** raw tokenomics usage/live folding and feature-task/cross-catalogue cost attribution. Existing pinned batch/case exports stay in scope; future adapter needs host-qualified supersession/generation/allocation contracts.
+- **F18, resolved by narrowing:** Little’s Law diagnostic. Future work requires time-average WIP, mean residence time, compatible population/units, stability and coverage (`R06:293`).
+- **F22, resolved by narrowing:** Monte Carlo campaign completion forecast including P50/P85/P95. Requires labelled API/schema, assumptions, reference population, sampling/termination, seed, scope-change and reproducibility tests (`R06:321`).
 
 ## 19. Review rounds
 
-Recorded per round as `vN findings → vN+1` tables (`F<n> | Resolution | Where`) with the verdicts **resolved / resolved by contract / resolved by narrowing / removed**; the review artefacts are filed under `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-vN-adversarial-review-codex.md`.
+Artifacts: `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-vN-adversarial-review-codex.md`. Verdicts: resolved / resolved by contract / resolved by narrowing / rejected (reason).
+
+### 19.1 v1 findings → v2
+
+23 addressed: 6 blockers, 16 majors, 1 minor; 23 resolved, 0 rejected. Four findings use narrowing; F6 parks two capture capabilities. Architecture retained; promise/decision changes marked below.
+
+| F | Resolution | Where |
+|---|---|---|
+| F1 | **resolved by contract** — observation/occurrence split and deterministic corrections; changes §2 and §3 D4–D6. | §2–3, §6.1–6.2, §6.7–6.9, §10, §12, §15, §17 |
+| F2 | **resolved by contract** — scope/cluster proxies cannot become measured case cycles; changes §3 D6–D7,D18. | §3, §5, §6.6, §6.8–6.10, §12, §15, §17 |
+| F3 | **resolved by contract** — both gate paths, bound required-N proof/tested revision, landing and case eligibility. | §5, §6.8–6.10, §9.2, §10, §12–13, §15, §17 |
+| F4 | **resolved by contract** — stable run/item identities, migration and bound generation joins; changes §3 D18–D20. | §3, §5, §6.2–6.3, §6.6–6.12, §12, §15, §17 |
+| F5 | **resolved by contract** — complete observed reviews only, rework proxies/unknown denominators; changes §2 backfill promise and §3 D14. | §2–3, §6.2, §6.6–6.11, §11–12, §15, §17 |
+| F6 | **resolved by narrowing** — park Copilot capture/live markers, pin Claude correlation fixtures; changes §2 and §3 D15,D17. | §2–3, §6.1, §6.6, §7, §10, §12–15, §17–18 |
+| F7 | **resolved** — owned telemetry inner ignore upgrade and actual staging checks; changes §3 D3. | §3, §6.1, §6.6, §12–13, §16–17 |
+| F8 | **resolved** — full-first-message stage derivation and tested child-path fallback; changes §3 D18. | §3, §6.6, §9, §12–14, §16–17 |
+| F9 | **resolved by contract** — participating roster union plus session binding and legacy rule; changes §3 D16. | §3, §6.3, §6.6, §9, §12–13, §15, §17, §20 |
+| F10 | **resolved by contract** — half-open UTC windows, full replay/cohorts and week conservation; clarifies §3 D11,D21. | §3, §6.5, §6.9–6.11, §12, §15, §17 |
+| F11 | **resolved by contract** — occurrence/episode/retry ids and repeat reopen/block validation; changes §3 D5,D7. | §3, §6.2, §6.5, §6.9–6.10, §12, §15, §17 |
+| F12 | **resolved by contract** — strict hierarchy, partial/missing-child rollups, scope reopen and mission ordering. | §5, §6.3, §6.8–6.10, §12, §15, §17 |
+| F13 | **resolved by narrowing** — pinned batch/case exports only, raw/task-cost reader parked; changes §2 and §3 D20. | §2–3, §6.12, §10, §12–13, §15–18 |
+| F14 | **resolved by contract** — committed manifests/recovery/shared lock, active sync and conflict reconciliation; changes §3 D4,D19,D22. | §3, §6.1–6.3, §6.5–6.6, §10, §12–13, §15, §17 |
+| F15 | **resolved by contract** — exact confidence preserved, explicit tier/probability/calibration provenance; changes §3 D9. | §3, §6.4, §6.8, §6.10, §9.2, §12, §15, §17 |
+| F16 | **resolved by contract** — proposals distinct from named human acceptance/timely commitments; changes §2 and §3 D9. | §2–3, §6.3–6.4, §8–9, §12, §15, §17 |
+| F17 | **resolved by contract** — per-metric validity, proven retrospective lead exclusion and valid zeros; changes §3 D12 and completes D10 percentile floors. | §3, §6.4, §6.9–6.10, §12, §15, §17 |
+| F18 | **resolved by narrowing** — park invalid Little’s Law comparison; changes §2 exclusions. | §2, §6.10, §12, §15, §17–18 |
+| F19 | **resolved by contract** — integration/epoch binding, lowercase aliases, mapped paginated PRs and fixed golden; changes §2 backfill promise. | §2, §6.3, §6.5, §6.7, §9.1, §10, §12, §15–17 |
+| F20 | **resolved** — exact name/OS/email slug rule and rename/collision fixtures. | §6.1, §12, §16–17 |
+| F21 | **resolved by contract** — semantic owned removal preserves later edits; changes §3 D15. | §3, §6.6, §12, §16–17 |
+| F22 | **resolved by narrowing** — forecasting removed from milestone and parked with future requirements; changes §2 exclusions. | §2, §13, §15, §17–18 |
+| F23 | **resolved** — corrected anchors/current tracked count; actual code distinguished from proposed worktree/host behavior. | Sources of truth, §6.6, §14, §16 |
 
 ## 20. Planning amendments
 
 | # | Amendment | Where |
 |---|---|---|
-| P-0 | `bundles/SPEC.md` "One shared telemetry submodule … one subfolder per factory" → "one subfolder per factory **or per cross-factory concern** (`delivery/` is the first)". Does not change §2 or §3. | M-1 |
+| P-0 | Amend `bundles/SPEC.md:298-304` “one subfolder per factory” to include cross-factory concerns (`delivery/`), preserving shared telemetry D3. | M-1 |
+| P-1 | Amend `bundles/SPEC.md:291-297` to allow participating-factory roster union for cross-factory hooks, retaining legacy missing-type rule and requiring plan/session binding; changes §3 D16, never substitutes plan-exists for admission. | M-1 |
