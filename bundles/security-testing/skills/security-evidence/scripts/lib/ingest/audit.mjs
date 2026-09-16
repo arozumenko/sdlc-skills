@@ -11,13 +11,16 @@
 // `**Reasoning:**`, `**Evidence:**`, `**Suggested fix:**`, `**Fix prompt:**`
 // lines. The fixture scripts/fixtures/qa/audit-report.md is a verbatim copy
 // of the bundle's documented example (kept identical by
-// bin/check-skill-dupes.mjs) and ends with a ```json block: the Finding
-// Schema array (+ `affected_pages`, `evidence`) — the machine-readable half
-// §6.6 names. Findings come from the JSON block when the report has one
-// (`findings_source: "json"`); a report without one — the methodology's
-// template writes none — is read in its heading form (`"markdown"`), so a
-// real qa-auditor report ingests too. The two describe the same findings in
-// the fixture (audit.test.mjs pins it).
+// bin/check-skill-dupes.mjs) and ends with a `## Findings (JSON)` section
+// holding a ```json block: the Finding Schema array (+ `affected_pages`,
+// `evidence`) — the machine-readable half §6.6 names. The block is the fence
+// under that heading; a report without the heading is read from its **last**
+// ```json fence when that fence is an array (an `**Evidence:**` line may
+// quote a JSON response body in a fence of its own — never the findings), and
+// otherwise in its heading form (`#### [P0, confidence 9] title`,
+// `findings_source: "markdown"`) — the methodology's template writes no block,
+// so a real qa-auditor report ingests too. The two describe the same findings
+// in the fixture (audit.test.mjs pins it).
 //
 // Records (locator.index = the source ordinal: 0 the audit, k the k-th
 // finding; a rejected finding keeps its ordinal):
@@ -48,7 +51,7 @@
 // Leaf over ./_qa-markdown.mjs, ./_shared.mjs, ../exit.mjs, ../tokens.mjs:
 // no fs, no child process, no git, no network (G-6, G-14), no clock (G-1).
 
-import { MarkdownFormatError, fencedBlock, splitFrontmatter } from "./_qa-markdown.mjs";
+import { MarkdownFormatError, fencedBlock, fencedBlocks, sections, splitFrontmatter } from "./_qa-markdown.mjs";
 import { hostAllowed, wrapInert } from "./_shared.mjs";
 import { CliError, EXIT } from "../exit.mjs";
 import { schemaInvalid } from "../tokens.mjs";
@@ -69,6 +72,7 @@ const ANY_HEADING = /^#{1,6}[ \t]+/;
 const FIELD_LINE = /^\*\*([A-Za-z ]+):\*\*[ \t]*(.*)$/;
 const FIELDS = Object.freeze({ "affected pages": "affected_pages", reasoning: "reasoning", evidence: "evidence", "suggested fix": "suggested_fix", "fix prompt": "fix_prompt" });
 const SPECIALIST_SECTION = /^###[ \t]+(?:\S+[ \t]+)?(.+?)[ \t]+—[ \t]+\d+[ \t]+findings?[ \t]*$/;
+const FINDINGS_JSON_SECTION = /^Findings[ \t]*\(JSON\)$/i;
 
 function invalid(reason) {
   return new CliError(EXIT.USAGE, schemaInvalid(KIND, reason));
@@ -97,7 +101,7 @@ function findingsFromJson(block) {
     if (f === null || typeof f !== "object" || Array.isArray(f)) throw invalid("the JSON block must be an array of finding objects");
     return {
       title: str(f.title),
-      priority: str(f.priority),
+      priority: str(f.priority)?.toLowerCase() ?? null, // the heading form lowercases `[P0, …]`; the two sources agree by construction
       confidence: Number.isInteger(f.confidence) ? f.confidence : null,
       affected_pages: pageList(f.affected_pages),
       reasoning: str(f.reasoning),
@@ -108,6 +112,27 @@ function findingsFromJson(block) {
       types: Array.isArray(f.types) ? f.types.filter((t) => typeof t === "string").join(", ") : null,
     };
   });
+}
+
+/**
+ * The findings JSON block: the fence under `## Findings (JSON)` when the report has that
+ * section (whatever it holds — that section *is* the block); otherwise the last ```json
+ * fence in the body, and only when it parses to an array (an evidence fence is prose).
+ * @returns {string | null}
+ */
+function findingsBlock(body) {
+  const section = sections(body, 2).find((s) => FINDINGS_JSON_SECTION.test(s.title));
+  if (section) return fencedBlock(section.text, "json");
+  const all = fencedBlocks(body, "json");
+  if (all.length === 0) return null;
+  const last = all[all.length - 1];
+  let parsed;
+  try {
+    parsed = JSON.parse(last);
+  } catch {
+    return null;
+  }
+  return Array.isArray(parsed) ? last : null;
 }
 
 /** The heading form: `#### [P0, confidence 9] title` + `**Field:** value` lines until the next heading. */
@@ -154,7 +179,7 @@ export function parseAuditReport(text) {
   let block;
   try {
     split = splitFrontmatter(text);
-    block = fencedBlock(split.body, "json");
+    block = findingsBlock(split.body);
   } catch (err) {
     if (err instanceof MarkdownFormatError) throw invalid(err.message);
     throw err;

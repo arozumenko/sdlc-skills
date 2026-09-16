@@ -21,12 +21,14 @@
 //                               line matching `headingRe` and before the next
 //                               heading → {columns, rows} (cells trimmed,
 //                               outer pipes optional, the |---| separator
-//                               skipped); null when there is none
+//                               skipped, a GFM-escaped `\|` stays inside its
+//                               cell as `|`); null when there is none
 //   sections(body, level)       [{title, text}] for every `#{level} ` heading,
 //                               each with the text up to the next heading of
 //                               that level or higher
 //   fencedBlock(body, lang)     the first ```<lang> fence's content, or null;
 //                               an unterminated fence ⇒ MarkdownFormatError
+//   fencedBlocks(body, lang)    every ```<lang> fence's content, in order
 //
 // The adapters map MarkdownFormatError to their own exit-2 token
 // (SCHEMA-INVALID(<kind>: <reason>)) — a malformed *input* is never left to
@@ -142,11 +144,14 @@ const HEADING = /^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/;
 const TABLE_ROW = /^\s*\|?.*\|.*$/;
 const SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 
+const UNESCAPED_PIPE = /(?<!\\)\|/;
+
+/** GFM cells: split on unescaped `|` only, and a `\|` inside a cell is a literal pipe. */
 function cells(line) {
   let s = line.trim();
   if (s.startsWith("|")) s = s.slice(1);
-  if (s.endsWith("|")) s = s.slice(0, -1);
-  return s.split("|").map((c) => c.trim());
+  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
+  return s.split(UNESCAPED_PIPE).map((c) => c.trim().replace(/\\\|/g, "|"));
 }
 
 /**
@@ -214,8 +219,20 @@ export function sections(body, level) {
  * @throws {MarkdownFormatError} when the matching fence is never closed
  */
 export function fencedBlock(body, lang) {
-  if (typeof body !== "string") throw new TypeError("fencedBlock: body must be a string");
+  const all = fencedBlocks(body, lang);
+  return all.length === 0 ? null : all[0];
+}
+
+/**
+ * @param {string} body
+ * @param {string} lang the info string, exactly
+ * @returns {string[]} every matching block's content (each with its trailing newline), in source order
+ * @throws {MarkdownFormatError} when a fence is never closed
+ */
+export function fencedBlocks(body, lang) {
+  if (typeof body !== "string") throw new TypeError("fencedBlocks: body must be a string");
   const lines = body.split(/\r?\n/);
+  const out = [];
   for (let i = 0; i < lines.length; i += 1) {
     const open = /^ {0,3}(`{3,}|~{3,})[ \t]*([^`\s]*)[ \t]*$/.exec(lines[i]);
     if (!open) continue;
@@ -226,8 +243,8 @@ export function fencedBlock(body, lang) {
       if (close && close[1][0] === fence[0] && close[1].length >= fence.length) break;
     }
     if (j >= lines.length) throw new MarkdownFormatError(`unterminated \`\`\`${info} fence`);
-    if (info === lang) return `${lines.slice(i + 1, j).join("\n")}\n`;
+    if (info === lang) out.push(`${lines.slice(i + 1, j).join("\n")}\n`);
     i = j;
   }
-  return null;
+  return out;
 }

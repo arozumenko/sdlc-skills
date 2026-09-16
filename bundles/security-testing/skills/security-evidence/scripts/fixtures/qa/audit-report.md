@@ -64,6 +64,8 @@ _No `browser_evaluate` — meta tags, cookies, storage, Core Web Vitals and axe 
 
 ## Findings (JSON)
 
+_Optional. The methodology's Step 5 template does not write this section; when present it is the machine-readable form of the findings above (the Finding Schema array plus `affected_pages` / `evidence`), and readers prefer it over the headings._
+
 ```json
 [
   {

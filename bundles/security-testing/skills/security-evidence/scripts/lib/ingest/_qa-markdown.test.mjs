@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { MarkdownFormatError, fencedBlock, findTable, parseFrontmatter, sections, splitFrontmatter } from "./_qa-markdown.mjs";
+import { MarkdownFormatError, fencedBlock, fencedBlocks, findTable, parseFrontmatter, sections, splitFrontmatter } from "./_qa-markdown.mjs";
 
 test("splitFrontmatter: leading --- block → {frontmatter, body}; no block → frontmatter null and the whole text as body", () => {
   const { frontmatter, body } = splitFrontmatter("---\nid: TC-001\ntitle: Login\n---\n\n# Body\n");
@@ -74,6 +74,11 @@ test("findTable: the first pipe table after a heading; header cells, separator s
   assert.equal(findTable(body, /^## Missing/), null, "no heading ⇒ null");
   assert.equal(findTable("## Results\n\nno table here\n\n## Next\n| a |\n|---|\n", /^## Results/), null, "a table under the next heading does not count");
   assert.deepEqual(findTable("## T\n| a | b |\n|---|---|\n", /^## T/).rows, [], "a header-only table has zero rows");
+  assert.deepEqual(
+    findTable("## T\n| ID | Title | Status |\n|---|---|---|\n| TC-001 | Verify a \\| b | ✅ PASS |\n", /^## T/).rows,
+    [["TC-001", "Verify a | b", "✅ PASS"]],
+    "a GFM-escaped \\| is a literal pipe inside its cell, not a column break",
+  );
 });
 
 test("sections: ATX headings of exactly the requested level, each with the text up to the next heading of that level or higher", () => {
@@ -92,6 +97,8 @@ test("fencedBlock: the first ```<lang> block's content; absent ⇒ null; untermi
   assert.equal(fencedBlock(body, "toml"), null);
   assert.equal(fencedBlock("````json\n{\"a\": \"```\"}\n````\n", "json"), "{\"a\": \"```\"}\n", "a longer fence closes only on its own length");
   assert.throws(() => fencedBlock("```json\n[1", "json"), MarkdownFormatError);
+  assert.deepEqual(fencedBlocks(body, "json"), ["[1, 2]\n", "[3]\n"], "fencedBlocks returns every matching fence in order");
+  assert.deepEqual(fencedBlocks(body, "toml"), []);
 });
 
 test("the shipped manual-qa fixtures parse: TC frontmatter keys, RUN Results table, audit frontmatter lists", () => {

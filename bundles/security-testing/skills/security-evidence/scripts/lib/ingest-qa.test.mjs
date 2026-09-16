@@ -71,7 +71,8 @@ test("manual-qa run report in its real Markdown format through ingest qa-run", a
   const [head, ...rows] = payload.records;
   assert.deepEqual(head.trusted, { record: "run", run_id: "RUN-2026-09-15-001", suite: "security-my-product-admitted", environment: "https://staging.example.com", environment_host_allowed: true, date: "2026-09-15", results: 3 });
   assert.deepEqual(rows.map((r) => [r.trusted.case_id, r.trusted.status]), [["TC-SEC-001", "PASS"], ["TC-SEC-002", "FAIL"], ["TC-SEC-003", "BLOCKED"]]);
-  assert.equal(rows[1].trusted.screenshot_path, "reports/screenshots/TC-SEC-002_2026-09-15.png");
+  assert.equal(rows[1].trusted.screenshot_path, undefined, "a screenshot path is inert (§6.6), never a trusted reference");
+  assert.ok(rows[1].inert.screenshot.includes("reports/screenshots/TC-SEC-002_2026-09-15.png"));
   assert.match(rows[1].inert.narrative, /^\[UNTRUSTED CONTENT/);
   assert.ok(rows[1].inert.narrative.includes("Expected the `session` cookie to carry `HttpOnly`"));
   // the screenshot is referenced by path and never copied: nothing new under <st> but the blob, the record and the index

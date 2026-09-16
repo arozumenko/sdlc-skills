@@ -41,11 +41,12 @@ test("the shipped fixture ⇒ a run record then one result per Results row; run_
   assert.deepEqual(r1.trusted, { record: "result", run_id: "RUN-2026-09-15-001", case_id: "TC-SEC-001", status: "PASS" });
   assert.deepEqual(Object.keys(r1.inert), ["title"]);
 
-  assert.deepEqual(r2.trusted, { record: "result", run_id: "RUN-2026-09-15-001", case_id: "TC-SEC-002", status: "FAIL", screenshot_path: "reports/screenshots/TC-SEC-002_2026-09-15.png" }, "the screenshot is referenced by path (§6.6), never copied");
-  assert.deepEqual(Object.keys(r2.inert).sort(), ["narrative", "title"]);
+  assert.deepEqual(r2.trusted, { record: "result", run_id: "RUN-2026-09-15-001", case_id: "TC-SEC-002", status: "FAIL" }, "the screenshot never enters trusted (§6.6 inert column, D5)");
+  assert.deepEqual(Object.keys(r2.inert).sort(), ["narrative", "screenshot", "title"]);
   assert.match(r2.inert.narrative, /^\[UNTRUSTED CONTENT/);
   assert.ok(r2.inert.narrative.includes("Failed at step:** 3"), "the failure narrative is quoted");
-  assert.ok(!("screenshot_path" in r2.inert), "the path is a reference in trusted, not quoted text");
+  assert.match(r2.inert.screenshot, /^\[UNTRUSTED CONTENT/, "the screenshot path is quoted inert text, not a reference");
+  assert.ok(r2.inert.screenshot.includes("reports/screenshots/TC-SEC-002_2026-09-15.png"));
 
   assert.deepEqual(r3.trusted, { record: "result", run_id: "RUN-2026-09-15-001", case_id: "TC-SEC-003", status: "BLOCKED" });
   assert.ok(r3.inert.narrative.includes("No outbound mail sink"), "the blocked reason is the narrative");
@@ -74,12 +75,15 @@ test("rows the format cannot vouch for are rejected, never dropped or promoted: 
   assert.equal(out.records[0].trusted.results, 3, "the header counts the table rows, rejected or not");
 });
 
-test("a screenshot path that is not a repo-relative posix path is quoted, not referenced", () => {
-  const text = redacted.replace("`reports/screenshots/TC-SEC-002_2026-09-15.png`", "`/etc/passwd`");
+test("a screenshot path never enters trusted, whatever it names — a narrative is not a scope- or target-validated reference (D5)", () => {
+  const text = redacted.replace("`reports/screenshots/TC-SEC-002_2026-09-15.png`", "`.agents/security-testing/private/keys/current`");
   const out = adapt(ctxWith(["staging.example.com"]), run, null, text, base);
   const r2 = out.records[2];
-  assert.equal(r2.trusted.screenshot_path, undefined);
-  assert.ok(r2.inert.narrative.includes("/etc/passwd"));
+  assert.deepEqual(Object.keys(r2.trusted).sort(), ["case_id", "record", "run_id", "status"], "no screenshot key in trusted");
+  assert.ok(!JSON.stringify(r2.trusted).includes(".agents/"), "the path is nowhere in trusted");
+  assert.match(r2.inert.screenshot, /^\[UNTRUSTED CONTENT/);
+  assert.ok(r2.inert.screenshot.includes(".agents/security-testing/private/keys/current"));
+  assert.ok(r2.inert.narrative.includes(".agents/security-testing/private/keys/current"));
 });
 
 test("parseRunReport: frontmatter + Results rows + narratives keyed by case id", () => {

@@ -21,15 +21,16 @@
 //            about the import, not this process's clock — G-1 is untouched);
 //            `results` counts every table row, rejected or not.
 //            inert {title (the H1), environment?}
-//   k ≥ 1    trusted {record: "result", run_id, case_id, status,
-//                     screenshot_path?}
+//   k ≥ 1    trusted {record: "result", run_id, case_id, status}
 //            `case_id` must match CASE_ID (lib/ingest/case.mjs), `status` ∈
-//            STATUSES (the token inside the cell — `✅ PASS` ⇒ PASS);
-//            `screenshot_path` is the `**Screenshot:** \`path\`` reference
-//            from the row's `## Failed Tests` / `## Blocked Tests` narrative
-//            when it is a repo-relative posix path — referenced by path, never
-//            copied, never opened (§6.6). Anything else in the narrative is
-//            quoted: inert {title, narrative?}.
+//            STATUSES (the token inside the cell — `✅ PASS` ⇒ PASS).
+//            inert {title, narrative?, screenshot?}: the row's `## Failed
+//            Tests` / `## Blocked Tests` narrative is quoted whole, and its
+//            `**Screenshot:** \`path\`` reference is surfaced as
+//            inert.screenshot — §6.6 puts screenshots in the inert column
+//            ("referenced by path, never copied"), and D5 lets only scope- or
+//            target-validated references act, which a path in a narrative is
+//            not; so it is quoted, never opened, and never promoted.
 //            A row whose Status carries no known token ⇒ rejected
 //            `unknown-status`; an ID that is not a case id ⇒ rejected
 //            `bad-case-id` (§4.1: rejections never change the exit code).
@@ -70,8 +71,6 @@ const STATUS_TOKEN = /(?<![A-Z])(PASS|FAIL|BLOCKED)(?![A-Z])/;
 const H1 = /^#[ \t]+(.*?)[ \t]*$/m;
 const NARRATIVE_HEADING = /^(?:[^\s]+[ \t]+)?(TC-[A-Z0-9-]+)[ \t]*:/; // `❌ TC-002: title` (any icon) or `TC-002: title`
 const SCREENSHOT = /\*\*Screenshot:\*\*[ \t]*`([^`\r\n]+)`/;
-/** A repo-relative posix path: not absolute, no backslash, no `.` / `..` segment, no whitespace. */
-const REPO_RELATIVE = /^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[^\\\s]+$/;
 
 function invalid(reason) {
   return new CliError(EXIT.USAGE, schemaInvalid(KIND, reason));
@@ -188,9 +187,9 @@ export function adapt(ctx, run, scope, redactedInput, locatorBase) {
       return;
     }
     const trusted = { record: "result", run_id: report.run_id, case_id: row.id, status: row.status };
-    if (row.screenshot !== null && REPO_RELATIVE.test(row.screenshot)) trusted.screenshot_path = row.screenshot;
     const inert = { title: wrapInert(row.title) };
     if (Object.hasOwn(report.narratives, row.id)) inert.narrative = wrapInert(report.narratives[row.id]);
+    if (row.screenshot !== null) inert.screenshot = wrapInert(row.screenshot);
     records.push({ locator: { import_sha256, original_hmac, index }, trusted, inert });
   });
 

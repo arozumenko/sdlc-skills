@@ -81,6 +81,31 @@ test("without a JSON block the documented heading form is parsed: `#### [P0, con
   assert.deepEqual(out.records.slice(1).map((r) => r.trusted), viaJson.records.slice(1).map((r) => r.trusted));
 });
 
+test("the findings block is the fence under `## Findings (JSON)`, not the first json fence: an Evidence line quoting a JSON body in its own fence is prose; without the heading the last array fence wins", () => {
+  const ctx = ctxWith(["staging.example.com"]);
+  const evidenceFence = "**Evidence:**\n\n```json\n{\"error\": \"session cookie lacks HttpOnly\"}\n```\n";
+  const withQuote = redacted.replace("**Suggested fix:** Add the `HttpOnly`", `${evidenceFence}\n**Suggested fix:** Add the \`HttpOnly\``);
+  assert.ok(withQuote !== redacted, "the fixture line the probe rewrites is present");
+  const out = adapt(ctx, run, null, withQuote, base);
+  assert.equal(out.records[0].trusted.findings_source, "json");
+  assert.equal(out.records.length, 4, "the findings come from the block under the heading, not the evidence fence");
+  // no `## Findings (JSON)` heading: the last json fence is used when it is an array …
+  const noHeading = withQuote.replace("## Findings (JSON)", "## Machine-readable");
+  assert.equal(adapt(ctx, run, null, noHeading, base).records[0].trusted.findings_source, "json");
+  // … and an evidence fence that is not an array falls back to the heading form instead of failing the import
+  const onlyEvidence = withQuote.slice(0, withQuote.indexOf("## Findings (JSON)"));
+  const md = adapt(ctx, run, null, onlyEvidence, base);
+  assert.equal(md.records[0].trusted.findings_source, "markdown");
+  assert.equal(md.records.length, 4);
+});
+
+test("a JSON-block priority written `P0` is the same closed-vocabulary token as the heading form's `[P0, …]`", () => {
+  const text = redacted.replace('"priority": "p0",', '"priority": "P0",');
+  const out = adapt(ctxWith(["staging.example.com"]), run, null, text, base);
+  assert.deepEqual(out.rejected, []);
+  assert.equal(out.records[1].trusted.priority, "p0");
+});
+
 test("findings the block cannot vouch for are rejected, never dropped: no title, a priority outside p0–p3; a non-integer confidence is null", () => {
   const text = redacted
     .replace('"title": "Missing Content-Security-Policy header",', '"title": 42,')
