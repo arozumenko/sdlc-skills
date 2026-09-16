@@ -340,6 +340,79 @@ test("redactDeep leaves numbers, booleans, null and undefined alone", () => {
   }
 });
 
+test("redactDeep throws a TypeError naming the path for a Buffer nested in an object", () => {
+  const input = { a: "clean", b: Buffer.from("password=1234") };
+  assert.throws(
+    () => redactDeep(input, DEFAULT_RULES),
+    (e) => e instanceof TypeError && /redactDeep: unsupported value at \$\.b \(Buffer\)/.test(e.message) && /redactString/.test(e.message),
+  );
+  // Same for a bare Uint8Array, and deeper in the tree the path follows keys and indexes.
+  assert.throws(
+    () => redactDeep({ runs: [{ blob: new Uint8Array([1, 2]) }] }, DEFAULT_RULES),
+    (e) => e instanceof TypeError && e.message.includes("at $.runs[0].blob (Uint8Array)"),
+  );
+  // A key that is not a plain identifier is bracket-quoted so the path stays unambiguous.
+  assert.throws(
+    () => redactDeep({ "odd key": [Buffer.alloc(1)] }, DEFAULT_RULES),
+    (e) => e instanceof TypeError && e.message.includes('at $["odd key"][0] (Buffer)'),
+  );
+});
+
+test("redactDeep throws a TypeError for a class instance holding a string field", () => {
+  class Finding {
+    constructor() {
+      this.reason = "password=1234";
+    }
+  }
+  assert.throws(
+    () => redactDeep({ f: new Finding() }, DEFAULT_RULES),
+    (e) => e instanceof TypeError && e.message.includes("at $.f (Finding)"),
+  );
+  // Anonymous prototype chains carry no constructor name; the tag falls back to "object".
+  const anon = Object.create(Object.create(null));
+  anon.reason = "password=1234";
+  assert.throws(
+    () => redactDeep([anon], DEFAULT_RULES),
+    (e) => e instanceof TypeError && e.message.includes("at $[0] (object)"),
+  );
+});
+
+test("redactDeep throws a TypeError for Map, Set and Date values", () => {
+  const cases = [
+    ["$.m", "Map", new Map([["password", "1234"]])],
+    ["$.s", "Set", new Set(["password=1234"])],
+    ["$.d", "Date", new Date(0)],
+  ];
+  for (const [path, tag, v] of cases) {
+    const key = path.slice(2);
+    assert.throws(
+      () => redactDeep({ [key]: v }, DEFAULT_RULES),
+      (e) => e instanceof TypeError && e.message.includes(`at ${path} (${tag})`),
+      tag,
+    );
+  }
+});
+
+test("redactDeep throws for a top-level Buffer; redactString remains the Buffer entry point", () => {
+  const buf = Buffer.from("password=1234");
+  assert.throws(
+    () => redactDeep(buf, DEFAULT_RULES),
+    (e) => e instanceof TypeError && e.message.includes("at $ (Buffer)"),
+  );
+  assert.equal(redactString(buf, DEFAULT_RULES).text, "<REDACTED:password-assign>");
+});
+
+test("redactDeep still accepts plain objects, null-prototype objects and arrays", () => {
+  const nullProto = Object.create(null);
+  nullProto.reason = "password=1234";
+  const out = redactDeep({ list: [nullProto, { k: "v" }], n: 1 }, DEFAULT_RULES);
+  assert.equal(out.list[0].reason, "<REDACTED:password-assign>");
+  assert.deepEqual(out.list[1], { k: "v" });
+  assert.equal(out.n, 1);
+  const clean = { a: [{ b: "c" }], d: Object.create(null) };
+  assert.equal(redactDeep(clean, DEFAULT_RULES), clean);
+});
+
 test("redactDeep uses DEFAULT_RULES when rules are omitted", () => {
   assert.equal(redactDeep("password=1234"), "<REDACTED:password-assign>");
   assert.equal(matches("password=1234"), true);
@@ -369,7 +442,7 @@ test("idempotent", () => {
 // ---------------------------------------------------------------------------
 // Bounded cost (untrusted input, D5: dirty-file snapshots, SARIF ingest, scope subjects)
 
-test("bounded cost: 256 KB of dash-joined identifiers, whitespace-free base64url and a whitespace run after `password` each redact in < 1 s", () => {
+test("bounded cost: 256 KB of dash-joined identifiers, whitespace-free base64url, a whitespace run after `password`, a minified bundle and repeated PEM headers each redact in < 1 s", () => {
   const KB = 256 * 1024;
   const inputs = {
     "dash-joined identifiers": "a-".repeat(KB / 2),

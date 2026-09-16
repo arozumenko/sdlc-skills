@@ -27,6 +27,12 @@
 //   digit and ≥ 32 chars is redacted (`path=src/Components/Auth/Login2FA/x.ts`,
 //   `const ROUTE = "/api/v2/Admin/Users/ResetPassword"`). A citation snippet
 //   holding such a constant becomes `sensitive: true`. Candidate for rules v2.
+// - Over-redaction, safe side: `high-entropy-assign` also fires on Subresource
+//   Integrity and lockfile hashes — `integrity="sha512-…"` / `sha384-…` in
+//   HTML and `"integrity": "sha512-…"` in package-lock.json are a mixed-case
+//   base64 value ≥ 32 chars after `key=` / `key:`. A citation into a lockfile
+//   or a `<script integrity>` tag becomes `sensitive: true`. Lowercase hex
+//   digests (`resolved …#9fceb02d…`, sha256 in stdout) are not affected.
 // - Over-redaction, safe side: `pem-block` treats a BEGIN header with no END
 //   as truncated key material and redacts to the end of the text, so prose
 //   such as `Found -----BEGIN CERTIFICATE----- header in README; see docs`
@@ -37,6 +43,15 @@
 //   only via `high-entropy-assign` on `sig=` (not when `%`-encoded within
 //   32 chars); Stripe `sk_live_…`, Slack webhook URLs, `scheme://user:pass@host`
 //   URL credentials and `Authorization: Basic …` pass through untouched.
+//
+// redactDeep walks strings, plain objects (Object.prototype or null prototype)
+// and arrays only. Anything else that is an object — Buffer/Uint8Array, Date,
+// Map/Set, class instances — throws a TypeError naming the $-rooted path and
+// the constructor. It must not pass through: the by-reference return is the
+// "nothing matched" signal canon.writeArtifact hashes and persists as clean,
+// and a JSON-serializable non-plain object (a Buffer serializes as
+// {type:"Buffer",data:[…]}, a class instance as its own fields) would reach
+// disk unredacted. Buffers go through redactString.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -181,8 +196,11 @@ function isPlainObject(value) {
 
 /**
  * Redact every string in a JSON-like value, recursively — values and object keys.
- * Numbers, booleans, null and undefined pass through. Non-plain objects (Buffer, Date, class
- * instances) are not walked; callers redact their text form explicitly.
+ * Numbers, booleans, null and undefined pass through. Plain objects (Object.prototype or null
+ * prototype) and arrays are walked. Any other object — Buffer/Uint8Array, Date, Map/Set, class
+ * instances — throws a TypeError naming the $-rooted JSON path (`$.runs[0].blob`) and the
+ * constructor, because passing it through by reference would report it as clean (see below) and
+ * JSON.stringify would still serialize its content. Redact a Buffer with redactString instead.
  *
  * When nothing matched, the input is returned by reference (deep-equal and identical), so a
  * writer that hashes the result sees the same bytes it would have hashed before redaction.
@@ -195,8 +213,21 @@ function isPlainObject(value) {
  * @param {T} value
  * @param {Rules} [rules]
  * @returns {T}
+ * @throws {TypeError} on a non-plain object anywhere in the tree
  */
 export function redactDeep(value, rules = DEFAULT_RULES) {
+  return walk(value, rules, "$");
+}
+
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** `$.key` for identifier-shaped keys, `$["odd key"]` otherwise; `$[3]` for array indexes. */
+function childPath(path, key) {
+  if (typeof key === "number") return `${path}[${key}]`;
+  return IDENTIFIER.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
+}
+
+function walk(value, rules, path) {
   if (typeof value === "string") {
     const { text, hits } = redactString(value, rules);
     return hits.length === 0 ? value : text;
@@ -206,7 +237,7 @@ export function redactDeep(value, rules = DEFAULT_RULES) {
     let out = null;
     for (let i = 0; i < value.length; i++) {
       const item = value[i];
-      const next = redactDeep(item, rules);
+      const next = walk(item, rules, childPath(path, i));
       if (next !== item) {
         if (out === null) out = value.slice();
         out[i] = next;
@@ -214,14 +245,19 @@ export function redactDeep(value, rules = DEFAULT_RULES) {
     }
     return out === null ? value : out;
   }
-  if (!isPlainObject(value)) return value;
+  if (!isPlainObject(value)) {
+    const tag = value.constructor?.name ?? "object";
+    throw new TypeError(
+      `redactDeep: unsupported value at ${path} (${tag}); pass strings, plain objects and arrays only — redact a Buffer with redactString`,
+    );
+  }
   let changed = false;
   const entries = [];
   const taken = new Set();
   for (const key of Object.keys(value)) {
     const item = value[key];
-    const nextKey = redactDeep(key, rules);
-    const nextItem = redactDeep(item, rules);
+    const nextKey = walk(key, rules, path);
+    const nextItem = walk(item, rules, childPath(path, key));
     if (nextKey !== key || nextItem !== item) changed = true;
     if (nextKey === key) taken.add(key);
     entries.push([key, nextKey, nextItem]);
