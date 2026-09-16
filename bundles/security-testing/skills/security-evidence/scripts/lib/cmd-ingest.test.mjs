@@ -173,8 +173,9 @@ test("argv contract: kind, file and --run are required; unknown kind, unknown ru
   writeFileSync(outside, "x\n");
   assert.match(await usage(["doc", outside, "--run", run_id]), /outside the work tree/);
   assert.match(await usage(["doc", "docs/threats.md", "--run", run_id, "--sent", "t.json"]), /--sent/);
-  // an adapter this task does not ship is a usage error, not a crash; the file is not touched
-  assert.match(await usage(["sarif", "docs/threats.md", "--run", run_id]), /adapter sarif is not available/);
+  // Every IMPORT_KINDS adapter ships as of TASK-016 (sarif was the last), so the
+  // "adapter <kind> is not available" branch of loadAdapter is unreachable through
+  // a real kind; it stays as the guard for a deleted module. Nothing above touched the store.
   assert.deepEqual(readdirSync(join(repo, ST, "ledger", run_id, "imports")), []);
 });
 

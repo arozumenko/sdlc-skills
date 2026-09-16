@@ -1,0 +1,14 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "r.region" } ] } },
+      "results": [
+        { "ruleId": "r.region", "level": "error", "message": { "text": "end before start" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 5, "endLine": 3 } } } ] },
+        { "ruleId": "r.region", "level": "error", "message": { "text": "string startLine" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": "4" } } } ] },
+        { "ruleId": "r.region", "level": "error", "message": { "text": "zero startLine" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 0, "endLine": 2 } } } ] },
+        { "ruleId": "r.region", "level": "error", "message": { "text": "past the end of the file" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 400 } } } ] }
+      ]
+    }
+  ]
+}

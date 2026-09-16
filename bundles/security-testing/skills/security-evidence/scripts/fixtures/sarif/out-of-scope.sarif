@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "r.scope", "properties": { "tags": [ "CWE-79" ] } } ] } },
+      "results": [
+        { "ruleId": "r.scope", "ruleIndex": 0, "level": "error", "message": { "text": "tracked but outside scope_paths" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "docs/notes.md" }, "region": { "startLine": 1, "endLine": 1 } } } ] },
+        { "ruleId": "r.scope", "ruleIndex": 0, "level": "error", "message": { "text": "not a scope file at all" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/missing.js" }, "region": { "startLine": 1 } } } ] }
+      ]
+    }
+  ]
+}

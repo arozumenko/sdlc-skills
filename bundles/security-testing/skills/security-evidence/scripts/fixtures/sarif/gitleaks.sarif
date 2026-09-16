@@ -1,0 +1,11 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "gitleaks", "semanticVersion": "8.18.0", "rules": [ { "id": "aws-access-token", "shortDescription": { "text": "AWS access token" } } ] } },
+      "results": [
+        { "ruleId": "aws-access-token", "ruleIndex": 0, "level": "error", "message": { "text": "aws-access-token has detected a secret" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 8, "endLine": 8, "snippet": { "text": "// password=1234" } } } } ], "partialFingerprints": { "commitSha": "", "email": "", "author": "", "depth": 0 } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "r.a" }, { "id": "r.b" } ] } },
+      "results": [
+        { "ruleId": "r.a", "ruleIndex": 1, "level": "error", "message": { "text": "index says r.b" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4, "snippet": { "text": "x" } } } } ] },
+        { "ruleId": "r.b", "ruleIndex": 1, "level": "error", "message": { "text": "agree" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 4, "snippet": { "text": "x" } } } } ] }
+      ]
+    }
+  ]
+}

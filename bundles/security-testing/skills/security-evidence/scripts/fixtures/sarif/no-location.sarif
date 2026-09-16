@@ -1,0 +1,16 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "r.no-loc" } ] } },
+      "results": [
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "no locations at all" } },
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "location without physicalLocation" }, "locations": [ { "logicalLocations": [ { "name": "find" } ] } ] },
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "absolute file URI" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "file:///home/me/repo/src/db.js" }, "region": { "startLine": 4 } } } ] },
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "parent escape" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "../secrets/key.pem" }, "region": { "startLine": 1 } } } ] },
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "percent-encoded escape" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/%2e%2e/etc/passwd" }, "region": { "startLine": 1 } } } ] },
+        { "ruleId": "r.no-loc", "level": "warning", "message": { "text": "in scope but no region" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" } } } ] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "semgrep", "version": "1.90.0", "rules": [ { "id": "javascript.express.sqli.tainted-sql-string" }, { "id": "generic.secrets.hardcoded" } ] } },
+      "results": [
+        { "ruleId": "javascript.express.sqli.tainted-sql-string", "ruleIndex": 0, "level": "error", "message": { "text": "no snippet" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 4, "endLine": 5 } } } ] },
+        { "ruleId": "generic.secrets.hardcoded", "ruleIndex": 1, "level": "warning", "message": { "text": "secret line, no snippet" }, "locations": [ { "physicalLocation": { "artifactLocation": { "uri": "src/db.js" }, "region": { "startLine": 8, "endLine": 9 } } } ] }
+      ]
+    }
+  ]
+}
