@@ -1,0 +1,17 @@
+{
+  "case_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "classification": "admitted-reviewed",
+  "lint_hits": [
+    {
+      "rule": "no-mutating-verb",
+      "step": 3,
+      "text_redacted": "submit the form"
+    }
+  ],
+  "assumptions": {
+    "base_url_host": "staging.example.com:8443",
+    "account": "qa-security-1"
+  },
+  "target_policy_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "receipt_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+}

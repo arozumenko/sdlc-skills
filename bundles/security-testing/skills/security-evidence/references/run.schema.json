@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run.schema.json",
+  "title": "run",
+  "description": "<run>/run.json payload (spec §6.1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "engagement_id",
+    "seq",
+    "base_oid",
+    "head_oid",
+    "template"
+  ],
+  "properties": {
+    "engagement_id": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "base_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "head_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "template": {
+      "type": "string",
+      "enum": [
+        "assessment",
+        "review",
+        "verify",
+        "threat-model"
+      ]
+    }
+  }
+}

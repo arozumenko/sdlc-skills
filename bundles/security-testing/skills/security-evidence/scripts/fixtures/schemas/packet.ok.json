@@ -1,0 +1,21 @@
+{
+  "kind": "subject",
+  "subject_ids": [
+    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  ],
+  "files": [
+    {
+      "path": "src/db.js",
+      "side": "head",
+      "oid": "1111111111111111111111111111111111111111",
+      "ranges": [
+        [
+          10,
+          14
+        ]
+      ],
+      "range_hmac": "8888888888888888888888888888888888888888888888888888888888888888"
+    }
+  ],
+  "policy_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+}

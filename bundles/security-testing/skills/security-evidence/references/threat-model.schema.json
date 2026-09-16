@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model.schema.json",
+  "title": "threat-model",
+  "description": "<st>/threat-model.json / <run>/threat-model.json (ThreatModel) and <run>/dispositions.json (Dispositions), M2 (spec §6.10).",
+  "$defs": {
+    "Range": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+    },
+    "Citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "side",
+        "lines"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head"
+          ]
+        },
+        "lines": {
+          "$ref": "#/$defs/Range"
+        }
+      }
+    },
+    "Element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "citation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^E-[0-9]{3}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "process",
+            "datastore",
+            "external",
+            "flow",
+            "boundary"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "citation": {
+          "$ref": "#/$defs/Citation"
+        }
+      }
+    },
+    "Mitigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "claim"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^M-[0-9]{3}$"
+        },
+        "claim": {
+          "type": "string"
+        },
+        "citation": {
+          "$ref": "#/$defs/Citation"
+        }
+      }
+    },
+    "Disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "undisposed",
+            "planned",
+            "executed",
+            "ticketed",
+            "accepted",
+            "mitigated"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        }
+      }
+    },
+    "Threat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "element_id",
+        "stride",
+        "title",
+        "mitigations",
+        "disposition"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^T-[0-9]{3}$"
+        },
+        "element_id": {
+          "type": "string"
+        },
+        "stride": {
+          "type": "string",
+          "enum": [
+            "S",
+            "T",
+            "R",
+            "I",
+            "D",
+            "E"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "mitigations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mitigation"
+          }
+        },
+        "disposition": {
+          "$ref": "#/$defs/Disposition"
+        }
+      }
+    },
+    "ThreatModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elements",
+        "threats"
+      ],
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Element"
+          }
+        },
+        "threats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Threat"
+          }
+        }
+      }
+    },
+    "Dispositions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dispositions"
+      ],
+      "properties": {
+        "dispositions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "threat_id",
+              "kind",
+              "ref",
+              "resolved_via"
+            ],
+            "properties": {
+              "threat_id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "undisposed",
+                  "planned",
+                  "executed",
+                  "ticketed",
+                  "accepted",
+                  "mitigated"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "resolved_via": {
+                "type": "string",
+                "enum": [
+                  "proposal",
+                  "admission",
+                  "observation",
+                  "tracker-readback",
+                  "register-row",
+                  "receipt",
+                  "none"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/ThreatModel"
+}

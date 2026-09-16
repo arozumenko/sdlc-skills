@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "proposals-index.schema.json",
+  "title": "proposals-index",
+  "description": "<run>/proposals-index.json (TL-14 index; written {proposals: []} by run init, rewritten by run snapshot proposals).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proposals"
+  ],
+  "properties": {
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "sha256",
+          "path"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

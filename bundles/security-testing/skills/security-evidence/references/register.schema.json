@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "register.schema.json",
+  "title": "register",
+  "description": "Register projection (<st>/register/projection.json), Row, Approval (always authenticated:false, D15), Event (events.jsonl line), Snapshot (<run>/register-events.json) and Alias (finding-alias.jsonl line).",
+  "$defs": {
+    "Approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorded_by",
+        "approved_by",
+        "approval_ref",
+        "authenticated"
+      ],
+      "properties": {
+        "recorded_by": {
+          "type": "string"
+        },
+        "approved_by": {
+          "type": "string"
+        },
+        "approval_ref": {
+          "type": "string"
+        },
+        "authenticated": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "Acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorded_by",
+        "approved_by",
+        "approval_ref",
+        "authenticated",
+        "until"
+      ],
+      "properties": {
+        "recorded_by": {
+          "type": "string"
+        },
+        "approved_by": {
+          "type": "string"
+        },
+        "approval_ref": {
+          "type": "string"
+        },
+        "authenticated": {
+          "type": "boolean",
+          "const": false
+        },
+        "until": {
+          "type": "string"
+        }
+      }
+    },
+    "Row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "subject",
+        "subject_kind",
+        "title",
+        "status",
+        "priority",
+        "owner",
+        "first_seen_run",
+        "last_verified_run",
+        "ticket_url",
+        "test_refs",
+        "proposal_refs",
+        "ack_refs",
+        "rationale",
+        "supersedes",
+        "superseded_by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^R-[0-9]{4}$"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subject_kind": {
+          "type": "string",
+          "enum": [
+            "finding",
+            "threat"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "accepted",
+            "fixed",
+            "regressed",
+            "false-positive",
+            "superseded"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "first_seen_run": {
+          "type": "string"
+        },
+        "last_verified_run": {
+          "type": "string"
+        },
+        "ticket_url": {
+          "type": "string"
+        },
+        "test_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "proposal_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptance": {
+          "$ref": "#/$defs/Acceptance"
+        },
+        "false_positive": {
+          "$ref": "#/$defs/Approval"
+        },
+        "ack_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "supersedes": {
+          "type": "string"
+        },
+        "superseded_by": {
+          "type": "string"
+        }
+      }
+    },
+    "Projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engagement_id",
+        "seq",
+        "chain_sha256",
+        "rows"
+      ],
+      "properties": {
+        "engagement_id": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chain_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rows": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^R-[0-9]{4}$": {
+              "$ref": "#/$defs/Row"
+            }
+          }
+        }
+      }
+    },
+    "Event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "prev_sha256",
+        "ts",
+        "actor",
+        "row_id",
+        "event",
+        "payload",
+        "ref"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prev_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "ts": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "row_id": {
+          "type": "string"
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "add",
+            "accept",
+            "revoke",
+            "acceptance-expired",
+            "fixed",
+            "regressed",
+            "close-false-positive",
+            "reopen",
+            "supersede",
+            "ticketed",
+            "regression-observed",
+            "verify-observed",
+            "alias"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^.+$": {}
+          },
+          "$comment": "per-event payload (plan §4.3 transition table); shape enforced by register-transitions.mjs"
+        },
+        "ref": {
+          "type": "string"
+        }
+      }
+    },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engagement_id",
+        "seq",
+        "chain_sha256",
+        "events"
+      ],
+      "properties": {
+        "engagement_id": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chain_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          }
+        }
+      }
+    },
+    "Alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_id",
+        "to_id",
+        "reason",
+        "run_id",
+        "seq",
+        "prev_sha256"
+      ],
+      "properties": {
+        "from_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "to_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prev_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/Projection"
+}

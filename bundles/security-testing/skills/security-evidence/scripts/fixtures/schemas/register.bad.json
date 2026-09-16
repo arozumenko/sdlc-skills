@@ -1,0 +1,32 @@
+{
+  "engagement_id": "eng-1",
+  "seq": 2,
+  "chain_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "rows": {
+    "R-0001": {
+      "id": "R-0001",
+      "subject": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "subject_kind": "finding",
+      "title": "SQL built from request input",
+      "status": "accepted",
+      "priority": "p1",
+      "owner": "team-payments",
+      "first_seen_run": "0123456789ab-0001",
+      "last_verified_run": "",
+      "ticket_url": "",
+      "test_refs": [],
+      "proposal_refs": [],
+      "acceptance": {
+        "recorded_by": "lead",
+        "approved_by": "cto@example.com",
+        "approval_ref": "https://github.com/acme/shop/issues/12",
+        "authenticated": true,
+        "until": "2026-12-31"
+      },
+      "ack_refs": [],
+      "rationale": "Behind an internal gateway until the rewrite lands.",
+      "supersedes": "",
+      "superseded_by": ""
+    }
+  }
+}

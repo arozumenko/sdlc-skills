@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "baseline.schema.json",
+  "title": "baseline",
+  "description": "<st>/private/baseline.<engagement_id>.json payload (spec §2 row 7; TASK-010). entries and ignored_count are keyed by path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "engagement_id",
+    "head_oid",
+    "index_sha256",
+    "entries",
+    "ignored_count"
+  ],
+  "properties": {
+    "engagement_id": {
+      "type": "string"
+    },
+    "head_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "index_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entries": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "ignored_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "redaction_version": 1,
+  "rules": [
+    {
+      "class": "password-assign",
+      "pattern": "password\\s*[=:]\\s*\\S+",
+      "flags": "gi",
+      "replacement": "<REDACTED:password-assign>"
+    }
+  ]
+}

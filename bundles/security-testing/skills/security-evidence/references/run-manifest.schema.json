@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-manifest.schema.json",
+  "title": "run-manifest",
+  "description": "<run>/manifest.json payload (envelope kind `manifest`; spec §6.1). inputs is keyed by input kind; set inputs (packets, receipts, ingest, verify-snapshots) are sha256(canonical(sorted member hashes)).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "inputs",
+    "report_sha256",
+    "template",
+    "template_version",
+    "tool_version"
+  ],
+  "properties": {
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "report_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "template": {
+      "type": "string",
+      "enum": [
+        "assessment",
+        "review",
+        "verify",
+        "threat-model"
+      ]
+    },
+    "template_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tool_version": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "admission.schema.json",
+  "title": "admission",
+  "description": "<run>/admissions/<case_sha256>.json (spec §9.1, P5): receipt_sha256 is present iff classification is admitted-reviewed.",
+  "$defs": {
+    "LintHit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "step",
+        "text_redacted"
+      ],
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text_redacted": {
+          "type": "string"
+        }
+      }
+    },
+    "Assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_url_host",
+        "account"
+      ],
+      "properties": {
+        "base_url_host": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_sha256",
+        "lint_hits",
+        "assumptions",
+        "target_policy_sha256",
+        "classification",
+        "receipt_sha256"
+      ],
+      "properties": {
+        "case_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "lint_hits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LintHit"
+          }
+        },
+        "assumptions": {
+          "$ref": "#/$defs/Assumptions"
+        },
+        "target_policy_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "classification": {
+          "type": "string",
+          "const": "admitted-reviewed"
+        },
+        "receipt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_sha256",
+        "lint_hits",
+        "assumptions",
+        "target_policy_sha256",
+        "classification"
+      ],
+      "properties": {
+        "case_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "lint_hits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LintHit"
+          }
+        },
+        "assumptions": {
+          "$ref": "#/$defs/Assumptions"
+        },
+        "target_policy_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "admitted-heuristic",
+            "proposal"
+          ]
+        }
+      }
+    }
+  ]
+}

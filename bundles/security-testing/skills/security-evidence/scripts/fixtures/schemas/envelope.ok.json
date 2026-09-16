@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "kind": "scope",
+  "run_id": "0123456789ab-0001",
+  "engagement_id": "eng-1",
+  "key_id": "k0123456789ab",
+  "created_at": "2026-09-16T10:00:00Z",
+  "self_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

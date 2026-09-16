@@ -1,0 +1,22 @@
+{
+  "id": "P-001",
+  "title": "Rate-limit probe against staging login",
+  "threat_ids": [
+    "T-003"
+  ],
+  "effect": "Sends 200 login attempts to staging; may lock a test account.",
+  "target": {
+    "host": "staging.example.com:8443",
+    "account": "qa-security-1"
+  },
+  "authorization": {
+    "status": "proposed",
+    "approver": "",
+    "approval_ref": "",
+    "authenticated": false
+  },
+  "steps": [
+    "Run the login probe with the qa-security-1 account",
+    "Record lockout behaviour"
+  ]
+}

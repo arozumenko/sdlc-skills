@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "imports-index.schema.json",
+  "title": "imports-index",
+  "description": "<run>/imports.json (TL-14 index; written {imports: []} by run init).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "imports"
+  ],
+  "properties": {
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "import_sha256",
+          "original_hmac"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "import_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "original_hmac": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

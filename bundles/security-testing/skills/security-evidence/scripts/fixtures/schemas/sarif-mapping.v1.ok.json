@@ -1,0 +1,28 @@
+{
+  "version": "v1",
+  "tools": {
+    "semgrep": {
+      "confidence": 6,
+      "rule_prefix_class": {
+        "javascript.express.sqli": "injection",
+        "javascript.lang.security.audit.xss": "xss"
+      }
+    },
+    "gitleaks": {
+      "confidence": 7,
+      "rule_prefix_class": {
+        "aws-access-token": "secret"
+      }
+    }
+  },
+  "tag_class": {
+    "CWE-89": "injection",
+    "CWE-79": "xss"
+  },
+  "level_priority": {
+    "error": "p1",
+    "warning": "p2",
+    "note": "p3"
+  },
+  "default_confidence": 3
+}

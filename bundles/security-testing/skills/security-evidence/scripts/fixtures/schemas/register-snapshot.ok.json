@@ -1,0 +1,37 @@
+{
+  "engagement_id": "eng-1",
+  "seq": 2,
+  "chain_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "events": [
+    {
+      "seq": 1,
+      "prev_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ts": "2026-09-16T10:00:00Z",
+      "actor": "lead",
+      "row_id": "R-0001",
+      "event": "add",
+      "payload": {
+        "subject": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "priority": "p1",
+        "title": "SQL built from request input"
+      },
+      "ref": "0123456789ab-0001"
+    },
+    {
+      "seq": 2,
+      "prev_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ts": "2026-09-16T10:00:00Z",
+      "actor": "lead",
+      "row_id": "R-0001",
+      "event": "accept",
+      "payload": {
+        "recorded_by": "lead",
+        "approved_by": "cto@example.com",
+        "approval_ref": "https://github.com/acme/shop/issues/12",
+        "authenticated": false,
+        "until": "2026-12-31"
+      },
+      "ref": "0123456789ab-0001"
+    }
+  ]
+}

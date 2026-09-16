@@ -1,0 +1,18 @@
+{
+  "elements": [
+    {
+      "id": "E-1",
+      "kind": "process",
+      "name": "Checkout API",
+      "citation": {
+        "path": "src/orders.js",
+        "side": "head",
+        "lines": [
+          1,
+          20
+        ]
+      }
+    }
+  ],
+  "threats": []
+}

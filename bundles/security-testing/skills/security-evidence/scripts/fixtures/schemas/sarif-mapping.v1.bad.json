@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "tools": {},
+  "tag_class": {},
+  "level_priority": {
+    "error": "p1",
+    "warning": "p2",
+    "note": "p3"
+  },
+  "default_confidence": 3
+}

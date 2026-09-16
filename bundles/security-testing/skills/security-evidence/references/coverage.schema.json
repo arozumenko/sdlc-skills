@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coverage.schema.json",
+  "title": "coverage",
+  "description": "<run>/coverage.json payload (spec §6.1; `indeterminate` per D3/P5 — empty scope ⇒ INDETERMINATE blocks sign-off).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accounting",
+    "scanner_rows",
+    "scope_sha256",
+    "examined_sha256",
+    "indeterminate"
+  ],
+  "properties": {
+    "accounting": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "range",
+          "status",
+          "by"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "range": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "examined",
+              "skipped",
+              "scanner-only",
+              "unexamined"
+            ]
+          },
+          "by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "scanner_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tool",
+          "version",
+          "import_sha256",
+          "paths"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "import_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "scope_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "examined_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "indeterminate": {
+      "type": "boolean"
+    }
+  }
+}

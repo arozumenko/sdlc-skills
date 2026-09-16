@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "proposal.schema.json",
+  "title": "proposal",
+  "description": "Frontmatter of <st>/proposals/<id>.proposal.md (M3, spec §9.4). Authorization is a proposed, unauthenticated record (D15).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "threat_ids",
+    "effect",
+    "target",
+    "authorization",
+    "steps"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^P-[0-9]{3}$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "threat_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "effect": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+(:[0-9]+)?$"
+        },
+        "account": {
+          "type": "string"
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approver",
+        "approval_ref",
+        "authenticated"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "proposed"
+        },
+        "approver": {
+          "type": "string"
+        },
+        "approval_ref": {
+          "type": "string"
+        },
+        "authenticated": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

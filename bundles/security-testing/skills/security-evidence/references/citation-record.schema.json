@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "citation-record.schema.json",
+  "title": "citation-record",
+  "description": "<st>/private/citations/<run>/<finding_id>.json (spec §6.5).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claimed_hmac",
+    "source_hmac",
+    "match",
+    "side",
+    "oid",
+    "redaction_version"
+  ],
+  "properties": {
+    "claimed_hmac": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_hmac": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "match": {
+      "type": "boolean"
+    },
+    "side": {
+      "type": "string",
+      "enum": [
+        "base",
+        "head",
+        "snapshot"
+      ]
+    },
+    "oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+    },
+    "redaction_version": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "packet.schema.json",
+  "title": "packet",
+  "description": "<run>/packets/<packet_sha256>.json payload (spec §6.4, P1). kind scope ⇒ subject_ids empty; kind subject ⇒ at least one subject.",
+  "$defs": {
+    "Range": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+    },
+    "File": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "side",
+        "oid",
+        "ranges",
+        "range_hmac"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head",
+            "snapshot"
+          ]
+        },
+        "oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Range"
+          }
+        },
+        "range_hmac": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "subject_ids",
+    "files",
+    "policy_sha256"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "scope",
+        "subject"
+      ]
+    },
+    "subject_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/File"
+      }
+    },
+    "policy_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {
+          "const": "scope"
+        },
+        "subject_ids": {
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "subject"
+        },
+        "subject_ids": {
+          "minItems": 1
+        }
+      }
+    }
+  ]
+}

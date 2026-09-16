@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "receipt.schema.json",
+  "title": "receipt",
+  "description": "Reviewer receipt (spec §6.4). Forbidden keys anywhere: state, verdict, id, gate, gate_stamp, states — rejected by the closed key lists and named by schema.forbiddenKeys().",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subject_id",
+        "packet_sha256",
+        "assertion",
+        "reviewer_run_id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "vulnerability-review"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "packet_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assertion": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "refuted",
+            "indeterminate"
+          ]
+        },
+        "reviewer_run_id": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subject_id",
+        "packet_sha256",
+        "assertion",
+        "reviewer_run_id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "mitigation-review"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "packet_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assertion": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "gap",
+            "indeterminate"
+          ]
+        },
+        "reviewer_run_id": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subject_id",
+        "packet_sha256",
+        "assertion",
+        "reviewer_run_id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "fix-review"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "packet_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assertion": {
+          "type": "string",
+          "enum": [
+            "not-refound",
+            "refound",
+            "indeterminate"
+          ]
+        },
+        "reviewer_run_id": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subject_id",
+        "packet_sha256",
+        "assertion",
+        "reviewer_run_id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ack"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "packet_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assertion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "indicator_id"
+          ],
+          "properties": {
+            "indicator_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "reviewer_run_id": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "import.schema.json",
+  "title": "import",
+  "description": "Ingest record <run>/ingest/<import_sha256>.json (Import), <run>/rejects.json (Rejects) and <run>/unlocated.json (Unlocated). Record.trusted is closed per adapter (TASK-016/017/018); Record.inert values are redacted strings only.",
+  "$defs": {
+    "Reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "locator"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "import_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "claims_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "Candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "reason"
+      ],
+      "properties": {
+        "locator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "import_sha256",
+            "index"
+          ],
+          "properties": {
+            "import_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "no-location",
+            "out-of-scope",
+            "unadmitted-case"
+          ]
+        },
+        "tool": {
+          "type": "string"
+        },
+        "rule_id": {
+          "type": "string"
+        }
+      }
+    },
+    "Record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "trusted",
+        "inert"
+      ],
+      "properties": {
+        "locator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "import_sha256",
+            "original_hmac",
+            "index"
+          ],
+          "properties": {
+            "import_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "original_hmac": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "trusted": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^.+$": {}
+          },
+          "$comment": "adapter-specific, closed per adapter by TASK-016/017/018"
+        },
+        "inert": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^.+$": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "Import": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "import_sha256",
+        "original_hmac",
+        "redaction_version",
+        "mapping_version",
+        "source_path",
+        "records",
+        "unlocated",
+        "rejected"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sarif",
+            "ticket",
+            "pr",
+            "doc",
+            "case",
+            "audit",
+            "qa-run",
+            "ta-report",
+            "tracker-readback"
+          ]
+        },
+        "import_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "original_hmac": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "redaction_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mapping_version": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Record"
+          }
+        },
+        "unlocated": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          }
+        },
+        "rejected": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reject"
+          }
+        }
+      }
+    },
+    "Rejects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rejected"
+      ],
+      "properties": {
+        "rejected": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reject"
+          }
+        }
+      }
+    },
+    "Unlocated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidates"
+      ],
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          }
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/Import"
+}

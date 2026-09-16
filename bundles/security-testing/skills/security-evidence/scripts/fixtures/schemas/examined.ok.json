@@ -1,0 +1,18 @@
+{
+  "packet_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "declared": [
+    {
+      "path": "src/db.js",
+      "ranges": [
+        [
+          1,
+          40
+        ],
+        [
+          41,
+          80
+        ]
+      ]
+    }
+  ]
+}

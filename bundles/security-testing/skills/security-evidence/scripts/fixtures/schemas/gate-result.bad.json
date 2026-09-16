@@ -1,0 +1,11 @@
+{
+  "accepted": [
+    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  ],
+  "unverifiable": [],
+  "rejected_counts": {
+    "agent-wrote-id": -1
+  },
+  "scope_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "claimed_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "redaction-rules.schema.json",
+  "title": "redaction-rules",
+  "description": "references/redaction-rules.json (US-003; data file owned by TASK-004).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "redaction_version",
+    "rules"
+  ],
+  "properties": {
+    "redaction_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "class",
+          "pattern",
+          "flags",
+          "replacement"
+        ],
+        "properties": {
+          "class": {
+            "type": "string",
+            "enum": [
+              "aws-key",
+              "gcp-key",
+              "azure-key",
+              "jwt",
+              "pem-block",
+              "password-assign",
+              "token-assign",
+              "secret-assign",
+              "bearer",
+              "high-entropy-assign"
+            ]
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "string"
+          },
+          "replacement": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

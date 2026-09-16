@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observations-index.schema.json",
+  "title": "observations-index",
+  "description": "<run>/observations.json (TL-14 index; written {observations: []} by run init).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observations"
+  ],
+  "properties": {
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation_id",
+          "sha256"
+        ],
+        "properties": {
+          "observation_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

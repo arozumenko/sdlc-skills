@@ -1,0 +1,20 @@
+{
+  "engagement_id": "eng-1",
+  "slug": "acme-shop",
+  "scope_paths": [
+    "src/"
+  ],
+  "product_paths": [
+    "src/"
+  ],
+  "targets": {
+    "tracker": [
+      "github.com"
+    ],
+    "browser": [],
+    "repo": "acme/shop"
+  },
+  "artifact_policy": {
+    "private": "committed"
+  }
+}

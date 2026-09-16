@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engagement.schema.json",
+  "title": "engagement",
+  "description": "The ```json engagement block of engagement.md (TL-5) and the <run>/engagement.json snapshot. artifact_policy.private is rejected by the closed key list (TL-13).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "engagement_id",
+    "slug",
+    "scope_paths",
+    "product_paths",
+    "targets"
+  ],
+  "properties": {
+    "engagement_id": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "scope_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "product_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tracker",
+        "browser",
+        "repo"
+      ],
+      "properties": {
+        "tracker": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+(:[0-9]+)?$"
+          }
+        },
+        "browser": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+(:[0-9]+)?$"
+          }
+        },
+        "repo": {
+          "type": "string"
+        }
+      }
+    },
+    "base_url": {
+      "type": "string"
+    },
+    "execute_project_tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "install": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "argv"
+          ],
+          "properties": {
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "allow_tracked_changes": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "sign_off": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_dispositions"
+      ],
+      "properties": {
+        "require_dispositions": {
+          "type": "string",
+          "enum": [
+            "all",
+            "executed-or-ticketed",
+            "none"
+          ]
+        }
+      }
+    },
+    "artifact_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "ledger": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "runs": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "receipts": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "proposals": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "handoffs": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "imports": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "register": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "reports": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        },
+        "cases": {
+          "type": "string",
+          "enum": [
+            "local",
+            "committed"
+          ]
+        }
+      }
+    }
+  }
+}

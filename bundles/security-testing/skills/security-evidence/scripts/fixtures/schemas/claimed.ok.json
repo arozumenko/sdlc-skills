@@ -1,0 +1,44 @@
+{
+  "scope_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "findings": [
+    {
+      "id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "title": "SQL built from request input",
+      "class": "injection",
+      "priority": "p1",
+      "confidence": 7,
+      "path": "src/db.js",
+      "side": "head",
+      "lines": [
+        10,
+        14
+      ],
+      "state": "CITATION_VERIFIED",
+      "occurrence": 0,
+      "source": {
+        "kind": "agent",
+        "ref": "1111111111111111111111111111111111111111111111111111111111111111",
+        "index": 0
+      },
+      "snippet": "db.query(`select * from t where id=${req.query.id}`)",
+      "cwe": "CWE-89",
+      "citations_typed": [
+        {
+          "role": "source",
+          "path": "src/routes.js",
+          "side": "head",
+          "lines": [
+            3,
+            4
+          ],
+          "context": true
+        }
+      ],
+      "requires_typed_citations": true,
+      "description": "Untrusted input reaches a SQL sink.",
+      "impact": "Read of arbitrary rows.",
+      "prerequisites": "Unauthenticated request.",
+      "remediation": "Parameterise the query."
+    }
+  ]
+}
