@@ -25,9 +25,13 @@
 // `ledger/`, `runs/` (G-10: nothing under a run is rewritten), `receipts/`
 // (G-7: no script writes there), `imports/`, `proposals/`, `handoffs/`,
 // `knowledge/` (seeded context-docs), `engagement.md` and
-// `threat-model.json` (operator-owned committed files). A path naming an
-// existing directory is refused too. Anything else is 2 USAGE and nothing is
-// written; `..` segments are normalised before every check.
+// `threat-model.json` (operator-owned committed files). The comparison is
+// case-insensitive: the guard is lexical but the write lands on a file system,
+// and on a case-insensitive one (APFS, NTFS) `REGISTER/events.jsonl` IS
+// `register/events.jsonl` — so `Register/` is refused on ext4 too (fail-closed
+// on every platform). A path naming an existing directory is refused too.
+// Anything else is 2 USAGE and nothing is written; `..` segments are
+// normalised before every check.
 //
 // stdout: `RENDER <repo-relative path> rows=<n> seq=<n>` (tokens.rendered; not
 // an enveloped artifact, so not WROTE). Exit 0; 2 usage / ENGAGEMENT-MISSING;
@@ -55,8 +59,9 @@ const WRITABLE_TEXT = ".agents/security-testing/, .agents/memory/<role>/, report
 // TL-13 private/, the register chain, the ledger, the operator-owned committed files and
 // the seeded knowledge/ context-docs): a view written there replaces a record with prose.
 // The bare directory name is reserved as well, so a file can never squat where the
-// directory is created later.
-const RESERVED_ST = /^\.agents\/security-testing\/(?:(?:register|private|ledger|runs|receipts|imports|proposals|handoffs|knowledge)(?:\/|$)|engagement\.md$|threat-model\.json$)/;
+// directory is created later. Case-insensitive (`i`): a case-insensitive file system
+// folds `REGISTER/` onto `register/`, so the lexical guard must fold too.
+const RESERVED_ST = /^\.agents\/security-testing\/(?:(?:register|private|ledger|runs|receipts|imports|proposals|handoffs|knowledge)(?:\/|$)|engagement\.md$|threat-model\.json$)/i;
 const RESERVED_TEXT = "register/, private/, ledger/, runs/, receipts/, imports/, proposals/, handoffs/, knowledge/, engagement.md, threat-model.json";
 
 const toPosix = (p) => (sep === "/" ? p : p.split(sep).join("/"));

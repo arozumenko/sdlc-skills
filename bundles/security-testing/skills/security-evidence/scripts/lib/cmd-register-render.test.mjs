@@ -107,7 +107,7 @@ test("--out: a path under <st>/ (cwd-relative) is honoured; outside G-5's writab
   assert.match(positional.stdout, /^USAGE\(render: unexpected argument extra\)/);
 });
 
-test("--out must never point into the bundle's own state under <st>/: the reserved set is 2 USAGE, nothing is rewritten, the register stays readable", async () => {
+test("--out must never point into the bundle's own state under <st>/: the reserved set (case-insensitive) is 2 USAGE, nothing is rewritten, the register stays readable", async () => {
   const repo = await seeded();
   const st = stDir(repo);
   // Plant the files the reserved set protects that seeding does not create, so
@@ -146,6 +146,16 @@ test("--out must never point into the bundle's own state under <st>/: the reserv
     "receipts/new.md", // a fresh file under a reserved directory is refused too
     "private/snapshots/x.md",
     "runs/0123456789ab-0002/anything.md",
+    // Case variants: on a case-insensitive file system (APFS, NTFS) these ARE the
+    // reserved paths, so the lexical guard folds case — refused on ext4 as well.
+    "REGISTER/events.jsonl",
+    "Register/projection.json",
+    "Private/keys/current",
+    "RUNS/0123456789ab-0001/report.md",
+    "Engagement.md",
+    "Threat-Model.json",
+    "KNOWLEDGE/finding-schema.md",
+    "Receipts",
   ];
   const snapshot = (rel) => {
     const path = join(st, rel);
