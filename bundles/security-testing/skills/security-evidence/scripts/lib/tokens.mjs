@@ -400,3 +400,20 @@ export function rendered({ relPath, rows, seq }) {
   if (!Number.isInteger(seq) || seq < 0) throw new TypeError(`rendered: seq must be a non-negative integer, got ${String(seq)}`);
   return `RENDER ${relPath} rows=${rows} seq=${seq}`;
 }
+
+// --- citations (TASK-014; spec §6.2 range rule / v3 §6.1, plan §5 TASK-014) ------
+// `cite.checkRange` reasons. Not stdout tokens: `gate` records them as
+// `rejects.json` reasons and `gate-result.rejected_counts` keys and the report
+// displays them — spelled once here (G-13). The plan names RANGE-NOT-ADMITTED;
+// the other four are TASK-014's spellings (recorded in the plan's PM log).
+
+/** `lines` is not `[start, end]` of integers with 1 ≤ start ≤ end. */
+export const RANGE_INVALID = "RANGE-INVALID";
+/** `end - start + 1 > 40` (spec §6.2). */
+export const RANGE_TOO_LONG = "RANGE-TOO-LONG";
+/** The cited path is not a `scope.files[]` entry (skipped, or never listed). */
+export const PATH_NOT_IN_SCOPE = "PATH-NOT-IN-SCOPE";
+/** A `head` citation of a `snapshot`-side scope file or vice versa (`base` is exempt: its bytes are never a scope file). */
+export const SIDE_MISMATCH = "SIDE-MISMATCH";
+/** A primary range that lies inside no single admitted range of its file (spec §6.2). */
+export const RANGE_NOT_ADMITTED = "RANGE-NOT-ADMITTED";

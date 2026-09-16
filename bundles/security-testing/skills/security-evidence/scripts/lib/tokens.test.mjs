@@ -205,6 +205,14 @@ test("rendered: `RENDER <repo-relative path> rows=<n> seq=<n>` (TASK-059)", () =
   assert.throws(() => tokens.rendered({ relPath: "x.md", rows: 1.5, seq: 1 }), /rows/);
 });
 
+test("citation reasons (TASK-014): the five checkRange spellings", () => {
+  assert.equal(tokens.RANGE_INVALID, "RANGE-INVALID");
+  assert.equal(tokens.RANGE_TOO_LONG, "RANGE-TOO-LONG");
+  assert.equal(tokens.PATH_NOT_IN_SCOPE, "PATH-NOT-IN-SCOPE");
+  assert.equal(tokens.SIDE_MISMATCH, "SIDE-MISMATCH");
+  assert.equal(tokens.RANGE_NOT_ADMITTED, "RANGE-NOT-ADMITTED");
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
