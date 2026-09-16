@@ -48,7 +48,7 @@ const COMMANDS = {
   publish: () => import("./lib/cmd-publish.mjs"), // TASK-031 (redacted-report | full-report | tracker; handoff | case are TASK-043)
   "check-export": () => import("./lib/cmd-check-export.mjs"), // TASK-031
   purge: () => import("./lib/cmd-purge.mjs"), // TASK-032
-  // "sign-off": () => import("./lib/cmd-sign-off.mjs"),     // TASK-033
+  "sign-off": () => import("./lib/cmd-sign-off.mjs"), // TASK-033
 };
 
 process.exitCode = await main({ name: "evidence", usage: USAGE, commands: COMMANDS }, process.argv.slice(2));
