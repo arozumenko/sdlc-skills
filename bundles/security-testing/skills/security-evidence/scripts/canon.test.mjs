@@ -434,6 +434,34 @@ test("writeArtifact replaces an existing file atomically (tmp+rename) and create
   assert.deepEqual(readdirSync(join(dir, "nested", "deeper")), ["a.json"]);
 });
 
+test("writeArtifact {exclusive: true}: write-once — a second write fails EEXIST atomically, leaves the first bytes and no tmp file", () => {
+  const dir = tmp();
+  const path = join(dir, "run.json");
+  const first = writeArtifact(path, makeEnvelope({ ...HEAD, kind: "run" }, { seq: 1 }), { exclusive: true });
+  const bytes = readFileSync(path);
+  assert.throws(
+    () => writeArtifact(path, makeEnvelope({ ...HEAD, kind: "run" }, { seq: 2 }), { exclusive: true }),
+    (e) => e.code === "EEXIST",
+  );
+  assert.deepEqual(readFileSync(path), bytes, "first write untouched");
+  assert.equal(readArtifact(path).payload.seq, 1);
+  assert.equal(readArtifact(path).envelope.self_sha256, first.envelope.self_sha256);
+  assert.deepEqual(readdirSync(dir), ["run.json"], "no tmp file left behind");
+  // the non-exclusive default still replaces
+  writeArtifact(path, makeEnvelope({ ...HEAD, kind: "run" }, { seq: 3 }));
+  assert.equal(readArtifact(path).payload.seq, 3);
+  // exclusive + prered compose
+  const p2 = join(dir, "import.json");
+  writeArtifact(p2, makeEnvelope({ ...HEAD, kind: "import" }, { note: "password=1234 handled" }), { exclusive: true, prered: true });
+  assert.match(readFileSync(p2, "utf8"), /password=1234/);
+});
+
+test("writeArtifact {exclusive: true} uses link+unlink (EEXIST from the kernel), not a racy existsSync check", () => {
+  const src = readFileSync(MODULE, "utf8");
+  assert.match(src, /linkSync\(/);
+  assert.doesNotMatch(src, /existsSync\(/);
+});
+
 test("readArtifact throws IntegrityError on tampered payload", () => {
   const dir = tmp();
   const path = join(dir, "gate-result.json");
