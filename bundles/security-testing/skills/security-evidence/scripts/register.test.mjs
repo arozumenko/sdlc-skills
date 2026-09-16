@@ -36,3 +36,16 @@ test("the entry script is a thin dispatcher and never spells the forbidden verb"
   assert.doesNotMatch(src, /child_process|node:fs\b/);
   assert.doesNotMatch(src, /confirm/i, "G-8");
 });
+
+test("TASK-028 commands are registered: add, replay, status, anchor route to their lib/cmd-register-*.mjs modules", () => {
+  const src = readFileSync(join(SCRIPTS_DIR, "register.mjs"), "utf8");
+  for (const cmd of ["add", "replay", "status", "anchor"]) {
+    assert.match(src, new RegExp(`^\\s*${cmd}: \\(\\) => import\\("\\./lib/cmd-register-${cmd}\\.mjs"\\),`, "m"), cmd);
+  }
+});
+
+test("a registered command outside a git work tree ⇒ exit 2 NOT-A-WORK-TREE", async () => {
+  const r = await runScript("register", ["status"], { cwd: tmpDir() });
+  assert.equal(r.code, 2);
+  assert.equal(r.stdout, "NOT-A-WORK-TREE\n");
+});

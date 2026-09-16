@@ -14,6 +14,7 @@ export const EDIT_ENGAGEMENT_AND_RERUN = "EDIT-ENGAGEMENT-AND-RERUN"; // §6.9 s
 export const ENGAGEMENT_MISSING = "ENGAGEMENT-MISSING"; // §4.1 run init / engagement baseline
 export const POLICY_INVALID_PRIVATE = "POLICY-INVALID(private)"; // TL-13
 export const RUN_COMMITTED = "RUN-COMMITTED"; // G-10: run snapshot refuses a COMMITTED run
+export const EQUIVALENCE_REQUIRED = "EQUIVALENCE-REQUIRED"; // §4.3 supersede with neither --subject-equivalent nor --transfer-exposure (thrown by TASK-029)
 
 // --- exit-3 class -----------------------------------------------------------
 export const DIRTY_TREE = "DIRTY-TREE"; // D18 / P6
@@ -23,6 +24,11 @@ export const NO_ASSESSMENT = "NO-ASSESSMENT"; // §7 sign-off
 
 // --- exit-5 class -----------------------------------------------------------
 export const CORRUPT = "CORRUPT"; // §6.8 register recovery
+export const ANCHOR_TRUNCATED = "TRUNCATED"; // §6.8 anchor verify: the log is shorter than the anchored seq
+export const ANCHOR_DIVERGED = "DIVERGED"; // §6.8 anchor verify: not the anchored state (rewritten, or advanced past the anchor)
+
+// --- exit-0 results ---------------------------------------------------------
+export const ANCHOR_MATCH = "MATCH"; // §6.8 anchor verify: exactly the anchored state
 
 // --- markers ----------------------------------------------------------------
 export const COMMITTED = "COMMITTED"; // build-report's last line and the run marker file name
@@ -64,6 +70,9 @@ export function keyLine(key_id, status) {
   if (!KEY_STATUSES.includes(status)) throw new TypeError(`keyLine: status must be created|reused|rotated, got ${String(status)}`);
   return `KEY: ${key_id} ${status}`;
 }
+// --- register vocabulary (plan §4.3 row fields) ------------------------------
+export const REGISTER_STATUSES = Object.freeze(["open", "accepted", "fixed", "regressed", "false-positive", "superseded"]);
+export const REGISTER_PRIORITIES = Object.freeze(["p0", "p1", "p2", "p3"]);
 
 /** `INCOMPLETE(<name>)` — exit 3 (required input missing). */
 export const incomplete = (name) => `INCOMPLETE(${name})`;
@@ -120,6 +129,74 @@ export function verdictLine({ verdict, finding, base, head, tested_tree, verify 
   if (tested_tree !== "same-as-head" && !SHA256.test(tested_tree)) throw new TypeError("verdictLine: tested_tree must be an hmac or same-as-head");
   if (!SHA256.test(verify)) throw new TypeError("verdictLine: verify must be a sha256");
   return `VERDICT ${verdict} finding=${finding} base=${base} head=${head} tested_tree=${tested_tree} verify=${verify}`;
+}
+
+// --- register (TASK-028; plan §4.3) -------------------------------------------
+
+const ROW_ID = /^R-[0-9]{4}$/;
+
+function requireRepoRelative(where, relPath) {
+  if (typeof relPath !== "string" || relPath.length === 0 || relPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(relPath) || relPath === ".." || relPath.startsWith("../")) {
+    throw new TypeError(`${where}: path must be repo-relative, got ${String(relPath)}`);
+  }
+}
+
+function byPriority(where, counts) {
+  if (counts === null || typeof counts !== "object") throw new TypeError(`${where}: counts must be an object`);
+  return REGISTER_PRIORITIES.map((p) => {
+    if (!Number.isInteger(counts[p]) || counts[p] < 0) throw new TypeError(`${where}: ${p} must be a non-negative integer`);
+    return `${p}=${counts[p]}`;
+  }).join(" ");
+}
+
+/** `TRANSITION-REJECTED(<event>: <from>)` — exit 4 (§4.3: an (event, from) pair outside the table). */
+export const transitionRejected = (event, from) => `TRANSITION-REJECTED(${event}: ${from})`;
+
+/** `ROW <R-id> status=<status> priority=<priority> seq=<n>` — the result of a register verb that changed a row. */
+export function row({ id, status, priority, seq }) {
+  if (!ROW_ID.test(id)) throw new TypeError(`row: id must be R-nnnn, got ${String(id)}`);
+  if (!REGISTER_STATUSES.includes(status)) throw new TypeError(`row: status ${String(status)} is outside the closed vocabulary`);
+  if (!REGISTER_PRIORITIES.includes(priority)) throw new TypeError(`row: priority ${String(priority)} is outside the closed vocabulary`);
+  if (!Number.isInteger(seq) || seq < 1) throw new TypeError(`row: seq must be a positive integer, got ${String(seq)}`);
+  return `ROW ${id} status=${status} priority=${priority} seq=${seq}`;
+}
+
+/** `REPLAY seq=<n> rows=<n> chain=<sha256>` — `register.mjs replay`. */
+export function replayed({ seq, rows, chain_sha256 }) {
+  if (!Number.isInteger(seq) || seq < 0) throw new TypeError(`replayed: seq must be a non-negative integer, got ${String(seq)}`);
+  if (!Number.isInteger(rows) || rows < 0) throw new TypeError(`replayed: rows must be a non-negative integer, got ${String(rows)}`);
+  if (!SHA256.test(chain_sha256)) throw new TypeError(`replayed: chain must be 64 lowercase hex chars, got ${String(chain_sha256)}`);
+  return `REPLAY seq=${seq} rows=${rows} chain=${chain_sha256}`;
+}
+
+/** `PROJECTION <repo-relative path>` — `register.mjs replay --write` persisted the projection (not an enveloped artifact, so not `WROTE`). */
+export function projection(relPath) {
+  requireRepoRelative("projection", relPath);
+  return `PROJECTION ${relPath}`;
+}
+
+/** `STATUS rows=<n> seq=<n>` — first line of `register.mjs status`. */
+export function statusLine({ rows, seq }) {
+  if (!Number.isInteger(rows) || rows < 0) throw new TypeError(`statusLine: rows must be a non-negative integer, got ${String(rows)}`);
+  if (!Number.isInteger(seq) || seq < 0) throw new TypeError(`statusLine: seq must be a non-negative integer, got ${String(seq)}`);
+  return `STATUS rows=${rows} seq=${seq}`;
+}
+
+/** `OPEN-EXPOSURE p0=<n> p1=<n> p2=<n> p3=<n>` — open + regressed rows by priority; no approval ever reduces it (G-8). */
+export function openExposure(counts) {
+  return `OPEN-EXPOSURE ${byPriority("openExposure", counts)}`;
+}
+
+/** `APPROVALS unauthenticated=<n>` — the one bucket every approval-like record lands in (D15). */
+export function approvals(n) {
+  if (!Number.isInteger(n) || n < 0) throw new TypeError(`approvals: n must be a non-negative integer, got ${String(n)}`);
+  return `APPROVALS unauthenticated=${n}`;
+}
+
+/** `COUNT <status> p0=<n> p1=<n> p2=<n> p3=<n>` — one per status, in REGISTER_STATUSES order. */
+export function count(status, counts) {
+  if (!REGISTER_STATUSES.includes(status)) throw new TypeError(`count: status ${String(status)} is outside the closed vocabulary`);
+  return `COUNT ${status} ${byPriority("count", counts)}`;
 }
 
 /** G-13: strings that must never appear under scripts/ (grep-guarded by tokens.test.mjs). */
