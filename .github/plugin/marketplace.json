@@ -204,6 +204,24 @@
       "version": "0.2.0"
     },
     {
+      "name": "secure-code-review",
+      "source": "./bundles/security-testing/skills/secure-code-review",
+      "description": "Use when reviewing code for security defects against a packet from the security-testing bundle — the `review` contract (claims over a scope packet) or a `vulnerability-review`, `mitigation-review` or `fix-review` (an assertion over a subject packet) — or when running the two-skill standalone review by hand. Investigate-then-refute loop, the fifteen-class taxonomy with CWE anchors, refutation criteria, a do-not-flag list, typed source/sink/control citations for data-flow classes, and the closed assertion vocabulary; every claim is re-checkable by `evidence.mjs gate`.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-engagement",
+      "source": "./bundles/security-testing/skills/security-engagement",
+      "description": "Use when leading a security engagement with the security-testing bundle — starting one on a repository, deciding whether to proceed or stand down, running an assessment or a review over a scope, verifying a fix, signing off, filing findings to the tracker, or choosing what a published report or ticket may reveal. The lead's standing skill; the commands it names live in the security-evidence skill installed next to it.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-evidence",
+      "source": "./bundles/security-testing/skills/security-evidence",
+      "description": "Use when running any command of the security-testing bundle — starting an engagement, allocating a run, scoping, building a packet, ingesting a SARIF file or a ticket, gating claims, accounting coverage, admitting receipts, building or re-checking a report, verifying a fix, working the residual-risk register, publishing a redacted report or a tracker payload, signing off, purging — or when a schema, a template or a result token's exact spelling is needed. Every script and every schema of the bundle lives here; the other security skills are prose that name these commands.",
+      "version": "0.2.0"
+    },
+    {
       "name": "seeding-a-project",
       "source": "./bundles/feature-development/skills/seeding-a-project",
       "description": "Use when the user asks to 'seed the project', 'onboard this repo', 'generate project config', 'create AGENTS.md', or after the scout has explored the codebase. Generates AGENTS.md and .agents/ configuration files for a new project.",
