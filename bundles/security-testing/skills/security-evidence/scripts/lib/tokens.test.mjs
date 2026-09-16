@@ -110,6 +110,14 @@ test("G-13: the forbidden strings never appear under scripts/ (fixtures and test
   assert.deepEqual(offenders, []);
 });
 
+test("baselineLine: `BASELINE: <n> files ignored=<n>` (TASK-010)", () => {
+  assert.equal(tokens.baselineLine({ files: 12, ignored: 3 }), "BASELINE: 12 files ignored=3");
+  assert.equal(tokens.baselineLine({ files: 0, ignored: 0 }), "BASELINE: 0 files ignored=0");
+  assert.throws(() => tokens.baselineLine({ files: -1, ignored: 0 }), /files/);
+  assert.throws(() => tokens.baselineLine({ files: 1, ignored: 1.5 }), /ignored/);
+  assert.throws(() => tokens.baselineLine({ files: "1", ignored: 0 }), /files/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;

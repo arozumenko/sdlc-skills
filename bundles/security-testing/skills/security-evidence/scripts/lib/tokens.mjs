@@ -201,3 +201,21 @@ export function count(status, counts) {
 
 /** G-13: strings that must never appear under scripts/ (grep-guarded by tokens.test.mjs). */
 export const FORBIDDEN_STRINGS = Object.freeze(["UNGATED", "exact checkout"]);
+
+// --- baseline (TASK-010; spec §6.9 step 4, plan §4.1 engagement init / baseline) ---
+
+function requireCount(where, name, n) {
+  if (!Number.isInteger(n) || n < 0) throw new TypeError(`${where}: ${name} must be a non-negative integer, got ${String(n)}`);
+  return n;
+}
+
+/**
+ * `BASELINE: <n> files ignored=<n>` — `engagement init` step 4 and
+ * `engagement baseline`: observed files (tracked + non-ignored untracked under
+ * scope_paths ∪ product_paths) and the summed per-path count of ignored files
+ * left outside the observation (§2 last row: the excluded coverage is visible).
+ * `files` is always the literal word, so the line parses the same for 1.
+ */
+export function baselineLine({ files, ignored }) {
+  return `BASELINE: ${requireCount("baselineLine", "files", files)} files ignored=${requireCount("baselineLine", "ignored", ignored)}`;
+}
