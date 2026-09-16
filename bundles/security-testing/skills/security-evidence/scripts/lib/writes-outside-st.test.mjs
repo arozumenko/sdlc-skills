@@ -49,6 +49,7 @@ const KNOWN_WRITERS = Object.freeze([
   "lib/cmd-run-snapshot.mjs",
   "lib/cmd-run.mjs",
   "lib/cmd-scope.mjs",
+  "lib/cmd-verify-all.mjs",
   "lib/ctx.mjs",
   "lib/fsx.mjs",
   "lib/imports.mjs",
