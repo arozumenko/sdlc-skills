@@ -62,7 +62,7 @@ export const KEY_AVAILABLE = "KEY: available"; // engagement validate, check
 export const KEY_UNAVAILABLE = "KEY: unavailable"; // the recorded key_id has no file ⇒ STRUCTURE-ONLY
 
 const KEY_STATUSES = Object.freeze(["created", "reused", "rotated"]);
-/** `k` + 12 hex chars (TL-9). The one copy keys.mjs re-exports as KEY_ID_PATTERN; ctx.mjs still carries its own (TASK-008 to fold). */
+/** `k` + 12 hex chars (TL-9). The one copy: keys.mjs re-exports it as KEY_ID_PATTERN and ctx.mjs imports it (folded in TASK-008). */
 export const KEY_ID = /^k[0-9a-f]{12}$/;
 /** `KEY: <key_id> created|reused|rotated` — engagement init step 3, from keys.ensureKey's `{key_id, status}`. */
 export function keyLine(key_id, status) {
@@ -253,4 +253,33 @@ export function aliased({ from_id, to_id, seq }) {
 export function checked(expired) {
   if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
   return `CHECK expired=${expired}`;
+}
+
+// --- engagement init / validate (TASK-008; spec §6.9 steps 0–4, plan §4.1 rows `engagement init|validate`) ---
+
+/** Step 0's second line when engagement.md was already there (the other case is ENGAGEMENT_TEMPLATE_WRITTEN). */
+export const ENGAGEMENT_PRESENT = "ENGAGEMENT: present";
+/** Step 1: the managed block was written (created, or re-rendered after a policy change / hand edit). */
+export const IGNORE_BLOCK_WRITTEN = "IGNORE-BLOCK: written";
+/** Step 1: the .gitignore already held exactly the block `artifact_policy` renders. */
+export const IGNORE_BLOCK_UNCHANGED = "IGNORE-BLOCK: unchanged";
+/** validate: the .gitignore holds exactly the block the policy renders (init would print `unchanged`). */
+export const IGNORE_BLOCK_OK = "IGNORE-BLOCK: ok";
+/** validate: init would rewrite the block — hand-edited, policy changed, or the file is gone (the deleted-file shape). */
+export const IGNORE_BLOCK_STALE = "IGNORE-BLOCK: stale";
+/** validate: `git ls-files` lists nothing under any active managed path. */
+export const TRACKED_NONE = "TRACKED: none";
+/** validate: the baseline file for this engagement exists and verifies. */
+export const BASELINE_PRESENT = "BASELINE: present";
+/** validate: no baseline file for this engagement. */
+export const BASELINE_ABSENT = "BASELINE: absent";
+/** `TRACKED(<path>)` — exit 4 (step 2): a tracked file under a managed path; `path` is repo-relative. */
+export function tracked(relPath) {
+  requireRepoRelative("tracked", relPath);
+  return `TRACKED(${relPath})`;
+}
+/** `NOT-IGNORED(<pattern>)` — exit 4 (step 2): `git check-ignore` refused the pattern's probe file; names the pattern. */
+export function notIgnored(pattern) {
+  if (typeof pattern !== "string" || pattern.length === 0 || pattern.includes("\n")) throw new TypeError(`notIgnored: pattern must be a non-empty single line, got ${String(pattern)}`);
+  return `NOT-IGNORED(${pattern})`;
 }
