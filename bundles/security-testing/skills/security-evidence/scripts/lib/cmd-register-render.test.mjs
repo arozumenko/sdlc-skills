@@ -3,7 +3,7 @@
 // redacted (G-4), byte-deterministic for a given projection.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "../canon.mjs";
 import { SCRIPTS_DIR, cleanupAll, initRepo, runScript } from "../fixtures/cli/harness.mjs";
@@ -78,24 +78,98 @@ test("--out: a path under <st>/ (cwd-relative) is honoured; outside G-5's writab
   assert.ok(existsSync(join(stDir(repo), "from-sub.md")), "a relative --out resolves against the invocation cwd");
 
   const readme = readFileSync(join(repo, "README.md"), "utf8");
-  for (const out of ["README.md", "src/register.md", "docs/risk-register.md", ".agents/notes.md", "tasks/other/register.md"]) {
+  for (const out of ["README.md", "src/register.md", "docs/risk-register.md", ".agents/notes.md", ".agents/memory/x.md", "tasks/other/register.md", ".agents/security-testing"]) {
     const bad = await register(repo, ["render", "--out", out]);
     assert.equal(bad.code, 2, out);
     assert.match(bad.stdout, /^USAGE\(render: --out must be under /);
     if (out === "README.md") assert.equal(readFileSync(join(repo, out), "utf8"), readme, "a tracked file outside the prefixes is untouched");
+    else if (out === ".agents/security-testing") assert.ok(statSync(join(repo, out)).isDirectory(), "<st> itself is not a writable target and stays a directory");
     else assert.ok(!existsSync(join(repo, out)), `${out} was not written`);
   }
   const tasks = await register(repo, ["render", "--out", "tasks/security-web-admitted/register.md"]);
   assert.equal(tasks.code, 0, tasks.stdout + tasks.stderr);
   assert.ok(existsSync(join(repo, "tasks", "security-web-admitted", "register.md")));
+  const memory = await register(repo, ["render", "--out", ".agents/memory/security-lead/register.md"]);
+  assert.equal(memory.code, 0, memory.stdout + memory.stderr);
+  assert.ok(existsSync(join(repo, ".agents", "memory", "security-lead", "register.md")), ".agents/memory/<role>/ is writable");
   const outside = await register(repo, ["render", "--out", "../outside.md"]);
   assert.equal(outside.code, 2);
   assert.match(outside.stdout, /^USAGE\(render: cannot write /);
   assert.ok(!existsSync(join(repo, "..", "outside.md")));
 
+  const dir = await register(repo, ["render", "--out", ".agents/security-testing/views"]);
+  assert.equal(dir.code, 2, dir.stdout + dir.stderr);
+  assert.match(dir.stdout, /^USAGE\(render: --out names a directory, got \.agents\/security-testing\/views\)/);
+  assert.ok(statSync(join(stDir(repo), "views")).isDirectory(), "the directory is untouched");
+
   const positional = await register(repo, ["render", "extra"]);
   assert.equal(positional.code, 2);
   assert.match(positional.stdout, /^USAGE\(render: unexpected argument extra\)/);
+});
+
+test("--out must never point into the bundle's own state under <st>/: the reserved set is 2 USAGE, nothing is rewritten, the register stays readable", async () => {
+  const repo = await seeded();
+  const st = stDir(repo);
+  // Plant the files the reserved set protects that seeding does not create, so
+  // each case checks "byte-identical after" rather than merely "still absent".
+  const planted = {
+    "runs/0123456789ab-0001/report.md": "# run report\n",
+    "receipts/claims-1.json": "{\"receipt\":true}\n",
+    "knowledge/finding-schema.md": "# finding schema\n",
+    "private/keys/current": "key-0001\n",
+    "ledger/index.jsonl": "{\"run\":1}\n",
+    "imports/i-1.json": "{}\n",
+    "proposals/p-1.json": "{}\n",
+    "handoffs/h-1.md": "# handoff\n",
+    "threat-model.json": "{\"threats\":[]}\n",
+  };
+  for (const [rel, body] of Object.entries(planted)) {
+    mkdirSync(join(st, rel, ".."), { recursive: true });
+    writeFileSync(join(st, rel), body);
+  }
+  const reserved = [
+    "register/events.jsonl",
+    "register/projection.json",
+    "register/finding-alias.jsonl",
+    "private/keys/current",
+    "engagement.md",
+    "runs/0123456789ab-0001/report.md",
+    "receipts/claims-1.json",
+    "knowledge/finding-schema.md",
+    "threat-model.json",
+    "ledger/index.jsonl",
+    "imports/i-1.json",
+    "proposals/p-1.json",
+    "handoffs/h-1.md",
+    "views/../register/events.jsonl", // `..` is normalised before the check
+    "register", // the bare directory name: a file must never squat where the directory goes
+    "receipts/new.md", // a fresh file under a reserved directory is refused too
+    "private/snapshots/x.md",
+    "runs/0123456789ab-0002/anything.md",
+  ];
+  const snapshot = (rel) => {
+    const path = join(st, rel);
+    if (!existsSync(path)) return null;
+    return statSync(path).isDirectory() ? "directory" : readFileSync(path);
+  };
+  const before = new Map(reserved.map((rel) => [rel, snapshot(rel)]));
+  for (const rel of reserved) {
+    for (const spelled of [`.agents/security-testing/${rel}`, join(st, rel)]) {
+      const r = await register(repo, ["render", "--out", spelled]);
+      assert.equal(r.code, 2, `${spelled}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, /^USAGE\(render: --out must not point into the bundle's own state \(register\/, private\/, ledger\/, runs\/, receipts\/, imports\/, proposals\/, handoffs\/, knowledge\/, engagement\.md, threat-model\.json\), got /, spelled);
+      const was = before.get(rel);
+      if (was === null) assert.ok(!existsSync(join(st, rel)), `${spelled} was not created`);
+      else if (was === "directory") assert.ok(statSync(join(st, rel)).isDirectory(), `${spelled} is still a directory`);
+      else assert.deepEqual(readFileSync(join(st, rel)), was, `${spelled} is byte-identical`);
+    }
+  }
+  assert.ok(!existsSync(join(st, "risk-register.md")), "no default view was written either");
+  const status = await register(repo, ["status"]);
+  assert.equal(status.code, 0, `the register is still readable: ${status.stdout}${status.stderr}`);
+  const view = await register(repo, ["render"]);
+  assert.equal(view.code, 0, view.stdout + view.stderr);
+  assert.equal(view.stdout, `RENDER ${REL} rows=1 seq=1\n`);
 });
 
 test("render runs the recovery rule: a projection ahead of the log ⇒ 5 CORRUPT and no view is written", async () => {

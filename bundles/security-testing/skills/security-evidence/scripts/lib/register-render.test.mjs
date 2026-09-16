@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { redactString } from "../redact.mjs";
 import { emptyRow } from "./register-transitions.mjs";
 import { anchor, summarize } from "./register-fold.mjs";
 import { COLUMNS, UNAUTHENTICATED_SENTENCE, renderRegister } from "./register-render.mjs";
@@ -157,4 +158,32 @@ test("pure module (no fs import): register-render.mjs imports nothing from node:
   for (const banned of ["node:fs", "node:child_process", "git.mjs", "fs/promises", "child_process", "Date.now", "new Date", "Math.random", "process."]) {
     assert.ok(!SELF.includes(banned), `register-render.mjs must not reference ${banned}`);
   }
+});
+
+test("a redaction hit inside a title never changes the line count or a row's column count (cell() keeps every rule inside one cell)", () => {
+  // Hostile titles: the *-assign rules, a bearer token, an AWS key id, a
+  // high-entropy assignment and a title that is mostly a pipe/newline soup.
+  // (A bare `-----BEGIN … PRIVATE KEY-----` with no END line is deliberately
+  // not here: redact.mjs fails safe by redacting to end-of-document, by design.)
+  const hostile = [
+    "Leaked password=1234 in config",
+    'secret: "hunter2hunter2" in env | and a pipe',
+    "token=abcdef0123456789abcdef0123456789abcdef01\nsecond line",
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnopqrstuvwxyz",
+    "AKIAIOSFODNN7EXAMPLE leaked in build log",
+    "signature=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  ];
+  const p = fixture();
+  const ids = Object.keys(p.rows);
+  hostile.forEach((title, i) => {
+    p.rows[ids[i]].title = title;
+  });
+  const md = renderRegister(p);
+  const red = redactString(md).text;
+  assert.notEqual(red, md, "at least one rule fired on the hostile fixture");
+  assert.ok(!red.includes("password=1234") && !red.includes("hunter2hunter2") && !red.includes("AKIAIOSFODNN7EXAMPLE"), red);
+  assert.equal(red.split("\n").length, md.split("\n").length, "redaction never changes the line count");
+  const rows = (text) => text.split("\n").filter((l) => /^\| R-\d{4} \|/.test(l));
+  assert.deepEqual(rows(red).map((l) => l.split(" | ").length), rows(md).map((l) => l.split(" | ").length), "every table row keeps its column count");
+  assert.equal(rows(red).length, rows(md).length);
 });

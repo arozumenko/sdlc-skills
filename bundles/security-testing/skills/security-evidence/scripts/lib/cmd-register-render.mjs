@@ -18,14 +18,22 @@
 // `--out` is a user-typed path: resolved against the invocation cwd like
 // every other CLI argument, required to lie inside the work tree, and — G-5:
 // only `publish --to` writes outside the bundle's own paths — under one of
-// `.agents/security-testing/`, `.agents/memory/`, `reports/security/` or
-// `tasks/security-*/`. Anything else is 2 USAGE and nothing is written.
+// `.agents/security-testing/`, `.agents/memory/<role>/`, `reports/security/`
+// or `tasks/security-*/`. Under `<st>/` the bundle's own state is a reserved
+// set the view may never replace: `register/` (the hash-chained log, the
+// projection, the alias log), `private/` (TL-13: keys, snapshots),
+// `ledger/`, `runs/` (G-10: nothing under a run is rewritten), `receipts/`
+// (G-7: no script writes there), `imports/`, `proposals/`, `handoffs/`,
+// `knowledge/` (seeded context-docs), `engagement.md` and
+// `threat-model.json` (operator-owned committed files). A path naming an
+// existing directory is refused too. Anything else is 2 USAGE and nothing is
+// written; `..` segments are normalised before every check.
 //
 // stdout: `RENDER <repo-relative path> rows=<n> seq=<n>` (tokens.rendered; not
 // an enveloped artifact, so not WROTE). Exit 0; 2 usage / ENGAGEMENT-MISSING;
 // 5 CORRUPT.
 
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { redactString } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
@@ -38,18 +46,33 @@ import { rendered } from "./tokens.mjs";
 const COMMAND = "render";
 export const DEFAULT_OUT = "risk-register.md"; // under <st>/
 
-// Repo-relative prefixes a script may write under (G-5); the tasks/security-<slug>/ shape is a glob.
-const WRITABLE = Object.freeze([".agents/security-testing/", ".agents/memory/", "reports/security/"]);
-const WRITABLE_GLOB = /^tasks\/security-[^/]+\//;
+// Repo-relative prefixes a script may write under (G-5); .agents/memory/<role>/ and tasks/security-<slug>/ are globs.
+const WRITABLE = Object.freeze([".agents/security-testing/", "reports/security/"]);
+const WRITABLE_GLOBS = Object.freeze([/^\.agents\/memory\/[^/]+\//, /^tasks\/security-[^/]+\//]);
 const WRITABLE_TEXT = ".agents/security-testing/, .agents/memory/<role>/, reports/security/ or tasks/security-*/";
 
+// Under <st>/ the bundle's own state is never a render target (G-7 receipts/, G-10 runs/,
+// TL-13 private/, the register chain, the ledger, the operator-owned committed files and
+// the seeded knowledge/ context-docs): a view written there replaces a record with prose.
+// The bare directory name is reserved as well, so a file can never squat where the
+// directory is created later.
+const RESERVED_ST = /^\.agents\/security-testing\/(?:(?:register|private|ledger|runs|receipts|imports|proposals|handoffs|knowledge)(?:\/|$)|engagement\.md$|threat-model\.json$)/;
+const RESERVED_TEXT = "register/, private/, ledger/, runs/, receipts/, imports/, proposals/, handoffs/, knowledge/, engagement.md, threat-model.json";
+
 const toPosix = (p) => (sep === "/" ? p : p.split(sep).join("/"));
+const isDirectory = (p) => {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false; // absent is fine: writeAtomic creates the parent
+  }
+};
 
 /**
  * Resolve `--out` against the invocation cwd and check it against the work
- * tree and the G-5 prefixes. Prose leads the message and the path follows
- * (a token whose value starts with a long absolute path reads as
- * high-entropy to redact.mjs).
+ * tree, the G-5 prefixes and the reserved set under `<st>/`. Prose leads the
+ * message and the path follows (a token whose value starts with a long
+ * absolute path reads as high-entropy to redact.mjs).
  * @param {object} ctx
  * @param {string} out as typed
  * @returns {{abs: string, rel: string}}
@@ -63,9 +86,11 @@ function resolveOut(ctx, out) {
     throw usageError(COMMAND, `cannot write ${out} (outside the work tree)`);
   }
   const rel = toPosix(inside);
-  if (!WRITABLE.some((prefix) => rel.startsWith(prefix)) && !WRITABLE_GLOB.test(rel)) {
+  if (!WRITABLE.some((prefix) => rel.startsWith(prefix)) && !WRITABLE_GLOBS.some((glob) => glob.test(rel))) {
     throw usageError(COMMAND, `--out must be under ${WRITABLE_TEXT} (G-5), got ${out}`);
   }
+  if (RESERVED_ST.test(rel)) throw usageError(COMMAND, `--out must not point into the bundle's own state (${RESERVED_TEXT}), got ${out}`);
+  if (isDirectory(target)) throw usageError(COMMAND, `--out names a directory, got ${out}`);
   return { abs: target, rel };
 }
 
