@@ -1,5 +1,7 @@
-// TASK-015 — lib/ingest/doc.mjs: the trivial adapter that proves the
-// dispatcher path (spec §6.6 row `doc`); the CLI path is cmd-ingest.test.mjs.
+// TASK-015 shipped this adapter to prove the dispatcher path; TASK-017 owns its
+// final shape (spec §6.6 row `doc`: structural validation = in-scope path;
+// trusted = the path; inert = the content). The CLI path is cmd-ingest.test.mjs
+// and ingest-tracker.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CliError } from "../exit.mjs";
@@ -31,11 +33,11 @@ test("in scope ⇒ one record trusting the path only; content inert (wrapped, re
   assert.deepEqual(validate("import", payload), []);
 });
 
-test("out of scope ⇒ no record, one unlocated candidate reason out-of-scope; never a throw on data", () => {
-  const out = adapt({}, run, scope(["src/app.js"]), "anything", base);
-  assert.deepEqual(out.records, []);
-  assert.deepEqual(out.unlocated, [{ locator: { import_sha256: SHA, index: 0 }, reason: "out-of-scope" }]);
-  assert.deepEqual(out.rejected, []);
+test("out of scope ⇒ the §6.6 structural failure: 2 SCHEMA-INVALID(doc: path … is not in scope); the token leads with prose, not the path", () => {
+  assert.throws(
+    () => adapt({}, run, scope(["src/app.js"]), "anything", base),
+    (e) => e instanceof CliError && e.code === 2 && e.token === "SCHEMA-INVALID(doc: path docs/threats.md is not in scope)",
+  );
 });
 
 test("no scope.json yet ⇒ 3 INCOMPLETE(scope); a non-string input is a caller bug", () => {

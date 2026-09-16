@@ -213,9 +213,17 @@ test("citation reasons (TASK-014): the five checkRange spellings", () => {
   assert.equal(tokens.RANGE_NOT_ADMITTED, "RANGE-NOT-ADMITTED");
 });
 
+test("ingest tracker-readback rows (TASK-017): `READBACK: ok | MISMATCH(<field>)` over the closed field list", () => {
+  assert.equal(tokens.READBACK_OK, "READBACK: ok");
+  assert.deepEqual(tokens.READBACK_FIELDS, ["url", "title", "body"]);
+  for (const field of tokens.READBACK_FIELDS) assert.equal(tokens.readbackMismatch(field), `READBACK: MISMATCH(${field})`);
+  assert.throws(() => tokens.readbackMismatch("labels"), /closed vocabulary/);
+  assert.throws(() => tokens.readbackMismatch(""), /closed vocabulary/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
-    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
+    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;
     assert.ok(typeof value === "string" || typeof value === "function", `${name}: ${typeof value}`);
     if (typeof value === "string") assert.doesNotMatch(value, /\n/, name);
   }

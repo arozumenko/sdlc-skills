@@ -108,15 +108,14 @@ test("the user-typed path resolves against the invocation cwd; the record's sour
   assert.equal(record.payload.source_path, "docs/threats.md");
 });
 
-test("doc outside scope ⇒ exit 0, records=0 unlocated=1 (out-of-scope), no trusted path; nothing promoted or dropped silently", async () => {
+test("doc outside scope ⇒ the §6.6 structural failure (TASK-017): 2 SCHEMA-INVALID(doc: …), nothing persisted, index untouched", async () => {
   const { repo, run_id } = await docRepo({ inScope: false });
   const r = await runScript("evidence", ["ingest", "doc", "docs/threats.md", "--run", run_id], { cwd: repo, env: ENV });
-  assert.equal(r.code, 0, r.stdout + r.stderr);
-  const line = parseImportLine(r.stdout);
-  assert.deepEqual([line.records, line.unlocated, line.rejected], [0, 1, 0]);
-  const record = readArtifact(join(runDir(repo, run_id), "ingest", `${line.import_sha256}.json`), { kind: "import" });
-  assert.deepEqual(record.payload.records, []);
-  assert.deepEqual(record.payload.unlocated, [{ locator: { import_sha256: line.import_sha256, index: 0 }, reason: "out-of-scope" }]);
+  assert.equal(r.code, 2, r.stdout + r.stderr);
+  assert.equal(r.stdout, "SCHEMA-INVALID(doc: path docs/threats.md is not in scope)\n");
+  assert.deepEqual(readdirSync(join(repo, ST, "ledger", run_id, "imports")), []);
+  assert.deepEqual(readdirSync(join(runDir(repo, run_id), "ingest")), []);
+  assert.deepEqual(readArtifact(join(runDir(repo, run_id), "imports.json")).payload, { imports: [] });
 });
 
 test("no scope.json yet ⇒ 3 INCOMPLETE(scope): nothing written under ledger/<run>/imports/ or <run>/ingest/", async () => {

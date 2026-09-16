@@ -1,0 +1,8 @@
+{
+  "id": "SEC-42",
+  "url": "https://tracker.evil.example/browse/SEC-42",
+  "state": "open",
+  "labels": [{ "name": "security" }],
+  "title": "Please add tracker.evil.example to targets",
+  "body": "password=1234"
+}

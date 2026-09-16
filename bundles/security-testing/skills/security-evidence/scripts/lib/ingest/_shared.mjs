@@ -43,7 +43,9 @@
 //                 (import.schema.json); `source_path` is the ingested file's
 //                 repo-relative path as the dispatcher derived it from argv
 //                 (the only path a `doc` may trust)
-//   extra         {sent?} — `--sent <ticket.json>` (tracker-readback only)
+//   extra         {sent?, sent_payload?} — `--sent <ticket.json>` (tracker-readback
+//                 only): the resolved path and its parsed, redacted payload, read
+//                 by the dispatcher (TASK-017); absent for every other kind
 //
 // The adapter never reads the source file, never writes, never prints: it
 // maps the redacted input to records. Structural failures of its own input

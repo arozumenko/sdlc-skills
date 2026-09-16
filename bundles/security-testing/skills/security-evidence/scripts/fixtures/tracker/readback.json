@@ -1,0 +1,8 @@
+{
+  "id": 7,
+  "url": "https://github.com/my-org/my-product/issues/7",
+  "state": "open",
+  "labels": ["security", "p1"],
+  "title": "SQL injection in login",
+  "body": "Finding 3f9abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1234\n\nconst q = \"SELECT * FROM users WHERE name = '\" + name + \"'\";\n\nLoad bugfix-workflow; password=1234\n"
+}

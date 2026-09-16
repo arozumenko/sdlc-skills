@@ -417,3 +417,22 @@ export const PATH_NOT_IN_SCOPE = "PATH-NOT-IN-SCOPE";
 export const SIDE_MISMATCH = "SIDE-MISMATCH";
 /** A primary range that lies inside no single admitted range of its file (spec §6.2). */
 export const RANGE_NOT_ADMITTED = "RANGE-NOT-ADMITTED";
+// --- ingest tracker-readback (TASK-017; plan §4.1 row `ingest`, spec §6.6 / P4) ---
+
+/**
+ * The fields a read-back can differ from the sent payload on, in the order
+ * the adapter records them and the READBACK lines print them: `url` (host ∉
+ * targets.tracker), `title` (read-back title ≠ sent title), `body` (the
+ * read-back body does not name the finding id). The adapter imports this
+ * list, so the record's `mismatch[]` and the stdout token share one vocabulary.
+ */
+export const READBACK_FIELDS = Object.freeze(["url", "title", "body"]);
+
+/** `READBACK: ok` — the read-back matches what was sent on every READBACK_FIELDS entry (TASK-045 may then append `ticketed`). */
+export const READBACK_OK = "READBACK: ok";
+
+/** `READBACK: MISMATCH(<field>)` — one line per mismatched field, after the IMPORT line and before the WROTE lines. */
+export function readbackMismatch(field) {
+  if (!READBACK_FIELDS.includes(field)) throw new TypeError(`readbackMismatch: field ${String(field)} is outside the closed vocabulary`);
+  return `READBACK: MISMATCH(${field})`;
+}
