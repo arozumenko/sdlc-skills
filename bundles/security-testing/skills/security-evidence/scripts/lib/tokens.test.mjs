@@ -55,6 +55,17 @@ test("register formatters (TASK-028)", () => {
   assert.deepEqual(tokens.REGISTER_PRIORITIES, ["p0", "p1", "p2", "p3"]);
 });
 
+test("register transition formatters (TASK-029)", () => {
+  assert.equal(tokens.emitterOnly("ticketed"), "EMITTER-ONLY(ticketed)");
+  assert.equal(tokens.notEquivalent("R-0001", "R-0002"), "NOT-EQUIVALENT(R-0001: R-0002)");
+  assert.equal(tokens.aliased({ from_id: "a".repeat(64), to_id: "b".repeat(64), seq: 3 }), `ALIAS from=${"a".repeat(64)} to=${"b".repeat(64)} seq=3`);
+  assert.throws(() => tokens.aliased({ from_id: "T-001", to_id: "b".repeat(64), seq: 1 }), /finding ids/);
+  assert.throws(() => tokens.aliased({ from_id: "a".repeat(64), to_id: "b".repeat(64), seq: 0 }), /seq/);
+  assert.equal(tokens.checked(0), "CHECK expired=0");
+  assert.equal(tokens.checked(2), "CHECK expired=2");
+  assert.throws(() => tokens.checked(-1), /expired/);
+});
+
 test("formatters", () => {
   assert.equal(tokens.incomplete("scope"), "INCOMPLETE(scope)");
   assert.equal(tokens.inconsistent("gate-result"), "INCONSISTENT(gate-result)");

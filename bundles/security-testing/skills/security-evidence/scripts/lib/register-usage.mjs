@@ -8,7 +8,7 @@
 // No redaction rule may fire on this text (register-usage.test.mjs): reword
 // an example rather than exempt it.
 
-import { ANCHOR_DIVERGED, ANCHOR_MATCH, ANCHOR_TRUNCATED, CORRUPT, EQUIVALENCE_REQUIRED, transitionRejected } from "./tokens.mjs";
+import { ANCHOR_DIVERGED, ANCHOR_MATCH, ANCHOR_TRUNCATED, CORRUPT, EQUIVALENCE_REQUIRED, emitterOnly, notEquivalent, transitionRejected } from "./tokens.mjs";
 
 export const USAGE = `usage: register.mjs [--root <dir>] [--actor <name>] [--quiet] <command> [flags]
 
@@ -23,13 +23,15 @@ commands
   alias --from <finding_id> --to <finding_id> --reason <r> --run <run_id>
   consume-verdict <verify.json>
   render [--out <path>]                     write the Markdown view (default <st>/risk-register.md)
-  transition <event> <R-id> [flags]         generic form of the verbs above (ticketed is not accepted here)
+  transition <event> <R-id> [flags]         generic form of accept|revoke|close-false-positive|reopen|supersede
+                                            (ticketed, fixed, regressed, *-observed, acceptance-expired are emitter-only: ${emitterOnly("<event>")})
   status [--json]
   replay [--write]                          rebuild the projection from the log; --write persists it
   anchor print                              <engagement_id>:<seq>:<chain_sha256>
   anchor verify --expect <engagement_id:seq:hash>   ${ANCHOR_MATCH} | ${ANCHOR_TRUNCATED} | ${ANCHOR_DIVERGED}
 
-exit codes  0 ok · 2 usage / ${EQUIVALENCE_REQUIRED} (supersede with neither flag) · 4 ${transitionRejected("<event>", "<from>")} / --subject-equivalent without a same-subject or alias link · 5 ${CORRUPT} / ${ANCHOR_TRUNCATED} / ${ANCHOR_DIVERGED}
-recovery    every command rebuilds a missing or behind projection from the log; a projection ahead of the log or a broken chain is ${CORRUPT}
+exit codes  0 ok · 2 usage / ${EQUIVALENCE_REQUIRED} (supersede with neither flag) / ${emitterOnly("<event>")} · 4 ${transitionRejected("<event>", "<from>")} / ${notEquivalent("<R-id>", "<R-id>")} (--subject-equivalent without a same-subject or alias link) · 5 ${CORRUPT} / ${ANCHOR_TRUNCATED} / ${ANCHOR_DIVERGED}
+recovery    every command rebuilds a missing or behind projection from the log; a projection ahead of the log or a broken chain (events or aliases) is ${CORRUPT}
+approvals   accept / revoke / close-false-positive store {recorded_by, approved_by, approval_ref, authenticated: false}; no verb authenticates a record and none reduces open exposure
 env         SECURITY_EVIDENCE_NOW · SECURITY_EVIDENCE_ACTOR
 `;
