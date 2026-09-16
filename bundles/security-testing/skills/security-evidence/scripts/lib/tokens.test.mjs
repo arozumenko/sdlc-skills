@@ -410,3 +410,23 @@ test("assessment / threat-model rows (TASK-024): the TL-16 sentence names sign-o
   assert.deepEqual(tokens.DISPOSITION_KINDS, ["undisposed", "planned", "executed", "ticketed", "accepted", "mitigated"]);
   assert.ok(Object.isFrozen(tokens.DISPOSITION_KINDS));
 });
+
+test("check rows (TASK-025; spec §6.3, plan §4.1 row `check`): the four result lines are spelled exactly, the counted forms take a positive integer", () => {
+  assert.equal(tokens.CONSISTENT, "CONSISTENT");
+  assert.equal(tokens.STRUCTURE_ONLY, "STRUCTURE-ONLY");
+  assert.equal(tokens.CURRENT, "CURRENT");
+  assert.equal(tokens.ORIGIN_MATCHES_SUPPLIED_DIGEST, "ORIGIN: matches supplied digest");
+  assert.equal(tokens.consistentRedactedOnly(1), "CONSISTENT-REDACTED-ONLY(1 citations)");
+  assert.equal(tokens.consistentRedactedOnly(12), "CONSISTENT-REDACTED-ONLY(12 citations)");
+  assert.equal(tokens.citationDrifted(1), "CITATION-DRIFTED(1)");
+  assert.equal(tokens.scopeDrifted(3), "SCOPE-DRIFTED(3 files)");
+  for (const bad of [0, -1, 1.5, "2", undefined]) {
+    assert.throws(() => tokens.consistentRedactedOnly(bad), TypeError, `consistentRedactedOnly(${String(bad)})`);
+    assert.throws(() => tokens.citationDrifted(bad), TypeError, `citationDrifted(${String(bad)})`);
+    assert.throws(() => tokens.scopeDrifted(bad), TypeError, `scopeDrifted(${String(bad)})`);
+  }
+  // the INCONSISTENT fields check spells: the input-hash form, the snapshot form, the marker
+  assert.equal(tokens.inconsistent("input:scope"), "INCONSISTENT(input:scope)");
+  assert.equal(tokens.inconsistent("snapshot:src/app.js"), "INCONSISTENT(snapshot:src/app.js)");
+  assert.equal(tokens.incomplete(tokens.COMMITTED), "INCOMPLETE(COMMITTED)");
+});

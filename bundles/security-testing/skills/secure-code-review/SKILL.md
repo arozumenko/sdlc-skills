@@ -248,7 +248,7 @@ the active session performs the review steps itself**, reading this skill.
     marker last. Findings without a receipt show as "not independently
     reviewed".
 11. `node <scripts>/evidence.mjs check <st>/runs/<run_id> --integrity --drift`
-    — `CONSISTENT` (or `CONSISTENT-REDACTED-ONLY(n)` when a dirty file has
+    — `CONSISTENT` (or `CONSISTENT-REDACTED-ONLY(n citations)` when a dirty file has
     changed since), then `CURRENT` or `CITATION-DRIFTED(n)`, then `ORIGIN:
     unauthenticated`, `KEY: available`.
 12. For a fix: `node <scripts>/verify.mjs all --finding <id> --base <oid> --head <oid>`

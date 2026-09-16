@@ -808,3 +808,23 @@ export const MISMATCH_OUTPUT = "MISMATCH(output)";
 export const INCOMPLETE_RUNS_SEE_SIGN_OFF = "see sign-off (INCOMPLETE: listing) — the ledger is outside the run directory (TL-3), so this report cannot count them";
 /** The six disposition kinds (spec §6.10), in spec order — the assessment and threat-model reports fold dispositions by kind in this order. */
 export const DISPOSITION_KINDS = Object.freeze(["undisposed", "planned", "executed", "ticketed", "accepted", "mitigated"]);
+
+// --- check (TASK-025; spec §6.3 result lines, §2 rows 1–2, §6.5 replay; plan §4.1 row `check`) ---
+/** Line 1: every recomputed value equals what the report shows, the rendered bytes match and (with --integrity) every citation re-validates against its recorded side. */
+export const CONSISTENT = "CONSISTENT";
+/** Line 1: the key is unavailable — content re-validation was skipped; structure and hashes were checked; never upgraded to CONSISTENT (spec §6.3). */
+export const STRUCTURE_ONLY = "STRUCTURE-ONLY";
+/** Line 2 (with --drift): every head/snapshot citation and every in-scope file still matches the working tree. */
+export const CURRENT = "CURRENT";
+/** Line 3: `--trusted-digest` equals the manifest hash RECOMPUTED from the run directory (never the sidecar), spec §2 / §6.3. */
+export const ORIGIN_MATCHES_SUPPLIED_DIGEST = "ORIGIN: matches supplied digest";
+function requirePositive(where, n) {
+  if (!Number.isInteger(n) || n < 1) throw new TypeError(`${where}: the count must be a positive integer, got ${String(n)}`);
+  return n;
+}
+/** `CONSISTENT-REDACTED-ONLY(<n> citations)` — line 1 for a review run whose `n` snapshot citations could be checked only against the redacted snapshot (the original is gone), spec §6.2 / §6.3. */
+export const consistentRedactedOnly = (n) => `CONSISTENT-REDACTED-ONLY(${requirePositive("consistentRedactedOnly", n)} citations)`;
+/** `CITATION-DRIFTED(<n>)` — line 2: `n` head/snapshot citations no longer resolve to the same text in the working tree. */
+export const citationDrifted = (n) => `CITATION-DRIFTED(${requirePositive("citationDrifted", n)})`;
+/** `SCOPE-DRIFTED(<n> files)` — line 2: `n` in-scope files differ from scope.json's per-file record. */
+export const scopeDrifted = (n) => `SCOPE-DRIFTED(${requirePositive("scopeDrifted", n)} files)`;
