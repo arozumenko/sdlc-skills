@@ -12,14 +12,44 @@
 // and are applied in file order. Every replacement is `<REDACTED:<class>>`,
 // which no rule matches, so redaction is idempotent.
 //
+// The three `*-assign` rules (password / secret / token) share one suffix after
+// their key group — redact.test.mjs asserts the three suffixes are byte-equal
+// so they cannot drift. The suffix accepts, after the key and an optional
+// closing quote / `]`: an optional single-line type annotation (`: str`,
+// `?: string`, `: Map<K,V>`, `: String?`, `: string | null`) followed by one
+// of `=>` `:=` `!=` `!==` `=` `==` `===` `:` and a value; a call argument
+// (`setPassword("…")`, `.password("…")`, `password.equals("…")`); a
+// following quoted argument (`strcmp(password, "…")`, `put("password", "…")`
+// as the first argument of a call); the k8s env name/value split (`- name:
+// DB_PASSWORD` + `value: …` on the next line, or `"name": "DB_PASSWORD",
+// "value": "…"`); the XML forms `<password>…</password>` and `key="password"
+// value="…"`; a space-separated CLI flag (`--password hunter2`); and the
+// Dockerfile legacy `ENV DB_PASSWORD hunter2`. A value is a quoted literal
+// (double, single or backtick, escaped quotes kept inside, never empty), an
+// unquoted run up to whitespace / `"` `'` `` ` `` `,` `;` `&` `<`, or a YAML
+// block scalar (`|` / `>` plus the indented lines). An unquoted value may not
+// start with `{` `[` `|` `>` `<` and may not be a bare type or keyword
+// (`string`, `str`, `int`, `null`, `None`, `true`, `required`, …), so
+// `password: string;`, `"password": {…}`, `password: null`, `password: {{ … }}`
+// and `requirePassword = true` are not assignments of a secret.
+//
 // Cost is bounded: every rule is linear in input length on adversarial text
 // (dash-joined identifiers, whitespace-free base64url, long whitespace runs,
-// minified bundles, repeated PEM headers). The `*-assign` rules keep that
-// property by starting only at a token boundary — the leading lookbehind
-// excludes `-` as well as `[A-Za-z0-9_]` — and by allowing a second
-// whitespace run only after a real quote (`\s*(?:["']\s*)?`). A rule that
-// re-introduces `\s*["']?\s*` or lets the identifier prefix start mid-token
-// goes quadratic; redact.test.mjs pins the bound.
+// repeated keys, minified bundles, repeated PEM headers). The `*-assign`
+// rules keep that property by starting only at a token boundary — the leading
+// lookbehind excludes `-` as well as `[A-Za-z0-9_]` — by allowing a second
+// whitespace run only after a real quote or bracket (`\s*(?:["']\s*(?:\]\s*)?)?`),
+// by putting a literal (`:`, `=`, `,`, `(`, `\n`, `>`) before every later
+// whitespace run, and by bounding every lookbehind that scans backwards over
+// an identifier (`{0,64}`) or whitespace (`{1,16}`) so it costs O(1) per
+// attempt. A rule that re-introduces `\s*["']?\s*`, lets the identifier prefix
+// start mid-token, or adds an unbounded backward scan goes quadratic;
+// redact.test.mjs pins the bound on a dozen shapes.
+//
+// Every key group also carries `(?<!<REDACTED:)`, so a placed marker is never
+// read as a key whatever follows it (`<REDACTED:secret-assign>}` once matched
+// the XML form); redact.test.mjs checks every class marker against a set of
+// trailing contexts.
 //
 // Known limits of rules v1 (guarantee is bounded to the list, §6.5):
 // - Over-redaction, safe side: `high-entropy-assign` admits `/` in the value,
@@ -30,19 +60,42 @@
 // - Over-redaction, safe side: `high-entropy-assign` also fires on Subresource
 //   Integrity and lockfile hashes — `integrity="sha512-…"` / `sha384-…` in
 //   HTML and `"integrity": "sha512-…"` in package-lock.json are a mixed-case
-//   base64 value ≥ 32 chars after `key=` / `key:`. A citation into a lockfile
-//   or a `<script integrity>` tag becomes `sensitive: true`. Lowercase hex
-//   digests (`resolved …#9fceb02d…`, sha256 in stdout) are not affected.
+//   base64 value ≥ 32 chars after `key=` / `key:` — and, for the same reason,
+//   on any base64 blob after a key (`content = "iVBORw0KGgo…"`, `data:
+//   "TWFuIGlzIGRpc3Rpbmd1aXNoZWQs…"`, a base64 fixture in a test file): a
+//   mixed-case, digit-bearing value of ≥ 32 base64 chars is indistinguishable
+//   from a key by shape. A citation into a lockfile, a `<script integrity>`
+//   tag or an inline base64 asset becomes `sensitive: true`. Lowercase hex
+//   digests (`resolved …#9fceb02d…`, sha256 in stdout) and `data:` URIs
+//   (`;` and `,` break the run) are not affected.
+// - Over-redaction, safe side: the `*-assign` rules redact a variable
+//   reference or expression as readily as a literal (`password: process.env.PW`,
+//   `token: $TOKEN`, `password: ${{ secrets.PW }}`, `secret_name: db-creds`),
+//   because an unquoted value with no digit can be a real weak password and a
+//   `$`-prefixed one can be a real one. Custom type names without an
+//   initializer (`password: SecureString;`) are redacted too; only the
+//   built-in type and keyword words are exempt.
 // - Over-redaction, safe side: `pem-block` treats a BEGIN header with no END
 //   as truncated key material and redacts to the end of the text, so prose
 //   such as `Found -----BEGIN CERTIFICATE----- header in README; see docs`
 //   loses its tail. Requiring a newline + base64 line before the to-end
 //   branch would fix the prose case but must keep the END search bounded
 //   (a failing to-end branch makes every BEGIN start rescan to the end).
+// - Gap: `bearer` requires a digit somewhere in the token so that
+//   `Bearer authentication required` / `Authorization: bearer
+//   authentication_required` prose is not redacted; a bearer token made only
+//   of letters (`Bearer abcdefghijklmnopqrstuvwxyz`) passes through. Every
+//   real-world bearer format (JWT, OAuth2 opaque, GitHub, Google) carries
+//   digits; the JWT shape is caught by `jwt` regardless.
 // - Gaps, v2 ticket: Azure SAS `SharedAccessSignature=sv=…&sig=…` is caught
 //   only via `high-entropy-assign` on `sig=` (not when `%`-encoded within
 //   32 chars); Stripe `sk_live_…`, Slack webhook URLs, `scheme://user:pass@host`
-//   URL credentials and `Authorization: Basic …` pass through untouched.
+//   URL credentials, `Authorization: Basic …`, short CLI flags (`-p hunter2`),
+//   a secret split across a line break (`password =\n  "…"`, an XML element
+//   whose text starts on the next line), a C# property with initializer
+//   (`Password { get; set; } = "…"`), a Markdown table cell (`| password |
+//   hunter2 |`) and a reversed compare (`"admin123".equals(password)`,
+//   `assertEquals("admin123", password)`) pass through untouched.
 //
 // redactDeep walks strings, plain objects (Object.prototype or null prototype)
 // and arrays only. Anything else that is an object — Buffer/Uint8Array, Date,
@@ -266,14 +319,18 @@ function walk(value, rules, path) {
   // Two keys that redact to the same marker must not collapse into one entry (a value would be
   // silently dropped). Unredacted keys keep their name; a redacted key that collides with one
   // already placed gets `#2`, `#3`, … so the entry count survives.
-  const out = {};
+  const out = [];
   for (const [key, nextKey, nextItem] of entries) {
     let k = nextKey;
     if (nextKey !== key) {
       for (let n = 2; taken.has(k); n++) k = `${nextKey}#${n}`;
       taken.add(k);
     }
-    out[k] = nextItem;
+    out.push([k, nextItem]);
   }
-  return out;
+  // Object.fromEntries defines own data properties, so a key spelled `__proto__` (legal in JSON,
+  // and JSON.parse yields it as an own property) stays an entry instead of hitting the
+  // Object.prototype setter — which would drop a string value or, for an object value, make it
+  // the prototype and turn the result into a non-plain object that the next pass rejects.
+  return Object.fromEntries(out);
 }

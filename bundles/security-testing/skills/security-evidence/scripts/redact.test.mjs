@@ -260,6 +260,89 @@ test("prefixed key names are redacted whole (no dangling x- / openai_ stubs)", (
   assert.equal(redactString("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE", DEFAULT_RULES).text, "AWS_ACCESS_KEY_ID=<REDACTED:aws-key>");
 });
 
+test("assignment operators := => == === and escaped quotes redact the value whole", () => {
+  // Review finding (round 3): `[:=]` consumed one character of a two-character operator and the
+  // unquoted alternative then took the rest of the operator as the value, leaving the real quoted
+  // value in the clear — with a marker placed, so matches() on the output said "clean".
+  const cases = [
+    ["'password' => 'hunter2',", "hunter2", "password-assign"],
+    ['password := "hunter2"', "hunter2", "password-assign"],
+    ['if (password == "admin123")', "admin123", "password-assign"],
+    ['api_token => "ghp_16C7e42F292c6912E7710c838347Ae178B4a"', "ghp_16C7e42F292c6912E7710c838347Ae178B4a", "token-assign"],
+    ['client_secret := "s3cr3t"', "s3cr3t", "secret-assign"],
+    ['"password": "a\\"b1234"', "b1234", "password-assign"],
+    ['password === "admin123"', "admin123", "password-assign"],
+    ['password !== "admin123"', "admin123", "password-assign"],
+  ];
+  for (const [input, secret, cls] of cases) {
+    const { text, hits } = redactString(input, DEFAULT_RULES);
+    assert.equal(countOccurrences(text, secret), 0, `secret survived: ${JSON.stringify(input)} -> ${JSON.stringify(text)}`);
+    assert.ok(hits.some((h) => h.class === cls), `${cls}: expected hit for ${JSON.stringify(input)}`);
+    assert.equal(matches(text, DEFAULT_RULES), false, `output still matches: ${JSON.stringify(text)}`);
+  }
+  assert.equal(redactString("'password' => 'hunter2',", DEFAULT_RULES).text, "'<REDACTED:password-assign>,");
+  assert.equal(redactString('if (password == "admin123")', DEFAULT_RULES).text, "if (<REDACTED:password-assign>)");
+});
+
+const SHAPES = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/redaction/shapes.json", import.meta.url)), "utf8"));
+
+test("adversarial shapes fixture: every secret-bearing line redacts whole and every benign near-miss survives", () => {
+  assert.ok(SHAPES.secrets.length >= 40, `fixture has ${SHAPES.secrets.length} secret shapes, want >= 40`);
+  assert.ok(SHAPES.benign.length >= 15, `fixture has ${SHAPES.benign.length} benign shapes, want >= 15`);
+  const failures = [];
+  for (const { shape, input, secret } of SHAPES.secrets) {
+    assert.equal(typeof secret, "string");
+    assert.ok(input.includes(secret), `fixture bug: ${shape} does not contain its own secret`);
+    const { text, hits } = redactString(input, DEFAULT_RULES);
+    if (text.includes(secret)) failures.push(`LEAK    [${shape}] ${JSON.stringify(input)} -> ${JSON.stringify(text)}`);
+    else if (hits.length === 0) failures.push(`NO-HIT  [${shape}] ${JSON.stringify(input)}`);
+    if (matches(text, DEFAULT_RULES)) failures.push(`RESIDUE [${shape}] output still matches: ${JSON.stringify(text)}`);
+    // Buffer entry point sees the same bytes.
+    assert.equal(redactString(Buffer.from(input, "utf8"), DEFAULT_RULES).text, text, shape);
+  }
+  for (const { shape, input } of SHAPES.benign) {
+    if (matches(input, DEFAULT_RULES)) failures.push(`OVER    [${shape}] ${JSON.stringify(input)} -> ${JSON.stringify(redactString(input, DEFAULT_RULES).text)}`);
+    else assert.equal(redactString(input, DEFAULT_RULES).text, input, shape);
+  }
+  assert.deepEqual(failures, [], `\n${failures.join("\n")}`);
+});
+
+test("known over-redactions stay on the safe side (references, expressions, custom types are redacted)", () => {
+  // Documented in the module header; pinned so a change that flips one is visible in review.
+  const lines = [
+    "password: process.env.DB_PASSWORD",
+    "token: $TOKEN",
+    "password: ${{ secrets.DB_PASSWORD }}",
+    "secret_name: db-creds",
+    "password: SecureString;",
+  ];
+  for (const line of lines) assert.equal(matches(line, DEFAULT_RULES), true, `expected safe-side redaction: ${line}`);
+});
+
+test("the three *-assign rules share one suffix after their key group", () => {
+  const byClass = Object.fromEntries(DEFAULT_RULES.rules.map((r) => [r.class, r.pattern]));
+  const patterns = ["password-assign", "secret-assign", "token-assign"].map((c) => byClass[c]);
+  let n = 0;
+  while (patterns.every((p) => n < p.length && p.at(-1 - n) === patterns[0].at(-1 - n))) n++;
+  // Every key group ends in `)`, so the common suffix picks that up; the shared part must then
+  // start at the whitespace/closing-quote group, i.e. cover every operator, annotation and value
+  // alternative — a fix applied to one rule and not the others fails here.
+  const suffix = patterns[0].slice(patterns[0].length - n).replace(/^\)/, "");
+  assert.ok(suffix.startsWith('\\s*(?:["\']\\s*(?:\\]\\s*)?)?(?:'), `shared suffix starts at: ${suffix.slice(0, 60)}`);
+  for (const p of patterns) assert.ok(p.includes("(?<!<REDACTED:)"), "every key group refuses to start inside a marker");
+  assert.ok(byClass["high-entropy-assign"].includes("(?<!<REDACTED:)"));
+});
+
+test("a placed marker is never a key, whatever follows it", () => {
+  const tails = [">", "}", ",", ' value="x"', "\n  value: x", '("x")', ', "x"', ' = "x"', ": x", " hunter2", "#2", "</password>", " := 'x'", " => 'x'"];
+  for (const c of TEN_CLASSES) {
+    for (const t of tails) {
+      const s = `<REDACTED:${c}>${t}`;
+      assert.equal(matches(s, DEFAULT_RULES), false, `marker absorbed: ${JSON.stringify(s)} -> ${JSON.stringify(redactString(s, DEFAULT_RULES).text)}`);
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // redactDeep
 
@@ -309,6 +392,31 @@ test("redactDeep keeps every entry when two keys redact to the same marker", () 
   assert.deepEqual(literal, { "<REDACTED:password-assign>#2": "a", "<REDACTED:password-assign>": "b" });
   // Suffixed keys are stable under a second pass.
   assert.equal(redactDeep(out, DEFAULT_RULES), out);
+});
+
+test("redactDeep keeps a key spelled __proto__ as an own property and stays idempotent", () => {
+  // JSON.parse yields `__proto__` as an own property; the output must too, or the entry is lost
+  // (string value: the Object.prototype setter ignores it; object value: it becomes the prototype
+  // and the result is no longer a plain object).
+  const str = JSON.parse('{"__proto__": "password=1234", "x": "password=1"}');
+  const out = redactDeep(str, DEFAULT_RULES);
+  assert.ok(Object.hasOwn(out, "__proto__"));
+  assert.equal(out["__proto__"], "<REDACTED:password-assign>");
+  assert.equal(Object.getPrototypeOf(out), Object.prototype);
+  assert.deepEqual(Object.keys(out), ["__proto__", "x"]);
+  assert.equal(JSON.stringify(out), '{"__proto__":"<REDACTED:password-assign>","x":"<REDACTED:password-assign>"}');
+  assert.equal(redactDeep(out, DEFAULT_RULES), out);
+
+  const obj = JSON.parse('{"__proto__": {"reason": "password=1234"}, "x": "password=1"}');
+  const out2 = redactDeep(obj, DEFAULT_RULES);
+  assert.ok(Object.hasOwn(out2, "__proto__"));
+  assert.equal(Object.getPrototypeOf(out2), Object.prototype);
+  assert.equal(out2["__proto__"].reason, "<REDACTED:password-assign>");
+  assert.equal(redactDeep(out2, DEFAULT_RULES), out2);
+
+  // Unchanged input is still returned by reference, own __proto__ and all.
+  const clean = JSON.parse('{"__proto__": {"a": "b"}, "x": "fine"}');
+  assert.equal(redactDeep(clean, DEFAULT_RULES), clean);
 });
 
 test("redactDeep returns the input untouched by reference when nothing matched", () => {
@@ -442,14 +550,35 @@ test("idempotent", () => {
 // ---------------------------------------------------------------------------
 // Bounded cost (untrusted input, D5: dirty-file snapshots, SARIF ingest, scope subjects)
 
-test("bounded cost: 256 KB of dash-joined identifiers, whitespace-free base64url, a whitespace run after `password`, a minified bundle and repeated PEM headers each redact in < 1 s", () => {
+test("bounded cost: 256 KB of dash-joined identifiers, whitespace-free base64url, whitespace / newline / operator runs after `password`, repeated keys, a minified bundle and repeated PEM headers each redact in < 1 s", () => {
   const KB = 256 * 1024;
+  const rep = (s) => s.repeat(Math.ceil(KB / s.length)).slice(0, KB);
   const inputs = {
     "dash-joined identifiers": "a-".repeat(KB / 2),
-    "whitespace-free base64url": "aB3_-".repeat(Math.ceil(KB / 5)).slice(0, KB),
+    "whitespace-free base64url": rep("aB3_-"),
     "password + whitespace run": "password" + " ".repeat(KB),
-    "minified bundle": "var a=1;function f(x){return x+1}".repeat(Math.ceil(KB / 34)).slice(0, KB),
-    "repeated PEM headers": "-----BEGIN X-----\n".repeat(Math.ceil(KB / 18)).slice(0, KB),
+    "password + newline/space run": "password" + "\n ".repeat(KB / 2),
+    "password + tab run then quote": "password" + "\t".repeat(KB) + '"',
+    "password repeated (no separator)": rep("password"),
+    "--password repeated": rep("--password "),
+    "ENV password repeated": rep("ENV password "),
+    "password, + whitespace": "password," + " ".repeat(KB),
+    "password.equals( + whitespace": "password.equals(" + " ".repeat(KB),
+    "password: + newline + spaces": "password:\n" + " ".repeat(KB),
+    "password: | block of indented lines": "password: |\n" + rep("  line of text\n"),
+    "password? + spaces": "password?" + " ".repeat(KB),
+    "password: Type< no close": "password: Map<" + "a".repeat(KB),
+    "password: union chain": "password: " + rep("a | "),
+    "password= chain": rep("password="),
+    '"password" quoted repeated': rep('"password" '),
+    'password" + spaces + ]': 'password"' + " ".repeat(KB) + "]",
+    "a-…-password + spaces": "a-".repeat(KB / 2) + "password" + " ".repeat(KB),
+    "secret: + name: lines": rep("secret:\n  name: db\n"),
+    "unclosed backtick": "token = `" + "a".repeat(KB),
+    "unclosed quote": 'token = "' + "a".repeat(KB),
+    "escaped quotes run": 'token = "' + rep('\\"'),
+    "minified bundle": rep("var a=1;function f(x){return x+1}"),
+    "repeated PEM headers": rep("-----BEGIN X-----\n"),
   };
   for (const [name, text] of Object.entries(inputs)) {
     const t0 = performance.now();
