@@ -1626,3 +1626,13 @@ Reviewer nits from Rio's PASS review of TASK-038 (`task/task-038`), recorded ver
 | TASK-039 / TASK-042 | TASK-038: e2e.test.mjs:636 STUB_TESTED_BY allowlist (lib/cmd-tm-lint.mjs, lib/cmd-plan.mjs) is honest (entry-script import + sibling test checked, stub existence pinned) but is a TL-1 exception: TASK-039 and TASK-042 must delete their row when the real sibling test lands — route as a note into both dispatches. |
 | TASK-037 follow-up / docs | TASK-038: Spec §12 literal 'no original bytes anywhere under .agents/security-testing/' holds until the lead copies the raw SARIF into reserved `<st>/imports/`; the E2E correctly pins `imports/semgrep.sarif` as the sole carrier and every bundle-written file clean. Suggest one README 'Not guaranteed' line (operator raw drops under `imports/` are not redacted) — owner TASK-037 follow-up / docs, not this task. |
 | TASK-027 follow-up / TASK-006 | TASK-038: Dev-reported out-of-ownership leftovers stand as routed: lib/git.test.mjs worktree-retry flake (TASK-027 follow-up) and fixtures/cli/harness.mjs leaking one sec-gitconfig-* dir per importing test file without after(cleanupAll) (TASK-006). Confirmed the E2E itself leaves zero sdlc-offline-* dirs after a full run. |
+
+### PM log additions (2026-09-17, M1 manual smoke)
+
+Manual smoke on a throwaway repo (install → engagement init ×2 → run init review → scope → packet → gate on a hand-written claim → coverage → build-report review → check CONSISTENT/CURRENT, tampered report ⇒ INCONSISTENT(summary.by_priority_state.p1) → fix commit → verify pass 1 → receipt → register add → verify pass 2 ⇒ UNVERIFIED-NO-TEST-SURFACE without an operator test command → sign-off FAIL(NO-ASSESSMENT) with the §7 listing) behaved per spec at every step.
+
+| Owner | Note |
+|---|---|
+| TASK-052 or a small follow-up | Every CLI dumps a Node stack trace on `EPIPE` when stdout is closed early (`… \| head -1`). Handle EPIPE on stdout in `ctx.out`/the dispatcher: exit quietly with the intended code. |
+| TASK-035 / README | The receipt drop-box contract is easy to get wrong by hand: `reviewer_run_id` must equal the pass-1 verify run id and the receipt must be dropped under `receipts/<pass-1 run>/`; `verify.json` says so (`not_applied_reason: reviewer_run_id != run`) but the reviewer prose and README should spell the sequence out with the exact fields. |
+| TASK-042 | `packet --kind subject --type case` seam (re-pointed from TASK-021 per the G10 PM log). |
