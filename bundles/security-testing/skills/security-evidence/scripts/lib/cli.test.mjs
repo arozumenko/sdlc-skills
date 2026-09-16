@@ -1,5 +1,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { cleanupAll, initRepo, tmpDir } from "../fixtures/cli/harness.mjs";
 import { IntegrityError } from "../canon.mjs";
 import { CliError } from "./exit.mjs";
@@ -97,6 +99,23 @@ test("CliError ⇒ token on stdout, its code; integrity failure ⇒ 5; anything 
   s = streams();
   assert.equal(await main(app(() => { throw new TypeError("sync"); }), ["foo"], { cwd: repo, env: {}, ...s }), 1);
   assert.match(s.stderr.text, /sync/);
+});
+
+test("main() never rejects: a non-CliError raised before run() (command loader, context) lands in the one catch ⇒ 1, redacted, on stderr", async () => {
+  const repo = initRepo();
+  let s = streams();
+  const loaderThrows = { name: "fake", usage: USAGE, commands: { foo: async () => { throw new Error("import failed token=abc123secret"); } } };
+  assert.equal(await main(loaderThrows, ["foo"], { cwd: repo, env: {}, ...s }), 1);
+  assert.equal(s.stdout.text, "");
+  assert.match(s.stderr.text, /^fake\.mjs: import failed /);
+  assert.doesNotMatch(s.stderr.text, /abc123secret/);
+
+  // a CliError from createContext (nested --root) takes the result channel, same as one from run()
+  s = streams();
+  mkdirSync(join(repo, "pkg"));
+  assert.equal(await main(app(async () => 0), ["--root", join(repo, "pkg"), "foo"], { cwd: repo, env: {}, ...s }), 2);
+  assert.equal(s.stdout.text, "USAGE(--root: must be the top level of a git work tree)\n");
+  assert.equal(s.stderr.text, "");
 });
 
 test("the subcommand stays at the head of the command argv; the cmd module routes it", async () => {

@@ -25,7 +25,7 @@
 // line must carry the on-disk identity, and the cheapest way to make that
 // true by construction is to compare against the file.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactId, parseStrict, readArtifact, writeArtifact as canonWriteArtifact } from "../canon.mjs";
@@ -67,12 +67,23 @@ function now(env) {
   return new Date().toISOString();
 }
 
+/**
+ * The consumer root is the top level of a git work tree, full stop (TL-2).
+ * Without `--root`, that is the top level containing cwd. With `--root`, the
+ * given dir must *be* the top level — a dir merely inside a work tree is
+ * refused, because git.mjs resolves `ls-files`/`status` against cwd but
+ * `<oid>:<path>` against the top level, so a nested root would list one file
+ * and hash another, and ctx.rel() would yield `../…` paths. Compared after
+ * realpath (macOS /var → /private/var) so a symlinked spelling of the top
+ * level is still the top level.
+ */
 function resolveRoot(flags, cwd) {
   if (flags.root !== undefined) {
     const root = resolve(cwd, flags.root);
     const top = toplevel(root);
     if (top === null) throw new CliError(EXIT.USAGE, NOT_A_WORK_TREE);
-    return root;
+    if (realpathSync(root) !== top) throw usageError("--root", "must be the top level of a git work tree");
+    return top;
   }
   const top = toplevel(cwd);
   if (top === null) throw new CliError(EXIT.USAGE, NOT_A_WORK_TREE);

@@ -11,7 +11,12 @@
 // The lock is `mkdirSync(lockDir)`: atomic on every platform, no O_EXCL file
 // dance, no PID file to trust. Acquisition polls with a 20 ms backoff and a
 // 10 s timeout; a lock whose mtime is older than 60 s is treated as
-// abandoned (a crashed holder) and reclaimed. Staleness is judged with the
+// abandoned (a crashed holder) and reclaimed. Reclaim is rename-then-rm, so
+// of N waiters that all judge the lock stale exactly one wins the rename and
+// the others see ENOENT — nobody can rm a lock a rival just re-created.
+// Consequence, by design: a *legitimate* holder that keeps the lock for more
+// than 60 s (staleMs) will have it stolen; keep critical sections short or
+// raise staleMs for the call. Staleness is judged with the
 // file system's clock — the mtime of a probe file written next to the lock —
 // so this module never reads the wall clock (G-1 keeps that read inside
 // ctx.now()). Elapsed time for the timeout is `performance.now()`, a
@@ -132,8 +137,24 @@ function tryAcquire(lockDir, staleMs, attempt) {
     }
     if (err.code !== "EEXIST") throw err;
   }
-  if (attempt % 50 === 0 && isStale(lockDir, staleMs)) rmSync(lockDir, { recursive: true, force: true });
+  if (attempt % 50 === 0 && isStale(lockDir, staleMs)) reclaim(lockDir);
   return false;
+}
+
+/**
+ * Take a stale lock away without racing another reclaimer: rename it aside
+ * (atomic; only one caller can win) and remove the renamed dir. ENOENT on
+ * the rename means someone else already reclaimed it — that is fine.
+ */
+function reclaim(lockDir) {
+  const aside = `${lockDir}.stale-${process.pid}-${++tmpCounter}`;
+  try {
+    renameSync(lockDir, aside);
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  rmSync(aside, { recursive: true, force: true });
 }
 
 function release(lockDir) {
@@ -196,8 +217,14 @@ export function withLockSync(lockDir, fn, options = {}) {
 // ---------------------------------------------------------------------------
 // trees
 
+/** UTF-8 byte order (what canon uses for keys), not UTF-16 code-unit order. */
+function compareBytes(a, b) {
+  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
 /**
- * Every file under `dir`, as posix paths relative to `dir`, sorted bytewise.
+ * Every file under `dir`, as posix paths relative to `dir`, sorted by UTF-8
+ * byte order (so a list that feeds a manifest sorts the way canon sorts).
  * Symlinks are listed as files, never followed. A missing dir is `[]`.
  * @param {string} dir
  * @returns {string[]}
@@ -219,7 +246,7 @@ export function walk(dir) {
     }
   };
   visit(dir, "");
-  return out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return out.sort(compareBytes);
 }
 
 /** Remove a file or directory tree; a missing path is not an error. */

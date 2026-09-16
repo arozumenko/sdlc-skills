@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanupAll, git as fixtureGit, initRepo, tmpDir, SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
@@ -112,6 +112,7 @@ test("blobOid and showBytes read a path at an oid; missing path ⇒ null / GitEr
   assert.match(oid, /^[0-9a-f]{40}$/);
   assert.equal(oid, fixtureGit(repo, ["hash-object", "src/app.js"]));
   assert.equal(blobOid(repo, head, "src/missing.js"), null);
+  assert.equal(blobOid(repo, head, "src"), null, "a directory is a tree, never a blob oid");
   const bytes = showBytes(repo, head, "src/app.js");
   assert.ok(Buffer.isBuffer(bytes));
   assert.equal(bytes.toString("utf8"), "export const a = 1;\n");
@@ -134,6 +135,13 @@ test("statusPorcelain parses -z output incl. renames and untracked files; path f
     statusPorcelain(repo, { paths: ["src"] }).map((r) => r.path),
     ["src/app.js"],
   );
+});
+
+test("statusPorcelain: a work-tree-side rename (` R`, intent-to-add) also carries the original path", () => {
+  const repo = initRepo();
+  renameSync(join(repo, "README.md"), join(repo, "README.txt"));
+  fixtureGit(repo, ["add", "-N", "README.txt"]);
+  assert.deepEqual(statusPorcelain(repo), [{ xy: " R", path: "README.txt", orig: "README.md" }]);
 });
 
 test("lsFiles: tracked, others with excludeStandard, ignored", () => {
@@ -174,6 +182,13 @@ test("diffNameOnly, diffUnified and mergeBaseIsAncestor over two commits", () =>
   assert.match(diffUnified(repo, base, head), /b\.js/);
   assert.equal(mergeBaseIsAncestor(repo, base, head), true);
   assert.equal(mergeBaseIsAncestor(repo, head, base), false);
+});
+
+test("diffNameOnly / diffUnified: a ref beginning with `-` is a revision, never a flag (--end-of-options)", () => {
+  const repo = initRepo();
+  const head = revParse(repo, "HEAD");
+  assert.throws(() => diffNameOnly(repo, "--stat", head), (e) => e instanceof GitError && /bad revision|unknown revision|--stat/.test(e.message));
+  assert.throws(() => diffUnified(repo, "--stat", head), (e) => e instanceof GitError);
 });
 
 test("worktreeAdd / worktreeRemove: detached checkout at an oid, removed cleanly", () => {

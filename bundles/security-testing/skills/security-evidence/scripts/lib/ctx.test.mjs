@@ -67,6 +67,22 @@ test("outside a git work tree ⇒ CliError 2", () => {
   assert.throws(() => createContext({ root: join(dir, "missing") }, { cwd: dir, env: {} }), (e) => e instanceof CliError && e.code === 2);
 });
 
+test("--root must be the top level of a work tree (TL-2): a nested dir ⇒ USAGE(--root: …); `.` from the top ⇒ the toplevel", () => {
+  const repo = initRepo();
+  mkdirSync(join(repo, "pkg", "src"), { recursive: true });
+  writeFileSync(join(repo, "pkg", "src", "app.js"), "export const nested = true;\n");
+  assert.throws(
+    () => createContext({ root: join(repo, "pkg") }, { cwd: tmpDir(), env: {} }),
+    (e) => e instanceof CliError && e.code === 2 && e.token === "USAGE(--root: must be the top level of a git work tree)",
+  );
+  assert.throws(() => createContext({ root: "pkg" }, { cwd: repo, env: {} }), (e) => e instanceof CliError && e.code === 2 && /^USAGE\(--root: /.test(e.token));
+  const dot = createContext({ root: "." }, { cwd: repo, env: {} });
+  assert.equal(dot.root, repo);
+  assert.equal(dot.rel(join(repo, "pkg", "src", "app.js")), "pkg/src/app.js");
+  const viaSymlinkFreePath = createContext({ root: join(repo, "pkg", "..") }, { cwd: tmpDir(), env: {} });
+  assert.equal(viaSymlinkFreePath.root, repo, "a path that normalises to the top level is the top level");
+});
+
 test("root = --root or the toplevel of cwd; st = <root>/.agents/security-testing; rel()/abs() are repo-relative", () => {
   const repo = initRepo();
   mkdirSync(join(repo, "deep", "er"), { recursive: true });

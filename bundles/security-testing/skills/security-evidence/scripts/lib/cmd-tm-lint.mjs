@@ -12,10 +12,10 @@
 // Exports one `{run(argv, ctx)}` per subcommand; the entry script's table
 // picks the one it dispatches to.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseStrict } from "../canon.mjs";
-import { parseCommandArgv } from "./cli.mjs";
+import { parseCommandArgv } from "./argv.mjs";
 import { EXIT, usageError } from "./exit.mjs";
 import { validate } from "./schema.mjs";
 import { notImplemented, schemaInvalid } from "./tokens.mjs";
@@ -59,14 +59,17 @@ function requireRun(command, flags) {
   return flags.run;
 }
 
-function exists(path) {
+/** True when the default model file exists; a directory in its place is the same usage error validateJsonFile raises. */
+function exists(command, path) {
+  let st;
   try {
-    readFileSync(path);
-    return true;
+    st = statSync(path);
   } catch (err) {
     if (err.code === "ENOENT") return false;
     throw err;
   }
+  if (!st.isFile()) throw usageError(command, `cannot read ${path}`);
+  return true;
 }
 
 export const check = {
@@ -75,7 +78,7 @@ export const check = {
     if (positionals.length) throw usageError("check", `unexpected argument ${positionals[0]}`);
     requireRun("check", flags);
     const model = typeof flags.model === "string" ? flags.model : join(ctx.st, "threat-model.json");
-    if (typeof flags.model === "string" || exists(model)) {
+    if (typeof flags.model === "string" || exists("check", model)) {
       const code = validateJsonFile(ctx, "check", "threat-model", model);
       if (code !== null) return code;
     }

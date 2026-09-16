@@ -46,9 +46,14 @@ test("G-13: the forbidden strings never appear under scripts/ (fixtures and test
         if (name === "fixtures") continue;
         visit(p);
       } else if (!name.endsWith(".test.mjs")) {
-        const src = readFileSync(p, "utf8");
+        let src = readFileSync(p, "utf8");
+        if (name === "tokens.mjs") {
+          // Strip only the list literal itself; the rest of tokens.mjs is scanned like any other file.
+          const before = src;
+          src = src.replace(/export const FORBIDDEN_STRINGS = Object\.freeze\(\[[^\]]*\]\);/, "");
+          assert.notEqual(src, before, "the FORBIDDEN_STRINGS literal was found and stripped");
+        }
         for (const s of tokens.FORBIDDEN_STRINGS) {
-          if (name === "tokens.mjs" && src.includes(`"${s}"`)) continue; // the list itself
           if (src.includes(s)) offenders.push(`${relative(SCRIPTS_DIR, p)}: ${s}`);
         }
       }

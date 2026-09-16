@@ -1,7 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CanonError, IntegrityError } from "../canon.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { CliError, EXIT, exitCodeFor, integrityFailure, isIntegrityFailure, usageError } from "./exit.mjs";
+import { usage } from "./tokens.mjs";
+
+test("exit.mjs is a leaf over tokens.mjs: no canon/redact import, so a pure core that throws a CliError pulls no crypto or fs (G-9)", () => {
+  const src = readFileSync(fileURLToPath(new URL("./exit.mjs", import.meta.url)), "utf8");
+  const imports = [...src.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]);
+  assert.deepEqual(imports, ["./tokens.mjs"]);
+});
+
+test("usageError spells its token through tokens.usage (G-13: one spelling)", () => {
+  assert.equal(usageError("check", "--run <id> is required").token, usage("check", "--run <id> is required"));
+});
 
 test("EXIT is the closed map 0..5", () => {
   assert.deepEqual(EXIT, { OK: 0, INTERNAL: 1, USAGE: 2, INDETERMINATE: 3, FAIL: 4, INTEGRITY: 5 });

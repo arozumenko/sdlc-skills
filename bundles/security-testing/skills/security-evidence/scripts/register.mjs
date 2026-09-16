@@ -23,7 +23,7 @@ commands
   replay [--write]
   anchor print | anchor verify --expect <engagement_id:seq:hash>
 
-exit codes  0 ok · 2 usage · 4 TRANSITION-REJECTED(<event>: <from>) / EQUIVALENCE-REQUIRED · 5 CORRUPT
+exit codes  0 ok · 2 usage / EQUIVALENCE-REQUIRED (supersede with neither flag) · 4 TRANSITION-REJECTED(<event>: <from>) / --subject-equivalent without a same-subject or alias link · 5 CORRUPT
 env         SECURITY_EVIDENCE_NOW · SECURITY_EVIDENCE_ACTOR
 `;
 

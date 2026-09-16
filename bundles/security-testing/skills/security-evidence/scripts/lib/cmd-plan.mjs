@@ -19,7 +19,7 @@
 
 import { readFileSync } from "node:fs";
 import { parseStrict } from "../canon.mjs";
-import { parseCommandArgv } from "./cli.mjs";
+import { parseCommandArgv } from "./argv.mjs";
 import { EXIT, usageError } from "./exit.mjs";
 import { validate } from "./schema.mjs";
 import { notImplemented, schemaInvalid } from "./tokens.mjs";

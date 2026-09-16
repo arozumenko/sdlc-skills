@@ -130,6 +130,12 @@ test("walk lists files recursively, sorted, with posix-relative paths; rmTree re
   writeFileSync(join(dir, "top.txt"), "");
   assert.deepEqual(walk(dir), ["a/x.txt", "b/inner/z.txt", "b/y.txt", "top.txt"]);
   assert.deepEqual(walk(join(dir, "missing")), []);
+  // UTF-8 byte order, as canon sorts keys: U+FF5E (EF BD 9E) precedes U+1F600 (F0 9F 98 80),
+  // whereas UTF-16 code units (D83D DE00 < FF5E) would put the emoji first.
+  const uni = tmpDir();
+  writeFileSync(join(uni, "\u{1F600}.txt"), "");
+  writeFileSync(join(uni, "\uFF5E.txt"), "");
+  assert.deepEqual(walk(uni), ["\uFF5E.txt", "\u{1F600}.txt"]);
   rmTree(join(dir, "b"));
   assert.equal(existsSync(join(dir, "b")), false);
   rmTree(join(dir, "b")); // idempotent

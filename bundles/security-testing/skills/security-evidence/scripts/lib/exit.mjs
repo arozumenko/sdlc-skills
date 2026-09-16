@@ -17,8 +17,13 @@
 //   inconsistent, whichever layer noticed first. `isIntegrityFailure` is the
 //   single home of that classification; `check`, `sign-off`, `run snapshot`
 //   and the dispatcher's catch all call it rather than re-deriving it.
+//
+// Classification is by `err.name` only. canon.mjs sets `this.name` on both
+// classes, and importing canon here (→ redact.mjs → rules read from disk at
+// import) would make every pure core that throws a CliError pull crypto+fs
+// transitively (G-9). Leaf module: imports only tokens.mjs.
 
-import { CanonError, IntegrityError } from "../canon.mjs";
+import { usage } from "./tokens.mjs";
 
 export const EXIT = Object.freeze({ OK: 0, INTERNAL: 1, USAGE: 2, INDETERMINATE: 3, FAIL: 4, INTEGRITY: 5 });
 
@@ -43,17 +48,19 @@ export class CliError extends Error {
   }
 }
 
+const INTEGRITY_ERROR_NAMES = Object.freeze(["CanonError", "IntegrityError"]);
+
 /**
  * True for the two error classes canon.readArtifact throws when a file is not
- * the artifact it claims to be. Matched by class and by name, so an error
- * that crossed a module boundary (another copy of canon.mjs) still classifies.
+ * the artifact it claims to be. Matched by name, so an error that crossed a
+ * module boundary (another copy of canon.mjs) still classifies and this
+ * module never has to import canon.
  * @param {unknown} err
  * @returns {boolean}
  */
 export function isIntegrityFailure(err) {
-  if (err instanceof CanonError || err instanceof IntegrityError) return true;
   if (err === null || typeof err !== "object") return false;
-  return err.name === "CanonError" || err.name === "IntegrityError";
+  return INTEGRITY_ERROR_NAMES.includes(err.name);
 }
 
 /**
@@ -74,7 +81,7 @@ export function exitCodeFor(err) {
  * @returns {CliError}
  */
 export function usageError(command, message) {
-  return new CliError(EXIT.USAGE, `USAGE(${command}: ${message})`);
+  return new CliError(EXIT.USAGE, usage(command, message));
 }
 
 /**

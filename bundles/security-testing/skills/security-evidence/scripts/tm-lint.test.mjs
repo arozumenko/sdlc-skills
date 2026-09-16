@@ -75,6 +75,14 @@ test("check on a model with a duplicate key ⇒ SCHEMA-INVALID naming the strict
   assert.match(r.stdout, /^SCHEMA-INVALID\(threat-model: duplicate key "elements"/m);
 });
 
+test("check when the default <st>/threat-model.json is a directory ⇒ usage error, not an internal error", async () => {
+  const repo = initRepo();
+  mkdirSync(join(repo, ".agents", "security-testing", "threat-model.json"), { recursive: true });
+  const r = await runScript("tm-lint", ["check", "--run", "abc"], { cwd: repo });
+  assert.equal(r.code, 2);
+  assert.match(r.stdout, /^USAGE\(check: cannot read .*threat-model\.json\)$/m);
+});
+
 test("check with an unreadable --model ⇒ usage error", async () => {
   const repo = initRepo();
   const r = await runScript("tm-lint", ["check", "--run", "abc", "--model", "missing.json"], { cwd: repo });

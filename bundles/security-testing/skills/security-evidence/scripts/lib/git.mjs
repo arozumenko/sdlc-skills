@@ -155,7 +155,9 @@ export function revParse(root, ref) {
 }
 
 /**
- * Blob oid of `path` at commit `oid`, or null when the path is absent there.
+ * Blob oid of `path` at commit `oid`, or null when the path is absent there
+ * *or is not a blob* (a directory resolves to a tree oid under rev-parse; a
+ * citation must never carry one, so the type is checked with cat-file -t).
  * @param {string} root
  * @param {string} oid
  * @param {string} path repo-relative
@@ -164,7 +166,9 @@ export function revParse(root, ref) {
 export function blobOid(root, oid, path) {
   const r = git(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${oid}:${path}`]);
   const out = r.stdout.trim();
-  return r.code === 0 && /^[0-9a-f]{40}$/.test(out) ? out : null;
+  if (r.code !== 0 || !/^[0-9a-f]{40}$/.test(out)) return null;
+  const t = git(root, ["cat-file", "-t", "--end-of-options", out]);
+  return t.code === 0 && t.stdout.trim() === "blob" ? out : null;
 }
 
 /**
@@ -187,7 +191,9 @@ export function showBytes(root, oid, path) {
  */
 export function statusPorcelain(root, { paths = [] } = {}) {
   // Renames stay on (they matter for the baseline diff); -z reports them as
-  // two entries, `R  new` then `old`, parsed below.
+  // two entries, `R  new` then `old`, parsed below. The rename can sit in
+  // either column: X for a staged rename (`R `), Y for a work-tree-side one
+  // (` R`, e.g. `mv a b; git add -N b`) — both carry the original path.
   const argv = ["status", "--porcelain=v1", "-z", "--untracked-files=all"];
   if (paths.length) argv.push("--", ...paths);
   const entries = splitZ(must(root, argv).stdout);
@@ -196,7 +202,7 @@ export function statusPorcelain(root, { paths = [] } = {}) {
     const entry = entries[i];
     const xy = entry.slice(0, 2);
     const path = entry.slice(3);
-    if (xy[0] === "R" || xy[0] === "C") {
+    if (xy[0] === "R" || xy[0] === "C" || xy[1] === "R" || xy[1] === "C") {
       rows.push({ xy, path, orig: entries[++i] });
     } else {
       rows.push({ xy, path });
@@ -243,7 +249,7 @@ export function checkIgnore(root, path) {
  * @returns {string[]}
  */
 export function diffNameOnly(root, base, head, { paths = [] } = {}) {
-  const argv = ["diff", "--name-only", "-z", "--no-renames", base, head];
+  const argv = ["diff", "--name-only", "-z", "--no-renames", "--end-of-options", base, head];
   if (paths.length) argv.push("--", ...paths);
   return splitZ(must(root, argv).stdout);
 }
@@ -258,7 +264,7 @@ export function diffNameOnly(root, base, head, { paths = [] } = {}) {
  * @returns {string}
  */
 export function diffUnified(root, base, head, path) {
-  const argv = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", base, head];
+  const argv = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--end-of-options", base, head];
   if (path !== undefined) argv.push("--", path);
   return must(root, argv).stdout;
 }
