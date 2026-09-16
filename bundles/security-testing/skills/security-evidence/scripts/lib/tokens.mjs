@@ -27,6 +27,30 @@ export const CORRUPT = "CORRUPT"; // §6.8 register recovery
 // --- markers ----------------------------------------------------------------
 export const COMMITTED = "COMMITTED"; // build-report's last line and the run marker file name
 
+// --- engagement init step 0 (TASK-011; §6.9 step 0 / P3) --------------------
+/** Printed before EDIT-ENGAGEMENT-AND-RERUN when step 0 wrote the engagement.md template copy. */
+export const ENGAGEMENT_TEMPLATE_WRITTEN = "ENGAGEMENT: template written — edit and re-run";
+
+const KNOWLEDGE_FILE_ORDER = Object.freeze(["engagement.md.template", "finding-schema.md", "report-reading-guide.md"]);
+/**
+ * `TEMPLATES: <file>=written|present …` — one entry per knowledge file, in
+ * plan §3.2 order, from a `{written[], present[]}` result (knowledge-templates
+ * ensureTemplates / stepTemplates). A file missing from both lists or named
+ * in both is a caller bug: the line is thrown, not guessed.
+ */
+export function templatesLine({ written, present }) {
+  if (!Array.isArray(written) || !Array.isArray(present)) throw new TypeError("templatesLine: written and present must be arrays");
+  const parts = KNOWLEDGE_FILE_ORDER.map((name) => {
+    const w = written.includes(name);
+    const p = present.includes(name);
+    if (w === p) throw new TypeError(`templatesLine: ${name} must be accounted for exactly once (written xor present)`);
+    return `${name}=${w ? "written" : "present"}`;
+  });
+  const stray = [...written, ...present].filter((name) => !KNOWLEDGE_FILE_ORDER.includes(name));
+  if (stray.length) throw new TypeError(`templatesLine: unknown knowledge file(s) ${stray.join(", ")}`);
+  return `TEMPLATES: ${parts.join(" ")}`;
+}
+
 /** `INCOMPLETE(<name>)` — exit 3 (required input missing). */
 export const incomplete = (name) => `INCOMPLETE(${name})`;
 /** `INCONSISTENT(<field>)` — exit 5 (check, build-report). */

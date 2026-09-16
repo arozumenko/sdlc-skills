@@ -15,6 +15,7 @@ test("constants are exactly the spec's spellings", () => {
   assert.equal(tokens.CORRUPT, "CORRUPT");
   assert.equal(tokens.COMMITTED, "COMMITTED");
   assert.equal(tokens.POLICY_INVALID_PRIVATE, "POLICY-INVALID(private)");
+  assert.equal(tokens.ENGAGEMENT_TEMPLATE_WRITTEN, "ENGAGEMENT: template written — edit and re-run");
 });
 
 test("formatters", () => {
@@ -26,6 +27,12 @@ test("formatters", () => {
   assert.equal(tokens.notImplemented("M2"), "NOT-IMPLEMENTED(M2)");
   assert.equal(tokens.notImplemented("M3"), "NOT-IMPLEMENTED(M3)");
   assert.throws(() => tokens.notImplemented("M1"), /M2\|M3/);
+  assert.equal(
+    tokens.templatesLine({ written: ["finding-schema.md"], present: ["engagement.md.template", "report-reading-guide.md"] }),
+    "TEMPLATES: engagement.md.template=present finding-schema.md=written report-reading-guide.md=present",
+  );
+  assert.throws(() => tokens.templatesLine({ written: [], present: [] }), /accounted/);
+  assert.throws(() => tokens.templatesLine({ written: ["stray.md"], present: ["engagement.md.template", "finding-schema.md", "report-reading-guide.md"] }), /unknown/);
   assert.equal(tokens.wrote(".agents/security-testing/runs/r/scope.json", "a".repeat(64)), `WROTE .agents/security-testing/runs/r/scope.json sha256=${"a".repeat(64)}`);
   assert.throws(() => tokens.wrote("/abs/path", "a".repeat(64)), /repo-relative/);
   assert.throws(() => tokens.wrote("../outside.json", "a".repeat(64)), /inside the repo/);
