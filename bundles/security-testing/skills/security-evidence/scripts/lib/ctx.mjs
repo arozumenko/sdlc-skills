@@ -13,9 +13,11 @@
 //     writeArtifact()  canon.writeArtifact + wrote(), so a caller cannot print the wrong identity
 //     rel(p) / abs(p)  repo-relative posix path / absolute path under root — for repo-LAYOUT
 //                      paths the scripts spell themselves (<st>/…, ledger/…), never for argv
-//     input(cmd, p)    absolute path of a file the USER typed on the command line: resolved
-//                      against the invocation cwd (what the user pointed at), then required
-//                      to lie inside root — outside ⇒ USAGE(<cmd>: cannot read <p> (outside the work tree))
+//     input(cmd, p)    absolute on-disk path of a file the USER typed on the command line:
+//                      resolved against the invocation cwd (what the user pointed at),
+//                      realpath'd (symlinks followed, so an alias of the tree is inside it
+//                      and a symlink out of the tree is outside it), then required to lie
+//                      inside root — outside ⇒ USAGE(<cmd>: cannot read <p> (outside the work tree))
 //   }
 //
 // The two path bases, stated once so every command picks the same one:
@@ -38,7 +40,7 @@
 // true by construction is to compare against the file.
 
 import { readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactId, parseStrict, readArtifact, writeArtifact as canonWriteArtifact } from "../canon.mjs";
 import { redactString } from "../redact.mjs";
@@ -76,6 +78,27 @@ function now(env) {
     return fixed;
   }
   return new Date().toISOString();
+}
+
+/**
+ * realpath(3) of `p`, or — when `p` does not exist yet — the realpath of its
+ * nearest existing ancestor plus the remaining names. A user-typed input
+ * usually exists (the command reads it next and turns ENOENT into its own
+ * USAGE), but the containment check must not be the place that fails on a
+ * typo, and an output-style argument must resolve through an aliased
+ * directory the same way its siblings do. Any error other than "not there"
+ * propagates: a permission failure is not a reason to fall back to the
+ * lexical path.
+ */
+function realpathLenient(p) {
+  try {
+    return realpathSync.native(p);
+  } catch (err) {
+    if (err.code !== "ENOENT" && err.code !== "ENOTDIR") throw err;
+  }
+  const parent = dirname(p);
+  if (parent === p) return p;
+  return join(realpathLenient(parent), basename(p));
 }
 
 /**
@@ -129,14 +152,18 @@ export function createContext(flags = {}, { cwd = process.cwd(), env = process.e
   };
   const abs = (p) => (isAbsolute(p) ? p : resolve(root, p));
 
-  // realpath(3) once so a symlinked spelling of cwd (macOS /var → /private/var)
-  // compares against root — itself git's realpath'd toplevel — like with like.
+  // realpath(3) the cwd once and the target every time, so a symlinked
+  // spelling of either (macOS /var → /private/var, an alias of the tree)
+  // compares against root — itself git's realpath'd toplevel — like with
+  // like, and a symlink *inside* the tree that points out of it is judged
+  // by where it really leads (TASK-015 follow-up: the check is on the
+  // on-disk path, not the lexical one).
   let inputBase;
   const input = (command, p) => {
     if (typeof command !== "string" || command === "") throw new TypeError("ctx.input: command name is required");
     if (typeof p !== "string" || p === "") throw usageError(command, "a file path is required");
     inputBase ??= realpathSync.native(cwd);
-    const target = resolve(inputBase, p);
+    const target = realpathLenient(resolve(inputBase, p));
     const inside = relative(root, target);
     // Prose first, path second: a token whose value *starts* with a long
     // absolute path reads as `<cmd>: <high-entropy>` to redact.mjs (G-4) and

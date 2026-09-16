@@ -254,3 +254,24 @@ export function checked(expired) {
   if (!Number.isInteger(expired) || expired < 0) throw new TypeError(`checked: expired must be a non-negative integer, got ${String(expired)}`);
   return `CHECK expired=${expired}`;
 }
+
+// --- ingest (TASK-015; plan §4.1 row `ingest`, spec §6.6) --------------------
+
+/** The `ingest <kind>` vocabulary = import.schema.json's `kind` enum; the leaf cannot import imports.mjs, so imports.test.mjs guards the drift. */
+const IMPORT_KIND_LIST = Object.freeze(["sarif", "ticket", "pr", "doc", "case", "audit", "qa-run", "ta-report", "tracker-readback"]);
+
+/** `IMPORT <kind> import_sha256=<h> records=<n> unlocated=<n> rejected=<n>` — the first line of `ingest`; the WROTE lines follow. */
+export function importLine({ kind, import_sha256, records, unlocated, rejected }) {
+  if (!IMPORT_KIND_LIST.includes(kind)) throw new TypeError(`importLine: kind ${String(kind)} is outside the closed vocabulary`);
+  if (!SHA256.test(import_sha256)) throw new TypeError("importLine: import_sha256 must be 64 lowercase hex chars");
+  requireCount("importLine", "records", records);
+  requireCount("importLine", "unlocated", unlocated);
+  requireCount("importLine", "rejected", rejected);
+  return `IMPORT ${kind} import_sha256=${import_sha256} records=${records} unlocated=${unlocated} rejected=${rejected}`;
+}
+
+/** `IMPORT-EXISTS(<import_sha256>)` — exit 2: the same redacted bytes were already ingested into this run (its record is write-once, G-10). */
+export function importExists(import_sha256) {
+  if (!SHA256.test(import_sha256)) throw new TypeError("importExists: import_sha256 must be 64 lowercase hex chars");
+  return `IMPORT-EXISTS(${import_sha256})`;
+}
