@@ -400,3 +400,23 @@ export function rendered({ relPath, rows, seq }) {
   if (!Number.isInteger(seq) || seq < 0) throw new TypeError(`rendered: seq must be a non-negative integer, got ${String(seq)}`);
   return `RENDER ${relPath} rows=${rows} seq=${seq}`;
 }
+
+// --- ingest tracker-readback (TASK-017; plan §4.1 row `ingest`, spec §6.6 / P4) ---
+
+/**
+ * The fields a read-back can differ from the sent payload on, in the order
+ * the adapter records them and the READBACK lines print them: `url` (host ∉
+ * targets.tracker), `title` (read-back title ≠ sent title), `body` (the
+ * read-back body does not name the finding id). The adapter imports this
+ * list, so the record's `mismatch[]` and the stdout token share one vocabulary.
+ */
+export const READBACK_FIELDS = Object.freeze(["url", "title", "body"]);
+
+/** `READBACK: ok` — the read-back matches what was sent on every READBACK_FIELDS entry (TASK-045 may then append `ticketed`). */
+export const READBACK_OK = "READBACK: ok";
+
+/** `READBACK: MISMATCH(<field>)` — one line per mismatched field, after the IMPORT line and before the WROTE lines. */
+export function readbackMismatch(field) {
+  if (!READBACK_FIELDS.includes(field)) throw new TypeError(`readbackMismatch: field ${String(field)} is outside the closed vocabulary`);
+  return `READBACK: MISMATCH(${field})`;
+}

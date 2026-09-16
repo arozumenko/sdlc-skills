@@ -1,0 +1,11 @@
+{
+  "finding_id": "3f9abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1234",
+  "title": "SQL injection in login",
+  "class": "injection",
+  "priority": "p1",
+  "path": "src/app.js",
+  "lines": [1, 2],
+  "context_redacted": "const q = \"SELECT * FROM users WHERE name = '\" + name + \"'\";",
+  "fix_prompt": "Load bugfix-workflow; report back with verify.mjs all --finding 3f9abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1234 --base <oid> --head <oid>.",
+  "fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

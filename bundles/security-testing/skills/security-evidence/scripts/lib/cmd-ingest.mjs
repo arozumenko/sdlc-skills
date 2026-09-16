@@ -8,12 +8,15 @@
 // Order, so a refusal leaves nothing behind and nothing is half-indexed:
 //
 //   1. argv: <kind> ∈ IMPORT_KINDS, one <file>, --run <id>; --sent only with
-//      tracker-readback (2 USAGE otherwise);
+//      tracker-readback, and required by it (2 USAGE otherwise);
 //   2. the adapter module — a kind whose adapter is not shipped yet is
 //      2 USAGE(ingest: adapter <kind> is not available), before the file is
 //      touched;
 //   3. the file: ctx.input() (cwd-relative, realpath'd, inside root — else
 //      2 USAGE) and read (ENOENT / EISDIR ⇒ 2 USAGE(ingest: cannot read …));
+//      --sent the same way, then parseStrict (2 SCHEMA-INVALID(tracker-
+//      readback: --sent does not parse …)) and redactDeep — it reaches the
+//      adapter as extra.sent_payload and is not itself an import (TASK-017);
 //   4. run.json (2 USAGE unknown run), COMMITTED ⇒ 2 RUN-COMMITTED (G-10),
 //      the run's key (2 KEY: unavailable), scope.json when present (null
 //      otherwise — an adapter that needs it says 3 INCOMPLETE(scope));
@@ -34,25 +37,28 @@
 //      the two writes, which a re-ingest reports as IMPORT-EXISTS.
 //
 // stdout: `IMPORT <kind> import_sha256=<h> records=<n> unlocated=<n>
-// rejected=<n>`, then `WROTE <run>/imports.json …` (assessment only), then
+// rejected=<n>`, then — `tracker-readback` only — `READBACK: ok` or one
+// `READBACK: MISMATCH(<field>)` per mismatched field of the record (TASK-017;
+// TASK-045 adds `TICKETED <R-id> <url>` and the register event after them),
+// then `WROTE <run>/imports.json …` (assessment only), then
 // `WROTE <run>/ingest/<sha>.json …` last. Exit 0; 2 as above; 3
 // INCOMPLETE(scope); rejections inside a well-formed file never change the
-// exit code (§4.1). `tracker-readback` adds READBACK / TICKETED lines
-// (TASK-017).
+// exit code (§4.1).
 //
 // Imports: node:fs (existsSync, readFileSync), node:path, ../canon.mjs,
-// ./argv.mjs, ./exit.mjs, ./imports.mjs, ./run-index.mjs (runDir),
-// ./schema.mjs, ./tokens.mjs. Every string that leaves the process goes
-// through ctx.out / ctx.wrote (G-4).
+// ../redact.mjs (redactDeep for --sent), ./argv.mjs, ./exit.mjs,
+// ./imports.mjs, ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs. Every
+// string that leaves the process goes through ctx.out / ctx.wrote (G-4).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { makeEnvelope, readArtifact, writeArtifact } from "../canon.mjs";
+import { CanonError, makeEnvelope, parseStrict, readArtifact, writeArtifact } from "../canon.mjs";
+import { redactDeep } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { CliError, EXIT, usageError } from "./exit.mjs";
 import { IMPORT_KINDS, appendImportIndex, loadRun, prepareImport, snapshotImport } from "./imports.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, KEY_UNAVAILABLE, RUN_COMMITTED, importExists, importLine } from "./tokens.mjs";
+import { COMMITTED, KEY_UNAVAILABLE, READBACK_OK, RUN_COMMITTED, importExists, importLine, readbackMismatch, schemaInvalid } from "./tokens.mjs";
 
 const COMMAND = "ingest";
 // TASK-002/005 follow-up (plan §6): one exported constant is owed; until then every enveloped-artifact writer carries the same literal.
@@ -82,6 +88,28 @@ function readInput(ctx, p) {
     if (err.code === "ENOENT" || err.code === "EISDIR" || err.code === "EACCES" || err.code === "ENOTDIR") throw usageError(COMMAND, `cannot read ${p}`);
     throw err;
   }
+}
+
+/**
+ * `--sent <ticket.json>` (tracker-readback only, TASK-017): the payload
+ * `publish --profile tracker` wrote, read through ctx.input() like every
+ * user-typed path, parsed strictly (an unparseable file is this command's
+ * own exit-2 result — never a CanonError left for the dispatcher, lib/exit.mjs
+ * header) and redacted before the adapter compares it with the read-back.
+ * It is not an import: publish already persisted it, redacted, under
+ * handoffs/; only `extra.sent_payload` (and the resolved path as `extra.sent`)
+ * reach the adapter, which validates the fields it needs.
+ */
+function readSent(ctx, p) {
+  const { abs, bytes } = readInput(ctx, p);
+  let parsed;
+  try {
+    parsed = parseStrict(bytes);
+  } catch (err) {
+    if (err instanceof CanonError) throw new CliError(EXIT.USAGE, schemaInvalid(READBACK, `--sent does not parse: ${err.message}`), { cause: err });
+    throw err;
+  }
+  return { sent: abs, sent_payload: redactDeep(parsed) };
 }
 
 function loadScope(run) {
@@ -123,11 +151,12 @@ export async function run(argv, ctx) {
   if (stray.length > 0) throw usageError(COMMAND, `unexpected argument ${stray[0]}`);
   if (typeof flags.run !== "string") throw usageError(COMMAND, "--run <id> is required");
   if (flags.sent !== undefined && kind !== READBACK) throw usageError(COMMAND, `--sent is for ${READBACK} only`);
+  if (kind === READBACK && flags.sent === undefined) throw usageError(COMMAND, `--sent <ticket.json> is required for ${READBACK}`);
 
   const adapt = await loadAdapter(kind);
   const { abs, bytes } = readInput(ctx, file);
   const source_path = ctx.rel(abs);
-  const extra = { sent: flags.sent === undefined ? undefined : ctx.input(COMMAND, flags.sent) };
+  const extra = flags.sent === undefined ? {} : readSent(ctx, flags.sent);
 
   const loaded = loadRun(ctx, flags.run);
   if (existsSync(join(loaded.dir, COMMITTED))) throw new CliError(EXIT.USAGE, RUN_COMMITTED);
@@ -169,6 +198,14 @@ export async function run(argv, ctx) {
   const index = await appendImportIndex(ctx, loaded.run_id, { kind, import_sha256: prepared.import_sha256, original_hmac: prepared.original_hmac }, { run: loaded });
 
   ctx.out(importLine({ kind, import_sha256: prepared.import_sha256, records: payload.records.length, unlocated: payload.unlocated.length, rejected: payload.rejected.length }));
+  if (kind === READBACK) {
+    // One READBACK line per record (the adapter yields exactly one): `ok`, or one MISMATCH(<field>) per mismatched field, in READBACK_FIELDS order (TASK-017).
+    // TASK-045 appends the `ticketed` event and prints TICKETED here, after these lines and only when mismatch is empty.
+    for (const rec of payload.records) {
+      if (rec.trusted.mismatch.length === 0) ctx.out(READBACK_OK);
+      else for (const field of rec.trusted.mismatch) ctx.out(readbackMismatch(field));
+    }
+  }
   if (index !== null) ctx.wrote(join(loaded.dir, "imports.json"), index);
   ctx.wrote(recordPath, record);
   return EXIT.OK;
