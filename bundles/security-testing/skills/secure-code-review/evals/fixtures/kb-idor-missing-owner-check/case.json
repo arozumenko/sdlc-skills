@@ -1,0 +1,11 @@
+{
+  "id": "kb-idor-missing-owner-check",
+  "kind": "known-bad",
+  "contract": "review",
+  "description": "Two routes behind requireUser. The list route scopes by the session's userId; the by-id route fetches any order by id and returns it without comparing order.owner to the session. One finding of class authz over the by-id handler. The list route is correct and must not be flagged.",
+  "packet": {
+    "files": [
+      { "path": "src/orders.js", "side": "head", "ranges": [[1, 13]] }
+    ]
+  }
+}

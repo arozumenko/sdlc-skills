@@ -1,0 +1,22 @@
+{
+  "id": "fp-execfile-argv-allowlist",
+  "kind": "fp-shaped",
+  "contract": "vulnerability-review",
+  "description": "A vulnerability-review over a claim that looks right at a glance: user input reaches child_process. It is wrong: execFile with an argv array and shell: false passes ref as one argument, the -- separator stops option parsing, and REF rejects anything but a short ref name. The reviewer is expected to refute.",
+  "packet": {
+    "files": [
+      { "path": "src/git.js", "side": "head", "ranges": [[1, 11]] }
+    ]
+  },
+  "subject": {
+    "title": "Command injection: user-controlled ref reaches child_process",
+    "class": "injection",
+    "priority": "p0",
+    "confidence": 7,
+    "path": "src/git.js",
+    "side": "head",
+    "lines": [6, 6],
+    "snippet": "    execFile(\"git\", [\"log\", \"--max-count=20\", \"--format=%H %s\", \"--\", ref], { cwd, shell: false, env: { PATH: process.env.PATH } }, (err, stdout) => {",
+    "cwe": "CWE-78"
+  }
+}

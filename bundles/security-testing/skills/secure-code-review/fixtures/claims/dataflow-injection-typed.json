@@ -1,0 +1,26 @@
+{
+  "scope_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "packet_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "findings": [
+    {
+      "title": "SQL built by string concatenation from req.query.id reaches pool.query without parameterisation",
+      "class": "injection",
+      "priority": "p1",
+      "confidence": 9,
+      "path": "src/users.js",
+      "side": "head",
+      "lines": [5, 6],
+      "snippet": "  const sql = \"SELECT id, email FROM users WHERE id = \" + id;\n  const result = await pool.query(sql);",
+      "cwe": "CWE-89",
+      "citations_typed": [
+        { "role": "source", "path": "src/users.js", "side": "head", "lines": [3, 3], "context": false },
+        { "role": "control", "path": "src/users.js", "side": "head", "lines": [4, 4], "context": false },
+        { "role": "sink", "path": "src/users.js", "side": "head", "lines": [6, 6], "context": false }
+      ],
+      "description": "Source: req.query.id (line 3) is attacker-controlled. Control: line 4 checks presence only; it neither types nor escapes the value. Sink: the concatenated string is passed to pool.query (line 6) with no parameters array, so the driver cannot separate code from data.",
+      "impact": "Read of arbitrary rows from users and, depending on driver privileges, other tables.",
+      "prerequisites": "Reachable route; no upstream middleware coerces req.query.id to an integer (none in scope).",
+      "remediation": "pool.query(\"SELECT id, email FROM users WHERE id = $1\", [id]) and validate id as an integer before the query."
+    }
+  ]
+}
