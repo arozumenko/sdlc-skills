@@ -342,6 +342,41 @@ test("build-report rows (TASK-023): REPORT_TEMPLATES, REPORT <path>, MANIFEST sh
   assert.equal(tokens.COMMITTED, "COMMITTED");
 });
 
+test("verify all rows (TASK-027): the refusal tokens, NEXT / REGISTER lines, the step lines, the tests vocabulary and the indicator kinds", () => {
+  assert.equal(tokens.UNKNOWN_FINDING, "UNKNOWN-FINDING");
+  assert.equal(tokens.UNVERIFIED_REFUTED_FINDING, "UNVERIFIED-REFUTED-FINDING");
+  assert.equal(tokens.NEXT_FIX_REVIEW, "NEXT: dispatch security-reviewer fix-review");
+  assert.equal(tokens.REGISTER_NO_ROW, "REGISTER: no row for finding");
+  assert.equal(tokens.BRANCH_COMMITTED, "COMMITTED");
+  assert.equal(tokens.BRANCH_NOT_COMMITTED, "NOT-COMMITTED");
+  assert.equal(tokens.BRANCH_PATH_UNTOUCHED, "PATH-UNTOUCHED");
+  assert.equal(tokens.branchLine("PATH-UNTOUCHED"), "BRANCH PATH-UNTOUCHED");
+  assert.throws(() => tokens.branchLine("MERGED"), /closed vocabulary/);
+  const oid = "a".repeat(40);
+  assert.equal(tokens.treeBeforeLine(oid), `TREE-BEFORE ${oid}`);
+  assert.throws(() => tokens.treeBeforeLine("abc"), /oid/);
+  assert.equal(tokens.installLine({ ran: true, tracked_changes: 1, untracked: 412, bytes: 18324511 }), "INSTALL ran tracked_changes=1 untracked=412 bytes=18324511");
+  assert.equal(tokens.installLine({ ran: false, tracked_changes: 0, untracked: 0, bytes: 0 }), "INSTALL skipped tracked_changes=0 untracked=0 bytes=0");
+  assert.throws(() => tokens.installLine({ ran: "yes", tracked_changes: 0, untracked: 0, bytes: 0 }), /ran/);
+  assert.equal(tokens.suppressionLine({ indicators: 2, deletion_only: false }), "SUPPRESSION indicators=2 deletion_only=false");
+  assert.throws(() => tokens.suppressionLine({ indicators: 2, deletion_only: "no" }), /deletion_only/);
+  for (const [name, value] of [["TESTS_PASS", "TESTS_PASS"], ["TESTS_FAIL", "TESTS_FAIL"], ["NO_TEST_SURFACE", "NO_TEST_SURFACE"], ["TESTS_INDETERMINATE", "TESTS_INDETERMINATE"]]) assert.equal(tokens[name], value);
+  assert.equal(tokens.TESTS_REASON_INSTALL_MODIFIED_TREE, "install-modified-tree");
+  assert.equal(tokens.TESTS_REASON_NO_SURFACE, "execute_project_tests absent from engagement.md");
+  assert.equal(tokens.argvRejected("first token is not on the allowlist"), "argv-rejected(first token is not on the allowlist)");
+  assert.equal(tokens.installArgvRejected("run without test"), "install-argv-rejected(run without test)");
+  assert.throws(() => tokens.argvRejected("a (b)"), /parentheses/);
+  const sha = "b".repeat(64);
+  assert.equal(tokens.testsLine({ result: "TESTS_PASS", exe: "/usr/local/bin/node", sha256: sha }), `TESTS TESTS_PASS exe=/usr/local/bin/node sha256=${sha}`);
+  assert.equal(tokens.testsLine({ result: "NO_TEST_SURFACE", reason: tokens.TESTS_REASON_NO_SURFACE }), "TESTS NO_TEST_SURFACE");
+  assert.equal(tokens.testsLine({ result: "TESTS_INDETERMINATE", reason: "install-modified-tree" }), "TESTS TESTS_INDETERMINATE(install-modified-tree)");
+  assert.equal(tokens.testsLine({ result: "TESTS_INDETERMINATE", reason: "timeout", exe: "/usr/local/bin/node", sha256: sha }), `TESTS TESTS_INDETERMINATE(timeout) exe=/usr/local/bin/node sha256=${sha}`);
+  assert.throws(() => tokens.testsLine({ result: "TESTS_INDETERMINATE" }), /reason/);
+  assert.throws(() => tokens.testsLine({ result: "TESTS_PASS", exe: "/a b", sha256: sha }), /whitespace/);
+  assert.throws(() => tokens.testsLine({ result: "PASSED" }), /closed vocabulary/);
+  assert.deepEqual([tokens.INDICATOR_IGNORE_FILE_EDIT, tokens.INDICATOR_INLINE_SUPPRESS, tokens.INDICATOR_TEST_SKIP], ["ignore-file-edit", "inline-suppress", "test-skip"]);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || value instanceof RegExp) continue;

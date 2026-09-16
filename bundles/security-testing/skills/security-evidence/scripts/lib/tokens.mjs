@@ -691,3 +691,87 @@ export const NOT_ASSESSED = "unknown / not assessed";
 export const NOT_INDEPENDENTLY_REVIEWED = "not independently reviewed";
 /** `ORIGIN: unauthenticated` — the report's chain-of-custody line and `check`'s default origin (spec §2, §6.3). */
 export const ORIGIN_UNAUTHENTICATED = "ORIGIN: unauthenticated";
+
+// --- verify all (TASK-027; plan §4.2 row `all`, §5 TASK-027; spec §6.4 steps 1–8, TL-6) ---
+/** `UNKNOWN-FINDING` — exit 2: no ledger run's `gate-result.accepted[]` carries the id (an `unverifiable[]` id counts as unknown: nothing to verify). */
+export const UNKNOWN_FINDING = "UNKNOWN-FINDING";
+/** `UNVERIFIED-REFUTED-FINDING` — exit 4 (spec §6.4 row 3): the finding's derived state is REVIEW_REFUTED; refused before any run is allocated. */
+export const UNVERIFIED_REFUTED_FINDING = "UNVERIFIED-REFUTED-FINDING";
+/** `NEXT: dispatch security-reviewer fix-review` — pass 1 only (TL-6): the packet is written, a fresh reviewer's receipt is the next step. */
+export const NEXT_FIX_REVIEW = "NEXT: dispatch security-reviewer fix-review";
+/** `REGISTER: no row for finding` — pass 2: consume-verdict found no live row; the verdict stands, the register is untouched. */
+export const REGISTER_NO_ROW = "REGISTER: no row for finding";
+
+/** Step 1 results (verify.schema.json `branch`). `BRANCH_COMMITTED` is the same spelling as the `COMMITTED` run marker. */
+export const BRANCH_COMMITTED = "COMMITTED";
+export const BRANCH_NOT_COMMITTED = "NOT-COMMITTED";
+export const BRANCH_PATH_UNTOUCHED = "PATH-UNTOUCHED";
+const BRANCH_LIST = Object.freeze([BRANCH_COMMITTED, BRANCH_NOT_COMMITTED, BRANCH_PATH_UNTOUCHED]);
+/** `BRANCH <COMMITTED|NOT-COMMITTED|PATH-UNTOUCHED>` — the step-1 line. */
+export function branchLine(token) {
+  if (!BRANCH_LIST.includes(token)) throw new TypeError(`branchLine: ${String(token)} is outside the closed vocabulary`);
+  return `BRANCH ${token}`;
+}
+/** `TREE-BEFORE <oid>` — the tree oid of the detached checkout before install (step 2). */
+export function treeBeforeLine(oid) {
+  if (!OID.test(oid)) throw new TypeError("treeBeforeLine: oid must be a 40-hex oid");
+  return `TREE-BEFORE ${oid}`;
+}
+/** `INSTALL <ran|skipped> tracked_changes=<n> untracked=<n> bytes=<n>` — the step-3 line. */
+export function installLine({ ran, tracked_changes, untracked, bytes }) {
+  if (typeof ran !== "boolean") throw new TypeError("installLine: ran must be a boolean");
+  return `INSTALL ${ran ? "ran" : "skipped"} tracked_changes=${requireCount("installLine", "tracked_changes", tracked_changes)} untracked=${requireCount("installLine", "untracked", untracked)} bytes=${requireCount("installLine", "bytes", bytes)}`;
+}
+/** `SUPPRESSION indicators=<n> deletion_only=<true|false>` — the step-4 line. */
+export function suppressionLine({ indicators, deletion_only }) {
+  if (typeof deletion_only !== "boolean") throw new TypeError("suppressionLine: deletion_only must be a boolean");
+  return `SUPPRESSION indicators=${requireCount("suppressionLine", "indicators", indicators)} deletion_only=${deletion_only}`;
+}
+
+/** Step-5 results (verify.schema.json `tests.result`). */
+export const TESTS_PASS = "TESTS_PASS";
+export const TESTS_FAIL = "TESTS_FAIL";
+export const NO_TEST_SURFACE = "NO_TEST_SURFACE";
+export const TESTS_INDETERMINATE = "TESTS_INDETERMINATE";
+const TEST_RESULT_LIST = Object.freeze([TESTS_PASS, TESTS_FAIL, NO_TEST_SURFACE, TESTS_INDETERMINATE]);
+/** `tests.reason` spellings — `TESTS_INDETERMINATE(<reason>)` (spec §6.4 step 3 names the first). */
+export const TESTS_REASON_INSTALL_MODIFIED_TREE = "install-modified-tree";
+export const TESTS_REASON_INSTALL_FAILED = "install-failed";
+export const TESTS_REASON_TIMEOUT = "timeout";
+export const TESTS_REASON_EXECUTABLE_NOT_FOUND = "executable-not-found";
+export const TESTS_REASON_SPAWN_FAILED = "spawn-failed";
+/** The child ended by a signal the timeout did not send (killed from outside). */
+export const TESTS_REASON_SIGNALLED = "signalled";
+/** `tests.reason` for NO_TEST_SURFACE: the operator record has no `execute_project_tests`. */
+export const TESTS_REASON_NO_SURFACE = "execute_project_tests absent from engagement.md";
+const REASON_TEXT = /^[^\n()]+$/;
+function requireReasonText(where, why) {
+  if (typeof why !== "string" || !REASON_TEXT.test(why)) throw new TypeError(`${where}: the reason must be one line without parentheses`);
+  return why;
+}
+/** `argv-rejected(<why>)` — the test argv failed the §4.2 allowlist or a deny rule; nothing was resolved or spawned. */
+export const argvRejected = (why) => `argv-rejected(${requireReasonText("argvRejected", why)})`;
+/** `install-argv-rejected(<why>)` — the same rules over `execute_project_tests.install.argv`. */
+export const installArgvRejected = (why) => `install-argv-rejected(${requireReasonText("installArgvRejected", why)})`;
+/**
+ * `TESTS <result>[(<reason>)][ exe=<path> sha256=<h>]` — the step-5 line:
+ * `TESTS_INDETERMINATE(<reason>)` spells the reason; the executable is named
+ * whenever one was resolved (spec §6.4 step 5).
+ */
+export function testsLine({ result, reason, exe, sha256 }) {
+  if (!TEST_RESULT_LIST.includes(result)) throw new TypeError(`testsLine: result ${String(result)} is outside the closed vocabulary`);
+  let token = result;
+  if (result === TESTS_INDETERMINATE) {
+    if (typeof reason !== "string" || reason.length === 0 || reason.includes("\n")) throw new TypeError("testsLine: TESTS_INDETERMINATE needs a reason");
+    token = `${result}(${reason})`;
+  }
+  if (exe === undefined && sha256 === undefined) return `TESTS ${token}`;
+  if (typeof exe !== "string" || exe.length === 0 || /\s/.test(exe)) throw new TypeError("testsLine: exe must be a path without whitespace");
+  if (!SHA256.test(sha256)) throw new TypeError("testsLine: sha256 must be 64 lowercase hex chars");
+  return `TESTS ${token} exe=${exe} sha256=${sha256}`;
+}
+
+/** Indicator kinds (verify.schema.json `suppression.indicators[].kind`, plan §4.2 closed list). */
+export const INDICATOR_IGNORE_FILE_EDIT = "ignore-file-edit";
+export const INDICATOR_INLINE_SUPPRESS = "inline-suppress";
+export const INDICATOR_TEST_SKIP = "test-skip";

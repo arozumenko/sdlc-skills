@@ -17,8 +17,8 @@ env         SECURITY_EVIDENCE_NOW · SECURITY_EVIDENCE_ACTOR
 `;
 
 const COMMANDS = {
-  // all: () => import("./lib/cmd-verify-all.mjs"),        // TASK-027
-  // evaluate: () => import("./lib/cmd-evaluate.mjs"),     // TASK-026
+  all: () => import("./lib/cmd-verify-all.mjs"), // TASK-027
+  evaluate: () => import("./lib/cmd-evaluate.mjs"), // TASK-026 (wired by TASK-027)
 };
 
 process.exitCode = await main({ name: "verify", usage: USAGE, commands: COMMANDS }, process.argv.slice(2));

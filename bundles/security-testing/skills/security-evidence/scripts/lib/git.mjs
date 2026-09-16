@@ -16,6 +16,7 @@
 // Imports only node:*. No clock (G-1), no network (G-14).
 
 import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 /** git could not run, or a typed helper met a state it cannot report as data. */
@@ -296,6 +297,12 @@ export function mergeBaseIsAncestor(root, ancestor, descendant) {
  * so hooks are pointed at a path that cannot exist: `<dir>/.no-hooks` is
  * inside the not-yet-created work tree, and git treats a missing hook as
  * no hook. `-c` must precede the subcommand.
+ *
+ * One retry after `git worktree prune` (TASK-027; PM log after G7): under
+ * load a fresh add has been seen to fail transiently, and a registered-but-
+ * missing work tree at the same path ("missing but already registered
+ * worktree") fails until pruned. The first attempt's partial directory, if
+ * any, is removed before the retry; the error names both attempts' stderr.
  * @param {string} root
  * @param {string} dir absolute, must not exist
  * @param {string} oid
@@ -304,7 +311,15 @@ export function worktreeAdd(root, dir, oid) {
   // A relative core.hooksPath is resolved by git against the work tree, so
   // only an absolute `dir` makes `<dir>/.no-hooks` provably non-existent.
   if (!isAbsolute(dir)) throw new TypeError(`worktreeAdd: dir must be absolute, got ${dir}`);
-  must(root, ["-c", `core.hooksPath=${join(dir, ".no-hooks")}`, "worktree", "add", "--detach", "--", dir, oid]);
+  const argv = ["-c", `core.hooksPath=${join(dir, ".no-hooks")}`, "worktree", "add", "--detach", "--", dir, oid];
+  const first = git(root, argv);
+  if (first.code === 0) return;
+  rmSync(dir, { recursive: true, force: true });
+  git(root, ["worktree", "prune"]);
+  const second = git(root, argv);
+  if (second.code !== 0) {
+    throw new GitError(`git worktree add failed (${second.code}) after a prune retry: ${second.stderr.trim()} [first attempt (${first.code}): ${first.stderr.trim()}]`, { argv, code: second.code, stderr: second.stderr });
+  }
 }
 
 /**
