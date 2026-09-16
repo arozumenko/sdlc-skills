@@ -244,6 +244,25 @@ test("packet rows (TASK-057): `PACKET <path> sha256=<h> kind=<k> files=<n>`; the
   assert.equal(tokens.NOT_IMPLEMENTED_SUBJECT_PACKET, "NOT-IMPLEMENTED(TASK-021)");
 });
 
+test("gate rows (TASK-019): the two citation states, `GATE accepted=<n> unverifiable=<n> rejected=<n> unlocated=<n>`, CLAIMS-PACKET-MISMATCH(<file>), GATE-EXISTS and gate's own rejection reasons", () => {
+  assert.equal(tokens.CITATION_VERIFIED, "CITATION_VERIFIED");
+  assert.equal(tokens.CITATION_FAILED, "CITATION_FAILED");
+  assert.equal(tokens.gateLine({ accepted: 3, unverifiable: 1, rejected: 2, unlocated: 8 }), "GATE accepted=3 unverifiable=1 rejected=2 unlocated=8");
+  assert.equal(tokens.gateLine({ accepted: 0, unverifiable: 0, rejected: 0, unlocated: 0 }), "GATE accepted=0 unverifiable=0 rejected=0 unlocated=0");
+  assert.throws(() => tokens.gateLine({ accepted: -1, unverifiable: 0, rejected: 0, unlocated: 0 }), /accepted/);
+  assert.throws(() => tokens.gateLine({ accepted: 0, unverifiable: 0.5, rejected: 0, unlocated: 0 }), /unverifiable/);
+  assert.throws(() => tokens.gateLine({ accepted: 0, unverifiable: 0, rejected: "0", unlocated: 0 }), /rejected/);
+  assert.throws(() => tokens.gateLine({ accepted: 0, unverifiable: 0, rejected: 0 }), /unlocated/);
+  assert.equal(tokens.claimsPacketMismatch(".agents/security-testing/receipts/r/claims-1.json"), "CLAIMS-PACKET-MISMATCH(.agents/security-testing/receipts/r/claims-1.json)");
+  assert.throws(() => tokens.claimsPacketMismatch(""), /file/);
+  assert.throws(() => tokens.claimsPacketMismatch("a\nb"), /file/);
+  assert.equal(tokens.GATE_EXISTS, "GATE-EXISTS");
+  const reasons = [tokens.GATE_AGENT_WROTE_ID, tokens.GATE_CLAIM_INVALID, tokens.GATE_PATH_NOT_AT_SIDE, tokens.GATE_RANGE_OUTSIDE_FILE, tokens.GATE_FILE_NOT_TEXT, tokens.GATE_DUPLICATE_ID];
+  assert.deepEqual(reasons, ["agent-wrote-id", "claim-invalid", "PATH-NOT-AT-SIDE", "RANGE-OUTSIDE-FILE", "FILE-NOT-TEXT", "duplicate-id"]);
+  const cite = [tokens.RANGE_INVALID, tokens.RANGE_TOO_LONG, tokens.PATH_NOT_IN_SCOPE, tokens.SIDE_MISMATCH, tokens.RANGE_NOT_ADMITTED];
+  assert.equal(new Set([...reasons, ...cite]).size, reasons.length + cite.length, "gate's reasons never collide with cite's");
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;
