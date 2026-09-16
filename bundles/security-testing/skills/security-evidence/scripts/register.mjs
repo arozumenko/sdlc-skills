@@ -21,7 +21,7 @@ const COMMANDS = {
   alias: () => import("./lib/cmd-register-transition.mjs").then((m) => m.verb("alias")), // TASK-029
   transition: () => import("./lib/cmd-register-transition.mjs"), // TASK-029 (ticketed and the other emitter-only events are refused here)
   // "consume-verdict": () => import("./lib/cmd-consume-verdict.mjs"), // TASK-030
-  // render: () => import("./lib/cmd-register-render.mjs"), // TASK-059
+  render: () => import("./lib/cmd-register-render.mjs"), // TASK-059
 };
 
 process.exitCode = await main({ name: "register", usage: USAGE, commands: COMMANDS }, process.argv.slice(2));
