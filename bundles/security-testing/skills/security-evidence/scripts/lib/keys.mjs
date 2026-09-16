@@ -50,8 +50,8 @@
 // the engagement's rows. Both spellings name the same engagement here.
 //
 // KEY_ID_PATTERN is tokens.KEY_ID re-exported: tokens.mjs cannot import this
-// module (cycle), so the regex lives there. ctx.mjs keeps its own copy
-// (G-15: not this task's file) — a note for TASK-008 to import tokens.KEY_ID.
+// module (cycle), so the regex lives there; ctx.mjs imports the same one
+// (folded in TASK-008 — one regex, no copies).
 //
 // Ordering note for the same process: `ctx.key()` caches its answer for the
 // life of a ctx (TASK-006). A writer that reads `ctx.key()` *before*

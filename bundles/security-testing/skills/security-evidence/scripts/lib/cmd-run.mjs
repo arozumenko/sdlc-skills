@@ -28,28 +28,25 @@
 // 5 for assessment). Exit 0; 2 USAGE(run init: …) / ENGAGEMENT-MISSING /
 // KEY: unavailable; 3 DIRTY-TREE.
 //
-// The clean-tree check (D18 as amended by P6): `git status --porcelain --
+// The clean-tree check (D18 as amended by P6) is lib/clean-tree.mjs
+// (assessmentDirt — moved there by TASK-008 so `scope`, TASK-013, shares it
+// without importing this command; TL-1): `git status --porcelain --
 // <scope_paths> <product_paths>` must be empty after excluding the bundle's
-// own managed paths — `.agents/security-testing/**`, `reports/security/`,
-// `tasks/security-*/` — and the root `.gitignore` when its only difference
-// from HEAD is the managed `# security-testing:begin/end` block. Files the
-// engagement itself creates never count as dirt; anything else dirty under
-// the assessed paths does (tracked or untracked; git-ignored files are not
-// listed by status and are outside the observation, as for the baseline).
-// An empty union assesses nothing, so nothing can be dirty. assessmentDirt()
-// is exported for `scope` (TASK-013), which re-runs the same check.
+// own managed paths and a `.gitignore` that differs from HEAD only by the
+// managed block (ignore-block.mjs owns the block's edges).
 //
-// Imports: node:fs (mkdirSync, readFileSync), node:path, ../canon.mjs,
-// ./argv.mjs, ./exit.mjs, ./git.mjs, ./ledger.mjs, ./run-index.mjs,
+// Imports: node:fs (mkdirSync), node:path, ../canon.mjs, ./argv.mjs,
+// ./clean-tree.mjs, ./exit.mjs, ./git.mjs, ./ledger.mjs, ./run-index.mjs,
 // ./schema.mjs, ./tokens.mjs. Every string that leaves the process goes
 // through ctx.out / ctx.log / ctx.writeArtifact (G-4).
 
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { makeEnvelope, writeArtifact } from "../canon.mjs";
 import { parseCommandArgv } from "./argv.mjs";
+import { assessmentDirt } from "./clean-tree.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
-import { GitError, blobOid, revParse, showBytes, statusPorcelain } from "./git.mjs";
+import { GitError, revParse } from "./git.mjs";
 import { RUN_KINDS, allocateRun, ledgerPaths } from "./ledger.mjs";
 import { INDEXES, runDir, writeEmptyIndexes } from "./run-index.mjs";
 import { validate } from "./schema.mjs";
@@ -60,88 +57,6 @@ const SCHEMA_VERSION = 1;
 const BASE_REQUIRED = Object.freeze(["review", "verify"]);
 /** Subdirectories every run starts with (plan §4.1). */
 export const RUN_SUBDIRS = Object.freeze(["packets", "receipts", "ingest", "verify-snapshots"]);
-
-// --- the clean-tree check (D18 / P6) ----------------------------------------
-
-/** The bundle's managed paths (spec D18): a status row under one of these is never dirt. */
-const MANAGED_PATH = /^(?:\.agents\/security-testing\/|reports\/security\/|tasks\/security-[^/]*\/)/;
-const GITIGNORE = ".gitignore";
-const BLOCK_BEGIN = "# security-testing:begin";
-const BLOCK_END = "# security-testing:end";
-
-/** `text` without the managed block (the begin line through the end line, inclusive); unchanged when the block is unterminated. */
-export function stripManagedBlock(text) {
-  const out = [];
-  let inside = false;
-  for (const line of text.split("\n")) {
-    const bare = line.replace(/\r$/, "");
-    if (!inside && bare === BLOCK_BEGIN) {
-      inside = true;
-      continue;
-    }
-    if (inside) {
-      if (bare === BLOCK_END) inside = false;
-      continue;
-    }
-    out.push(line);
-  }
-  // A begin marker with no end line is not the managed block: strip nothing,
-  // so every line after it (a live pattern to git, which reads the marker as
-  // a comment) still compares against HEAD and counts as dirt.
-  if (inside) return text;
-  return out.join("\n");
-}
-
-/**
- * The lines of a `.gitignore` that mean something to git, after the managed
- * block is stripped: CR dropped, blank lines dropped. Blank lines are
- * separators with no effect on matching, and the block writer has to add the
- * newline (or a blank separator) that attaches the block to a file whose last
- * line had no LF — that whitespace is part of the block's edit, not dirt.
- */
-function ignoreLinesOf(text) {
-  return stripManagedBlock(text)
-    .split("\n")
-    .map((line) => line.replace(/\r$/, ""))
-    .filter((line) => line.trim() !== "");
-}
-
-/** True when the working `.gitignore` differs from HEAD's only by the managed block (and the whitespace that attaches it). */
-function gitignoreOnlyManagedBlock(ctx) {
-  const atHead = blobOid(ctx.root, "HEAD", GITIGNORE) === null ? "" : showBytes(ctx.root, "HEAD", GITIGNORE).toString("utf8");
-  let working;
-  try {
-    working = readFileSync(join(ctx.root, GITIGNORE), "utf8");
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-    working = "";
-  }
-  const a = ignoreLinesOf(atHead);
-  const b = ignoreLinesOf(working);
-  return a.length === b.length && a.every((line, i) => line === b[i]);
-}
-
-/**
- * The status rows under `scope_paths ∪ product_paths` that are dirt for an
- * assessment: everything `git status --porcelain` lists there except the
- * bundle's managed paths and a `.gitignore` that differs only by the managed
- * block. A rename counts unless both its sides are managed.
- * @param {object} ctx
- * @param {{scope_paths: string[], product_paths: string[]}} record the engagement record
- * @returns {{xy: string, path: string, orig?: string}[]} empty ⇒ clean
- */
-export function assessmentDirt(ctx, record) {
-  const paths = [...new Set([...record.scope_paths, ...record.product_paths])].filter((p) => typeof p === "string" && p.length > 0);
-  if (paths.length === 0) return [];
-  let gitignoreClean; // computed at most once, only when .gitignore shows up
-  const managed = (path) => {
-    if (MANAGED_PATH.test(path)) return true;
-    if (path !== GITIGNORE) return false;
-    gitignoreClean ??= gitignoreOnlyManagedBlock(ctx);
-    return gitignoreClean;
-  };
-  return statusPorcelain(ctx.root, { paths }).filter((row) => !(managed(row.path) && (row.orig === undefined || managed(row.orig))));
-}
 
 // --- run init ----------------------------------------------------------------
 

@@ -45,14 +45,13 @@ import { redactString } from "../redact.mjs";
 import { parseEngagementMd } from "./engagement.mjs";
 import { toplevel } from "./git.mjs";
 import { CliError, EXIT, usageError } from "./exit.mjs";
-import { ENGAGEMENT_MISSING, NOT_A_WORK_TREE, inconsistent, wrote as wroteToken } from "./tokens.mjs";
+import { ENGAGEMENT_MISSING, KEY_ID, NOT_A_WORK_TREE, inconsistent, wrote as wroteToken } from "./tokens.mjs";
 
 const SCRIPTS_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 export const VERSION_PATH = join(SCRIPTS_DIR, "version.json");
 export const ST_REL = join(".agents", "security-testing");
 
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
-const KEY_ID = /^k[0-9a-f]{12}$/;
 
 function redactLine(s) {
   return redactString(s).text;
