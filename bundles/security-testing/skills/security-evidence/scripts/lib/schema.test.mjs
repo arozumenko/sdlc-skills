@@ -350,6 +350,14 @@ test("register: statuses, events and approvals are the closed vocabularies; appr
   assert.deepEqual(validate("register-event", { ...ev, event: "ticketed", payload: { ticket_url: "https://github.com/x/y/issues/1", import_sha256: SHA256 } }), []);
   assert.deepEqual(validate("register-snapshot", fixture("register-snapshot", "ok")), []);
   assert.deepEqual(validate("finding-alias", fixture("finding-alias", "ok")), []);
+  // TASK-058: the snapshot witnesses finding-alias.jsonl too (PM log after TASK-029) —
+  // `aliases` is an optional list of Alias lines; the fixture carries one.
+  const snap = fixture("register-snapshot", "ok");
+  assert.ok(Array.isArray(snap.aliases) && snap.aliases.length === 1, "the ok fixture exercises aliases");
+  const { aliases: _drop, ...withoutAliases } = snap;
+  assert.deepEqual(validate("register-snapshot", withoutAliases), [], "aliases is optional (additive to the TASK-005 shape)");
+  assert.ok(validate("register-snapshot", { ...snap, aliases: [{ ...snap.aliases[0], seq: 0.5 }] }).length > 0, "alias items are the Alias def");
+  assert.ok(validate("register-snapshot", { ...snap, aliases: [{ ...snap.aliases[0], extra: 1 }] }).length > 0);
 });
 
 test("admission: receipt_sha256 required iff admitted-reviewed", () => {

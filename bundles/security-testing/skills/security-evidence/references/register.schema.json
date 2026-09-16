@@ -285,6 +285,13 @@
           "items": {
             "$ref": "#/$defs/Event"
           }
+        },
+        "aliases": {
+          "$comment": "finding-alias.jsonl as of the snapshot (TASK-058, PM log after TASK-029): optional and additive; `run snapshot register` always writes it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Alias"
+          }
         }
       }
     },

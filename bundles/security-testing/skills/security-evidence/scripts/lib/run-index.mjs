@@ -17,7 +17,8 @@
 // is current now), and writeArtifact (tmp + rename, atomic) — under the run
 // lock (ledger.withRunLock), so two processes appending to the same index
 // never lose an entry. `run snapshot proposals` (TASK-058) rewrites
-// proposals-index.json the same way. Their identity never enters a preimage;
+// proposals-index.json the same way through replaceIndex (the whole list, so
+// a re-snapshot drops entries too). Their identity never enters a preimage;
 // the manifest hashes the members they list.
 //
 // A run whose `COMMITTED` marker exists is closed: appendIndex refuses with
@@ -81,6 +82,33 @@ export function writeEmptyIndexes(ctx, head) {
 }
 
 /**
+ * The one rewrite path for an index file (G-10): under the run lock, read the
+ * artifact on disk, derive the new list with `next(currentList)`, validate,
+ * re-envelope with the run's own identity and write tmp+rename.
+ * @param {string} where caller name for the TypeError
+ * @param {(list: object[]) => object[]} next
+ */
+async function rewriteIndex(ctx, run_id, name, where, next) {
+  const { file, kind, key } = indexSpec(name);
+  const dir = runDir(ctx, run_id);
+  const path = join(dir, file);
+  return withRunLock(ctx, run_id, () => {
+    if (existsSync(join(dir, COMMITTED))) throw new CliError(EXIT.USAGE, RUN_COMMITTED);
+    if (!existsSync(path)) throw new CliError(EXIT.INDETERMINATE, incomplete(name));
+    const current = readArtifact(path, { kind });
+    // A hash-consistent but off-shape index (list key missing or not an
+    // array) is a bad artifact (exit-5 class), not a TypeError from the spread.
+    if (validate(kind, current.payload).length > 0) throw integrityFailure(inconsistent(file));
+    const payload = { [key]: next(current.payload[key]) };
+    const errors = validate(kind, payload);
+    if (errors.length > 0) throw new TypeError(`${where}: entry is off-schema for ${kind}: ${errors[0]}`);
+    const { schema_version, run_id: rid, engagement_id, key_id } = current.envelope;
+    const head = { schema_version, kind, run_id: rid, engagement_id, key_id, now: ctx.now };
+    return writeArtifact(path, makeEnvelope(head, payload));
+  });
+}
+
+/**
  * Append `entry` to the run's `<name>` index: the one rewrite path for a file
  * under `<run>/` (G-10), atomic across processes (run lock + tmp/rename).
  * @param {object} ctx
@@ -93,21 +121,24 @@ export function writeEmptyIndexes(ctx, head) {
  * @throws {IntegrityError | CanonError} when the index on disk is not the artifact it claims to be (exit-5 class)
  */
 export async function appendIndex(ctx, run_id, name, entry) {
-  const { file, kind, key } = indexSpec(name);
-  const dir = runDir(ctx, run_id);
-  const path = join(dir, file);
-  return withRunLock(ctx, run_id, () => {
-    if (existsSync(join(dir, COMMITTED))) throw new CliError(EXIT.USAGE, RUN_COMMITTED);
-    if (!existsSync(path)) throw new CliError(EXIT.INDETERMINATE, incomplete(name));
-    const current = readArtifact(path, { kind });
-    // A hash-consistent but off-shape index (list key missing or not an
-    // array) is a bad artifact (exit-5 class), not a TypeError from the spread.
-    if (validate(kind, current.payload).length > 0) throw integrityFailure(inconsistent(file));
-    const payload = { [key]: [...current.payload[key], entry] };
-    const errors = validate(kind, payload);
-    if (errors.length > 0) throw new TypeError(`appendIndex: entry is off-schema for ${kind}: ${errors[0]}`);
-    const { schema_version, run_id: rid, engagement_id, key_id } = current.envelope;
-    const head = { schema_version, kind, run_id: rid, engagement_id, key_id, now: ctx.now };
-    return writeArtifact(path, makeEnvelope(head, payload));
-  });
+  return rewriteIndex(ctx, run_id, name, "appendIndex", (list) => [...list, entry]);
+}
+
+/**
+ * Replace the run's `<name>` index list wholesale (`run snapshot proposals`,
+ * TASK-058: the index mirrors `<st>/proposals/` as of now, so a re-snapshot
+ * must drop entries as well as add them). Same lock, same refusals, same
+ * re-enveloping as appendIndex.
+ * @param {object} ctx
+ * @param {string} run_id
+ * @param {"imports" | "observations" | "proposals"} name
+ * @param {object[]} entries the whole new list, per the index's schema
+ * @returns {Promise<{envelope: object, payload: object}>} the artifact now on disk
+ * @throws {CliError} 2 RUN-COMMITTED · 3 INCOMPLETE(<name>)
+ * @throws {TypeError} unknown name, bad run_id, not an array, off-schema entry (nothing written)
+ * @throws {IntegrityError | CanonError} when the index on disk is not the artifact it claims to be (exit-5 class)
+ */
+export async function replaceIndex(ctx, run_id, name, entries) {
+  if (!Array.isArray(entries)) throw new TypeError(`replaceIndex: entries must be an array, got ${entries === null ? "null" : typeof entries}`);
+  return rewriteIndex(ctx, run_id, name, "replaceIndex", () => [...entries]);
 }

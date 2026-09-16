@@ -93,6 +93,22 @@ test("consume-verdict tokens (TASK-030)", () => {
   assert.throws(() => tokens.consumed({ verdict: "VERIFIED", row: "R-0001", verify: "abc" }), /sha256/);
 });
 
+test("run snapshot tokens (TASK-058; plan §4.1 rows `run snapshot *`)", () => {
+  assert.equal(tokens.SNAPSHOT_EXISTS, "SNAPSHOT-EXISTS");
+  assert.equal(tokens.kindRefused("review"), "KIND(review)");
+  assert.throws(() => tokens.kindRefused("audit"), /closed vocabulary/);
+  assert.equal(tokens.snapshotRegister({ events: 3, chain_sha256: "c".repeat(64) }), `SNAPSHOT register events=3 chain=${"c".repeat(64)}`);
+  assert.equal(tokens.snapshotRegister({ events: 0, chain_sha256: "0".repeat(64) }), `SNAPSHOT register events=0 chain=${"0".repeat(64)}`);
+  assert.throws(() => tokens.snapshotRegister({ events: -1, chain_sha256: "c".repeat(64) }), /events/);
+  assert.throws(() => tokens.snapshotRegister({ events: 1, chain_sha256: "zz" }), /chain/);
+  assert.equal(tokens.snapshotVerify({ from: "deadbeef0000-0001", sha256: "d".repeat(64) }), `SNAPSHOT verify from=deadbeef0000-0001 sha256=${"d".repeat(64)}`);
+  assert.throws(() => tokens.snapshotVerify({ from: "nope", sha256: "d".repeat(64) }), /from/);
+  assert.throws(() => tokens.snapshotVerify({ from: "deadbeef0000-0001", sha256: "d" }), /sha256/);
+  assert.equal(tokens.snapshotProposals(0), "SNAPSHOT proposals n=0");
+  assert.equal(tokens.snapshotProposals(2), "SNAPSHOT proposals n=2");
+  assert.throws(() => tokens.snapshotProposals(-1), /n must/);
+});
+
 test("formatters", () => {
   assert.equal(tokens.incomplete("scope"), "INCOMPLETE(scope)");
   assert.equal(tokens.inconsistent("gate-result"), "INCONSISTENT(gate-result)");
