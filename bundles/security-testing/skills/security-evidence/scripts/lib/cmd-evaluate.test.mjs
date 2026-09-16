@@ -6,7 +6,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { run, USAGE } from "./cmd-evaluate.mjs";
@@ -27,10 +27,13 @@ function tmp() {
   return d;
 }
 
+// The fake ctx resolves like ctx.input() does for an in-tree path (cwd-relative,
+// absolute kept); the containment rule itself is exercised end to end in
+// cmd-verify-all.test.mjs ("evaluate is wired … ctx.input()").
 function fakeCtx() {
   const out = [];
   const log = [];
-  return { ctx: { out: (s) => out.push(s), log: (s) => log.push(s) }, out, log };
+  return { ctx: { out: (s) => out.push(s), log: (s) => log.push(s), input: (_command, p) => resolve(p) }, out, log };
 }
 
 const verifyFixtures = () => readdirSync(VERIFY_FIXTURES).filter((f) => f.endsWith(".json")).sort();
@@ -128,8 +131,9 @@ test("wrong kind ⇒ exit 5", async () => {
   assert.deepEqual(out, []);
 });
 
-test("no git, no child process, no network, no console; stdout only via ctx.out", () => {
+test("no git, no child process, no network, no console; stdout only via ctx.out; the file goes through ctx.input()", () => {
   for (const banned of ["node:child_process", "child_process", "git.mjs", "node:http", "node:https", "node:net", "node:dns", "fetch(", "console."]) {
     assert.ok(!SELF.includes(banned), `cmd-evaluate.mjs must not reference ${banned}`);
   }
+  assert.match(SELF, /ctx\.input\("evaluate", /, "TASK-027 (PM log after G3): the user-typed path is resolved by ctx.input()");
 });

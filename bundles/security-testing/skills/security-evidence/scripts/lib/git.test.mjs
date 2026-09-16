@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanupAll, git as fixtureGit, initRepo, tmpDir, SCRIPTS_DIR } from "../fixtures/cli/harness.mjs";
@@ -254,14 +254,49 @@ test("diffUnified pins the a/ b/ header prefixes against a consumer's diff.nopre
   assert.match(diffUnified(repo, base, head, "src/app.js"), pinned, "diff.submodule=log leaves a plain file diff alone");
 });
 
+/** Rethrow with git's own stderr and the worktree list, so an intermittent failure is diagnosable (PM log after G7). */
+function diagnosed(repo, step, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    let list = "(git worktree list failed)";
+    try {
+      list = fixtureGit(repo, ["worktree", "list", "--porcelain"]);
+    } catch {
+      // keep the placeholder
+    }
+    const stderr = err && typeof err.stderr === "string" ? err.stderr : "(no stderr on the error)";
+    throw new Error(`${step}: ${err instanceof Error ? err.message : String(err)}\n--- git stderr ---\n${stderr}\n--- git worktree list ---\n${list}`, { cause: err });
+  }
+}
+
 test("worktreeAdd / worktreeRemove: detached checkout at an oid, removed cleanly", () => {
   const repo = initRepo();
   const head = revParse(repo, "HEAD");
   const dir = join(tmpDir(), "wt");
+  diagnosed(repo, "worktreeAdd", () => worktreeAdd(repo, dir, head));
+  diagnosed(repo, "checkout content", () => {
+    assert.equal(readFileSync(join(dir, "src", "app.js"), "utf8"), "export const a = 1;\n");
+    assert.equal(revParse(dir, "HEAD"), head);
+  });
+  diagnosed(repo, "worktreeRemove", () => worktreeRemove(repo, dir));
+  diagnosed(repo, "after remove", () => {
+    assert.equal(existsSync(dir), false);
+    assert.doesNotMatch(fixtureGit(repo, ["worktree", "list"]), /wt/);
+  });
+});
+
+test("worktreeAdd retries once after a prune: a registered-but-missing work tree at the same path is cleared, not fatal (TASK-027)", () => {
+  const repo = initRepo();
+  const head = revParse(repo, "HEAD");
+  const dir = join(tmpDir(), "wt");
   worktreeAdd(repo, dir, head);
-  assert.equal(readFileSync(join(dir, "src", "app.js"), "utf8"), "export const a = 1;\n");
+  rmSync(dir, { recursive: true, force: true }); // gone from disk, still registered under .git/worktrees/
+  assert.match(fixtureGit(repo, ["worktree", "list", "--porcelain"]), /prunable/, "control: git sees a stale registration");
+  diagnosed(repo, "worktreeAdd over a stale registration", () => worktreeAdd(repo, dir, head));
   assert.equal(revParse(dir, "HEAD"), head);
   worktreeRemove(repo, dir);
-  assert.equal(existsSync(dir), false);
-  assert.doesNotMatch(fixtureGit(repo, ["worktree", "list"]), /wt/);
+  // a failure that a prune cannot fix names both attempts
+  assert.throws(() => worktreeAdd(repo, dir, "0".repeat(40)), (err) => err instanceof GitError && /after a prune retry/.test(err.message) && /first attempt/.test(err.message) && typeof err.stderr === "string");
+  assert.equal(existsSync(dir), false, "nothing left behind");
 });
