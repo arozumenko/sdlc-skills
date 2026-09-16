@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "examined.schema.json",
+  "title": "examined",
+  "description": "Examined declaration (agent drop-box payload, admitted by `coverage --examined`) and <run>/examined.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_sha256",
+    "declared"
+  ],
+  "properties": {
+    "packet_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "declared": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "ranges"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "sarif",
+  "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "original_hmac": "5555555555555555555555555555555555555555555555555555555555555555",
+  "redaction_version": 1,
+  "mapping_version": "v1",
+  "source_path": ".agents/security-testing/imports/semgrep.sarif",
+  "records": [
+    {
+      "locator": {
+        "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "original_hmac": "5555555555555555555555555555555555555555555555555555555555555555",
+        "index": 0
+      },
+      "trusted": {
+        "path": "src/db.js",
+        "rule_id": "javascript.express.sqli",
+        "level": "error",
+        "region": [
+          10,
+          14
+        ]
+      },
+      "inert": {
+        "message": "SQL string concatenation"
+      }
+    }
+  ],
+  "unlocated": [
+    {
+      "locator": {
+        "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "index": 3
+      },
+      "reason": "out-of-scope",
+      "tool": "semgrep",
+      "rule_id": "javascript.express.sqli"
+    }
+  ],
+  "rejected": [
+    {
+      "reason": "ruleIndex/ruleId disagree",
+      "locator": {
+        "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "index": 2
+      }
+    }
+  ]
+}

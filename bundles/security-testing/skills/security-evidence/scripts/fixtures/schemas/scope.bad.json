@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "path": "src/db.js",
+      "side": "head",
+      "oid": "1111111111111111111111111111111111111111",
+      "file_hmac": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "lines": 120
+    }
+  ],
+  "ranges": {
+    "src/db.js": [
+      [
+        0,
+        40
+      ]
+    ]
+  },
+  "skipped": []
+}

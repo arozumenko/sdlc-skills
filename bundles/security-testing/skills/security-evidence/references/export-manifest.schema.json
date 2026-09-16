@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export-manifest.schema.json",
+  "title": "export-manifest",
+  "description": "export-manifest.json written next to every `publish --profile` output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_manifest_sha256",
+    "profile",
+    "profile_version",
+    "output_sha256"
+  ],
+  "properties": {
+    "source_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profile": {
+      "type": "string",
+      "enum": [
+        "redacted-report",
+        "full-report",
+        "tracker",
+        "handoff",
+        "case"
+      ]
+    },
+    "profile_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "output_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "packet-policy.v1.schema.json",
+  "title": "packet-policy.v1",
+  "description": "references/packet-policy.v1.json (data file owned by TASK-057).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "max_range",
+    "sides",
+    "typed_citation_rule",
+    "redaction_version"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "max_range": {
+      "type": "integer",
+      "const": 40
+    },
+    "sides": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "base",
+          "head",
+          "snapshot"
+        ]
+      }
+    },
+    "typed_citation_rule": {
+      "type": "string",
+      "const": "context-allowed-outside-admitted"
+    },
+    "redaction_version": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

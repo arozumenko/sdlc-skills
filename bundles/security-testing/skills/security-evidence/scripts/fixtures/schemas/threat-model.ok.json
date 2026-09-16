@@ -1,0 +1,53 @@
+{
+  "elements": [
+    {
+      "id": "E-001",
+      "kind": "process",
+      "name": "Checkout API",
+      "citation": {
+        "path": "src/orders.js",
+        "side": "head",
+        "lines": [
+          1,
+          20
+        ]
+      }
+    }
+  ],
+  "threats": [
+    {
+      "id": "T-001",
+      "element_id": "E-001",
+      "stride": "T",
+      "title": "Order total tampered in transit",
+      "mitigations": [
+        {
+          "id": "M-001",
+          "claim": "Server recomputes the total",
+          "citation": {
+            "path": "src/orders.js",
+            "side": "head",
+            "lines": [
+              40,
+              52
+            ]
+          }
+        }
+      ],
+      "disposition": {
+        "kind": "mitigated",
+        "ref": "M-001"
+      }
+    },
+    {
+      "id": "T-002",
+      "element_id": "E-001",
+      "stride": "I",
+      "title": "Order export leaks PII",
+      "mitigations": [],
+      "disposition": {
+        "kind": "undisposed"
+      }
+    }
+  ]
+}

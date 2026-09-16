@@ -1,0 +1,13 @@
+{
+  "candidates": [
+    {
+      "locator": {
+        "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "index": 3
+      },
+      "reason": "unknown",
+      "tool": "semgrep",
+      "rule_id": "javascript.express.sqli"
+    }
+  ]
+}

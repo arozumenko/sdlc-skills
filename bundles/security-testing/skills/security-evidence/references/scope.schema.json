@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scope.schema.json",
+  "title": "scope",
+  "description": "<run>/scope.json payload (spec §6.1, §6.2). ranges and snapshot are keyed by repo-relative path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "files",
+    "ranges",
+    "skipped"
+  ],
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "side",
+          "oid",
+          "file_hmac",
+          "lines"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "head",
+              "snapshot"
+            ]
+          },
+          "oid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+          },
+          "file_hmac": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "lines": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "ranges": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+          }
+        }
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "binary",
+              "too-large",
+              "symlink",
+              "submodule",
+              "unreadable"
+            ]
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "original_hmac",
+            "redacted_sha256",
+            "redaction_version"
+          ],
+          "properties": {
+            "original_hmac": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "redacted_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "redaction_version": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

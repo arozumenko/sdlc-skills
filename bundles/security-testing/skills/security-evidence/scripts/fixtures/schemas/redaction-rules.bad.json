@@ -1,0 +1,11 @@
+{
+  "redaction_version": 1,
+  "rules": [
+    {
+      "class": "credit-card",
+      "pattern": "x",
+      "flags": "g",
+      "replacement": "y"
+    }
+  ]
+}

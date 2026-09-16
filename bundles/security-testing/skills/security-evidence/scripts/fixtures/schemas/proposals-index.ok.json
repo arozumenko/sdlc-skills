@@ -1,0 +1,9 @@
+{
+  "proposals": [
+    {
+      "id": "P-001",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "path": ".agents/security-testing/proposals/P-001.proposal.md"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "finding_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "base_oid": "0000000000000000000000000000000000000000",
+  "head_oid": "1111111111111111111111111111111111111111",
+  "branch": "COMMITTED",
+  "tree_before": "1111111111111111111111111111111111111111",
+  "install": {
+    "ran": true,
+    "argv_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "allow_tracked_changes": false,
+    "tracked_changes": [],
+    "untracked_count": 412,
+    "untracked_bytes": 18324511
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [
+      {
+        "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "kind": "inline-suppress",
+        "path": "src/db.js",
+        "line": 12
+      }
+    ],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "TESTS_PASS",
+    "argv_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "executable_path": "/usr/local/bin/npm",
+    "executable_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_redacted": "> test\n\n12 passing\n"
+  },
+  "packet_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "receipts": [
+    {
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "type": "fix-review",
+      "assertion": "not-refound",
+      "applied": true
+    },
+    {
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "type": "ack",
+      "indicator_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "open",
+  "evaluation": {
+    "verdict": "VERIFIED (unacked)",
+    "refound_observed": false,
+    "ack_refs": [
+      "2222222222222222222222222222222222222222222222222222222222222222"
+    ],
+    "events": []
+  }
+}

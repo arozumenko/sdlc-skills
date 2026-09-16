@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "finding.schema.json",
+  "title": "finding",
+  "description": "Finding (gate output), Claim (agent-authored, no id/state/occurrence/source), ClaimSet (claims-<n>.json, TL-15) and Claimed (findings.claimed.json payload).",
+  "$defs": {
+    "Range": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "$comment": "[start, end] with start >= 1; end >= start is enforced by cite.checkRange (not expressible in the keyword subset)"
+    },
+    "TypedCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "path",
+        "side",
+        "lines",
+        "context"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "source",
+            "sink",
+            "control"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head",
+            "snapshot"
+          ]
+        },
+        "lines": {
+          "$ref": "#/$defs/Range"
+        },
+        "context": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "class",
+        "priority",
+        "confidence",
+        "path",
+        "side",
+        "lines",
+        "state",
+        "occurrence",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "injection",
+            "xss",
+            "ssrf",
+            "path-traversal",
+            "deserialization",
+            "auth",
+            "authz",
+            "crypto",
+            "secret",
+            "input-validation",
+            "config",
+            "logging",
+            "dos",
+            "supply-chain",
+            "unmapped"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ]
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "path": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head",
+            "snapshot"
+          ]
+        },
+        "lines": {
+          "$ref": "#/$defs/Range"
+        },
+        "snippet": {
+          "type": "string"
+        },
+        "snippet_redacted": {
+          "type": "string"
+        },
+        "context_redacted": {
+          "type": "string"
+        },
+        "sensitive": {
+          "type": "boolean"
+        },
+        "cwe": {
+          "type": "string",
+          "pattern": "^CWE-[0-9]+$"
+        },
+        "citations_typed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypedCitation"
+          }
+        },
+        "requires_typed_citations": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "prerequisites": {
+          "type": "string"
+        },
+        "remediation": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "CITATION_VERIFIED",
+            "CITATION_FAILED"
+          ]
+        },
+        "occurrence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "ref",
+            "index"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "sarif"
+              ]
+            },
+            "ref": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "$comment": "exactly one of snippet | snippet_redacted | context_redacted (spec §6.5)",
+      "oneOf": [
+        {
+          "required": [
+            "snippet"
+          ]
+        },
+        {
+          "required": [
+            "snippet_redacted"
+          ]
+        },
+        {
+          "required": [
+            "context_redacted"
+          ]
+        }
+      ]
+    },
+    "Claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "class",
+        "priority",
+        "confidence",
+        "path",
+        "side",
+        "lines"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "injection",
+            "xss",
+            "ssrf",
+            "path-traversal",
+            "deserialization",
+            "auth",
+            "authz",
+            "crypto",
+            "secret",
+            "input-validation",
+            "config",
+            "logging",
+            "dos",
+            "supply-chain",
+            "unmapped"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "p0",
+            "p1",
+            "p2",
+            "p3"
+          ]
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "path": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head",
+            "snapshot"
+          ]
+        },
+        "lines": {
+          "$ref": "#/$defs/Range"
+        },
+        "snippet": {
+          "type": "string"
+        },
+        "snippet_redacted": {
+          "type": "string"
+        },
+        "context_redacted": {
+          "type": "string"
+        },
+        "sensitive": {
+          "type": "boolean"
+        },
+        "cwe": {
+          "type": "string",
+          "pattern": "^CWE-[0-9]+$"
+        },
+        "citations_typed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypedCitation"
+          }
+        },
+        "requires_typed_citations": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "prerequisites": {
+          "type": "string"
+        },
+        "remediation": {
+          "type": "string"
+        },
+        "occurrence_hint": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "$comment": "exactly one of snippet | snippet_redacted | context_redacted (spec §6.5)",
+      "oneOf": [
+        {
+          "required": [
+            "snippet"
+          ]
+        },
+        {
+          "required": [
+            "snippet_redacted"
+          ]
+        },
+        {
+          "required": [
+            "context_redacted"
+          ]
+        }
+      ]
+    },
+    "ClaimSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_sha256",
+        "packet_sha256",
+        "findings"
+      ],
+      "properties": {
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "packet_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Claim"
+          }
+        }
+      }
+    },
+    "Claimed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_sha256",
+        "findings"
+      ],
+      "properties": {
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/Finding"
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sarif-mapping.v1.schema.json",
+  "title": "sarif-mapping.v1",
+  "description": "references/sarif-mapping.v1.json (spec D6, §6.7; data file owned by TASK-016).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "tools",
+    "tag_class",
+    "level_priority",
+    "default_confidence"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "confidence",
+            "rule_prefix_class"
+          ],
+          "properties": {
+            "confidence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "rule_prefix_class": {
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^.+$": {
+                  "type": "string",
+                  "enum": [
+                    "injection",
+                    "xss",
+                    "ssrf",
+                    "path-traversal",
+                    "deserialization",
+                    "auth",
+                    "authz",
+                    "crypto",
+                    "secret",
+                    "input-validation",
+                    "config",
+                    "logging",
+                    "dos",
+                    "supply-chain",
+                    "unmapped"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tag_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "string",
+          "enum": [
+            "injection",
+            "xss",
+            "ssrf",
+            "path-traversal",
+            "deserialization",
+            "auth",
+            "authz",
+            "crypto",
+            "secret",
+            "input-validation",
+            "config",
+            "logging",
+            "dos",
+            "supply-chain",
+            "unmapped"
+          ]
+        }
+      }
+    },
+    "level_priority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error",
+        "warning",
+        "note"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "const": "p1"
+        },
+        "warning": {
+          "type": "string",
+          "const": "p2"
+        },
+        "note": {
+          "type": "string",
+          "const": "p3"
+        }
+      }
+    },
+    "default_confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    }
+  }
+}

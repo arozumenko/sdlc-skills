@@ -1,0 +1,10 @@
+{
+  "dispositions": [
+    {
+      "threat_id": "T-001",
+      "kind": "mitigated",
+      "ref": "M-001",
+      "resolved_via": "approval"
+    }
+  ]
+}

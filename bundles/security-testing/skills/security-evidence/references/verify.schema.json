@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verify.schema.json",
+  "title": "verify",
+  "description": "<run>/verify.json payload (spec §6.4 step 8). `evaluation` is exactly evaluate() of the rest; evaluate() event payloads are empty (consume-verdict adds verify_sha256 to the register event).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "finding_id",
+    "base_oid",
+    "head_oid",
+    "branch",
+    "tree_before",
+    "install",
+    "tested_tree",
+    "suppression",
+    "tests",
+    "packet_sha256",
+    "receipts",
+    "row_status_at_start",
+    "evaluation"
+  ],
+  "properties": {
+    "finding_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "head_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "branch": {
+      "type": "string",
+      "enum": [
+        "COMMITTED",
+        "NOT-COMMITTED",
+        "PATH-UNTOUCHED"
+      ]
+    },
+    "tree_before": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ran",
+        "allow_tracked_changes",
+        "tracked_changes",
+        "untracked_count",
+        "untracked_bytes"
+      ],
+      "properties": {
+        "ran": {
+          "type": "boolean"
+        },
+        "argv_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "allow_tracked_changes": {
+          "type": "boolean"
+        },
+        "tracked_changes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untracked_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "untracked_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "tested_tree": {
+      "type": "string",
+      "oneOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "const": "same-as-head"
+        }
+      ]
+    },
+    "suppression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indicators",
+        "deletion_only"
+      ],
+      "properties": {
+        "indicators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "path",
+              "line"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ignore-file-edit",
+                  "inline-suppress",
+                  "test-skip"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sensitive": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "deletion_only": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "timed_out",
+        "output_redacted"
+      ],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": [
+            "TESTS_PASS",
+            "TESTS_FAIL",
+            "NO_TEST_SURFACE",
+            "TESTS_INDETERMINATE"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "argv_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "executable_path": {
+          "type": "string"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "output_redacted": {
+          "type": "string"
+        }
+      }
+    },
+    "packet_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sha256",
+          "type",
+          "applied"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "fix-review",
+              "ack"
+            ]
+          },
+          "assertion": {
+            "type": "string"
+          },
+          "indicator_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "not_applied_reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "row_status_at_start": {
+      "type": "string",
+      "enum": [
+        "open",
+        "accepted",
+        "fixed",
+        "regressed",
+        "false-positive",
+        "superseded",
+        "none"
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "refound_observed",
+        "ack_refs",
+        "events"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "pattern": "^(VERIFIED|REGRESSED|UNVERIFIED-REFOUND|UNVERIFIED-NOT-COMMITTED|UNVERIFIED-TESTS-FAILED|UNVERIFIED-NO-TEST-SURFACE|UNVERIFIED-INDETERMINATE\\([a-z-]+\\)|UNVERIFIED-SUPPRESSION\\((deletion-only|[0-9]+ unacked)\\))$"
+        },
+        "refound_observed": {
+          "type": "boolean"
+        },
+        "ack_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event",
+              "payload"
+            ],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": [
+                  "regression-observed"
+                ]
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

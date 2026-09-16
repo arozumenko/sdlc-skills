@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation.schema.json",
+  "title": "observation",
+  "description": "<run>/observations/<observation_id>.json (M3). Unknown values are the string \"unknown\".",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observation_id",
+    "import_sha256",
+    "case_id",
+    "case_sha256",
+    "result",
+    "run_id",
+    "base_url",
+    "account",
+    "head_oid"
+  ],
+  "properties": {
+    "observation_id": {
+      "type": "string",
+      "pattern": "^O-[0-9a-f]{12}$"
+    },
+    "import_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "case_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "unknown"
+      ]
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "base_url": {
+      "type": "string"
+    },
+    "account": {
+      "type": "string"
+    },
+    "head_oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$|^unknown$"
+    }
+  }
+}

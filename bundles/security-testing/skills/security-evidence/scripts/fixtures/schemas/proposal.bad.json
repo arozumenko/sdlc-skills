@@ -1,0 +1,16 @@
+{
+  "id": "P-001",
+  "title": "x",
+  "threat_ids": [],
+  "effect": "x",
+  "target": {
+    "host": "https://staging.example.com"
+  },
+  "authorization": {
+    "status": "approved",
+    "approver": "",
+    "approval_ref": "",
+    "authenticated": false
+  },
+  "steps": []
+}

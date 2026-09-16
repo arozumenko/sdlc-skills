@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate-result.schema.json",
+  "title": "gate-result",
+  "description": "<run>/gate-result.json payload (spec §6.1). rejected_counts is keyed by rejection reason.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accepted",
+    "unverifiable",
+    "rejected_counts",
+    "scope_sha256",
+    "claimed_sha256"
+  ],
+  "properties": {
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "unverifiable": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "rejected_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^.+$": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "scope_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "claimed_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

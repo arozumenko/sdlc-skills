@@ -1,0 +1,18 @@
+{
+  "rejected": [
+    {
+      "reason": "ruleIndex/ruleId disagree",
+      "locator": {
+        "import_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "index": 2
+      }
+    },
+    {
+      "reason": "float region",
+      "locator": {
+        "claims_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+        "index": 0
+      }
+    }
+  ]
+}

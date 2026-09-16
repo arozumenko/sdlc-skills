@@ -1,0 +1,49 @@
+{
+  "engagement_id": "eng-1",
+  "slug": "acme-shop",
+  "scope_paths": [
+    "src/"
+  ],
+  "product_paths": [
+    "src/",
+    "package.json"
+  ],
+  "targets": {
+    "tracker": [
+      "github.com"
+    ],
+    "browser": [
+      "staging.example.com:8443"
+    ],
+    "repo": "acme/shop"
+  },
+  "base_url": "https://staging.example.com:8443",
+  "execute_project_tests": {
+    "argv": [
+      "npm",
+      "test"
+    ],
+    "timeout_s": 600,
+    "install": {
+      "argv": [
+        "npm",
+        "ci"
+      ],
+      "allow_tracked_changes": false
+    }
+  },
+  "sign_off": {
+    "require_dispositions": "executed-or-ticketed"
+  },
+  "artifact_policy": {
+    "ledger": "local",
+    "runs": "local",
+    "receipts": "local",
+    "proposals": "local",
+    "handoffs": "local",
+    "imports": "local",
+    "register": "local",
+    "reports": "local",
+    "cases": "local"
+  }
+}

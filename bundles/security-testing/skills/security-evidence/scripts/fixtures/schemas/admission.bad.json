@@ -1,0 +1,10 @@
+{
+  "case_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "classification": "admitted",
+  "lint_hits": [],
+  "assumptions": {
+    "base_url_host": "staging.example.com:8443",
+    "account": "qa-security-1"
+  },
+  "target_policy_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+}
