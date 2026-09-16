@@ -342,9 +342,28 @@ test("build-report rows (TASK-023): REPORT_TEMPLATES, REPORT <path>, MANIFEST sh
   assert.equal(tokens.COMMITTED, "COMMITTED");
 });
 
+test("publish / check-export rows (TASK-031): PUBLISH_PROFILES, `PUBLISHED profile=<p> output=<path> sha256=<h>`, `DEDUPE finding=<id> existing=<url>`, the NEXT line, VERIFIED-DERIVATIVE, LINKED-ONLY, MISMATCH(output)", () => {
+  assert.deepEqual([...tokens.PUBLISH_PROFILES], ["redacted-report", "full-report", "tracker", "handoff", "case"]);
+  const h = "a".repeat(64);
+  assert.equal(tokens.publishedLine({ profile: "redacted-report", relPath: "reports/security/r/report.md", sha256: h }), `PUBLISHED profile=redacted-report output=reports/security/r/report.md sha256=${h}`);
+  assert.throws(() => tokens.publishedLine({ profile: "pdf", relPath: "reports/x", sha256: h }), /profile/);
+  assert.throws(() => tokens.publishedLine({ profile: "tracker", relPath: "/abs", sha256: h }), /repo-relative/);
+  assert.throws(() => tokens.publishedLine({ profile: "tracker", relPath: "x", sha256: "zz" }), /sha256/);
+  assert.equal(tokens.dedupeLine({ finding: h, existing: "https://github.com/o/r/issues/1" }), `DEDUPE finding=${h} existing=https://github.com/o/r/issues/1`);
+  assert.throws(() => tokens.dedupeLine({ finding: "R-0001", existing: "https://x" }), /finding id/);
+  assert.throws(() => tokens.dedupeLine({ finding: h, existing: "" }), /existing/);
+  assert.throws(() => tokens.dedupeLine({ finding: h, existing: "two\nlines" }), /existing/);
+  const p = `.agents/security-testing/handoffs/${h}.ticket.json`;
+  assert.equal(tokens.nextPost(p), `NEXT: post ${p} via issue-tracking, then ingest tracker-readback --sent ${p} <response.json>`);
+  assert.throws(() => tokens.nextPost("../x"), /repo-relative/);
+  assert.equal(tokens.VERIFIED_DERIVATIVE, "VERIFIED-DERIVATIVE");
+  assert.equal(tokens.LINKED_ONLY, "LINKED-ONLY");
+  assert.equal(tokens.MISMATCH_OUTPUT, "MISMATCH(output)");
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
-    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || value instanceof RegExp) continue;
+    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || name === "PUBLISH_PROFILES" || value instanceof RegExp) continue;
     assert.ok(typeof value === "string" || typeof value === "function", `${name}: ${typeof value}`);
     if (typeof value === "string") assert.doesNotMatch(value, /\n/, name);
   }

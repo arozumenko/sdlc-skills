@@ -45,8 +45,8 @@ const COMMANDS = {
   receipt: () => import("./lib/cmd-receipt.mjs"), // TASK-022 (validate | apply)
   "build-report": () => import("./lib/cmd-build-report.mjs"), // TASK-023 (core, review + verify templates) / TASK-024 (assessment, threat-model)
   // check: () => import("./lib/cmd-check.mjs"),             // TASK-025
-  // publish: () => import("./lib/cmd-publish.mjs"),         // TASK-031
-  // "check-export": () => import("./lib/cmd-check-export.mjs"), // TASK-031
+  publish: () => import("./lib/cmd-publish.mjs"), // TASK-031 (redacted-report | full-report | tracker; handoff | case are TASK-043)
+  "check-export": () => import("./lib/cmd-check-export.mjs"), // TASK-031
   purge: () => import("./lib/cmd-purge.mjs"), // TASK-032
   // "sign-off": () => import("./lib/cmd-sign-off.mjs"),     // TASK-033
 };

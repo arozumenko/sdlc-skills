@@ -691,3 +691,31 @@ export const NOT_ASSESSED = "unknown / not assessed";
 export const NOT_INDEPENDENTLY_REVIEWED = "not independently reviewed";
 /** `ORIGIN: unauthenticated` — the report's chain-of-custody line and `check`'s default origin (spec §2, §6.3). */
 export const ORIGIN_UNAUTHENTICATED = "ORIGIN: unauthenticated";
+
+// --- publish + check-export (TASK-031; plan §4.1 rows `publish` / `check-export`; spec §6.9 "Publication", §9.4 / P4) ---
+/** The five publication profiles (spec §6.9), in spec order; `handoff` and `case` are M3 (NOT-IMPLEMENTED(M3) until TASK-043). */
+export const PUBLISH_PROFILES = Object.freeze(["redacted-report", "full-report", "tracker", "handoff", "case"]);
+/** `PUBLISHED profile=<p> output=<repo-relative path> sha256=<h>` — one line per published file; `sha256` is that file's own hash (the manifest's `output_sha256` is the set identity, carried by the WROTE line's artifact). */
+export function publishedLine({ profile, relPath, sha256 }) {
+  if (!PUBLISH_PROFILES.includes(profile)) throw new TypeError(`publishedLine: profile must be one of ${PUBLISH_PROFILES.join("|")}, got ${String(profile)}`);
+  requireRepoRelative("publishedLine", relPath);
+  if (!SHA256.test(sha256)) throw new TypeError(`publishedLine: sha256 must be 64 lowercase hex chars, got ${String(sha256)}`);
+  return `PUBLISHED profile=${profile} output=${relPath} sha256=${sha256}`;
+}
+/** `DEDUPE finding=<id> existing=<url>` — the tracker profile skipped a finding the register or a prior import already tracks (first dedupe layer, P4). */
+export function dedupeLine({ finding, existing }) {
+  if (!SHA256.test(finding)) throw new TypeError(`dedupeLine: finding must be a finding id, got ${String(finding)}`);
+  if (typeof existing !== "string" || existing.length === 0 || /[\r\n]/.test(existing)) throw new TypeError("dedupeLine: existing must be a non-empty one-line url");
+  return `DEDUPE finding=${finding} existing=${existing}`;
+}
+/** `NEXT: post <path> via issue-tracking, then ingest tracker-readback --sent <path> <response.json>` — one per written ticket; the tracker call is the lead's (G-14). */
+export function nextPost(relPath) {
+  requireRepoRelative("nextPost", relPath);
+  return `NEXT: post ${relPath} via issue-tracking, then ingest tracker-readback --sent ${relPath} <response.json>`;
+}
+/** `VERIFIED-DERIVATIVE` — exit 0: the profile re-applied to the source reproduces the output byte for byte (spec §6.9). */
+export const VERIFIED_DERIVATIVE = "VERIFIED-DERIVATIVE";
+/** `LINKED-ONLY` — exit 0: no source supplied; the manifest links the output to a source this check could not re-apply (spec §6.9). */
+export const LINKED_ONLY = "LINKED-ONLY";
+/** `MISMATCH(output)` — exit 5: an output file differs from the re-applied profile, or from its own manifest's `output_sha256`, or is missing (plan §4.1). */
+export const MISMATCH_OUTPUT = "MISMATCH(output)";
