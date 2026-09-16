@@ -1599,3 +1599,17 @@ Reviewer nits from Rio's PASS review of TASK-035 (`task/task-035`), recorded ver
 | TASK-033 follow-up | TASK-035: TASK-033 follow-up still open (PM log after G16): checklist says 'one line per tracked pattern'; cmd-sign-off.mjs:328 still prints only `tracked(trackedPaths[0])`. Already routed to TASK-033. |
 | PM (review process) | TASK-035: Review-process note: I ran `npm run validate` in the detached worktree; that aggregate script chains `validate:externals` (exit 0, no side effects observed). Future reviews should run `validate:factories`, `validate:marketplaces`, `validate:dupes` individually. |
 | PM (CI) | TASK-035: skills-ref is not installed locally so the CI agentskills.io check could not be reproduced; the frontmatter mirrors secure-code-review's (TASK-034, CI-green) field for field and the branch test pins name/description shape. |
+
+### PM log additions (after G18)
+
+Reviewer nits from Rio's PASS review of TASK-037 (`task/task-037`), recorded verbatim.
+
+| Owner | Note |
+|---|---|
+| TASK-037 follow-up | TASK-037: TASK-037 follow-up: bundles/security-testing/skills/security-evidence/SKILL.md `register.mjs render` row spells its result as `WROTE …`; cmd-register-render.mjs:115 prints `RENDER <path> rows=<n> seq=<n>` and never calls ctx.wrote (risk-register.md is Markdown, not an enveloped artifact). Spell the RENDER line; the instructions.md `register.mjs` token-table row omits it too. |
+| TASK-037 follow-up | TASK-037: TASK-037 follow-up: SKILL.md `evidence.mjs scope` row lists only `WROTE <run>/scope.json …`; cmd-scope.mjs:370 prints `SCOPE files=<n> ranges=<n> skipped=<n> snapshot=<n>` before the WROTE line. Same for `run snapshot register\|verify\|proposals`: cmd-run-snapshot.mjs prints `SNAPSHOT register events=<n> chain=<h>` / `SNAPSHOT verify from=<run_id> sha256=<h>` / `SNAPSHOT proposals n=<n>` (WROTE follows for register and proposals only). Add the result lines. |
+| TASK-037 follow-up | TASK-037: TASK-037 follow-up: SKILL.md `evidence.mjs publish` row spells `DEDUPE finding=<id> existing=<R-id>`; lib/profiles/tracker.mjs:156-163 fills `existing` with the ticket URL (the register row's `ticket_url` or the open import's trusted url), matching the header comment in cmd-publish.mjs:47 `existing=<url>`. Spell `<url>`. |
+| TASK-037 follow-up | TASK-037: TASK-037 follow-up (low): SKILL.md `evidence.mjs sign-off` usage omits the `--integrity` / `--drift` flags cmd-sign-off.mjs accepts; instructions.md artifact map omits the reserved `<st>/imports/` directory that plan §3.2 lists. Both are omissions, not misstatements. |
+| TASK-037 follow-up | TASK-037: Dev deviation note miscounts: references/ holds 27 `*.schema.json`, not 28; the shipped SKILL.md schema index names all 27 (the test pins every file present), so only the deviation text is off. |
+| TASK-037 follow-up / TASK-038 | TASK-037: Deviation claim 'the codex target install also exits 0' is not in manifest.test.mjs (only the claude-target seed test runs); the PM-log NOTES.md item is confirmed by the claude run alone, which is what the plan asked for. TASK-038 E2E should cover the other targets if it does not already. |
+| PM (integration) / TASK-052 | TASK-037: PM (integration): task/task-037 is cut at 28ecfde (spec/plan tips), so the two-dot diff is exactly the ten intended files — no merge-base artifact this time. `.claude-plugin/marketplace.json` (hand-curated, still on `factories/` paths) carries no security-testing entry; plan §5 TASK-052 owns catalog rows, not this task. |
