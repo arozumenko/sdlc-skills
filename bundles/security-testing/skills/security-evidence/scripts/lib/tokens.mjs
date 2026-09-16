@@ -498,13 +498,6 @@ export function packetLine({ relPath, sha256, kind, files }) {
   return `PACKET ${relPath} sha256=${sha256} kind=${kind} files=${requireCount("packetLine", "files", files)}`;
 }
 
-/**
- * `NOT-IMPLEMENTED(TASK-021)` — exit 2: `packet --kind subject` until TASK-021
- * lands (plan §5 TASK-057: "returns 2 NOT-IMPLEMENTED until then"). Not the
- * M2|M3 `notImplemented(milestone)` form: the subject packet is an M1 task,
- * so the token names the task that ships it. TASK-021 deletes this row.
- */
-export const NOT_IMPLEMENTED_SUBJECT_PACKET = "NOT-IMPLEMENTED(TASK-021)";
 // --- gate (TASK-019; plan §4.1 row `gate`, §5 TASK-019; spec §6.1 gate-result, §6.5, TL-15) ---
 
 /** `gate` citation states — the only two a finding can carry (spec §6.5; finding.schema.json `state`). */
@@ -581,4 +574,19 @@ export function gap(path, start, end) {
  */
 export function coverageLine({ examined, skipped, scanner }) {
   return `COVERAGE examined=${requireCount("coverageLine", "examined", examined)} skipped=${requireCount("coverageLine", "skipped", skipped)} scanner=${requireCount("coverageLine", "scanner", scanner)}`;
+}
+
+// --- packet --kind subject (TASK-021; plan §5 TASK-021, §4.1 row `packet`; spec §6.4 / P1) ---
+
+/**
+ * `UNVERIFIABLE-SUBJECT(<id>)` — exit 2: `packet --kind subject` names a
+ * finding in `gate-result.unverifiable[]` (CITATION_FAILED): there is nothing
+ * a reviewer can confirm, so no packet is built (plan §5 TASK-021). The
+ * TASK-057 `NOT-IMPLEMENTED(TASK-021)` stub row is gone: the subject packet
+ * ships. `<id>` is the finding id as given (a keyed or plain identity, never
+ * content).
+ */
+export function unverifiableSubject(id) {
+  if (!SHA256.test(id)) throw new TypeError(`unverifiableSubject: id must be a finding id (64 lowercase hex chars), got ${String(id)}`);
+  return `UNVERIFIABLE-SUBJECT(${id})`;
 }

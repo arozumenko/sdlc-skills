@@ -1,7 +1,8 @@
 // lib/cmd-packet.mjs — `evidence.mjs packet --run <id> --kind scope` (TASK-057;
 // plan §4.1 row `packet`, §5 TASK-057; spec §6.4 P1, §6.1 `packet.json`,
-// TL-15; US-015 AC-1, US-028 AC-3) and the argv shape of `--kind subject
-// --subject <id>… [--type <t>]` (TASK-021 fills the body).
+// TL-15; US-015 AC-1, US-028 AC-3) and `--kind subject --subject <id>…
+// [--type <t>]` (TASK-021; plan §5 TASK-021; spec §6.4 P1 "subject packet";
+// US-015 AC-1).
 //
 // The SCOPE packet is the `review` contract's input: built from scope.json
 // before `gate`, before any finding id exists, it lists every scope file with
@@ -10,28 +11,73 @@
 // `examined-*.json` must name (TL-15); `gate --claims` / `coverage
 // --examined` re-verify that against `<run>/packets/`.
 //
+// The SUBJECT packet is the input of the `vulnerability-review` and
+// `mitigation-review` contracts (and, built by `verify all` over its
+// worktree, `fix-review`): the exact ranges a fresh reviewer may read for the
+// named subjects, nothing else. `subject_ids` is the given ids in argv order
+// (a repeated id is dropped); `files[]` is every cited range grouped by
+// (path, side) — for a finding, its primary range plus every
+// `citations_typed[]` range, each at the side gate admitted it at (a typed
+// citation carries its own side and may name another scope file: the
+// reviewer of a data-flow finding needs the source and the sink, so they are
+// in the packet rather than residual exposure); for a mitigation, its one
+// `citation`. `--type` selects the SOURCE the ids are looked up in — it is
+// not in the payload (packet.schema.json is closed; a receipt's `type` is
+// the reviewer's word, and `receipt validate` checks `subject_id ∈
+// subject_ids`):
+//
+//   vulnerability-review  <run>/gate-result.json + findings.claimed.json —
+//                         the default for a 64-hex id; an id in
+//                         `unverifiable[]` ⇒ 2 UNVERIFIABLE-SUBJECT(<id>)
+//                         (a CITATION_FAILED finding has nothing a reviewer
+//                         can confirm), any other id not in `accepted[]` ⇒
+//                         2 USAGE(unknown subject); gate not run ⇒ 3
+//                         INCOMPLETE(gate-result); `claimed_sha256` not the
+//                         claimed artifact on disk, or an accepted id with
+//                         no finding ⇒ 5 INCONSISTENT(gate-result)
+//   mitigation-review     <run>/threat-model.json (the snapshot `tm-lint
+//                         check` writes, M2) — the default for an `M-nnn`
+//                         id; absent ⇒ 3 INCOMPLETE(threat-model); off-schema
+//                         ⇒ 5 INCONSISTENT(threat-model); unknown id ⇒ 2
+//                         USAGE; a mitigation without `citation` ⇒ 2 USAGE
+//                         (nothing to review)
+//   fix-review            SEAM for TASK-027: `verify all` builds this packet
+//                         in-process from its worktree (`citedFiles` below
+//                         gives the ranges; the worktree supplies bytes and
+//                         oids). From the CLI ⇒ 2 USAGE — a run directory
+//                         has no worktree to hash.
+//   case                  SEAM for TASK-042 (M3): the case file at `head`,
+//                         id = case_sha256. ⇒ 2 NOT-IMPLEMENTED(M3) until
+//                         then; the resolver slot is `SUBJECT_SOURCES.case`.
+//
+// Without `--type`, every id must be of one shape (all 64-hex or all
+// `M-nnn`) — one packet, one contract; a mix ⇒ 2 USAGE. The oid per file is
+// the scope file's for `head` / `snapshot` (what gate admitted against) and
+// the base blob's (`git rev-parse <base_oid>:<path>`) for `base`, exactly
+// what `receipt validate` (TASK-022) re-checks.
+//
 // Order (so a refusal leaves nothing behind):
 //
 //   1. argv: `--run` (shape), `--kind scope|subject`; scope refuses
-//      `--subject` / `--type` (2 USAGE); subject requires `--subject` and
-//      validates `--type` (2 USAGE);
+//      `--subject` / `--type` (2 USAGE); subject requires ≥ 1 non-empty
+//      `--subject` and validates `--type` (2 USAGE);
 //   2. `<run>/run.json` (unknown run ⇒ 2 USAGE); `COMMITTED` present ⇒ 2
-//      RUN-COMMITTED (G-10); `scope.json` absent ⇒ 3 INCOMPLETE(scope) (the
+//      RUN-COMMITTED (G-10); `scope.json` absent ⇒ 3 INCOMPLETE(scope) (every
 //      packet is derived from it); the run's key by the envelope's `key_id`
 //      ⇒ 2 `KEY: unavailable` when its file is gone (no HMAC, no identity);
 //   3. the policy: `references/packet-policy.v1.json` (packet-core
 //      POLICY_PATH) or `--policy <file>` (a user-typed path: ctx.input keeps
 //      it inside the work tree, 2 USAGE otherwise; off-schema ⇒ 2
 //      SCHEMA-INVALID(packet-policy.v1: …));
-//   4. `--kind subject` ⇒ 2 NOT-IMPLEMENTED(TASK-021) — TASK-021 replaces
-//      this line with the subject resolution and reuses everything else;
-//   5. files = every `scope.files[]` entry with `ranges = scope.ranges[path]`
-//      (`[]` for an empty file); `packet-core.buildPacket` with
-//      `lib/cite.mjs resolveSide` bound to the run and scope — `head`
-//      bytes from `git cat-file` at head_oid, `snapshot` bytes from the
-//      private redacted snapshot after its sha256 is re-verified;
+//   4. subject resolution per the table above — every id checked before any
+//      byte is hashed; scope: files = every `scope.files[]` entry with
+//      `ranges = scope.ranges[path]` (`[]` for an empty file);
+//   5. `packet-core.buildPacket` with `lib/cite.mjs resolveSide` bound to
+//      the run and scope — `head`/`base` bytes from `git cat-file` at the
+//      recorded oid, `snapshot` bytes from the private redacted snapshot
+//      after its sha256 is re-verified;
 //   6. `<run>/packets/<packet_sha256>.json`, write-once. The file is named
-//      by its identity, so a re-run on the same scope produces the same
+//      by its identity, so a re-run on the same inputs produces the same
 //      name: an existing file that verifies to that identity is the same
 //      artifact and the command succeeds idempotently (nothing rewritten,
 //      G-10); an existing file that does not ⇒ 5 INCONSISTENT(packets/<sha>).
@@ -44,15 +90,17 @@
 //
 // stdout: `PACKET <path> sha256=<h> kind=<k> files=<n>` then `WROTE <path>
 // sha256=<h>` — the same sha, the packet's identity. Exit 0; 2 USAGE /
-// RUN-COMMITTED / KEY: unavailable / SCHEMA-INVALID / NOT-IMPLEMENTED; 3
-// INCOMPLETE(…); 5 INCONSISTENT(…) or when run.json / scope.json is not the
-// artifact it claims to be (readArtifact).
+// RUN-COMMITTED / KEY: unavailable / SCHEMA-INVALID / UNVERIFIABLE-SUBJECT /
+// NOT-IMPLEMENTED(M3); 3 INCOMPLETE(…); 5 INCONSISTENT(…) or when run.json /
+// scope.json / gate-result.json / findings.claimed.json / threat-model.json
+// is not the artifact it claims to be (readArtifact).
 //
 // Imports: node:fs (existsSync, readFileSync — every write is
 // canon.writeArtifact), node:path, ../canon.mjs, ../redact.mjs (redactDeep:
 // the payload is redacted in-process before it is named, so the identity is
 // over what leaves memory, G-4), ./argv.mjs, ./cite.mjs (the one resolver,
-// G-6: git runs only inside git.mjs), ./exit.mjs, ./ledger.mjs (RUN_ID),
+// G-6: git runs only inside git.mjs), ./exit.mjs, ./git.mjs (blobOid, for
+// the base oid a `base` citation names), ./ledger.mjs (RUN_ID),
 // ./packet-core.mjs, ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs.
 // No network (G-14), no clock (G-1: created_at is ctx.now()).
 
@@ -61,18 +109,22 @@ import { join } from "node:path";
 import { CanonError, IntegrityError, artifactId, makeEnvelope, parseStrict, readArtifact, writeArtifact } from "../canon.mjs";
 import { DEFAULT_RULES, redactDeep } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
-import { ObjectMissing, SnapshotMismatch, SnapshotMissing, resolveSide } from "./cite.mjs";
+import { ObjectMissing, SIDES, SnapshotMismatch, SnapshotMissing, resolveSide } from "./cite.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
+import { blobOid } from "./git.mjs";
 import { RUN_ID } from "./ledger.mjs";
 import { PACKET_KINDS, POLICY_PATH, buildPacket } from "./packet-core.mjs";
 import { runDir } from "./run-index.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, KEY_UNAVAILABLE, NOT_IMPLEMENTED_SUBJECT_PACKET, RUN_COMMITTED, incomplete, inconsistent, packetLine, schemaInvalid } from "./tokens.mjs";
+import { COMMITTED, KEY_UNAVAILABLE, RUN_COMMITTED, incomplete, inconsistent, notImplemented, packetLine, schemaInvalid, unverifiableSubject } from "./tokens.mjs";
 
 const COMMAND = "packet";
 const POLICY_SCHEMA = "packet-policy.v1";
-/** `--type` vocabulary for `--kind subject` (plan §4.1; TASK-021 assigns the defaults per subject). */
+/** `--type` vocabulary for `--kind subject` (plan §4.1): which source the subject ids are resolved in. */
 export const SUBJECT_TYPES = Object.freeze(["vulnerability-review", "mitigation-review", "fix-review", "case"]);
+const FINDING_ID = /^[0-9a-f]{64}$/;
+/** threat-model.schema.json `Mitigation.id`. */
+const MITIGATION_ID = /^M-[0-9]{3}$/;
 
 // --- argv ---------------------------------------------------------------------------
 
@@ -90,9 +142,12 @@ function parseArgs(argv) {
     if (flags.type !== undefined) throw usageError(COMMAND, "--type is not accepted with --kind scope");
   } else {
     if (flags.subject === undefined) throw usageError(COMMAND, "--subject <id> is required with --kind subject");
+    if (flags.subject.some((s) => s === "")) throw usageError(COMMAND, "--subject must not be empty");
     if (flags.type !== undefined && !SUBJECT_TYPES.includes(flags.type)) throw usageError(COMMAND, `--type must be one of ${SUBJECT_TYPES.join("|")}, got ${flags.type}`);
   }
-  return { run_id, kind, subjects: flags.subject ?? [], type: flags.type, policyPath: flags.policy };
+  // argv order, first occurrence wins (plan §5 TASK-021: "the given ids in argv order (deduplicated)")
+  const subjects = [...new Set(flags.subject ?? [])];
+  return { run_id, kind, subjects, type: flags.type, policyPath: flags.policy };
 }
 
 // --- inputs -------------------------------------------------------------------------
@@ -141,6 +196,135 @@ function loadPolicy(ctx, policyPath) {
     throw new Error(`${COMMAND}: the shipped ${POLICY_SCHEMA} file is off-schema: ${errors[0]}`);
   }
   return policy;
+}
+
+// --- subject resolution -------------------------------------------------------------
+
+/** UTF-8 byte order — the order packet-core sorts files in. */
+function compareBytes(a, b) {
+  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
+function requireCitation(c, at) {
+  if (c === null || typeof c !== "object" || typeof c.path !== "string" || c.path === "") throw new TypeError(`citedFiles: ${at} has no path`);
+  if (!SIDES.includes(c.side)) throw new TypeError(`citedFiles: ${at}.side must be one of ${SIDES.join("|")}`);
+  if (!Array.isArray(c.lines) || c.lines.length !== 2 || !c.lines.every(Number.isSafeInteger)) throw new TypeError(`citedFiles: ${at}.lines must be [start, end]`);
+  return { path: c.path, side: c.side, lines: [c.lines[0], c.lines[1]] };
+}
+
+/**
+ * The ranges a set of gated findings cite, grouped by (path, side): each
+ * finding's primary `{path, side, lines}` plus every `citations_typed[]`
+ * entry at its own side. Pure; oids are the caller's (the scope file's or
+ * the base blob's here; the worktree's in `verify all`, TASK-027 — this is
+ * the seam the fix-review packet is built on). Entries sorted by (path in
+ * UTF-8 byte order, side); ranges by (start, end), exact duplicates dropped —
+ * the same canonical order packet-core applies, so the result reads as the
+ * packet will. Inputs are never mutated.
+ * @param {object[]} findings finding.schema.json Findings (or anything with path, side, lines, citations_typed?)
+ * @returns {{path: string, side: string, ranges: number[][]}[]}
+ */
+export function citedFiles(findings) {
+  if (!Array.isArray(findings)) throw new TypeError("citedFiles: findings must be an array");
+  const groups = new Map();
+  const add = ({ path, side, lines }) => {
+    const k = `${side}\0${path}`;
+    if (!groups.has(k)) groups.set(k, { path, side, ranges: [] });
+    groups.get(k).ranges.push(lines);
+  };
+  findings.forEach((f, i) => {
+    add(requireCitation(f, `findings[${i}]`));
+    const typed = Array.isArray(f?.citations_typed) ? f.citations_typed : [];
+    typed.forEach((t, j) => add(requireCitation(t, `findings[${i}].citations_typed[${j}]`)));
+  });
+  return [...groups.values()]
+    .sort((a, b) => compareBytes(a.path, b.path) || SIDES.indexOf(a.side) - SIDES.indexOf(b.side))
+    .map((g) => {
+      const sorted = [...g.ranges].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const ranges = sorted.filter((r, i) => i === 0 || r[0] !== sorted[i - 1][0] || r[1] !== sorted[i - 1][1]);
+      return { path: g.path, side: g.side, ranges };
+    });
+}
+
+/** Read one of the run's own artifacts: absent ⇒ 3 INCOMPLETE(<name>), tampered ⇒ 5 (readArtifact). */
+function readRunArtifact(dir, file, kind, name) {
+  const path = join(dir, file);
+  if (!existsSync(path)) throw new CliError(EXIT.INDETERMINATE, incomplete(name));
+  return readArtifact(path, { kind });
+}
+
+/**
+ * The oid packet-core records for a cited file: the scope file's (blob oid
+ * at head, or the snapshot's redacted_sha256) for head|snapshot, the base
+ * blob's for base. A cited file the scope does not list, or a base blob
+ * that is gone, is the run's own state gone wrong (gate admitted it): 5.
+ */
+function oidFor(ctx, { run, scope }, { path, side }) {
+  if (side === "base") {
+    const oid = blobOid(ctx.root, run.payload.base_oid, path);
+    if (oid === null) throw integrityFailure(inconsistent(`base:${path}`));
+    return oid;
+  }
+  const file = scope.payload.files.find((f) => f.path === path && f.side === side);
+  if (file === undefined) throw integrityFailure(inconsistent(`scope:${path}`));
+  return file.oid;
+}
+
+/** Findings (`vulnerability-review`): ids looked up in gate-result, files from findings.claimed.json. */
+function resolveFindings(ctx, inputs, subjects) {
+  const { dir } = inputs;
+  const gateResult = readRunArtifact(dir, "gate-result.json", "gate-result", "gate-result");
+  const claimed = readRunArtifact(dir, "findings.claimed.json", "claimed", "gate-result");
+  if (gateResult.payload.claimed_sha256 !== claimed.envelope.self_sha256) throw integrityFailure(inconsistent("gate-result"));
+  const { accepted, unverifiable } = gateResult.payload;
+  const findings = subjects.map((id) => {
+    if (unverifiable.includes(id)) throw new CliError(EXIT.USAGE, unverifiableSubject(id));
+    if (!accepted.includes(id)) throw usageError(COMMAND, `unknown subject ${id}`);
+    const finding = claimed.payload.findings.find((f) => f.id === id);
+    if (finding === undefined) throw integrityFailure(inconsistent("gate-result"));
+    return finding;
+  });
+  return citedFiles(findings).map((f) => ({ ...f, oid: oidFor(ctx, inputs, f) }));
+}
+
+/** Mitigations (`mitigation-review`): ids looked up in the run's threat-model snapshot, one file per mitigation citation. */
+function resolveMitigations(ctx, inputs, subjects) {
+  const model = readRunArtifact(inputs.dir, "threat-model.json", "threat-model", "threat-model");
+  if (validate("threat-model", model.payload).length > 0) throw integrityFailure(inconsistent("threat-model"));
+  const mitigations = model.payload.threats.flatMap((t) => t.mitigations);
+  const cited = subjects.map((id) => {
+    const m = mitigations.find((x) => x.id === id);
+    if (m === undefined) throw usageError(COMMAND, `unknown subject ${id}`);
+    if (m.citation === undefined) throw usageError(COMMAND, `subject ${id} has no citation to review`);
+    return { path: m.citation.path, side: m.citation.side, lines: m.citation.lines };
+  });
+  return citedFiles(cited).map((f) => ({ ...f, oid: oidFor(ctx, inputs, f) }));
+}
+
+/**
+ * One resolver per `--type`: `(ctx, inputs, subjects) → files` for
+ * packet-core, or a refusal. `fix-review` and `case` are the documented
+ * seams (header): TASK-027 builds the fix-review packet in-process over its
+ * worktree; TASK-042 fills `case` (the case file at head, id = case_sha256).
+ */
+const SUBJECT_SOURCES = Object.freeze({
+  "vulnerability-review": resolveFindings,
+  "mitigation-review": resolveMitigations,
+  "fix-review": () => {
+    throw usageError(COMMAND, "--type fix-review packets are built by verify all over its worktree, not from a run directory");
+  },
+  case: () => {
+    throw new CliError(EXIT.USAGE, notImplemented("M3"));
+  },
+});
+
+/** Without `--type`: the shape of the ids picks the source, and every id must share it (one packet, one contract). */
+function inferType(subjects) {
+  const shapes = new Set(subjects.map((id) => (FINDING_ID.test(id) ? "vulnerability-review" : MITIGATION_ID.test(id) ? "mitigation-review" : null)));
+  if (shapes.size > 1) throw usageError(COMMAND, "--subject ids name subjects of more than one kind (findings and mitigations); one packet, one contract — pass --type to say which");
+  const [shape] = shapes;
+  if (shape === null) throw usageError(COMMAND, `unknown subject ${subjects.find((id) => !FINDING_ID.test(id) && !MITIGATION_ID.test(id))}`);
+  return shape;
 }
 
 // --- build + write ------------------------------------------------------------------
@@ -200,14 +384,15 @@ export async function run(argv, ctx) {
   const inputs = loadRun(ctx, args.run_id);
   const policy = loadPolicy(ctx, args.policyPath);
 
+  let spec;
   if (args.kind === "subject") {
-    // TASK-021: resolve `args.subjects` (gate-result.accepted + findings.claimed.json,
-    // threat-model mitigations, cases) to file entries, then fall through to build.
-    ctx.out(NOT_IMPLEMENTED_SUBJECT_PACKET);
-    return EXIT.USAGE;
+    const type = args.type ?? inferType(args.subjects);
+    spec = { kind: "subject", subject_ids: args.subjects, files: SUBJECT_SOURCES[type](ctx, inputs, args.subjects) };
+  } else {
+    spec = { kind: "scope", subject_ids: [], files: scopeFiles(inputs.scope) };
   }
 
-  const raw = build(ctx, { ...inputs, policy }, { kind: "scope", subject_ids: [], files: scopeFiles(inputs.scope) });
+  const raw = build(ctx, { ...inputs, policy }, spec);
   // Redacted before it is named (G-4): the identity and the file name are over what leaves memory.
   const payload = redactDeep(raw, DEFAULT_RULES);
   const errors = validate("packet", payload);
