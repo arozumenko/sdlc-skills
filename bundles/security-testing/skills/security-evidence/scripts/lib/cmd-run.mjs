@@ -67,7 +67,7 @@ const GITIGNORE = ".gitignore";
 const BLOCK_BEGIN = "# security-testing:begin";
 const BLOCK_END = "# security-testing:end";
 
-/** `text` without the managed block (the begin line through the end line, inclusive). */
+/** `text` without the managed block (the begin line through the end line, inclusive); unchanged when the block is unterminated. */
 export function stripManagedBlock(text) {
   const out = [];
   let inside = false;
@@ -83,6 +83,10 @@ export function stripManagedBlock(text) {
     }
     out.push(line);
   }
+  // A begin marker with no end line is not the managed block: strip nothing,
+  // so every line after it (a live pattern to git, which reads the marker as
+  // a comment) still compares against HEAD and counts as dirt.
+  if (inside) return text;
   return out.join("\n");
 }
 

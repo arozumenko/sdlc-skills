@@ -26,6 +26,11 @@
 //       are never refilled), run_id = head_oid[0:12] + "-" + seq (4 digits,
 //       TL-9), the entry appended and the index rewritten atomically. Only
 //       the ledger is touched; the caller creates the run directory.
+//       Cap: seq 9999 is the last run a ledger can hold (four digits, one
+//       ledger per <st>); the 10000th allocation throws inside the lock ⇒
+//       exit 1 INTERNAL, lock released, index.json unchanged. An operator
+//       limit, not a bug — a CliError with its own token is owed once the
+//       spec names one (plan §6, TASK-012 review 2).
 //   readIndex(ctx) → entries[]      `[]` when absent; anything off-shape is
 //                                    CliError 5 INCONSISTENT(ledger/index.json)
 //   listCommittedRuns(ctx)          the entries whose `<run>/COMMITTED` exists

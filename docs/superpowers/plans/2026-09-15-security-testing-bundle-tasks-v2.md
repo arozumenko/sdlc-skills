@@ -164,7 +164,7 @@ Where spec v6.1 fixes a contract but leaves the representation open, I fix the r
     snapshots/<run_id>/<path>        # redacted bytes of dirty review files
     citations/<run_id>/<finding_id>.json
   ledger/                            # managed-ignored
-    index.json  index.lock/
+    index.json  index.lock/  <run_id>.lock/   # run lock (TL-14 index rewrites); outside every walked tree
     <run_id>/imports/<import_sha256>
   runs/<run_id>/                     # managed-ignored
     run.json  engagement.json  scope.json  examined.json
@@ -204,7 +204,7 @@ tasks/security-<slug>-admitted/      # publish --profile case                   
 | `lib/keys.mjs` | `ensureKey(ctx, {rotate}) → {key_id, created}`, `loadKey(ctx, key_id) → Buffer|null`, `currentKeyId(ctx)`, `keysOf(ctx, engagement_id) → key_id[]` | 009 |
 | `lib/baseline.mjs` | `computeBaseline(ctx) → payload` (throws `CliError(2, "ENGAGEMENT-MISSING")` without `engagement.md`), `diffBaseline(ctx, baseline) → {changed[], added[], removed[], ignored_counts{}}` | 010 |
 | `lib/ignore-block.mjs` | `PATTERNS` (ten, in §6.9 order), `renderBlock(policy)`, `upsertBlock(text, policy) → {text, changed}` | 008 |
-| `lib/ledger.mjs` | `allocateRun(ctx, {kind, base_oid, head_oid}) → {seq, run_id}` (under lock), `readIndex(ctx)`, `listCommittedRuns(ctx)`, `withRunLock(ctx, run_id, fn)` | 012 |
+| `lib/ledger.mjs` | `allocateRun(ctx, {kind, base_oid, head_oid}) → {seq, run_id}` (under lock), `readIndex(ctx)`, `listCommittedRuns(ctx)`, `withRunLock(ctx, run_id, fn)` (lock dir `ledger/<run_id>.lock/`, never under `<run>/`) | 012 |
 | `lib/run-index.mjs` | `appendIndex(ctx, run_id, name, entry)` for the TL-14 index files (tmp+rename under `withRunLock`) | 012 |
 | `lib/cite.mjs` | `resolveSide(ctx, run, scope, {path, side}) → Buffer`, `resolveWorking(ctx, path)`, `checkRange(scope, citation) → {ok, reason?, context?}`, `occurrenceOf(lines, normalisedSnippet, start)`, `rangeBytes(buf, start, end)` | 014 |
 | `lib/imports.mjs` | `snapshotImport(ctx, run_id, buf, {kind, source_path}) → {import_sha256, original_hmac, redaction_version, path}` (also appends to `<run>/imports.json`) | 015 |
@@ -700,7 +700,7 @@ packet-policy.v1    {version: const 1, max_range: const 40, sides: [enum(base|he
 
 **Objective.** Allocate a run first, refuse dirty assessments, snapshot the engagement record, and give the assessment template every input it will later require — empty (P2).
 
-**Implementation.** `scripts/lib/ledger.mjs` (`allocateRun` under `ledger/index.lock/`: read index, `seq = max+1`, write `{seq, run_id, kind}` via `writeAtomic`; `run_id` per TL-9; `withRunLock(ctx, run_id, fn)` on `<run>/.lock/`), `scripts/lib/run-index.mjs` (`appendIndex(ctx, run_id, name, entry)` — read the index artifact, push, re-envelope, `writeAtomic`, under `withRunLock`; TL-14), `lib/cmd-run.mjs` (`init`: for `assessment` check `git status --porcelain` empty **before** allocation ⇒ `3 DIRTY-TREE`, ledger untouched; resolve `base_oid`/`head_oid` to 40-hex; create `<run>/{packets,receipts,ingest,verify-snapshots}/` and `ledger/<run_id>/imports/`; write `run.json`, `engagement.json`; **assessment only**: `imports.json` `{imports: []}`, `observations.json` `{observations: []}`, `proposals-index.json` `{proposals: []}` as enveloped artifacts of kinds `imports-index|observations-index|proposals-index`; `threat-model.json` is **not** written — its absence is the `INCOMPLETE(threat-model)` signal). `run snapshot …` is TASK-058.
+**Implementation.** `scripts/lib/ledger.mjs` (`allocateRun` under `ledger/index.lock/`: read index, `seq = max+1`, write `{seq, run_id, kind}` via `writeAtomic`; `run_id` per TL-9; `withRunLock(ctx, run_id, fn)` on `ledger/<run_id>.lock/` — not under `<run>/`, see the G5 row in §6 and the `ledger.mjs` header), `scripts/lib/run-index.mjs` (`appendIndex(ctx, run_id, name, entry)` — read the index artifact, push, re-envelope, `writeAtomic`, under `withRunLock`; TL-14), `lib/cmd-run.mjs` (`init`: for `assessment` check `git status --porcelain` empty **before** allocation ⇒ `3 DIRTY-TREE`, ledger untouched; resolve `base_oid`/`head_oid` to 40-hex; create `<run>/{packets,receipts,ingest,verify-snapshots}/` and `ledger/<run_id>/imports/`; write `run.json`, `engagement.json`; **assessment only**: `imports.json` `{imports: []}`, `observations.json` `{observations: []}`, `proposals-index.json` `{proposals: []}` as enveloped artifacts of kinds `imports-index|observations-index|proposals-index`; `threat-model.json` is **not** written — its absence is the `INCOMPLETE(threat-model)` signal). `run snapshot …` is TASK-058.
 
 **Interface Contract.** §4.1 row `run init`; `run.json` payload `{engagement_id, seq, base_oid, head_oid, template}`; `appendIndex` is the only writer that rewrites a file under `<run>/`.
 
@@ -1269,3 +1269,13 @@ Recorded by the TASK-012 implementer. The P6 `.gitignore` comparison now works o
 | TASK-008 | `stripManagedBlock` (and the `# security-testing:begin/end` markers) live in `cmd-run.mjs` until the ignore-block module exists; fold them into `ignore-block.mjs` and have `cmd-run.mjs` import them — one definition of the block's edges. |
 | TASK-023 (manifest/build-report) | `run-index.appendIndex` rewrites tmp+rename, leaving a transient `.<file>.tmp-<pid>-<n>` under `<run>/` while it runs (TL-14, by design), and `fsx.walk()` does not hide dotfiles. Walk the run under `withRunLock` or skip `.`-prefixed entries, otherwise a concurrent append can surface in a manifest. |
 | TASK-007 / TASK-013 | `scope_paths` / `product_paths` go straight to `git status -- <paths>` (and will to `scope`) as pathspecs; `engagement.schema.json` accepts any string, so a `:`-prefixed value is pathspec magic (`:!src` excludes). Operator-authored, not a security issue — either reject a leading `:` in the parser or document that the paths are git pathspecs. |
+
+### Follow-ups from TASK-012 review 2 (Rio, 2026-09-16)
+
+Recorded by the TASK-012 implementer. Blocking item fixed: `stripManagedBlock` now strips nothing when a `# security-testing:begin` has no end line (git reads the marker as a comment and every line after it as a live pattern, so the tail compares against HEAD and is dirt); the P6 loop pins it for all three HEAD shapes. Plan text corrected: the run lock is `ledger/<run_id>.lock/`, not `<run>/.lock/` (§3.3 row, TASK-012 Implementation, layout tree).
+
+| Owner | Follow-up from review |
+|---|---|
+| TL reading before G6 (TASK-013 `scope`) | `run init --kind assessment --head <ref>` accepts a ref other than HEAD, but the clean-tree check (D18/P6) compares the working tree against HEAD/index while citations later resolve at `head_oid` — a clean tree at HEAD says nothing about `HEAD~1`. §4.1 allows `--head` for every kind, so this is a spec gap. Options: refuse `--head` ≠ HEAD for assessment (exit 2 USAGE) in `run init`, or have `scope` (which re-runs `assessmentDirt`) enforce it. Decide before TASK-013 lands. |
+| TL-9 / spec | `allocateRun` at seq 9999 throws inside `index.lock/` ⇒ exit 1 INTERNAL; lock released, `index.json` unchanged, no corruption. Operator-facing limit (four digits, one ledger per `<st>`), not an internal bug — worth a CliError 4 with a token once the spec names one. The cap is noted in the `ledger.mjs` header. |
+| TASK-008 (`engagement validate`) | When HEAD's `.gitignore` holds only the managed block and the working file is deleted, both sides reduce to `[]` ⇒ `run init` judges the tree clean. Deleting the block re-exposes `private/` to git — that is `engagement validate`'s `IGNORE-BLOCK: stale` concern, not `run init`'s; make sure validate covers the deleted-file shape. |

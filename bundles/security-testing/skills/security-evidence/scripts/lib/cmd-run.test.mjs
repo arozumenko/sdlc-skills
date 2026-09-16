@@ -180,6 +180,12 @@ test("P6: dirt outside scope_paths ∪ product_paths and the bundle's managed pa
     writeFileSync(join(repo, ".gitignore"), `${working}dist/\n`);
     const d = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
     assert.equal(d.code, 3, `${label}: pattern outside the block`);
+    // …and a begin marker with no end line is not the block: git reads the
+    // marker as a comment and `dist/` as a live pattern, so it is dirt too
+    writeFileSync(join(repo, ".gitignore"), `${atHead}${atHead.endsWith("\n") || atHead === "" ? "" : "\n"}# security-testing:begin\ndist/\n`);
+    const u = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
+    assert.equal(u.code, 3, `${label}: unterminated block hides nothing`);
+    assert.equal(u.stdout, "DIRTY-TREE\n");
   }
 });
 
