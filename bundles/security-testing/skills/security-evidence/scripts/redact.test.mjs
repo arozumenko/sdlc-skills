@@ -297,6 +297,20 @@ test("redactDeep redacts object keys too", () => {
   assert.deepEqual(out, { "<REDACTED:password-assign>": "v", plain: "<REDACTED:password-assign>" });
 });
 
+test("redactDeep keeps every entry when two keys redact to the same marker", () => {
+  const out = redactDeep({ "password=1": "a", "password=2": "b", "password=3": "c" }, DEFAULT_RULES);
+  assert.deepEqual(out, {
+    "<REDACTED:password-assign>": "a",
+    "<REDACTED:password-assign>#2": "b",
+    "<REDACTED:password-assign>#3": "c",
+  });
+  // A literal key that already spells the marker is never renamed; the redacted one steps aside.
+  const literal = redactDeep({ "password=1": "a", "<REDACTED:password-assign>": "b" }, DEFAULT_RULES);
+  assert.deepEqual(literal, { "<REDACTED:password-assign>#2": "a", "<REDACTED:password-assign>": "b" });
+  // Suffixed keys are stable under a second pass.
+  assert.equal(redactDeep(out, DEFAULT_RULES), out);
+});
+
 test("redactDeep returns the input untouched by reference when nothing matched", () => {
   const obj = { a: "clean", b: [1, "two", { c: null, d: false }], e: 3 };
   const out = redactDeep(obj, DEFAULT_RULES);
@@ -345,8 +359,34 @@ test("idempotent", () => {
   assert.deepEqual(twice, once);
   // Strong form: the second pass finds nothing, so it returns the same reference.
   assert.equal(twice, once);
-  // And no replacement marker itself matches any rule.
-  for (const c of TEN_CLASSES) assert.equal(matches(`<REDACTED:${c}>`, DEFAULT_RULES), false, c);
+  // And no replacement marker (nor a collision-suffixed key form of it) itself matches any rule.
+  for (const c of TEN_CLASSES) {
+    assert.equal(matches(`<REDACTED:${c}>`, DEFAULT_RULES), false, c);
+    assert.equal(matches(`<REDACTED:${c}>#2`, DEFAULT_RULES), false, c);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bounded cost (untrusted input, D5: dirty-file snapshots, SARIF ingest, scope subjects)
+
+test("bounded cost: 256 KB of dash-joined identifiers, whitespace-free base64url and a whitespace run after `password` each redact in < 1 s", () => {
+  const KB = 256 * 1024;
+  const inputs = {
+    "dash-joined identifiers": "a-".repeat(KB / 2),
+    "whitespace-free base64url": "aB3_-".repeat(Math.ceil(KB / 5)).slice(0, KB),
+    "password + whitespace run": "password" + " ".repeat(KB),
+    "minified bundle": "var a=1;function f(x){return x+1}".repeat(Math.ceil(KB / 34)).slice(0, KB),
+    "repeated PEM headers": "-----BEGIN X-----\n".repeat(Math.ceil(KB / 18)).slice(0, KB),
+  };
+  for (const [name, text] of Object.entries(inputs)) {
+    const t0 = performance.now();
+    matches(text, DEFAULT_RULES);
+    redactString(Buffer.from(text), DEFAULT_RULES);
+    const elapsed = performance.now() - t0;
+    // Linear rules finish in tens of milliseconds at this size; a quadratic rule takes > 10 s.
+    // The bound is generous so the test never flakes, and still catches a return to quadratic.
+    assert.ok(elapsed < 1000, `${name}: ${elapsed.toFixed(0)} ms (rule cost is no longer linear)`);
+  }
 });
 
 // ---------------------------------------------------------------------------

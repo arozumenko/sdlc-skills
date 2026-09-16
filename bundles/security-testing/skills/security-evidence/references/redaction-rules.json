@@ -33,19 +33,19 @@
     },
     {
       "class": "password-assign",
-      "pattern": "(?<![A-Za-z0-9_])[A-Za-z0-9_-]*(?:password|passwd|pwd)\\s*[\"']?\\s*[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
+      "pattern": "(?<![A-Za-z0-9_-])[A-Za-z0-9_-]*(?:password|passwd|pwd)\\s*(?:[\"']\\s*)?[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
       "flags": "gi",
       "replacement": "<REDACTED:password-assign>"
     },
     {
       "class": "secret-assign",
-      "pattern": "(?<![A-Za-z0-9_])(?:[A-Za-z0-9_-]*secret[A-Za-z0-9_-]*|[A-Za-z0-9_-]*private[_-]?key)\\s*[\"']?\\s*[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
+      "pattern": "(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]*secret[A-Za-z0-9_-]*|[A-Za-z0-9_-]*private[_-]?key)\\s*(?:[\"']\\s*)?[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
       "flags": "gi",
       "replacement": "<REDACTED:secret-assign>"
     },
     {
       "class": "token-assign",
-      "pattern": "(?<![A-Za-z0-9_])(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|[A-Za-z0-9_-]*access[_-]?key)\\s*[\"']?\\s*[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
+      "pattern": "(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]*token|[A-Za-z0-9_-]*api[_-]?key|[A-Za-z0-9_-]*access[_-]?key)\\s*(?:[\"']\\s*)?[:=]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"',;&<]+)",
       "flags": "gi",
       "replacement": "<REDACTED:token-assign>"
     },
@@ -57,7 +57,7 @@
     },
     {
       "class": "high-entropy-assign",
-      "pattern": "(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_-]{2,}\\s*[\"']?\\s*[:=]\\s*[\"']?(?!//)(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*[A-Z])(?=[A-Za-z0-9+/_-]*[0-9])[A-Za-z0-9+/_-]{32,}={0,2}[\"']?",
+      "pattern": "(?<![A-Za-z0-9_-])[A-Za-z_][A-Za-z0-9_-]{2,}\\s*(?:[\"']\\s*)?[:=]\\s*[\"']?(?!//)(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*[A-Z])(?=[A-Za-z0-9+/_-]*[0-9])[A-Za-z0-9+/_-]{32,}={0,2}[\"']?",
       "flags": "g",
       "replacement": "<REDACTED:high-entropy-assign>"
     }

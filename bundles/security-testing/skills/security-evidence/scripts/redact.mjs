@@ -11,6 +11,32 @@
 //   {redaction_version: int, rules: [{class, pattern, flags, replacement}]}
 // and are applied in file order. Every replacement is `<REDACTED:<class>>`,
 // which no rule matches, so redaction is idempotent.
+//
+// Cost is bounded: every rule is linear in input length on adversarial text
+// (dash-joined identifiers, whitespace-free base64url, long whitespace runs,
+// minified bundles, repeated PEM headers). The `*-assign` rules keep that
+// property by starting only at a token boundary — the leading lookbehind
+// excludes `-` as well as `[A-Za-z0-9_]` — and by allowing a second
+// whitespace run only after a real quote (`\s*(?:["']\s*)?`). A rule that
+// re-introduces `\s*["']?\s*` or lets the identifier prefix start mid-token
+// goes quadratic; redact.test.mjs pins the bound.
+//
+// Known limits of rules v1 (guarantee is bounded to the list, §6.5):
+// - Over-redaction, safe side: `high-entropy-assign` admits `/` in the value,
+//   so a `key=` / `key:` whose value is a path, route or branch name with a
+//   digit and ≥ 32 chars is redacted (`path=src/Components/Auth/Login2FA/x.ts`,
+//   `const ROUTE = "/api/v2/Admin/Users/ResetPassword"`). A citation snippet
+//   holding such a constant becomes `sensitive: true`. Candidate for rules v2.
+// - Over-redaction, safe side: `pem-block` treats a BEGIN header with no END
+//   as truncated key material and redacts to the end of the text, so prose
+//   such as `Found -----BEGIN CERTIFICATE----- header in README; see docs`
+//   loses its tail. Requiring a newline + base64 line before the to-end
+//   branch would fix the prose case but must keep the END search bounded
+//   (a failing to-end branch makes every BEGIN start rescan to the end).
+// - Gaps, v2 ticket: Azure SAS `SharedAccessSignature=sv=…&sig=…` is caught
+//   only via `high-entropy-assign` on `sig=` (not when `%`-encoded within
+//   32 chars); Stripe `sk_live_…`, Slack webhook URLs, `scheme://user:pass@host`
+//   URL credentials and `Authorization: Basic …` pass through untouched.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -160,6 +186,11 @@ function isPlainObject(value) {
  *
  * When nothing matched, the input is returned by reference (deep-equal and identical), so a
  * writer that hashes the result sees the same bytes it would have hashed before redaction.
+ *
+ * Object keys that redact to the same marker do not collapse: the second and later ones are
+ * suffixed `#2`, `#3`, … (`{"password=1": "a", "password=2": "b"}` →
+ * `{"<REDACTED:password-assign>": "a", "<REDACTED:password-assign>#2": "b"}`), so no value is
+ * dropped and the entry count survives. Keys that were not redacted are never renamed.
  * @template T
  * @param {T} value
  * @param {Rules} [rules]
@@ -186,12 +217,27 @@ export function redactDeep(value, rules = DEFAULT_RULES) {
   if (!isPlainObject(value)) return value;
   let changed = false;
   const entries = [];
+  const taken = new Set();
   for (const key of Object.keys(value)) {
     const item = value[key];
     const nextKey = redactDeep(key, rules);
     const nextItem = redactDeep(item, rules);
     if (nextKey !== key || nextItem !== item) changed = true;
-    entries.push([nextKey, nextItem]);
+    if (nextKey === key) taken.add(key);
+    entries.push([key, nextKey, nextItem]);
   }
-  return changed ? Object.fromEntries(entries) : value;
+  if (!changed) return value;
+  // Two keys that redact to the same marker must not collapse into one entry (a value would be
+  // silently dropped). Unredacted keys keep their name; a redacted key that collides with one
+  // already placed gets `#2`, `#3`, … so the entry count survives.
+  const out = {};
+  for (const [key, nextKey, nextItem] of entries) {
+    let k = nextKey;
+    if (nextKey !== key) {
+      for (let n = 2; taken.has(k); n++) k = `${nextKey}#${n}`;
+      taken.add(k);
+    }
+    out[k] = nextItem;
+  }
+  return out;
 }
