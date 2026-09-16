@@ -16,7 +16,7 @@ receipts (fix-review, ack; may be empty)
 
 {{block:identity}}
 
-Timestamps live in artifact envelopes and are part of no identity (spec §6.1); this report carries none.
+Timestamps live in artifact envelopes and are part of no identity (spec §6.1); this report carries none. Sections 2–5 are this template's own (a verify report has one subject); `## 6. Limitations` and `## 12. Chain of custody` keep their v3 §11 numbers so a section number means the same thing in every report (`templates/README.md`). The assessment template folds each snapshotted verify run into its findings' verification history and its verify-history table.
 
 ## 2. Verdict
 

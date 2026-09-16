@@ -802,3 +802,9 @@ export const VERIFIED_DERIVATIVE = "VERIFIED-DERIVATIVE";
 export const LINKED_ONLY = "LINKED-ONLY";
 /** `MISMATCH(output)` — exit 5: an output file differs from the re-applied profile, or from its own manifest's `output_sha256`, or is missing (plan §4.1). */
 export const MISMATCH_OUTPUT = "MISMATCH(output)";
+
+// --- assessment / threat-model templates (TASK-024; spec §11 section 3, §6.3; TL-16 reading in templates/README.md) ---
+/** Section 3 "incomplete runs": the ledger is outside the run directory (TL-3, G-16) and spec §6.3's closed assessment list has no ledger input, so the report defers the count to `sign-off`'s `INCOMPLETE:` listing (TL-16). */
+export const INCOMPLETE_RUNS_SEE_SIGN_OFF = "see sign-off (INCOMPLETE: listing) — the ledger is outside the run directory (TL-3), so this report cannot count them";
+/** The six disposition kinds (spec §6.10), in spec order — the assessment and threat-model reports fold dispositions by kind in this order. */
+export const DISPOSITION_KINDS = Object.freeze(["undisposed", "planned", "executed", "ticketed", "accepted", "mitigated"]);

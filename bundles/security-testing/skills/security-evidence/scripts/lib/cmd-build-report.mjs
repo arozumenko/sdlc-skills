@@ -21,18 +21,21 @@
 //      would leave a COMMITTED assessment-kind run whose report is not an
 //      assessment — sign-off reads run kinds) ⇒ 2 USAGE otherwise;
 //   3. `templates/<name>.md` parsed (absent ⇒ 2 USAGE: the template is not
-//      shipped — assessment and threat-model land in TASK-024); its
-//      required-inputs block must equal inputs.REQUIRED[<name>] (a
-//      packaging bug otherwise: Error, exit 1);
+//      shipped — all four ship since TASK-024); its required-inputs block
+//      must equal inputs.REQUIRED[<name>] (a packaging bug otherwise:
+//      Error, exit 1);
 //   4. under the run lock (ledger/<id>.lock/ — so a concurrent TL-14 index
 //      append can neither surface a tmp file nor land between the closure
 //      and the marker): COMMITTED re-checked; inputs.closeOver (3
 //      INCOMPLETE(<input>) / 5 INCONSISTENT(<file>)); the run's key by the
 //      envelope's key_id (absent ⇒ the view says KEY: unavailable and lists
 //      the keyed identities it could not re-derive — spec §6.5 — the report
-//      still builds); render.buildView (InconsistentInput ⇒ 5
-//      INCONSISTENT(<field>): gate-result | coverage | verify);
-//      render.renderMarkdown;
+//      still builds) plus every other key_id the closure's envelopes name
+//      (render.keyIdsOf: rotation, verify snapshots copied from other runs),
+//      each resolved or null so Limitations name the artifacts whose key
+//      is gone (TASK-024); render.buildView (InconsistentInput ⇒ 5
+//      INCONSISTENT(<field>): gate-result | coverage | verify |
+//      register-events | dispositions); render.renderMarkdown;
 //   5. writes, each write-once via tmp + link (an existing file is an atomic
 //      EEXIST), in this order: `report.md`; `manifest.json` (kind manifest:
 //      {inputs, report_sha256, template, template_version, tool_version},
@@ -75,7 +78,7 @@ import { parseCommandArgv } from "./argv.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
 import { REQUIRED, closeOver } from "./inputs.mjs";
 import { RUN_ID, withRunLock } from "./ledger.mjs";
-import { InconsistentInput, buildView, parseTemplate, renderMarkdown } from "./render.mjs";
+import { InconsistentInput, buildView, keyIdsOf, parseTemplate, renderMarkdown } from "./render.mjs";
 import { runDir } from "./run-index.mjs";
 import { validate } from "./schema.mjs";
 import { COMMITTED, REPORT_TEMPLATES, RUN_COMMITTED, inconsistent, manifestLine, reportLine } from "./tokens.mjs";
@@ -184,9 +187,18 @@ export async function buildReport(ctx, { run_id, template }) {
     if (existsSync(join(dir, COMMITTED))) throw new CliError(EXIT.USAGE, RUN_COMMITTED);
     const inputs = closeOver(dir, template, { ledgerDir: join(ctx.st, "ledger", run_id) });
     const key = ctx.keyById(run.envelope.key_id);
+    // every key the closure's envelopes name (rotation, snapshots copied in
+    // from other runs): Limitations list the artifacts whose key is gone
+    // (spec §6.5; TASK-024)
+    const keys = Object.fromEntries(
+      keyIdsOf(inputs).map((id) => {
+        const k = ctx.keyById(id);
+        return [id, k === null ? null : k.bytes];
+      }),
+    );
     let view;
     try {
-      view = buildView(inputs, { key: key === null ? null : key.bytes, rules: DEFAULT_RULES, tool_version: ctx.toolVersion(), template_version: parsed.template_version });
+      view = buildView(inputs, { key: key === null ? null : key.bytes, keys, rules: DEFAULT_RULES, tool_version: ctx.toolVersion(), template_version: parsed.template_version });
     } catch (err) {
       if (err instanceof InconsistentInput) throw integrityFailure(inconsistent(err.field), err);
       throw err;
