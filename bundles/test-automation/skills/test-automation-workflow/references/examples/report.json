@@ -1,0 +1,56 @@
+{
+  "batch": "security-my-product-admitted",
+  "base": "main",
+  "execution_provider": "manual-qa",
+  "integration_branch": "tests/batch-security-my-product-admitted",
+  "gate": {
+    "verdict": "green",
+    "runs": 3,
+    "seconds": [41, 39, 40],
+    "failures": []
+  },
+  "cases": [
+    {
+      "id": "TC-SEC-001",
+      "outcome": "delivered",
+      "note": "merged to trunk; manual-qa run RUN-2026-09-15-001 cited as execution provenance",
+      "findings": [],
+      "branch": "tests/TC-SEC-001-security-headers",
+      "pr": 41,
+      "coverage": { "full": true, "excluded": [] },
+      "gate": { "runs": 3, "seconds": [41, 39, 40] }
+    },
+    {
+      "id": "TC-SEC-002",
+      "outcome": "delivered",
+      "note": "merged to trunk; step 3 excluded on the filed defect",
+      "findings": [
+        { "kind": "defect", "note": "session cookie is issued without HttpOnly on POST /login", "ref": "SEC-DEF-17" }
+      ],
+      "branch": "tests/TC-SEC-002-session-cookie",
+      "pr": 42,
+      "coverage": {
+        "full": false,
+        "excluded": [
+          { "step": "TC-SEC-002/3", "category": "blocked-by-defect", "referent": "SEC-DEF-17", "note": "HttpOnly assertion held on the filed defect" }
+        ]
+      },
+      "gate": { "runs": 3, "seconds": [41, 39, 40] }
+    },
+    {
+      "id": "TC-SEC-003",
+      "outcome": "blocked",
+      "note": "no outbound mail sink on staging — the reset link cannot be retrieved; env blocker, replan when a sink exists",
+      "findings": [
+        { "kind": "note", "note": "the reset-token flow needs a mail sink (e.g. a MailHog instance) on the target environment", "ref": null }
+      ]
+    }
+  ],
+  "totals": { "delivered": 2, "blocked": 1 },
+  "quality_flags": [],
+  "quota_halted": false,
+  "expected_red": [
+    { "spec": "tests/security/session-cookie.spec.ts", "test_id": "TC-SEC-002 :: HttpOnly", "ticket": "SEC-DEF-17", "why": "asserted softly until the product ships the HttpOnly fix", "case_ids": ["TC-SEC-002"] }
+  ],
+  "parked": []
+}

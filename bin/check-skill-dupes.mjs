@@ -42,6 +42,27 @@ const GROUPS = [
     "bundles/security-testing/knowledge/report-reading-guide.md",
     "bundles/security-testing/skills/security-evidence/templates/knowledge/report-reading-guide.md",
   ],
+  // security-testing ingest fixtures (TASK-018): `ingest case | audit | qa-run |
+  // ta-report` parse the manual-qa and test-automation formats, and the
+  // adapters' fixtures are verbatim copies of the owning bundle's documented
+  // example, so a format change upstream fails here instead of silently
+  // breaking the adapter in a consumer's repo (plan guardrail G-12).
+  [
+    "bundles/manual-qa/knowledge/examples/TC-SEC-001.md",
+    "bundles/security-testing/skills/security-evidence/scripts/fixtures/qa/TC-SEC-001.md",
+  ],
+  [
+    "bundles/manual-qa/knowledge/examples/RUN-2026-09-15-001.md",
+    "bundles/security-testing/skills/security-evidence/scripts/fixtures/qa/RUN-2026-09-15-001.md",
+  ],
+  [
+    "bundles/manual-qa/knowledge/examples/audit-report.md",
+    "bundles/security-testing/skills/security-evidence/scripts/fixtures/qa/audit-report.md",
+  ],
+  [
+    "bundles/test-automation/skills/test-automation-workflow/references/examples/report.json",
+    "bundles/security-testing/skills/security-evidence/scripts/fixtures/ta/report.json",
+  ],
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
