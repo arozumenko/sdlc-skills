@@ -631,10 +631,10 @@ test("security-reviewer appears in every host's native shape", { skip: SKIP }, a
 
 // M1 CLI-shape stubs whose sibling tests are owed by the task that fills them in
 // (TASK-006 shipped the stubs; their behaviour is pinned by the entry-script
-// tests named here). The day TASK-039 / TASK-042 land, the stub leaves this
-// list and the sibling rule applies.
+// tests named here). The day TASK-042 lands, the stub leaves this list and
+// the sibling rule applies (TASK-039 removed lib/cmd-tm-lint.mjs's row when
+// lib/cmd-tm-lint.test.mjs landed).
 const STUB_TESTED_BY = Object.freeze({
-  "lib/cmd-tm-lint.mjs": "tm-lint.test.mjs",
   "lib/cmd-plan.mjs": "plan.test.mjs",
 });
 

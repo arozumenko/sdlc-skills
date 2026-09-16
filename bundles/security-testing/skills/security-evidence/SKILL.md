@@ -11,8 +11,8 @@ metadata:
 
 # Security evidence — the command and schema index
 
-Three entry scripts carry every command of the bundle (`tm-lint.mjs` and
-`plan.mjs` ship their CLI shape at M1 and land in M2/M3). Each is a thin
+Four entry scripts carry every command of the bundle (`plan.mjs` ships its
+CLI shape at M1 and lands in M3). Each is a thin
 argv dispatcher over `scripts/lib/cmd-<name>.mjs`; the shared modules are
 `canon.mjs` (canonical bytes, envelopes, identities), `normalize.mjs`
 (line normalisation), `redact.mjs` (the bounded rule list) and `lib/`.
@@ -110,15 +110,26 @@ authenticated: false}` and none reduces open exposure.
 | `register.mjs anchor print` | `<engagement_id>:<seq>:<chain_sha256>` for the consumer to keep outside the repo | the anchor |
 | `register.mjs anchor verify --expect <engagement_id:seq:hash>` | compare the log against a held anchor | `MATCH` \| `TRUNCATED` \| `DIVERGED` (exit 5) |
 
-## `tm-lint.mjs` (M2) and `plan.mjs` (M3)
+## `tm-lint.mjs` (M2)
 
-`tm-lint.mjs check` validates a threat model and writes the run's copy;
+`tm-lint.mjs check` validates the threat model the `threat-modeling` skill
+describes and writes the run's copy; `tm-lint.mjs render` writes its
+Markdown view (D14). Dispositions are validated as relationships against
+the run directory (spec §6.10): the agent's `disposition.kind` is an
+assertion, `<run>/dispositions.json` is what the script derived from it.
+
+| Command | Does | Prints |
+|---|---|---|
+| `tm-lint.mjs check --run <id> [--model <path>]` | validate `<st>/threat-model.json` (or `--model`): schema, unique ids, non-blank names, one in-scope citation per element (and per cited mitigation; a dirty `snapshot` file cannot be cited), then snapshot it write-once as `<run>/threat-model.json`, then validate every disposition relationship — `planned` against `proposals-index.json` / `admissions/`, `executed` against `observations/`, `ticketed` against a `tracker-readback` import whose body carries the threat id, `accepted` against the register snapshot's row (subject = threat, status accepted), `mitigated` against `receipt apply`'s `MITIGATION_CONFIRMED` — and write `<run>/dispositions.json` (one row per threat, `resolved_via`) | `TM elements=<n> threats=<n> undisposed=<n>`, two `WROTE …`; `4 TM-INVALID(<threat\|element>: <reason>)` (nothing written on a structural failure; the snapshot's `WROTE` after a relationship failure); `2 SNAPSHOT-EXISTS` for a different model on a snapshotted run; `3 INCOMPLETE(scope)` |
+| `tm-lint.mjs render --run <id>` | `<run>/threat-model.md` from the snapshot, the dispositions index and the run's mitigation states; write-once | `RENDER <path> elements=<n> threats=<n>`; `3 INCOMPLETE(threat-model\|dispositions)`; `2 RENDER-EXISTS` |
+
+## `plan.mjs` (M3)
+
 `plan.mjs admit` produces the admission record that decides whether a case
 enters the hand-off suite or stays a proposal (unknown effects ⇒ proposal).
 
 | Command | Does at M1 |
 |---|---|
-| `tm-lint.mjs check --run <id> [--model <path>]` / `tm-lint.mjs render --run <id>` | CLI shape and schema validation of `threat-model.json`; `2 NOT-IMPLEMENTED(M2)` otherwise |
 | `plan.mjs admit --run <id> <case.md> [--receipt <sha256>]` / `plan.mjs propose --run <id> <proposal.md>` / `plan.mjs ta-prompt --run <id> --slug <s> --base <branch>` | CLI shape and schema validation; `2 NOT-IMPLEMENTED(M3)` otherwise; `2 PROPOSAL-UNDER-TASKS` is already refused |
 
 ## Schemas (`references/`)
@@ -148,7 +159,7 @@ stdlib subset of JSON Schema). Enveloped artifacts share
 | `proposal.schema.json`, `proposals-index.schema.json` | `<st>/proposals/<id>.proposal.md` frontmatter and `<run>/proposals-index.json` |
 | `admission.schema.json` | `<run>/admissions/<case_sha256>.json` (M3) |
 | `register.schema.json` | register events, alias log entries and the projection |
-| `threat-model.schema.json` | `<st>/threat-model.json` (M2) |
+| `threat-model.schema.json` | `<st>/threat-model.json`, its run snapshot `<run>/threat-model.json` and `<run>/dispositions.json` (`Dispositions`) |
 | `export-manifest.schema.json` | the manifest next to every published output |
 | `sarif-mapping.v1.schema.json` (`sarif-mapping.v1.json`) | the versioned SARIF mapping and its closed fallback matrix |
 | `redaction-rules.schema.json` (`redaction-rules.json`) | the bounded, versioned rule list |

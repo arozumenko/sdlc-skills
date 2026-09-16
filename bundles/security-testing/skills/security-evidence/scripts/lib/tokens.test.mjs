@@ -430,3 +430,22 @@ test("check rows (TASK-025; spec §6.3, plan §4.1 row `check`): the four result
   assert.equal(tokens.inconsistent("snapshot:src/app.js"), "INCONSISTENT(snapshot:src/app.js)");
   assert.equal(tokens.incomplete(tokens.COMMITTED), "INCOMPLETE(COMMITTED)");
 });
+
+test("tm-lint rows (TASK-039; plan §4.4, PM rulings R1/R2): TM-INVALID(<threat|element>: <reason>) over the closed locus shapes, the TM line, the RENDER line, RENDER-EXISTS, the R2 wording", () => {
+  assert.equal(tokens.tmInvalid("E-001", 'missing required "citation"'), 'TM-INVALID(E-001: missing required "citation")');
+  assert.equal(tokens.tmInvalid("T-007", "mitigated(M-001): M-001 has no MITIGATION_CONFIRMED state (not independently reviewed)"), "TM-INVALID(T-007: mitigated(M-001): M-001 has no MITIGATION_CONFIRMED state (not independently reviewed))");
+  assert.equal(tokens.tmInvalid("elements[0]", "id: expected string, got integer"), "TM-INVALID(elements[0]: id: expected string, got integer)");
+  assert.equal(tokens.tmInvalid("threats[2]", "x"), "TM-INVALID(threats[2]: x)");
+  assert.equal(tokens.tmInvalid("model", 'unknown key "extra"'), 'TM-INVALID(model: unknown key "extra")');
+  for (const bad of ["M-001", "E-1", "elements", "threat-model", "", undefined]) assert.throws(() => tokens.tmInvalid(bad, "reason"), TypeError, `locus ${String(bad)}`);
+  for (const bad of ["", "two\nlines", undefined]) assert.throws(() => tokens.tmInvalid("E-001", bad), TypeError, `reason ${String(bad)}`);
+  assert.equal(tokens.TM_DIRTY_CITATION, "cites a dirty file; build the model on an assessment run");
+  assert.equal(tokens.tmInvalid("E-001", tokens.TM_DIRTY_CITATION), "TM-INVALID(E-001: cites a dirty file; build the model on an assessment run)");
+  assert.equal(tokens.tmLine({ elements: 3, threats: 7, undisposed: 0 }), "TM elements=3 threats=7 undisposed=0");
+  assert.throws(() => tokens.tmLine({ elements: 3, threats: 7 }), TypeError);
+  assert.throws(() => tokens.tmLine({ elements: -1, threats: 7, undisposed: 0 }), TypeError);
+  assert.equal(tokens.tmRendered({ relPath: ".agents/security-testing/runs/0123456789ab-0001/threat-model.md", elements: 1, threats: 2 }), "RENDER .agents/security-testing/runs/0123456789ab-0001/threat-model.md elements=1 threats=2");
+  assert.throws(() => tokens.tmRendered({ relPath: "/abs/threat-model.md", elements: 1, threats: 2 }), TypeError);
+  assert.equal(tokens.RENDER_EXISTS, "RENDER-EXISTS");
+  assert.equal(tokens.SNAPSHOT_EXISTS, "SNAPSHOT-EXISTS", "check reuses TASK-058's token for a different model on a snapshotted run");
+});

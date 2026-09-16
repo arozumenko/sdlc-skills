@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// tm-lint.mjs — entry point for threat-model linting (plan §4.4, M2). M1
-// ships the CLI shape and schema validation; both commands end in
-// NOT-IMPLEMENTED(M2) until TASK-039.
+// tm-lint.mjs — entry point for threat-model linting (plan §4.4; TASK-006
+// shape, TASK-039 bodies). Thin dispatcher: lib/cmd-tm-lint.mjs does the work.
 import { main } from "./lib/cli.mjs";
 
 const USAGE = `usage: tm-lint.mjs [--root <dir>] [--actor <name>] [--quiet] <command> [flags]
 
 commands
   check --run <id> [--model <path>]      validate the threat model (default <st>/threat-model.json): schema, one citation per element,
-                                         every disposition relationship; writes <run>/threat-model.json and <run>/dispositions.json
-  render --run <id>                      write <run>/threat-model.md
+                                         every disposition relationship; writes <run>/threat-model.json (write-once) and <run>/dispositions.json
+  render --run <id>                      write <run>/threat-model.md from the run's snapshot and dispositions
 
-exit codes  0 ok · 2 usage / SCHEMA-INVALID / NOT-IMPLEMENTED(M2) · 4 TM-INVALID(<threat|element>: <reason>)
+exit codes  0 ok · 2 usage / RUN-COMMITTED / SNAPSHOT-EXISTS / RENDER-EXISTS · 3 INCOMPLETE(<input>) · 4 TM-INVALID(<threat|element>: <reason>) · 5 INCONSISTENT(<input>)
 `;
 
 const COMMANDS = {

@@ -93,11 +93,14 @@ test("runScript's children ignore a hostile ~/.gitconfig even when the caller ov
 
   // ctx resolves root through `git rev-parse --show-toplevel`; with the broken
   // config leaking in, that fails and the script cannot get past NOT-A-WORK-TREE.
+  // Past it, `render` parses its argv first: the --run shape refusal is the
+  // proof the work tree resolved (TASK-039 replaced the M1 NOT-IMPLEMENTED stub).
+  const PAST_WORK_TREE = "USAGE(render: --run must be <12 hex>-<4 digits>, got abc)\n";
   const r = await runScript("tm-lint", ["render", "--run", "abc"], { cwd: repo, env: { HOME: home } });
-  assert.equal(r.stdout, "NOT-IMPLEMENTED(M2)\n", `the script under test saw the hermetic config, not HOME/.gitconfig:\n${r.stderr}`);
+  assert.equal(r.stdout, PAST_WORK_TREE, `the script under test saw the hermetic config, not HOME/.gitconfig:\n${r.stderr}`);
   assert.equal(r.code, 2);
 
   const hostile = hostileHome();
   const r2 = await runScript("tm-lint", ["render", "--run", "abc"], { cwd: repo, env: { HOME: hostile } });
-  assert.equal(r2.stdout, "NOT-IMPLEMENTED(M2)\n");
+  assert.equal(r2.stdout, PAST_WORK_TREE);
 });
