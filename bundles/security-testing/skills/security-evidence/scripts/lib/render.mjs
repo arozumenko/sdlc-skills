@@ -1,14 +1,16 @@
-// lib/render.mjs — the pure report renderer (TASK-023; plan §3.3 row
-// `lib/render.mjs`, §5 TASK-023/024; spec §6.3 derivation table, §11 report
-// structure, TL-7 markers; US-016; G-9 pure core). `cmd-build-report.mjs`
-// wires it to a run directory; `check` (TASK-025) calls the same three
-// functions over the same inputs and byte-compares the result.
+// lib/render.mjs — the pure report renderer (TASK-023 review + verify;
+// TASK-024 assessment + threat-model; plan §3.3 row `lib/render.mjs`, §5
+// TASK-023/024; spec §6.3 derivation table, §11 report structure, TL-7
+// markers; US-016; G-9 pure core). `cmd-build-report.mjs` wires it to a run
+// directory; `check` (TASK-025) calls the same three functions over the same
+// inputs (with the same `opts.keys`) and byte-compares the result.
 //
 //   parseTemplate(text)      → {template, template_version, required_inputs, body}
 //   buildView(inputs, opts)  → view          (the derivation; throws InconsistentInput)
 //   renderMarkdown(view, t)  → string        (deterministic; redacted; LF-terminated)
 //   sanitize(s, {cell})      → string        (every input string passes it)
 //   marker(path)             → `<!-- v:<path> -->`
+//   keyIdsOf(inputs)         → string[]      (every key_id the closure's envelopes name)
 //
 // Templates (templates/README.md): frontmatter `template` + `template_version`,
 // one fenced `required-inputs` block (the closed list, spec §6.3 — the note
@@ -44,7 +46,40 @@
 //   verify   evaluate.evaluate(payload minus evaluation) compared by identity
 //            with the recorded evaluation ⇒ InconsistentInput("verify"); the
 //            VERDICT line is tokens.verdictLine over the payload and the
-//            artifact's own identity.
+//            artifact's own identity. The assessment runs the same check
+//            over every `verify-snapshots/<id>/verify.json`.
+//   register (assessment, TASK-024) register-fold.replay over the events of
+//            `register-events.json` (the snapshot, never <st>/register —
+//            TL-3, G-16) and verifyAliasChain over its aliases; the
+//            replayed seq and chain_sha256 must equal the recorded ones
+//            ⇒ InconsistentInput("register-events") otherwise. Status
+//            counts, open exposure and the one unauthenticated-approvals
+//            bucket are register-fold.summarize over that projection
+//            (spec §6.3 row "register status, delta, unauthenticated-
+//            approval bucket"; G-8: nothing is subtracted from exposure).
+//            The delta is the events whose `ref` names this run and the
+//            rows whose `first_seen_run` is this run.
+//   threat   (assessment, threat-model; TASK-024) elements, threats and
+//            the model's own dispositions rendered as recorded; mitigation
+//            states are states.applyReceipts' `mitigation_states` over the
+//            same receipts + packets; a mitigation with no applied
+//            mitigation-review receipt is `not independently reviewed`. The
+//            threat-model template's `dispositions.json` index must agree
+//            with the model (every entry names a threat the model carries,
+//            with the same kind and ref, no threat twice)
+//            ⇒ InconsistentInput("dispositions") otherwise.
+//
+// TL-16 (TASK-024 reading; templates/README.md): section 3's "incomplete
+// runs" cannot be counted inside the run directory — the ledger is outside
+// it (TL-3, G-16) and spec §6.3's closed assessment list has no ledger
+// input — so the line is the fixed token INCOMPLETE_RUNS_SEE_SIGN_OFF,
+// marked, and `sign-off`'s INCOMPLETE: listing is the count's home.
+//
+// Keys (TASK-024; spec §6.5 "the report's Limitations list them"): `opts.key`
+// is the run's own key (or null); the optional `opts.keys` maps every key_id
+// the closure's envelopes name (keyIdsOf(inputs) lists them) to its bytes or
+// null, and Limitations get one `KEY: unavailable — artifacts whose key
+// <id> has no key file: …` line per null entry, naming the artifacts.
 //
 // The view is plain data (JSON-able, no functions, no Buffers): every value
 // the report shows, addressed by the `<view-path>` the TL-7 marker names.
@@ -70,25 +105,31 @@
 //
 // Pure (G-9): imports ../canon.mjs (artifactId), ../redact.mjs (redactString),
 // ./coverage-core.mjs, ./evaluate.mjs, ./gate-core.mjs (findingId),
-// ./states.mjs and ./tokens.mjs. No clock, no fs, no git, no network; no
-// child processes.
+// ./register-fold.mjs (replay, summarize), ./register-transitions.mjs
+// (verifyAliasChain), ./states.mjs and ./tokens.mjs. No clock, no fs, no git,
+// no network; no child processes.
 
 import { artifactId } from "../canon.mjs";
 import { redactString } from "../redact.mjs";
 import { countByStatus, computeCoverage } from "./coverage-core.mjs";
 import { evaluate } from "./evaluate.mjs";
 import { findingId } from "./gate-core.mjs";
+import { replay, summarize } from "./register-fold.mjs";
+import { verifyAliasChain } from "./register-transitions.mjs";
 import { applyReceipts } from "./states.mjs";
 import {
   CITATION_FAILED,
   CITATION_VERIFIED,
   COVERAGE_INDETERMINATE,
+  DISPOSITION_KINDS,
+  INCOMPLETE_RUNS_SEE_SIGN_OFF,
   KEY_AVAILABLE,
   KEY_UNAVAILABLE,
   NOT_ASSESSED,
   NOT_INDEPENDENTLY_REVIEWED,
   ORIGIN_UNAUTHENTICATED,
   REGISTER_PRIORITIES,
+  REGISTER_STATUSES,
   REPORT_TEMPLATES,
   REVIEW_CONFIRMED,
   REVIEW_INDETERMINATE,
@@ -255,13 +296,90 @@ function requireList(artifacts, name) {
 }
 
 function requireOpts(opts) {
-  if (!isObject(opts)) throw new TypeError("buildView: opts must be {key, rules, tool_version, template_version}");
-  const { key = null, rules, tool_version, template_version } = opts;
+  if (!isObject(opts)) throw new TypeError("buildView: opts must be {key, rules, tool_version, template_version, keys?}");
+  const { key = null, rules, tool_version, template_version, keys = null } = opts;
   if (key !== null && !(key instanceof Uint8Array && key.length > 0)) throw new TypeError("buildView: key must be the engagement key bytes or null");
   if (!isObject(rules) || !Array.isArray(rules.rules) || !Number.isSafeInteger(rules.redaction_version)) throw new TypeError("buildView: rules must be a loaded redact.mjs rule set");
   if (typeof tool_version !== "string" || tool_version === "") throw new TypeError("buildView: tool_version must be a non-empty string");
   if (!Number.isSafeInteger(template_version) || template_version < 0) throw new TypeError("buildView: template_version must be a non-negative integer");
-  return { key, rules, tool_version, template_version };
+  if (keys !== null) {
+    if (!isObject(keys)) throw new TypeError("buildView: keys must map key_id → key bytes | null");
+    for (const [id, bytes] of Object.entries(keys)) {
+      if (bytes !== null && !(bytes instanceof Uint8Array && bytes.length > 0)) throw new TypeError(`buildView: keys.${id} must be key bytes or null`);
+    }
+  }
+  return { key, rules, tool_version, template_version, keys };
+}
+
+// --- keys across the closure (TASK-024; spec §6.5) ----------------------------------
+
+/** Run-directory file names of the singleton inputs and the two index artifacts (labels for Limitations). */
+const SINGLETON_FILES = Object.freeze({
+  run: "run.json",
+  scope: "scope.json",
+  claimed: "findings.claimed.json",
+  "gate-result": "gate-result.json",
+  coverage: "coverage.json",
+  examined: "examined.json",
+  rejects: "rejects.json",
+  unlocated: "unlocated.json",
+  engagement: "engagement.json",
+  "threat-model": "threat-model.json",
+  verify: "verify.json",
+  dispositions: "dispositions.json",
+  "register-events": "register-events.json",
+  "proposals-index": "proposals-index.json",
+  "imports-index": "imports.json",
+  "observations-index": "observations.json",
+});
+
+const hasEnvelope = (a) => isObject(a) && isObject(a.envelope) && typeof a.envelope.key_id === "string";
+
+/**
+ * Every artifact in the closure with the label the report uses for it and the key_id its envelope names.
+ * @param {{artifacts: object}} inputs
+ * @returns {{label: string, key_id: string}[]} sorted by label
+ */
+function artifactLabels(inputs) {
+  const out = [];
+  const add = (label, a) => {
+    if (hasEnvelope(a)) out.push({ label, key_id: a.envelope.key_id });
+  };
+  for (const [name, value] of Object.entries(inputs.artifacts)) {
+    if (Object.hasOwn(SINGLETON_FILES, name)) add(SINGLETON_FILES[name], value);
+    else if (name === "packets" || name === "receipts") for (const a of value) add(`${name}/${a.envelope.self_sha256}`, a);
+    else if (name === "imports") for (const a of value) add(`ingest/${a.payload.import_sha256}`, a);
+    else if (name === "observations") for (const a of value) add(`observations/${a.payload.observation_id}`, a);
+    else if (name === "verify-snapshots") {
+      for (const s of value) {
+        add(`verify-snapshots/${s.id}/verify.json`, s.verify);
+        for (const p of s.packets) add(`verify-snapshots/${s.id}/packets/${p.envelope.self_sha256}`, p);
+        for (const r of s.receipts) add(`verify-snapshots/${s.id}/receipts/${r.envelope.self_sha256}`, r);
+      }
+    }
+  }
+  return out.sort((a, b) => compare(a.label, b.label));
+}
+
+/**
+ * The distinct key_ids the closure's envelopes name, sorted — what the command
+ * resolves (ctx.keyById) into `opts.keys`.
+ * @param {{artifacts: object}} inputs from inputs.closeOver
+ * @returns {string[]}
+ */
+export function keyIdsOf(inputs) {
+  requireInputs(inputs);
+  return [...new Set(artifactLabels(inputs).map((a) => a.key_id))].sort(compare);
+}
+
+/** One Limitations line per key_id in `opts.keys` that has no bytes, naming the artifacts enveloped under it (spec §6.5). */
+function keyLimitations(inputs, opts) {
+  if (opts.keys === null) return [];
+  const labels = artifactLabels(inputs);
+  return Object.keys(opts.keys)
+    .sort(compare)
+    .filter((id) => opts.keys[id] === null)
+    .map((id) => `${KEY_UNAVAILABLE} — artifacts whose key ${id} has no key file: ${list(labels.filter((a) => a.key_id === id).map((a) => a.label))}`);
 }
 
 function runView(run, run_id) {
@@ -370,7 +488,8 @@ function findingView(f, applied, receipts, notApplied) {
   };
 }
 
-function reviewView(inputs, opts, run_id) {
+/** The review derivation; the assessment view builds on its result. */
+function reviewCore(inputs, opts, run_id) {
   const A = inputs.artifacts;
   const run = requireArtifact(A, "run");
   const scope = requireArtifact(A, "scope");
@@ -404,8 +523,9 @@ function reviewView(inputs, opts, run_id) {
   limitations.push(`data-flow findings without typed citations: ${untyped.length === 0 ? "(none)" : untyped.join(", ")}`);
   limitations.push(`redaction rules version: ${opts.rules.redaction_version}`);
   limitations.push("local ≠ confidential: every artifact under .agents/security-testing/ is local by default and disclosed only through `publish --profile`");
+  limitations.push(...keyLimitations(inputs, opts));
 
-  return {
+  const view = {
     template: "review",
     run: runView(run, run_id),
     key: opts.key === null ? "unavailable" : "available",
@@ -430,7 +550,7 @@ function reviewView(inputs, opts, run_id) {
       rejected_total: rejects.payload.rejected.length,
       unlocated: unlocated.payload.candidates.length,
       unauthenticated_approvals: NOT_ASSESSED,
-      incomplete_runs: "see sign-off (the ledger is outside the run directory, TL-3)",
+      incomplete_runs: INCOMPLETE_RUNS_SEE_SIGN_OFF,
     },
     findings,
     unresolved: {
@@ -445,6 +565,232 @@ function reviewView(inputs, opts, run_id) {
     packets: packetsView(packets),
     threat_model: `${NOT_ASSESSED} — the review template carries no threat model (spec §6.3)`,
     register: `${NOT_ASSESSED} — the review template carries no register snapshot (spec §6.3)`,
+    limitations,
+    hashes: { ...inputs.hashes },
+    custody: custodyView(inputs, opts),
+  };
+  return { view, applied, receipts, packets };
+}
+
+function reviewView(inputs, opts, run_id) {
+  return reviewCore(inputs, opts, run_id).view;
+}
+
+// --- view: threat model (assessment + threat-model templates) ------------------------
+
+const citationText = (c) => (isObject(c) && Array.isArray(c.lines) ? `${c.path}:${c.lines[0]}-${c.lines[1]} @ ${c.side}` : NOT_ASSESSED);
+const dispositionText = (d) => (typeof d.ref === "string" && d.ref !== "" ? `${d.kind} (${d.ref})` : d.kind);
+
+/**
+ * Elements, threats and mitigations as recorded, mitigation states from
+ * applyReceipts; `dispositions` is the threat-model template's index (checked
+ * against the model) or null for the assessment (which carries the model's
+ * own dispositions only).
+ */
+function threatModelView(model, mitigation_states, dispositions) {
+  const m = model.payload;
+  const threats = m.threats.map((t) => ({ id: t.id, element_id: t.element_id, stride: t.stride, title: t.title, disposition: dispositionText(t.disposition), disposition_kind: t.disposition.kind, mitigations: t.mitigations.map((x) => x.id) }));
+  const mitigations = m.threats.flatMap((t) => t.mitigations.map((x) => ({ id: x.id, threat_id: t.id, claim: x.claim, state: mitigation_states[x.id] ?? NOT_INDEPENDENTLY_REVIEWED, citation: citationText(x.citation) })));
+  const by_disposition = Object.fromEntries(DISPOSITION_KINDS.map((k) => [k, threats.filter((t) => t.disposition_kind === k).length]));
+  let index = null;
+  if (dispositions !== null) {
+    const byId = new Map(m.threats.map((t) => [t.id, t]));
+    const seen = new Set();
+    for (const d of dispositions.payload.dispositions) {
+      const t = byId.get(d.threat_id);
+      if (t === undefined) throw new InconsistentInput("dispositions", `threat ${d.threat_id} is not in the model`);
+      if (seen.has(d.threat_id)) throw new InconsistentInput("dispositions", `threat ${d.threat_id} is disposed twice`);
+      seen.add(d.threat_id);
+      if (t.disposition.kind !== d.kind || (t.disposition.ref ?? "") !== d.ref) throw new InconsistentInput("dispositions", `threat ${d.threat_id}: ${d.kind}(${d.ref}) is not the model's ${dispositionText(t.disposition)}`);
+    }
+    index = dispositions.payload.dispositions.map((d) => ({ threat_id: d.threat_id, kind: d.kind, ref: d.ref === "" ? NOT_ASSESSED : d.ref, resolved_via: d.resolved_via }));
+  }
+  return {
+    elements: m.elements.length,
+    elements_list: m.elements.map((e) => ({ id: e.id, kind: e.kind, name: e.name, citation: citationText(e.citation) })),
+    threats,
+    mitigations,
+    mitigation_states: { ...mitigation_states },
+    by_disposition,
+    undisposed: by_disposition.undisposed,
+    dispositions: index,
+  };
+}
+
+// --- view: assessment ----------------------------------------------------------------
+
+/** register-fold.replay over the snapshot; the recorded seq / chain must be what the events replay to. */
+function replayRegister(snapshot) {
+  const p = snapshot.payload;
+  let projection;
+  try {
+    projection = replay(p.events, p.engagement_id);
+    verifyAliasChain(Array.isArray(p.aliases) ? p.aliases : []);
+  } catch (err) {
+    throw new InconsistentInput("register-events", err.message);
+  }
+  if (projection.seq !== p.seq || projection.chain_sha256 !== p.chain_sha256) throw new InconsistentInput("register-events", "seq / chain_sha256 do not follow from the events");
+  return projection;
+}
+
+function approvalsOf(rows) {
+  const out = [];
+  for (const row of rows) {
+    if (row.status === "accepted" && isObject(row.acceptance)) out.push({ row: row.id, kind: "acceptance", approved_by: row.acceptance.approved_by, approval_ref: row.acceptance.approval_ref, until: row.acceptance.until });
+    if (row.status === "false-positive" && isObject(row.false_positive)) out.push({ row: row.id, kind: "false-positive", approved_by: row.false_positive.approved_by, approval_ref: row.false_positive.approval_ref, until: NOT_ASSESSED });
+    if (Array.isArray(row.ack_refs) && row.ack_refs.length > 0) out.push({ row: row.id, kind: "ack_refs", approved_by: "(fix-review ack receipts)", approval_ref: row.ack_refs.join(", "), until: NOT_ASSESSED });
+  }
+  return out;
+}
+
+function registerView(snapshot, proposalsIndex, run_id) {
+  const projection = replayRegister(snapshot);
+  const summary = summarize(projection);
+  const rows = Object.keys(projection.rows)
+    .sort(compare)
+    .map((id) => projection.rows[id])
+    .map((r) => ({ id: r.id, subject: r.subject, subject_kind: r.subject_kind, priority: r.priority, status: r.status, owner: r.owner === "" ? NOT_ASSESSED : r.owner, ticket_url: r.ticket_url === "" ? NOT_ASSESSED : r.ticket_url, last_verified_run: r.last_verified_run === "" ? NOT_ASSESSED : r.last_verified_run, first_seen_run: r.first_seen_run, title: r.title, ack_refs: [...r.ack_refs] }));
+  const events = snapshot.payload.events;
+  return {
+    engagement_id: projection.engagement_id,
+    seq: projection.seq,
+    chain_sha256: projection.chain_sha256,
+    events: events.length,
+    aliases: Array.isArray(snapshot.payload.aliases) ? snapshot.payload.aliases.length : 0,
+    rows,
+    counts: summary.counts,
+    open_exposure: summary.open_exposure,
+    unauthenticated_approvals: summary.unauthenticated_approvals,
+    approvals: approvalsOf(rows.map((r) => projection.rows[r.id])),
+    delta: events.filter((e) => e.ref === run_id).map((e) => ({ seq: e.seq, event: e.event, row_id: e.row_id })),
+    rows_added: rows.filter((r) => r.first_seen_run === run_id).map((r) => r.id),
+    proposals: proposalsIndex.payload.proposals.map((p) => ({ id: p.id, sha256: p.sha256, path: p.path })),
+  };
+}
+
+/** Every snapshotted verify.json, its evaluation re-run (InconsistentInput("verify") on a mismatch). */
+function verifyHistoryView(snapshots) {
+  return [...snapshots]
+    .sort((a, b) => compare(a.id, b.id))
+    .map((s) => {
+      const p = s.verify.payload;
+      const { evaluation, ...raw } = p;
+      if (artifactId(evaluate(raw)) !== artifactId(evaluation)) throw new InconsistentInput("verify", `verify-snapshots/${s.id}: evaluation does not follow from the raw results`);
+      const verify_sha256 = s.verify.envelope.self_sha256;
+      return { verify_run_id: s.id, finding_id: p.finding_id, verdict: evaluation.verdict, refound_observed: evaluation.refound_observed, tested_tree: p.tested_tree, tests_result: p.tests.result, verify_sha256, verdict_line: verdictLine({ verdict: evaluation.verdict, finding: p.finding_id, base: p.base_oid, head: p.head_oid, tested_tree: p.tested_tree, verify: verify_sha256 }) };
+    });
+}
+
+function engagementView(engagement) {
+  const e = engagement.payload;
+  const str = (v) => (typeof v === "string" && v !== "" ? v : NOT_ASSESSED);
+  const paths = (v) => (Array.isArray(v) && v.length > 0 ? v.join(", ") : "(none)");
+  const tests = isObject(e.execute_project_tests) ? e.execute_project_tests : null;
+  const policy = isObject(e.artifact_policy) ? e.artifact_policy : {};
+  const committed = Object.keys(policy)
+    .filter((k) => policy[k] === "committed")
+    .sort(compare);
+  return {
+    engagement_id: str(e.engagement_id),
+    slug: str(e.slug),
+    scope_paths: paths(e.scope_paths),
+    product_paths: paths(e.product_paths),
+    targets_tracker: isObject(e.targets) ? paths(e.targets.tracker) : NOT_ASSESSED,
+    targets_browser: isObject(e.targets) ? paths(e.targets.browser) : NOT_ASSESSED,
+    targets_repo: isObject(e.targets) ? str(e.targets.repo) : NOT_ASSESSED,
+    base_url: str(e.base_url),
+    execute_project_tests: tests === null ? "absent (verify all reports NO_TEST_SURFACE)" : `present: ${tests.argv.length} argv tokens, timeout_s=${Number.isSafeInteger(tests.timeout_s) ? tests.timeout_s : "default"}, install ${isObject(tests.install) ? `present (allow_tracked_changes=${tests.install.allow_tracked_changes === true})` : "absent"}`,
+    require_dispositions: isObject(e.sign_off) && typeof e.sign_off.require_dispositions === "string" ? e.sign_off.require_dispositions : "not set (default executed-or-ticketed)",
+    artifact_policy: Object.keys(policy)
+      .sort(compare)
+      .map((k) => `${k}=${policy[k]}`)
+      .join(", ") || "(all local)",
+    committed_artifacts: committed,
+  };
+}
+
+function assessmentView(inputs, opts, run_id) {
+  const A = inputs.artifacts;
+  const core = reviewCore(inputs, opts, run_id);
+  const engagement = requireArtifact(A, "engagement");
+  const model = requireArtifact(A, "threat-model");
+  const snapshot = requireArtifact(A, "register-events");
+  const proposalsIndex = requireArtifact(A, "proposals-index");
+  const imports = requireList(A, "imports");
+  const observations = requireList(A, "observations");
+  const snapshots = A["verify-snapshots"];
+  if (!Array.isArray(snapshots)) throw new TypeError("buildView: artifacts.verify-snapshots must be an array");
+
+  const register = registerView(snapshot, proposalsIndex, run_id);
+  const verify_history = verifyHistoryView(snapshots);
+  const eng = engagementView(engagement);
+  const view = core.view;
+
+  // findings: ticket_url from the register row(s) on the finding, history from verify snapshots + register events
+  const rowsBySubject = new Map();
+  for (const r of register.rows) {
+    if (!rowsBySubject.has(r.subject)) rowsBySubject.set(r.subject, []);
+    rowsBySubject.get(r.subject).push(r);
+  }
+  const rowIdsOf = (id) => (rowsBySubject.get(id) ?? []).map((r) => r.id);
+  const events = snapshot.payload.events;
+  for (const f of view.findings) {
+    const rows = rowsBySubject.get(f.id) ?? [];
+    const ticketed = rows.find((r) => r.ticket_url !== NOT_ASSESSED);
+    f.ticket_url = ticketed === undefined ? NOT_ASSESSED : ticketed.ticket_url;
+    f.register_rows = rows.map((r) => r.id);
+    const ids = new Set(rowIdsOf(f.id));
+    const parts = [
+      ...verify_history.filter((v) => v.finding_id === f.id).map((v) => `${v.verdict} (verify ${v.verify_run_id})`),
+      ...events.filter((e) => ids.has(e.row_id)).map((e) => `${e.event}@seq${e.seq} (${e.row_id})`),
+    ];
+    f.verification_history = parts.length === 0 ? NOT_ASSESSED : parts.join("; ");
+  }
+  view.summary.unauthenticated_approvals = register.unauthenticated_approvals;
+  view.summary.incomplete_runs = INCOMPLETE_RUNS_SEE_SIGN_OFF;
+  view.unresolved.qa_fail = observations.filter((o) => o.payload.result === "FAIL").map((o) => ({ observation_id: o.payload.observation_id, case_id: o.payload.case_id, result: o.payload.result, import_sha256: o.payload.import_sha256, head_oid: o.payload.head_oid }));
+  view.unresolved.browser_evidence = `${NOT_ASSESSED} — no browser-evidence input at M1`;
+  view.limitations.push(`outside the local policy: ${eng.committed_artifacts.length === 0 ? "(none — every artifact_policy entry is local)" : `${eng.committed_artifacts.join(", ")} (artifact_policy: committed)`}`);
+  view.limitations.push(`verify runs snapshotted: ${verify_history.length}${verify_history.length === 0 ? " — no fix has been verified in this assessment" : ""}`);
+  view.limitations.push(`register snapshot: seq ${register.seq}, ${register.rows.length} rows, ${register.unauthenticated_approvals} unauthenticated approval record(s) — none is authenticated (D15)`);
+
+  return {
+    ...view,
+    template: "assessment",
+    engagement: eng,
+    imports: imports.map((a) => ({ kind: a.payload.kind, import_sha256: a.payload.import_sha256, source_path: a.payload.source_path, records: a.payload.records.length, unlocated: a.payload.unlocated.length, rejected: a.payload.rejected.length })),
+    observations: observations.map((o) => ({ observation_id: o.payload.observation_id, case_id: o.payload.case_id, result: o.payload.result, import_sha256: o.payload.import_sha256 })),
+    threat_model: threatModelView(model, core.applied.mitigation_states, null),
+    verify_history,
+    register,
+  };
+}
+
+// --- view: threat-model ----------------------------------------------------------------
+
+function threatModelTemplateView(inputs, opts, run_id) {
+  const A = inputs.artifacts;
+  const run = requireArtifact(A, "run");
+  const model = requireArtifact(A, "threat-model");
+  const dispositions = requireArtifact(A, "dispositions");
+  const packets = requireList(A, "packets");
+  const receipts = requireList(A, "receipts");
+  const applied = applyReceipts(null, receipts, packets);
+  const limitations = [
+    opts.key === null ? `${KEY_UNAVAILABLE} — no keyed value is re-derived by this template; citation re-validation is check's` : `${KEY_AVAILABLE}`,
+    `receipts not applied: ${applied.not_applied.length}${applied.not_applied.length === 0 ? "" : ` (${applied.not_applied.map((n) => `${n.receipt_sha256}: ${n.reason}`).join("; ")})`}`,
+    `conflicting receipts: ${applied.conflicts.length}${applied.conflicts.length === 0 ? "" : ` (${applied.conflicts.map((c) => `${c.subject_id}: ${c.assertions.join("/")}`).join("; ")})`}`,
+    `redaction rules version: ${opts.rules.redaction_version}`,
+    "local ≠ confidential",
+    ...keyLimitations(inputs, opts),
+  ];
+  return {
+    template: "threat-model",
+    run: runView(run, run_id),
+    key: opts.key === null ? "unavailable" : "available",
+    threat_model: threatModelView(model, applied.mitigation_states, dispositions),
+    receipts: { total: receipts.length, not_applied: applied.not_applied.map((n) => ({ ...n })), conflicts: applied.conflicts.map((c) => ({ ...c })) },
+    packets: packetsView(packets),
     limitations,
     hashes: { ...inputs.hashes },
     custody: custodyView(inputs, opts),
@@ -474,6 +820,7 @@ function verifyView(inputs, opts, run_id) {
     `install ran: ${p.install.ran}; tracked changes after install: ${p.install.tracked_changes.length}; tested tree: ${p.tested_tree === "same-as-head" ? "same-as-head" : "an HMAC of the tree after install (not head)"}`,
     `redaction rules version: ${opts.rules.redaction_version}`,
     "local ≠ confidential",
+    ...keyLimitations(inputs, opts),
   ];
   return {
     template: "verify",
@@ -514,7 +861,7 @@ function verifyView(inputs, opts, run_id) {
   };
 }
 
-const VIEWS = Object.freeze({ review: reviewView, verify: verifyView });
+const VIEWS = Object.freeze({ review: reviewView, assessment: assessmentView, verify: verifyView, "threat-model": threatModelTemplateView });
 
 /**
  * The derivation (see the header).
@@ -528,7 +875,7 @@ export function buildView(inputs, opts) {
   requireInputs(inputs);
   const o = requireOpts(opts);
   const build = VIEWS[inputs.template];
-  if (build === undefined) throw new Error(`buildView: template ${inputs.template} is not renderable yet (TASK-024)`);
+  if (build === undefined) throw new Error(`buildView: template ${inputs.template} has no view`);
   const run = requireArtifact(inputs.artifacts, "run");
   return build(inputs, o, run.envelope.run_id);
 }
@@ -744,7 +1091,115 @@ const VERIFY_BLOCKS = {
   },
 };
 
-const BLOCKS = Object.freeze({ review: REVIEW_BLOCKS, verify: VERIFY_BLOCKS });
+/** Section 10 for the assessment and the threat-model template: elements, threats, mitigations (with derived states), dispositions. */
+function threatModelBlock(v) {
+  const t = v.threat_model;
+  const out = [bullet("elements", t.elements, "threat_model.elements"), bullet("threats", t.threats.length, "threat_model.threats.length"), bullet("undisposed", t.undisposed, "threat_model.undisposed"), ""];
+  out.push("Dispositions by kind (spec §6.10):", "", ...header(["kind", "threats"]), ...DISPOSITION_KINDS.map((k) => row([k, t.by_disposition[k]], `threat_model.by_disposition.${k}`)), "");
+  out.push("Elements (one citation each):", "");
+  if (t.elements_list.length === 0) out.push(`(no elements) ${marker("threat_model.elements_list")}`);
+  else out.push(...header(["id", "kind", "name", "citation"]), ...t.elements_list.map((e, i) => row([e.id, e.kind, e.name, e.citation], `threat_model.elements_list[${i}]`)));
+  out.push("", "Threats (STRIDE per element; disposition as recorded in the model):", "");
+  if (t.threats.length === 0) out.push(`(no threats) ${marker("threat_model.threats")}`);
+  else out.push(...header(["id", "element", "stride", "title", "disposition", "mitigations"]), ...t.threats.map((x, i) => row([x.id, x.element_id, x.stride, x.title, x.disposition, list(x.mitigations)], `threat_model.threats[${i}]`)));
+  out.push("", "Mitigation states (applied mitigation-review receipts; a mitigation without one is not independently reviewed):", "");
+  if (t.mitigations.length === 0) out.push(`(no mitigations) ${marker("threat_model.mitigations")}`);
+  else out.push(...header(["id", "threat", "state", "citation"]), ...t.mitigations.map((m, i) => row([m.id, m.threat_id, m.state, m.citation], `threat_model.mitigations[${i}]`)));
+  if (t.dispositions !== null) {
+    out.push("", "Disposition references (tm-lint check validates each relationship, not mere existence):", "");
+    if (t.dispositions.length === 0) out.push(`(no disposition references) ${marker("threat_model.dispositions")}`);
+    else out.push(...header(["threat", "kind", "ref", "resolved via"]), ...t.dispositions.map((d, i) => row([d.threat_id, d.kind, d.ref, d.resolved_via], `threat_model.dispositions[${i}]`)));
+  }
+  return out;
+}
+
+const ASSESSMENT_BLOCKS = {
+  ...REVIEW_BLOCKS,
+  engagement: (v) => {
+    const e = v.engagement;
+    const out = [
+      bullet("engagement_id", e.engagement_id, "engagement.engagement_id"),
+      bullet("slug", e.slug, "engagement.slug"),
+      bullet("scope_paths", e.scope_paths, "engagement.scope_paths"),
+      bullet("product_paths", e.product_paths, "engagement.product_paths"),
+      bullet("targets.tracker", e.targets_tracker, "engagement.targets_tracker"),
+      bullet("targets.browser", e.targets_browser, "engagement.targets_browser"),
+      bullet("targets.repo", e.targets_repo, "engagement.targets_repo"),
+      bullet("base_url", e.base_url, "engagement.base_url"),
+      bullet("execute_project_tests", e.execute_project_tests, "engagement.execute_project_tests"),
+      bullet("require_dispositions", e.require_dispositions, "engagement.require_dispositions"),
+      bullet("artifact_policy", e.artifact_policy, "engagement.artifact_policy"),
+      "",
+      "Inputs ingested (redacted import records under ingest/):",
+      "",
+    ];
+    if (v.imports.length === 0) out.push(`(no imports) ${marker("imports")}`);
+    else out.push(...header(["kind", "import_sha256", "source", "records", "unlocated", "rejected"]), ...v.imports.map((i, k) => row([i.kind, i.import_sha256, i.source_path, i.records, i.unlocated, i.rejected], `imports[${k}]`)));
+    out.push("", "Scope files:");
+    return out;
+  },
+  findings: (v) => {
+    const out = REVIEW_BLOCKS.findings(v);
+    if (out[out.length - 1] !== "") out.push("");
+    out.push("Verification history (each snapshotted verify.json, evaluated by `verify.mjs evaluate` — never free text):", "");
+    if (v.verify_history.length === 0) out.push(`(no verify snapshots) ${marker("verify_history")}`);
+    else out.push(...header(["verify run", "finding", "verdict", "tests", "tested_tree", "verify sha256"]), ...v.verify_history.map((h, i) => row([h.verify_run_id, h.finding_id, h.verdict, h.tests_result, h.tested_tree, h.verify_sha256], `verify_history[${i}]`)));
+    return out;
+  },
+  unresolved: (v) => {
+    const out = REVIEW_BLOCKS.unresolved(v);
+    out.push("", "QA FAIL observations (passive cases the QA bundles ran; an observation is never a finding):", "");
+    if (v.unresolved.qa_fail.length === 0) out.push(`(none) ${marker("unresolved.qa_fail")}`);
+    else out.push(...header(["observation", "case", "result", "import_sha256"]), ...v.unresolved.qa_fail.map((o, i) => row([o.observation_id, o.case_id, o.result, o.import_sha256], `unresolved.qa_fail[${i}]`)));
+    out.push("", bullet("browser-evidence candidates", v.unresolved.browser_evidence, "unresolved.browser_evidence"));
+    return out;
+  },
+  "threat-model": threatModelBlock,
+  register: (v) => {
+    const r = v.register;
+    const out = [
+      bullet("engagement", r.engagement_id, "register.engagement_id"),
+      bullet("seq", r.seq, "register.seq"),
+      bullet("chain_sha256", r.chain_sha256, "register.chain_sha256"),
+      bullet("events in the snapshot", r.events, "register.events"),
+      bullet("alias lines in the snapshot", r.aliases, "register.aliases"),
+      bullet("rows", r.rows.length, "register.rows.length"),
+      bullet("unauthenticated approvals", r.unauthenticated_approvals, "register.unauthenticated_approvals"),
+      "",
+      "Counts by status × priority (replay over the snapshot):",
+      "",
+      ...header(["status", ...REGISTER_PRIORITIES]),
+      ...REGISTER_STATUSES.map((s) => row([s, ...REGISTER_PRIORITIES.map((p) => r.counts[s][p])], `register.counts.${s}`)),
+      "",
+      "Open exposure by priority (open + regressed + accepted + false-positive; an approval never leaves exposure, spec §6.8):",
+      "",
+      ...header(["priority", "rows"]),
+      ...REGISTER_PRIORITIES.map((p) => row([p, r.open_exposure[p]], `register.open_exposure.${p}`)),
+      "",
+      "Rows:",
+      "",
+    ];
+    if (r.rows.length === 0) out.push(`(no rows) ${marker("register.rows")}`);
+    else out.push(...header(["id", "subject", "priority", "status", "owner", "ticket_url", "last_verified_run", "title"]), ...r.rows.map((x, i) => row([x.id, x.subject, x.priority, x.status, x.owner, x.ticket_url, x.last_verified_run, x.title], `register.rows[${i}]`)));
+    out.push("", `Delta for this run (events whose ref is this run; rows first seen in it: ${cell(list(r.rows_added))}): ${marker("register.rows_added")}`, "");
+    if (r.delta.length === 0) out.push(`(no events reference this run) ${marker("register.delta")}`);
+    else out.push(...header(["seq", "event", "row"]), ...r.delta.map((d, i) => row([d.seq, d.event, d.row_id], `register.delta[${i}]`)));
+    out.push("", "Proposed acceptances and other unauthenticated approval records (none is authenticated, D15):", "");
+    if (r.approvals.length === 0) out.push(`(none) ${marker("register.approvals")}`);
+    else out.push(...header(["row", "kind", "approved_by", "approval_ref", "until"]), ...r.approvals.map((a, i) => row([a.row, a.kind, a.approved_by, a.approval_ref, a.until], `register.approvals[${i}]`)));
+    out.push("", "Proposals (active work outside tasks/, indexed by run snapshot proposals):", "");
+    if (r.proposals.length === 0) out.push(`(no proposals) ${marker("register.proposals")}`);
+    else out.push(...header(["id", "sha256 (redacted text)", "path"]), ...r.proposals.map((p, i) => row([p.id, p.sha256, p.path], `register.proposals[${i}]`)));
+    return out;
+  },
+};
+
+const THREAT_MODEL_BLOCKS = {
+  ...SHARED_BLOCKS,
+  "threat-model": threatModelBlock,
+};
+
+const BLOCKS = Object.freeze({ review: REVIEW_BLOCKS, assessment: ASSESSMENT_BLOCKS, verify: VERIFY_BLOCKS, "threat-model": THREAT_MODEL_BLOCKS });
 const BLOCK_SLOT = /^\{\{block:([a-z-]+)\}\}$/;
 const SCALAR_SLOT = /\{\{([A-Za-z0-9_.[\]-]+)\}\}/g;
 
@@ -760,7 +1215,7 @@ export function renderMarkdown(view, template) {
   if (!isObject(template) || typeof template.body !== "string") throw new TypeError("renderMarkdown: template must come from parseTemplate");
   if (template.template !== view.template) throw new Error(`renderMarkdown: template ${template.template} does not match the view's template ${view.template}`);
   const blocks = BLOCKS[view.template];
-  if (blocks === undefined) throw new Error(`renderMarkdown: template ${view.template} has no blocks yet (TASK-024)`);
+  if (blocks === undefined) throw new Error(`renderMarkdown: template ${view.template} has no blocks`);
   const out = [];
   for (const line of template.body.split("\n")) {
     const b = BLOCK_SLOT.exec(line.trim());

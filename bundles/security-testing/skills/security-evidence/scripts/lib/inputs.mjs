@@ -35,7 +35,8 @@
 // to be (malformed, wrong kind, self_sha256 mismatch, a set member filed
 // under a name that is not its identity, an envelope naming another run —
 // run.json must name the directory, every other artifact of the run must
-// name run.json's run) ⇒ 5 INCONSISTENT(<file>). Then the
+// name run.json's run, and a verify snapshot's verify.json must name the
+// verify run its directory is named after) ⇒ 5 INCONSISTENT(<file>). Then the
 // closure: every artifact an input references by hash must itself be
 // present — receipts → packets, examined → its scope packet, verify → the
 // fix-review packet, observations → their imports, verify-snapshots → their
@@ -256,6 +257,9 @@ function readVerifySnapshots(guard, dir) {
     const path = join(base, id, "verify.json");
     if (!guard.exists(path)) throw missing(`verify:${id}`);
     const verify = readArtifact(guard, path, "verify", `verify-snapshots/${id}/verify.json`);
+    // TASK-024 (PM log after G12): a snapshot is filed under the verify run it
+    // came from — `run snapshot verify` names the directory by that run's id.
+    if (verify.envelope.run_id !== id) throw integrityFailure(inconsistent(`verify-snapshots/${id}/verify.json`));
     const packets = readSet(guard, join(base, id), "packets", "packet", `verify-snapshots/${id}/packets`);
     const receipts = readSet(guard, join(base, id), "receipts", "receipt", `verify-snapshots/${id}/receipts`);
     if (!ids(packets).has(verify.payload.packet_sha256)) throw missing(`packet:${verify.payload.packet_sha256}`);

@@ -60,7 +60,7 @@ test("REQUIRED: one closed list per template, review ⊂ assessment, and every t
     for (const name of list) assert.ok(Object.hasOwn(SINGLETONS, name) || Object.hasOwn(SETS, name) || ["imports", "observations", "verify-snapshots"].includes(name), `${name} has a reader`);
   }
   const shipped = readdirSync(TEMPLATES).filter((f) => f.endsWith(".md") && f !== "README.md");
-  assert.deepEqual(shipped.sort(), ["review.md", "verify.md"], "TASK-023 ships review + verify; assessment + threat-model land in TASK-024");
+  assert.deepEqual(shipped.sort(), ["assessment.md", "review.md", "threat-model.md", "verify.md"], "TASK-023 shipped review + verify; TASK-024 ships assessment + threat-model");
   for (const file of shipped) {
     const t = parseTemplate(readFileSync(join(TEMPLATES, file), "utf8"));
     assert.equal(`${t.template}.md`, file, "template name equals the file stem");
@@ -244,4 +244,31 @@ test("closeOver(assessment): the run-init-shaped run (empty indexes, no threat m
   // an index entry without its record is a missing transitive input
   write(dir, "imports.json", "imports-index", { imports: [{ kind: "sarif", import_sha256: "5".repeat(64), original_hmac: "6".repeat(64) }] });
   assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.token === `INCOMPLETE(import:${"5".repeat(64)})`);
+});
+
+test("closeOver(assessment): a verify snapshot is filed under its own run id — verify-snapshots/<id>/verify.json whose envelope names another run is 5 INCONSISTENT(verify-snapshots/<id>/verify.json) (TASK-024; PM log after G12)", () => {
+  const { dir } = reviewRun();
+  write(dir, "engagement.json", "engagement", { engagement_id: "e" });
+  write(dir, "imports.json", "imports-index", { imports: [] });
+  write(dir, "observations.json", "observations-index", { observations: [] });
+  write(dir, "proposals-index.json", "proposals-index", { proposals: [] });
+  write(dir, "threat-model.json", "threat-model", { elements: [], threats: [] });
+  write(dir, "register-events.json", "register-snapshot", { engagement_id: "e", seq: 0, chain_sha256: "0".repeat(64), events: [], aliases: [] });
+  const rule = "verified-two-acks";
+  const verify = readArtifact(join(VERIFY_FIXTURES, `${rule}.json`), { kind: "verify" });
+  const plant = (id) => {
+    const snap = join(dir, "verify-snapshots", id);
+    mkdirSync(join(snap, "packets"), { recursive: true });
+    mkdirSync(join(snap, "receipts"), { recursive: true });
+    copyFileSync(join(VERIFY_FIXTURES, `${rule}.json`), join(snap, "verify.json"));
+    copyFileSync(join(VERIFY_FIXTURES, "packets", `${verify.payload.packet_sha256}.json`), join(snap, "packets", `${verify.payload.packet_sha256}.json`));
+    for (const r of verify.payload.receipts) copyFileSync(join(VERIFY_FIXTURES, "receipts", `${r.sha256}.json`), join(snap, "receipts", `${r.sha256}.json`));
+  };
+  plant(verify.envelope.run_id);
+  const inputs = closeOver(dir, "assessment");
+  assert.equal(inputs.artifacts["verify-snapshots"].length, 1);
+  assert.equal(inputs.artifacts["verify-snapshots"][0].id, verify.envelope.run_id);
+  rmSync(join(dir, "verify-snapshots"), { recursive: true, force: true });
+  plant("abcdef012345-0099");
+  assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.code === 5 && err.token === "INCONSISTENT(verify-snapshots/abcdef012345-0099/verify.json)");
 });

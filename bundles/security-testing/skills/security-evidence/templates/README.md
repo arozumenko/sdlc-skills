@@ -54,8 +54,8 @@ copied in from another run is `5 INCONSISTENT(<file>)`.
 |---|---|---|
 | `review` | run, scope, claimed, gate-result, coverage, examined, packets, receipts (vulnerability-review; may be empty), rejects, unlocated | 023 |
 | `verify` | run, verify, packets (the fix-review packet), receipts (fix-review, ack; may be empty) | 023 (PM log G12: moved here from 024 to break the 027 ↔ 024 cycle) |
-| `assessment` | review inputs + engagement, threat-model, receipts (mitigation-review), observations, imports, verify-snapshots, register-events, proposals-index — every one an artifact inside the run directory (spec P2) | 024 (list declared in `inputs.mjs` now) |
-| `threat-model` | run, threat-model, packets (mitigation), receipts (mitigation-review), dispositions | 024 (list declared in `inputs.mjs` now) |
+| `assessment` | review inputs + engagement, threat-model, receipts (mitigation-review), observations, imports, verify-snapshots, register-events, proposals-index — every one an artifact inside the run directory (spec P2): `run init --kind assessment` writes the empty indexes, `run snapshot register\|verify\|proposals` copies the rest in; `threat-model.json` absent ⇒ `INCOMPLETE(threat-model)` — at M1 the assessment E2E writes the empty model `{elements: [], threats: []}` as an enveloped artifact via `canon.writeArtifact`, the same path `tm-lint check` writes from M2 (documented, not a hack) | 024 |
+| `threat-model` | run, threat-model, packets (mitigation), receipts (mitigation-review), dispositions | 024 |
 
 Input names map to run-directory files: `run.json`, `scope.json`,
 `findings.claimed.json`, `gate-result.json`, `coverage.json`,
@@ -79,7 +79,45 @@ recorded by their own `self_sha256` (TASK-058's contract).
 1 Identity · 2 Coverage · 3 Executive summary · 4 Scope and rules of
 engagement · 5 Methodology · 6 Limitations · 7 Risk methodology · 8 Findings ·
 9 Unresolved candidates · 10 Threat model and mitigation states · 11 Register
-delta and proposed acceptances · 12 Chain of custody. `review` and `verify`
-render the subset their inputs support and say `unknown / not assessed` for
-the rest — never a blank cell. A `CITATION_VERIFIED` finding with no applied
-vulnerability-review receipt is shown as `not independently reviewed`.
+delta and proposed acceptances · 12 Chain of custody. `assessment` and
+`review` render all twelve (`review` says `unknown / not assessed` where its
+inputs carry nothing — never a blank cell). **Subsets keep the numbers**: a
+section number means the same thing in every report, so `verify` renders
+1, its own 2–5 (verdict, raw results, suppression, receipts), 6 and 12, and
+`threat-model` renders 1, 5, 6, 10 and 12. A `CITATION_VERIFIED` finding
+with no applied vulnerability-review receipt is shown as `not independently
+reviewed`; so is a mitigation with no applied mitigation-review receipt.
+
+### Section 3 of the assessment (spec §11) and the TL-16 reading
+
+Counts by priority × state, unresolved by priority, rejected by reason, the
+unlocated count and the unauthenticated-approvals bucket are all derived
+inside the run directory (gate re-run, `receipt apply`, rejects, unlocated,
+`register.mjs replay` over `register-events.json`). **Incomplete runs are
+not**: the ledger lives outside the run directory (TL-3, G-16) and spec
+§6.3's closed assessment list carries no ledger input, so the report cannot
+count them without either reading outside the run or extending the closed
+list (a §20 amendment). TL-16 (decided in TASK-024): the line reads `see
+sign-off …`, marked `<!-- v:summary.incomplete_runs -->` so `check` still
+names it, and `sign-off`'s `INCOMPLETE:` listing is the count's home. A
+`run snapshot ledger` input was not added.
+
+### Section 8 fields (assessment)
+
+id, title, class/CWE, priority, confidence, state, affected asset,
+description, impact, prerequisites, evidence, reproduction (`not attempted`),
+remediation, `ticket_url` (from the register snapshot's row for the finding,
+else `unknown / not assessed`) and verification history — verdicts from the
+snapshotted `verify.json`s naming the finding plus the register events on
+its row, never free text; `unknown / not assessed` when there are none.
+
+### Limitations (every template)
+
+`KEY: available` / `KEY: unavailable — keyed identities not re-derived for …`
+for the run's own key (review, assessment), and one `KEY: unavailable —
+artifacts whose key <key_id> has no key file: …` line per missing key across
+every artifact in the closure (rotation leaves earlier artifacts under
+earlier keys; spec §6.5 "the report's Limitations list them"). The assessment
+adds the artifacts the engagement's `artifact_policy` marks `committed`
+("outside the local policy") and the M1 note that no `verify` run means no
+fix has been verified.

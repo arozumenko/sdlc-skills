@@ -398,8 +398,15 @@ test("publish / check-export rows (TASK-031): PUBLISH_PROFILES, `PUBLISHED profi
 
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
-    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || name === "PUBLISH_PROFILES" || value instanceof RegExp) continue;
+    if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || name === "REPORT_TEMPLATES" || name === "PUBLISH_PROFILES" || name === "DISPOSITION_KINDS" || value instanceof RegExp) continue;
     assert.ok(typeof value === "string" || typeof value === "function", `${name}: ${typeof value}`);
     if (typeof value === "string") assert.doesNotMatch(value, /\n/, name);
   }
+});
+
+test("assessment / threat-model rows (TASK-024): the TL-16 sentence names sign-off; DISPOSITION_KINDS is spec §6.10's closed list in spec order", () => {
+  assert.match(tokens.INCOMPLETE_RUNS_SEE_SIGN_OFF, /^see sign-off /);
+  assert.ok(tokens.INCOMPLETE_RUNS_SEE_SIGN_OFF.includes("TL-3"));
+  assert.deepEqual(tokens.DISPOSITION_KINDS, ["undisposed", "planned", "executed", "ticketed", "accepted", "mitigated"]);
+  assert.ok(Object.isFrozen(tokens.DISPOSITION_KINDS));
 });
