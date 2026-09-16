@@ -132,7 +132,8 @@ async function check(command, argv, ctx) {
   const today = todayOf(ctx.now());
   const expired = expiredAcceptances(projection.rows, today);
   for (const { id, until } of expired) {
-    const result = await appendRow(ctx, id, "acceptance-expired", { until }, today);
+    // ref is the lapsed `until`, not today: the event's own `ts` already says when it expired.
+    const result = await appendRow(ctx, id, "acceptance-expired", { until }, until);
     printRow(ctx, result.projection, id, result.event.seq);
   }
   ctx.out(checked(expired.length));

@@ -27,6 +27,14 @@
 // unauthenticated-approvals bucket and leaves it in exposure
 // (register-fold.summarize).
 //
+// Invariant: `acceptance` is present only while status is `accepted` and
+// `false_positive` only while status is `false-positive` — every transition
+// out of those statuses (revoke, acceptance-expired, fixed, reopen, a
+// transfer-exposure reopen) strips the record. The one exception is a
+// `superseded` row, where a record left behind is history on a dead row.
+// Consumers (TASK-046 skill, TASK-059 render) read the approval state from
+// `status`, never from the record's presence.
+//
 // Supersession (spec §6.8, US-021 AC-5). One event on the SOURCE row
 // `{by, mode: subject-equivalent | transfer-exposure}`; applyEvent updates the
 // target FIRST (`supersedes`, and for transfer-exposure `priority =
@@ -324,8 +332,9 @@ export function applyTransition(row, event, payload) {
 /**
  * The `--transfer-exposure` half of a supersession, on the target (pure):
  * `priority = max(both)`; `status = open` when the source was open|regressed
- * (a target reopened this way carries no stale acceptance). Applied BEFORE
- * the source becomes superseded.
+ * (a target reopened this way carries no stale acceptance or false-positive
+ * record — the same invariant revoke / acceptance-expired / reopen keep).
+ * Applied BEFORE the source becomes superseded.
  * @param {object} target
  * @param {object} source
  * @returns {object} the new target
@@ -336,6 +345,7 @@ export function transferExposure(target, source) {
   if (source.status === "open" || source.status === "regressed") {
     next.status = "open";
     delete next.acceptance;
+    delete next.false_positive;
   }
   return next;
 }

@@ -240,6 +240,13 @@ test("--transfer-exposure raises priority to max and sets open when source open|
   assert.equal(fromAccepted.status, "fixed", "an accepted source does not reopen the target");
   assert.equal(target.status, "fixed", "pure: input untouched");
   assert.deepEqual(PRIORITIES, ["p0", "p1", "p2", "p3"]);
+  for (const [status, record] of [["accepted", "acceptance"], ["false-positive", "false_positive"]]) {
+    const stale = rowIn(status, "R-0002", { priority: "p2" });
+    assert.ok(record in stale, `fixture: a ${status} row carries ${record}`);
+    const reopened = transferExposure(stale, rowIn("open", "R-0001", { priority: "p1" }));
+    assert.equal(reopened.status, "open");
+    assert.ok(!(record in reopened), `a target reopened by transfer carries no stale ${record} record`);
+  }
 });
 
 test("applyEvent supersede: the target is updated first (supersedes, transfer), then the source becomes superseded — one event", () => {
@@ -463,7 +470,7 @@ test("check (CLI) expires every acceptance with until < today (UTC) and appends 
   assert.equal(r.code, 0, r.stdout + r.stderr);
   assert.equal(r.stdout, "ROW R-0001 status=open priority=p1 seq=7\nCHECK expired=1\n");
   const log = readLog(repo);
-  assert.deepEqual({ event: log[6].event, row_id: log[6].row_id, payload: log[6].payload }, { event: "acceptance-expired", row_id: "R-0001", payload: { until: "2026-09-15" } });
+  assert.deepEqual({ event: log[6].event, row_id: log[6].row_id, payload: log[6].payload, ref: log[6].ref }, { event: "acceptance-expired", row_id: "R-0001", payload: { until: "2026-09-15" }, ref: "2026-09-15" }, "ref is the lapsed until, not today (the event's ts says when)");
   const rows = readProjection(repo).rows;
   assert.equal(rows["R-0001"].status, "open");
   assert.ok(!("acceptance" in rows["R-0001"]));

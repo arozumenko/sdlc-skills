@@ -57,13 +57,9 @@ const APPROVE = ["--approved-by", "cto", "--approval-ref", "RISK-1"];
 const ENV = { SECURITY_EVIDENCE_NOW: "2026-09-16T10:00:00Z", SECURITY_EVIDENCE_ACTOR: "lead" };
 
 async function repoWithEngagement() {
-  const repo = initRepo();
-  const st = join(repo, ".agents", "security-testing");
-  const { mkdirSync, copyFileSync } = await import("node:fs");
-  const { TEMPLATE_PATHS } = await import("./lib/engagement.mjs");
-  mkdirSync(st, { recursive: true });
-  copyFileSync(TEMPLATE_PATHS["engagement.md.template"], join(st, "engagement.md"));
-  return { repo, st };
+  const { repoWithEngagement: seed, stDir } = await import("./fixtures/register/seed.mjs");
+  const repo = seed();
+  return { repo, st: stDir(repo) };
 }
 
 test("confirm is an unknown command (exit 2)", async () => {
