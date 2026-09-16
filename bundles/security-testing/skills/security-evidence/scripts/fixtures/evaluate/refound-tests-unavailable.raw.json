@@ -1,0 +1,39 @@
+{
+  "finding_id": "e1f991eaf057b2856b7debe74b70aeb7b24431806f07cf5582f6ab0ce324e6be",
+  "base_oid": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "head_oid": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "branch": "COMMITTED",
+  "tree_before": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "install": {
+    "ran": true,
+    "argv_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "allow_tracked_changes": false,
+    "tracked_changes": [
+      "package-lock.json"
+    ],
+    "untracked_count": 412,
+    "untracked_bytes": 18324511
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "TESTS_INDETERMINATE",
+    "reason": "install-modified-tree",
+    "argv_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "timed_out": false,
+    "output_redacted": ""
+  },
+  "packet_sha256": "94670a0597a02f30ee905c7c8dfb2a20b3425c217cffb18ab7fabde0c114988c",
+  "receipts": [
+    {
+      "sha256": "6947de04f2c3f602505984bd9c0eed038d54a2671526362e2ac0c072dfc0387d",
+      "type": "fix-review",
+      "assertion": "refound",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "fixed"
+}

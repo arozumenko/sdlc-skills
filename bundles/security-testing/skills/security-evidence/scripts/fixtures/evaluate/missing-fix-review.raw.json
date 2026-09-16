@@ -1,0 +1,45 @@
+{
+  "finding_id": "d53016073eabc8e71275752e50631ccebd953fe5c021150f78958c816aacf39e",
+  "base_oid": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "head_oid": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "branch": "COMMITTED",
+  "tree_before": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "install": {
+    "ran": false,
+    "allow_tracked_changes": false,
+    "tracked_changes": [],
+    "untracked_count": 0,
+    "untracked_bytes": 0
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [
+      {
+        "id": "d2c17175f48a79e142908d893ef8f141fe9201edd3f27f6aa28883129f425838",
+        "kind": "inline-suppress",
+        "path": "src/db.js",
+        "line": 12
+      }
+    ],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "TESTS_PASS",
+    "argv_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "executable_path": "/usr/local/bin/npm",
+    "executable_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_redacted": "> test\n\n12 passing\n"
+  },
+  "packet_sha256": "1f320a40d49c53d59a9bde89b8e0dd918dc70d8d187c484fd4f13ef33f95490e",
+  "receipts": [
+    {
+      "sha256": "76c039f87b521a233b0abc2ddd07883eed82e1db11c0a0cb725d5c2bd758e0e8",
+      "type": "ack",
+      "indicator_id": "d2c17175f48a79e142908d893ef8f141fe9201edd3f27f6aa28883129f425838",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "open"
+}

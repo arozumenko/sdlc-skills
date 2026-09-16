@@ -1,0 +1,57 @@
+{
+  "finding_id": "6b9f456c778a06cea30477a9a0a6fca8511a616f967db5035d7f2aab05e1a405",
+  "base_oid": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "head_oid": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "branch": "COMMITTED",
+  "tree_before": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "install": {
+    "ran": false,
+    "allow_tracked_changes": false,
+    "tracked_changes": [],
+    "untracked_count": 0,
+    "untracked_bytes": 0
+  },
+  "tested_tree": "same-as-head",
+  "suppression": {
+    "indicators": [
+      {
+        "id": "d2c17175f48a79e142908d893ef8f141fe9201edd3f27f6aa28883129f425838",
+        "kind": "inline-suppress",
+        "path": "src/db.js",
+        "line": 12
+      },
+      {
+        "id": "86b9a91e749cef4c5601548fe9b3a46e99aa6b67b6f06683016f0d948f4cc2d3",
+        "kind": "test-skip",
+        "path": "src/db.test.js",
+        "line": 40
+      }
+    ],
+    "deletion_only": false
+  },
+  "tests": {
+    "result": "TESTS_PASS",
+    "argv_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "executable_path": "/usr/local/bin/npm",
+    "executable_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_redacted": "> test\n\n12 passing\n"
+  },
+  "packet_sha256": "a097ae2ac447fe9121232790bc1045f5d52f303571305114cbcd5ae122743059",
+  "receipts": [
+    {
+      "sha256": "87e9c041e6f5464d354568c92c2e3739bbc4367dd085cda3ca4b50742f5b1e06",
+      "type": "fix-review",
+      "assertion": "not-refound",
+      "applied": true
+    },
+    {
+      "sha256": "eadf218f7c3af4a9e6444ed071172ab8e6947d663a86d0a0b7fcfb93e95d1fe2",
+      "type": "ack",
+      "indicator_id": "d2c17175f48a79e142908d893ef8f141fe9201edd3f27f6aa28883129f425838",
+      "applied": true
+    }
+  ],
+  "row_status_at_start": "open"
+}
