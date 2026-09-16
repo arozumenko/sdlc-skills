@@ -1,9 +1,9 @@
-# delivery-metrics — design spec (v5)
+# delivery-metrics — design spec (v5.1)
 
 **Date:** 2026-09-16
 **Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
 **Branch:** feat/delivery-metrics-spec (worktree off `main`; spec only)
-**Status:** v5 — proportionality pass: guarantees capped at tokenomics' own; 13 mechanisms replaced by explicit limitations; ready for round 5.
+**Status:** v5 — proportionality pass: guarantees capped at tokenomics' own; 13 mechanisms replaced by explicit limitations; ready for round 5. **v5.1:** §13 re-cut to Slice 1 (M1 = cycle time, velocity, estimate delta per task/mission/campaign) on the user's decision, 2026-09-17; no other section changed.
 **Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`; reviews `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v[1-4]-adversarial-review-codex.md`. House style: `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md`, read from `feat/security-testing-bundle-spec` (absent in this worktree).
 **Source aliases:** `TOK` = `bundles/test-automation/skills/tokenomics`; `TAW` = `bundles/test-automation/skills/test-automation-workflow`; `AS` = `bundles/test-automation/skills/automation-scoping`. All delivery schemas below are proposed requirements; §16 anchors existing-repository claims.
 
@@ -293,15 +293,20 @@ Implementation gates: npm test; npm run validate (factories/marketplaces/externa
 
 ## 13. Plan
 
+Re-cut on 2026-09-17 (v5.1, user decision): **M1 is Slice 1** — cycle time, velocity and estimate-vs-actual delta per task / mission / campaign, nothing else. Every contract in §6 still applies to what M1 ships; the parts M1 does not ship are deferred, not removed. M1 works without tokenomics; the Claude hook is inside M1 because without it task cycle time has no observed start.
+
 | # | Milestone | Capability |
 |---|---|---|
-| M-1 | Small prerequisites | Docs/catalog refresh, P-0/P-1 amendments; only three small tokenomics amendments: read scorer `estMin`, emit dispatch `startedAt` from available startTs, align `work_item_level` vocabulary (`batch→mission`, `feature→task`); SPIKE-1 real Claude Agent/Workflow child-path/concurrent/main-worktree fixtures |
-| M1 | Core | schemas/simple storage, identity/revisions/plan migration, CLI/git/timeline/metrics/Markdown/JSON, registration-gap/conflict caveats; feature handoffs/acceptance/scout opt-in |
-| M2 | Claude hooks | SPIKE-1 prerequisite; roster/session guard/full-message resolution, owned installer/doctor/remove/ignore upgrade and best-effort sync; no shared-writer migration |
-| M3 | Automation | generation-qualified source imports, scorer/outcomes/gates/landing, existing cost exports with published-minute caveats, calibration snapshots/index, playbook; no tokenomics provenance/accounting API |
-| M4 | Presentation + PR history | self-contained HTML, archived JSON, mapped paginated gh backfill; no forecasting |
+| M-1 | Small prerequisites | Docs/catalog refresh (orphan count), P-0/P-1 amendments to `bundles/SPEC.md`; SPIKE-1 (real Claude Agent/Workflow child-transcript, concurrent and main/worktree fixtures for `SubagentStop`). The three tokenomics one-liners (`estMin` key, dispatch `startedAt`, `work_item_level` vocabulary) move to M3 — nothing in Slice 1 reads tokenomics. |
+| **M1 — Slice 1** | **Plan + estimates** | `plan register --from <plan.md\|.json>` reading the ```` ```json delivery-plan ```` block (§6.3): campaign → missions → tasks, stable `campaign_id`/`run_id`/version, `created`/`estimated`/`cancelled` delta events, estimate `{unit: h, low, high, tier, class, accepted_by, accepted_at}` (§6.4; `unaccepted` counted, excluded). Markdown importer (`#### TASK-NNN`, `**Complexity:**`, `Gn` groups) with `--dry-run`/`--yes`. |
+| | **Actuals** | `event <ref> dispatched\|done\|cancelled [--sha] [--at] --id <token>` (§6.5); `backfill --git --head <sha>` deriving `created`, `first_commit`, `done` for the local-branch mode (§6.7; PR mode deferred); one opt-in Claude `SubagentStop` hook emitting `dispatched`/`dispatch_ended` with roster/session guard and id resolution (§6.6), `install-hooks.mjs --host claude [--local] [--remove] [--doctor]`. Storage per §6.1 (append-only per-user JSONL, advisory mkdir lock, best-effort sync, `malformed-lines` counted). Timeline per §6.9 restricted to `created → dispatched/first_commit → done/cancelled` (blocked/reopen/review transitions are accepted by the schema but not derived in M1 — counted as `deferred-events`). |
+| | **Metrics** | `cycle_time` (task: first observed build dispatch → first `done`; mission/campaign: child-derived, labelled), `commit_to_done` when no dispatch, `lead_time`; `throughput` per UTC ISO week per level and `velocity` (≥3 whole weeks) (§6.9–6.10); estimate delta: per item actual vs `[low, high]` (inside/outside, `work_ratio` = actual ÷ midpoint), per level `MdMRE`, `PRED(25)`, `hit_rate`, per mission/campaign `schedule_variance` with scope added/removed (§6.4, §6.10). Coverage: dispatched/first-commit/done shares by source, unestimated/unaccepted counts, `malformed-lines`, `CONFLICT` count. |
+| | **Output + wiring** | `status` (PM one-screen), `report [--json] [--since --until --cutoff]` markdown + JSON envelope (§6.11); SKILL.md/README, `skills.json`, both `factory.json`, marketplaces; tech-lead template block, PM merge-step call, scout opt-in (§9.1). Golden fixture from the security-testing dataset (§12). |
+| M2 | Quality + episodes | `review_history`/`review_rounds`/`first_pass_rate`, `rework_observed`, `blocked`/`unblocked` intervals, `reopened` episodes and their separate ages/cycles, `work_item_age` vs P85, retraction/correction revisions, PR-mode backfill via `gh` and task↔PR association. |
+| M3 | Automation + cost | test-automation `sync --automation` (generation-qualified imports, scorer estimates in `active_min`, scope/gate/receipt proxies, landing), the three tokenomics one-liners, cost quoting from existing exports with published-minute caveats (§6.12), calibration snapshots/index and playbook wiring (§9.2). |
+| M4 | Presentation | self-contained HTML, `--from-json` re-render, `--calibrate`; no forecasting. |
 
-Each milestone includes §12/§17 checks. M1 works without tokenomics/hooks. This edit changes only the spec; cited amendments remain proposed implementation work.
+Each milestone includes its §12 tests and §17 acceptance criteria; AC rows that name M2+ capabilities (review completeness, reopen, automation, cost) are asserted at their milestone, not at M1. This edit changes only §13 and the header; cited amendments remain proposed implementation work.
 
 ## 14. Open questions
 
