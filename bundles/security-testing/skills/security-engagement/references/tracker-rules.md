@@ -29,12 +29,16 @@ show. Stated once, verbatim, so nobody shortens it:
    lines moved) and its `finding_id`. Through `issue-tracking`, search the
    tracker named in `targets.tracker` for the fingerprint and for the
    finding id. A hit that is open means the tracker already has this
-   defect: do not post. Comment the new `finding_id` and `fingerprint`
-   lines on it through `issue-tracking` so its body carries the id, then
-   read that ticket back (step 4) so the URL lands on the record. If the
-   hit's id differs from yours because the finding was re-gated (lines
-   moved, snippet changed), also link the ids:
-   `node <scripts>/register.mjs alias --from <old finding_id> --to <finding_id> --reason <r> --run <run_id>`.
+   defect: do not post. Edit its **body** through `issue-tracking` so the
+   body carries the new `finding_id` and `fingerprint` lines (a comment is
+   not the body: the read-back checks `body` for the id and reads a
+   commented-on ticket as `MISMATCH(body)`), then read that ticket back
+   (step 4) so the URL lands on the record. If the hit's id differs from
+   yours because the finding was re-gated (lines moved, snippet changed),
+   also link the ids:
+   `node <scripts>/register.mjs alias --from <old finding_id> --to <finding_id> --reason <r> --run <run_id>`
+   — `publish` reads the alias log, so a row ticketed under the old id
+   dedupes the new id from then on.
    A hit that is closed is context for the new ticket's body — reference
    it by URL, nothing else.
 3. **Post.** The payload has nine keys and the body carries them and
@@ -63,14 +67,17 @@ show. Stated once, verbatim, so nobody shortens it:
    title that differs from the sent one, `body` when the body does not
    contain `finding_id`. Only the fields the mutation set are trusted:
    `finding_id` comes from the sent payload, never from the tracker. On
-   `READBACK: ok` the register row gets the `ticketed` event with the URL
-   (`TICKETED <R-id> <url>`, M3 — until then the read-back record is the
-   evidence and you add nothing by hand: `register.mjs transition ticketed`
-   is refused, `EMITTER-ONLY(ticketed)`). A mismatch means the ticket is
-   not what was sent: fix the ticket through `issue-tracking` (edit the
-   body to carry the id; never delete), read back again. A
-   `MISMATCH(title)` on a pre-existing ticket you commented on is expected
-   — the record keeps the URL, and the mismatch is what you report.
+   `READBACK: ok` the live register row whose subject is the finding gets
+   the `ticketed` event with the URL, status unchanged, and the command
+   prints `TICKETED <R-id> <url>`; with no such row it prints
+   `READBACK: ok (no register row)` — the record is the evidence, add the
+   row (`register.mjs add`) and read back again. You add nothing by hand:
+   `register.mjs transition ticketed` is refused, `EMITTER-ONLY(ticketed)`.
+   A mismatch means the ticket is not what was sent: fix the ticket
+   through `issue-tracking` (edit the body to carry the id; never delete),
+   read back again. A `MISMATCH(title)` on a pre-existing ticket whose body
+   you edited is expected — the record keeps the URL, nothing becomes
+   `ticketed`, and the mismatch is what you report.
 5. `node <scripts>/register.mjs render` so `risk-register.md` shows the
    `ticket_url` column.
 
@@ -100,12 +107,11 @@ A tracker state you did not read back is a state you do not know.
 
 `fix_prompt` is what the developer follows. It tells them to load the
 feature-development `bugfix-workflow` skill for the finding (id, class,
-priority, `path:lines`), to fix the cause at the cited range and never
-edit tests, ignore files or suppression config to make it pass, and to
-report back the exact command
+priority, `path:lines`), carries `context_redacted` verbatim as the only
+description they get, tells them to fix the cause at the cited range and
+never edit tests, ignore files or suppression config to make it pass, and
+to report back the exact command
 `verify.mjs all --finding <id> --base <oid> --head <fix-commit>` — `--base`
-is the run's `head_oid`, `--head` is the fix commit they name. The
-`context_redacted` next to it is the only description they get. M3
-replaces the stub with the full route; your part is unchanged either way:
+is the run's `head_oid`, `--head` is the fix commit they name. Your part:
 when the developer reports a head, run the Verify phase and consume the
 verdict.

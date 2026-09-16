@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { parseStrict, readArtifact, sha256Hex } from "../canon.mjs";
 import { cleanupAll } from "../fixtures/cli/harness.mjs";
 import { ctxFor, readyRepo } from "../fixtures/ingest/setup.mjs";
-import { ENV, ST, committedReviewRun, evidence, ingestTicket, registerAdd } from "../fixtures/publish/setup.mjs";
+import { ENV, ST, committedReviewRun, evidence, ingestTicket, register, registerAdd } from "../fixtures/publish/setup.mjs";
 import { exportIdentity } from "./profiles/index.mjs";
 import { TICKET_KEYS } from "./profiles/tracker.mjs";
 import { append } from "./register-core.mjs";
@@ -195,6 +195,49 @@ test("NEXT line names issue-tracking and tracker-readback, one per written ticke
   const again = await publish(repo, run_id, "tracker", HANDOFFS);
   assert.equal(again.code, 0);
   assert.equal(lines(again.stdout).filter((l) => l.startsWith("NEXT: ")).length, 2, "identical republish: the same tickets, the same NEXT lines");
+});
+
+test("fix_prompt names bugfix-workflow and the verify command (TASK-045; US-039 AC-4)", async () => {
+  const { repo, run_id, ids, claimed } = await committedReviewRun();
+  const r = await publish(repo, run_id, "tracker", HANDOFFS);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const run = readArtifact(join(repo, ST, "runs", run_id, "run.json"), { kind: "run" });
+  const injection = parseStrict(readFileSync(join(repo, HANDOFFS, `${ids.injection}.ticket.json`)));
+  assert.equal(typeof injection.fix_prompt, "string");
+  assert.match(injection.fix_prompt, /bugfix-workflow/, "routes the developer to the feature-development bugfix-workflow skill");
+  assert.ok(injection.fix_prompt.includes(`verify.mjs all --finding ${ids.injection} --base ${run.payload.head_oid} --head <fix-commit>`), "the exact command to report back with; --base is the run's head_oid");
+  assert.match(injection.fix_prompt, /src\/db\.js:3-4/);
+  assert.ok(injection.fix_prompt.includes(injection.context_redacted), "the prompt carries context_redacted — the one description the developer gets");
+  assert.match(injection.fix_prompt, /never edit tests, ignore files or suppression config/i);
+  const finding = claimed.payload.findings.find((f) => f.id === ids.injection);
+  assert.ok(!injection.fix_prompt.includes(finding.snippet), "never the snippet");
+  // a secret-class finding: the prompt carries the redacted context and nothing a rule matches
+  const secret = parseStrict(readFileSync(join(repo, HANDOFFS, `${ids.secret}.ticket.json`)));
+  assert.ok(secret.fix_prompt.includes("<REDACTED:password-assign>"));
+  assert.ok(!secret.fix_prompt.includes(SECRET));
+  assert.ok(secret.fix_prompt.includes(`verify.mjs all --finding ${ids.secret} --base ${run.payload.head_oid} --head <fix-commit>`));
+  // the stub is gone: one generator, imported from lib/fix-prompt.mjs
+  const src = readFileSync(join(HERE, "profiles", "tracker.mjs"), "utf8");
+  assert.doesNotMatch(src, /fixPromptStub/);
+  assert.match(src, /from "\.\.\/fix-prompt\.mjs"/);
+});
+
+test("dedupe follows finding aliases: a row ticketed under the old id of a re-keyed finding dedupes the new id (TASK-045; PM log route from TASK-031)", async () => {
+  const { repo, run_id, ids } = await committedReviewRun();
+  const oldId = "d".repeat(64);
+  // the row was ticketed under the old id (a read-back in an earlier run), then the lead linked the ids
+  const rowId = await registerAdd(repo, oldId, "sql built from req.query.id", run_id);
+  await append(ctxFor(repo), { row_id: rowId, event: "ticketed", payload: { ticket_url: "https://github.com/my-org/my-product/issues/5", import_sha256: "c".repeat(64) }, ref: run_id });
+  const linked = await register(repo, ["alias", "--from", oldId, "--to", ids.injection, "--reason", "re-gated after the lines moved", "--run", run_id]);
+  assert.equal(linked.code, 0, `${linked.stdout}${linked.stderr}`);
+
+  const r = await publish(repo, run_id, "tracker", HANDOFFS);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  assert.ok(out.includes(`DEDUPE finding=${ids.injection} existing=https://github.com/my-org/my-product/issues/5`), `the alias-linked row's url: ${r.stdout}`);
+  assert.equal(out.filter((l) => l.startsWith("NEXT: ")).length, 2);
+  assert.ok(!existsSync(join(repo, HANDOFFS, `${ids.injection}.ticket.json`)), "not posted again");
+  assert.deepEqual(readdirSync(join(repo, ST, "register")).sort(), ["events.jsonl", "finding-alias.jsonl", "projection.json"], "publish reads the alias log and writes nothing");
 });
 
 test("--to for a report profile: must be inside the work tree, never under .agents/security-testing/ (case-insensitive), never under .git/, never an existing file; nothing written on refusal", async () => {

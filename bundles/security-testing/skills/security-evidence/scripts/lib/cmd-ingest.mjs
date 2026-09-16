@@ -28,6 +28,18 @@
 //      mapping_version}; the record payload is assembled and validated
 //      against import.schema.json (an off-schema adapter result is an
 //      internal error, exit 1 — never written);
+//   6a. `tracker-readback` only (TASK-045): when the record's `mismatch` is
+//      empty (the PM's gate — a foreign host is already a `url` mismatch on
+//      a kept record, so "host ∈ targets.tracker and mismatch empty" is
+//      exactly `mismatch.length === 0`) the register is READ — readEvents +
+//      replay, chain-verified, no lock, no directory created, no projection
+//      written (5 CORRUPT on a break, before anything is persisted) — for
+//      the live row whose subject is the sent `finding_id` (subject_kind
+//      finding, status not superseded). None ⇒ nothing to ticket (step 8
+//      says so). More than one ⇒ 2 USAGE naming them, nothing written: a
+//      read-back whose event has no single row to land on is not
+//      half-ingested — the lead supersedes the duplicates and re-runs.
+//      A mismatch consults nothing: the record is the evidence, no event.
 //   7. imports.snapshotImport with `index: false` — the redacted bytes land
 //      under ledger/<run>/imports/<sha> (G-3) — then the record is written
 //      write-once to <run>/ingest/<sha>.json (kind `import`; EEXIST from a
@@ -35,30 +47,46 @@
 //      appended (assessment runs only, TL-14). An index entry always has its
 //      record; a record may at worst lack its entry after a crash between
 //      the two writes, which a re-ingest reports as IMPORT-EXISTS.
+//   8. `tracker-readback` with an empty `mismatch` and one live row: the
+//      `ticketed` event — `{ticket_url: trusted.url, import_sha256}`, `ref`
+//      = the run id — is appended through register-core.append (under the
+//      register lock, recovery rule re-run, folded in memory first; the
+//      only emitter of `ticketed`, spec §6.8 / P4; `register.mjs transition
+//      ticketed` is EMITTER-ONLY). The status never changes; the row gains
+//      the url. The event names the import that is its evidence, so a
+//      record always precedes its event; a crash between the two leaves a
+//      record without an event, which the lead sees as a row without a
+//      `ticket_url` and re-reads back (a fresh response is new bytes).
 //
 // stdout: `IMPORT <kind> import_sha256=<h> records=<n> unlocated=<n>
-// rejected=<n>`, then — `tracker-readback` only — `READBACK: ok` or one
-// `READBACK: MISMATCH(<field>)` per mismatched field of the record (TASK-017;
-// TASK-045 adds `TICKETED <R-id> <url>` and the register event after them),
-// then `WROTE <run>/imports.json …` (assessment only), then
+// rejected=<n>`, then — `tracker-readback` only — one of: `READBACK: ok`
+// followed by `TICKETED <R-id> <url>` (the event landed), or `READBACK: ok
+// (no register row)` (matched, nothing to land on), or one `READBACK:
+// MISMATCH(<field>)` per mismatched field of the record (TASK-017; no
+// event); then `WROTE <run>/imports.json …` (assessment only), then
 // `WROTE <run>/ingest/<sha>.json …` last. Exit 0; 2 as above; 3
-// INCOMPLETE(scope); rejections inside a well-formed file never change the
-// exit code (§4.1).
+// INCOMPLETE(scope); 5 CORRUPT (read-back with an empty mismatch over a
+// broken register, nothing written); rejections inside a well-formed file
+// never change the exit code (§4.1).
 //
 // Imports: node:fs (existsSync, readFileSync), node:path, ../canon.mjs,
 // ../redact.mjs (redactDeep for --sent), ./argv.mjs, ./exit.mjs,
-// ./imports.mjs, ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs. Every
-// string that leaves the process goes through ctx.out / ctx.wrote (G-4).
+// ./imports.mjs, ./register-core.mjs (append, readEvents, replay),
+// ./register-transitions.mjs (TransitionError), ./run-index.mjs (runDir),
+// ./schema.mjs, ./tokens.mjs. Every string that leaves the process goes
+// through ctx.out / ctx.wrote (G-4).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CanonError, makeEnvelope, parseStrict, readArtifact, writeArtifact } from "../canon.mjs";
 import { redactDeep } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
-import { CliError, EXIT, usageError } from "./exit.mjs";
+import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
 import { IMPORT_KINDS, appendImportIndex, loadRun, prepareImport, snapshotImport } from "./imports.mjs";
+import { append as appendEvent, readEvents, replay } from "./register-core.mjs";
+import { TransitionError } from "./register-transitions.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, KEY_UNAVAILABLE, READBACK_OK, RUN_COMMITTED, importExists, importLine, readbackMismatch, schemaInvalid } from "./tokens.mjs";
+import { COMMITTED, CORRUPT, KEY_UNAVAILABLE, READBACK_OK, READBACK_OK_NO_ROW, RUN_COMMITTED, importExists, importLine, readbackMismatch, schemaInvalid, ticketedLine, transitionRejected } from "./tokens.mjs";
 
 const COMMAND = "ingest";
 // TASK-002/005 follow-up (plan §6): one exported constant is owed; until then every enveloped-artifact writer carries the same literal.
@@ -116,6 +144,55 @@ function loadScope(run) {
   const path = join(run.dir, "scope.json");
   if (!existsSync(path)) return null;
   return readArtifact(path, { kind: "scope" });
+}
+
+// --- tracker-readback → ticketed (TASK-045) ---------------------------------------
+
+/** The register projection, read without a lock and without writing (chain-verified; 5 CORRUPT) — the same read cmd-publish does for its dedupe. */
+function readProjection(ctx) {
+  const engagement_id = ctx.engagement().engagement_id;
+  const events = readEvents(ctx);
+  try {
+    return replay(events, engagement_id);
+  } catch (err) {
+    if (err instanceof CliError) throw err;
+    if (err.name === "ChainError" || err.name === "TransitionError") throw integrityFailure(CORRUPT, err);
+    throw err;
+  }
+}
+
+/** The live rows whose subject is `finding_id`: subject_kind finding, not superseded (a superseded row is dead; its successor carries the subject), in row-id order. */
+function liveRowsFor(rows, finding_id) {
+  return Object.keys(rows)
+    .sort()
+    .map((id) => rows[id])
+    .filter((r) => r.subject === finding_id && r.subject_kind === "finding" && r.status !== "superseded");
+}
+
+/**
+ * Step 6a: the row a matched read-back will land on, or null when there is
+ * none. Runs before anything is persisted, so a CORRUPT register or an
+ * ambiguous subject refuses the whole ingest with nothing written.
+ * @returns {{row_id: string} | null}
+ */
+function resolveTicketRow(ctx, record) {
+  if (record.trusted.mismatch.length !== 0) return null;
+  const projection = readProjection(ctx);
+  const rows = liveRowsFor(projection.rows, record.trusted.finding_id);
+  if (rows.length === 0) return null;
+  if (rows.length > 1) throw usageError(COMMAND, `finding has ${rows.length} live register rows (${rows.map((r) => r.id).join(", ")}); supersede the duplicates first`);
+  return { row_id: rows[0].id };
+}
+
+/** Step 8: append `ticketed` for one matched record and return the TICKETED line. */
+async function ticket(ctx, { row_id, run_id, record, import_sha256 }) {
+  try {
+    await appendEvent(ctx, { row_id, event: "ticketed", payload: { ticket_url: record.trusted.url, import_sha256 }, ref: run_id });
+  } catch (err) {
+    if (err instanceof TransitionError) throw new CliError(EXIT.FAIL, transitionRejected(err.event, err.from), { cause: err });
+    throw err;
+  }
+  return ticketedLine({ row: row_id, url: record.trusted.url });
 }
 
 const LIST_KEYS = Object.freeze(["records", "unlocated", "rejected"]);
@@ -183,6 +260,8 @@ export async function run(argv, ctx) {
   };
   const errors = validate("import", payload);
   if (errors.length > 0) throw new Error(`ingest ${kind}: record payload is off-schema: ${errors[0]}`);
+  // 6a. the row a matched read-back lands on — resolved before the first byte is written (the adapter yields exactly one record)
+  const ticketRows = kind === READBACK ? payload.records.map((rec) => resolveTicketRow(ctx, rec)) : [];
 
   // Persist: bytes (G-3), then the record (write-once), then the index entry (TL-14).
   await snapshotImport(ctx, loaded.run_id, bytes, { kind, source_path, index: false, run: loaded });
@@ -199,11 +278,17 @@ export async function run(argv, ctx) {
 
   ctx.out(importLine({ kind, import_sha256: prepared.import_sha256, records: payload.records.length, unlocated: payload.unlocated.length, rejected: payload.rejected.length }));
   if (kind === READBACK) {
-    // One READBACK line per record (the adapter yields exactly one): `ok`, or one MISMATCH(<field>) per mismatched field, in READBACK_FIELDS order (TASK-017).
-    // TASK-045 appends the `ticketed` event and prints TICKETED here, after these lines and only when mismatch is empty.
-    for (const rec of payload.records) {
-      if (rec.trusted.mismatch.length === 0) ctx.out(READBACK_OK);
-      else for (const field of rec.trusted.mismatch) ctx.out(readbackMismatch(field));
+    // One READBACK line per record (the adapter yields exactly one): `ok` + TICKETED (the event lands here, step 8),
+    // `ok (no register row)`, or one MISMATCH(<field>) per mismatched field in READBACK_FIELDS order (TASK-017) — no event.
+    for (const [i, rec] of payload.records.entries()) {
+      if (rec.trusted.mismatch.length !== 0) {
+        for (const field of rec.trusted.mismatch) ctx.out(readbackMismatch(field));
+      } else if (ticketRows[i] === null) {
+        ctx.out(READBACK_OK_NO_ROW);
+      } else {
+        ctx.out(READBACK_OK);
+        ctx.out(await ticket(ctx, { row_id: ticketRows[i].row_id, run_id: loaded.run_id, record: rec, import_sha256: prepared.import_sha256 }));
+      }
     }
   }
   if (index !== null) ctx.wrote(join(loaded.dir, "imports.json"), index);

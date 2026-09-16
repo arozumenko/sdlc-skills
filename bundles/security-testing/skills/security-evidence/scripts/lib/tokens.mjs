@@ -955,3 +955,14 @@ export function tmRendered({ relPath, elements, threats } = {}) {
 }
 /** `RENDER-EXISTS` — exit 2: `<run>/threat-model.md` is already there with different content (the mitigation states moved after it was written); the view is write-once (G-10) — the report is `build-report --template threat-model`'s. */
 export const RENDER_EXISTS = "RENDER-EXISTS";
+// --- ingest tracker-readback → ticketed (TASK-045; plan §4.1 row `ingest`, §5 TASK-045; spec §6.8 / P4) ---
+
+/** `READBACK: ok (no register row)` — the read-back matched on every field but no live register row carries the finding as its subject: the record is the evidence, no `ticketed` event is appended (the lead adds the row and reads back again). */
+export const READBACK_OK_NO_ROW = `${READBACK_OK} (no register row)`;
+
+/** `TICKETED <R-id> <url>` — after the READBACK line and before the WROTE lines: the `ticketed` event landed on the row with the read-back's url (status unchanged). */
+export function ticketedLine({ row, url }) {
+  if (typeof row !== "string" || !ROW_ID.test(row)) throw new TypeError(`ticketedLine: row must be R-nnnn, got ${String(row)}`);
+  if (typeof url !== "string" || url.length === 0 || /[\s]/.test(url)) throw new TypeError("ticketedLine: url must be a non-empty string without whitespace");
+  return `TICKETED ${row} ${url}`;
+}

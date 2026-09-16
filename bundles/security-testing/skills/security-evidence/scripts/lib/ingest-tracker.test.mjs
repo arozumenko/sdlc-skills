@@ -153,7 +153,7 @@ test("tracker-readback trusts only mutated fields and records mismatch; READBACK
   assert.deepEqual([line.kind, line.records, line.unlocated, line.rejected], ["tracker-readback", 1, 0, 0]);
   const lines = ok.stdout.trimEnd().split("\n");
   assert.equal(lines.length, 4, "IMPORT, READBACK, WROTE imports.json, WROTE record");
-  assert.equal(lines[1], "READBACK: ok");
+  assert.equal(lines[1], "READBACK: ok (no register row)", "matched on every field; no row to ticket (TASK-045's variant of READBACK: ok)");
   assert.match(lines[2], new RegExp(`^WROTE ${ST}/runs/${run_id}/imports\\.json sha256=`));
   assert.match(lines[3], new RegExp(`^WROTE ${ST}/runs/${run_id}/ingest/${line.import_sha256}\\.json sha256=`));
   const art = record(repo, run_id, line.import_sha256);
@@ -259,4 +259,154 @@ test("review run: the four adapters land records without an imports.json (no ind
   const rb = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", run_id, "--sent", SENT]);
   assert.equal(rb.code, 0, rb.stdout + rb.stderr);
   assert.deepEqual(rb.stdout.trimEnd().split("\n").map((l) => l.split(" ")[0]), ["IMPORT", "READBACK:", "WROTE"]);
+});
+
+// --- TASK-045: tracker read-back → `ticketed` (spec §6.8 "ticketed … from ingest tracker-readback only", §9.4 / P4; plan §5 TASK-045; US-039 AC-2, AC-3) ---
+
+const registerCli = (repo, args) => runScript("register", args, { cwd: repo, env: ENV });
+const REGISTER = join(ST, "register");
+const eventsOf = (repo) => readFileSync(join(repo, REGISTER, "events.jsonl"), "utf8").trimEnd().split("\n").map((l) => parseStrict(l));
+const projectionOf = (repo) => parseStrict(readFileSync(join(repo, REGISTER, "projection.json")));
+
+async function addRow(repo, run_id, subject = FINDING_ID) {
+  const r = await registerCli(repo, ["add", "--subject", subject, "--priority", "p1", "--title", "SQL injection in login", "--run", run_id]);
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  return /^ROW (R-\d{4}) /m.exec(r.stdout)[1];
+}
+
+test("read-back with matching fields ⇒ ticketed event sets ticket_url, status unchanged (US-039 AC-2, AC-3)", async () => {
+  const { repo, run_id } = await trackerRepo();
+  const rowId = await addRow(repo, run_id);
+  // any status: an accepted row stays accepted and gains the url
+  const acc = await registerCli(repo, ["accept", rowId, "--until", "2027-01-01", "--approved-by", "cto", "--approval-ref", "RISK-1"]);
+  assert.equal(acc.code, 0, acc.stdout + acc.stderr);
+  const seqBefore = projectionOf(repo).seq;
+
+  const r = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", run_id, "--sent", SENT]);
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.equal(r.stderr, "");
+  const line = parseImportLine(r.stdout);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.deepEqual(lines.slice(1, 3), ["READBACK: ok", `TICKETED ${rowId} https://github.com/my-org/my-product/issues/7`], "TICKETED after the READBACK line, before WROTE");
+  assert.equal(lines.length, 5, "IMPORT, READBACK, TICKETED, WROTE imports.json, WROTE record");
+  assert.match(lines[3], new RegExp(`^WROTE ${ST}/runs/${run_id}/imports\\.json sha256=`));
+  assert.match(lines[4], new RegExp(`^WROTE ${ST}/runs/${run_id}/ingest/${line.import_sha256}\\.json sha256=`));
+
+  const events = eventsOf(repo);
+  const last = events.at(-1);
+  assert.equal(events.length, seqBefore + 1, "exactly one event appended");
+  assert.equal(last.event, "ticketed");
+  assert.equal(last.row_id, rowId);
+  assert.deepEqual(last.payload, { ticket_url: "https://github.com/my-org/my-product/issues/7", import_sha256: line.import_sha256 }, "the payload names the read-back import that is the evidence");
+  assert.equal(last.ref, run_id);
+  assert.equal(last.actor, "lead");
+  assert.equal(last.ts, ENV.SECURITY_EVIDENCE_NOW);
+  const projection = projectionOf(repo);
+  assert.equal(projection.seq, seqBefore + 1);
+  const row = projection.rows[rowId];
+  assert.equal(row.ticket_url, "https://github.com/my-org/my-product/issues/7");
+  assert.equal(row.status, "accepted", "ticketed never changes the status");
+  assert.equal(row.subject, FINDING_ID);
+  // the register is consistent after the append: every command re-runs the recovery rule
+  const replay = await registerCli(repo, ["replay"]);
+  assert.equal(replay.code, 0, replay.stdout + replay.stderr);
+  assert.deepEqual(readdirSync(join(repo, REGISTER)).sort(), ["events.jsonl", "projection.json"], "no leftover lock");
+
+  // the same read-back again is IMPORT-EXISTS (write-once record) and appends nothing
+  const again = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", run_id, "--sent", SENT]);
+  assert.equal(again.code, 2);
+  assert.match(again.stdout, /^IMPORT-EXISTS\(/m);
+  assert.equal(eventsOf(repo).length, seqBefore + 1);
+
+  // a second mutation read back (a relabel: different bytes, same url) is a second ticketed event on the same row
+  const relabel = join(IMPORTS, "readback.relabel.json");
+  writeFileSync(join(repo, relabel), JSON.stringify({ ...JSON.parse(readFileSync(fixture("readback.json"), "utf8")), labels: ["security", "p1", "triaged"] }));
+  const r2 = await ingest(repo, ["tracker-readback", relabel, "--run", run_id, "--sent", SENT]);
+  assert.equal(r2.code, 0, r2.stdout + r2.stderr);
+  assert.equal(r2.stdout.trimEnd().split("\n")[2], `TICKETED ${rowId} https://github.com/my-org/my-product/issues/7`);
+  assert.equal(eventsOf(repo).length, seqBefore + 2);
+  assert.equal(projectionOf(repo).rows[rowId].status, "accepted");
+});
+
+test("mismatch or foreign host ⇒ no event; no row ⇒ `READBACK: ok (no register row)` and no register created; two live rows ⇒ 2 USAGE, nothing written", async () => {
+  // no register at all: the read-back is evidence, nothing is ticketed, nothing is created under register/
+  const bare = await trackerRepo();
+  const none = await ingest(bare.repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", bare.run_id, "--sent", SENT]);
+  assert.equal(none.code, 0, none.stdout + none.stderr);
+  const noneLines = none.stdout.trimEnd().split("\n");
+  assert.equal(noneLines[1], "READBACK: ok (no register row)");
+  assert.equal(noneLines.length, 4, "IMPORT, READBACK, WROTE, WROTE — no TICKETED");
+  assert.ok(!existsSync(join(bare.repo, REGISTER)), "a read-only lookup creates no register");
+  const [nrec] = record(bare.repo, bare.run_id, parseImportLine(none.stdout).import_sha256).payload.records;
+  assert.deepEqual(nrec.trusted.mismatch, [], "the record is the same either way");
+
+  const { repo, run_id } = await trackerRepo();
+  const rowId = await addRow(repo, run_id);
+  const logBefore = readFileSync(join(repo, REGISTER, "events.jsonl"));
+  const projectionBefore = readFileSync(join(repo, REGISTER, "projection.json"));
+
+  const mm = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.mismatch.json"), "--run", run_id, "--sent", SENT]);
+  assert.equal(mm.code, 0, mm.stdout + mm.stderr);
+  assert.deepEqual(mm.stdout.trimEnd().split("\n").slice(1, 3), ["READBACK: MISMATCH(title)", "READBACK: MISMATCH(body)"]);
+  assert.doesNotMatch(mm.stdout, /^TICKETED /m);
+
+  const foreignPath = join(IMPORTS, "readback.foreign.json");
+  writeFileSync(join(repo, foreignPath), JSON.stringify({ ...JSON.parse(readFileSync(fixture("readback.json"), "utf8")), url: "https://tracker.evil.example/browse/SEC-42" }));
+  const fo = await ingest(repo, ["tracker-readback", foreignPath, "--run", run_id, "--sent", SENT]);
+  assert.equal(fo.code, 0, fo.stdout + fo.stderr);
+  assert.equal(fo.stdout.trimEnd().split("\n")[1], "READBACK: MISMATCH(url)");
+  assert.doesNotMatch(fo.stdout, /^TICKETED /m);
+
+  assert.ok(readFileSync(join(repo, REGISTER, "events.jsonl")).equals(logBefore), "no event on any mismatch");
+  assert.ok(readFileSync(join(repo, REGISTER, "projection.json")).equals(projectionBefore));
+  assert.equal(projectionOf(repo).rows[rowId].ticket_url, "", "ticket_url untouched");
+
+  // two live rows for the subject: the register is ambiguous — refused before anything is written
+  const dup = await addRow(repo, run_id);
+  assert.notEqual(dup, rowId);
+  const recordsBefore = readdirSync(join(runDir(repo, run_id), "ingest")).sort();
+  const blobsBefore = readdirSync(join(repo, ST, "ledger", run_id, "imports")).sort();
+  const two = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", run_id, "--sent", SENT]);
+  assert.equal(two.code, 2, two.stdout + two.stderr);
+  assert.match(two.stdout, new RegExp(`^USAGE\\(ingest: finding has 2 live register rows \\(${rowId}, ${dup}\\); supersede the duplicates first\\)$`, "m"));
+  assert.deepEqual(readdirSync(join(runDir(repo, run_id), "ingest")).sort(), recordsBefore, "nothing written");
+  assert.deepEqual(readdirSync(join(repo, ST, "ledger", run_id, "imports")).sort(), blobsBefore);
+  assert.equal(eventsOf(repo).length, 2, "the two adds, nothing else");
+});
+
+test("subsequent publish --profile tracker dedupes on the recorded ticket_url (US-039 AC-3 end to end)", async () => {
+  const { committedReviewRun, registerAdd } = await import("../fixtures/publish/setup.mjs");
+  const { repo, run_id, ids } = await committedReviewRun();
+  const publish = () => runScript("evidence", ["publish", "--run", run_id, "--profile", "tracker", "--to", HANDOFFS], { cwd: repo, env: ENV });
+  const first = await publish();
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.equal(first.stdout.split("\n").filter((l) => l.startsWith("NEXT: ")).length, 3);
+  assert.equal(first.stdout.split("\n").filter((l) => l.startsWith("DEDUPE ")).length, 0);
+
+  // the lead posts the payload's fields (title verbatim, body carrying finding_id) and saves the response
+  const sentPath = join(HANDOFFS, `${ids.injection}.ticket.json`);
+  const sent = parseStrict(readFileSync(join(repo, sentPath)));
+  const response = { id: 12, url: "https://github.com/my-org/my-product/issues/12", state: "open", labels: ["security"], title: sent.title, body: `finding_id ${sent.finding_id}\nfingerprint ${sent.fingerprint}\n${sent.fix_prompt}\n` };
+  mkdirSync(join(repo, IMPORTS), { recursive: true });
+  writeFileSync(join(repo, IMPORTS, "response-12.json"), JSON.stringify(response, null, 2));
+
+  // the read-back lands in the current open run, never the COMMITTED one (RUN-COMMITTED)
+  const committed = await ingest(repo, ["tracker-readback", join(IMPORTS, "response-12.json"), "--run", run_id, "--sent", sentPath]);
+  assert.equal(committed.code, 2);
+  assert.match(committed.stdout, /^RUN-COMMITTED$/m);
+  const current = await initRun(repo, "review");
+  const rowId = await registerAdd(repo, ids.injection, sent.title, run_id);
+  const rb = await ingest(repo, ["tracker-readback", join(IMPORTS, "response-12.json"), "--run", current, "--sent", sentPath]);
+  assert.equal(rb.code, 0, rb.stdout + rb.stderr);
+  assert.ok(rb.stdout.includes(`\nREADBACK: ok\nTICKETED ${rowId} https://github.com/my-org/my-product/issues/12\n`), rb.stdout);
+  assert.equal(projectionOf(repo).rows[rowId].ticket_url, "https://github.com/my-org/my-product/issues/12");
+
+  const second = await publish();
+  assert.equal(second.code, 0, second.stdout + second.stderr);
+  const out = second.stdout.trimEnd().split("\n");
+  assert.ok(out.includes(`DEDUPE finding=${ids.injection} existing=https://github.com/my-org/my-product/issues/12`), second.stdout);
+  const next = out.filter((l) => l.startsWith("NEXT: "));
+  assert.equal(next.length, 2, "the ticketed finding is not posted again");
+  assert.ok(!next.some((l) => l.includes(ids.injection)));
+  assert.ok(existsSync(join(repo, sentPath)), "the earlier payload file stays (publish never deletes)");
 });
