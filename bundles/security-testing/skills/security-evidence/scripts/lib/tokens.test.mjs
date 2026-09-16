@@ -263,6 +263,24 @@ test("gate rows (TASK-019): the two citation states, `GATE accepted=<n> unverifi
   assert.equal(new Set([...reasons, ...cite]).size, reasons.length + cite.length, "gate's reasons never collide with cite's");
 });
 
+test("coverage rows (TASK-020): EXAMINED-PACKET-MISMATCH, COVERAGE-EXISTS, `COVERAGE INDETERMINATE`, OVERLAP/GAP(<path>:<a>-<b>) and the COVERAGE line", () => {
+  assert.equal(tokens.EXAMINED_PACKET_MISMATCH, "EXAMINED-PACKET-MISMATCH");
+  assert.equal(tokens.COVERAGE_EXISTS, "COVERAGE-EXISTS");
+  assert.equal(tokens.COVERAGE_INDETERMINATE, "COVERAGE INDETERMINATE");
+  assert.equal(tokens.overlap("src/db.js", 3, 4), "OVERLAP(src/db.js:3-4)");
+  assert.equal(tokens.overlap("src/db.js", 3, 3), "OVERLAP(src/db.js:3-3)");
+  assert.equal(tokens.gap("src/app.js", 1, 10), "GAP(src/app.js:1-10)");
+  assert.throws(() => tokens.overlap("", 1, 2), /path/);
+  assert.throws(() => tokens.overlap("p", 0, 2), /range/);
+  assert.throws(() => tokens.gap("p", 3, 2), /range/);
+  assert.throws(() => tokens.gap("p", 1.5, 2), /range/);
+  assert.equal(tokens.coverageLine({ examined: 3, skipped: 1, scanner: 2 }), "COVERAGE examined=3 skipped=1 scanner=2");
+  assert.equal(tokens.coverageLine({ examined: 0, skipped: 0, scanner: 0 }), "COVERAGE examined=0 skipped=0 scanner=0");
+  assert.throws(() => tokens.coverageLine({ examined: -1, skipped: 0, scanner: 0 }), /examined/);
+  assert.throws(() => tokens.coverageLine({ examined: 1, skipped: 0.5, scanner: 0 }), /skipped/);
+  assert.throws(() => tokens.coverageLine({ examined: 1, skipped: 0 }), /scanner/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || name === "READBACK_FIELDS" || value instanceof RegExp) continue;

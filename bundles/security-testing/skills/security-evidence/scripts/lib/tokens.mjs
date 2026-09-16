@@ -546,3 +546,39 @@ export const GATE_RANGE_OUTSIDE_FILE = "RANGE-OUTSIDE-FILE";
 export const GATE_FILE_NOT_TEXT = "FILE-NOT-TEXT";
 /** a second candidate with the identity of one already gated (same path, class, snippet, occurrence): one finding, one entry; a CITATION_VERIFIED candidate outranks a CITATION_FAILED one, else the first wins. */
 export const GATE_DUPLICATE_ID = "duplicate-id";
+
+// --- coverage (TASK-020; plan §4.1 row `coverage`, spec D3 / §6.3, US-014) -------
+
+/** `EXAMINED-PACKET-MISMATCH` — exit 2: the examined declaration's `packet_sha256` is not a `kind: scope` packet of this run (TL-15). */
+export const EXAMINED_PACKET_MISMATCH = "EXAMINED-PACKET-MISMATCH";
+/** `COVERAGE-EXISTS` — exit 2: `coverage` refuses a run that already has examined.json or coverage.json (G-10: write-once; retry = new seq). Parallel to SCOPE-EXISTS. */
+export const COVERAGE_EXISTS = "COVERAGE-EXISTS";
+/** `COVERAGE INDETERMINATE` — exit 0: the scope has no files (D3); coverage.json carries `indeterminate: true`, which `sign-off` (TASK-033) turns into `COVERAGE-INDETERMINATE(<run>)`. */
+export const COVERAGE_INDETERMINATE = "COVERAGE INDETERMINATE";
+
+function requireLineRange(where, path, start, end) {
+  if (typeof path !== "string" || path.length === 0) throw new TypeError(`${where}: path must be a non-empty string`);
+  if (!Number.isInteger(start) || start < 1 || !Number.isInteger(end) || end < start) throw new TypeError(`${where}: range must be integers 1 ≤ start ≤ end, got ${String(start)}-${String(end)}`);
+}
+
+/** `OVERLAP(<path>:<a>-<b>)` — exit 4: two examined declarations cover the same lines; `a-b` is the intersection (plan §5 TASK-020). */
+export function overlap(path, start, end) {
+  requireLineRange("overlap", path, start, end);
+  return `OVERLAP(${path}:${start}-${end})`;
+}
+
+/** `GAP(<path>:<a>-<b>)` — exit 4: lines of an admitted range that no accounting entry covers — a bug in the accounting, never a declaration gap (which is reported as `unexamined`). */
+export function gap(path, start, end) {
+  requireLineRange("gap", path, start, end);
+  return `GAP(${path}:${start}-${end})`;
+}
+
+/**
+ * `COVERAGE examined=<n> skipped=<n> scanner=<n>` — the first line of
+ * `coverage` when the scope is not empty; the two WROTE lines follow. The
+ * counts are accounting entries by status (`examined`, `skipped`,
+ * `scanner-only`); `unexamined` entries are the remainder and are not printed.
+ */
+export function coverageLine({ examined, skipped, scanner }) {
+  return `COVERAGE examined=${requireCount("coverageLine", "examined", examined)} skipped=${requireCount("coverageLine", "skipped", skipped)} scanner=${requireCount("coverageLine", "scanner", scanner)}`;
+}
