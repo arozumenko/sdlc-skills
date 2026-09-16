@@ -1,9 +1,9 @@
-# security-testing bundle — design spec (v6.1)
+# security-testing bundle — design spec (v6.2)
 
 **Date:** 2026-09-15 (v6; v5 fd6e8c8, v4 33539a6, v3 028fab1, v2 9201e6b, v1 875f211)
 **Bundle:** `bundles/security-testing/` (new)
 **Branch:** feat/security-testing-bundle-spec
-**Status:** v6.1 — v6 reviewed **approve with changes** (0 blockers, 0 majors); v6.1 adds the planning amendments in §20 (representation choices the decomposition needed; none changes §2 or §3)
+**Status:** v6.2 — v6 reviewed **approve with changes** (0 blockers, 0 majors); v6.1/v6.2 add the planning amendments in §20 (representation choices the decomposition needed; none changes §2 or §3)
 **Inputs:** [market research](../notes/2026-09-14-security-testing-market-research.md),
 [secops comparison](../notes/2026-09-14-security-testing-secops-comparison.md),
 reviews [v1](../notes/2026-09-14-security-testing-spec-adversarial-review-codex.md),
@@ -71,7 +71,7 @@ Produces a **security assessment**, not a penetration test.
 | D15 | Approvals are unauthenticated records. **No `confirm` command exists.** |
 | D16 | Two evidence layers with keyed HMACs; identity keyed by content sensitivity (§6.5). |
 | D17 | Public verdicts only from `verify.mjs all`; multi-indicator ACK; regression observed independently of completeness (§6.4). |
-| D18 | Assessment scope is a **clean tree at `head_oid`**. `scope` refuses a dirty tree for `assessment`; `review` runs may be dirty and then store a private **redacted** snapshot plus HMACs of the originals (§6.2). |
+| D18 | Assessment scope is a **clean tree at `head_oid` for the assessed paths**: `run init --kind assessment` requires `git status --porcelain -- <scope_paths> <product_paths>` to be empty after excluding this bundle's own managed paths (`.agents/security-testing/**`, `reports/security/`, `tasks/security-*/`, the managed `.gitignore` block) — files the engagement itself creates never count as dirt; anything else dirty under the assessed paths ⇒ exit 3 `DIRTY-TREE`. `scope` refuses a dirty tree for `assessment`; `review` runs may be dirty and then store a private **redacted** snapshot plus HMACs of the originals (§6.2). |
 
 ## 4. Roster (`localAgents`)
 
@@ -672,3 +672,4 @@ made the flow unschedulable.
 | P3 | `engagement init` step 0 writes templates and, when `engagement.md` is absent, the template copy, then exits 2 `EDIT-ENGAGEMENT-AND-RERUN`; baseline runs only with an `engagement.md` present. Register directory is under the managed ignore block; `artifact_policy: committed` removes a pattern. `purge` scope stated. | §6.9 |
 | P4 | Tracker publication is a two-layer contract: script produces the payload and dedupes against register/imports; the lead posts via `issue-tracking` and dedupes against the live tracker; `ingest tracker-readback` emits `ticketed`. | §6.8, §9.4 |
 | P5 | `ticketed` transition, `register.mjs render`, `tool_version` from `version.json`, `INDETERMINATE` coverage blocks sign-off, `admitted-reviewed` needs assertion `confirmed`, `refound` not-applied fixture. | §6.1, §6.4, §6.8, §7, §9.1 |
+| P6 | Assessment cleanliness is checked over `scope_paths ∪ product_paths` with the bundle's own managed paths excluded, so `engagement init`'s own outputs (engagement.md, knowledge templates, register render, the `.gitignore` block) never trip `DIRTY-TREE`; citations still resolve at `head_oid`, which is why the assessed paths must be clean. | D18 |
