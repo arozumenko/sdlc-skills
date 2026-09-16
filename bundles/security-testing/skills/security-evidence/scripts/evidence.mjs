@@ -33,7 +33,7 @@ env         SECURITY_EVIDENCE_NOW (fixed created_at) · SECURITY_EVIDENCE_ACTOR 
 const COMMANDS = {
   // engagement: () => import("./lib/cmd-engagement.mjs"),   // TASK-008
   run: () => import("./lib/cmd-run.mjs"), // TASK-012 (init) / TASK-058 (snapshot)
-  // scope: () => import("./lib/cmd-scope.mjs"),             // TASK-013
+  scope: () => import("./lib/cmd-scope.mjs"), // TASK-013
   // ingest: () => import("./lib/cmd-ingest.mjs"),           // TASK-015
   // gate: () => import("./lib/cmd-gate.mjs"),               // TASK-019
   // coverage: () => import("./lib/cmd-coverage.mjs"),       // TASK-020

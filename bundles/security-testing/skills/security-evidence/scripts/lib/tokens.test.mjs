@@ -146,6 +146,16 @@ test("baselineLine: `BASELINE: <n> files ignored=<n>` (TASK-010)", () => {
   assert.throws(() => tokens.baselineLine({ files: "1", ignored: 0 }), /files/);
 });
 
+test("scope rows (TASK-013): SCOPE-EXISTS and `SCOPE files=<n> ranges=<n> skipped=<n> snapshot=<n>`", () => {
+  assert.equal(tokens.SCOPE_EXISTS, "SCOPE-EXISTS");
+  assert.equal(tokens.scopeLine({ files: 3, ranges: 2, skipped: 1, snapshot: 0 }), "SCOPE files=3 ranges=2 skipped=1 snapshot=0");
+  assert.equal(tokens.scopeLine({ files: 0, ranges: 0, skipped: 0, snapshot: 0 }), "SCOPE files=0 ranges=0 skipped=0 snapshot=0");
+  assert.throws(() => tokens.scopeLine({ files: -1, ranges: 0, skipped: 0, snapshot: 0 }), /files/);
+  assert.throws(() => tokens.scopeLine({ files: 1, ranges: 0.5, skipped: 0, snapshot: 0 }), /ranges/);
+  assert.throws(() => tokens.scopeLine({ files: 1, ranges: 0, skipped: "0", snapshot: 0 }), /skipped/);
+  assert.throws(() => tokens.scopeLine({ files: 1, ranges: 0, skipped: 0 }), /snapshot/);
+});
+
 test("every exported token is a string constant or a function; every constant is one line", () => {
   for (const [name, value] of Object.entries(tokens)) {
     if (name === "FORBIDDEN_STRINGS" || name === "REGISTER_STATUSES" || name === "REGISTER_PRIORITIES" || value instanceof RegExp) continue;
