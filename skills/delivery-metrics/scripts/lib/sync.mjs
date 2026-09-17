@@ -18,8 +18,15 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
     if (g('status', '--porcelain')) g('commit', '-q', '-m', `delivery-metrics: ${new Date().toISOString()}`);
     if (!g('remote')) return { synced: true, reason: 'no remote (local telemetry branch only)' };
     try { g('push', '-q'); return { synced: true }; } catch { /* rejected — integrate once */ }
-    try { g('fetch', '-q'); g('merge', '--no-edit', '@{u}'); }
-    catch { try { g('merge', '--abort'); } catch { /* nothing to abort */ } return { synced: false, reason: 'push rejected; merge conflict — manual repair needed (delivery.mjs doctor)' }; }
+    // Issue 4: fetch and merge fail for different reasons (network/remote down vs a real content
+    // conflict) and must be reported distinctly — a fetch failure is not a merge conflict.
+    try { g('fetch', '-q'); } catch { return { synced: false, reason: 'push rejected; fetch failed — retried next invocation' }; }
+    try { g('merge', '--no-edit', '@{u}'); }
+    catch {
+      const conflict = gitState(tel).unmerged.length > 0;
+      try { g('merge', '--abort'); } catch { /* nothing to abort */ }
+      return { synced: false, reason: conflict ? 'push rejected; merge conflict — manual repair needed (delivery.mjs doctor)' : 'push rejected; merge failed — manual repair needed (delivery.mjs doctor)' };
+    }
     try { g('push', '-q'); return { synced: true, reason: 'merged remote changes then pushed' }; }
     catch { return { synced: false, reason: 'push failed — retried next invocation' }; }
   } catch (e) { return { synced: false, reason: String(e.message).split('\n')[0] }; }

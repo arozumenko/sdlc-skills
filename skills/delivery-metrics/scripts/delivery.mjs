@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-metrics CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
-import { realpathSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
@@ -16,6 +16,12 @@ const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', '
 const TERMINAL_HISTORY_EVENTS = ['done', 'cancelled', 'reopened'];
 const out = (io, s) => io.stdout.write(`${s}\n`);
 const isoOrThrow = (s, flag) => { if (Number.isNaN(Date.parse(s))) throw cliError('USAGE', `invalid ${flag} ${s}`); return new Date(s).toISOString(); };
+/** A bare `--flag` with no argument (parseArgs sets it to boolean true) is user input, not a crash —
+ * fail it as USAGE before it reaches path.resolve/Number/Date.parse, some of which throw plain
+ * TypeErrors (not cliError) on a boolean and would otherwise fall through to INTERNAL/exit 1. */
+const requireValue = (f, name) => { if (f[name] === true) throw cliError('USAGE', `--${name} requires a value`); return f[name]; };
+/** plan register --from <file> must reject a directory (EISDIR would otherwise reach INTERNAL). */
+const requireFile = (path) => { if (!existsSync(path)) throw cliError('USAGE', `no such file ${path}`); if (!statSync(path).isFile()) throw cliError('USAGE', `${path} is not a file`); };
 
 export function parseArgs(argv) {
   const o = { cmd: argv[0] ?? null, sub: null, positional: [], flags: {} };
@@ -78,9 +84,9 @@ function emitRegistration(repo, io, { run, delta, token, at, createdAtOf, now, a
 }
 
 function cmdPlanRegister(repo, f, io, now) {
-  const file = f.from ? resolve(repo, f.from) : null, token = f.id;
+  const file = requireValue(f, 'from') ? resolve(repo, f.from) : null, token = f.id;
   if (!file || !token) throw cliError('USAGE', 'plan register needs --from <file> --id <token>');
-  if (!existsSync(file)) throw cliError('USAGE', `no such file ${file}`);
+  requireFile(file);
   const text = readFileSync(file, 'utf8');
   let obj = extractPlanBlock(text);
   if (!obj) {
@@ -129,7 +135,7 @@ function cmdPlanRegister(repo, f, io, now) {
     ? Object.fromEntries(Object.entries(full.supersedes.item_map ?? {}).filter(([oldId, newId]) => oldId !== newId))
     : null;
 
-  const at = f.at ? isoOrThrow(f.at, '--at') : nowIso(now);
+  const at = f.at ? isoOrThrow(requireValue(f, 'at'), '--at') : nowIso(now);
   const sourceHead = git(repo, ['rev-parse', '--verify', 'HEAD^{commit}']);
   const rel = relPath(repo, file); const tracked = git(repo, ['ls-files', '--error-unmatch', rel]) != null;
   const created = {};
@@ -149,11 +155,22 @@ function cmdPlanRegister(repo, f, io, now) {
   const factories = f.factories ? String(f.factories).split(',') : [full.factory];
   if (!factories.includes(full.factory)) throw cliError('USAGE', 'participating factories must include plan factory');
   const roster = makeRoster(repo, factories, f.roster ? String(f.roster).split(',') : null);
+  // F10.3 (continuation): mergeCatalogue (plan.mjs, unmodified) has no notion of ledger state, so it
+  // marks every item missing from `next` as `cancelled: true`. Patch the delivered-removed subset
+  // back to `cancelled: false, removed_delivered: true` here — that keeps resolveRef accepting them
+  // (it only refuses `cancelled` items) and, on the *next* re-cut, keeps planDelta's own
+  // `if (old.cancelled) reopened.push(i)` check from firing when the item is re-added (old.cancelled
+  // is false), so a re-add never mints a spurious `reopened` for an item whose true state is `done`.
+  // An item present in `next` again gets a fresh row straight from `next` with no `removed_delivered`
+  // field, so the flag is naturally cleared once the item is back in scope.
+  const mergedItems = mergeCatalogue(prev?.items ?? [], next, { keepMissing, renameMap });
+  const removedDeliveredIds = new Set(scopeRemovedDelivered.map((i) => i.item_id));
+  for (const i of mergedItems) if (removedDeliveredIds.has(i.item_id)) { i.cancelled = false; i.removed_delivered = true; }
   const rec = {
     run: runId, campaign_id: full.campaign_id, run_id: full.run_id, version: full.version, factory: full.factory, status: 'open',
     registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind,
     source: { path: file, rel, sha256: sha256(text), head: sourceHead }, canonical_sha256: canonicalHash(full), roster,
-    import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergeCatalogue(prev?.items ?? [], next, { keepMissing, renameMap }),
+    import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergedItems,
     versions: [...(prev?.versions ?? []), { version: full.version, at, keep_missing: keepMissing, canonical_sha256: canonicalHash(full), items: next }],
     requests: { ...(prev?.requests ?? {}) },
   };
@@ -172,9 +189,9 @@ function cmdPlanRegister(repo, f, io, now) {
 
 function buildEvent(repo, run, item, ev, f, token, now) {
   if (!CLI_EVENTS.includes(ev) || !EVENTS.includes(ev)) throw cliError('USAGE', `unknown event ${ev}; expected one of ${CLI_EVENTS.join('|')}`);
-  const revision = f.revision != null ? Number(f.revision) : 0;
+  const revision = f.revision != null ? Number(requireValue(f, 'revision')) : 0;
   if (!Number.isInteger(revision) || revision < 0) throw cliError('USAGE', 'invalid --revision');
-  let at = f.at ? isoOrThrow(f.at, '--at') : null; const meta = { version: run.version };
+  let at = f.at ? isoOrThrow(requireValue(f, 'at'), '--at') : null; const meta = { version: run.version };
   if (f.sha) {
     const c = commitTime(repo, f.sha); if (!c) throw cliError('USAGE', `cannot resolve commit ${f.sha}`);
     if (at && at !== c.at) { if (revision < 1) throw cliError('USAGE', `at and sha disagree (${at} vs ${c.at}); pass --revision <n> to correct`); meta.clock = 'corrected'; } else at = c.at;
@@ -202,19 +219,30 @@ function cmdEvent(repo, p, io, now) {
     // in a genuinely different transition is still rejected.
     if (rec.status === 'active') { const why = validateTransition(historyFor(item), ev); if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`); }
     const res = appendObservation(repo, rec, { now });
-    if (res.result === 'EVENT' && TERMINAL_HISTORY_EVENTS.includes(ev)) historyFor(item).push({ event: ev, at: rec.at });
+    // Minor (a): re-sort after every push so a batch's rows fold in timeline order even when the
+    // input file lists them out of chronological order (historyFor returns the live array reference,
+    // so sorting in place keeps every later lookup for this item consistent).
+    if (res.result === 'EVENT' && TERMINAL_HISTORY_EVENTS.includes(ev)) { const h = historyFor(item); h.push({ event: ev, at: rec.at }); h.sort((a, b) => a.at.localeCompare(b.at)); }
     out(io, `${res.result} ${res.observation_id} ${rec.at}`);
     return res;
   };
   if (p.flags.from) {
-    const from = resolve(repo, p.flags.from);
-    if (!existsSync(from)) throw cliError('USAGE', `no such file ${from}`);
+    const from = requireValue(p.flags, 'from') ? resolve(repo, p.flags.from) : null;
+    requireFile(from);
     let appended = 0, skipped = 0, conflicts = 0, invalid = 0, n = 0;
     for (const line of readFileSync(from, 'utf8').split('\n')) {
       n++; if (!line.trim()) continue;
       let j; try { j = JSON.parse(line); } catch { invalid++; io.stderr.write(`WARN line ${n}: invalid json\n`); continue; }
+      // Issue 1: a line that parses cleanly but isn't a plain object (null, an array, a bare string
+      // or number) would otherwise reach `j.ref` as undefined and fail deep inside — reject it here,
+      // counted the same as invalid JSON.
+      if (j === null || typeof j !== 'object' || Array.isArray(j)) { invalid++; io.stderr.write(`WARN line ${n}: not an object\n`); continue; }
       try { const res = one(j.ref, j.event, { at: j.at, sha: j.sha, transition: j.transition, raw: j.raw, revision: j.revision, status: j.status, note: j.note }, j.id); if (res.result === 'EVENT') appended++; else if (res.result === 'SKIP') skipped++; else conflicts++; }
-      catch (e) { if (!e.code) throw e; invalid++; io.stderr.write(`WARN line ${n}: ${e.message}\n`); }
+      // Issue 2: only a genuine cliError (code + a mapped exit) is "this row is invalid input" — a
+      // real system error (e.g. a thrown fs Error with a string .code like EACCES/ENOSPC) must not be
+      // swallowed as an invalid line; it propagates out to main()'s INTERNAL/exit-1 catch-all, exactly
+      // like main's own predicate (`e.code && e.exit`).
+      catch (e) { if (!(e.code && e.exit)) throw e; invalid++; io.stderr.write(`WARN line ${n}: ${e.message}\n`); }
     }
     out(io, `EVENTS appended=${appended} skipped=${skipped} conflicts=${conflicts} invalid=${invalid}`);
     if (conflicts || invalid) throw cliError(conflicts ? 'ID-CONFLICT' : 'USAGE', `${conflicts} conflicting, ${invalid} invalid line(s)`);
@@ -279,7 +307,10 @@ function cmdProfile(repo, p, io) {
   const from = resolve(repo, p.flags.from);
   let obj; try { obj = JSON.parse(readFileSync(from, 'utf8')); } catch { throw cliError('USAGE', `${from}: invalid json or no such file`); }
   const errs = validateProfile(obj, tpl); if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
-  mkdirSync(deliveryDir(repo), { recursive: true }); writeFileSync(profilePath(repo), `${JSON.stringify({ ...tpl, ...obj }, null, 2)}\n`);
+  // Issue 3: a shallow {...tpl, ...obj} replaces the whole `baselines` object wholesale, dropping
+  // every template baseline the caller didn't mention — merge that one nested object one level deep.
+  const merged = { ...tpl, ...obj, baselines: { ...tpl.baselines, ...(obj.baselines ?? {}) } };
+  mkdirSync(deliveryDir(repo), { recursive: true }); writeFileSync(profilePath(repo), `${JSON.stringify(merged, null, 2)}\n`);
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
 

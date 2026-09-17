@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -189,6 +189,69 @@ test('event --from validates against accumulated batch history (F10.1); --revisi
   assert.equal(corrected.code, 0, corrected.stderr);
 });
 
+// Minor (a): the accumulated batch history must be re-sorted by `at` after each push, not left in
+// file/push order — otherwise a later row's fold can land on the wrong "current state". Here row 2
+// ('cancelled' at 09:00 on the 17th) is appended *after* row 1 ('reopened' at 12:00 on the 17th) in
+// file order, even though 09:00 < 12:00. Without re-sorting, row 3's fold sees the array in push
+// order (done, reopened, cancelled) and ends on 'cancelled' — wrongly rejecting row 3's 'done'. With
+// re-sorting, the array folds in true timeline order (done, cancelled, reopened) and correctly ends
+// on 'open', so row 3's 'done' is accepted.
+test('event --from folds out-of-order batch rows in timeline order, not push order (minor a)', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const seed = run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T08:00:00Z', '--id', 'seed-done']);
+  assert.equal(seed.code, 0, seed.stderr);
+  const f = join(repo, 'unordered.jsonl');
+  writeFileSync(f, [
+    JSON.stringify({ ref: 'TASK-001', event: 'reopened', at: '2026-09-17T12:00:00Z', id: 'ro1' }),
+    JSON.stringify({ ref: 'TASK-001', event: 'cancelled', at: '2026-09-17T09:00:00Z', id: 'c1' }),
+    JSON.stringify({ ref: 'TASK-001', event: 'done', at: '2026-09-17T15:00:00Z', id: 'd3' }),
+  ].join('\n') + '\n');
+  const r = run(repo, ['event', '--from', f]);
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /EVENTS appended=3 skipped=0 conflicts=0 invalid=0/);
+});
+
+// Issue 1: a line that parses as valid JSON but is not a plain object (null / array / a bare
+// scalar) must not reach `j.ref` (undefined) and crash — it is counted as an invalid line, same as
+// malformed JSON, and the batch still exits 2.
+test('event --from: a non-object JSON line (null/array/scalar) is counted invalid, not INTERNAL (issue 1)', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const f = join(repo, 'nonobj.jsonl');
+  writeFileSync(f, [
+    JSON.stringify({ ref: 'TASK-001', event: 'dispatched', at: '2026-09-16T09:00:00Z', id: 'ok-1' }),
+    JSON.stringify(null),
+    JSON.stringify([1, 2, 3]),
+    JSON.stringify('just a string'),
+  ].join('\n') + '\n');
+  const r = run(repo, ['event', '--from', f]);
+  assert.equal(r.code, 2);
+  assert.match(r.stdout, /EVENTS appended=1 skipped=0 conflicts=0 invalid=3/);
+  assert.match(r.stderr, /line 2: not an object/);
+  assert.match(r.stderr, /line 3: not an object/);
+  assert.match(r.stderr, /line 4: not an object/);
+});
+
+// Issue 2: a real system error (a thrown fs Error carrying a string .code like EACCES) must not be
+// swallowed as "invalid line" — it must propagate to main()'s INTERNAL/exit-1 catch-all, using the
+// same predicate main() itself uses (`e.code && e.exit`), not a bare `!e.code` check.
+test('event --from: a thrown fs error with a string .code (EACCES) propagates to INTERNAL, not invalid-line (issue 2)', (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) { t.skip('root ignores permission bits'); return; }
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const eventsFile = join(deliveryDir(repo), 'events-tester.jsonl');
+  assert.ok(existsSync(eventsFile), 'the cli registration already wrote this user\'s events file');
+  chmodSync(eventsFile, 0o444);
+  try {
+    const f = join(repo, 'perm.jsonl');
+    writeFileSync(f, `${JSON.stringify({ ref: 'TASK-001', event: 'dispatched', at: '2026-09-16T09:00:00Z', id: 'perm-1' })}\n`);
+    const r = run(repo, ['event', '--from', f]);
+    assert.equal(r.code, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /^INTERNAL\(/);
+  } finally { chmodSync(eventsFile, 0o644); }
+});
+
 test('plan register: removing an already-done item never cancels its history (F10.3, scope_removed_delivered)', () => {
   const repo = initRepo();
   run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
@@ -202,6 +265,39 @@ test('plan register: removing an already-done item never cancels its history (F1
   const { active } = resolveObservations(repo);
   assert.equal(active.filter((o) => o.ref === 'TASK-002' && o.event === 'cancelled').length, 0, 'no cancelled observation is minted for delivered scope');
   assert.equal(active.filter((o) => o.ref === 'TASK-002' && o.event === 'done').length, 1, 'the done history survives untouched');
+});
+
+// Issue 5: a delivered-removed item's catalogue row must not be `cancelled: true` (mergeCatalogue's
+// default for anything missing from the new plan), or the ledger and the catalogue disagree — the
+// ledger says 'done', the catalogue says 'cancelled'. It must instead carry `removed_delivered: true`
+// / `cancelled: false`, so resolveRef keeps accepting it, and so a later re-add never mints a
+// spurious `reopened` (planDelta's own `if (old.cancelled) reopened.push(i)` only fires when the
+// saved row says cancelled). Once the item is back in scope, `removed_delivered` is cleared.
+test('plan register: removed_delivered rows stay resolvable, and re-adding them never mints reopened (issue 5)', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  run(repo, ['event', 'TASK-002', 'done', '--id', 'done-002']);
+  const v2 = plan(2, [{ ref: 'TASK-001' }]); // TASK-002 removed from scope, but it is already done
+  const r2 = run(repo, ['plan', 'register', '--from', writePlan(repo, v2, 'p2.md'), '--id', 'reg-2', '--at', '2026-09-17T00:00:00Z']);
+  assert.equal(r2.code, 0, r2.stderr);
+  const recV2 = JSON.parse(readFileSync(runPath(repo, 'sec/run-1'), 'utf8'));
+  const rowV2 = recV2.items.find((i) => i.ref === 'TASK-002');
+  assert.equal(rowV2.cancelled, false, 'a delivered-removed row is never marked cancelled');
+  assert.equal(rowV2.removed_delivered, true);
+  // resolveRef still accepts it (only `cancelled` items are refused) — a further event on it succeeds
+  // without needing --allow-cancelled.
+  const evOnRemoved = run(repo, ['event', 'TASK-002', 'blocked', '--id', 'blk-1']);
+  assert.equal(evOnRemoved.code, 0, evOnRemoved.stderr);
+
+  const v3 = plan(3, [{ ref: 'TASK-001' }, { ref: 'TASK-002' }]); // re-add
+  const r3 = run(repo, ['plan', 'register', '--from', writePlan(repo, v3, 'p3.md'), '--id', 'reg-3', '--at', '2026-09-18T00:00:00Z']);
+  assert.equal(r3.code, 0, r3.stderr);
+  const { active } = resolveObservations(repo);
+  assert.equal(active.filter((o) => o.ref === 'TASK-002' && o.event === 'reopened').length, 0, 're-adding delivered-removed scope never mints reopened');
+  const recV3 = JSON.parse(readFileSync(runPath(repo, 'sec/run-1'), 'utf8'));
+  const rowV3 = recV3.items.find((i) => i.ref === 'TASK-002');
+  assert.equal(rowV3.cancelled, false);
+  assert.ok(!rowV3.removed_delivered, 'removed_delivered is cleared once the item is back in scope');
 });
 
 // F16: supersedes carries an item's history forward under a genuinely renamed item_id (a validated
@@ -244,8 +340,47 @@ test('F20: malformed plan shape, missing event --from file, and profile range va
   assert.equal(okProf.code, 0, okProf.stderr);
   const saved = JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8'));
   assert.equal(saved.minWholeWeeks, 4); assert.equal(saved.baselines.cycle_time_task_h, 12);
+  // Issue 3: baselines merges one level deep — the template's other baseline keys must survive a
+  // profile write that only mentions one of them, not be dropped by a whole-object replacement.
+  assert.equal(saved.baselines.cycle_time_mission_h, null);
+  assert.equal(saved.baselines.throughput_task_per_week, null);
+  assert.equal(saved.baselines.first_pass_rate, null);
+  assert.equal(saved.baselines.hit_rate, null);
 
   const badType = join(repo, 'profile-bad2.json'); writeFileSync(badType, JSON.stringify({ capturePrompts: 'yes' }));
   const badR = run(repo, ['profile', 'set', '--from', badType]);
   assert.equal(badR.code, 2); assert.match(badR.stderr, /^SCHEMA-INVALID\(profile\.capturePrompts/);
+});
+
+// Minor (b): a bare `--from`/`--at`/`--revision` (no value — parseArgs sets it to boolean true) must
+// be USAGE, not a raw TypeError reaching INTERNAL; `plan register --from <directory>` must also be
+// USAGE, not a raw EISDIR reaching INTERNAL.
+test('minor (b): bare --from/--at/--revision and a directory --from all exit USAGE, never INTERNAL', () => {
+  const repo = initRepo();
+  const planFile = writePlan(repo, plan());
+  const bareFrom = run(repo, ['plan', 'register', '--from', '--id', 'x']);
+  assert.equal(bareFrom.code, 2); assert.match(bareFrom.stderr, /^USAGE\(--from requires a value/);
+
+  const dirFrom = run(repo, ['plan', 'register', '--from', repo, '--id', 'x']);
+  assert.equal(dirFrom.code, 2); assert.match(dirFrom.stderr, /^USAGE\(.*is not a file/);
+
+  run(repo, ['plan', 'register', '--from', planFile, '--id', 'reg-1']);
+
+  // A v2 re-cut with a bare --at: f.at is boolean `true` (truthy), so the "re-cut requires --at"
+  // guard (`!f.at`) does not fire — it must still be rejected once isoOrThrow/requireValue sees it.
+  const v2File = writePlan(repo, plan(2, [{ ref: 'TASK-001' }]), 'p2.md');
+  const bareAt = run(repo, ['plan', 'register', '--from', v2File, '--id', 'reg-2', '--at']);
+  assert.equal(bareAt.code, 2); assert.match(bareAt.stderr, /^USAGE\(--at requires a value/);
+
+  const bareEventAt = run(repo, ['event', 'TASK-001', 'done', '--id', 'z', '--at']);
+  assert.equal(bareEventAt.code, 2); assert.match(bareEventAt.stderr, /^USAGE\(--at requires a value/);
+
+  const bareRevision = run(repo, ['event', 'TASK-001', 'done', '--id', 'z', '--revision']);
+  assert.equal(bareRevision.code, 2); assert.match(bareRevision.stderr, /^USAGE\(--revision requires a value/);
+
+  const bareEventFrom = run(repo, ['event', '--from']);
+  assert.equal(bareEventFrom.code, 2); assert.match(bareEventFrom.stderr, /^USAGE\(--from requires a value/);
+
+  const dirEventFrom = run(repo, ['event', '--from', repo]);
+  assert.equal(dirEventFrom.code, 2); assert.match(dirEventFrom.stderr, /^USAGE\(.*is not a file/);
 });

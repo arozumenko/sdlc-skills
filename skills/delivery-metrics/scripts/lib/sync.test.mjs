@@ -32,6 +32,20 @@ test('two writers: rejected push → fetch/merge/push succeeds; distinct per-use
   assert.match(g(join(b, '.agents', 'telemetry'), 'ls-files'), /events-a\.jsonl[\s\S]*events-b\.jsonl/);
 });
 
+// Issue 4: a rejected push followed by a fetch that fails outright (remote unreachable/network down)
+// must be reported distinctly from a real merge conflict — it is not something a manual merge can fix.
+test('sync: fetch failure after a rejected push is reported distinctly from a merge conflict', () => {
+  const { a, b } = world();
+  write(a, 'events-a.jsonl', '{"a":1}\n'); assert.equal(bestEffortSync(a, { env: {} }).synced, true);
+  write(b, 'events-b.jsonl', '{"b":1}\n');
+  const tel = join(b, '.agents', 'telemetry');
+  g(tel, 'remote', 'set-url', 'origin', join(tel, 'no-such-remote.git'));
+  const r = bestEffortSync(b, { env: {} });
+  assert.equal(r.synced, false);
+  assert.match(r.reason, /fetch failed/);
+  assert.doesNotMatch(r.reason, /merge conflict/);
+});
+
 test('conflicting shared file: merge aborted, nothing committed as resolved, reason names manual repair; unmerged tree is never staged', () => {
   const { a, b } = world();
   write(a, 'profile.json', '{"x":1}\n'); bestEffortSync(a, { env: {} });
