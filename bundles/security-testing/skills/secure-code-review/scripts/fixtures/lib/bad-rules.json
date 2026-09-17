@@ -1,0 +1,6 @@
+{
+  "redaction_version": 2,
+  "rules": [
+    { "class": "bad-flag", "pattern": "abc", "flags": "x", "replacement": "<REDACTED:bad-flag>" }
+  ]
+}

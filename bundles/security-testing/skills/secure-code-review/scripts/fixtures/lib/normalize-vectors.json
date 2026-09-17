@@ -1,0 +1,254 @@
+[
+  {
+    "name": "empty-input",
+    "note": "zero bytes yield zero lines",
+    "input_base64": "",
+    "expected_lines": []
+  },
+  {
+    "name": "plain-lf",
+    "note": "LF text passes through unchanged",
+    "input_base64": "YQpiCmM=",
+    "expected_lines": [
+      "a",
+      "b",
+      "c"
+    ]
+  },
+  {
+    "name": "trailing-lf",
+    "note": "a trailing newline does not add an empty line",
+    "input_base64": "YQpiCg==",
+    "expected_lines": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "bom-stripped",
+    "note": "leading UTF-8 BOM (EF BB BF) is removed",
+    "input_base64": "77u/YQpi",
+    "expected_lines": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "bom-only",
+    "note": "a file that is only a BOM has no lines",
+    "input_base64": "77u/",
+    "expected_lines": []
+  },
+  {
+    "name": "bom-mid-file-preserved",
+    "note": "only the leading BOM is stripped; U+FEFF elsewhere is content",
+    "input_base64": "77u/YQrvu79i",
+    "expected_lines": [
+      "a",
+      "\ufeffb"
+    ]
+  },
+  {
+    "name": "cr-newlines",
+    "note": "lone CR is a newline",
+    "input_base64": "YQ1iDWM=",
+    "expected_lines": [
+      "a",
+      "b",
+      "c"
+    ]
+  },
+  {
+    "name": "crlf-newlines",
+    "note": "CRLF is one newline",
+    "input_base64": "YQ0KYg0K",
+    "expected_lines": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "mixed-newlines",
+    "note": "CRLF, CR and LF mixed in one file",
+    "input_base64": "YQ0KYg1jCmQ=",
+    "expected_lines": [
+      "a",
+      "b",
+      "c",
+      "d"
+    ]
+  },
+  {
+    "name": "crlf-then-cr",
+    "note": "CRLF followed by CR is two newlines; the empty line between them is dropped",
+    "input_base64": "YQ0KDWI=",
+    "expected_lines": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "trailing-cr",
+    "note": "a trailing lone CR does not add an empty line",
+    "input_base64": "YQ0=",
+    "expected_lines": [
+      "a"
+    ]
+  },
+  {
+    "name": "tab-runs",
+    "note": "runs of tabs collapse to one space",
+    "input_base64": "YQkJCWIJIGM=",
+    "expected_lines": [
+      "a b c"
+    ]
+  },
+  {
+    "name": "space-runs-trimmed",
+    "note": "runs of spaces collapse; leading and trailing whitespace is trimmed",
+    "input_base64": "ICAgYSAgIGIgICA=",
+    "expected_lines": [
+      "a b"
+    ]
+  },
+  {
+    "name": "nbsp-is-horizontal-whitespace",
+    "note": "U+00A0 (Zs) collapses like a space and is trimmed at the ends",
+    "input_base64": "YcKgwqBiwqA=",
+    "expected_lines": [
+      "a b"
+    ]
+  },
+  {
+    "name": "ideographic-space",
+    "note": "U+3000 (Zs) collapses like a space",
+    "input_base64": "44CAYeOAgOOAgGI=",
+    "expected_lines": [
+      "a b"
+    ]
+  },
+  {
+    "name": "mixed-horizontal-whitespace",
+    "note": "a run mixing tab, space and NBSP is one space",
+    "input_base64": "YSAJwqAgYg==",
+    "expected_lines": [
+      "a b"
+    ]
+  },
+  {
+    "name": "empty-lines-dropped",
+    "note": "empty and whitespace-only lines are dropped; nothing else is",
+    "input_base64": "YQoKICAKCQrCoApiCg==",
+    "expected_lines": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "leading-empty-lines",
+    "note": "empty lines at the start are dropped too",
+    "input_base64": "CgoKYQ==",
+    "expected_lines": [
+      "a"
+    ]
+  },
+  {
+    "name": "nfc-composed",
+    "note": "decomposed e + U+0301 becomes U+00E9",
+    "input_base64": "Y2FmZcyB",
+    "expected_lines": [
+      "caf\u00e9"
+    ]
+  },
+  {
+    "name": "nfc-already-composed",
+    "note": "already-NFC text is unchanged",
+    "input_base64": "Y2Fmw6k=",
+    "expected_lines": [
+      "caf\u00e9"
+    ]
+  },
+  {
+    "name": "nfc-hangul",
+    "note": "Hangul jamo (U+1112 U+1161 U+11AB) compose to U+D55C",
+    "input_base64": "4YSS4YWh4Yar",
+    "expected_lines": [
+      "\ud55c"
+    ]
+  },
+  {
+    "name": "vertical-whitespace-preserved",
+    "note": "form feed and vertical tab are neither horizontal whitespace nor newlines",
+    "input_base64": "YQxiC2M=",
+    "expected_lines": [
+      "a\fb\u000bc"
+    ]
+  },
+  {
+    "name": "unicode-line-separator-preserved",
+    "note": "U+2028 and U+0085 are not newlines; they stay inside the line",
+    "input_base64": "YeKAqGLChWM=",
+    "expected_lines": [
+      "a\u2028b\u0085c"
+    ]
+  },
+  {
+    "name": "line-order-and-count",
+    "note": "five non-empty lines stay five lines in order",
+    "input_base64": "MQoyCjMKNAo1",
+    "expected_lines": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ]
+  },
+  {
+    "name": "interior-single-space-kept",
+    "note": "single spaces between tokens are kept",
+    "input_base64": "bGV0IHggPSAxOw==",
+    "expected_lines": [
+      "let x = 1;"
+    ]
+  },
+  {
+    "name": "multibyte-content",
+    "note": "multibyte UTF-8 is decoded, not split",
+    "input_base64": "5pel5pys6KqeCtC10LzQvtC00LfQuCDwn5mC",
+    "expected_lines": [
+      "\u65e5\u672c\u8a9e",
+      "\u0435\u043c\u043e\u0434\u0437\u0438 \ud83d\ude42"
+    ]
+  },
+  {
+    "name": "invalid-utf8-lead-byte",
+    "note": "0xFF is never valid UTF-8",
+    "input_base64": "Yf9i",
+    "expected_error": "EncodingError"
+  },
+  {
+    "name": "invalid-utf8-truncated-sequence",
+    "note": "a 3-byte sequence cut after 2 bytes",
+    "input_base64": "4oI=",
+    "expected_error": "EncodingError"
+  },
+  {
+    "name": "invalid-utf8-overlong",
+    "note": "overlong encoding of '/' (C0 AF)",
+    "input_base64": "wK8=",
+    "expected_error": "EncodingError"
+  },
+  {
+    "name": "invalid-utf8-surrogate",
+    "note": "encoded UTF-16 surrogate (ED A0 80) is invalid UTF-8",
+    "input_base64": "7aCA",
+    "expected_error": "EncodingError"
+  },
+  {
+    "name": "invalid-utf8-latin1",
+    "note": "Latin-1 e-acute (E9) alone is rejected, not silently replaced",
+    "input_base64": "Y2Fm6Q==",
+    "expected_error": "EncodingError"
+  }
+]
