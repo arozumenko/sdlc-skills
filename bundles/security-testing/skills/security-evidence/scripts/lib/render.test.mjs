@@ -414,9 +414,11 @@ function synthAssessment({ withVerify = true, tamper = () => {}, reviewOptions =
   const importRecord = art("import", { kind: "sarif", import_sha256: IMPORT, original_hmac: "a".repeat(64), redaction_version: DEFAULT_RULES.redaction_version, mapping_version: "1", source_path: "imports/semgrep.sarif", records: [], unlocated: [], rejected: [] });
   A.imports = [importRecord];
   A["imports-index"] = art("imports-index", { imports: [{ kind: "sarif", import_sha256: IMPORT, original_hmac: "a".repeat(64) }] });
+  // observations (TASK-044): one FAIL (a section-9 candidate) and one PASS (recorded, never unresolved)
   const observation = art("observation", { observation_id: "O-0123456789ab", import_sha256: IMPORT, case_id: "SEC-CASE-1", case_sha256: "b".repeat(64), result: "FAIL", run_id: RUN_ID, base_url: "https://staging.example.invalid", account: "unknown", head_oid: HEAD });
-  A.observations = [observation];
-  A["observations-index"] = art("observations-index", { observations: [{ observation_id: "O-0123456789ab", sha256: observation.envelope.self_sha256 }] });
+  const passed = art("observation", { observation_id: "O-0123456789ac", import_sha256: IMPORT, case_id: "SEC-CASE-2", case_sha256: "c".repeat(64), result: "PASS", run_id: RUN_ID, base_url: "unknown", account: "qa-user", head_oid: "unknown" });
+  A.observations = [observation, passed];
+  A["observations-index"] = art("observations-index", { observations: [observation, passed].map((o) => ({ observation_id: o.payload.observation_id, sha256: o.envelope.self_sha256 })) });
   // verify snapshot: the TASK-026 rule, its finding re-pointed at the plain finding (evaluate is independent of finding_id)
   const snapshots = [];
   if (withVerify) {
@@ -496,8 +498,9 @@ test("buildView(assessment): section 3 counts derive from the view — priority 
   assert.equal(view.verify_history.length, 1);
   assert.equal(view.verify_history[0].finding_id, ids.plain);
   assert.equal(view.verify_history[0].verdict, "VERIFIED");
-  assert.equal(view.unresolved.qa_fail.length, 1);
-  assert.equal(view.unresolved.qa_fail[0].case_id, "SEC-CASE-1");
+  assert.equal(view.unresolved.qa_fail.length, 1, "only the FAIL observation is a candidate");
+  assert.deepEqual(view.unresolved.qa_fail[0], { observation_id: "O-0123456789ab", case_id: "SEC-CASE-1", case_sha256: "b".repeat(64), result: "FAIL", import_sha256: IMPORT, head_oid: HEAD });
+  assert.deepEqual(view.observations.map((o) => [o.observation_id, o.result]).sort(), [["O-0123456789ab", "FAIL"], ["O-0123456789ac", "PASS"]], "both observations are recorded in the view");
   assert.deepEqual(view.register.proposals.map((p) => p.id), ["active-sqli-probe"]);
   assert.deepEqual(view.hashes, inputs.hashes);
   assert.doesNotThrow(() => JSON.stringify(view), "plain data");
@@ -568,7 +571,12 @@ test("renderMarkdown(assessment): the twelve sections in v3 §11 order with Cove
   assert.match(section4, /scope_paths: src\/ <!-- v:engagement\.scope_paths -->/);
   assert.match(section4, /require_dispositions: executed-or-ticketed <!-- v:engagement\.require_dispositions -->/);
   const section9 = text.slice(text.indexOf("## 9. "), text.indexOf("## 10. "));
-  assert.match(section9, /\| SEC-CASE-1 \| FAIL \|/);
+  // TASK-044 (US-036 AC-3): the FAIL observation is a marked row with its case identity; the PASS one is not a candidate; the mitigation-review rule is printed
+  assert.match(section9, /^\| observation \| case \| case_sha256 \| result \| import_sha256 \|$/m);
+  assert.match(section9, new RegExp(`^\\| O-0123456789ab \\| SEC-CASE-1 \\| b{64} \\| FAIL \\| ${IMPORT} \\| <!-- v:unresolved\\.qa_fail\\[0\\] -->$`, "m"));
+  assert.doesNotMatch(section9, /O-0123456789ac|SEC-CASE-2/);
+  assert.match(section9, /A FAIL observation stays a candidate: a mitigation decision needs a separate `mitigation-review` receipt citing the observation/);
+  assert.doesNotMatch(section9, /MITIGATION_/, "no state is derived for an observation");
   const section10 = text.slice(text.indexOf("## 10. "), text.indexOf("## 11. "));
   assert.match(section10, /\| M-001 \| T-001 \| MITIGATION_CONFIRMED \|/);
   assert.match(section10, /\| T-002 \| E-001 \| I \| verbose errors \| undisposed \|/);

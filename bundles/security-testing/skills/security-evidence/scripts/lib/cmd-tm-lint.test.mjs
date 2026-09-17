@@ -182,9 +182,10 @@ test("one threat per disposition value validates; dangling reference fails with 
   assert.deepEqual(readArtifact(join(dir, "dispositions.json"), { kind: "dispositions" }), index);
 
   // dangling references, each in a fresh run (the snapshot is frozen per run): threat id + the missing relationship
-  const dangling = async (threats, expected) => {
+  const dangling = async (threats, expected, plant) => {
     const id = await initRun(repo, "assessment");
     await ok(evidence(repo, ["scope", "--run", id]));
+    if (plant) plant(id);
     writeModel(repo, model({ threats }), "dangling.json");
     const r = await tmLint(repo, ["check", "--run", id, "--model", "dangling.json"]);
     assert.equal(r.code, 4, r.stdout + r.stderr);
@@ -192,6 +193,12 @@ test("one threat per disposition value validates; dangling reference fails with 
     assert.equal(existsSync(join(runDir(repo, id), "dispositions.json")), false);
   };
   await dangling([threat({ disposition: { kind: "planned", ref: "P-999" } })], "TM-INVALID(T-001: planned(P-999): proposal P-999 is not in proposals-index.json)");
+  // TASK-044 (PM ruling after G22): a `proposal`-classified admission record is not planned — only an `admitted-*` record is
+  const PROPOSAL_CASE = "4".repeat(64);
+  await dangling([threat({ disposition: { kind: "planned", ref: PROPOSAL_CASE } })], `TM-INVALID(T-001: planned(${PROPOSAL_CASE}): no admission record admissions/${PROPOSAL_CASE}.json)`, (id) => {
+    const { receipt_sha256: _r, ...heuristic } = admissionPayload();
+    writeRunArtifact(repo, id, join("admissions", `${PROPOSAL_CASE}.json`), "admission", { ...heuristic, case_sha256: PROPOSAL_CASE, classification: "proposal" });
+  });
   await dangling([threat({ disposition: { kind: "executed", ref: "O-000000000000" } })], "TM-INVALID(T-001: executed(O-000000000000): no observation observations/O-000000000000.json)");
   await dangling([threat({ disposition: { kind: "accepted", ref: "R-0001" } })], "TM-INVALID(T-001: accepted(R-0001): register-events.json is not in the run (run snapshot register))");
   await dangling([threat({ id: "T-005", disposition: { kind: "ticketed", ref: TICKET_URL } })], `TM-INVALID(T-005: ticketed(${TICKET_URL}): no tracker-readback record shows a ticket body at that url carrying T-005)`);

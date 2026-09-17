@@ -480,3 +480,18 @@ test("plan admit | propose rows (TASK-042; plan §4.5, §5 TASK-042; spec §9.1)
   assert.equal(tokens.nextSnapshotProposals("abcdefabcdef-0001"), "NEXT: run snapshot proposals --run abcdefabcdef-0001");
   assert.throws(() => tokens.nextSnapshotProposals("abc"), /run_id|run id/i);
 });
+
+test("ingest qa-run | ta-report rows (TASK-044; plan §5 TASK-044; spec §9.2, §9.3): UNADMITTED_CASE is the Candidate enum's spelling, the OBSERVATION line over the three results, the TA-UNITS line", () => {
+  const sha = "b".repeat(64);
+  assert.equal(tokens.UNADMITTED_CASE, "unadmitted-case");
+  for (const result of ["PASS", "FAIL", "BLOCKED"]) {
+    assert.equal(tokens.observationLine({ observation_id: "O-0123456789ab", case_id: "TC-001", result }), `OBSERVATION O-0123456789ab case=TC-001 result=${result}`);
+  }
+  assert.throws(() => tokens.observationLine({ observation_id: "O-1", case_id: "TC-001", result: "PASS" }), /observation_id/);
+  assert.throws(() => tokens.observationLine({ observation_id: "O-0123456789ab", case_id: "TC 001", result: "PASS" }), /case_id/);
+  assert.throws(() => tokens.observationLine({ observation_id: "O-0123456789ab", case_id: "TC-001", result: "SKIPPED" }), /result/);
+  assert.equal(tokens.taUnitsLine({ relPath: `.agents/security-testing/runs/abcdefabcdef-0001/ta-units/${sha}.json`, units: 3, sha256: sha }), `TA-UNITS .agents/security-testing/runs/abcdefabcdef-0001/ta-units/${sha}.json units=3 sha256=${sha}`);
+  assert.throws(() => tokens.taUnitsLine({ relPath: "/abs/x.json", units: 1, sha256: sha }), /repo-relative/);
+  assert.throws(() => tokens.taUnitsLine({ relPath: "x.json", units: -1, sha256: sha }), /units/);
+  assert.throws(() => tokens.taUnitsLine({ relPath: "x.json", units: 1, sha256: "zz" }), /sha256/);
+});

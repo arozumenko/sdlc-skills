@@ -5,7 +5,8 @@
 // `packet --kind subject --type case`, every receipt goes through `receipt
 // validate` — the ids an admission names are the bundle's own. The refusal
 // matrices live in cmd-plan-admit.test.mjs / cmd-plan-propose.test.mjs;
-// `ta-prompt` is TASK-044's and stays the M1 stub (pinned at the end).
+// `ta-prompt` (TASK-044) keeps its argv contract pinned at the end; its prompt
+// is lib/observations.test.mjs's.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -218,9 +219,29 @@ test("proposal frontmatter validated; authorization stub authenticated:false (US
   assert.deepEqual(readdirSync(join(repo, ST, "proposals")), [`${OK_PROPOSAL.id}.proposal.md`], "the refusals wrote nothing");
 });
 
-test("ta-prompt is TASK-044's: argv validated, then NOT-IMPLEMENTED(M3)", async () => {
+test("ta-prompt (TASK-044): the argv contract stays — --run shape, --slug shape, --base a branch name, an unknown run — and every refusal is a token, nothing NOT-IMPLEMENTED; the prompt itself is lib/observations.test.mjs's", async () => {
   const repo = readyRepo();
-  const r = await plan(repo, ["ta-prompt", "--run", "abc", "--slug", "s", "--base", "main"]);
-  assert.equal(r.code, 2);
-  assert.equal(r.stdout, "NOT-IMPLEMENTED(M3)\n");
+  const badRun = await plan(repo, ["ta-prompt", "--run", "abc", "--slug", "s", "--base", "main"]);
+  assert.equal(badRun.code, 2);
+  assert.equal(badRun.stdout, "USAGE(ta-prompt: --run must be <12 hex>-<4 digits>, got abc)\n");
+  const badSlug = await plan(repo, ["ta-prompt", "--run", "abcdefabcdef-0001", "--slug", "My Product", "--base", "main"]);
+  assert.equal(badSlug.code, 2);
+  assert.equal(badSlug.stdout, "USAGE(ta-prompt: --slug must be lowercase letters, digits and hyphens, got My Product)\n");
+  for (const base of ["-x", "a..b", "feature/", "a b", "x.lock", " "]) {
+    const badBase = await plan(repo, ["ta-prompt", "--run", "abcdefabcdef-0001", "--slug", "s", "--base", base]);
+    assert.equal(badBase.code, 2, JSON.stringify(base));
+    assert.match(badBase.stdout, /^USAGE\(ta-prompt: --base must be a branch name/);
+  }
+  const unknown = await plan(repo, ["ta-prompt", "--run", "abcdefabcdef-0001", "--slug", "s", "--base", "release/2026.09"]);
+  assert.equal(unknown.code, 2);
+  assert.equal(unknown.stdout, "USAGE(ta-prompt: unknown run abcdefabcdef-0001)\n");
+  const stray = await plan(repo, ["ta-prompt", "--run", "abcdefabcdef-0001", "--slug", "s", "--base", "main", "extra"]);
+  assert.equal(stray.code, 2);
+  assert.equal(stray.stdout, "USAGE(ta-prompt: unexpected argument extra)\n");
+  // a run with no published suite: the prompt needs publish --profile case first (nothing is derived from candidates)
+  const run_id = await scopedRun(repo, "assessment");
+  const none = await plan(repo, ["ta-prompt", "--run", run_id, "--slug", "s", "--base", "main"]);
+  assert.equal(none.code, 2);
+  assert.equal(none.stdout, `USAGE(ta-prompt: run ${run_id} has no published suite (publish --profile case first))\n`);
+  assert.doesNotMatch(badRun.stdout + badSlug.stdout + unknown.stdout + none.stdout, /NOT-IMPLEMENTED/);
 });

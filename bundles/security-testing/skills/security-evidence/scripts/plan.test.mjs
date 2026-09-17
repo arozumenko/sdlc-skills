@@ -74,14 +74,18 @@ test("propose validates the run and the proposal frontmatter block against the s
   assert.doesNotMatch(unknownRun.stdout + badRun.stdout, /NOT-IMPLEMENTED/);
 });
 
-test("ta-prompt requires --run, --slug and --base, then NOT-IMPLEMENTED(M3)", async () => {
+test("ta-prompt requires --run, --slug and --base, then reads the run (TASK-044: the M1 stub is gone)", async () => {
   const repo = initRepo();
   const bad = await runScript("plan", ["ta-prompt", "--run", "abc", "--slug", "s"], { cwd: repo });
   assert.equal(bad.code, 2);
   assert.match(bad.stdout, /^USAGE\(ta-prompt: --base <branch> is required\)$/m);
-  const ok = await runScript("plan", ["ta-prompt", "--run", "abc", "--slug", "s", "--base", "main"], { cwd: repo });
-  assert.equal(ok.code, 2);
-  assert.equal(ok.stdout, "NOT-IMPLEMENTED(M3)\n");
+  const shape = await runScript("plan", ["ta-prompt", "--run", "abc", "--slug", "s", "--base", "main"], { cwd: repo });
+  assert.equal(shape.code, 2);
+  assert.equal(shape.stdout, "USAGE(ta-prompt: --run must be <12 hex>-<4 digits>, got abc)\n");
+  const unknown = await runScript("plan", ["ta-prompt", "--run", "abcdefabcdef-0001", "--slug", "s", "--base", "main"], { cwd: repo });
+  assert.equal(unknown.code, 2);
+  assert.equal(unknown.stdout, "USAGE(ta-prompt: unknown run abcdefabcdef-0001)\n");
+  assert.doesNotMatch(bad.stdout + shape.stdout + unknown.stdout, /NOT-IMPLEMENTED/);
 });
 
 test("the entry script is a thin dispatcher", () => {

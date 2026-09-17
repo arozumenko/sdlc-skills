@@ -67,7 +67,10 @@ test("manual-qa run report in its real Markdown format through ingest qa-run", a
   const { repo, run_id } = await qaRepo();
   const before = walk(join(repo, ST)).length;
   const { line, payload } = await ingest(repo, run_id, "qa-run", "reports/RUN-2026-09-15-001.md");
-  assert.deepEqual([line.records, line.unlocated, line.rejected], [4, 0, 0]);
+  // TASK-044: every result row is a record; a row whose case has no admitted record in the run is also an unlocated candidate (`unadmitted-case`), never an observation
+  assert.deepEqual([line.records, line.unlocated, line.rejected], [4, 3, 0]);
+  assert.deepEqual(payload.unlocated.map((c) => [c.reason, c.locator.index]), [["unadmitted-case", 1], ["unadmitted-case", 2], ["unadmitted-case", 3]]);
+  assert.equal(existsSync(join(runDir(repo, run_id), "observations")), false, "no observation without an admission");
   const [head, ...rows] = payload.records;
   assert.deepEqual(head.trusted, { record: "run", run_id: "RUN-2026-09-15-001", suite: "security-my-product-admitted", environment: "https://staging.example.com", environment_host_allowed: true, date: "2026-09-15", results: 3 });
   assert.deepEqual(rows.map((r) => [r.trusted.case_id, r.trusted.status]), [["TC-SEC-001", "PASS"], ["TC-SEC-002", "FAIL"], ["TC-SEC-003", "BLOCKED"]]);

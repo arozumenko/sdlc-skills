@@ -40,13 +40,30 @@
 //      read-back whose event has no single row to land on is not
 //      half-ingested — the lead supersedes the duplicates and re-runs.
 //      A mismatch consults nothing: the record is the evidence, no event.
+//   6b. `qa-run` only (TASK-044, spec §9.2): the run's case_id ↔ case_sha256
+//      join (lib/observations.mjs caseResolver — the run's `ingest case`
+//      records and `<run>/admissions/`) derives, in memory, one observation
+//      per result row whose case has an `admitted-*` record and one
+//      unlocated Candidate (reason `unadmitted-case`) per row that has none;
+//      the candidates join the record's `unlocated[]` (gate folds them into
+//      `<run>/unlocated.json`, G-10). `ta-report` only: the per-unit payload
+//      (lib/ta-units.mjs buildTaUnits) over the same join. Both run BEFORE
+//      the first byte is written, so a structural refusal (a case id listed
+//      twice) leaves nothing behind;
 //   7. imports.snapshotImport with `index: false` — the redacted bytes land
-//      under ledger/<run>/imports/<sha> (G-3) — then the record is written
+//      under ledger/<run>/imports/<sha> (G-3) — then the derived files:
+//      `<run>/observations/<id>.json` (each write-once + its index entry on
+//      assessment runs, lib/observations.mjs writeObservations) or
+//      `<run>/ta-units/<import_sha256>.json` (write-once, payload-only,
+//      lib/ta-units.mjs writeTaUnits) — then the record is written
 //      write-once to <run>/ingest/<sha>.json (kind `import`; EEXIST from a
 //      concurrent ingest ⇒ 2 IMPORT-EXISTS), then the index entry is
 //      appended (assessment runs only, TL-14). An index entry always has its
 //      record; a record may at worst lack its entry after a crash between
-//      the two writes, which a re-ingest reports as IMPORT-EXISTS.
+//      the two writes, which a re-ingest reports as IMPORT-EXISTS. The
+//      derived files precede the record so that a crash between them heals
+//      on re-ingest (their writes are idempotent by identity) instead of
+//      leaving a record whose observations can never be derived.
 //   8. `tracker-readback` with an empty `mismatch` and one live row: the
 //      `ticketed` event — `{ticket_url: trusted.url, import_sha256}`, `ref`
 //      = the run id — is appended through register-core.append (under the
@@ -63,18 +80,23 @@
 // followed by `TICKETED <R-id> <url>` (the event landed), or `READBACK: ok
 // (no register row)` (matched, nothing to land on), or one `READBACK:
 // MISMATCH(<field>)` per mismatched field of the record (TASK-017; no
-// event); then `WROTE <run>/imports.json …` (assessment only), then
-// `WROTE <run>/ingest/<sha>.json …` last. Exit 0; 2 as above; 3
+// event); then — `qa-run` only — `OBSERVATION <id> case=<c> result=<r>` +
+// `WROTE <run>/observations/<id>.json …` per observation and `WROTE
+// <run>/observations.json …` when the index grew; — `ta-report` only —
+// `TA-UNITS <run>/ta-units/<sha>.json units=<n> sha256=<h>`; then `WROTE
+// <run>/imports.json …` (assessment only), then `WROTE
+// <run>/ingest/<sha>.json …` last. Exit 0; 2 as above; 3
 // INCOMPLETE(scope); 5 CORRUPT (read-back with an empty mismatch over a
 // broken register, nothing written); rejections inside a well-formed file
 // never change the exit code (§4.1).
 //
 // Imports: node:fs (existsSync, readFileSync), node:path, ../canon.mjs,
 // ../redact.mjs (redactDeep for --sent), ./argv.mjs, ./exit.mjs,
-// ./imports.mjs, ./register-core.mjs (append, readEvents, replay),
-// ./register-transitions.mjs (TransitionError), ./run-index.mjs (runDir),
-// ./schema.mjs, ./tokens.mjs. Every string that leaves the process goes
-// through ctx.out / ctx.wrote (G-4).
+// ./imports.mjs, ./observations.mjs, ./register-core.mjs (append,
+// readEvents, replay), ./register-transitions.mjs (TransitionError),
+// ./run-index.mjs (runDir), ./schema.mjs, ./ta-units.mjs, ./tokens.mjs.
+// Every string that leaves the process goes through ctx.out / ctx.wrote
+// (G-4).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -83,15 +105,19 @@ import { redactDeep } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
 import { IMPORT_KINDS, appendImportIndex, loadRun, prepareImport, snapshotImport } from "./imports.mjs";
+import { caseResolver, deriveObservations, writeObservations } from "./observations.mjs";
 import { append as appendEvent, readEvents, replay } from "./register-core.mjs";
 import { TransitionError } from "./register-transitions.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, CORRUPT, KEY_UNAVAILABLE, READBACK_OK, READBACK_OK_NO_ROW, RUN_COMMITTED, importExists, importLine, readbackMismatch, schemaInvalid, ticketedLine, transitionRejected } from "./tokens.mjs";
+import { buildTaUnits, writeTaUnits } from "./ta-units.mjs";
+import { COMMITTED, CORRUPT, KEY_UNAVAILABLE, READBACK_OK, READBACK_OK_NO_ROW, RUN_COMMITTED, importExists, importLine, observationLine, readbackMismatch, schemaInvalid, taUnitsLine, ticketedLine, transitionRejected } from "./tokens.mjs";
 
 const COMMAND = "ingest";
 // TASK-002/005 follow-up (plan §6): one exported constant is owed; until then every enveloped-artifact writer carries the same literal.
 const SCHEMA_VERSION = 1;
 const READBACK = "tracker-readback";
+const QA_RUN = "qa-run";
+const TA_REPORT = "ta-report";
 
 /** The adapter for `kind`, or 2 USAGE when it is not shipped (TASK-016/017/018 add theirs). */
 async function loadAdapter(kind) {
@@ -195,6 +221,22 @@ async function ticket(ctx, { row_id, run_id, record, import_sha256 }) {
   return ticketedLine({ row: row_id, url: record.trusted.url });
 }
 
+// --- qa-run → observations, ta-report → ta-units (TASK-044) --------------------------
+
+/**
+ * Step 6b: the hand-off intake records derived from the adapter's result,
+ * in memory. `unlocated` are the unadmitted-case candidates the record
+ * carries; `observations` / `taUnits` are written in step 7.
+ * @returns {{observations: object[], unlocated: object[], taUnits: object | null}}
+ */
+function deriveHandoff(kind, run, adapted, import_sha256) {
+  const none = { observations: [], unlocated: [], taUnits: null };
+  if (kind !== QA_RUN && kind !== TA_REPORT) return none;
+  const resolve = caseResolver(run.dir);
+  if (kind === QA_RUN) return { ...none, ...deriveObservations(adapted.records, { import_sha256, resolve }) };
+  return { ...none, taUnits: buildTaUnits(adapted.records, { import_sha256, resolve }) };
+}
+
 const LIST_KEYS = Object.freeze(["records", "unlocated", "rejected"]);
 
 /** The adapter's result, checked before it is trusted with a locator base (an adapter bug is an internal error, never a written artifact). */
@@ -247,6 +289,8 @@ export async function run(argv, ctx) {
 
   const base = { import_sha256: prepared.import_sha256, original_hmac: prepared.original_hmac, source_path };
   const adapted = checkAdapted(kind, await adapt(ctx, loaded, scope, prepared.redacted, base, extra), base);
+  // 6b. the hand-off intake records (TASK-044), derived in memory before anything is persisted
+  const derived = deriveHandoff(kind, loaded, adapted, prepared.import_sha256);
   const payload = {
     kind,
     import_sha256: prepared.import_sha256,
@@ -255,7 +299,7 @@ export async function run(argv, ctx) {
     mapping_version: adapted.mapping_version,
     source_path,
     records: adapted.records,
-    unlocated: adapted.unlocated,
+    unlocated: [...adapted.unlocated, ...derived.unlocated],
     rejected: adapted.rejected,
   };
   const errors = validate("import", payload);
@@ -263,8 +307,10 @@ export async function run(argv, ctx) {
   // 6a. the row a matched read-back lands on — resolved before the first byte is written (the adapter yields exactly one record)
   const ticketRows = kind === READBACK ? payload.records.map((rec) => resolveTicketRow(ctx, rec)) : [];
 
-  // Persist: bytes (G-3), then the record (write-once), then the index entry (TL-14).
+  // Persist: bytes (G-3), the derived files (step 7), then the record (write-once), then the index entry (TL-14).
   await snapshotImport(ctx, loaded.run_id, bytes, { kind, source_path, index: false, run: loaded });
+  const observations = derived.observations.length === 0 ? null : await writeObservations(ctx, loaded, derived.observations);
+  const taUnits = derived.taUnits === null ? null : writeTaUnits(ctx, loaded, derived.taUnits);
   const { engagement_id, key_id } = loaded.envelope;
   const head = { schema_version: SCHEMA_VERSION, kind: "import", run_id: loaded.run_id, engagement_id, key_id, now: ctx.now };
   let record;
@@ -291,6 +337,14 @@ export async function run(argv, ctx) {
       }
     }
   }
+  if (observations !== null) {
+    for (const { path, artifact } of observations.written) {
+      ctx.out(observationLine({ observation_id: artifact.payload.observation_id, case_id: artifact.payload.case_id, result: artifact.payload.result }));
+      ctx.wrote(path, artifact);
+    }
+    if (observations.index !== null) ctx.wrote(join(loaded.dir, "observations.json"), observations.index);
+  }
+  if (taUnits !== null) ctx.out(taUnitsLine({ relPath: ctx.rel(taUnits.path), units: derived.taUnits.units.length, sha256: taUnits.sha256 }));
   if (index !== null) ctx.wrote(join(loaded.dir, "imports.json"), index);
   ctx.wrote(recordPath, record);
   return EXIT.OK;

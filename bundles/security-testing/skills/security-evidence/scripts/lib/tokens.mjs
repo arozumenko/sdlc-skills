@@ -1016,3 +1016,30 @@ export function unadmittedEntry(relPath) {
   requireRepoRelative("unadmittedEntry", relPath);
   return `  ${relPath}`;
 }
+
+// --- ingest qa-run → observations, ingest ta-report → ta-units, plan ta-prompt (TASK-044; plan §4.5, §5 TASK-044; spec §9.2 observations, §9.3; US-036, US-037) ---
+// `ingest qa-run` prints, after its IMPORT line, one OBSERVATION line plus the
+// WROTE line of `<run>/observations/<id>.json` per result row whose case has an
+// `admitted-*` record in the run; a row without one is an unlocated candidate
+// with reason UNADMITTED_CASE (import.schema.json Candidate — the closed enum).
+// `ingest ta-report` prints one TA-UNITS line for `<run>/ta-units/<import_sha256>.json`
+// (payload-only, not an enveloped artifact, so not WROTE — the PROPOSAL line is
+// the precedent). `plan.mjs ta-prompt` prints the §9.3 prompt (spelled once in
+// lib/cmd-plan.mjs, the way the §9.2 prompt lives in lib/profiles/handoff.mjs).
+const OBSERVATION_ID = /^O-[0-9a-f]{12}$/;
+const OBSERVATION_RESULTS = Object.freeze(["PASS", "FAIL", "BLOCKED"]);
+/** The Candidate reason of a qa-run result row whose case has no admitted record in the run (US-036 AC-2). */
+export const UNADMITTED_CASE = "unadmitted-case";
+/** `OBSERVATION <O-id> case=<case_id> result=<PASS|FAIL|BLOCKED>` — one per observation derived from a qa-run import; its WROTE line follows. */
+export function observationLine({ observation_id, case_id, result } = {}) {
+  if (typeof observation_id !== "string" || !OBSERVATION_ID.test(observation_id)) throw new TypeError(`observationLine: observation_id must be O-<12 hex>, got ${String(observation_id)}`);
+  if (typeof case_id !== "string" || case_id.length === 0 || /[\s=]/.test(case_id)) throw new TypeError("observationLine: case_id must be a non-empty token");
+  if (!OBSERVATION_RESULTS.includes(result)) throw new TypeError(`observationLine: result must be one of ${OBSERVATION_RESULTS.join("|")}, got ${String(result)}`);
+  return `OBSERVATION ${observation_id} case=${case_id} result=${result}`;
+}
+/** `TA-UNITS <repo-relative path> units=<n> sha256=<h>` — `ingest ta-report` wrote its per-unit record; `sha256` is over the file's bytes (payload-only canonical JSON + LF). */
+export function taUnitsLine({ relPath, units, sha256 } = {}) {
+  requireRepoRelative("taUnitsLine", relPath);
+  if (typeof sha256 !== "string" || !SHA256.test(sha256)) throw new TypeError("taUnitsLine: sha256 must be 64 hex chars");
+  return `TA-UNITS ${relPath} units=${requireCount("taUnitsLine", "units", units)} sha256=${sha256}`;
+}
