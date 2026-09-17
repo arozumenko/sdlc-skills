@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { caseText, PASSIVE_ROWS } from "../../fixtures/plan/helpers.mjs";
 import { caseSha256, parseSteps } from "../admission-core.mjs";
 import { parseTestCase } from "../ingest/case.mjs";
-import { AUDIT_HEADERS, CaseRefused, PRIORITY_MAP, PROFILE, PROFILE_VERSION, apply, auditForm, isAuditStep, suiteDir, suiteFile } from "./case.mjs";
+import { AUDIT_HEADERS, AUDIT_STEPS, CaseRefused, PRIORITY_MAP, PROFILE, PROFILE_VERSION, apply, auditForm, isAuditStep, suiteDir, suiteFile } from "./case.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = readFileSync(join(HERE, "..", "..", "fixtures", "qa", "TC-SEC-001.md"));
@@ -201,6 +201,37 @@ test("refusals are CaseRefused with a reason, never a silent rename: a non TC-NN
   const dup = candidate("TC-001_x.md", caseText("TC-001", PLAIN_ROWS));
   refused([dup, { ...dup, relpath: "other/TC-001_x.md" }], [admission(dup.case_sha256, "admitted-heuristic")], /two candidates/);
   assert.throws(() => apply(source([], []), null, { slug: "Bad Slug" }), TypeError);
+});
+
+test("TASK-043-FU: a literal absolute URL in a Navigate step keeps its path (audit-branch.md: `/login` for a literal on an allowed host) — the host class excludes `/` and is not lazy; a bare host is `/`", () => {
+  const paths = (action) => auditForm([{ step: 1, action, expected: "Loads" }, { step: 2, action: "Inspect the response headers", expected: "`X-Frame-Options` is DENY" }]).map((r) => r.action);
+  assert.equal(paths("Navigate to https://staging.example.com/login")[2], AUDIT_STEPS.header("X-Frame-Options", "/login"));
+  assert.equal(paths("Navigate to `https://staging.example.com/a/b?x=1`")[2], AUDIT_STEPS.header("X-Frame-Options", "/a/b?x=1"));
+  assert.equal(paths("Navigate to https://staging.example.com")[2], AUDIT_STEPS.header("X-Frame-Options", "/"));
+  assert.equal(paths("Navigate to `{{base_url}}/login`")[2], AUDIT_STEPS.header("X-Frame-Options", "/login"), "the placeholder form is unchanged");
+  assert.equal(paths("Open http://localhost:3000/health and wait")[2], AUDIT_STEPS.header("X-Frame-Options", "/health"), "a port stays in the host, the path is captured up to whitespace");
+  assert.equal(paths("Navigate to https://staging.example.com/login")[1], AUDIT_STEPS.collect);
+  // the collection row names the same path
+  const rows = auditForm([{ step: 1, action: "Navigate to https://staging.example.com/login", expected: "Loads" }]);
+  assert.equal(rows[1].expected, AUDIT_STEPS.collected("/login"));
+});
+
+test("TASK-043-FU: the priority lookup is an own-property read — `priority: constructor` (toString, valueOf, hasOwnProperty) is refused with the existing token, never published as a native function", () => {
+  for (const key of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+    const cand = candidate("TC-001_x.md", caseText("TC-001", PLAIN_ROWS).replace("priority: high", `priority: ${key}`));
+    assert.throws(() => apply(source([cand], [admission(cand.case_sha256, "admitted-heuristic")]), null, {}), (err) => err instanceof CaseRefused && new RegExp(`priority ${key} is neither p0…p3 nor critical\\|high\\|medium\\|low`).test(err.message), key);
+  }
+  // the vocabulary itself still maps and passes through, case-insensitively
+  const p3 = candidate("TC-001_x.md", caseText("TC-001", PLAIN_ROWS).replace("priority: high", "priority: P3"));
+  assert.match(apply(source([p3], [admission(p3.case_sha256, "admitted-heuristic")]), null, {})[0].bytes.toString("utf8"), /^priority: low$/m);
+  const low = candidate("TC-001_x.md", caseText("TC-001", PLAIN_ROWS).replace("priority: high", "priority: Low"));
+  assert.match(apply(source([low], [admission(low.case_sha256, "admitted-heuristic")]), null, {})[0].bytes.toString("utf8"), /^priority: low$/m);
+});
+
+test("TASK-043-FU: case.mjs declares no slug regex of its own — SLUG is the registry's one export (lib/profiles/index.mjs)", () => {
+  const src = readFileSync(join(HERE, "case.mjs"), "utf8");
+  assert.doesNotMatch(src, /^const SLUG = /m, "the naming inversion lives in index.mjs");
+  assert.match(src, /import \{[^}]*\bSLUG\b[^}]*\} from "\.\/index\.mjs"/);
 });
 
 test("G-9: case.mjs imports no fs, child_process, git or clock", () => {

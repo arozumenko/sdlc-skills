@@ -9,7 +9,7 @@
 // per test (the key lives inside the repo, so a copy checks identically).
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeEnvelope, readArtifact, writeArtifact } from "../canon.mjs";
 import { cleanupAll, git, runScript, tmpDir } from "../fixtures/cli/harness.mjs";
@@ -639,6 +639,63 @@ test("review 1: a directory named <run>.case.export-manifest.json, or a plain fi
   assert.equal(r.code, 0, r.stderr);
   assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
   assert.match(r.stderr, /tasks\/security-my-product-admitted is not a directory — its files are not listed/);
+});
+
+test("TASK-043-FU: a symlink (dangling, to a directory, or to a published member) or an unreadable file placed in the suite by hand ⇒ listed as unadmitted with a stderr note — sign-off still prints its verdict (never ENOENT/EISDIR/EACCES)", async (t) => {
+  const { repo } = await signedRepo();
+  const suite = join(repo, "tasks", "security-my-product-admitted");
+  await publishedSuite(repo, [["TC-002_plain.md", [["Navigate to `{{base_url}}/`", "Loads"]], "Plain"]]);
+  symlinkSync(join(suite, "TC-002_plain.md"), join(suite, "TC-006_link-to-member.md")); // a link to a published member: not what publish wrote either
+  symlinkSync(join(repo, "nowhere.md"), join(suite, "TC-007_dangling.md"));
+  mkdirSync(join(repo, "elsewhere"));
+  writeFileSync(join(repo, "elsewhere", "TC-008_far.md"), "far\n");
+  symlinkSync(join(repo, "elsewhere"), join(suite, "TC-009_linked-dir.md"));
+  const unreadable = join(suite, "TC-010_unreadable.md");
+  writeFileSync(unreadable, "x\n");
+  chmodSync(unreadable, 0o000);
+  t.after(() => chmodSync(unreadable, 0o644));
+  const canRead = (() => { try { readFileSync(unreadable); return true; } catch { return false; } })(); // root reads anything
+  const r = await signOffCli(repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  assert.ok(out[0].startsWith("SIGN-OFF: "), r.stdout);
+  // the unreadable file is listed either way: unreadable ⇒ the guard lists it; readable (root) ⇒ foreign content
+  const expected = ["TC-006_link-to-member", "TC-007_dangling", "TC-009_linked-dir", "TC-010_unreadable"].map((n) => `  tasks/security-my-product-admitted/${n}.md`);
+  const at = out.indexOf(`UNADMITTED: ${expected.length}`);
+  assert.ok(at > 0, r.stdout);
+  assert.deepEqual(out.slice(at + 1, at + 1 + expected.length), expected);
+  // prose first, path last: the path is never a `key: value` to redact.mjs (G-4), so the note names it in the clear
+  for (const name of ["TC-006_link-to-member", "TC-007_dangling", "TC-009_linked-dir"]) assert.match(r.stderr, new RegExp(`^sign-off: not a regular file, listed as unadmitted — tasks/security-my-product-admitted/${name}\\.md$`, "m"), name);
+  if (!canRead) assert.match(r.stderr, /^sign-off: could not be read, listed as unadmitted — tasks\/security-my-product-admitted\/TC-010_unreadable\.md$/m);
+  assert.doesNotMatch(r.stderr, /REDACTED/, "the note survives redaction");
+  assert.doesNotMatch(r.stderr, /ENOENT|EISDIR|EACCES|at .*cmd-sign-off/, "no escaped error");
+  assert.ok(!out.some((l) => l.includes("TC-008_far.md")), "the linked directory's content is never walked");
+});
+
+test("TASK-043-FU: identities are engagement-wide, not per suite — a file in suite A whose bytes equal a member recorded for suite B (another --slug) reads as admitted in A", async () => {
+  const { repo } = await signedRepo();
+  const run_id = await publishedSuite(repo, [["TC-002_plain.md", [["Navigate to `{{base_url}}/`", "Loads"]], "Plain"]]);
+  const suiteA = join(repo, "tasks", "security-my-product-admitted");
+  const suiteB = join(repo, "tasks", "security-other-admitted");
+  // suite B: a second case sidecar of the same engagement (another run, slug `other`) recording the same member
+  const published = readFileSync(join(suiteA, "TC-002_plain.md"));
+  const em = readArtifact(join(repo, ST, "handoffs", `${run_id}.case.export-manifest.json`), { kind: "export-manifest" });
+  const run = readArtifact(join(runDir(repo, run_id), "run.json"), { kind: "run" });
+  const head = { schema_version: run.envelope.schema_version, kind: "export-manifest", run_id: `${"c".repeat(12)}-0002`, engagement_id: run.envelope.engagement_id, key_id: run.envelope.key_id, now: NOW };
+  writeArtifact(join(repo, ST, "handoffs", `${"c".repeat(12)}-0002.case.export-manifest.json`), makeEnvelope(head, { ...em.payload, opts: { slug: "other", members: em.payload.opts.members } }));
+  mkdirSync(suiteB, { recursive: true });
+  writeFileSync(join(suiteB, "TC-002_plain.md"), published);
+  writeFileSync(join(suiteB, "TC-003_foreign.md"), "foreign\n");
+  const r = await signOffCli(repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  const at = out.indexOf("UNADMITTED: 1");
+  assert.ok(at > 0, r.stdout);
+  assert.equal(out[at + 1], "  tasks/security-other-admitted/TC-003_foreign.md", "the copy of suite A's member is admitted in suite B: one identity set per engagement");
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.deepEqual(result.unadmitted.suites, ["tasks/security-my-product-admitted", "tasks/security-other-admitted"]);
+  const src = readFileSync(new URL("./cmd-sign-off.mjs", import.meta.url), "utf8");
+  assert.match(src, /identities are engagement-wide, not per suite/, "the header says so");
 });
 
 test("cmd-sign-off imports: no child process of its own, no network, no writer, stdout only through ctx (G-4, G-6, G-14)", () => {

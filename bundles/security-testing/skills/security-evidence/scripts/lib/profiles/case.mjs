@@ -45,12 +45,15 @@
 //   no candidate, or with two.
 //   suiteDir(slug) → `tasks/security-<slug>-admitted`; suiteFile(id, slug).
 //
-// Pure (G-9): imports ../admission-core.mjs (parseSteps) and
-// ../ingest/_qa-markdown.mjs (parseFrontmatter, the tags reading) only. No fs, no
-// git, no clock.
+// Pure (G-9): imports ../admission-core.mjs (parseSteps),
+// ../ingest/_qa-markdown.mjs (parseFrontmatter, the tags reading) and
+// ./index.mjs (SLUG — the registry's one spelling, TASK-043-FU; the registry
+// imports this module back, a cycle both sides use inside functions only).
+// No fs, no git, no clock.
 
 import { parseSteps } from "../admission-core.mjs";
 import { parseFrontmatter } from "../ingest/_qa-markdown.mjs";
+import { SLUG } from "./index.mjs";
 
 export const PROFILE = "case";
 export const PROFILE_VERSION = 1;
@@ -68,14 +71,15 @@ export const AUDIT_STEPS = Object.freeze({
   cookies: (path) => `Inspect the \`Set-Cookie\` response headers of the \`${path}\` document`,
 });
 
-const SLUG = /^[a-z0-9-]+$/;
 const CANONICAL_ID = /^TC-[0-9]{3}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const COOKIE_FLAG = /\b(?:secure|httponly|samesite)\b/i;
 const COOKIE_WORD = /\bcookies?\b/i;
 const NAVIGATE = /^(?:navigate|go|browse|return)\s+(?:back\s+)?to\b|^(?:open|visit|load)\b/i;
 const RELOAD_OR_PANEL = /^(?:reload|refresh)\b|\bnetwork\s+panel\b|\bdeveloper\s+tools\b|\bdevtools\b/i;
-const URL_IN_ACTION = /`?((?:\{\{\s*base_url\s*\}\}|https?:\/\/[^\s`'"<>)\]]+?)(\/[^\s`'"<>)\]]*)?)`?/i;
+// the host class excludes `/` and is greedy (TASK-043-FU): a literal `https://host/login` captures `/login` in
+// group 2 like `{{base_url}}/login` does; a lazy host would stop at `https://h` and leave the path to the host
+const URL_IN_ACTION = /`?((?:\{\{\s*base_url\s*\}\}|https?:\/\/[^\s\/`'"<>)\]]+)(\/[^\s`'"<>)\]]*)?)`?/i;
 const MARKUP = /[*_`~]|^[\s>]+/g;
 const STEPS_HEADING = /^##[ \t]+Steps[ \t]*$/;
 const TABLE_LINE = /^\s*\|/;
@@ -183,7 +187,9 @@ function rewriteFrontmatter(lines, close, refuse) {
     if (!m) continue;
     if (m[1] === "priority") {
       const raw = m[2].replace(/\s+#.*$/, "").trim().replace(/^["']|["']$/g, "");
-      const mapped = PRIORITY_MAP[raw.toLowerCase()] ?? (QA_PRIORITIES.includes(raw.toLowerCase()) ? raw.toLowerCase() : null);
+      const key = raw.toLowerCase();
+      // own-property read (TASK-043-FU): `priority: constructor` must not walk the prototype into a native function
+      const mapped = (Object.hasOwn(PRIORITY_MAP, key) ? PRIORITY_MAP[key] : null) ?? (QA_PRIORITIES.includes(key) ? key : null);
       if (mapped === null) refuse(`priority ${raw} is neither p0…p3 nor ${QA_PRIORITIES.join("|")}`);
       lines[i] = `priority: ${mapped}`;
     } else {

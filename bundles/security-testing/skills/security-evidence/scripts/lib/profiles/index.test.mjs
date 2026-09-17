@@ -8,8 +8,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Hex } from "../../canon.mjs";
+import { RUN_ID as LEDGER_RUN_ID } from "../ledger.mjs";
 import { PUBLISH_PROFILES } from "../tokens.mjs";
-import { EXPORT_MANIFEST_FILE, M1_PROFILES, M3_PROFILES, SIDECAR_SUFFIX, exportIdentity, expectedOutputs, manifestNameFor, memberIdentity, membersOf, profileModule, requireOutputs } from "./index.mjs";
+import { EXPORT_MANIFEST_FILE, M1_PROFILES, M3_PROFILES, M3_SIDECAR, RUN_ID, SIDECAR_SUFFIX, SLUG, exportIdentity, expectedOutputs, manifestNameFor, memberIdentity, membersOf, profileModule, requireOutputs } from "./index.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ID = "a".repeat(64);
@@ -73,6 +74,30 @@ test("TASK-043 naming: handoff and case manifests are `<run_id>.<profile>.export
   assert.equal(expectedOutputs("case", `${RUN}.case.export-manifest.json`, {}), null, "no slug / members recorded ⇒ nothing to compare");
   assert.equal(expectedOutputs("handoff", `${RUN}.handoff.export-manifest.json`, { slug: "x" }), null, "no base_url recorded ⇒ not re-derivable");
   assert.equal(expectedOutputs("tracker", `${ID}.export-manifest.json`, { slug: "ignored" }).relpaths[0], `${ID}.ticket.json`, "M1 profiles ignore opts");
+});
+
+test("TASK-043-FU: M3_SIDECAR, SLUG and RUN_ID are exported once from the registry and imported — never re-declared — by cmd-publish.mjs, cmd-sign-off.mjs and case.mjs", () => {
+  assert.ok(M3_SIDECAR instanceof RegExp && SLUG instanceof RegExp && RUN_ID instanceof RegExp);
+  assert.equal(RUN_ID.source, LEDGER_RUN_ID.source, "the registry's RUN_ID is ledger.mjs's expression (the pure registry cannot import ledger)");
+  const run_id = `${"a".repeat(12)}-0001`;
+  assert.ok(RUN_ID.test(run_id) && !RUN_ID.test("nope"));
+  assert.ok(SLUG.test("my-product") && !SLUG.test("My Product"));
+  const m = M3_SIDECAR.exec(`${run_id}.case.export-manifest.json`);
+  assert.deepEqual([m[1], m[2]], [run_id, "case"]);
+  assert.equal(M3_SIDECAR.exec(`${run_id}.handoff.export-manifest.json`)[2], "handoff");
+  assert.equal(M3_SIDECAR.exec(`${run_id}.tracker.export-manifest.json`), null);
+  assert.equal(M3_SIDECAR.exec(`${"b".repeat(64)}.export-manifest.json`), null, "the tracker sidecar is not an M3 sidecar");
+  assert.equal(manifestNameFor("case", { run_id }), `${run_id}.case.export-manifest.json`, "manifestNameFor and M3_SIDECAR agree");
+  assert.ok(M3_SIDECAR.test(manifestNameFor("handoff", { run_id })));
+  for (const [file, names] of [["../cmd-publish.mjs", ["SLUG"]], ["../cmd-sign-off.mjs", ["M3_SIDECAR", "SLUG"]], ["./case.mjs", ["SLUG"]]]) {
+    const src = readFileSync(join(HERE, file), "utf8");
+    for (const name of names) {
+      assert.doesNotMatch(src, new RegExp(`^const ${name} = `, "m"), `${file} re-declares ${name}`);
+      assert.match(src, new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from "\\.?\\/?(profiles\\/)?index\\.mjs"`), `${file} imports ${name} from the registry`);
+    }
+  }
+  const signOff = readFileSync(join(HERE, "..", "cmd-sign-off.mjs"), "utf8");
+  assert.doesNotMatch(signOff, /^const CASE_MANIFEST = /m, "the case-sidecar shape is M3_SIDECAR's second group, not a fourth regex");
 });
 
 test("G-9: the profile modules and the registry import no fs, child_process, git or clock", () => {
