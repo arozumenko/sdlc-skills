@@ -417,3 +417,36 @@ test('renderHtml: estimateRowsHtml renders a real per-item estimate row matching
   assert.ok(!evilHtml.includes('<b>TASK-9</b>'), 'raw markup must not appear unescaped in the estimate table');
   assert.ok(evilHtml.includes(`<tr><td>${escHtml(evil)}</td>`), 'escaped form must appear as the estimate table row\'s ref cell');
 });
+
+test('renderHtml: human sections — campaign header, KPI cards, per-task bar rows in natural units, assessor tables collapsed', () => {
+  const repo = tmp();
+  const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec-campaign', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1, estimate: EST(2, 4) },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 3) },
+  ] });
+  const o = (id, ref, level, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  const est = (id, ref, level, e) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/${id}/estimated/rev-0`, source: 'cli', source_record_id: `est-${id}`, estimate: e, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('campaign', 'sec-campaign', 'campaign', 'created', '2026-09-09T00:00:00Z'); o('mission-g1', 'G1', 'mission', 'created', '2026-09-09T00:00:00Z'); o('task-a', 'TASK-A', 'task', 'created', '2026-09-09T00:00:00Z');
+  est('mission-g1', 'G1', 'mission', EST(2, 4)); est('task-a', 'TASK-A', 'task', EST(1, 3));
+  o('task-a', 'TASK-A', 'task', 'dispatched', '2026-09-10T00:00:00Z'); o('task-a', 'TASK-A', 'task', 'done', '2026-09-10T02:00:00Z'); o('mission-g1', 'G1', 'mission', 'done', '2026-09-10T02:00:00Z');
+  const html = renderHtml(assemble(repo, { now: NOW }));
+  // Header names the campaign, not the run id; the run id is the muted sub-line.
+  assert.match(html, /<h2>sec-campaign <span class="sub">campaign sec\/run-1 · plan v1 · in progress<\/span><\/h2>/);
+  // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Tasks this week', 'Within range', 'Typical error']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  assert.ok(html.includes('<span class="stat-value">1 / 1</span>'), 'tasks done 1 / 1');
+  assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
+  assert.ok(html.includes('2 h–2 h'), 'range in natural units');
+  assert.doesNotMatch(html.split('<details>')[0], /\d\.\d\dh\b/, 'no two-decimal-hours in the human sections');
+  // Per-task bar row: ref + state chip + bar + duration + estimate verdict.
+  assert.match(html, /<div class="row"><div class="lbl" title="sec\/run-1\/task-a">TASK-A<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div><div class="num">2 h<span class="sub"> · class S · mission G1 · estimate 1 h–3 h · <span class="oc oc-done">within range<\/span><\/span><\/div><\/div>/);
+  // Per-mission row carries the schedule-variance verdict in words.
+  assert.match(html, /G1<span class="oc oc-done">done<\/span>.*1\/1 tasks done · estimate 2 h–4 h · <span class="oc oc-done">within the estimate<\/span>/);
+  // Assessor tables are still all there, but collapsed.
+  const details = html.split('<details>');
+  assert.ok(details.length >= 3, 'statistics + envelope are <details> blocks');
+  assert.ok(details[1].includes('<h2>Flow time</h2>') && details[1].includes('<h2>Coverage</h2>'), 'assessor panels live inside the first details block');
+  assert.ok(!details[0].includes('<h2>Flow time</h2>'), 'flow-time strata are not in the human part');
+  assert.ok(html.includes('<strong>Caveats</strong> — standing limitations'), 'caveats stay visible with a preface');
+});

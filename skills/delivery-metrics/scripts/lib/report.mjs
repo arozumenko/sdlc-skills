@@ -215,8 +215,8 @@ const excludedStr = (obj) => Object.entries(obj).filter(([, v]) => v).map(([k, v
 // token-composition bar/legend/share-cell classes tokenomics ships are dropped (unused here).
 export const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const PAGE_CSS = `
-:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--warn:#c53030}
-html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--warn:#e06c6c}
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--series-1:#2a78d6;--warn:#c53030;--ok:#2f855a}
+html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--series-1:#3987e5;--warn:#e06c6c;--ok:#48a06f}
 *{box-sizing:border-box}
 body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1120px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
 h1{font-size:1.35rem;margin:0 0 .2rem}
@@ -240,6 +240,20 @@ td{border-bottom:1px solid var(--gridline);padding:.3rem .5rem;font-variant-nume
 .chip{font-size:.8rem;border:1px solid var(--gridline);border-radius:8px;padding:.1rem .5rem;margin-right:.4rem;color:var(--text-secondary);display:inline-block}
 ul{margin:.3rem 0;padding-left:1.3rem}
 li{margin:.15rem 0}
+h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
+.stat-sub{color:var(--text-muted);font-weight:400}
+.panel-sub{margin:.15rem 0 .75rem;color:var(--text-muted);font-size:.84rem}
+.row{display:grid;grid-template-columns:minmax(130px,210px) minmax(140px,1fr) minmax(220px,300px);gap:.7rem;align-items:center;margin:.32rem 0}
+.row .lbl{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .track{background:var(--gridline);border-radius:4px;height:15px}
+.row .bar{background:var(--series-1);height:15px;border-radius:4px}
+.row .num{font-size:.84rem;font-variant-numeric:tabular-nums}
+.sub{color:var(--text-muted)}
+.oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
+.oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
+details{margin-top:1.1rem}
+summary{cursor:pointer;color:var(--text-secondary);font-size:.9rem}
+@media(max-width:640px){.row{grid-template-columns:110px 1fr}.row .num{grid-column:1/-1}}
 `;
 const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
 const kpiCard = (title, cells, callout) => `<div class="kpi-card"><h3>${title}</h3><div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
@@ -324,7 +338,7 @@ const flowRowsHtml = (m, e) => {
       for (const [name, s] of Object.entries(mm)) {
         if (name === 'quality' || !s) continue;
         const label = name === 'lead_time' ? ` (${e.policy.labels.lead_time})` : '';
-        L.push(`<tr><td>${escHtml(`${lv} ${name}${label}`)}</td><td>${escHtml(st)}</td><td>n=${s.n}</td><td>${s.median == null ? '— (n<5)' : h(s.median)}</td><td>${s.p85 == null ? '— (n<7)' : h(s.p85)}</td><td>${s.p90 == null ? '— (n<10)' : h(s.p90)}</td><td>${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''}</td></tr>`);
+        L.push(`<tr><td>${escHtml(`${lv} ${name}${label}`)}</td><td>${escHtml(st)}</td><td>n=${s.n}</td><td>${s.median == null ? '— (n&lt;5)' : h(s.median)}</td><td>${s.p85 == null ? '— (n&lt;7)' : h(s.p85)}</td><td>${s.p90 == null ? '— (n&lt;10)' : h(s.p90)}</td><td>${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''}</td></tr>`);
       }
       L.push(`<tr><td>${escHtml(`${lv} quality`)}</td><td>${escHtml(st)}</td><td colspan="5">quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done}</td></tr>`);
     }
@@ -388,7 +402,37 @@ const envelopeHtml = (e) => {
     `<li>policy: weeks ${escHtml(e.policy.weeks)}, percentiles ${escHtml(e.policy.percentile)} (floors median≥5 P85≥7 P90≥10), estimate base ${escHtml(e.policy.estimate_base)}, ${escHtml(e.policy.durations)}, tokenomics ${escHtml(e.sources.tokenomics)}, sources hashed as read</li>` +
     `</ul></section>`;
 };
-const caveatsHtml = (e) => `<section class="callout-warn"><strong>Caveats</strong><ul>${e.caveats.map((c) => `<li>${escHtml(c)}</li>`).join('')}</ul></section>`;
+const caveatsHtml = (e) => `<section class="callout-warn"><strong>Caveats</strong> — standing limitations of this measurement, printed on every report; they are not errors.<ul>${e.caveats.map((c) => `<li>${escHtml(c)}</li>`).join('')}</ul></section>`;
+
+// Human-readable helpers for the page (the assessor tables below keep `h`/toHours for parity with
+// Markdown). Durations pick their own unit by magnitude; a null is always '—', never a guess.
+const fmtDur = (sec) => {
+  if (sec == null || !Number.isFinite(sec)) return '—';
+  const a = Math.abs(sec), sign = sec < 0 ? '−' : '';
+  if (a < 60) return `${sign}${Math.round(a)} s`;
+  if (a < 3600) return `${sign}${Math.round((a / 60) * 10) / 10} min`;
+  if (a < 86400) return `${sign}${Math.round((a / 3600) * 10) / 10} h`;
+  return `${sign}${Math.round((a / 86400) * 10) / 10} d`;
+};
+const fmtRangeH = (est) => (est ? `${fmtDur(est.low * 3600)}–${fmtDur(est.high * 3600)}` : '—');
+const fmtTs = (iso) => { if (!iso) return '—'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
+const elapsedS = (a, b) => (a && b ? (Date.parse(b) - Date.parse(a)) / 1000 : null);
+const needs = (n, floor) => `needs ≥${floor} <span class="stat-sub">(have ${n})</span>`;
+const spreadLine = (s) => (s ? `median ${s.median == null ? `— (needs ≥5, have ${s.n})` : fmtDur(s.median)} · min ${fmtDur(s.min)} · max ${fmtDur(s.max)}${s.samples ? ` · samples ${s.samples.map(fmtDur).join(', ')}` : ''}` : 'not measured');
+const verdictOf = (r) => {
+  if (!r) return null;
+  if (r.reason) return { text: { unaccepted: 'estimate not accepted', unestimated: 'no estimate', missing_actual: 'no actual yet', zero_midpoint: 'zero-width estimate', unit_mismatch: 'unit mismatch', excluded_item: 'excluded item', no_eligible_latest: 'no eligible latest estimate' }[r.reason] ?? r.reason, cls: '' };
+  if (r.hit === true) return { text: 'within range', cls: 'oc-done' };
+  if (r.hit === false) return { text: r.ratio != null && r.ratio < 1 ? 'below range' : 'above range', cls: 'oc-cancelled' };
+  return null;
+};
+const bandText = (sv) => {
+  if (!sv) return null;
+  if (sv.band.vs_low_s < 0) return `${fmtDur(-sv.band.vs_low_s)} under the low bound`;
+  if (sv.band.vs_high_s > 0) return `${fmtDur(sv.band.vs_high_s)} over the high bound`;
+  return 'within the estimate';
+};
+const stateChip = (state) => `<span class="oc oc-${escHtml(state)}">${escHtml(state.replace('_', ' '))}</span>`;
 
 export function renderHtml(doc) {
   const e = doc.envelope; const esc = escHtml;
@@ -396,48 +440,114 @@ export function renderHtml(doc) {
   const parts = [
     `<!doctype html><meta charset="utf-8"><title>Delivery report — ${esc(e.plans.join(', '))}</title><style>${PAGE_CSS}</style>`,
     '<h1>Delivery report</h1>',
-    `<p class="meta">generated ${esc(e.generated_at)} · cutoff ${esc(e.cutoff)} · window [${esc(e.window.since)}, ${esc(e.window.effective_end)}) · sha ${esc(e.git.sha ?? '—')}${e.git.is_working_tree ? ' (dirty)' : ''} · plans ${esc(e.plans.join(', '))}${metaFilters}</p>`,
+    `<p class="meta">Delivery view · generated ${fmtTs(e.generated_at)} · observed ${fmtTs(e.window.since)} → ${fmtTs(e.window.effective_end)} · ${e.plans.length} plan(s) · git ${esc((e.git.sha ?? '—').slice(0, 10))}${e.git.is_working_tree ? ' (uncommitted changes)' : ''}${metaFilters}</p>`,
   ];
   for (const p of doc.plans) {
     const m = p.metrics;
-    // KPI row (contract §2a): Progress / Task cycle time / Throughput / Estimates.
-    const progressCells = LEVELS.filter((lv) => p.items.some((i) => i.level === lv)).map((lv) => {
-      const rows = p.items.filter((i) => i.level === lv); const n = (st) => rows.filter((i) => i.state === st).length;
-      return statCell(esc(lv), `done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`);
-    });
-    const ct = m.flow.task?.strata?.all?.cycle_time;
-    const ctExcluded = Object.entries(m.flow.task?.excluded ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ');
-    const cycleCells = ct
-      ? [statCell('n', ct.n), statCell('median', ct.median == null ? '— (n<5)' : h(ct.median)), statCell('P85', ct.p85 == null ? '— (n<7)' : h(ct.p85)), statCell('min–max', `${h(ct.min)}–${h(ct.max)}`)]
-      : [statCell('cycle_time', '— (not measured)')];
-    const throughputCells = Object.entries(m.throughput).map(([lv, t]) => {
-      const last = t.weeks[t.weeks.length - 1];
-      const mark = last ? (!last.covered ? '†' : (!last.whole ? '*' : '')) : '';
-      const lastTxt = last ? `${esc(last.key)}=${last.count}${mark}` : '—';
-      const velTxt = t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks})` : `— (${t.weeks.filter((w) => w.whole).length} whole weeks < ${e.policy.minWholeWeeks})`;
-      return statCell(esc(lv), `${lastTxt} · velocity ${velTxt} · wip ${m.wip[lv]}`);
-    });
-    const es = m.estimates.task?.strata?.all;
-    const estimatesCells = es
-      ? [statCell('hit_rate', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits}/${es.hit_rate.ranged}`), statCell('MdMRE', es.mdmre ?? '—'), statCell('PRED(25)', es.pred25 ?? '—'), statCell('MAE', es.mae_s == null ? '—' : h(es.mae_s)), statCell('n / eligible', `${es.n} / ${es.eligible}`)]
-      : [statCell('estimates', '—')];
-    const estimatesExcluded = es ? Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)}=${v}</span>`).join('') : '';
+    const byLevel = (lv) => p.items.filter((i) => i.level === lv);
+    const count = (rows, st) => rows.filter((i) => i.state === st).length;
+    const tasks = byLevel('task').sort((a, b) => a.ref.localeCompare(b.ref, 'en', { numeric: true }));
+    const missions = byLevel('mission').sort((a, b) => a.ref.localeCompare(b.ref, 'en', { numeric: true }));
+    const campaign = byLevel('campaign')[0] ?? null;
+    const estRow = new Map(m.estimate_rows.map((r) => [r.item_id, r]));
+    const svRow = new Map(m.schedule_variance.map((r) => [r.ref, r]));
+    const missionOf = new Map(); for (const g of missions) for (const c of g.first_completion?.children ?? []) missionOf.set(c, g.ref);
+    const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
+    const es = m.estimates.task?.strata?.all ?? null;
+    const doneTasks = count(tasks, 'done');
+    const weekOf = (lv) => { const t = m.throughput[lv]; const w = t?.weeks[t.weeks.length - 1]; return w ? `${w.count}${!w.covered ? '†' : (!w.whole ? '*' : '')} <span class="stat-sub">${esc(w.key)}</span>` : '—'; };
+    const vel = m.throughput.task;
+    const velTxt = vel?.velocity ? `${vel.velocity.median} / week` : `needs ${e.policy.minWholeWeeks} whole weeks <span class="stat-sub">(have ${vel ? vel.weeks.filter((w) => w.whole).length : 0})</span>`;
+    const statusWord = { open: 'in progress', closed: 'closed' }[p.status] ?? p.status;
 
     parts.push('<section class="plan">');
-    parts.push(`<h2>Plan ${esc(p.run)} v${p.version} (${esc(p.status)})</h2>`);
-    parts.push(`<section class="kpi-row">${kpiCard('Progress', progressCells)}${kpiCard('Task cycle time', cycleCells, !ct && ctExcluded ? esc(ctExcluded) : null)}${kpiCard('Throughput', throughputCells)}${kpiCard('Estimates', estimatesCells, estimatesExcluded || null)}</section>`);
-    parts.push(`<section class="panel"><h2>Flow time</h2><table><tr><th>metric</th><th>stratum</th><th>n</th><th>median</th><th>P85</th><th>P90</th><th>min–max</th></tr>${flowRowsHtml(m, e)}</table></section>`);
-    parts.push(`<section class="panel"><h2>Throughput</h2><table><tr><th>level</th><th>week</th><th>count</th><th>mark</th></tr>${throughputRowsHtml(m)}</table><p class="note">*partial, †before declared coverage</p>${throughputLinesHtml(m, e)}</section>`);
-    parts.push(`<section class="panel"><h2>Quality</h2>${qualityLinesHtml(m, p)}</section>`);
+    parts.push(`<h2>${esc(campaign?.ref ?? p.run)} <span class="sub">campaign ${esc(p.run)} · plan v${p.version} · ${esc(statusWord)}</span></h2>`);
+    parts.push(`<p class="panel-sub">${tasks.length} task(s) in ${missions.length} mission(s)${campaign ? `; campaign ${esc(campaign.state.replace('_', ' '))}` : ''}. A run is one execution of the campaign; the plan version counts re-cuts of its scope; "${esc(statusWord)}" is the run's own status (\`plan close\` ends it).</p>`);
+
+    const cards = [
+      kpiCard('Delivery', [
+        statCell('Tasks done', `${doneTasks} / ${tasks.length}`),
+        statCell('Missions done', `${count(missions, 'done')} / ${missions.length}`),
+        statCell('In progress', `${count(tasks, 'in_progress')} <span class="stat-sub">tasks</span>`),
+        statCell('Cancelled', `${count(tasks, 'cancelled')} <span class="stat-sub">tasks</span>`),
+      ], count(tasks, 'planned') ? `${count(tasks, 'planned')} task(s) not started yet` : null),
+      kpiCard('Cycle time <span class="stat-sub">dispatch → merge</span>', [
+        statCell('Median', ct ? (ct.median == null ? needs(ct.n, 5) : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>'),
+        statCell('Range', ct ? `${fmtDur(ct.min)}–${fmtDur(ct.max)}` : '—'),
+        statCell('Tasks measured', ct ? `${ct.n} of ${doneTasks}` : `0 of ${doneTasks}`),
+        statCell('Lead time <span class="stat-sub">planned → merge</span>', lt ? (lt.median == null ? `${fmtDur(lt.min)}–${fmtDur(lt.max)}` : fmtDur(lt.median)) : '—'),
+      ], `Cycle time runs from the first observed dispatch to the merge; lead time from registration in the plan. Medians need ≥5 finished tasks, P85 ≥7, P90 ≥10 — smaller sets show the range instead.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
+      kpiCard('Throughput <span class="stat-sub">UTC ISO weeks</span>', [
+        statCell('Tasks this week', weekOf('task')),
+        statCell('Missions this week', weekOf('mission')),
+        statCell('Velocity <span class="stat-sub">tasks / whole week</span>', velTxt),
+        statCell('Open now', `${m.wip.task ?? 0} <span class="stat-sub">tasks · ${m.wip.mission ?? 0} missions</span>`),
+      ], '† week starts before the plan\'s observation window · * partial week. Velocity is the median of whole covered weeks — never extrapolated from a partial one.'),
+      kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
+        statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
+        statCell('Actual ÷ estimate', es.work_ratio ? (es.work_ratio.median == null ? `×${Math.round(es.work_ratio.min * 100) / 100}–×${Math.round(es.work_ratio.max * 100) / 100} <span class="stat-sub">(${es.work_ratio.n}, no median under 5)</span>` : `×${Math.round(es.work_ratio.median * 100) / 100}`) : '—'),
+        statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
+        statCell('Counted', `${es.eligible} of ${es.n} <span class="stat-sub">estimates</span>`),
+      ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
+      `An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]. Error = median of |estimate − actual| ÷ actual.${es && excludedStr(es.excluded) ? ` Excluded: ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join('')}` : ''}`),
+    ].join('');
+    parts.push(`<section class="kpi-row">${cards}</section>`);
+
+    // Per task — the tokenomics per-case idiom: label + state chip, bar = cycle time, number + muted detail.
+    const cycles = tasks.map((t) => elapsedS(t.started_at, t.done_at));
+    const maxCycle = Math.max(1, ...cycles.filter((c) => c != null));
+    const taskRows = tasks.map((t, idx) => {
+      const c = cycles[idx]; const r = estRow.get(t.item_id); const v = verdictOf(r);
+      const detail = [
+        t.class ? `class ${esc(t.class)}` : null,
+        missionOf.has(t.item_id) ? `mission ${esc(missionOf.get(t.item_id))}` : null,
+        t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : 'no estimate'),
+        v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : null,
+        t.rework_count ? `${t.rework_count} rework` : null,
+        t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
+        !t.started_at && t.state !== 'planned' ? 'no observed start' : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="row"><div class="lbl" title="${esc(t.item_id)}">${esc(t.ref)}${stateChip(t.state)}</div><div class="track">${c != null ? `<div class="bar" style="width:${Math.max(1, (c / maxCycle) * 100)}%"></div>` : ''}</div><div class="num">${c != null ? fmtDur(c) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
+    }).join('');
+    parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the ranges the tech-lead declared and a named human accepted; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
+
+    // Per mission — elapsed from first child dispatch to landing, against the mission's own range.
+    const missionRows = missions.map((g) => {
+      const kids = g.first_completion?.children ?? []; const kidItems = kids.map((k) => p.items.find((i) => i.item_id === k)).filter(Boolean);
+      const el = elapsedS(g.started_at, g.landing_at ?? g.done_at); const sv = svRow.get(g.ref);
+      const detail = [
+        `${kidItems.filter((i) => i.state === 'done').length}/${kids.length} tasks done`,
+        g.estimate ? `estimate ${fmtRangeH(g.estimate)}` : 'no estimate',
+        sv ? `<span class="oc ${sv.band.vs_low_s < 0 || sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done'}">${esc(bandText(sv))}</span>` : null,
+        sv && (sv.scope.added || sv.scope.removed) ? `scope +${sv.scope.added}/−${sv.scope.removed}` : null,
+        g.start_basis ? `start ${esc(g.start_basis)}` : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="row"><div class="lbl" title="${esc(g.item_id)}">${esc(g.ref)}${stateChip(g.state)}</div><div class="track"></div><div class="num">${el != null ? fmtDur(el) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
+    }).join('');
+    const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
+    parts.push(`<section class="panel"><h2>Per mission</h2><p class="panel-sub">Elapsed = first task dispatched → mission landed (parent time is derived from its children, never dispatched itself).</p>${missionRows || '<p class="note">No missions in this plan.</p>'}${campaignLine}</section>`);
+
+    parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
+
+    const open = p.items.filter((i) => i.state === 'in_progress');
+    if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>age</th></tr>${openItemsRowsHtml(p, e)}</table></section>`);
+
+    // Everything the assessor export prints, unchanged, one click away.
     let estimatesPanel = `<section class="panel"><h2>Estimates</h2><table><tr><th>level</th><th>stratum</th><th>n</th><th>eligible</th><th>work_ratio median</th><th>MdMRE</th><th>PRED(25)</th><th>MAE</th><th>hit_rate</th><th>excluded</th></tr>${estimatesStrataRowsHtml(m)}</table>`;
     if (m.estimate_rows.length) estimatesPanel += `<table><tr><th>ref</th><th>level</th><th>class</th><th>tier</th><th>base</th><th>range (h)</th><th>actual</th><th>basis</th><th>ratio</th><th>hit</th><th>reason</th></tr>${estimateRowsHtml(m)}</table>`;
     if (m.schedule_variance.length) estimatesPanel += `<ul>${scheduleVarianceHtml(m)}</ul>`;
-    parts.push(`${estimatesPanel}</section>`);
+    estimatesPanel += '</section>';
+    parts.push(`<details><summary>Statistics for assessors — strata, per-item rows, coverage${open.length ? '' : ', open items'} (the same figures as the Markdown/JSON export)</summary>`);
+    parts.push(`<section class="panel"><h2>Flow time</h2><table><tr><th>metric</th><th>stratum</th><th>n</th><th>median</th><th>P85</th><th>P90</th><th>min–max</th></tr>${flowRowsHtml(m, e)}</table></section>`);
+    parts.push(`<section class="panel"><h2>Throughput</h2><table><tr><th>level</th><th>week</th><th>count</th><th>mark</th></tr>${throughputRowsHtml(m)}</table><p class="note">*partial, †before declared coverage</p>${throughputLinesHtml(m, e)}</section>`);
+    parts.push(`<section class="panel"><h2>Quality</h2>${qualityLinesHtml(m, p)}</section>`);
+    parts.push(estimatesPanel);
     parts.push(`<section class="panel"><h2>Coverage</h2>${coverageLinesHtml(m, p)}</section>`);
-    parts.push(`<section class="panel"><h2>Open items</h2><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>age</th></tr>${openItemsRowsHtml(p, e)}</table></section>`);
+    if (!open.length) parts.push('<section class="panel"><h2>Open items</h2><p class="note">None.</p></section>');
+    parts.push('</details>');
     parts.push('</section>');
   }
-  parts.push(envelopeHtml(e));
+  parts.push(`<details><summary>Envelope — ledger health, diagnostics, baselines, policy</summary>${envelopeHtml(e)}</details>`);
   parts.push(caveatsHtml(e));
   return parts.join('\n');
 }
