@@ -180,6 +180,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "quality-evals",
+      "source": "./bundles/manual-qa/skills/quality-evals",
+      "description": "Use when a team wants to validate test-runner's bug-detection accuracy or test-author's authoring fidelity against their OWN app before trusting the manual-qa bundle on real work — \"how good is this agent, really\", \"benchmark test-author/test-runner\", \"build a gold suite\", \"self-eval the manual QA team\". Ports a held-out-answer-key eval methodology (deterministic Tier A scoring + a judged Tier B rubric) that keeps a self-authored eval honest, generalized to any app.",
+      "version": "0.2.0"
+    },
+    {
       "name": "reproducing-issues",
       "source": "./bundles/feature-development/skills/reproducing-issues",
       "description": "Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Turns a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Reproduction and documentation only — does not fix code.",
