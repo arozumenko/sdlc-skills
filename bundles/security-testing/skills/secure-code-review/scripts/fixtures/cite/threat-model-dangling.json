@@ -1,0 +1,19 @@
+{
+  "head": "$HEAD",
+  "scope_paths": ["src/"],
+  "elements": [
+    {
+      "id": "E-001",
+      "name": "HTTP handler",
+      "kind": "process",
+      "citations": [
+        { "path": "src/app.js", "lines": [1, 3], "snippet": "import { readFileSync } from \"node:fs\";\nimport { createServer } from \"node:http\";" }
+      ]
+    }
+  ],
+  "threats": [
+    { "id": "T-001", "element_id": "E-001", "stride": "I", "title": "Secret in source", "mitigations": [], "disposition": "accepted(R-0001)" },
+    { "id": "T-002", "element_id": "E-001", "stride": "D", "title": "Unbounded request body", "mitigations": [], "disposition": "planned(TC-001)" },
+    { "id": "T-003", "element_id": "E-001", "stride": "T", "title": "Path traversal via req.url", "mitigations": [], "disposition": "planned(TC-009)" }
+  ]
+}

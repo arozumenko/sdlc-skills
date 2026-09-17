@@ -413,7 +413,10 @@ test("a malformed document is a usage error that never echoes the file's bytes",
     [JSON.stringify({ head: "0".repeat(40), examined: [], findings: [] }), /^USAGE\(check: head [0-9a-f]{7} is not a commit/],
     [JSON.stringify({ examined: [], findings: [{ class: "x" }] }), /^USAGE\(check: findings\[0\] must carry a class and a non-empty citations array/],
     [JSON.stringify({ examined: [], findings: [{ citations: [{}] }] }), /^USAGE\(check: findings\[0\] must carry a class/],
-    [JSON.stringify({ elements: [], threats: [] }), /^USAGE\(check: threat-model mode/],
+    [JSON.stringify({ nope: 1 }), /^USAGE\(check: neither a findings nor a threat-model document/],
+    [JSON.stringify({ elements: "x", threats: [] }), /^USAGE\(check: elements must be an array/],
+    [JSON.stringify({ elements: [], threats: "x" }), /^USAGE\(check: threats must be an array/],
+    [JSON.stringify({ head: 7, elements: [], threats: [] }), /^USAGE\(check: head must be a 40-hex oid/],
   ];
   for (const [text, re] of cases) {
     writeFileSync(file, text);
@@ -429,8 +432,6 @@ test("a malformed document is a usage error that never echoes the file's bytes",
   r = run(root, "check", ".agents/security-testing/reviews/r1/nope.json");
   assert.equal(r.code, 2);
   assert.equal(r.out[0], "USAGE(check: .agents/security-testing/reviews/r1/nope.json not found)");
-  r = run(root, "check", rel.replace("findings.json", "findings.json"), "--md");
-  assert.ok(r.code === 2 || r.code === 0, "--md belongs to the next task; it must not crash");
 });
 
 test("an empty findings list is a valid review; the command table now holds check", async () => {
@@ -440,5 +441,282 @@ test("an empty findings list is a valid review; the command table now holds chec
   assert.deepEqual(r.out, ["COVERAGE examined=0 partial=0 unexamined=2", "CHECK verified=0 failed=0"]);
   assert.deepEqual(readDoc(file).findings, []);
   const mod = await import(CITE);
-  assert.deepEqual(Object.keys(mod.COMMANDS).slice(0, 3), ["init", "show", "check"]);
+  assert.deepEqual(Object.keys(mod.COMMANDS), ["init", "show", "check", "redact"]);
+});
+
+test("show prints the canonical path in its header", () => {
+  const { root, oid2 } = buildRepo();
+  ENG(root);
+  const r = run(root, "show", "./src/./app.js", "1", "2");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.equal(r.out[0], `SHOW src/app.js ${oid2.slice(0, 7)} 1-2`);
+});
+
+// ---------------------------------------------------------------- check (threat model)
+
+const REGISTER = ".agents/security-testing/register/events.jsonl";
+const SUITE = "tasks/security-acme-admitted";
+/** Append register events as Task 6 writes them: one JSON object per line. */
+const writeRegister = (root, events) => {
+  mkdirSync(join(root, ".agents/security-testing/register"), { recursive: true });
+  writeFileSync(join(root, REGISTER), events.map((e, i) => JSON.stringify({ seq: i + 1, ts: "2026-09-17T00:00:00Z", actor: "lead", payload: {}, ...e })).join("\n") + "\n");
+};
+/** The admitted suite index as Task 7 writes it. */
+const writeAdmitted = (root, files) => {
+  mkdirSync(join(root, SUITE), { recursive: true });
+  writeFileSync(join(root, SUITE, ".admitted.json"), `${JSON.stringify(files.map((file) => ({ file, sha256: "0".repeat(64) })))}\n`);
+};
+/** Build the repo + engagement + one live register row + one admitted case; write `threat-model.json` from a fixture or an object. */
+const model = (doc, { register = [{ row_id: "R-0001", event: "add" }], admitted = ["TC-001_login.md"] } = {}) => {
+  const repo = buildRepo();
+  ENG(repo.root);
+  if (register !== null) writeRegister(repo.root, register);
+  if (admitted !== null) writeAdmitted(repo.root, admitted);
+  const dir = join(repo.root, ".agents/security-testing");
+  const text = typeof doc === "string" ? fill(doc, { HEAD: repo.oid2 }) : `${JSON.stringify(doc, null, 2)}\n`;
+  writeFileSync(join(dir, "threat-model.json"), text);
+  return { ...repo, dir, file: join(dir, "threat-model.json"), rel: ".agents/security-testing/threat-model.json" };
+};
+
+test("check on a threat model verifies element and mitigation citations, lints, stamps and re-runs", () => {
+  const { root, oid2, file, rel } = model("threat-model-ok.json");
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+  assert.deepEqual(r.out, ["MODEL elements=1 threats=4 open=1", "CHECK verified=2 failed=0"]);
+  const m = readDoc(file);
+  assert.equal(m.elements[0].id, "E-001", "the agent's ids stay");
+  assert.equal(m.elements[0].citations[0].state, "VERIFIED");
+  assert.equal(m.elements[0].citations[0].oid, oid2);
+  assert.equal(m.elements[0].citations[0].snippet_redacted, "import { readFileSync } from \"node:fs\";\nimport { createServer } from \"node:http\";");
+  assert.equal(m.threats[2].mitigations[0].citations[0].state, "VERIFIED");
+  assert.equal(m.threats[2].mitigations[0].citations[0].oid, oid2);
+  assert.match(m.check_stamp, HEX64);
+  assert.equal(m.coverage, undefined, "no coverage on a threat model");
+  const first = readFileSync(file, "utf8");
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.equal(readFileSync(file, "utf8"), first, "a second run is byte-idempotent");
+});
+
+test("a dangling planned(TC-nnn) ⇒ TM-INVALID and exit 4; the file is still written back", () => {
+  const { root, oid2, file, rel } = model("threat-model-dangling.json");
+  const r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes("TM-INVALID T-003: planned(TC-009): not in the admitted suite"), r.out.join("\n"));
+  assert.ok(r.out.includes("MODEL elements=1 threats=3 open=0"));
+  assert.equal(r.out.at(-1), "CHECK verified=1 failed=0", "CHECK is last; TM-INVALID does not count as a failed citation");
+  const m = readDoc(file);
+  assert.equal(m.elements[0].citations[0].state, "VERIFIED");
+  assert.equal(m.elements[0].citations[0].oid, oid2);
+  assert.match(m.check_stamp, HEX64);
+});
+
+test("accepted(R-nnnn) is read from the register fold: add is live; supersede and close-false-positive are not", () => {
+  const cases = [
+    [[{ row_id: "R-0001", event: "add" }], 0],
+    [[{ row_id: "R-0001", event: "add" }, { row_id: "R-0001", event: "accept" }], 0],
+    [[{ row_id: "R-0001", event: "add" }, { row_id: "R-0001", event: "fixed" }], 0],
+    [[{ row_id: "R-0001", event: "add" }, { row_id: "R-0001", event: "supersede" }], 4],
+    [[{ row_id: "R-0001", event: "add" }, { row_id: "R-0001", event: "close-false-positive" }], 4],
+    [[{ row_id: "R-0001", event: "add" }, { row_id: "R-0001", event: "close-false-positive" }, { row_id: "R-0001", event: "reopen" }], 0],
+    [[{ row_id: "R-0002", event: "add" }], 4],
+    [[{ row_id: "R-0001", event: "ticket" }], 4, "a row with no add event does not exist"],
+    [null, 4, "no register file ⇒ no rows"],
+    [[], 4],
+  ];
+  for (const [register, code, why] of cases) {
+    const { root, rel } = model("threat-model-ok.json", { register });
+    const r = run(root, "check", rel);
+    assert.equal(r.code, code, `${why ?? JSON.stringify(register)}: ${r.out.join("\n")}`);
+    assert.equal(r.out.includes("TM-INVALID T-001: accepted(R-0001): no such register row"), code === 4, JSON.stringify(register));
+  }
+});
+
+test("a corrupt register line ⇒ CORRUPT and exit 5, nothing written; a corrupt .admitted.json likewise", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  const before = readFileSync(file, "utf8");
+  writeFileSync(join(root, REGISTER), `${JSON.stringify({ seq: 1, row_id: "R-0001", event: "add" })}\nnot json hunter22x\n`);
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 5, r.out.join("\n"));
+  assert.deepEqual(r.out, ["CORRUPT events.jsonl:2"]);
+  assert.ok(!`${r.out.join("\n")}${r.err}`.includes("hunter22x"));
+  assert.equal(readFileSync(file, "utf8"), before);
+  writeFileSync(join(root, REGISTER), `${JSON.stringify({ seq: 1, event: "add" })}\n`);
+  r = run(root, "check", rel);
+  assert.deepEqual([r.code, r.out], [5, ["CORRUPT events.jsonl:1"]], "a line without row_id/event");
+  writeRegister(root, [{ row_id: "R-0001", event: "add" }]);
+  writeFileSync(join(root, SUITE, ".admitted.json"), "{ nope");
+  r = run(root, "check", rel);
+  assert.deepEqual([r.code, r.out], [5, [`CORRUPT ${SUITE}/.admitted.json`]]);
+  assert.equal(readFileSync(file, "utf8"), before);
+});
+
+test("planned(TC-nnn) needs the case in .admitted.json by its TC prefix; no suite ⇒ none admitted", () => {
+  let { root, rel } = model("threat-model-ok.json", { admitted: ["TC-001_other-slug.md", "TC-002_x.md"] });
+  assert.equal(run(root, "check", rel).code, 0);
+  ({ root, rel } = model("threat-model-ok.json", { admitted: ["TC-002_x.md"] }));
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 4);
+  assert.ok(r.out.includes("TM-INVALID T-002: planned(TC-001): not in the admitted suite"), r.out.join("\n"));
+  ({ root, rel } = model("threat-model-ok.json", { admitted: null }));
+  r = run(root, "check", rel);
+  assert.equal(r.code, 4);
+  assert.ok(r.out.includes("TM-INVALID T-002: planned(TC-001): not in the admitted suite"), r.out.join("\n"));
+});
+
+test("threat-model mode: a FAILED citation, a structural defect and a dirty scope", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  const doc = readDoc(file);
+  doc.elements[0].citations[0].snippet = "nope";
+  doc.threats[0].element_id = "E-009";
+  writeDoc(file, doc);
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.deepEqual(r.out, ["FAILED E-001.0 snippet-not-found", "TM-INVALID T-001: element E-009 is not in the model", "MODEL elements=1 threats=4 open=1", "CHECK verified=1 failed=1"]);
+  assert.equal(readDoc(file).elements[0].citations[0].state, "FAILED(snippet-not-found)");
+  // A mitigation citation fails under its own locus.
+  const fixed = readDoc(file);
+  delete fixed.check_stamp;
+  fixed.elements[0].citations[0] = { path: "src/app.js", lines: [1, 3], snippet: "import { readFileSync } from \"node:fs\";" };
+  delete fixed.elements[0].citations[0].state;
+  fixed.threats[0].element_id = "E-001";
+  fixed.threats[2].mitigations[0].citations[0] = { path: "README.md", lines: [1, 1], snippet: "# fixture" };
+  for (const t of fixed.threats) for (const m of t.mitigations) for (const c of m.citations) delete c.state;
+  writeDoc(file, fixed);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes("FAILED M-001.0 path-not-in-scope"), r.out.join("\n"));
+  // Dirt under scope blocks before anything is checked or written.
+  const before = readFileSync(file, "utf8");
+  writeFileSync(join(root, "src", "util.js"), "export const clamp = () => 0;\n");
+  r = run(root, "check", rel);
+  assert.deepEqual([r.code, r.out], [2, ["DIRTY-SCOPE src/util.js"]]);
+  assert.equal(readFileSync(file, "utf8"), before);
+});
+
+test("threat-model mode: D10 — state/verdict anywhere and id outside E/T/M positions are refused; stamped output re-runs", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  const clean = readDoc(file);
+  for (const [key, mutate] of [
+    ["state", (d) => { d.elements[0].citations[0].state = "VERIFIED"; }],
+    ["state", (d) => { d.threats[0].state = "open"; }],
+    ["verdict", (d) => { d.verdict = "VERIFIED"; }],
+    ["verdict", (d) => { d.threats[2].mitigations[0].verdict = "confirmed"; }],
+    ["id", (d) => { d.elements[0].citations[0].id = "x"; }],
+    ["id", (d) => { d.id = "x"; }],
+    ["snippet_redacted", (d) => { d.elements[0].citations[0].snippet_redacted = "x"; }],
+    ["check_stamp", (d) => { d.check_stamp = "0".repeat(64); }],
+  ]) {
+    const d = structuredClone(clean);
+    mutate(d);
+    writeDoc(file, d);
+    const bytes = readFileSync(file, "utf8");
+    const r = run(root, "check", rel);
+    assert.equal(r.code, 2, key);
+    assert.equal(r.out[0], `REFUSED agent-written key ${key}`);
+    assert.equal(readFileSync(file, "utf8"), bytes, `${key}: nothing written`);
+  }
+  writeDoc(file, clean);
+  assert.equal(run(root, "check", rel).code, 0);
+  const stamped = readDoc(file);
+  stamped.threats[0].title = "edited under the stamp";
+  writeDoc(file, stamped);
+  const r = run(root, "check", rel);
+  assert.equal(r.code, 2, r.out.join("\n"));
+  assert.equal(r.out[0], "REFUSED agent-written key state");
+});
+
+test("an empty model is valid", () => {
+  const { root, rel } = model({ elements: [], threats: [] });
+  const r = run(root, "check", rel);
+  assert.deepEqual([r.code, r.out], [0, ["MODEL elements=0 threats=0 open=0", "CHECK verified=0 failed=0"]]);
+});
+
+// ---------------------------------------------------------------- --md and redact
+
+/** The tables block `--md` printed: every line after CHECK up to TABLES, as the text the sha256 covers. */
+const tablesOf = (out) => {
+  const start = out.findIndex((l) => l.startsWith("CHECK ")) + 1;
+  return { text: `${out.slice(start, -1).join("\n")}\n`, last: out.at(-1) };
+};
+
+test("check --md prints the findings and coverage tables and a TABLES sha256 line; --no-snippets drops snippets", () => {
+  const { root, oid2, dir, file, rel } = review("findings-ok.json");
+  let r = run(root, "check", rel, "--md");
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+  assert.ok(r.out.includes("CHECK verified=1 failed=0"));
+  assert.ok(r.out.some((l) => l.startsWith("| id | priority |")), r.out.join("\n"));
+  assert.ok(r.out.some((l) => l.startsWith("| path | status |")));
+  assert.ok(r.out.some((l) => l.includes("<REDACTED:key-value>")), "the snippet column carries the redacted snippet");
+  assert.ok(!r.out.some((l) => l.includes("hunter22x")));
+  assert.ok(r.out.some((l) => l.includes("not independently reviewed")));
+  let { text, last } = tablesOf(r.out);
+  assert.match(last, /^TABLES sha256=[0-9a-f]{64}$/);
+  assert.equal(last, `TABLES sha256=${sha256(text)}`, "the hash covers exactly the printed tables");
+  const id = readDoc(file).findings[0].id;
+  assert.ok(text.includes(`| ${id.slice(0, 7)} | p1 | hardcoded-secret | Hard-coded credential | src/app.js:3-5 @${oid2.slice(0, 7)} VERIFIED |`), text);
+  assert.ok(text.includes("| src/app.js | examined | 1-12 |  |"), text);
+  assert.ok(text.includes("| src/util.js | unexamined |  | 1-2 |"), text);
+  const again = run(root, "check", rel, "--md");
+  assert.equal(again.out.at(-1), last, "the same doc renders to the same hash");
+  r = run(root, "check", rel, "--md", "--no-snippets");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(!r.out.some((l) => l.includes("hunter") || l.includes("<REDACTED")), r.out.join("\n"));
+  assert.match(r.out.at(-1), /^TABLES sha256=[0-9a-f]{64}$/);
+  assert.notEqual(r.out.at(-1), last);
+  // A valid second opinion shows up in the table.
+  writeFileSync(join(dir, `second-${id}.json`), fill("second-ok.json", { ID: id, HEAD: oid2, SHA: sha256(readFileSync(file)) }));
+  r = run(root, "check", rel, "--md", "--no-snippets");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.some((l) => l.endsWith("| confirmed by s1 |")), r.out.join("\n"));
+  // --md without check's flags order: flags may come first.
+  r = run(root, "check", "--md", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+});
+
+test("check --md on a threat model prints elements, threats and mitigations; a failing check still prints tables", () => {
+  const { root, oid2, rel } = model("threat-model-ok.json");
+  let r = run(root, "check", rel, "--md");
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+  const { text, last } = tablesOf(r.out);
+  assert.equal(last, `TABLES sha256=${sha256(text)}`);
+  assert.ok(text.includes(`| E-001 | process | HTTP handler | src/app.js:1-3 @${oid2.slice(0, 7)} VERIFIED |`), text);
+  assert.ok(text.includes("| T-001 | E-001 | I | Secret in source | accepted(R-0001) |"), text);
+  assert.ok(text.includes(`| T-003 | M-001 | The handler reads the path straight from req.url \\| no normalisation yet | src/app.js:7-10 @${oid2.slice(0, 7)} VERIFIED |`), text);
+  assert.ok(!text.includes("| id | priority |"), "no findings table on a model");
+  const dangling = model("threat-model-dangling.json");
+  r = run(dangling.root, "check", dangling.rel, "--md");
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes("TM-INVALID T-003: planned(TC-009): not in the admitted suite"));
+  assert.ok(r.out.some((l) => l.startsWith("| T-003 | E-001 | T |")));
+  assert.match(r.out.at(-1), /^TABLES sha256=[0-9a-f]{64}$/);
+  assert.equal(run(dangling.root, "check", dangling.rel, "--no-snippets").code, 2, "--no-snippets needs --md");
+});
+
+test("redact rewrites a Markdown file in place and reports hits", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  mkdirSync(join(root, "reports"), { recursive: true });
+  const report = join(root, "reports", "x.md");
+  writeFileSync(report, "# Report\n\ntoken = abcdefghijkl1234\n\nSee Bearer aaaaaaaaaaaaaaaaaaaaaaaa in the log.\n");
+  let r = run(root, "redact", "reports/x.md");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.deepEqual(r.out, ["REDACTED reports/x.md hits=2"]);
+  const after = readFileSync(report, "utf8");
+  assert.ok(!after.includes("abcdefghijkl1234"));
+  assert.ok(!after.includes("aaaaaaaaaaaaaaaaaaaaaaaa"));
+  assert.equal(after, "# Report\n\ntoken = <REDACTED:key-value>\n\nSee Bearer <REDACTED:bearer> in the log.\n");
+  r = run(root, "redact", "reports/x.md");
+  assert.deepEqual([r.code, r.out], [0, ["REDACTED reports/x.md hits=0"]], "a clean file is reported with zero hits and left alone");
+  assert.equal(readFileSync(report, "utf8"), after);
+  // The path itself is a user string: printed redacted.
+  r = run(root, "redact", "reports/nope.md");
+  assert.deepEqual([r.code, r.out], [2, ["USAGE(redact: reports/nope.md not found)"]]);
+  writeFileSync(join(root, "reports", "x.txt"), "token = abcdefghijkl1234\n");
+  r = run(root, "redact", "reports/x.txt");
+  assert.deepEqual([r.code, r.out], [2, ["USAGE(redact: reports/x.txt is not a .md file)"]]);
+  assert.ok(readFileSync(join(root, "reports", "x.txt"), "utf8").includes("abcdefghijkl1234"), "a refused file is untouched");
+  r = run(root, "redact");
+  assert.equal(r.code, 2);
+  assert.match(r.out[0], /^USAGE\(redact: usage: redact <file\.md>\)$/);
 });
