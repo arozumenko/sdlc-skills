@@ -63,6 +63,14 @@ const GROUPS = [
     "bundles/test-automation/skills/test-automation-workflow/references/examples/report.json",
     "bundles/security-testing/skills/security-evidence/scripts/fixtures/ta/report.json",
   ],
+  // execution-authorization design note (TASK-051): the v2 receiving-side
+  // skill is "owned by the QA bundles" (security-testing spec §5) and which
+  // one signs off is spec §14 open question 5, so the note ships identically
+  // in both until that is answered. manual-qa is canonical only by alphabet.
+  [
+    "bundles/manual-qa/docs/execution-authorization.md",
+    "bundles/test-automation/docs/execution-authorization.md",
+  ],
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
