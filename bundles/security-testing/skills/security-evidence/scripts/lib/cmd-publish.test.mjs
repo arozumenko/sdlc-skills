@@ -433,7 +433,7 @@ test("handoff prompt text exact: <st>/handoffs/<slug>.md is the §9.2 two-line p
   // a second run's handoff for the same slug: same prompt bytes, its own sidecar — never a clobber
   const other = await publish(repo, run_id, "handoff", HANDOFFS, ["--base-url", "https://qa.example.com"]);
   assert.equal(other.code, 2, "a different prompt at the same <slug>.md is refused");
-  assert.match(other.stdout, /already exists with different content; remove the stale file first \(its --to is fixed\)/, "review 1: --to is fixed for the M3 profiles, so the way out is named");
+  assert.match(other.stdout, /already exists with different content; remove the stale prompt file first \(its --to is fixed\)/, "review 1 / TASK-043-FU: --to is fixed for the M3 profiles, so the way out is named per profile (suite file / prompt file)");
   const overridden = await publish(repo, run_id, "handoff", HANDOFFS, ["--slug", "other", "--base-url", "https://qa.example.com"]);
   assert.equal(overridden.code, 2, "the same run already has a handoff sidecar for another export");
   assert.match(overridden.stdout, /already exists for a different export/);
@@ -446,6 +446,31 @@ test("handoff prompt text exact: <st>/handoffs/<slug>.md is the §9.2 two-line p
   assert.match(secret.stdout, /^USAGE\(publish: the handoff base_url carries a value redact\.mjs rewrites \(a token, key or credential\); pass a base URL without it\)$/m);
   assert.doesNotMatch(secret.stdout + secret.stderr, /Qm9sZGx5/, "the value never leaves the process");
   assert.ok(!existsSync(join(repo, HANDOFFS, "other.md")), "nothing written");
+});
+
+test("TASK-043-FU: republish of the case profile after a candidate changed (re-admitted) ⇒ 2 USAGE naming the way out — `remove the stale suite file first`, since --to is fixed for case and handoff; nothing written; cmd-publish declares no slug regex of its own", async () => {
+  const { caseText } = await import("../fixtures/plan/helpers.mjs");
+  const { repo, run_id } = await admittedRun();
+  const first = await publish(repo, run_id, "case", SUITE);
+  assert.equal(first.code, 0, `${first.stdout}${first.stderr}`);
+  const before = readFileSync(join(repo, SUITE, "TC-003_plain.md"));
+  // the candidate changes and a later run of the same engagement re-admits it: the same suite file name, different bytes
+  const later = await committedReviewRun({
+    repo,
+    before: async (r, id) => {
+      writeFileSync(join(r, CASES, "TC-003_plain.md"), caseText("TC-003", PLAIN_ROWS, { title: "Verify a plain observation, revised", extra: "account: unauthenticated" }));
+      const a = await runPlan(r, ["admit", "--run", id, `${CASES}/TC-003_plain.md`]);
+      assert.equal(a.code, 0, `${a.stdout}${a.stderr}`);
+    },
+  });
+  const again = await publish(repo, later.run_id, "case", SUITE);
+  assert.equal(again.code, 2, `${again.stdout}${again.stderr}`);
+  assert.match(again.stdout, /^USAGE\(publish: \.\/tasks\/security-my-product-admitted\/TC-003_plain\.md already exists with different content; remove the stale suite file first \(its --to is fixed\)\)$/m);
+  assert.doesNotMatch(again.stdout, /choose another --to/);
+  assert.ok(readFileSync(join(repo, SUITE, "TC-003_plain.md")).equals(before), "the stale file is untouched");
+  assert.ok(!existsSync(join(repo, HANDOFFS, `${later.run_id}.case.export-manifest.json`)), "no manifest written");
+  const src = readFileSync(join(HERE, "cmd-publish.mjs"), "utf8");
+  assert.doesNotMatch(src, /^const SLUG = /m, "SLUG is imported from lib/profiles/index.mjs");
 });
 
 test("case refusals name the case and rename nothing: TC-SEC-NNN id ⇒ 2 USAGE, nothing written; a candidate edited after admit ⇒ 2 USAGE (no candidate with that identity)", async () => {

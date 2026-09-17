@@ -50,7 +50,9 @@
 //      and `--base-url` / the engagement's `base_url` (2 USAGE without one).
 //   5. writes — every output name is checked against the destination first
 //      (an existing file with different bytes ⇒ 2 USAGE, nothing written:
-//      publish never clobbers a file it did not derive), then each new file
+//      publish never clobbers a file it did not derive; for the M3 profiles
+//      the message says `remove the stale suite|prompt file first` — their
+//      --to is fixed, so there is no other destination to choose), then each new file
 //      lands by fsx.writeAtomic (byte-identical existing files are kept:
 //      republishing is idempotent), then `export-manifest.json` (or the
 //      tracker sidecar `<finding_id>.export-manifest.json`) as an enveloped
@@ -82,7 +84,8 @@
 // reads and stats only; writes go through ./fsx.mjs writeAtomic and
 // ctx.writeArtifact), node:path, ../canon.mjs (artifactId, makeEnvelope,
 // readArtifact, sha256Hex), ../redact.mjs (redactString), ./argv.mjs, ./exit.mjs, ./fsx.mjs, ./ledger.mjs
-// (RUN_ID), ./profiles/*, ./register-core.mjs (readAliases, readEvents, replay),
+// (RUN_ID), ./profiles/* (index.mjs: SLUG — the registry's one spelling),
+// ./register-core.mjs (readAliases, readEvents, replay),
 // ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs. No child process
 // (G-6), no network (G-14), no clock (G-1: created_at is ctx.now()).
 
@@ -97,7 +100,7 @@ import { RUN_ID } from "./ledger.mjs";
 import { loadSource } from "./profiles/_source.mjs";
 import { CaseRefused, suiteDir } from "./profiles/case.mjs";
 import { promptLines } from "./profiles/handoff.mjs";
-import { M3_PROFILES, exportIdentity, manifestNameFor, membersOf, profileModule, requireOutputs } from "./profiles/index.mjs";
+import { M3_PROFILES, SLUG, exportIdentity, manifestNameFor, membersOf, profileModule, requireOutputs } from "./profiles/index.mjs";
 import { plan as trackerPlan } from "./profiles/tracker.mjs";
 import { readAliases, readEvents, replay } from "./register-core.mjs";
 import { runDir } from "./run-index.mjs";
@@ -108,7 +111,6 @@ const COMMAND = "publish";
 /** The tracker and handoff profiles' one destination, and where every M3 manifest lands (plan §4.1 row `publish`; §3.2 layout). */
 export const HANDOFFS_REL = ".agents/security-testing/handoffs";
 const CASES_SEGMENT = "cases";
-const SLUG = /^[a-z0-9-]+$/;
 const ST_PREFIX = /^\.agents\/security-testing(?:\/|$)/i;
 const GIT_PREFIX = /^\.git(?:\/|$)/i;
 
@@ -231,7 +233,9 @@ function writeSet(ctx, { dest, profile, version, outputs, manifestName, source, 
   for (const o of outputs) {
     const path = join(dest.abs, o.relpath);
     if (existsSync(path) && statSync(path).isDirectory()) throw usageError(COMMAND, `${dest.rel}/${o.relpath} is a directory; choose another --to`);
-    if (differs(path, o.bytes)) throw usageError(COMMAND, `${dest.rel}/${o.relpath} already exists with different content; ${M3_PROFILES.includes(profile) ? "remove the stale file first (its --to is fixed)" : "choose another --to"}`);
+    // the M3 destinations are fixed (the suite directory, <st>/handoffs/), so "choose another --to" is a dead end there:
+    // a candidate that changed in a later run, or a changed --base-url at <slug>.md, is republished after the stale file goes
+    if (differs(path, o.bytes)) throw usageError(COMMAND, `${dest.rel}/${o.relpath} already exists with different content; ${profile === "case" ? "remove the stale suite file first (its --to is fixed)" : profile === "handoff" ? "remove the stale prompt file first (its --to is fixed)" : "choose another --to"}`);
   }
   let existingManifest = null;
   if (existsSync(manifestPath)) {

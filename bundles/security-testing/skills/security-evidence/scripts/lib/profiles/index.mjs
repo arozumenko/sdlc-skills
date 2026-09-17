@@ -44,8 +44,18 @@
 // [{relpath, sha256}] list `output_sha256` hashes — names the suite files
 // and is what sign-off's UNADMITTED listing compares against).
 //
+// The naming inversion is spelled once, here (TASK-043-FU, the TASK-031
+// follow-up): `M3_SIDECAR` (`<run_id>.<handoff|case>.export-manifest.json`,
+// groups run_id and profile), `SLUG` (the suite / prompt name class) and
+// `RUN_ID` are exported for cmd-publish, cmd-sign-off and case.mjs instead
+// of being re-declared there. `RUN_ID` is the same expression as
+// lib/ledger.mjs's (the run id's owner) — pinned equal by the test; the
+// registry cannot import ledger.mjs (G-9: it reads the file system).
+//
 // Pure (G-9): imports ../../canon.mjs (canonical, sha256Hex), ../tokens.mjs and
-// the five profile modules. No fs, no git, no clock.
+// the five profile modules. No fs, no git, no clock. case.mjs imports `SLUG`
+// back from here — a cycle ESM tolerates because both sides read the other's
+// bindings inside functions only, never at module evaluation.
 
 import { canonical, sha256Hex } from "../../canon.mjs";
 import { PUBLISH_PROFILES } from "../tokens.mjs";
@@ -67,9 +77,12 @@ const MODULES = Object.freeze({ "redacted-report": redactedReport, "full-report"
 const SHA256 = /^[0-9a-f]{64}$/;
 const PLAIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SIDECAR = /^([0-9a-f]{64})\.export-manifest\.json$/;
-const RUN_ID = /^[0-9a-f]{12}-[0-9]{4}$/;
-const M3_SIDECAR = /^([0-9a-f]{12}-[0-9]{4})\.(handoff|case)\.export-manifest\.json$/;
-const SLUG = /^[a-z0-9-]+$/;
+/** `<12 hex>-<4 digits>` — lib/ledger.mjs's RUN_ID, spelled here for the pure registry (see the header). */
+export const RUN_ID = /^[0-9a-f]{12}-[0-9]{4}$/;
+/** The M3 per-run sidecar name: `[1]` the run id, `[2]` the profile (`handoff` | `case`). */
+export const M3_SIDECAR = /^([0-9a-f]{12}-[0-9]{4})\.(handoff|case)\.export-manifest\.json$/;
+/** The slug class: `tasks/security-<slug>-admitted`, `<st>/handoffs/<slug>.md`, `--slug`. */
+export const SLUG = /^[a-z0-9-]+$/;
 
 /**
  * The module for a registered profile.

@@ -131,7 +131,16 @@
 //                  a hash. The identity is sha256 over the file's REDACTED
 //                  bytes (redact.mjs is idempotent, so a published file hashes
 //                  to what publish recorded; a foreign file never has plain
-//                  sha256 taken over unredacted content — G-2). Informational:
+//                  sha256 taken over unredacted content — G-2). The
+//                  identities are engagement-wide, not per suite: one set
+//                  over every trusted case manifest of the engagement, so a
+//                  file in suite A whose bytes equal a member recorded for
+//                  suite B (another --slug) reads as admitted in A — both
+//                  were admitted in this engagement, which is the §2 claim.
+//                  A suite entry that is not a regular file (a symlink of any
+//                  kind — publish writes regular files only) or that cannot
+//                  be read is listed as unadmitted with a stderr note; the
+//                  verdict always prints (TASK-043-FU). Informational:
 //                  spec §7's fail table is closed; the lead reads the list.
 //   check throws   checkRun's own USAGE (run.json gone after the marker was
 //                  seen) or INCOMPLETE(COMMITTED) (marker gone) and any other
@@ -143,19 +152,20 @@
 // `signOff(ctx, {engagement_id, expect}) → result` is the programmatic entry
 // (the E2E and TASK-035's checklist test read it); `run()` prints it.
 //
-// Imports: node:fs (existsSync, readFileSync, readdirSync, statSync — reads only),
+// Imports: node:fs (existsSync, lstatSync, readFileSync, readdirSync, statSync — reads only),
 // node:path, ../canon.mjs (readArtifact, sha256Hex), ../redact.mjs
 // (redactString), ./argv.mjs, ./baseline.mjs (readBaseline, diffBaseline,
 // observedPaths), ./cmd-check.mjs (checkRun), ./cmd-tm-lint.mjs (the
 // snapshot and index file names — the writer's own constants), ./exit.mjs,
 // ./fsx.mjs (walk), ./ignore-block.mjs (probeManagedPaths), ./ledger.mjs
 // (readIndex), ./profiles/case.mjs (suiteDir), ./profiles/index.mjs
-// (memberIdentity), ./register-core.mjs (openRegister), ./register-fold.mjs
+// (memberIdentity; M3_SIDECAR and SLUG — the registry's one spelling of the
+// sidecar name and the slug class, TASK-043-FU), ./register-core.mjs (openRegister), ./register-fold.mjs
 // (anchorVerify, parseAnchor, summarize), ./run-index.mjs (runDir),
 // ./schema.mjs (validate), ./tokens.mjs. No child process of its own (G-6:
 // git only through the modules above), no network (G-14), no clock (G-1).
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readArtifact, sha256Hex } from "../canon.mjs";
 import { redactString } from "../redact.mjs";
@@ -168,7 +178,7 @@ import { walk } from "./fsx.mjs";
 import { probeManagedPaths } from "./ignore-block.mjs";
 import { readIndex } from "./ledger.mjs";
 import { suiteDir } from "./profiles/case.mjs";
-import { memberIdentity } from "./profiles/index.mjs";
+import { M3_SIDECAR, SLUG, memberIdentity } from "./profiles/index.mjs";
 import { openRegister } from "./register-core.mjs";
 import { anchorVerify, parseAnchor, summarize } from "./register-fold.mjs";
 import { runDir } from "./run-index.mjs";
@@ -210,8 +220,6 @@ import {
 
 const COMMAND = "sign-off";
 const HANDOFFS_SEGMENT = "handoffs";
-const CASE_MANIFEST = /^[0-9a-f]{12}-[0-9]{4}\.case\.export-manifest\.json$/;
-const SLUG = /^[a-z0-9-]+$/;
 
 /**
  * Every `<cause>` a `SIGN-OFF: FAIL(<cause>)` line can carry, spelled with
@@ -369,7 +377,7 @@ function recordedSuites(ctx) {
   const dir = join(ctx.st, HANDOFFS_SEGMENT);
   const suites = new Set();
   const identities = new Set();
-  const names = existsSync(dir) ? readdirSync(dir).filter((n) => CASE_MANIFEST.test(n)).sort() : [];
+  const names = existsSync(dir) ? readdirSync(dir).filter((n) => M3_SIDECAR.exec(n)?.[2] === "case").sort() : [];
   for (const name of names) {
     const untrusted = (why) => ctx.log(`${COMMAND}: ${HANDOFFS_SEGMENT}/${name} ${why} — its recorded suite is not trusted`);
     if (!isFile(join(dir, name))) {
@@ -424,9 +432,26 @@ function unadmittedFiles(ctx, record) {
       continue;
     }
     for (const rel of walk(abs)) {
+      const path = `${suite}/${rel}`;
+      // fsx.walk lists a symlink as a file (Dirent.isDirectory() is false for a link); publish lands regular files
+      // only, so anything else — a symlink of any kind, a socket — is not what publish wrote: listed, never read
+      // (TASK-043-FU). The same for a file the process cannot read (EACCES): fail-closed, the verdict still prints.
+      // Prose first, path last (G-4: `sign-off: tasks/security-<slug>-admitted/TC-NNN_<slug>.md` reads as a
+      // high-entropy assignment to redact.mjs and would leave the note as `<REDACTED:…>.md`)
+      let bytes = null;
+      try {
+        if (lstatSync(join(abs, rel)).isFile()) bytes = readFileSync(join(abs, rel));
+        else ctx.log(`${COMMAND}: not a regular file, listed as unadmitted — ${path}`);
+      } catch {
+        ctx.log(`${COMMAND}: could not be read, listed as unadmitted — ${path}`);
+      }
+      if (bytes === null) {
+        files.push(path);
+        continue;
+      }
       // identity over the REDACTED bytes: equal to what publish recorded for a published file, and never a plain hash over foreign content (G-2)
-      const sha = sha256Hex(Buffer.from(redactString(readFileSync(join(abs, rel))).text, "utf8"));
-      if (!identities.has(sha)) files.push(`${suite}/${rel}`);
+      const sha = sha256Hex(Buffer.from(redactString(bytes).text, "utf8"));
+      if (!identities.has(sha)) files.push(path);
     }
   }
   return { suites: sorted, files };
