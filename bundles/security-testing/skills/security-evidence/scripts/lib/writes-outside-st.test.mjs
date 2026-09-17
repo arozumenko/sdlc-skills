@@ -42,6 +42,8 @@ const KNOWN_WRITERS = Object.freeze([
   "lib/cmd-gate.mjs",
   "lib/cmd-ingest.mjs",
   "lib/cmd-packet.mjs",
+  "lib/cmd-plan-admit.mjs", // TASK-042: <run>/admissions/<case_sha256>.json (writeArtifact) — under <st>
+  "lib/cmd-plan-propose.mjs", // TASK-042: <st>/proposals/<id>.proposal.md (writeAtomic) — under <st>
   "lib/cmd-publish.mjs",
   "lib/cmd-purge.mjs",
   "lib/cmd-receipt.mjs",

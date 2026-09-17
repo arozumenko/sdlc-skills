@@ -740,7 +740,7 @@ test("mitigation subjects (--type mitigation-review, the default for an M-nnn id
   assert.deepEqual(packetFiles(repo, run_id), [`${scopePacket}.json`, `${line.sha256}.json`].sort());
 });
 
-test("one packet, one contract: a finding id and a mitigation id together ⇒ 2 USAGE; --type fix-review is verify all's (2 USAGE); --type case is M3 (2 NOT-IMPLEMENTED(M3))", async () => {
+test("one packet, one contract: a finding id and a mitigation id together ⇒ 2 USAGE; --type fix-review is verify all's (2 USAGE); --type case over an id that is not a committed path ⇒ 2 USAGE", async () => {
   const { repo, run_id, scopePacket, finding } = await gatedRepo();
   const id = finding(CLAIMS.injection.title).id;
   const mixed = await packet(repo, ["--run", run_id, "--kind", "subject", "--subject", id, "--subject", "M-001"]);
@@ -751,8 +751,80 @@ test("one packet, one contract: a finding id and a mitigation id together ⇒ 2 
   assert.match(fix.stdout, /^USAGE\(packet: --type fix-review/);
   const kase = await packet(repo, ["--run", run_id, "--kind", "subject", "--subject", "c".repeat(64), "--type", "case"]);
   assert.equal(kase.code, 2, kase.stdout + kase.stderr);
-  assert.equal(kase.stdout.trim(), "NOT-IMPLEMENTED(M3)");
+  assert.match(kase.stdout, /^USAGE\(packet: case c{64} is not in the tree at head [0-9a-f]{12} \(commit the case and start a run at that head\)\)$/m);
   assert.deepEqual(packetFiles(repo, run_id), [`${scopePacket}.json`], "nothing written");
+});
+
+// --- case packets (TASK-042: the `SUBJECT_SOURCES.case` seam) ---------------------------
+
+test("case packet (TASK-042): --type case --subject <path> ⇒ the committed case file at head as the one entry (whole normalised range, blob oid, range_hmac) with subject id = case_sha256 over its redacted text; receipt validate binds a vulnerability-review to it; idempotent", async () => {
+  const { readyRepo: planRepo, writeCase, caseText, PASSIVE_ROWS, commitAll, scopedRun } = await import("../fixtures/plan/helpers.mjs");
+  const { caseSha256 } = await import("./admission-core.mjs");
+  const repo = planRepo();
+  const rel = writeCase(repo, "TC-001_security-headers.md", caseText("TC-001", [["Open `{{base_url}}/login` with password=`Hunter2Secret9` in the query", "Login page loads"], ...PASSIVE_ROWS]));
+  commitAll(repo);
+  const run_id = await scopedRun(repo);
+  const r = await packet(repo, ["--run", run_id, "--kind", "subject", "--type", "case", "--subject", rel]);
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  const line = parsePacketLine(r.stdout);
+  assert.equal(line.kind, "subject");
+  assert.equal(line.files, 1);
+  const p = readPacket(repo, run_id, line.sha256);
+  const bytes = readFileSync(join(repo, rel));
+  const { case_sha256 } = caseSha256(bytes);
+  assert.deepEqual(p.payload.subject_ids, [case_sha256], "the subject id is the case identity, not the path given");
+  assert.notEqual(case_sha256, sha256Hex(bytes), "sha256 over the REDACTED text (G-2)");
+  const [file] = p.payload.files;
+  assert.equal(file.path, rel);
+  assert.equal(file.side, "head");
+  assert.equal(file.oid, git(repo, ["rev-parse", `HEAD:${rel}`]));
+  const lines = bytes.toString("utf8").split("\n").filter((l) => l.trim() !== "").length;
+  assert.deepEqual(file.ranges, [[1, lines]], "the whole file, normalised line numbers");
+  assert.equal(file.range_hmac, hmacHex(keyBytes(repo), rangeBytes(bytes, 1, lines)));
+  assert.deepEqual(filesContaining(repo, "Hunter2Secret9"), [`cases/my-product/TC-001_security-headers.md`], "the raw credential is only in the operator's own candidate file, in no bundle-written file (the packet carries an HMAC, the subject a redacted identity)");
+  assert.deepEqual(validate("packet", p.payload), []);
+  // receipt validate accepts a vulnerability-review on it: the oid at head matches
+  mkdirSync(join(repo, ST, "receipts", run_id), { recursive: true });
+  writeFileSync(join(repo, ST, "receipts", run_id, "r.json"), JSON.stringify({ type: "vulnerability-review", subject_id: case_sha256, packet_sha256: line.sha256, assertion: "confirmed", reviewer_run_id: run_id }));
+  const rv = await runScript("evidence", ["receipt", "validate", "--run", run_id, join(ST, "receipts", run_id, "r.json")], { cwd: repo, env: ENV });
+  assert.equal(rv.code, 0, rv.stdout + rv.stderr);
+  assert.match(rv.stdout, new RegExp(`^RECEIPT admitted sha256=[0-9a-f]{64} type=vulnerability-review subject=${case_sha256}$`, "m"));
+  // idempotent: the same packet again is the same file
+  const again = await packet(repo, ["--run", run_id, "--kind", "subject", "--type", "case", "--subject", rel]);
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(parsePacketLine(again.stdout).sha256, line.sha256);
+  assert.match(again.stderr, /already present with this identity; nothing rewritten/);
+});
+
+test("case packet refusals: a path not at head (uncommitted, edited after the run, or a directory) ⇒ 2 USAGE; a non-repo path ⇒ 2 USAGE; two paths with one identity ⇒ 2 USAGE; without --type a path is an unknown subject; two distinct cases ⇒ one packet with two subjects", async () => {
+  const { readyRepo: planRepo, writeCase, caseText, PASSIVE_ROWS, commitAll, scopedRun } = await import("../fixtures/plan/helpers.mjs");
+  const repo = planRepo();
+  const a = writeCase(repo, "TC-001_a.md", caseText("TC-001", PASSIVE_ROWS));
+  const twin = writeCase(repo, "TC-001_twin.md", caseText("TC-001", PASSIVE_ROWS));
+  const b = writeCase(repo, "TC-002_b.md", caseText("TC-002", PASSIVE_ROWS, { title: "Another" }));
+  commitAll(repo);
+  const run_id = await scopedRun(repo);
+  const uncommitted = writeCase(repo, "TC-003_later.md", caseText("TC-003", PASSIVE_ROWS));
+  for (const [subjects, re] of [
+    [[uncommitted], /^USAGE\(packet: case \S+ is not in the tree at head [0-9a-f]{12} \(commit the case and start a run at that head\)\)$/m],
+    [[".agents/security-testing/cases"], /^USAGE\(packet: case \S+ is not in the tree at head /m],
+    [["../x.md"], /^USAGE\(packet: --subject \.\.\/x\.md is not a repo-relative case path/m],
+    [["/etc/passwd"], /^USAGE\(packet: --subject \/etc\/passwd is not a repo-relative case path/m],
+    [[a, twin], /^USAGE\(packet: cases \S+ and \S+ have the same identity \(one case, one subject\)\)$/m],
+  ]) {
+    const r = await packet(repo, ["--run", run_id, "--kind", "subject", "--type", "case", ...subjects.flatMap((x) => ["--subject", x])]);
+    assert.equal(r.code, 2, `${subjects.join(" ")}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, re);
+  }
+  const untyped = await packet(repo, ["--run", run_id, "--kind", "subject", "--subject", a]);
+  assert.equal(untyped.code, 2, untyped.stdout + untyped.stderr);
+  assert.match(untyped.stdout, /^USAGE\(packet: unknown subject /m);
+  assert.deepEqual(packetFiles(repo, run_id), [], "nothing written");
+  const two = await packet(repo, ["--run", run_id, "--kind", "subject", "--type", "case", "--subject", a, "--subject", b]);
+  assert.equal(two.code, 0, two.stdout + two.stderr);
+  const p = readPacket(repo, run_id, parsePacketLine(two.stdout).sha256);
+  assert.equal(p.payload.subject_ids.length, 2);
+  assert.deepEqual(p.payload.files.map((f) => f.path), [a, b]);
 });
 
 test("citedFiles (the seam verify all builds its fix-review packet on): pure grouping of a finding's primary and typed ranges by (path, side), oids left to the caller", () => {

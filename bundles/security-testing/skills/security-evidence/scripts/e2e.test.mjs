@@ -634,9 +634,8 @@ test("security-reviewer appears in every host's native shape", { skip: SKIP }, a
 // tests named here). The day TASK-042 lands, the stub leaves this list and
 // the sibling rule applies (TASK-039 removed lib/cmd-tm-lint.mjs's row when
 // lib/cmd-tm-lint.test.mjs landed).
-const STUB_TESTED_BY = Object.freeze({
-  "lib/cmd-plan.mjs": "plan.test.mjs",
-});
+// TL-1 exception list, empty since TASK-042 landed cmd-plan.test.mjs (TASK-039 had removed its row): every lib module has a sibling test.
+const STUB_TESTED_BY = Object.freeze({});
 
 test("every script has a sibling *.test.mjs", () => {
   const scripts = walk(HERE).filter((rel) => rel.endsWith(".mjs") && !rel.endsWith(".test.mjs") && !rel.startsWith("fixtures/"));

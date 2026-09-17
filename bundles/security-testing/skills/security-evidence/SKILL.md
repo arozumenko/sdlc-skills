@@ -11,8 +11,8 @@ metadata:
 
 # Security evidence — the command and schema index
 
-Four entry scripts carry every command of the bundle (`plan.mjs` ships its
-CLI shape at M1 and lands in M3). Each is a thin
+Four entry scripts carry every command of the bundle (`plan.mjs admit |
+propose` landed in M3; `ta-prompt` still ships its CLI shape). Each is a thin
 argv dispatcher over `scripts/lib/cmd-<name>.mjs`; the shared modules are
 `canon.mjs` (canonical bytes, envelopes, identities), `normalize.mjs`
 (line normalisation), `redact.mjs` (the bounded rule list) and `lib/`.
@@ -61,7 +61,7 @@ over the canonical payload. `metadata.version` above equals
 | `evidence.mjs run snapshot register\|verify\|proposals --run <id> [--from <verify_run_id>]…` | copy cross-run artifacts **into** the run directory so `build-report` reads nothing outside it: `run snapshot register` (the register events as `<run>/register-events.json`), `run snapshot verify` (another verify run's `verify.json` with its packets and receipts under `<run>/verify-snapshots/<verify_run_id>/`), `run snapshot proposals` (the proposals index) | `WROTE …`; `2 RUN-COMMITTED`; `2 SNAPSHOT-EXISTS` |
 | `evidence.mjs scope --run <id> [--include <path-or-glob>]… [--max-bytes <n>]` | enumerate tracked files under `scope_paths` into `<run>/scope.json` (identity independent of envelope); a `review` run snapshots dirty files redacted with HMACs of the originals under `<st>/private/snapshots/<run_id>/` | `WROTE <run>/scope.json …`; `3 DIRTY-TREE` (assessment); `2 SCOPE-EXISTS` |
 | `evidence.mjs packet --run <id> --kind scope` | the scope packet for the `review` contract: every scope file with its whole admitted range, `range_hmac`, `policy_sha256` | `PACKET <path> sha256=<h> kind=scope files=<n>` |
-| `evidence.mjs packet --run <id> --kind subject --subject <id>… [--type <t>] [--policy <file>]` | a subject packet over one gated finding (or a mitigation / a case) for `vulnerability-review` / `mitigation-review`, built from its primary and typed citations | `PACKET <path> sha256=<h> kind=subject files=<n>` |
+| `evidence.mjs packet --run <id> --kind subject --subject <id>… [--type <t>] [--policy <file>]` | a subject packet over one gated finding (or a mitigation) for `vulnerability-review` / `mitigation-review`, built from its primary and typed citations; `--type case --subject <st>/cases/<slug>/TC-NNN_<slug>.md` lists the committed candidate case at head with subject id `case_sha256` (sha256 over its redacted text) for the `vulnerability-review` that admits it ("confirmed passive") | `PACKET <path> sha256=<h> kind=subject files=<n>`; `2 USAGE(packet: case <path> is not in the tree at head …)` |
 | `evidence.mjs ingest <kind> <file> --run <id> [--sent <ticket.json>]` | `<kind>` ∈ `sarif`, `ticket`, `pr`, `doc`, `case`, `audit`, `qa-run`, `ta-report`, `tracker-readback`; read → HMAC → redact → persist the import under `<st>/ledger/<run_id>/imports/<import_sha256>`, write `<run>/ingest/<import_sha256>.json`; untrusted content proposes, only scope- and target-validated references act; SARIF goes through `references/sarif-mapping.v1.json` and its closed fallback matrix | `IMPORT <kind> import_sha256=<h> records=<n> unlocated=<n> rejected=<n>`; `2 IMPORT-EXISTS(<h>)`; `READBACK: ok` / `MISMATCH(<field>)` for `tracker-readback` |
 | `evidence.mjs gate --run <id> [--claims <payload.json>]…` | re-check every claim's citation byte for byte after normalisation; derive ids (keyed when the content matches a redaction rule); write `<run>/findings.claimed.json`, `gate-result.json`, `rejects.json`, `unlocated.json` and the private citation records | `GATE accepted=<n> unverifiable=<n> rejected=<n> unlocated=<n>`; `2 CLAIMS-PACKET-MISMATCH`; `2 GATE-EXISTS` |
 | `evidence.mjs coverage --run <id> --examined <payload.json> [--scanner-rows <file>]` | account for every scoped range exactly once: `examined`, `unexamined`, scanner-only | `COVERAGE examined=<n> skipped=<n> scanner=<n>`; `COVERAGE INDETERMINATE` (empty scope); `2 EXAMINED-PACKET-MISMATCH`; `2 COVERAGE-EXISTS` |
@@ -126,11 +126,16 @@ assertion, `<run>/dispositions.json` is what the script derived from it.
 ## `plan.mjs` (M3)
 
 `plan.mjs admit` produces the admission record that decides whether a case
-enters the hand-off suite or stays a proposal (unknown effects ⇒ proposal).
+enters the hand-off suite or stays a proposal (unknown effects ⇒ proposal;
+the claim is "admitted by lint or by review", never "safe"); `plan.mjs
+propose` files active work outside `tasks/`. The grammar, the forbidden
+list and the routes are the `security-test-planning` skill.
 
-| Command | Does at M1 |
-|---|---|
-| `plan.mjs admit --run <id> <case.md> [--receipt <sha256>]` / `plan.mjs propose --run <id> <proposal.md>` / `plan.mjs ta-prompt --run <id> --slug <s> --base <branch>` | CLI shape and schema validation; `2 NOT-IMPLEMENTED(M3)` otherwise; `2 PROPOSAL-UNDER-TASKS` is already refused |
+| Command | Does | Prints |
+|---|---|---|
+| `plan.mjs admit --run <id> <case.md> [--receipt <sha256>]` | lint the `## Steps` Action cells of a candidate case under `<st>/cases/<slug>/` (allowed-operation grammar + forbidden patterns + hosts against `targets.browser` of the run's engagement) and write `<run>/admissions/<case_sha256>.json` (write-once; `case_sha256` = sha256 over the redacted text, the same identity `ingest case` and `packet --type case` use): `admitted-heuristic` with zero hits, `proposal` otherwise; with `--receipt`, the named admitted `vulnerability-review` receipt on the case packet must be this case's and `receipt apply`'s state must be `REVIEW_CONFIRMED` ⇒ `admitted-reviewed` (`receipt_sha256` recorded; a forbidden hit is never reviewed away), `refuted` / `indeterminate` ⇒ `proposal` with a `review-not-confirmed` hit | `ADMISSION case=<case_sha256> classification=<admitted-heuristic\|admitted-reviewed\|proposal> hits=<n>`, `WROTE …` (exit 0 for every classification); `2 SCHEMA-INVALID(case: …)`, `2 ADMISSION-EXISTS` (a different record for the same case), `2 USAGE(admit: candidate cases live under …)`, `3 INCOMPLETE(engagement)`, `4 RECEIPT-MISMATCH(<reason>)` |
+| `plan.mjs propose --run <id> <proposal.md>` | validate the one fenced ```` ```json proposal ```` block against `proposal.schema.json` (`authorization.status: proposed`, `authenticated: false` by schema) and copy the file, redacted, to `<st>/proposals/<id>.proposal.md`; a source under `tasks/` is refused; an existing destination with different bytes is refused, never overwritten | `PROPOSAL <path> id=<P-nnn> sha256=<h>`, `NEXT: run snapshot proposals --run <id>`; `2 SCHEMA-INVALID(proposal: …)`, `2 PROPOSAL-UNDER-TASKS` |
+| `plan.mjs ta-prompt --run <id> --slug <s> --base <branch>` | CLI shape only (TASK-044) | `2 NOT-IMPLEMENTED(M3)` |
 
 ## Schemas (`references/`)
 
