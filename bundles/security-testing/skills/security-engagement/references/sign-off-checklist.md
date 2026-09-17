@@ -27,8 +27,13 @@ belong to the record on disk); a malformed `--expect`. Exit `5` only when
 ## Fail causes, in evaluation order
 
 Each row: the `<cause>` exactly as the line spells it, what it means, and
-what to do. Every cause but the first two and the register ones names its
-run.
+what to do. Which causes name their run, by group, as the script prints
+them: `NO-ASSESSMENT` carries no run (there is none to name);
+`INCONSISTENT(<field>)`, `STRUCTURE-ONLY` and `SCOPE-DRIFTED(<n> files)` carry ` run=<run_id>`
+after the cause; `COVERAGE-INDETERMINATE(<run>)` names its run inside the parentheses;
+`CORRUPT`, `TRUNCATED`, `DIVERGED`, `DISPOSITIONS(<threat ids>)` and `TRACKED(<path>)` carry no run
+(the register, the anchor, the policy and the tracked-path check are
+engagement-wide, not per run).
 
 | `SIGN-OFF: FAIL(<cause>)` | Meaning | Do |
 |---|---|---|

@@ -110,6 +110,14 @@ test("sign-off checklist names every FAIL cause token and every listing header e
   assert.match(text, /`SIGN-OFF: FAIL\(<cause>\)`/);
   assert.match(text, /informational/i, "the listings are informational and never change the exit code (US-025 AC-5)");
   assert.doesNotMatch(text, /UNGATED|exact checkout/, "G-13 forbidden strings");
+  // TASK-047 (routed TASK-035 follow-up): which causes name their run, by group, as cmd-sign-off.mjs prints them —
+  // ` run=<run_id>` on INCONSISTENT / STRUCTURE-ONLY / SCOPE-DRIFTED, inside the parens for COVERAGE-INDETERMINATE, none on the rest.
+  assert.doesNotMatch(text, /Every cause but the first two and the register ones names its\s+run/, "the wrong sentence is gone");
+  const intro = text.slice(0, text.indexOf("| `SIGN-OFF: FAIL(<cause>)` |"));
+  assert.match(intro, /`INCONSISTENT\(<field>\)`, `STRUCTURE-ONLY` and `SCOPE-DRIFTED\(<n> files\)` carry ` run=<run_id>`/);
+  assert.match(intro, /`COVERAGE-INDETERMINATE\(<run>\)` names its run inside the parentheses/);
+  assert.match(intro, /`CORRUPT`, `TRUNCATED`, `DIVERGED`, `DISPOSITIONS\(<threat ids>\)` and `TRACKED\(<path>\)` carry no run/);
+  assert.match(intro, /`NO-ASSESSMENT`[^.]*no run/);
 });
 
 test("tracker-rules names both dedupe layers and tracker-readback", () => {
