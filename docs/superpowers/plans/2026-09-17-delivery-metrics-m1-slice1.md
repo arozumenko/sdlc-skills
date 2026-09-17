@@ -1,6 +1,6 @@
-# delivery-metrics M1 (Slice 1) Implementation Plan (v2)
+# delivery-metrics M1 (Slice 1) Implementation Plan (v3)
 
-**Plan version:** v2 — 2026-09-17; v1 review (`docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v1-adversarial-review-codex.md`, 19 blockers / 14 majors) applied by the plan author — see "Review rounds" at the end.
+**Plan version:** v3 — 2026-09-17; v1 review (`docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v1-adversarial-review-codex.md`, 19 blockers / 14 majors) applied by the plan author; round-2 review (`docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v2-adversarial-review-codex.md`, 1 blocker / 3 majors) applied in v3 — see "Review rounds" at the end.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -26,7 +26,8 @@
 10. SKILL.md frontmatter keys only `name`, `description` (≤ 1024), `license`, `compatibility` (≤ 500, quoted), `metadata` (`authors`, `version`); `name` = directory name; no `tools:` key anywhere.
 11. Commit after every task; `npm test && npm run validate:factories && npm run validate:marketplaces && npm run validate:dupes` green at every commit (`validate:externals` needs network — run it once at Task 13 if online, otherwise record "not run: offline").
 12. Honesty caveats are printed **unconditionally** in every report: `acceptance: unauthenticated`, `writes: non-transactional`, `partial-update: possible`, `capture-loss: possible`, `shared-files: last-writer-wins`, `sync: best-effort`, `concurrency: best-effort`, `hook-transcript-shapes: provisional until SPIKE-1`. Checked-zero and unknown are distinct in output.
-13. Work in the worktree `/Users/Daniel_Sallai/dev/sdlc-skills-delivery-metrics` on branch `feat/delivery-metrics-spec`. `docs/superpowers/` is gitignored — plan/spec commits use `git add -f`.
+13. All telemetry paths resolve the shared main-checkout owner via Task 1, including CLI, hook, installer and doctor; source-file/Git reads retain the invoking checkout.
+14. Work in the worktree `/Users/Daniel_Sallai/dev/sdlc-skills-delivery-metrics` on branch `feat/delivery-metrics-spec`. `docs/superpowers/` is gitignored — plan/spec commits use `git add -f`.
 
 ---
 
@@ -37,7 +38,9 @@ skills/delivery-metrics/
   SKILL.md, README.md                                       (Task 1; README finished in Task 13)
   scripts/delivery.mjs             CLI: plan | session | event | status | backfill | report | doctor   (Tasks 5, 8, 9, 12)
   scripts/install-hooks.mjs        Claude SubagentStop splice, ignore blocks, telemetry submodule bootstrap, --remove/--doctor (Task 12)
-  scripts/lib/paths.mjs            dirs, user slug, encoding, plan/events paths, mkdir lock, errors           (Task 1)
+  scripts/lib/paths.mjs            shared worktree owner, dirs, user slug, encoding, plan/events paths, mkdir lock, errors           (Task 1)
+  scripts/lib/roster.mjs           shipped factory map × installed roles, validated run snapshot (Task 1)
+  references/factory-roles.json    generated factory-to-role membership; copied with the orphan skill (Task 1)
   scripts/lib/events.mjs           record validator, ids, append (SKIP/ID-CONFLICT), read (validated, hashed) + resolution (Task 2)
   scripts/lib/plan.mjs             block extraction, schema, run-scoped ids, catalogue, delta, registration observations (Task 3)
   scripts/lib/plan-markdown.mjs    tasks-file importer → canonical block                                   (Task 4)
@@ -128,11 +131,11 @@ git commit -m "docs: orphan/external counts, SPEC P-0/P-1, SPIKE-1 procedure (de
 
 **Files:**
 - Create: `skills/delivery-metrics/SKILL.md`, `skills/delivery-metrics/README.md`
-- Create: `skills/delivery-metrics/scripts/lib/paths.mjs`, `skills/delivery-metrics/scripts/lib/paths.test.mjs`
+- Create: `skills/delivery-metrics/scripts/lib/paths.mjs`, `skills/delivery-metrics/scripts/lib/paths.test.mjs`, `scripts/lib/roster.mjs`, `scripts/lib/roster.test.mjs`, `references/factory-roles.json` (last three relative to `skills/delivery-metrics/`)
 - Modify: `skills.json`, `bundles/feature-development/factory.json:166-169`, `bundles/test-automation/factory.json:11-14`; regenerate the three marketplaces
 
 **Interfaces:**
-- Produces: `deliveryDir(repo)`, `plansDir(repo)`, `sessionsDir(repo)`, `profilePath(repo)`; `encodeSegment(s)` / `decodeSegment(s)`; `runPath(repo, runId)` (`plans/<enc(runId)>.json`); `eventsPath(repo, slug)`; `sessionPath(repo, host, session)`; `whoAmI(repo) → {name, email, slug}` (tokenomics rule, `telemetry-capture.mjs:75-94`); `withLock(repo, fn, {staleMs=60000, now}) → fn()` (throws `cliError('LOCK-BUSY', …)`); `nowIso(now)`; `sha256(textOrBuffer)`; `cliError(code, detail) → Error{code, exit}` (exit map from Global Constraint 8; `detail` newlines flattened).
+- Produces: `resolveOwnerRepo(repo) → absolute main checkout` (plain non-Git directories pass through); `ownerRepo(payload, env) → resolveOwnerRepo(payload.cwd ?? env.CLAUDE_PROJECT_DIR ?? process.cwd())`; `deliveryDir(repo)`, `plansDir(repo)`, `sessionsDir(repo)`, `profilePath(repo)`; `encodeSegment(s)` / `decodeSegment(s)`; `runPath(repo, runId)` (`plans/<enc(runId)>.json`); `eventsPath(repo, slug)`; `sessionPath(repo, host, session)`; `whoAmI(repo) → {name, email, slug}` (tokenomics rule, `telemetry-capture.mjs:75-94`); `withLock(repo, fn, {staleMs=60000, now}) → fn()` (throws `cliError('LOCK-BUSY', …)`); `nowIso(now)`; `sha256(textOrBuffer)`; `cliError(code, detail) → Error{code, exit}` (exit map from Global Constraint 8; `detail` newlines flattened).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -140,16 +143,31 @@ git commit -m "docs: orphan/external counts, SPEC P-0/P-1, SPIKE-1 procedure (de
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, existsSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, utimesSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deliveryDir, encodeSegment, decodeSegment, runPath, eventsPath, sessionPath, withLock, nowIso, sha256, whoAmI, cliError } from './paths.mjs';
+import { execFileSync } from 'node:child_process';
+import { resolveOwnerRepo, ownerRepo, deliveryDir, encodeSegment, decodeSegment, runPath, eventsPath, sessionPath, withLock, nowIso, sha256, whoAmI, cliError } from './paths.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-paths-'));
 
 test('deliveryDir is .agents/telemetry/delivery under the repo', () => {
   const repo = tmp();
   assert.equal(deliveryDir(repo), join(repo, '.agents', 'telemetry', 'delivery'));
+});
+
+test('owner is shared before telemetry exists, from linked and nested directories', () => {
+  const repo = tmp();
+  const g = (...args) => execFileSync('git', ['-C', repo, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } });
+  g('init', '-q', '-b', 'main'); g('commit', '-q', '--allow-empty', '-m', 'init');
+  const wt = join(tmp(), 'arbitrary'); g('worktree', 'add', '-q', '-b', 'work', wt);
+  mkdirSync(join(wt, 'nested'));
+  assert.equal(resolveOwnerRepo(join(wt, 'nested')), realpathSync(repo));
+  assert.equal(ownerRepo({ cwd: wt }, { CLAUDE_PROJECT_DIR: tmp() }), realpathSync(repo));
+  assert.equal(deliveryDir(wt), deliveryDir(repo));
+  assert.equal(runPath(wt, 'a/b'), runPath(repo, 'a/b'));
+  assert.equal(sessionPath(wt, 'claude', 's'), sessionPath(repo, 'claude', 's'));
+  assert.equal(resolveOwnerRepo(tmp()).startsWith('/'), true);
 });
 
 test('encodeSegment percent-encodes / % : reversibly and leaves the rest', () => {
@@ -200,9 +218,22 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { userInfo } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, isAbsolute } from 'node:path';
 
-export const deliveryDir = (repo) => join(repo, '.agents', 'telemetry', 'delivery');
+export function resolveOwnerRepo(repo) {
+  const candidate = resolve(repo);
+  const g = (...args) => { try { return execFileSync('git', ['-C', candidate, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
+  const top = g('rev-parse', '--show-toplevel')?.trim();
+  if (!top) return candidate;
+  // Git lists the main checkout first, even with --separate-git-dir; never guess from path spelling.
+  const listing = g('worktree', 'list', '--porcelain', '-z');
+  const first = listing?.split('\0').find((v) => v.startsWith('worktree '))?.slice(9);
+  if (!first || !isAbsolute(first)) throw cliError('USAGE', 'cannot resolve telemetry owner from git worktree list');
+  return resolve(first);
+}
+export const ownerRepo = (payload = {}, env = {}) => resolveOwnerRepo(payload.cwd ?? env.CLAUDE_PROJECT_DIR ?? process.cwd());
+
+export const deliveryDir = (repo) => join(resolveOwnerRepo(repo), '.agents', 'telemetry', 'delivery');
 export const plansDir = (repo) => join(deliveryDir(repo), 'plans');
 export const sessionsDir = (repo) => join(deliveryDir(repo), 'sessions');
 export const profilePath = (repo) => join(deliveryDir(repo), 'profile.json');
@@ -247,7 +278,91 @@ export function withLock(repo, fn, { staleMs = 60000, now = Date.now() } = {}) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes** — 5 passing.
+- [ ] **Step 3a: Ship the factory map and roster resolver**
+
+Create `scripts/lib/roster.mjs`, `scripts/lib/roster.test.mjs` and `references/factory-roles.json`. Generate the map from the package manifests once during implementation (and regenerate when factory membership changes); this code runs at the repository root, never in an installed consumer. The whole orphan skill, including this JSON, is copied by the installer.
+
+```js
+// Run with node --input-type=module on stdin from the repo root.
+import { readFileSync, writeFileSync } from 'node:fs';
+const ids = ['feature-development', 'test-automation', 'manual-qa'];
+const factories = Object.fromEntries(ids.map((id) => {
+  const f = JSON.parse(readFileSync(`bundles/${id}/factory.json`, 'utf8'));
+  return [id, [...new Set([...(f.localAgents ?? []), ...(f.agents ?? []).map((a) => typeof a === 'string' ? a : a.id)])].sort()];
+}));
+writeFileSync('skills/delivery-metrics/references/factory-roles.json', `${JSON.stringify({ v: 1, factories }, null, 2)}\n`);
+```
+
+`roster.mjs` exports `installedAgents(repo) → string[]`, `makeRoster(repo, factories, requested=null) → {v:1,factories:string[],agents:string[],map_sha256:string}`, and `validRoster(snapshot) → boolean`. `requested` is an optional explicit assertion of the discovered union, not an unverified list of roles. Empty unions permit manual CLI tracking but admit no named hook role. The legacy missing-type exception still requires a valid snapshot and binding. Snapshot validation checks shape, known factories, sorted unique names, map hash and membership; it is not authentication. Later installation changes take effect only on registration or `plan roster` refresh.
+
+```js
+// scripts/lib/roster.mjs — STDLIB ONLY; all factory data travels with this skill.
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { cliError, resolveOwnerRepo, sha256 } from './paths.mjs';
+const bytes = readFileSync(new URL('../../references/factory-roles.json', import.meta.url));
+const map = JSON.parse(bytes.toString('utf8'));
+const digest = sha256(bytes);
+const sorted = (xs) => [...new Set(xs)].sort();
+export function installedAgents(repo) {
+  const roles = [];
+  for (const root of new Set([repo, resolveOwnerRepo(repo)])) for (const host of ['.claude', '.cursor', '.windsurf', '.github', '.codex']) {
+    const dir = join(root, host, 'agents');
+    if (!existsSync(dir)) continue;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory() && existsSync(join(dir, e.name, 'AGENT.md'))) roles.push(e.name);
+      else if (e.isFile() && /(?:(?:\.agent)?\.md|\.toml)$/.test(e.name)) roles.push(e.name.replace(/(?:(?:\.agent)?\.md|\.toml)$/, ''));
+    }
+  }
+  return sorted(roles);
+}
+export function makeRoster(repo, factories, requested = null) {
+  if (!Array.isArray(factories) || !factories.length || factories.some((f) => !Object.hasOwn(map.factories, f))) throw cliError('USAGE', 'unknown participating factory');
+  const fs = sorted(factories), allowed = new Set(fs.flatMap((f) => map.factories[f]));
+  const agents = installedAgents(repo).filter((a) => allowed.has(a));
+  if (requested && JSON.stringify(sorted(requested)) !== JSON.stringify(agents)) throw cliError('USAGE', 'roster must equal installed participating-factory union');
+  return { v: 1, factories: fs, agents, map_sha256: digest };
+}
+export function validRoster(s) {
+  if (!s || s.v !== 1 || s.map_sha256 !== digest || !Array.isArray(s.factories) || !s.factories.length || !Array.isArray(s.agents)) return false;
+  if (s.factories.some((f) => typeof f !== 'string' || !Object.hasOwn(map.factories, f)) || s.agents.some((a) => typeof a !== 'string')) return false;
+  const allowed = new Set(s.factories.flatMap((f) => map.factories[f]));
+  return JSON.stringify(s.factories) === JSON.stringify(sorted(s.factories)) && JSON.stringify(s.agents) === JSON.stringify(sorted(s.agents)) && s.agents.every((a) => allowed.has(a));
+}
+```
+
+- [ ] **Step 3b: Test the installed roster layouts and membership boundary**
+
+```js
+// scripts/lib/roster.test.mjs
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { installedAgents, makeRoster, validRoster } from './roster.mjs';
+test('factory map intersects installed roles on every supported layout', () => {
+  for (const host of ['.claude', '.cursor', '.windsurf', '.github', '.codex']) {
+    const repo = mkdtempSync(join(tmpdir(), 'dm-roster-'));
+    const dir = join(repo, host, 'agents'); mkdirSync(dir, { recursive: true });
+    for (const role of ['js-dev', 'test-automation-lead', 'qa-auditor']) {
+      if (host === '.codex') writeFileSync(join(dir, `${role}.toml`), 'role');
+      else if (host === '.github') writeFileSync(join(dir, `${role}.agent.md`), 'role');
+      else { mkdirSync(join(dir, role)); writeFileSync(join(dir, role, 'AGENT.md'), 'role'); }
+    }
+    assert.equal(installedAgents(repo).length, 3);
+    const s = makeRoster(repo, ['feature-development', 'test-automation']);
+    assert.deepEqual(s.agents, ['js-dev', 'test-automation-lead']); assert.equal(validRoster(s), true);
+    assert.equal(validRoster({ ...s, agents: [...s.agents, 'qa-auditor'] }), false);
+    assert.equal(validRoster({ ...s, map_sha256: 'changed' }), false);
+    assert.throws(() => makeRoster(repo, s.factories, ['qa-auditor']), /roster must equal/);
+  }
+});
+```
+
+Run `node --test skills/delivery-metrics/scripts/lib/paths.test.mjs skills/delivery-metrics/scripts/lib/roster.test.mjs` → all pass.
+
+- [ ] **Step 4: Run test to verify it passes** — all timeline tests pass. Monday is 2026-09-14: 09:00 → 13:00 = 4 × 3600 = 14,400 seconds; Tuesday is 2026-09-15. First completion and first start are unchanged by Tuesday’s added child. Task 7 asserts actual 4 h / ((2 + 6) / 2) h = 1, hit true, and one Monday completion.
 
 - [ ] **Step 5: Write SKILL.md and README.md**
 
@@ -858,7 +973,7 @@ export function registrationObservations({ run, version, delta, token, at, creat
   const out = [];
   for (const i of delta.created) {
     const c = createdAtOf(i);
-    out.push(makeObservation({ ...base(i), event: 'created', transition_id: `${i.item_id}/created/0`, at: c?.at ?? at, basis: c ? 'plan-commit' : 'observed', meta: { version, ...(c?.sha ? { git_sha: c.sha } : {}) } }, { now }));
+    out.push(makeObservation({ ...base(i), event: 'created', transition_id: `${i.item_id}/created/0`, at: c?.at ?? at, basis: c?.sha ? 'plan-commit' : 'observed', meta: { version, ...(c?.sha ? { git_sha: c.sha } : {}) } }, { now }));
   }
   for (const { item: i, stale } of delta.estimated) {
     const rev = i.estimate_revision ?? 0;
@@ -1068,14 +1183,14 @@ git commit -m "feat(delivery-metrics): markdown tasks-file importer bounded to t
 
 | Command | Behaviour |
 |---|---|
-| `plan register --from <f> --id <token> [--campaign --run --version --observation-start --integration-ref] [--at <iso>] [--created-at <iso>] [--keep-missing] [--roster a,b] [--dry-run] [--yes]` | Read block (or import markdown with `--yes`; without `--yes` print the block + `DRY-RUN` and exit 0). `validatePlan` → `SCHEMA-INVALID(first)`; `assignIds`; `validateIds` → `SCHEMA-INVALID`. Request digest `d = sha256(token + canonicalHash(full))`. Load run record. **Retry first:** if `run.requests[token]?.digest === d` → regenerate that request's observations from `run.versions[v].items` vs the previous version's items (same `at`/`createdAt` stored in `requests[token]`) and append (all `SKIP`), print `PLAN … (retry)`, exit 0. If `run.requests[token]` exists with a different digest → `ID-CONFLICT(registration token reused with different input)`. Else new request: `version ≤ run.version` → `USAGE(version must exceed <n>)`; `supersedes` present → keys must exist in `run.items`, values must be ids of this plan, else `MIGRATION-REQUIRED`; a new version without `supersedes` is allowed (missing items cancel unless `--keep-missing`). `at = --at ?? now` (a re-cut, i.e. `version > 1`, **requires** `--at`, else `USAGE(re-cut requires --at)`). `createdAtOf(item)`: `--created-at` → `{at}` (basis observed unless git); else if the source file is tracked, `firstCommitContaining(repo, 'HEAD', rel, item.ref)` per item (`plan-commit`); else `null` (→ `at`, observed). Roster snapshot: `--roster` or the installed `.claude/agents/*` names. Save run: `{run, campaign_id, run_id, version, factory, status:'open', registered_at, updated_at, observation_start, source_epoch, mission_kind, source:{path, rel, sha256}, canonical_sha256, roster_agents:[], import, supersedes, items: mergeCatalogue(prev, next), versions:[…, {version, at, canonical_sha256, items: next}], requests:{[token]: {digest, version, at, created_at_flag}}}`. Then append observations (`estimate_revision` per item = count of existing `estimated` observations for it), printing `EVENT/SKIP/ID-CONFLICT …` per line, then `PLAN <run> v<version> items=<n> created=<a> estimated=<b> stale-acceptance=<s> cancelled=<c> reopened=<d> accepted=<x> unaccepted=<y> unestimated=<z>`. Exit 2 if any `ID-CONFLICT`. Sync requested in `finally`. |
-| `plan list` / `plan show --plan <run>` / `plan close --plan <run>` / `plan roster --plan <run> --agents a,b` | `PLAN <run> v<version> status=<s> items=<n>` per run; JSON; close; replace `roster_agents` (last-writer-wins). |
+| `plan register --from <f> --id <token> [--campaign --run --version --observation-start --integration-ref] [--at <iso>] [--created-at <iso>] [--keep-missing] [--factories feature-development,test-automation] [--roster a,b] [--dry-run] [--yes]` | Read block (or import markdown with `--yes`; without `--yes` print the block + `DRY-RUN` and exit 0). `validatePlan` → `SCHEMA-INVALID(first)`; `assignIds`; `validateIds` → `SCHEMA-INVALID`. Request digest `d = sha256(token + canonicalHash(full))`. Load run record. **Retry first:** if `run.requests[token]?.digest === d` → re-emit `requests[token].observations` (including the saved per-item creation clocks and estimate revisions) and append (all `SKIP`), print `PLAN … (retry)`, exit 0. If `run.requests[token]` exists with a different digest → `ID-CONFLICT(registration token reused with different input)`. Else new request: `version ≤ run.version` → `USAGE(version must exceed <n>)`; `supersedes` present → keys must exist in `run.items`, values must be ids of this plan, else `MIGRATION-REQUIRED`; a new version without `supersedes` is allowed (missing items cancel unless `--keep-missing`). `at = --at ?? now` (a re-cut, i.e. `version > 1`, **requires** `--at`, else `USAGE(re-cut requires --at)`). `createdAtOf(item)`: `--created-at` → `{at}` (basis observed unless git); else if the source file is tracked, `firstCommitContaining(repo, sourceHead, rel, item.ref)` (resolve the invocation checkout’s HEAD to a full SHA once per request and persist it) per item (`plan-commit`); else `{at: nowIso(now)}` (observed registration clock, independently of re-cut `--at`). Resolve and save every creation clock in the request before appending; retry uses saved clocks even after branch growth. Roster snapshot: Task 1 `makeRoster(repo, --factories ?? [full.factory], --roster ?? null)`; require the plan factory among participants. Store `roster` and its `agents` as compatibility `roster_agents`; `--roster` asserts the union and cannot introduce a foreign role. Save run: `{run, campaign_id, run_id, version, factory, status:'open', registered_at, updated_at, observation_start, source_epoch, mission_kind, source:{path, rel, sha256, head}, canonical_sha256, roster:{v, factories, agents, map_sha256}, roster_agents:[], import, supersedes, items: mergeCatalogue(prev, next), versions:[…, {version, at, keep_missing, canonical_sha256, items: next}], requests:{[token]: {digest, version, at, source_head, keep_missing, created, observations}}}`. Then append observations (`estimate_revision` per item = count of existing `estimated` observations for it), printing `EVENT/SKIP/ID-CONFLICT …` per line, then `PLAN <run> v<version> items=<n> created=<a> estimated=<b> stale-acceptance=<s> cancelled=<c> reopened=<d> accepted=<x> unaccepted=<y> unestimated=<z>`. Exit 2 if any `ID-CONFLICT`. Sync requested in `finally`. |
+| `plan list` / `plan show --plan <run>` / `plan close --plan <run>` / `plan roster --plan <run> --agents a,b` | `PLAN <run> v<version> status=<s> items=<n>` per run; JSON; close; refresh `roster` using its saved participating factories and assert `--agents` equals the installed union; replace `roster_agents = roster.agents` (last-writer-wins). |
 | `session set --host <h> --session <s> --plan <run>` | writes `sessions/<enc>.json` `{host, session, plan, at}`. |
 | `event <ref> <event> --id <token> [--plan <run>] [--at <iso>] [--sha <sha>] [--revision <n>] [--status active\|retracted] [--transition <t>] [--raw <s>] [--note <s>] [--allow-cancelled]` | `<event>` ∈ `dispatched\|done\|cancelled\|blocked\|unblocked\|reopened\|review_requested\|review_returned\|review_approved\|first_commit`. `--sha` → `at` = committer time, `meta.git_sha`; `--sha` **and** a differing `--at`: allowed only with `--revision ≥ 1` (an explicit correction: `at` wins, `meta.git_sha` kept, `meta.clock: 'corrected'`), else `USAGE(at and sha disagree; pass --revision <n> to correct)`. Invalid `--at` → `USAGE(invalid --at)`. Default `transition_id`: `<item>/<event>/episode-1` for `done\|cancelled\|reopened`, `<item>/<event>/<token>` otherwise. `validateTransition` over the item's current active occurrences (selected via `selectOccurrences`, Task 6 — until Task 6 exists, over active observations sorted by `at`) → `INVALID-TRANSITION(<detail>)`. `SKIP` exit 0; `ID-CONFLICT` exit 2 with the hint `use --revision <n+1>`. |
 | `event --from <jsonl> [--plan <run>]` | each line `{ref, event, id, at?, sha?, revision?, status?, transition?, raw?, note?}`; bad JSON → `USAGE(line <n>: invalid json)`; sequential appends; `EVENTS appended=<n> skipped=<m> conflicts=<k> invalid=<i>`; exit 2 if conflicts or invalid > 0. |
 | `profile set --from <f>` | keys validated against the template; `profile.json` written (last-writer-wins). |
 
-All commands: known errors print one line and exit per Global Constraint 8; anything else `INTERNAL(...)` exit 1. Every mutating command calls `bestEffortSync` in a `finally` (so a partial `--from` batch still syncs) and prints `WARN sync: <reason>` on stderr when not synced for a reason other than `DELIVERY_NO_SYNC`/`plain-dir`.
+All commands use Task 1 path helpers, which resolve the shared owner before every ledger/plan/session/profile/lock access. Keep the invocation checkout for source-file and Git evidence reads: `--from` resolves against that checkout, and registration pins its HEAD. Sync, report assembly, hook, installer and doctor use `resolveOwnerRepo` for telemetry and never pick an owner based on whether a delivery directory already exists. All commands: known errors print one line and exit per Global Constraint 8; anything else `INTERNAL(...)` exit 1. Every mutating command calls `bestEffortSync` in a `finally` (so a partial `--from` batch still syncs) and prints `WARN sync: <reason>` on stderr when not synced for a reason other than `DELIVERY_NO_SYNC`/`plain-dir`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1199,14 +1314,17 @@ test('plan register: block → run file, per-item plan-commit creation, observat
   execFileSync('git', ['add', 'plan.md'], { cwd: repo }); execFileSync('git', ['commit', '-q', '-m', 'plan v1'], { cwd: repo, env: { ...process.env, GIT_COMMITTER_DATE: '2026-09-10T08:00:00Z', GIT_AUTHOR_DATE: '2026-09-10T08:00:00Z' } });
   const f = writePlan(repo, plan()); // adds TASK-002 later
   execFileSync('git', ['add', 'plan.md'], { cwd: repo }); execFileSync('git', ['commit', '-q', '-m', 'plan v1 + task 2'], { cwd: repo, env: { ...process.env, GIT_COMMITTER_DATE: '2026-09-12T08:00:00Z', GIT_AUTHOR_DATE: '2026-09-12T08:00:00Z' } });
+  const pinnedHead = git(repo, 'rev-parse', 'HEAD');
   const r = run(repo, ['plan', 'register', '--from', f, '--id', 'reg-1']);
   assert.equal(r.code, 0, r.stderr);
   assert.match(r.stdout, /PLAN sec\/run-1 v1 items=4 created=4 estimated=1 stale-acceptance=0 cancelled=0 reopened=0 accepted=1 unaccepted=0 unestimated=3/);
   const rec = JSON.parse(readFileSync(runPath(repo, 'sec/run-1'), 'utf8'));
   assert.equal(rec.status, 'open'); assert.equal(rec.versions.length, 1); assert.ok(rec.requests['reg-1']); assert.ok(Array.isArray(rec.roster_agents));
+  assert.equal(rec.source.head, pinnedHead); assert.equal(rec.requests['reg-1'].source_head, pinnedHead);
   const { active } = resolveObservations(repo);
   const c1 = active.find((o) => o.event === 'created' && o.ref === 'TASK-001'), c2 = active.find((o) => o.event === 'created' && o.ref === 'TASK-002');
   assert.equal(c1.basis, 'plan-commit'); assert.equal(c1.at, '2026-09-10T08:00:00.000Z'); assert.equal(c2.at, '2026-09-12T08:00:00.000Z', 'creation is per item, not per file');
+  commitAt(repo, 'later branch growth', '2026-09-18T00:00:00Z');
   const again = run(repo, ['plan', 'register', '--from', f, '--id', 'reg-1']);
   assert.equal(again.code, 0, again.stderr); assert.match(again.stdout, /\(retry\)/); assert.equal((again.stdout.match(/^SKIP/gm) || []).length, 5);
   assert.equal(resolveObservations(repo).active.length, 5);
@@ -1302,19 +1420,20 @@ test('event --from jsonl (invalid line counted, exit 2); session set; plan list/
 ```js
 // STDLIB ONLY. Thin git helpers; every failure → null (never a guess).
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export function git(repo, args, { cwd } = {}) {
   try { return execFileSync('git', ['-C', cwd ?? repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024, timeout: 20000 }).trim(); } catch { return null; }
 }
-export function relPath(repo, file) { const abs = resolve(file), root = resolve(repo); return abs.startsWith(`${root}/`) ? abs.slice(root.length + 1) : file; }
+export function relPath(repo, file) { const physical = (p) => { try { return realpathSync(p); } catch { return resolve(p); } }; const abs = physical(file), root = physical(repo); return abs.startsWith(`${root}/`) ? abs.slice(root.length + 1) : file; }
 export function commitTime(repo, sha) {
   const out = git(repo, ['show', '-s', '--format=%H%x1f%cI', `${sha}^{commit}`]);
   if (!out) return null; const [full, iso] = out.split('\x1f'); return full && iso ? { sha: full, at: new Date(iso).toISOString() } : null;
 }
 const wordRe = (ref) => new RegExp(`(^|[^A-Za-z0-9-])${ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-])`);
 export function firstCommitContaining(repo, head, rel, ref) {
+  if (!head) return null;
   const out = git(repo, ['log', '--reverse', '--format=%H%x1f%cI', head, '--', rel]);
   if (!out) return null;
   const re = wordRe(ref);
@@ -1343,9 +1462,11 @@ import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { gitState } from './git.mjs';
+import { resolveOwnerRepo } from './paths.mjs';
 
 export function bestEffortSync(repo, { env = process.env } = {}) {
   if (env.DELIVERY_NO_SYNC === '1') return { synced: false, reason: 'DELIVERY_NO_SYNC' };
+  repo = resolveOwnerRepo(repo);
   const tel = join(repo, '.agents', 'telemetry');
   if (!existsSync(join(tel, '.git'))) return { synced: false, reason: 'plain-dir' };
   const g = (...a) => execFileSync('git', ['-C', tel, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 }).trim();
@@ -1367,7 +1488,7 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
 ```js
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-metrics CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
@@ -1376,6 +1497,7 @@ import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, l
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
+import { makeRoster } from './lib/roster.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -1417,19 +1539,18 @@ export function validateTransition(history, event) {
   if (event === 'reopened' && state === 'open') return 'reopened when the item is not terminal';
   return null;
 }
-function installedAgents(repo) { const d = join(repo, '.claude', 'agents'); try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && existsSync(join(d, e.name, 'AGENT.md'))).map((e) => e.name).sort(); } catch { return []; } }
 
-function emitRegistration(repo, io, { run, version, delta, token, at, createdAtOf, now, active }) {
+function emitRegistration(repo, io, { run, version, delta, token, at, createdAtOf, now, active, records = null }) {
   for (const i of [...delta.created, ...delta.estimated.map((e) => e.item)]) i.estimate_revision = active.filter((o) => o.plan === run.run && o.item_id === i.item_id && o.event === 'estimated').length;
   // a changed estimate on an existing item gets the next revision; a new item starts at 0
-  const recs = registrationObservations({ run, version, delta, token, at, createdAtOf, now });
+  const recs = records ?? registrationObservations({ run, version, delta, token, at, createdAtOf, now });
   let conflicts = 0;
   for (const r of recs) { const res = appendObservation(repo, r, { now }); out(io, `${res.result} ${res.observation_id}`); if (res.result === 'ID-CONFLICT') conflicts++; }
   return conflicts;
 }
 
 function cmdPlanRegister(repo, f, io, now) {
-  const file = f.from, token = f.id;
+  const file = f.from ? resolve(repo, f.from) : null, token = f.id;
   if (!file || !token) throw cliError('USAGE', 'plan register needs --from <file> --id <token>');
   if (!existsSync(file)) throw cliError('USAGE', `no such file ${file}`);
   const text = readFileSync(file, 'utf8');
@@ -1452,7 +1573,7 @@ function cmdPlanRegister(repo, f, io, now) {
   if (req && req.digest === digest) {
     const ver = prev.versions.find((v) => v.version === req.version); const before = prev.versions.filter((v) => v.version < req.version).sort((a, b) => b.version - a.version)[0];
     const delta = planDelta(before?.items ?? [], ver.items, { keepMissing: req.keep_missing });
-    const conflicts = emitRegistration(repo, io, { run: prev, version: req.version, delta, token, at: req.at, createdAtOf: (i) => req.created[i.item_id] ?? null, now, active });
+    const conflicts = emitRegistration(repo, io, { run: prev, version: req.version, delta, token, at: req.at, createdAtOf: (i) => req.created[i.item_id] ?? null, now, active, records: req.observations });
     out(io, `PLAN ${runId} v${req.version} (retry) items=${prev.items.length}`);
     if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict`);
     return 0;
@@ -1466,27 +1587,34 @@ function cmdPlanRegister(repo, f, io, now) {
     for (const [oldId, newId] of Object.entries(full.supersedes.item_map ?? {})) { if (!known.has(oldId)) throw cliError('MIGRATION-REQUIRED', `supersedes maps unknown item ${oldId}`); if (!mine.has(newId)) throw cliError('MIGRATION-REQUIRED', `supersedes targets unknown item ${newId}`); }
   }
   const at = f.at ? isoOrThrow(f.at, '--at') : nowIso(now);
+  const sourceHead = git(repo, ['rev-parse', '--verify', 'HEAD^{commit}']);
   const rel = relPath(repo, file); const tracked = git(repo, ['ls-files', '--error-unmatch', rel]) != null;
   const created = {};
   const createdAtOf = (i) => {
     if (f['created-at']) return (created[i.item_id] = { at: isoOrThrow(f['created-at'], '--created-at') });
-    if (!tracked) return null;
-    const c = firstCommitContaining(repo, 'HEAD', rel, i.ref); if (c) created[i.item_id] = c; return c;
+    if (!tracked || !sourceHead) return null;
+    const c = firstCommitContaining(repo, sourceHead, rel, i.ref); if (c) created[i.item_id] = c; return c;
   };
   const delta = planDelta(prev?.items ?? [], next, { keepMissing: Boolean(f['keep-missing']) });
   if (f['dry-run']) { out(io, `DRY-RUN ${runId} v${full.version} created=${delta.created.length} estimated=${delta.estimated.length} cancelled=${delta.cancelled.length}`); return 0; }
+  const factories = f.factories ? String(f.factories).split(',') : [full.factory];
+  if (!factories.includes(full.factory)) throw cliError('USAGE', 'participating factories must include plan factory');
+  const roster = makeRoster(repo, factories, f.roster ? String(f.roster).split(',') : null);
   const rec = {
     run: runId, campaign_id: full.campaign_id, run_id: full.run_id, version: full.version, factory: full.factory, status: 'open',
     registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind,
-    source: { path: file, rel, sha256: sha256(text) }, canonical_sha256: canonicalHash(full), roster_agents: f.roster ? String(f.roster).split(',') : (prev?.roster_agents ?? installedAgents(repo)),
+    source: { path: file, rel, sha256: sha256(text), head: sourceHead }, canonical_sha256: canonicalHash(full), roster, roster_agents: roster.agents,
     import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergeCatalogue(prev?.items ?? [], next, { keepMissing: Boolean(f['keep-missing']) }),
-    versions: [...(prev?.versions ?? []), { version: full.version, at, canonical_sha256: canonicalHash(full), items: next }],
+    versions: [...(prev?.versions ?? []), { version: full.version, at, keep_missing: Boolean(f['keep-missing']), canonical_sha256: canonicalHash(full), items: next }],
     requests: { ...(prev?.requests ?? {}) },
   };
   mkdirSync(deliveryDir(repo), { recursive: true });
-  const conflicts = emitRegistration(repo, io, { run: rec, version: full.version, delta, token, at, createdAtOf, now, active });
-  rec.requests[token] = { digest, version: full.version, at, keep_missing: Boolean(f['keep-missing']), created };
+  for (const i of delta.created) created[i.item_id] = createdAtOf(i) ?? { at: nowIso(now) };
+  for (const i of [...delta.created, ...delta.estimated.map((e) => e.item)]) i.estimate_revision = active.filter((o) => o.plan === runId && o.item_id === i.item_id && o.event === 'estimated').length;
+  const observations = registrationObservations({ run: rec, version: full.version, delta, token, at, createdAtOf: (i) => created[i.item_id], now });
+  rec.requests[token] = { digest, version: full.version, at, source_head: sourceHead, keep_missing: Boolean(f['keep-missing']), created, observations };
   saveRun(repo, rec);
+  const conflicts = emitRegistration(repo, io, { run: rec, version: full.version, delta, token, at, createdAtOf: (i) => created[i.item_id], now, active, records: observations });
   const st = next.map((i) => estimateStatus(i.estimate));
   out(io, `PLAN ${runId} v${full.version} items=${next.length} created=${delta.created.length} estimated=${delta.estimated.length} stale-acceptance=${delta.estimated.filter((e) => e.stale).length} cancelled=${delta.cancelled.length} reopened=${delta.reopened.length} accepted=${st.filter((s) => s === 'accepted').length} unaccepted=${st.filter((s) => s === 'unaccepted').length} unestimated=${st.filter((s) => s === 'none').length}`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
@@ -1549,7 +1677,7 @@ function cmdPlan(repo, p, io, now) {
   const run = resolveRun(repo, f.plan);
   if (p.sub === 'show') { out(io, JSON.stringify(run, null, 2)); return 0; }
   if (p.sub === 'close') { run.status = 'closed'; run.updated_at = nowIso(now); saveRun(repo, run); out(io, `PLAN ${run.run} status=closed`); return 0; }
-  if (p.sub === 'roster') { if (!f.agents) throw cliError('USAGE', 'plan roster --plan <run> --agents a,b'); run.roster_agents = String(f.agents).split(',').map((s) => s.trim()).filter(Boolean); run.updated_at = nowIso(now); saveRun(repo, run); out(io, `PLAN ${run.run} roster=${run.roster_agents.join(',')}`); return 0; }
+  if (p.sub === 'roster') { if (!f.agents) throw cliError('USAGE', 'plan roster --plan <run> --agents a,b'); run.roster = makeRoster(repo, run.roster?.factories ?? [run.factory], String(f.agents).split(',').map((s) => s.trim()).filter(Boolean)); run.roster_agents = run.roster.agents; run.updated_at = nowIso(now); saveRun(repo, run); out(io, `PLAN ${run.run} roster=${run.roster_agents.join(',')}`); return 0; }
   throw cliError('USAGE', `plan ${p.sub ?? ''}: expected register|list|show|close|roster`);
 }
 function cmdSession(repo, p, io, now) {
@@ -1580,7 +1708,7 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().then((c) => process.exit(c));
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().then((c) => process.exit(c));
 ```
 
 `templates/profile.template.json`:
@@ -1606,12 +1734,13 @@ git commit -m "feat(delivery-metrics): CLI — plan register (retry-safe), event
 - Create: `skills/delivery-metrics/scripts/lib/timeline.mjs`, `skills/delivery-metrics/scripts/lib/timeline.test.mjs`
 
 **Interfaces:**
-- Consumes: `events.mjs` (`SOURCE_RANK`, `factKey`), `plan.mjs` (`estimateStatus`).
+- Consumes: `events.mjs` (`SOURCE_RANK`, `factKey`), `plan.mjs` (`estimateStatus`, `mergeCatalogue`).
 - Produces:
   - `selectOccurrences(observations, ledgerConflicts = []) → {occurrences, conflicts, counts}` — group active observations by `(plan, item_id, transition_id, basis)`; for each group the best rank = min `SOURCE_RANK` over the group **and** over ledger conflicts (from `resolveObservations().conflicts`) with the same key — a ledger-level conflict at rank ≤ best **quarantines** the occurrence (`reason: 'ledger-conflict'`, no fallback); otherwise records at the best rank must share one `factKey` (differences in `at`, `meta.stage`, `meta.result`, `estimate`, `raw`, `git_sha`, `pr`, `round`, `version` are disagreements) → `CONFLICT` (`reason: 'equal-rank-disagreement'`); else one `occ = {item_id, ref, level, plan, event, at, basis, transition_id, source, estimate, meta, provenance: [{source, observation_id, at, path, line}]}`. Sorted by `at`, then `transition_id`.
-  - `buildTimelines({occurrences, plan, end}) → {items: Map<item_id, Item>, counts: {unregistered, deferredEvents, deferredEpisodes, invalidChains, parentIncomplete, awaitingLanding, clockSkew}}`. `Item`: `{item_id, ref, level, parent_item_id, class, role, story, sequence, version_added, cancelled_in_plan, created_at, created_basis, created_sha, estimates: [{revision, at, estimate, status}], estimate_original, estimate_latest, started_at, start_basis, first_commit_at, done_at, done_basis, done_sha, landing_at, cancelled_at, state: planned|in_progress|done|cancelled, dispatch_count, rework_count, deferred_events, reopened, children, child_summary: {done, cancelled, open, unknown, cancelled_scope}, flags}`.
+  - `buildTimelines({occurrences, plan, end}) → {items: Map<item_id, Item>, counts: {unregistered, deferredEvents, deferredEpisodes, invalidChains, parentIncomplete, awaitingLanding, clockSkew}}`. `Item`: `{item_id, ref, level, parent_item_id, class, role, story, sequence, version_added, cancelled_in_plan, created_at, created_basis, created_sha, estimates: [{revision, at, estimate, status}], estimate_original, estimate_latest, started_at, start_basis, first_commit_at, done_at, done_basis, done_sha, landing_at, cancelled_at, state: planned|in_progress|done|cancelled, dispatch_count, rework_count, deferred_events, reopened, first_completion, current_scope, scope_since, membership_since, children, child_summary: {done, cancelled, open, unknown, cancelled_scope}, flags}`.
     Replay rules (spec §6.9, M1): occurrences with `at ≥ end` ignored; `created` → first wins; `estimated` → pushed; `dispatched` → `dispatch_count++`; sets `started_at` only when `meta.stage ∈ {undefined, null, 'build'}`, no start yet, **and** the item is not already terminal (a dispatch after `done` is activity only); `first_commit` → proxy only (`first_commit_at`), never a start; `done` → first wins (`done_at`, `done_sha = meta.git_sha`), `state = done`; `cancelled` → first wins; `done` after `cancelled` (or `cancelled` after `done`) without an intervening `reopened` → flag `invalid-chain` (item excluded from every metric; `invalidChains++`), state keeps the first terminal; `reopened` → `reopened = true`, flag `deferred-episode` (item excluded from duration/estimate metrics, counted in throughput once by its first completion; `deferredEpisodes++`); `rework_observed` → `rework_count++`; the other deferred events → `deferred_events++`. `clock-skew` is per clock pair and decided in metrics (Task 7), not here — the timeline only exposes the clocks.
-    Rollups (spec §5): parent `started_at` = earliest **descendant** observed `started_at` (`start_basis: derived-child`); an explicit parent `dispatched` never overrides it. Children = catalogue children including `cancelled_in_plan` ones (counted in `child_summary.cancelled_scope`, excluded from the "all terminal" test). Mission completion needs **landing evidence**: an explicit observed mission `done` (`landing_at`) **and** every non-scope-cancelled child terminal → `done_at = max(landing_at, latest child terminal)`, `done_basis: 'observed'` (landing) — if landing exists but a child is open/unknown → flag `PARENT-INCOMPLETE`, state `in_progress`, `done_at = null`; if all children terminal but no landing → flag `awaiting-landing`, state `in_progress`. Campaign completion: explicit campaign `done` **or** all missions terminal → `done_at = max(explicit, latest mission done)`, basis `derived-child` when no explicit; `PARENT-INCOMPLETE` when explicit but missions open. All children cancelled (and no landing) → parent `cancelled`; `partial-cancelled` flag when cancelled + done children coexist. A child with no occurrence at all → `child_summary.unknown++`, parent stays open.
+    Rollups (spec §5): parent `started_at` = earliest **descendant** observed `started_at` (`start_basis: derived-child`); an explicit parent `dispatched` never overrides it. Children = catalogue children including `cancelled_in_plan` ones (counted in `child_summary.cancelled_scope`, excluded from the "all terminal" test). Mission completion needs **landing evidence**: an explicit observed mission `done` (`landing_at`) **and** every non-scope-cancelled child terminal → `done_at = max(landing_at, latest child terminal)`, `done_basis: 'observed'` (landing) — if landing exists but a child is open/unknown → flag `PARENT-INCOMPLETE`, state `in_progress`, `current_scope.done_at = null` (historical `done_at` remains the first qualified completion); if all children terminal but no landing → flag `awaiting-landing`, state `in_progress`. Campaign completion: explicit campaign `done` **or** all missions terminal → `done_at = max(explicit, latest mission done)`, basis `derived-child` when no explicit; `PARENT-INCOMPLETE` when explicit but missions open. All children cancelled (and no landing) → parent `cancelled`; `partial-cancelled` flag when cancelled + done children coexist. A child with no occurrence at all → `child_summary.unknown++`, parent stays open.
+  - `Item.first_completion` = null or `{started_at,start_basis,done_at,done_basis,done_sha,landing_at,children}` from the first qualified historical boundary; `Item.current_scope` = `{state,started_at,done_at,landing_at,child_summary,pending}` at end. Existing `started_at/start_basis/done_at/done_basis/done_sha/landing_at` alias the first-completion clocks once qualified; `state`, `children`, `child_summary` remain endpoint scope. A scope addition does not set `deferred-episode` or erase first delivery. Membership comes from sequential `versions[].items`, applying later versions only at their effective `at`; first version is the declared original historical scope. Added required descendants invalidate prior landing for the new scope (`scope_since`), so their eventual finish alone cannot deliver that scope without a new mission landing. A parent’s qualification cannot precede its current required-membership boundary (`membership_since`), including a removal that makes previously unfinished scope terminal. Membership/event ties use the new version and all observations at the timestamp together. Replay uses only readable versions/evidence; last-writer-wins and capture-loss caveats still apply. No persistent completion cache or episode engine is added.
   - `estimateOriginal(es)`, `estimateLatest(es, before)` as before (first accepted; latest accepted with `at < before`, same unit).
 
 - [ ] **Step 1: Write the failing test**
@@ -1701,6 +1830,41 @@ test('rollups: derived start (explicit parent dispatch ignored), landing require
   assert.equal(r.items.get(M).state, 'cancelled');
 });
 
+test('Monday completion survives Tuesday scope addition; endpoint remains pending through Wednesday', () => {
+  const A = it('task-a').item_id, B = it('task-b').item_id, M = it('mission-g1').item_id, C = it('campaign').item_id;
+  const v1 = plan.items.filter((i) => [C, M, A].includes(i.item_id));
+  const v2 = [...v1, { ...it('task-b'), version_added: 2 }];
+  const history = { ...plan, items: v2, observation_start: '2026-09-14T00:00:00.000Z', versions: [
+    { version: 1, at: '2026-09-13T00:00:00.000Z', items: v1 },
+    { version: 2, at: '2026-09-15T09:00:00.000Z', items: v2 },
+  ] };
+  const es = EST({ low: 2, high: 6, proposed_at: '2026-09-13T00:00:00Z', accepted_at: '2026-09-13T01:00:00Z' });
+  const occurrences = selectOccurrences([
+    obs('mission-g1', 'estimated', es.accepted_at, { estimate: es }),
+    obs('task-a', 'dispatched', '2026-09-14T09:00:00Z', { meta: { stage: 'build' } }),
+    obs('task-a', 'done', '2026-09-14T11:00:00Z'),
+    obs('mission-g1', 'done', '2026-09-14T13:00:00Z'),
+    obs('task-b', 'created', '2026-09-15T09:00:00Z', { meta: { version: 2 } }),
+  ]).occurrences;
+  const early = buildTimelines({ occurrences, plan: history, end: '2026-09-15T00:00:00Z' });
+  const late = buildTimelines({ occurrences, plan: history, end: '2026-09-17T00:00:00Z' });
+  for (const id of [M, C]) {
+    assert.equal(early.items.get(id).state, 'done');
+    const i = late.items.get(id);
+    assert.equal(i.done_at, '2026-09-14T13:00:00.000Z');
+    assert.equal(i.first_completion.started_at, '2026-09-14T09:00:00.000Z');
+    assert.equal(i.state, 'in_progress'); assert.equal(i.current_scope.done_at, null);
+    assert.equal(i.current_scope.pending, true); assert.ok(i.flags.includes('scope-pending-after-first-completion'));
+  }
+  assert.equal(late.items.get(M).child_summary.open, 1);
+  const later = [...occurrences, ...selectOccurrences([obs('task-b', 'done', '2026-09-16T11:00:00Z', { meta: { version: 2 } })]).occurrences];
+  const noNewLanding = buildTimelines({ occurrences: later, plan: history, end: END }).items.get(M);
+  assert.equal(noNewLanding.current_scope.done_at, null); assert.equal(noNewLanding.done_at, '2026-09-14T13:00:00.000Z');
+  const removed = { ...history, versions: [{ ...history.versions[0], items: v2 }, { ...history.versions[1], items: v1 }] };
+  const afterRemoval = buildTimelines({ occurrences, plan: removed, end: END }).items.get(M);
+  assert.equal(afterRemoval.first_completion.done_at, '2026-09-15T09:00:00.000Z', 'removal qualifies Tuesday, never backdates completion to Monday');
+});
+
 test('estimateOriginal / estimateLatest', () => {
   const es = [{ revision: 0, at: '2026-09-15T00:00:00.000Z', estimate: EST({ accepted_by: null, accepted_at: null }), status: 'unaccepted' },
     { revision: 1, at: '2026-09-15T12:00:00.000Z', estimate: EST(), status: 'accepted' }, { revision: 2, at: '2026-09-16T12:00:00.000Z', estimate: EST({ high: 5 }), status: 'accepted' }];
@@ -1715,7 +1879,7 @@ test('estimateOriginal / estimateLatest', () => {
 ```js
 // STDLIB ONLY. Occurrence selection (spec D6, with ledger-conflict carry-over) and per-item timelines with rollups (spec §5, §6.9; M1 subset).
 import { SOURCE_RANK, factKey } from './events.mjs';
-import { estimateStatus } from './plan.mjs';
+import { estimateStatus, mergeCatalogue } from './plan.mjs';
 
 const START_STAGES = new Set([undefined, null, 'build']);
 const TERMINAL = new Set(['done', 'cancelled']);
@@ -1752,10 +1916,10 @@ export function estimateLatest(es, before) {
 
 const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent_item_id: i.parent_item_id ?? null, class: i.class ?? null, role: i.role ?? null, story: i.story ?? null, sequence: i.sequence ?? null,
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, estimates: [], estimate_original: null, estimate_latest: null,
-  started_at: null, start_basis: null, first_commit_at: null, done_at: null, done_basis: null, done_sha: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, rework_count: 0,
+  scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, first_commit_at: null, done_at: null, done_basis: null, done_sha: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, rework_count: 0,
   deferred_events: 0, reopened: false, children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
 
-export function buildTimelines({ occurrences, plan, end }) {
+function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
   const items = new Map(plan.items.map((i) => [i.item_id, newItem(i)]));
   for (const i of items.values()) if (i.parent_item_id && items.has(i.parent_item_id)) items.get(i.parent_item_id).children.push(i.item_id);
@@ -1772,7 +1936,7 @@ export function buildTimelines({ occurrences, plan, end }) {
       case 'dispatched': it.dispatch_count++; if (START_STAGES.has(o.meta.stage) && !it.started_at && !terminal && it.level === 'task') { it.started_at = o.at; it.start_basis = 'observed'; } if (it.state === 'planned') it.state = 'in_progress'; break;
       case 'first_commit': if (!it.first_commit_at) it.first_commit_at = o.at; if (it.state === 'planned') it.state = 'in_progress'; break;
       case 'done':
-        if (it.level !== 'task') { explicitDone.set(it.item_id, o); it.landing_at ??= o.at; break; }
+        if (it.level !== 'task') { if ((!it.scope_since || o.at >= it.scope_since) && !explicitDone.has(it.item_id)) { explicitDone.set(it.item_id, o); it.landing_at = o.at; } break; }
         if (it.state === 'cancelled' && !it.reopened) { if (!it.flags.includes('invalid-chain')) { it.flags.push('invalid-chain'); counts.invalidChains++; } break; }
         if (!it.done_at) { it.done_at = o.at; it.done_basis = 'observed'; it.done_sha = o.meta.git_sha ?? null; } it.state = 'done'; break;
       case 'cancelled':
@@ -1800,7 +1964,7 @@ export function buildTimelines({ occurrences, plan, end }) {
       const explicit = explicitDone.get(it.item_id);
       if (explicit && !allTerminal) { it.flags.push('PARENT-INCOMPLETE'); it.state = 'in_progress'; it.done_at = null; counts.parentIncomplete++; }
       else if (allTerminal && s.done === 0 && !explicit) { it.state = 'cancelled'; it.cancelled_at = lastTerminal; }
-      else if (allTerminal && (explicit || level === 'campaign')) { it.state = 'done'; it.done_at = explicit && explicit.at > lastTerminal ? explicit.at : lastTerminal; it.done_basis = explicit ? 'observed' : 'derived-child'; it.done_sha = explicit?.meta?.git_sha ?? null; }
+      else if (allTerminal && (explicit || level === 'campaign')) { it.state = 'done'; it.done_at = [explicit?.at, lastTerminal, it.membership_since].filter(Boolean).sort().pop(); it.done_basis = explicit ? 'observed' : 'derived-child'; it.done_sha = explicit?.meta?.git_sha ?? null; }
       else if (allTerminal) { it.flags.push('awaiting-landing'); it.state = 'in_progress'; counts.awaitingLanding++; }
       else if (it.state === 'planned' && (starts.length || kids.some((k) => k.seen))) it.state = 'in_progress';
       if (s.cancelled > 0 && s.done > 0) it.flags.push('partial-cancelled');
@@ -1810,6 +1974,59 @@ export function buildTimelines({ occurrences, plan, end }) {
   for (const it of items.values()) { it.estimate_latest = estimateLatest(it.estimates, it.started_at); delete it.seen; }
   return { items, counts };
 }
+
+/** Membership is effective-time data; first registration describes historical v1 scope.
+ * Later versions apply at their explicit at, including keep-missing behavior. */
+function catalogueAt(plan, at) {
+  const versions = [...(plan.versions ?? [])].sort((a, b) => a.version - b.version);
+  if (!versions.length) return plan.items;
+  let rows = [], scopeSince = new Map(), membershipSince = new Map();
+  const descendants = (items, parent) => {
+    const ids = new Set([parent]);
+    for (let pass = 0; pass < items.length; pass++) for (const i of items) if (!i.cancelled && ids.has(i.parent_item_id)) ids.add(i.item_id);
+    ids.delete(parent); return ids;
+  };
+  for (let n = 0; n < versions.length; n++) {
+    const v = versions[n]; if (n > 0 && new Date(v.at).toISOString() > at) break;
+    const next = mergeCatalogue(rows, v.items, { keepMissing: Boolean(v.keep_missing) });
+    if (n > 0) for (const parent of next.filter((i) => i.level !== 'task')) {
+      const before = descendants(rows, parent.item_id), after = descendants(next, parent.item_id);
+      if ([...after].some((id) => !before.has(id)) || [...before].some((id) => !after.has(id))) membershipSince.set(parent.item_id, new Date(v.at).toISOString());
+      if ([...after].some((id) => !before.has(id))) scopeSince.set(parent.item_id, new Date(v.at).toISOString());
+    }
+    rows = next;
+  }
+  return rows.map((i) => ({ ...i, scope_since: scopeSince.get(i.item_id) ?? null, membership_since: membershipSince.get(i.item_id) ?? null }));
+}
+
+export function buildTimelines({ occurrences, plan, end }) {
+  const endIso = new Date(end).toISOString();
+  const ordered = [...occurrences].sort((a, b) => a.at.localeCompare(b.at) || a.transition_id.localeCompare(b.transition_id));
+  const boundaries = [...new Set([...ordered.map((o) => o.at), ...(plan.versions ?? []).slice(1).map((v) => new Date(v.at).toISOString())])].filter((t) => t < endIso).sort();
+  const first = new Map();
+  // Pure replay of readable evidence, not an additional ledger or transaction.
+  for (const at of boundaries) {
+    const cut = new Date(Date.parse(at) + 1).toISOString();
+    const snap = reduceTimelineSnapshot({ occurrences: ordered.filter((o) => o.at <= at), plan: { ...plan, items: catalogueAt(plan, at) }, end: cut });
+    for (const it of snap.items.values()) if (it.state === 'done' && !first.has(it.item_id)) {
+      first.set(it.item_id, { started_at: it.started_at, start_basis: it.start_basis, done_at: it.done_at, done_basis: it.done_basis, done_sha: it.done_sha, landing_at: it.landing_at, children: [...it.children] });
+    }
+  }
+  const endpoint = new Date(Date.parse(endIso) - 1).toISOString();
+  const result = reduceTimelineSnapshot({ occurrences: ordered, plan: { ...plan, items: catalogueAt(plan, endpoint) }, end: endIso });
+  for (const it of result.items.values()) {
+    it.current_scope = { state: it.state, started_at: it.started_at, done_at: it.done_at, landing_at: it.landing_at, child_summary: { ...it.child_summary }, pending: it.level !== 'task' && it.state !== 'done' && it.state !== 'cancelled' };
+    it.first_completion = first.get(it.item_id) ?? null;
+    if (it.first_completion) {
+      // Compatibility clocks ALWAYS describe first delivery; state/children describe the endpoint.
+      const { children, ...clocks } = it.first_completion; Object.assign(it, clocks);
+      if (it.level !== 'task' && it.current_scope.pending) it.flags.push('scope-pending-after-first-completion');
+    }
+    it.estimate_latest = estimateLatest(it.estimates, it.started_at);
+  }
+  return result;
+}
+
 ```
 
 - [ ] **Step 4: Run test to verify it passes** — 5 passing.
@@ -1847,7 +2064,7 @@ git commit -m "feat(delivery-metrics): occurrence selection with conflict carry-
       coverage: { [level]: { done, with_dispatched, with_first_commit, with_created, start_source: {observed, 'derived-child', none}, sources: {dispatched: {}, first_commit: {}, done: {}} } },
       rework_proxy_items, caveats: [] }
     ```
-    Rules: completion cohort = `done_at ∈ [since, end)` and state `done`; items flagged `invalid-chain` or `deferred-episode` are excluded from every duration/estimate metric (counted in `cohorts.excluded_items`) but a `deferred-episode` item still counts once in throughput by its first completion; each duration is validated **independently**: negative → the matching `clock_skew_*` counter, the other clocks of that item stay valid; `cycle_time` needs `start_basis === 'observed'`; parents with `derived-child` start → `parent_elapsed`; `commit_to_done` only when no `started_at`; `lead_time` needs `created_at`; **retrospective_plan_proxy** = `created_basis === 'plan-commit'` **and** `created_sha != null && created_sha === done_sha` **and** elapsed ≤ `zeroDurationSec` (same commit proves retrospective authorship; short duration alone never does); throughput counts first `done_at` per UTC ISO week; `velocity` = median over `whole` weeks when `≥ minWholeWeeks`, else `null` + caveat; estimate actual for unit `h`: task → cycle (observed start), mission/campaign → parent_elapsed; exclusion reasons are **mutually exclusive, in this order**: `excluded_item`, `unestimated` (no estimated revision at all), `unaccepted` (revisions exist, none accepted), `no_eligible_latest` (`estimateBase==='latest'` and nothing accepted before start), `unit_mismatch` (`active_min` in M1), `missing_actual`, `late_accepted` (`accepted_at ≥ started_at`), `zero_midpoint`, `zero_actual` (kept in MAE, excluded from ratio/MRE); `point` (`low === high`) is an additional flag (excluded from hit-rate only); `hit = low ≤ actual_h ≤ high` on the **unrounded** hour value; `band.vs_high_s = actual − high·3600`, `band.vs_low_s = actual − low·3600` (rendered as `[vs_high, vs_low]` → `[-4h, +16h]`); `scope.added` = children `version_added > 1`, `scope.removed` = children `cancelled_in_plan`; `filters.level`/`filters.class` restrict the items considered (the window/cohort logic is unchanged); `rework_proxy_items` = completed items with `rework_count > 0`; `caveats` generated from numbers only.
+    Rules: completion cohort = first-delivery `done_at ∈ [since, end)`, independently of endpoint `state`; endpoint `state` drives WIP/status; items flagged `invalid-chain` or `deferred-episode` are excluded from every duration/estimate metric (counted in `cohorts.excluded_items`) but a `deferred-episode` item still counts once in throughput by its first completion; each duration is validated **independently**: negative → the matching `clock_skew_*` counter, the other clocks of that item stay valid; `cycle_time` needs `start_basis === 'observed'`; parents with `derived-child` start → `parent_elapsed`; `commit_to_done` only when no `started_at`; `lead_time` needs `created_at`; **retrospective_plan_proxy** = `created_basis === 'plan-commit'` **and** `created_sha != null && created_sha === done_sha` **and** elapsed ≤ `zeroDurationSec` (same commit proves retrospective authorship; short duration alone never does); throughput counts first `done_at` per UTC ISO week; `velocity` = median over `whole` weeks when `≥ minWholeWeeks`, else `null` + caveat; estimate actual for unit `h`: task → cycle (observed start), mission/campaign → parent_elapsed; exclusion reasons are **mutually exclusive, in this order**: `excluded_item`, `unestimated` (no estimated revision at all), `unaccepted` (revisions exist, none accepted), `no_eligible_latest` (`estimateBase==='latest'` and nothing accepted before start), `unit_mismatch` (`active_min` in M1), `missing_actual`, `late_accepted` (`accepted_at ≥ started_at`), `zero_midpoint`, `zero_actual` (kept in MAE, excluded from ratio/MRE); `point` (`low === high`) is an additional flag (excluded from hit-rate only); `hit = low ≤ actual_h ≤ high` on the **unrounded** hour value; `band.vs_high_s = actual − high·3600`, `band.vs_low_s = actual − low·3600` (rendered as `[vs_high, vs_low]` → `[-4h, +16h]`); `scope.added` = children `version_added > 1`, `scope.removed` = children `cancelled_in_plan`; `filters.level`/`filters.class` restrict the items considered (the window/cohort logic is unchanged); `rework_proxy_items` = completed items with `rework_count > 0`; `caveats` generated from numbers only.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1875,6 +2092,19 @@ test('seconds/hours, stats floors, nearest rank on unrounded values', () => {
   const s7 = stats([1, 2, 3, 4, 5, 6, 7]); assert.equal(s7.median, 4); assert.equal(s7.p85, 6); assert.equal(s7.p90, null);
   const s10 = stats([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]); assert.equal(s10.p90, 9); assert.equal(s10.p85, 9); assert.equal(s10.median, 5);
   assert.equal(stats([]), null);
+});
+
+test('first parent delivery drives throughput/accuracy while endpoint scope drives WIP', () => {
+  const est = { unit: 'h', low: 2, high: 6, tier: 'budgetary', accepted_by: 'D', accepted_at: '2026-09-13T01:00:00.000Z' };
+  const parent = item({ id: 'parent', level: 'mission', started: '2026-09-14T09:00:00.000Z', start_basis: 'derived-child', done: '2026-09-14T13:00:00.000Z', est });
+  const plan = { observation_start: '2026-09-14T00:00:00.000Z' };
+  for (const state of ['done', 'in_progress']) {
+    const i = { ...parent, state, flags: state === 'done' ? [] : ['scope-pending-after-first-completion'] };
+    const m = computeMetrics({ items: toMap([i]), plan, since: '2026-09-14T00:00:00Z', end: '2026-09-17T00:00:00Z' });
+    assert.equal(m.throughput.mission.weeks.reduce((n, w) => n + w.count, 0), 1);
+    assert.equal(m.estimate_rows[0].actual_s, 14400); assert.equal(m.estimate_rows[0].ratio, 1); assert.equal(m.estimate_rows[0].hit, true);
+    assert.equal(m.wip.mission, state === 'done' ? 0 : 1);
+  }
 });
 
 test('isoWeekUtc across a year boundary; weekKeys whole/covered with a late coverage start', () => {
@@ -2002,7 +2232,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
   if (filters.level) all = all.filter((i) => i.level === filters.level);
   if (filters.class) all = all.filter((i) => i.class === filters.class);
   const excludedItem = (i) => i.flags.includes('invalid-chain') || i.flags.includes('deferred-episode');
-  const completed = all.filter((i) => i.state === 'done' && inWin(i.done_at, sinceIso, endIso));
+  const completed = all.filter((i) => inWin(i.done_at, sinceIso, endIso));
   const caveats = [];
   const data = { window: { since: sinceIso, end: endIso, coverage_start: covStart }, cohorts: { completed: completed.length, created: all.filter((i) => inWin(i.created_at, sinceIso, endIso)).length,
     excluded_items: { invalid_chain: all.filter((i) => i.flags.includes('invalid-chain')).length, deferred_episode: all.filter((i) => i.flags.includes('deferred-episode')).length } },
@@ -2055,7 +2285,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
       else if (a?.skew) reason = 'clock_skew';
       else if (!a) reason = 'missing_actual';
       else if (chosen.accepted_at && new Date(chosen.accepted_at).toISOString() >= i.started_at) reason = 'late_accepted';
-      if (reason) { if (reason !== 'unestimated' || i.estimates.length) bs.forEach((b) => b.excluded[reason]++); if (reason !== 'unestimated') data.estimate_rows.push({ item_id: i.item_id, ref: i.ref, level, class: i.class, tier, base: estimateBase, estimate: chosen ? { unit: chosen.unit, low: chosen.low, high: chosen.high } : null, actual_s: a?.s ?? null, actual_basis: a?.basis ?? null, ratio: null, hit: null, reason }); continue; }
+      if (reason) { bs.forEach((b) => b.excluded[reason]++); if (reason !== 'unestimated') data.estimate_rows.push({ item_id: i.item_id, ref: i.ref, level, class: i.class, tier, base: estimateBase, estimate: chosen ? { unit: chosen.unit, low: chosen.low, high: chosen.high } : null, actual_s: a?.s ?? null, actual_basis: a?.basis ?? null, ratio: null, hit: null, reason }); continue; }
       const mid = (chosen.low + chosen.high) / 2, actualH = a.s / 3600, ae = Math.abs(a.s - mid * 3600);
       let ratio = null, hit = null;
       bs.forEach((b) => { b.eligible++; b._aes.push(ae); });
@@ -2117,6 +2347,7 @@ git commit -m "feat(delivery-metrics): metrics in seconds — per-clock validity
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, appendFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendObservation, makeObservation } from './events.mjs';
@@ -2138,6 +2369,26 @@ const seed = (repo) => {
   appendFileSync(eventsPath(repo, 'u'), `${JSON.stringify(makeObservation({ user: 'u', host: 'cli', plan: 'ghost/run-9', item_id: 'ghost/run-9/task-x', ref: 'X', level: 'task', event: 'done', at: '2026-09-09T00:00:00Z', transition_id: 'ghost/run-9/task-x/done/episode-1', source: 'cli', source_record_id: 'g1', meta: { version: 1 } }, { now: 0 }))}\n`);
 };
 const NOW = Date.parse('2026-09-21T00:00:00Z');
+
+test('historical registration alone supplies per-item creation cohorts and lead time', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { main } = await import('../delivery.mjs');
+  const repo = tmp();
+  const g = (args, at = '2026-09-10T08:00:00Z') => execFileSync('git', args, { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x', GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } });
+  g(['init', '-q', '-b', 'main']);
+  const block = { campaign_id: 'sec', run_id: 'run-1', version: 1, factory: 'feature-development', observation_start: '2026-09-01T00:00:00Z', source_epoch: { from: '2026-09-01T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'sec' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-001' }] }] };
+  const commit = (at) => { writeFileSync(join(repo, 'plan.json'), JSON.stringify(block)); g(['add', 'plan.json']); g(['commit', '-q', '-m', 'plan'], at); };
+  commit('2026-09-10T08:00:00Z'); block.missions[0].tasks.push({ ref: 'TASK-002' }); commit('2026-09-12T08:00:00Z');
+  const io = { write() {} }, now = Date.parse('2026-09-18T12:00:00Z');
+  const call = (args) => main(args, { repo, now, stdout: io, stderr: io, env: { DELIVERY_NO_SYNC: '1' } });
+  assert.equal(await call(['plan', 'register', '--from', 'plan.json', '--id', 'reg']), 0);
+  for (const ref of ['TASK-001', 'TASK-002']) assert.equal(await call(['event', ref, 'done', '--id', ref, '--at', '2026-09-16T10:00:00Z']), 0);
+  const d = assemble(repo, { since: '2026-09-10T00:00:00Z', cutoff: '2026-09-17T00:00:00Z', now, filters: { level: 'task' } });
+  assert.equal(d.plans[0].metrics.flow.task.strata.all.lead_time.min, 98 * 3600);
+  assert.equal(d.plans[0].metrics.flow.task.strata.all.lead_time.max, 146 * 3600);
+  const creation = assemble(repo, { since: '2026-09-10T00:00:00Z', cutoff: '2026-09-11T00:00:00Z', now, filters: { level: 'task' } });
+  assert.equal(creation.plans[0].metrics.cohorts.created, 1);
+});
 
 test('assemble: window defaults normalised, read-once provenance, coverage counts (unregistered, registration gaps), unconditional caveats', () => {
   const repo = tmp(); seed(repo);
@@ -2194,6 +2445,8 @@ test('report/status commands: markdown, --json, --out, --level/--class filters, 
 });
 ```
 
+Historical-registration arithmetic: Sep 10 08:00 → Sep 16 10:00 = 6 × 24 + 2 = 146 h = 525,600 s; Sep 12 08:00 → Sep 16 10:00 = 4 × 24 + 2 = 98 h = 352,800 s. Exactly TASK-001 is created in [Sep 10 00:00, Sep 11 00:00); registration on Sep 18 does not move either clock. No backfill command is called.
+
 - [ ] **Step 2: Run tests to verify they fail.**
 
 - [ ] **Step 3: Write `report.mjs`**
@@ -2207,7 +2460,7 @@ import { resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
 import { computeMetrics, toHours } from './metrics.mjs';
 import { listRuns, loadRun } from './plan.mjs';
-import { cliError, nowIso, profilePath, runPath, sha256 } from './paths.mjs';
+import { cliError, nowIso, profilePath, runPath, sha256, resolveOwnerRepo } from './paths.mjs';
 import { buildTimelines, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -2220,9 +2473,10 @@ export function loadProfile(repo) {
   const buf = readFileSync(p);
   try { return { profile: { ...tpl, ...JSON.parse(buf.toString('utf8')) }, sha256: sha256(buf), source: 'file' }; } catch { return { profile: tpl, sha256: sha256(buf), source: 'template-default (profile.json malformed)' }; }
 }
-const compact = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags });
+const compact = (i) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags });
 
 export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
+  repo = resolveOwnerRepo(repo);
   const runs = plans ? plans.map((id) => { const r = loadRun(repo, id); if (!r) throw cliError('NO-PLAN', `no registered run ${id}`); return r; }) : listRuns(repo);
   if (!runs.length) throw cliError('NO-PLAN', 'no registered plan in this repo');
   const iso = (v, name) => { if (v == null) return null; if (Number.isNaN(Date.parse(v))) throw cliError('USAGE', `invalid ${name} ${v}`); return new Date(v).toISOString(); };
@@ -2243,7 +2497,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
     docs.push({ run: r.run, version: r.version, status: r.status, observations: occ.length, registration_gaps: g, metrics: computeMetrics({ items, plan: r, since: sinceIso, end, profile, estimateBase, filters }), counts, items: [...items.values()].map(compact) });
   }
+  const pending = docs.flatMap((d) => d.items).filter((i) => i.first_completion && i.current_scope?.pending).length;
   const derived = docs.flatMap((d) => d.metrics.caveats.map((c) => `${d.run}: ${c}`));
+  if (pending) derived.push(`${pending} parent(s): first delivery retained; current scope pending (see current_scope, WIP and status)`);
   if (res.counts.malformed) derived.push(`${res.counts.malformed} malformed ledger line(s) skipped — capture loss possible`);
   if (res.conflicts.length) derived.push(`${res.conflicts.length} ledger observation(s) in CONFLICT (same revision, different content) — excluded, no fallback`);
   if (conflicts.length) derived.push(`${conflicts.length} occurrence(s) quarantined (equal-rank disagreement or ledger conflict) — no lower-source fallback`);
@@ -2299,7 +2555,7 @@ export function renderMarkdown(doc) {
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; sources ${JSON.stringify(c.sources)}`);
     L.push(`- registration_gaps=${p.registration_gaps}`);
     L.push('', '## Open items', '', '| ref | level | state | started | age |', '|---|---|---|---|---|');
-    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '— (no observed start)'} |`);
+    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '— (no observed start)'} |`);
     L.push('');
   }
   L.push('### Envelope', '', `- ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}`);
@@ -2316,7 +2572,8 @@ export function renderStatus(doc) {
   for (const p of doc.plans) {
     L.push(`STATUS ${p.run} v${p.version} (${p.status}) at ${e.window.effective_end}`);
     for (const lv of ['campaign', 'mission', 'task', 'case']) { const rows = p.items.filter((i) => i.level === lv); if (!rows.length) continue; const n = (s) => rows.filter((i) => i.state === s).length; L.push(`  ${lv}: done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`); }
-    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign')) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '—'}`);
+    for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
+    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '—'}`);
     if (p.registration_gaps) L.push(`  registration_gaps=${p.registration_gaps} (items without a created observation)`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
@@ -2360,7 +2617,7 @@ git commit -m "feat(delivery-metrics): report (markdown/JSON) with read-once pro
 - Modify: `skills/delivery-metrics/scripts/delivery.mjs` (`backfill` command), `skills/delivery-metrics/scripts/delivery.test.mjs` (one CLI test)
 
 **Interfaces:**
-- Consumes: `git.mjs` (`git`, `isAncestor`, `firstCommitContaining`), `events.mjs` (`makeObservation`, `appendObservation`), `plan.mjs` (`loadRun`, `saveRun`).
+- Consumes: Task 5 shared `git.mjs` (`git`, `isAncestor`, `firstCommitContaining`); registration and backfill both call this resolver with a pinned full SHA, and neither imports the other CLI, `events.mjs` (`makeObservation`, `appendObservation`), `plan.mjs` (`loadRun`, `saveRun`).
 - Produces:
   - `gitLog(repo, args) → [{sha, parents, at, subject}]`.
   - `matchMergeSubject(subject, run) → item|null` — `^merge\s+(\S+)`; the branch (case-insensitive) equals an item's `branch` alias, else `task/task-(\d+)` → the item with `ref === 'TASK-' + n`.
@@ -2679,8 +2936,8 @@ git commit -m "test(delivery-metrics): golden fixture from the security-testing 
 
 **Interfaces:**
 - Consumes: `lib/paths.mjs`, `lib/events.mjs`, `lib/plan.mjs`, `lib/git.mjs` (`git`).
-- Produces (exported): `SUPPORTED_SHAPES = ['claude-projects-subagents-v1']` (the only child layout accepted until SPIKE-1: `<dir(parent transcript)>/<session_id>/subagents/<agent_id>.jsonl` or `agent-<agent_id>.jsonl`, with a sibling `.meta.json`); `readStdinBounded(ms, max)`; `ownerRepo(payload, env) → dir` — candidates `payload.cwd`, `CLAUDE_PROJECT_DIR`, `cwd`; for each, if `git rev-parse --git-common-dir` resolves and differs from `--git-dir` (a linked worktree, whatever its path), use the common dir's parent as the owner; else the candidate; first candidate that has `.agents/telemetry/delivery/` wins, else the first candidate; `sessionRun(repo, host, sessionId) → run|null` (open runs only); `rosterOf(run) → Set` (`run.roster_agents`); `findChildTranscript(payload) → {path, metaPath, shape}|null` — `agent_transcript_path` is accepted **only** when it exists, its basename is `<agent_id>.jsonl`/`agent-<agent_id>.jsonl` **and** its path contains `/<session_id>/`; else the documented shape; `parseTranscript(path) → {firstTs, lastTs, firstUserText, records, complete}` — `complete` = at least one `user` record and at least one later non-user record with a timestamp; `classifyStage(text)`; `resolveRefs(run, {description, firstUserText, branch}) → {items, how}`; `appendOrRevise(repo, rec, opts)`; `handleStop(payload, {repo, now}) → {wrote: [], diagnostic: string|null}`.
-- Hook contract (spec §6.6): stdin ≤ 64 KiB, never stdout, always exit 0. Guards in order: (1) an open run exists, else exit; (2) `sessions/claude:<session_id>.json` → open run, else diagnostic `unbound-session`; (3) role = `.meta.json` `agentType` (or payload `agent_type`): present and **not in `rosterOf(run)`** → exit silently (foreign); missing → admitted, diagnostic `unknown-role`; (4) child transcript per `SUPPORTED_SHAPES`; none → diagnostic `no-transcript`; (5) `parseTranscript`: no `firstTs` → diagnostic `no-transcript`; `complete === false` → emit **only** `dispatched` (start observed) plus diagnostic `incomplete-transcript` (no `dispatch_ended`); (6) resolve + emit.
+- Produces (exported): `SUPPORTED_SHAPES = ['claude-projects-subagents-v1']` (the only child layout accepted until SPIKE-1: `<dir(parent transcript)>/<session_id>/subagents/<agent_id>.jsonl` or `agent-<agent_id>.jsonl`, with a sibling `.meta.json`); `readStdinBounded(ms, max)`; `ownerRepo(payload, env) → dir` — re-export Task 1’s shared resolver; payload cwd takes precedence, with no search for another repository containing telemetry; `sessionRun(repo, host, sessionId) → run|null` (open runs only); `rosterOf(run) → Set` (Task 1 validated `run.roster.agents`; never source-checkout metadata); `findChildTranscript(payload) → {path, metaPath, shape}|null` — `agent_transcript_path` is accepted **only** when it exists, its basename is `<agent_id>.jsonl`/`agent-<agent_id>.jsonl` **and** its path contains `/<session_id>/`; else the documented shape; `parseTranscript(path) → {firstTs, lastTs, firstUserText, records, complete}` — `complete` = at least one `user` record and at least one later non-user record with a timestamp; `classifyStage(text)`; `resolveRefs(run, {description, firstUserText, branch}) → {items, how}`; `appendOrRevise(repo, rec, opts)`; `handleStop(payload, {repo, now}) → {wrote: [], diagnostic: string|null}`.
+- Hook contract (spec §6.6): stdin ≤ 64 KiB, never stdout, always exit 0. Guards in order: (1) an open run exists, else exit; (2) `sessions/claude:<session_id>.json` → open run, else diagnostic `unbound-session`; (3) invalid/missing snapshot → diagnostic `invalid-roster`, no emission; otherwise role = `.meta.json` `agentType` (or payload `agent_type`): present and **not in `rosterOf(run)`** → exit silently (foreign); missing → admitted, diagnostic `unknown-role`; (4) child transcript per `SUPPORTED_SHAPES`; none → diagnostic `no-transcript`; (5) `parseTranscript`: no `firstTs` → diagnostic `no-transcript`; `complete === false` → emit **only** `dispatched` (start observed) plus diagnostic `incomplete-transcript` (no `dispatch_ended`); (6) resolve + emit.
 - Emission per resolved item: `dispatched {at: firstTs, transition <item>/dispatched/<agent_id>, meta: {stage, version}, session, agentId, role, label}`; `dispatch_ended {at: lastTs, transition <item>/dispatch_ended/<agent_id>}` when complete; stage `fix` → `rework_observed {transition <item>/rework_observed/<agent_id>, meta.round: null}`; `source: 'hook'`, `host: 'claude'`, `source_record_id: claude:<session_id>:<agent_id>`, `basis: observed`. `label` = `capturePrompts ? description.slice(0,120) : '<ref> <stage>'`. No item → one unattributed `dispatched`/`dispatch_ended` pair (`item_id/ref/level: null`, `meta.unattributed: true`). Diagnostics → `.agents/telemetry/delivery/diagnostics-<slug>.jsonl` `{at, kind, session, agent_id, detail}`. Grown transcript → `appendOrRevise` bumps the revision of the changed observation.
 
 - [ ] **Step 1: Write the failing test**
@@ -2689,13 +2946,14 @@ git commit -m "test(delivery-metrics): golden fixture from the security-testing 
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyStage, resolveRefs, handleStop, ownerRepo, parseTranscript, findChildTranscript } from './dispatch-hook.mjs';
 import { saveRun } from '../scripts/lib/plan.mjs';
+import { makeRoster } from '../scripts/lib/roster.mjs';
 import { resolveObservations } from '../scripts/lib/events.mjs';
 import { deliveryDir, sessionsDir, sessionPath } from '../scripts/lib/paths.mjs';
 
@@ -2705,7 +2963,7 @@ const R = 'sec/run-1';
 const run = { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', roster_agents: ['js-dev', 'tech-lead'], items: [
   { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
   { item_id: `${R}/task-task-023`, ref: 'TASK-023', level: 'task', parent_item_id: `${R}/mission-g1`, branch: 'task/task-023' }, { item_id: `${R}/task-task-034`, ref: 'TASK-034', level: 'task', parent_item_id: `${R}/mission-g1`, branch: 'task/task-034' }] };
-const setup = ({ bind = true } = {}) => { const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true }); saveRun(repo, run); if (bind) { mkdirSync(sessionsDir(repo), { recursive: true }); writeFileSync(sessionPath(repo, 'claude', 'sess-1'), JSON.stringify({ host: 'claude', session: 'sess-1', plan: R })); } return repo; };
+const setup = ({ bind = true } = {}) => { const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true }); for (const role of ['js-dev', 'tech-lead', 'test-automation-lead', 'qa-auditor']) { const d = join(repo, '.claude', 'agents', role); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'AGENT.md'), 'role'); } const roster = makeRoster(repo, ['feature-development', 'test-automation']); saveRun(repo, { ...run, roster, roster_agents: roster.agents }); if (bind) { mkdirSync(sessionsDir(repo), { recursive: true }); writeFileSync(sessionPath(repo, 'claude', 'sess-1'), JSON.stringify({ host: 'claude', session: 'sess-1', plan: R })); } return repo; };
 const transcripts = ({ agentType = 'js-dev', description = 'Implement TASK-023 build-report core', first = 'You are js-dev. Implement TASK-023.', t0 = '2026-09-16T09:00:00.000Z', t1 = '2026-09-16T10:00:00.000Z', agentId = 'agent-1', complete = true, session = 'sess-1' } = {}) => {
   const proj = tmp(); const parent = join(proj, `${session}.jsonl`); writeFileSync(parent, `${JSON.stringify({ type: 'user', timestamp: t0, message: { role: 'user', content: 'hi' } })}\n`);
   const dir = join(proj, session, 'subagents'); mkdirSync(dir, { recursive: true });
@@ -2764,17 +3022,40 @@ test('guards: no open plan → nothing; unbound session → diagnostic; foreign-
   const t = transcripts();
   const none = tmp(); assert.deepEqual(handleStop(payload(t), { repo: none, now: NOW }), { wrote: [], diagnostic: null }); assert.ok(!existsSync(deliveryDir(none)));
   const unbound = setup({ bind: false }); assert.equal(handleStop(payload(t), { repo: unbound, now: NOW }).diagnostic, 'unbound-session'); assert.equal(resolveObservations(unbound).active.length, 0); assert.ok(readdirSync(deliveryDir(unbound)).some((f) => f.startsWith('diagnostics-')));
+  const positive = setup(); assert.equal(handleStop(payload(transcripts({ agentType: 'test-automation-lead' })), { repo: positive, now: NOW }).wrote.length, 2);
   const foreign = setup(); assert.deepEqual(handleStop(payload(transcripts({ agentType: 'qa-auditor' })), { repo: foreign, now: NOW }), { wrote: [], diagnostic: null }, 'qa-auditor is not in the plan roster even if installed');
   const unknown = setup(); const ru = handleStop(payload(transcripts({ agentType: '' })), { repo: unknown, now: NOW }); assert.equal(ru.diagnostic, 'unknown-role'); assert.equal(ru.wrote.length, 2);
   const missing = setup(); const rm = handleStop(payload(t, { agent_id: 'agent-9' }), { repo: missing, now: NOW }); assert.equal(rm.diagnostic, 'no-transcript'); assert.equal(rm.wrote.length, 0);
 });
 
-test('ownerRepo: linked worktree (any path) resolves to the main checkout via git-common-dir; plain dirs pass through', () => {
+test('ownerRepo: linked worktree (any path) resolves to the main checkout via worktree list; plain dirs pass through', () => {
   const main = tmp(); execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: main }); execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'x'], { cwd: main, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } });
   mkdirSync(join(main, '.agents', 'telemetry', 'delivery'), { recursive: true });
   const wt = join(tmp(), 'elsewhere'); execFileSync('git', ['worktree', 'add', '-q', wt], { cwd: main });
-  assert.equal(ownerRepo({ cwd: wt }, {}), main); assert.equal(ownerRepo({ cwd: main }, {}), main); assert.equal(ownerRepo({}, { CLAUDE_PROJECT_DIR: main }), main);
+  assert.equal(ownerRepo({ cwd: wt }, {}), realpathSync(main)); assert.equal(ownerRepo({ cwd: main }, {}), realpathSync(main)); assert.equal(ownerRepo({}, { CLAUDE_PROJECT_DIR: main }), realpathSync(main));
   assert.ok(parseTranscript('/nonexistent').firstTs === null);
+});
+
+test('register and bind in an arbitrary linked worktree, capture there, report one owner ledger', async () => {
+  const { main } = await import('../scripts/delivery.mjs');
+  const { assemble } = await import('../scripts/lib/report.mjs');
+  const mainRepo = tmp();
+  const g = (...args) => execFileSync('git', ['-C', mainRepo, ...args], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } });
+  g('init', '-q', '-b', 'main'); g('commit', '-q', '--allow-empty', '-m', 'init');
+  const wt = join(tmp(), 'arbitrary-linked-checkout'); g('worktree', 'add', '-q', '-b', 'feature', wt);
+  const agents = join(mainRepo, '.claude', 'agents', 'js-dev'); mkdirSync(agents, { recursive: true }); writeFileSync(join(agents, 'AGENT.md'), 'role');
+  const block = { campaign_id: 'sec', run_id: 'run-1', version: 1, factory: 'feature-development', observation_start: '2026-09-14T00:00:00Z', source_epoch: { from: '2026-09-14T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'sec' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-023', role: 'js-dev' }] }] };
+  writeFileSync(join(wt, 'plan.json'), JSON.stringify(block));
+  const io = { write() {} };
+  const call = (args) => main(args, { repo: wt, now: NOW, stdout: io, stderr: io, env: { DELIVERY_NO_SYNC: '1' } });
+  assert.equal(await call(['plan', 'register', '--from', 'plan.json', '--id', 'reg', '--created-at', '2026-09-14T00:00:00Z']), 0);
+  assert.equal(await call(['session', 'set', '--host', 'claude', '--session', 'sess-1', '--plan', R]), 0);
+  assert.equal(handleStop(payload(transcripts(), { cwd: wt }), { repo: wt, now: NOW }).wrote.length, 2);
+  const options = { since: '2026-09-14T00:00:00Z', cutoff: '2026-09-17T00:00:00Z', now: NOW };
+  assert.deepEqual(assemble(mainRepo, options), assemble(wt, options));
+  assert.equal(resolveObservations(mainRepo).active.filter((o) => o.source === 'hook').length, 2);
+  assert.equal(existsSync(join(wt, '.agents', 'telemetry', 'delivery')), false);
+  assert.equal(existsSync(sessionPath(mainRepo, 'claude', 'sess-1')), true);
 });
 
 test('script: malformed stdin / missing fields → exit 0, no stdout, no files', () => {
@@ -2792,13 +3073,14 @@ test('script: malformed stdin / missing fields → exit 0, no stdout, no files',
 #!/usr/bin/env node
 // STDLIB ONLY. Claude SubagentStop → dispatched / dispatch_ended (+ rework_observed) observations (spec §6.6).
 // Never prints to stdout, always exits 0. Admission: open run, session→run association, role in the run's roster snapshot.
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, nowIso, sessionPath, whoAmI } from '../scripts/lib/paths.mjs';
+import { deliveryDir, nowIso, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
+import { validRoster } from '../scripts/lib/roster.mjs';
 
 export const SUPPORTED_SHAPES = ['claude-projects-subagents-v1'];
 const STAGE = [[/\b(fix round|address review)\b/i, 'fix'], [/\b(mini-gate|hardening gate|gate)\b/i, 'gate'], [/\bmerge\b/i, 'merge'], [/\breview\w*/i, 'review'], [/\b(implement\w*|build)\b/i, 'build']];
@@ -2811,13 +3093,9 @@ export function readStdinBounded(ms = 2000, max = 65536) {
   });
 }
 
-export function ownerRepo(payload = {}, env = {}) {
-  const cands = [payload.cwd, env.CLAUDE_PROJECT_DIR, process.cwd()].filter(Boolean).map((p) => resolve(p));
-  const owners = cands.map((c) => { const gd = git(c, ['rev-parse', '--git-dir']), cd = git(c, ['rev-parse', '--git-common-dir']); if (gd && cd && resolve(c, gd) !== resolve(c, cd)) return dirname(resolve(c, cd)); return c; });
-  return owners.find((c) => existsSync(join(c, '.agents', 'telemetry', 'delivery'))) ?? owners[0];
-}
+export { ownerRepo } from '../scripts/lib/paths.mjs';
 export function sessionRun(repo, host, sessionId) { try { const s = JSON.parse(readFileSync(sessionPath(repo, host, sessionId), 'utf8')); const r = loadRun(repo, s.plan); return r && r.status === 'open' ? r : null; } catch { return null; } }
-export const rosterOf = (run) => new Set(run.roster_agents ?? []);
+export const rosterOf = (run) => new Set(validRoster(run.roster) ? run.roster.agents : []);
 
 export function findChildTranscript(payload) {
   const { session_id: sid, agent_id: aid } = payload; if (!sid || !aid) return null;
@@ -2854,6 +3132,7 @@ function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deli
 const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts); } catch { return false; } };
 
 export function handleStop(payload, { repo, now = Date.now() } = {}) {
+  repo = resolveOwnerRepo(repo);
   const none = { wrote: [], diagnostic: null };
   if (!payload?.session_id || !payload?.agent_id) return none;
   if (!listRuns(repo).some((r) => r.status === 'open')) return none;
@@ -2862,6 +3141,7 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   if (!run) return { wrote: [], diagnostic: diagnose(repo, slug, 'unbound-session', payload, 'run: delivery.mjs session set --host claude --session <id> --plan <run>', now) };
   const child = findChildTranscript(payload);
   let meta = {}; if (child) { try { meta = JSON.parse(readFileSync(child.metaPath, 'utf8')); } catch { meta = {}; } }
+  if (!validRoster(run.roster)) return { wrote: [], diagnostic: diagnose(repo, slug, 'invalid-roster', payload, 'refresh plan roster with this installed skill', now) };
   const role = meta.agentType || payload.agent_type || null;
   let diagnostic = null;
   if (role && !rosterOf(run).has(role)) return none;
@@ -2896,7 +3176,7 @@ async function main() {
     if (process.env.DELIVERY_NO_SYNC !== '1') { try { const { bestEffortSync } = await import('../scripts/lib/sync.mjs'); bestEffortSync(repo, { env: process.env }); } catch { /* best effort */ } }
   } catch { /* hooks never fail the host */ }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().then(() => process.exit(0), () => process.exit(0));
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().then(() => process.exit(0), () => process.exit(0));
 ```
 
 - [ ] **Step 4: Run test to verify it passes** — 8 passing.
@@ -2916,7 +3196,8 @@ git commit -m "feat(delivery-metrics): Claude SubagentStop hook — roster/sessi
 - Modify: `skills/delivery-metrics/scripts/delivery.mjs` (`doctor` command delegates to `doctorReport`)
 
 **Interfaces:**
-- Produces (exported): `MARKER = '_delivery'`; `skillRootOf(url)`; `installClaude(repo, rel, {local, remove}) → settingsPath` (one marked `SubagentStop` entry `{matcher:'*', hooks:[{type:'command', command:'node "${CLAUDE_PROJECT_DIR}/<rel>/hooks/dispatch-hook.mjs" --stop', timeout:30, async:true}], _delivery:true}`; removes only `_delivery` entries; preserves everything else); `installIgnoreBlocks(repo, {remove}) → {root, inner}` — root `.gitignore` block (`# >>> delivery-metrics (managed)` … `# <<< delivery-metrics`) with `.agents/telemetry/delivery/reports/`, `.agents/telemetry/delivery/.lock/`, `.agents/telemetry/delivery/.pending-*`; inner block in `.agents/telemetry/.gitignore` with `/delivery/reports/`, `/delivery/.lock/`, `/delivery/.pending-*` — **created** when `.agents/telemetry/` exists (git dir or plain dir), never only when the file already exists; `bootstrapTelemetry(repo) → {status: 'already'|'created'|'no-git'|'kept'}` — the tokenomics procedure (`bundles/test-automation/skills/tokenomics/scripts/install-hooks.mjs:329-404`) re-implemented: orphan `telemetry` branch via plumbing if absent (`hash-object -t tree /dev/null`, `commit-tree`, `update-ref`), move interim `.agents/telemetry` files aside and restore on any exit, untrack a previously committed `.agents/telemetry` (`rm -r --cached`), best-effort push of the branch, `git -c protocol.file.allow=always submodule add --force -b telemetry -- ./ .agents/telemetry`, `.gitmodules` `ignore = all`, seed `README.md` + inner `.gitignore`; idempotent (`already` when `.agents/telemetry/.git` exists); `doctorReport(repo, rel) → {lines, ok}` — hook wired; open runs; sessions; **every** ignore pattern checked with `git check-ignore` in its owning repo (main: three root patterns; inner: three patterns inside `.agents/telemetry` when it is a git dir); tracked transients (`git ls-files .agents/telemetry/delivery/reports .agents/telemetry/delivery/.lock` in the owner) reported; `gitState` of the telemetry owner (unmerged, merging, dirty, unpushed); diagnostics line count; unconditional caveats; `main(argv)`.
+- Produces (exported): `MARKER = '_delivery'`; `skillRootOf(url)`; `installClaude(repo, rel, {local, remove}) → settingsPath` (one marked `SubagentStop` entry `{matcher:'*', hooks:[{type:'command', command:'node "<absolute-installed-skill>/hooks/dispatch-hook.mjs" --stop', timeout:30, async:true}], _delivery:true}`; removes only `_delivery` entries; preserves everything else); `installIgnoreBlocks(repo, {remove}) → {root, inner}` — root `.gitignore` block (`# >>> delivery-metrics (managed)` … `# <<< delivery-metrics`) with `.agents/telemetry/delivery/reports/`, `.agents/telemetry/delivery/.lock/`, `.agents/telemetry/delivery/.pending-*`; inner block in `.agents/telemetry/.gitignore` with `/delivery/reports/`, `/delivery/.lock/`, `/delivery/.pending-*` — **created** when `.agents/telemetry/` exists (git dir or plain dir), never only when the file already exists; `bootstrapTelemetry(repo) → {status: 'already'|'created'|'no-git'|'kept'}` — the tokenomics procedure (`bundles/test-automation/skills/tokenomics/scripts/install-hooks.mjs:329-404`) re-implemented: orphan `telemetry` branch via plumbing if absent (`hash-object -t tree /dev/null`, `commit-tree`, `update-ref`), move interim `.agents/telemetry` files aside and restore on any exit, untrack a previously committed `.agents/telemetry` (`rm -r --cached`), best-effort push of the branch, `git -c protocol.file.allow=always submodule add --force -b telemetry -- ./ .agents/telemetry`, `.gitmodules` `ignore = all`, seed `README.md` + inner `.gitignore`; idempotent (`already` when `.agents/telemetry/.git` exists); `doctorReport(repo, rel) → {lines, ok}` — hook wired; open runs; sessions; **every** ignore pattern checked with `git check-ignore` in its owning repo (main: three root patterns; inner: three patterns inside `.agents/telemetry` when it is a git dir); tracked transients (`git ls-files .agents/telemetry/delivery/reports .agents/telemetry/delivery/.lock` in the owner) reported; `gitState` of the telemetry owner (unmerged, merging, dirty, unpushed); diagnostics line count; unconditional caveats; `main(argv)`.
+- Hook command pins the installed script’s absolute path, so a child’s `CLAUDE_PROJECT_DIR` cannot redirect it into a different checkout. Moving that installation requires re-running the installer. `main` and `doctorReport` resolve the shared owner with Task 1 before touching telemetry or settings.
 - CLI: `install-hooks.mjs [--host claude] [--local] [--remove] [--doctor] [--no-submodule]`; other hosts → `UNSUPPORTED-HOST(<h>)` exit 2; default run = `bootstrapTelemetry` (unless `--no-submodule` or already) + `installClaude` + `installIgnoreBlocks`; prints `INSTALLED <settings>`, `ignore blocks: root=… inner=…`, `telemetry: <status>`; `--remove` strips hook + blocks only (never touches ledger data or the submodule).
 
 - [ ] **Step 1: Write the failing test**
@@ -2973,6 +3254,15 @@ test('bootstrapTelemetry: creates the self-referential submodule on the telemetr
   assert.equal(bootstrapTelemetry(mkdtempSync(join(tmpdir(), 'nogit-'))).status, 'no-git');
 });
 
+test('installer and doctor use the same main owner from a linked worktree', () => {
+  const repo = tmp();
+  const wt = join(mkdtempSync(join(tmpdir(), 'dm-linked-')), 'linked'); g(repo, 'commit', '-q', '--allow-empty', '-m', 'init'); g(repo, 'worktree', 'add', '-q', '-b', 'linked', wt);
+  execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: wt, env: { ...process.env, CLAUDE_PROJECT_DIR: wt } });
+  assert.equal(existsSync(join(repo, '.claude', 'settings.json')), true);
+  assert.equal(existsSync(join(wt, '.claude', 'settings.json')), false);
+  assert.deepEqual(doctorReport(wt, 'skills/delivery-metrics'), doctorReport(repo, 'skills/delivery-metrics'));
+});
+
 test('doctorReport: wiring, plans, every ignore pattern in its owner, tracked transients, git state, caveats', () => {
   const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
   let d = doctorReport(repo, REL);
@@ -3001,11 +3291,11 @@ test('script: --host copilot exits 2 UNSUPPORTED-HOST; default installs and prin
 ```js
 #!/usr/bin/env node
 // STDLIB ONLY. Opt-in Claude SubagentStop capture + shared telemetry submodule (spec §6.1, §6.6, D15). Installing the skill never wires this.
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, sessionsDir } from './lib/paths.mjs';
+import { deliveryDir, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
 
@@ -3020,7 +3310,7 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
   const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   const kept = (Array.isArray(settings.hooks.SubagentStop) ? settings.hooks.SubagentStop : []).filter((e) => !e || !e[MARKER]);
-  if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/${posix(rel)}/hooks/dispatch-hook.mjs" --stop`, timeout: 30, async: true }], [MARKER]: true });
+  if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "${posix(resolve(repo, rel, 'hooks/dispatch-hook.mjs'))}" --stop`, timeout: 30, async: true }], [MARKER]: true });
   if (kept.length) settings.hooks.SubagentStop = kept; else delete settings.hooks.SubagentStop;
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
   writeJson(file, settings); return file;
@@ -3074,6 +3364,7 @@ export function bootstrapTelemetry(repo) {
 export function telemetryMode(repo) { return existsSync(join(repo, '.agents', 'telemetry', '.git')) ? 'submodule' : 'plain-dir'; }
 
 export function doctorReport(repo, rel) {
+  repo = resolveOwnerRepo(repo);
   const lines = []; let ok = true;
   const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
   const wired = [...(settings.hooks?.SubagentStop ?? []), ...(local.hooks?.SubagentStop ?? [])].some((e) => e && e[MARKER]);
@@ -3095,6 +3386,7 @@ export function doctorReport(repo, rel) {
 }
 
 export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()) {
+  repo = resolveOwnerRepo(repo);
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
   const host = val('--host') ?? 'claude'; if (host !== 'claude') { process.stderr.write(`UNSUPPORTED-HOST(${host})\n`); return 2; }
   const rel = posix(relative(repo, skillRootOf()));
@@ -3105,7 +3397,7 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);
   return 0;
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(main());
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(main());
 ```
 
 - [ ] **Step 4: Wire `doctor` into `delivery.mjs`** — `import { doctorReport, skillRootOf } from './install-hooks.mjs';` `function cmdDoctor(repo, p, io) { for (const l of doctorReport(repo, relative(repo, skillRootOf(import.meta.url))).lines) out(io, l); return 0; }` (add `relative` to the `node:path` import; `doctor: cmdDoctor` in `COMMANDS`).
@@ -3127,7 +3419,9 @@ git commit -m "feat(delivery-metrics): installer — Claude SubagentStop splice,
 - Create: `skills/delivery-metrics/references/event-model.md`, `references/metrics.md`, `references/plan-block.md`, `templates/plan-block.template.md`
 - Modify: `skills/delivery-metrics/README.md`
 
-**Interfaces:** none new; prose names the exact commands from Tasks 5, 9, 12. The spec is **not** edited by this task.
+- Create: `skills/delivery-metrics/scripts/installed.test.mjs` (six isolated installed CLI smokes).
+
+**Interfaces:** Task 1 roster snapshot is consumed by the installed CLI smokes; prose names the exact commands from Tasks 5, 9, 12. The spec is **not** edited by this task.
 
 - [ ] **Step 1: Agent frontmatter** — add `delivery-metrics` to `skills-on-demand:` of `feature-development/agents/{tech-lead,project-manager,scout}` and `test-automation/agents/{scout,test-automation-lead}` (create the key when absent). Never `skills:`. Keep any value containing `: ` quoted.
 
@@ -3183,9 +3477,67 @@ Run in the worktree root:
 ```bash
 npm test && npm run validate:factories && npm run validate:marketplaces && npm run validate:dupes
 npx --no-install skills-ref validate skills/delivery-metrics || echo "skills-ref not installed locally — CI runs it"
-for t in claude copilot codex; do d=$(mktemp -d); node bin/init.mjs init --skills delivery-metrics --target $t --yes --dir "$d" 2>&1 | tail -3; ls "$d"; done
+installer="$PWD/bin/init.mjs"
+for t in claude copilot codex; do d=$(mktemp -d); (cd "$d" && node "$installer" init --skills delivery-metrics --target "$t" --yes) || exit 1; done
 ```
-The standalone `--skills delivery-metrics` install pulls no external (`repo:`) skills, so it is offline; if `bin/init.mjs` has no `--dir` flag, run each smoke inside a fresh `mktemp -d` with `cd` and check the placed path. Expected: the skill directory placed for each target; no hook wired; `npm test` green. If online, also `npm run validate:externals`; otherwise record `validate:externals: not run (offline)` in the commit message.
+The standalone `--skills delivery-metrics` install pulls no external (`repo:`) skills, so it is offline; each smoke runs inside a fresh directory because the installer uses cwd. Step 6a covers both factories, their external dependencies, and installed CLI execution. Expected: the skill directory placed for each target; no hook wired; `npm test` green. If online, also `npm run validate:externals`; otherwise record `validate:externals: not run (offline)` in the commit message.
+
+- [ ] **Step 6a: Execute six installed CLI smokes without source-checkout access at runtime**
+
+Create `skills/delivery-metrics/scripts/installed.test.mjs` with the following offline fixture. External skills are local test stubs, not upstream-validation evidence. Git URL rewriting handles the installer's unconditional fetch; file-only transport makes accidental network access fail. Each runtime uses a physical copy of installed output after deleting the first install directory; no source factory manifests or runtime checkout paths are passed. All six combinations must register, bind, record and report; named-role admission is separately covered by Task 11's multi-factory and foreign-role fixtures.
+
+```js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
+const sandbox = mkdtempSync(join(tmpdir(), 'dm-installed-'));
+const config = join(sandbox, 'gitconfig'); writeFileSync(config, '');
+const env = { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', GIT_ALLOW_PROTOCOL: 'file', SDLC_SKILLS_CACHE_DIR: join(sandbox, 'cache'), DELIVERY_NO_SYNC: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
+const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+const entries = JSON.parse(readFileSync(join(root, 'skills.json'), 'utf8')).skills.filter((e) => e.repo);
+for (const repo of new Set(entries.map((e) => e.repo))) {
+  const mirror = join(sandbox, 'mirrors', repo.replaceAll('/', '__')); mkdirSync(mirror, { recursive: true });
+  git(mirror, 'init', '-q', '-b', 'fixture');
+  const mine = entries.filter((e) => e.repo === repo);
+  for (const e of mine) {
+    const dir = join(mirror, e.subdir ?? ''); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${e.id}\ndescription: Offline installer fixture\n---\n# Fixture\n`);
+  }
+  git(mirror, 'add', '.'); git(mirror, 'commit', '-q', '-m', 'fixtures');
+  for (const ref of new Set(mine.map((e) => e.ref ?? 'main'))) git(mirror, 'branch', ref);
+  git(sandbox, 'config', '--file', config, `url.file://${mirror}.insteadOf`, `https://github.com/${repo}`);
+}
+for (const factory of ['feature-development', 'test-automation']) for (const [target, dir] of [['claude', '.claude'], ['copilot', '.github'], ['codex', '.codex']]) {
+  test(`installed CLI: ${factory}/${target}`, () => {
+    const installed = mkdtempSync(join(sandbox, 'install-'));
+    execFileSync('node', [join(root, 'bin/init.mjs'), 'init', '--factory', factory, '--target', target, '--yes'], { cwd: installed, env, stdio: 'pipe' });
+    const consumer = mkdtempSync(join(sandbox, 'consumer-')); cpSync(installed, consumer, { recursive: true, dereference: true }); rmSync(installed, { recursive: true });
+    const skill = join(consumer, dir, 'skills', 'delivery-metrics');
+    assert.ok(existsSync(join(skill, 'references', 'factory-roles.json')));
+    const cli = (...args) => execFileSync('node', [join(skill, 'scripts/delivery.mjs'), ...args], { cwd: consumer, env: { ...env, CLAUDE_PROJECT_DIR: consumer }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const block = { campaign_id: 'smoke', run_id: 'r1', version: 1, factory, observation_start: '2026-09-14T00:00:00Z', source_epoch: { from: '2026-09-14T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'smoke' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-001' }] }] };
+    writeFileSync(join(consumer, 'plan.json'), JSON.stringify(block));
+    assert.match(cli('plan', 'register', '--from', 'plan.json', '--id', 'r', '--created-at', '2026-09-14T00:00:00Z'), /PLAN smoke\/r1/);
+    const saved = JSON.parse(cli('plan', 'show', '--plan', 'smoke/r1'));
+    assert.deepEqual(saved.roster.factories, [factory]);
+    assert.ok(saved.roster.agents.includes(factory === 'feature-development' ? 'js-dev' : 'test-automation-lead'));
+    assert.ok(!saved.roster.agents.includes('qa-auditor'));
+    assert.match(cli('session', 'set', '--host', target, '--session', 's', '--plan', 'smoke/r1'), /SESSION/);
+    cli('event', 'TASK-001', 'dispatched', '--id', 'd', '--at', '2026-09-14T09:00:00Z');
+    cli('event', 'TASK-001', 'done', '--id', 'f', '--at', '2026-09-14T11:00:00Z');
+    const report = JSON.parse(cli('report', '--json', '--cutoff', '2026-09-17T00:00:00Z'));
+    assert.equal(report.plans[0].metrics.flow.task.strata.all.cycle_time.min, 7200);
+    assert.match(cli('doctor'), /plans: 1 open/);
+  });
+}
+```
+
+Run `node --test skills/delivery-metrics/scripts/installed.test.mjs` → six passing. Arithmetic: 11:00 − 09:00 = 2 × 3600 = 7,200 seconds. Also add to README: default roster = installed roles intersected with the shipped map for `factory`; multi-factory registration supplies `--factories feature-development,test-automation`. `--roster`/`plan roster --agents` assert the computed union; unknown factories/foreign roles fail with `USAGE`. The hook consumes the validated saved snapshot, with no checkout-manifest lookup.
 
 - [ ] **Step 7: Commit**
 ```bash
@@ -3199,7 +3551,7 @@ git commit -m "feat(delivery-metrics): factory wiring (tech-lead block, PM momen
 
 1. **Spec coverage (M1 rows of §13):** plan block + estimates → Tasks 3, 5; markdown importer → Task 4; `event`/`backfill`/hook/installer → Tasks 5, 9, 11, 12; storage §6.1 (append-only, advisory lock, best-effort sync incl. unmerged check, submodule bootstrap) → Tasks 1, 2, 5, 12; timeline §6.9 (M1 subset with validation) → Task 6; metrics §6.10 (cycle/commit_to_done/lead, throughput/velocity with declared coverage, estimate delta per item and stratum, schedule variance, coverage) → Task 7; `status`/`report` §6.11 → Task 8; feature-development wiring §9.1 + scout → Task 13; golden §12/AC-3 → Task 10; M-1 docs + P-0/P-1 + SPIKE-1 procedure → Task 0. Deferred (M2+): review completeness, blocked/reopen derivation, PR-mode backfill, HTML/`--calibrate`/`--from-json`, automation adapter, cost join.
 2. **Placeholders:** none — every step carries code or an exact edit.
-3. **Type consistency:** `makeObservation`/`validateRecord` (Task 2) are what Tasks 3/5/9/11 use; `factKey` is consumed by Task 6; `Item` (Task 6, incl. `created_sha`, `done_sha`, `landing_at`, `rework_count`, `reopened`, `version_added`) is what Task 7/8 read; `appendObservation` result `{result, observation_id, revision, path}` is used by Tasks 5, 9, 11; `assemble` doc shape is what `renderMarkdown`/`renderStatus`/golden consume; `resolveRun`/`loadRun`/`saveRun`/`listRuns` names are consistent across Tasks 3, 5, 8, 9, 11, 12; CLI error codes match Global Constraint 8.
+3. **Type consistency:** `makeObservation`/`validateRecord` (Task 2) are what Tasks 3/5/9/11 use; `factKey` is consumed by Task 6; `Item` (Task 6, `first_completion`/`current_scope` and compatibility first-delivery clocks, incl. `created_sha`, `done_sha`, `landing_at`, `rework_count`, `reopened`, `version_added`) is what Task 7/8 read; `appendObservation` result `{result, observation_id, revision, path}` is used by Tasks 5, 9, 11; `assemble` doc shape is what `renderMarkdown`/`renderStatus`/golden consume; `resolveRun`/`loadRun`/`saveRun`/`listRuns` names are consistent across Tasks 3, 5, 8, 9, 11, 12; CLI error codes match Global Constraint 8.
 
 ## Review rounds
 
@@ -3240,3 +3592,14 @@ git commit -m "feat(delivery-metrics): factory wiring (tech-lead block, PM momen
 | F31 | resolved — `cliError` for every user-input failure; NO-EVENTS before end; `--sha`+`--at` correction via `--revision` | Tasks 1, 5, 8 |
 | F32 | resolved — band `[vs_high, vs_low]`; zero-midpoint counted; `no_eligible_latest` reason | Task 7 |
 | F33 | resolved — `--from-json` deferred to M4; both-factory + three-host standalone smokes offline; `skills-ref` availability handled | Tasks 8, 13 |
+
+### v2 findings → v3
+
+4 findings addressed: 1 blocker, 3 majors; 4 resolved, 0 rejected. The review cites the earlier 710-line snapshot; these repairs apply to the executable 3,242-line v2 present at the start of this round, preserving its code and tasks.
+
+| F | Resolution | Where |
+|---|---|---|
+| F1 | resolved | Tasks 3, 5, 8, 9: explicit clock → pinned per-item first-containing commit → registration time; shared Git helper, saved request clocks/observations and historical registration tests without backfill. |
+| F2 | resolved | Tasks 1, 5, 11, 13: shipped factory map, installed-role intersection and validated snapshot; multi-factory/foreign-role hook fixtures and six offline installed CLI smokes. |
+| F3 | resolved | Tasks 1, 5, 8, 11, 12: common owner before telemetry exists; source evidence remains in the invoking checkout; linked-worktree register/bind/capture/report and installer/doctor tests. |
+| F4 | resolved | Tasks 5–8: effective membership replay, first_completion separate from current_scope, new-scope landing boundary, Monday/Tuesday regression, first-delivery accuracy/throughput and pending WIP/status. |
