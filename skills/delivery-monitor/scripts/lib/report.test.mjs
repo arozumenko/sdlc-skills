@@ -460,4 +460,6 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.ok(details[1].includes('<h2>Flow time</h2>') && details[1].includes('<h2>Coverage</h2>'), 'assessor panels live inside the first details block');
   assert.ok(!details[0].includes('<h2>Flow time</h2>'), 'flow-time strata are not in the human part');
   assert.ok(html.includes('<strong>Caveats</strong> — standing limitations'), 'caveats stay visible with a preface');
+  // Human open-items rows use natural units, never raw ISO stamps; the assessor copy keeps ISO.
+  assert.match(html2, /<h2>Open items<\/h2>.*?<td>G2<\/td><td>mission<\/td><td>in progress<\/td><td>11 Sep 2026 00:00 UTC<\/td><td>10 d<\/td>/s);
 });

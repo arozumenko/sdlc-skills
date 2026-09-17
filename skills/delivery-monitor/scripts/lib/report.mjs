@@ -99,7 +99,7 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags,
+const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -508,7 +508,7 @@ export function renderHtml(doc) {
       const detail = [
         t.class ? `class ${esc(t.class)}` : null,
         missionOf.has(t.item_id) ? `mission ${esc(missionOf.get(t.item_id))}` : null,
-        t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : 'no estimate'),
+        t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : (t.estimate_status === 'unaccepted' ? 'estimate not accepted' : 'no estimate')),
         v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : null,
         t.rework_count ? `${t.rework_count} rework` : null,
         t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
@@ -541,7 +541,7 @@ export function renderHtml(doc) {
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     const open = p.items.filter((i) => i.state === 'in_progress');
-    if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>age</th></tr>${openItemsRowsHtml(p, e)}</table></section>`);
+    if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);
 
     // Everything the assessor export prints, unchanged, one click away.
     let estimatesPanel = `<section class="panel"><h2>Estimates</h2><table><tr><th>level</th><th>stratum</th><th>n</th><th>eligible</th><th>work_ratio median</th><th>MdMRE</th><th>PRED(25)</th><th>MAE</th><th>hit_rate</th><th>excluded</th></tr>${estimatesStrataRowsHtml(m)}</table>`;

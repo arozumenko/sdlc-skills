@@ -366,3 +366,18 @@ test('estimateOriginal / estimateLatest', () => {
     { revision: 1, at: '2026-09-15T12:00:00.000Z', estimate: EST(), status: 'accepted' }, { revision: 2, at: '2026-09-16T12:00:00.000Z', estimate: EST({ high: 5 }), status: 'accepted' }];
   assert.equal(estimateOriginal(es).high, 3); assert.equal(estimateLatest(es, '2026-09-16T09:00:00.000Z').high, 3); assert.equal(estimateLatest(es, '2026-09-17T00:00:00.000Z').high, 5); assert.equal(estimateOriginal([es[0]]), null);
 });
+
+test('research-09: a git "address review" rework inside a hook fix-dispatch span is the same episode — counted once; outside any span it counts', () => {
+  const hook = (event, at, agent, stage = 'fix') => makeObservation({ user: 'u', host: 'claude', plan: R, item_id: it('task-a').item_id, ref: it('task-a').ref, level: 'task', event, at, transition_id: `${it('task-a').item_id}/${event}/${agent}`, source: 'hook', source_record_id: `claude:s:${agent}`, agentId: agent, meta: { version: 1, stage } }, { now: 0 });
+  const gitRework = (at, round) => obs('task-a', 'rework_observed', at, { source: 'git', transition_id: `${it('task-a').item_id}/rework_observed/${round}`, meta: { round, git_sha: `sha-${round}` } });
+  const o = [obs('task-a', 'created', '2026-09-14T09:00:00Z'),
+    hook('dispatched', '2026-09-15T09:00:00Z', 'a1', 'build'), hook('dispatch_ended', '2026-09-15T09:30:00Z', 'a1', 'build'),
+    // fix round 1: hook span 10:00–10:20 with its own rework_observed; the git commit lands inside the span
+    hook('dispatched', '2026-09-15T10:00:00Z', 'a2'), hook('rework_observed', '2026-09-15T10:00:00Z', 'a2'), gitRework('2026-09-15T10:12:00Z', 1), hook('dispatch_ended', '2026-09-15T10:20:00Z', 'a2'),
+    // a later hand-made "address review 2" commit with no hook dispatch around it is a second episode
+    gitRework('2026-09-15T12:00:00Z', 2),
+    obs('task-a', 'done', '2026-09-15T13:00:00Z')];
+  const { items } = tl(o); const a = items.get(it('task-a').item_id);
+  assert.equal(a.rework_count, 2, 'one hook-witnessed episode (git duplicate folded in) + one git-only episode');
+  assert.equal(a.fix_spans.length, 1); assert.equal(a.fix_spans[0].to, '2026-09-15T10:20:00.000Z');
+});

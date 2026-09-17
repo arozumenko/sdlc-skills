@@ -69,7 +69,7 @@ const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, created_source: null, estimates: [], estimate_original: null, estimate_latest: null,
   scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, start_source: null, first_commit_at: null,
   first_commit_source: null, done_at: null, done_basis: null, done_sha: null, done_source: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, proxy_dispatches: 0, rework_count: 0,
-  deferred_events: 0, reopened: false, children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
+  deferred_events: 0, reopened: false, fix_spans: [], children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
 
 function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
@@ -92,6 +92,7 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         // separately in `proxy_dispatches` and must never upgrade to a measured start.
         if (o.basis !== 'observed') { it.proxy_dispatches++; }
         else if (START_STAGES.has(o.meta.stage) && !it.started_at && !terminal && it.level === 'task') { it.started_at = o.at; it.start_basis = 'observed'; it.start_source = o.source; }
+        if (o.source === 'hook' && o.meta.stage === 'fix') it.fix_spans.push({ from: o.at, to: null, agent: o.agentId ?? null });
         if (it.state === 'planned') it.state = 'in_progress';
         break;
       case 'first_commit': if (!it.first_commit_at) { it.first_commit_at = o.at; it.first_commit_source = o.source; } if (it.state === 'planned') it.state = 'in_progress'; break;
@@ -109,8 +110,11 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         if (it.state === 'done' && !it.reopened) { if (!it.flags.includes('invalid-chain')) { it.flags.push('invalid-chain'); counts.invalidChains++; } break; }
         if (!it.cancelled_at) it.cancelled_at = o.at; if (it.state !== 'done') it.state = 'cancelled'; break;
       case 'reopened': if (!it.reopened) { it.reopened = true; it.flags.push('deferred-episode'); counts.deferredEpisodes++; } break;
-      case 'rework_observed': it.rework_count++; break;
-      case 'dispatch_ended': break;
+      // Research-09: the hook (fix dispatch) and `backfill --git` ("address review N" commit) both
+      // witness the same rework episode. A git rework whose commit falls inside a hook fix-dispatch
+      // span (open or closed) for this item is that episode, not a second one — counted once.
+      case 'rework_observed': if (!(o.source === 'git' && it.fix_spans.some((sp) => o.at >= sp.from && (sp.to == null || o.at <= sp.to)))) it.rework_count++; break;
+      case 'dispatch_ended': { const sp = it.fix_spans.find((x) => x.to == null && (x.agent == null || x.agent === (o.agentId ?? null))); if (sp) sp.to = o.at; break; }
       default: if (DEFERRED.has(o.event)) { it.deferred_events++; counts.deferredEvents++; }
     }
   }
