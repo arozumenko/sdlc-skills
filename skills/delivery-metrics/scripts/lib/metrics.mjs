@@ -5,7 +5,12 @@ export const nearestRank = (sorted, q) => sorted[Math.max(0, Math.ceil(q * sorte
 export function stats(values) {
   const s = values.filter((v) => typeof v === 'number' && Number.isFinite(v)).sort((a, b) => a - b); const n = s.length;
   if (!n) return null;
-  return { n, min: s[0], max: s[n - 1], median: n >= 5 ? nearestRank(s, 0.5) : null, p85: n >= 7 ? nearestRank(s, 0.85) : null, p90: n >= 10 ? nearestRank(s, 0.9) : null, samples: n < 5 ? s : undefined };
+  const out = { n, min: s[0], max: s[n - 1], median: n >= 5 ? nearestRank(s, 0.5) : null, p85: n >= 7 ? nearestRank(s, 0.85) : null, p90: n >= 10 ? nearestRank(s, 0.9) : null };
+  // Minor fix: omit the `samples` key entirely for n >= 5 rather than setting it to undefined —
+  // an explicit `undefined` value is still an own enumerable key and can trip a strict deepEqual
+  // against a literal that has no such key at all.
+  if (n < 5) out.samples = s;
+  return out;
 }
 export function weekStartUtc(iso) { const d = new Date(iso); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7))); }
 export function isoWeekUtc(iso) {
@@ -57,8 +62,11 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
   const completed = all.filter((i) => inWin(i.done_at, sinceIso, endIso));
   const caveats = [];
   const data = { window: { since: sinceIso, end: endIso, coverage_start: covStart }, cohorts: { completed: completed.length, created: all.filter((i) => inWin(i.created_at, sinceIso, endIso)).length,
-    // F10/F12: raw inventory of excluded/quarantined evidence, independent of the [since,end) window (matches invalid_chain/deferred_episode already being window-independent).
-    excluded_items: { invalid_chain: all.filter(invalidChain).length, deferred_episode: all.filter(deferredEpisode).length, proxy_completions: all.filter(proxyCompletion).length } },
+    // Important fix: scoped to the windowed done cohort (`completed`), matching `completed`/`created`
+    // above — a count here can never exceed `cohorts.completed` or cite an item whose done_at falls
+    // outside [since,end). The window-independent inventory lives separately under `inventory.excluded_items` below.
+    excluded_items: { invalid_chain: completed.filter(invalidChain).length, deferred_episode: completed.filter(deferredEpisode).length, proxy_completions: completed.filter(proxyCompletion).length } },
+    inventory: { excluded_items: { invalid_chain: all.filter(invalidChain).length, deferred_episode: all.filter(deferredEpisode).length, proxy_completions: all.filter(proxyCompletion).length } },
     flow: {}, throughput: {}, wip: {}, mission_turnaround: { pairs: [], stats: null }, estimates: {}, estimate_rows: [], schedule_variance: [], coverage: {}, rework_proxy_items: completed.filter((i) => i.rework_count > 0).length, caveats };
   const weeks = weekKeys(sinceIso, endIso, covStart);
   for (const level of LEVELS) {
@@ -91,8 +99,10 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
         else targets.forEach((t) => t.lead_time.push(s));
       }
     }
+    // Minor fix: quality lives in exactly one place — per-stratum (`strata.<class>.quality`,
+    // including 'all') — no level-level duplicate.
     data.flow[level] = { strata: Object.fromEntries(Object.entries(strata).map(([k, v]) => [k, { ...Object.fromEntries(Object.entries(v).map(([m, arr]) => [m, stats(arr)])), quality: qualityFor(k === 'all' ? done : done.filter((i) => i.class === k)) }])),
-      excluded: ex, quality: qualityFor(done) };
+      excluded: ex };
     const counts = weeks.map((w) => ({ key: w.key, count: throughputDone.filter((i) => i.done_at >= w.start && i.done_at < w.end).length, whole: w.whole, covered: w.covered }));
     const whole = counts.filter((w) => w.whole).map((w) => w.count); let velocity = null, caveat = null;
     if (whole.length >= minWeeks) velocity = { median: nearestRank([...whole].sort((a, b) => a - b), 0.5), mean: Math.round((whole.reduce((a, b) => a + b, 0) / whole.length) * 100) / 100, whole_weeks: whole.length };
@@ -110,6 +120,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
       const bs = keys.map(eb);
       if (i.estimates.length) bs.forEach((b) => b.n++);
       let reason = null; const a = actualOf.get(i.item_id);
+      const mid = chosen ? (chosen.low + chosen.high) / 2 : null;
       if (excludedItem(i)) reason = 'excluded_item';
       else if (!i.estimates.length) reason = 'unestimated';
       else if (!i.estimate_original) reason = 'unaccepted';
@@ -117,12 +128,19 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
       else if (chosen.unit !== 'h') reason = 'unit_mismatch';
       else if (a?.skew) reason = 'clock_skew';
       else if (!a) reason = 'missing_actual';
-      else if (chosen.accepted_at && new Date(chosen.accepted_at).toISOString() >= i.started_at) reason = 'late_accepted';
+      // Minor fix: compare epoch numbers via Date.parse, not `new Date(...).toISOString()` against
+      // the raw `started_at` string. toISOString() always normalizes to millisecond precision
+      // ('...000Z'), which sorts lexically BEFORE a same-instant string with no milliseconds
+      // ('...Z') — the old string comparison silently missed the accepted_at === started_at case.
+      else if (chosen.accepted_at != null && Date.parse(chosen.accepted_at) >= Date.parse(i.started_at)) reason = 'late_accepted';
+      // Minor fix: zero_midpoint is now a full mutually-exclusive reason (brief order: …,
+      // late_accepted, zero_midpoint, zero_actual, …) — not eligible, no MAE/ratio/MRE contribution,
+      // same early-return shape as every other reason above it.
+      else if (mid === 0) reason = 'zero_midpoint';
       if (reason) { bs.forEach((b) => b.excluded[reason]++); if (reason !== 'unestimated') data.estimate_rows.push({ item_id: i.item_id, ref: i.ref, level, class: i.class, tier, base: estimateBase, estimate: chosen ? { unit: chosen.unit, low: chosen.low, high: chosen.high } : null, actual_s: a?.s ?? null, actual_basis: a?.basis ?? null, ratio: null, hit: null, reason }); continue; }
-      const mid = (chosen.low + chosen.high) / 2, actualH = a.s / 3600, ae = Math.abs(a.s - mid * 3600);
-      let ratio = null, hit = null;
-      bs.forEach((b) => { b.eligible++; b._aes.push(ae); });
-      if (mid === 0) bs.forEach((b) => b.excluded.zero_midpoint++); else { ratio = Math.round((actualH / mid) * 10000) / 10000; bs.forEach((b) => b._ratios.push(actualH / mid)); }
+      const actualH = a.s / 3600, ae = Math.abs(a.s - mid * 3600);
+      const ratio = Math.round((actualH / mid) * 10000) / 10000; let hit = null;
+      bs.forEach((b) => { b.eligible++; b._aes.push(ae); b._ratios.push(actualH / mid); });
       if (a.s === 0) bs.forEach((b) => b.excluded.zero_actual++); else bs.forEach((b) => b._mres.push(Math.abs(actualH - mid) / actualH));
       if (chosen.low === chosen.high) bs.forEach((b) => b.excluded.point++); else { hit = actualH >= chosen.low && actualH <= chosen.high; bs.forEach((b) => { b.hit_rate.ranged++; if (hit) b.hit_rate.hits++; }); }
       data.estimate_rows.push({ item_id: i.item_id, ref: i.ref, level, class: i.class, tier, base: estimateBase, estimate: { unit: chosen.unit, low: chosen.low, high: chosen.high }, actual_s: a.s, actual_basis: a.basis, ratio, hit, reason: null });
@@ -136,6 +154,10 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     const src = (field) => done.reduce((m, i) => { const s = i[field]; if (s) m[s] = (m[s] ?? 0) + 1; return m; }, {});
     data.coverage[level] = { done: done.length, with_dispatched: done.filter((i) => i.start_basis === 'observed').length, with_first_commit: done.filter((i) => i.first_commit_at).length, with_created: done.filter((i) => i.created_at).length,
       start_source: { observed: done.filter((i) => i.start_basis === 'observed').length, 'derived-child': done.filter((i) => i.start_basis === 'derived-child').length, none: done.filter((i) => !i.started_at).length },
+      // Minor fix: done_basis split so coverage.done reconciles with throughput — observed +
+      // 'derived-child' + proxy always sums to coverage.done, and observed + 'derived-child' is
+      // exactly the population throughputDone/measurable draw from (proxy is what F12 excludes).
+      done_basis: { observed: done.filter((i) => i.done_basis === 'observed').length, 'derived-child': done.filter((i) => i.done_basis === 'derived-child').length, proxy: done.filter(proxyCompletion).length },
       sources: { created: src('created_source'), dispatched: src('start_source'), first_commit: src('first_commit_source'), done: src('done_source') } };
     if (done.length && level === 'task' && data.coverage[level].with_dispatched === 0) caveats.push(`${level}: no observed dispatch start — cycle_time absent, commit_to_done shown instead`);
   }
