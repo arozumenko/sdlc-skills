@@ -380,4 +380,12 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().then((c) => process.exit(c));
+// Task 10: `process.exit(c)` right after an async `main()` resolves races Node's own async stdout
+// flush when stdout is a pipe (not a TTY/file) and the write exceeds the OS pipe buffer (64KB on
+// macOS) — `report --json` on the security-testing golden fixture (59 tasks, ~163KB) reproduced
+// this exactly: piped/captured output silently truncated at 65536 bytes mid-string, downstream
+// JSON.parse failing. Setting `process.exitCode` instead lets the event loop drain pending stdio
+// writes before exiting naturally — the documented fix (Node process.exit() docs) for this class of
+// bug. No pending async handles are held open elsewhere in this CLI (bestEffortSync above runs
+// synchronously), so this cannot hang.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().then((c) => { process.exitCode = c; });
