@@ -18,7 +18,7 @@
 // child process is an argv array with `shell: false` (via lib/git.mjs); no
 // network. Imports only from ./lib/.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -91,7 +91,10 @@ function init(args, ctx) {
     return 4;
   }
   // .gitignore is bytes: read and written as latin1 so the consumer's own
-  // lines round-trip untouched; only the ASCII block is ours.
+  // lines round-trip untouched; only the ASCII block is ours. This is the
+  // one write that does NOT pass through `redactString` — the same bytes go
+  // back to the same file, and redacting a consumer's ignore file would
+  // corrupt it. Nothing here originates from us but the block.
   const current = readGitignore(root);
   const next = upsertBlock(current);
   if (next === current) {
@@ -178,6 +181,20 @@ function show(args, ctx) {
 /** The command table; `check` and `redact` join it in later tasks. */
 export const COMMANDS = { init: command("init", init), show: command("show", show) };
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exit(runCli(COMMANDS, process.argv.slice(2), { name: "cite" }));
+/**
+ * True when this file is the process entry script. Both sides are realpath'd:
+ * `import.meta.url` is already canonical, `argv[1]` is whatever the caller
+ * typed — a file symlink, a `--symlink` install, or a copy under an aliased
+ * tmpdir (`/var/…` → `/private/var/…` on macOS) would otherwise never match
+ * and main would silently not run.
+ * @returns {boolean}
+ */
+function isEntryScript() {
+  try {
+    return process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
 }
+
+if (isEntryScript()) process.exit(runCli(COMMANDS, process.argv.slice(2), { name: "cite" }));

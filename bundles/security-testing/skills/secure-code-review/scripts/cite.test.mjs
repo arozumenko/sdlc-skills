@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_LINES, buildRepo } from "./fixtures/cite/build-repo.mjs";
@@ -145,11 +145,27 @@ test("show needs a readable engagement record", () => {
 });
 
 test("the command table holds init and show; MAX_RANGE_LINES is exported; importing does not run main", async () => {
+  // A `process.exit` inside the import would kill this runner; the export
+  // check below makes the "import is inert" claim explicit.
   const mod = await import(CITE);
   assert.deepEqual(Object.keys(mod.COMMANDS).slice(0, 2), ["init", "show"]);
   assert.equal(mod.MAX_RANGE_LINES, 40);
+  assert.equal(typeof mod.underScope, "function");
   const { root } = buildRepo();
   const r = run(root, "nope");
   assert.equal(r.code, 2);
   assert.equal(r.out[0], "USAGE(cite: unknown command nope)");
+});
+
+test("main runs when the script is reached through a symlink or an aliased directory", () => {
+  // Review 1: `resolve(argv[1]) === fileURLToPath(import.meta.url)` compared a
+  // non-canonical invoked path against Node's realpath'd module URL, so a
+  // file symlink, a `--symlink` install, or a copy under macOS's aliased
+  // tmpdir made main() silently never run (exit 0, no result line).
+  const { root } = buildRepo();
+  const link = join(root, "cite-link.mjs");
+  symlinkSync(CITE, link);
+  const r = spawnSync(process.execPath, [link, "nope"], { cwd: root, encoding: "utf8" });
+  assert.equal(r.status, 2, `stdout=${r.stdout} stderr=${r.stderr}`);
+  assert.equal(r.stdout.trim(), "USAGE(cite: unknown command nope)");
 });
