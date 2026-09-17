@@ -9,7 +9,7 @@ import { parseArgs, validateTransition } from './delivery.mjs';
 import { deliveryDir, runPath } from './lib/paths.mjs';
 import { resolveObservations } from './lib/events.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
-import { buildFixtureRepo } from './lib/git-backfill.test.mjs';
+import { buildFixtureRepo } from './lib/git-fixtures.mjs';
 
 const CLI = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-cli-'));
@@ -481,4 +481,65 @@ test('backfill --git: CLI event count matches deriveGitObservations directly; id
   const taskAll = rpt.plans[0].metrics.flow.task.strata.all;
   assert.ok(taskAll.commit_to_done, 'commit_to_done measured from first_commit -> done (no dispatched events recorded)');
   assert.equal(taskAll.cycle_time, null, 'no dispatched events were ever observed -> no cycle_time');
+});
+
+// Review fix (F20, CLI level): every backfill user-input failure must exit 2 with a USAGE( prefix —
+// previously only proven against deriveGitObservations directly, never through the CLI's own flag
+// parsing/guards. Also proves --plan is routed through the same requireValue guard as --head.
+test('F20: backfill --git input guards all exit 2 (USAGE) — --pr, missing/bare --head, unresolvable --head, invalid --since, bare --plan', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', 'init'); // initRepo() itself makes no commit — need a resolvable HEAD
+  const head = git(repo, 'rev-parse', 'HEAD');
+
+  const noGit = run(repo, ['backfill', '--pr']);
+  assert.equal(noGit.code, 2, noGit.stderr); assert.match(noGit.stderr, /^USAGE\(/);
+
+  const pr = run(repo, ['backfill', '--git', '--pr']);
+  assert.equal(pr.code, 2, pr.stderr); assert.match(pr.stderr, /^USAGE\(--pr is not in M1/);
+
+  const noHead = run(repo, ['backfill', '--git']);
+  assert.equal(noHead.code, 2, noHead.stderr); assert.match(noHead.stderr, /^USAGE\(backfill needs --head/);
+
+  const bareHead = run(repo, ['backfill', '--git', '--head']);
+  assert.equal(bareHead.code, 2, bareHead.stderr); assert.match(bareHead.stderr, /^USAGE\(--head requires a value/);
+
+  const badHead = run(repo, ['backfill', '--git', '--head', 'deadbeef']);
+  assert.equal(badHead.code, 2, badHead.stderr); assert.match(badHead.stderr, /^USAGE\(head deadbeef not found/);
+
+  const badSince = run(repo, ['backfill', '--git', '--head', head, '--since', 'not-a-date']);
+  assert.equal(badSince.code, 2, badSince.stderr); assert.match(badSince.stderr, /^USAGE\(invalid --since/);
+
+  const barePlan = run(repo, ['backfill', '--git', '--plan']);
+  assert.equal(barePlan.code, 2, barePlan.stderr); assert.match(barePlan.stderr, /^USAGE\(--plan requires a value/);
+});
+
+// Minor: --dry-run prints WOULD lines (never EVENT/SKIP/ID-CONFLICT) and never writes run.backfill —
+// a real backfill pass must still be required to actually record anything.
+test('minor: backfill --git --dry-run prints WOULD lines and never writes run.backfill or ledger events', () => {
+  const fx = buildFixtureRepo();
+  const tasks = [
+    { ref: 'TASK-001', branch: 'task/task-001' }, { ref: 'TASK-002', branch: 'task/task-002' },
+    { ref: 'TASK-003', branch: 'task/task-003' }, { ref: 'TASK-004', branch: 'task/task-004' },
+  ];
+  const p = plan(1, tasks);
+  p.observation_start = '2026-09-15T00:00:00Z';
+  p.source_epoch = { from: '2026-09-15T00:00:00Z', until: null, integration_ref: 'main' };
+  const planText = `# plan\n#### TASK-001: a\n#### TASK-002: b\n#### TASK-003: c\n#### TASK-004: d\n\n\`\`\`json delivery-plan\n${JSON.stringify(p)}\n\`\`\`\n`;
+  writeFileSync(join(fx.repo, 'plan.md'), planText);
+  execFileSync('git', ['-C', fx.repo, 'add', 'plan.md']);
+  execFileSync('git', ['-C', fx.repo, 'commit', '-q', '-m', 'plan: register block'], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } });
+  const reg = run(fx.repo, ['plan', 'register', '--from', join(fx.repo, 'plan.md'), '--id', 'reg-1']);
+  assert.equal(reg.code, 0, reg.stderr);
+  const registeredCount = resolveObservations(fx.repo).active.length;
+
+  const dry = run(fx.repo, ['backfill', '--git', '--head', fx.head, '--cutoff', '2026-12-31T00:00:00Z', '--dry-run']);
+  assert.equal(dry.code, 0, dry.stderr);
+  assert.match(dry.stdout, /^WOULD /m);
+  assert.ok(!/^(EVENT|SKIP|ID-CONFLICT) /m.test(dry.stdout), 'dry-run never appends to the ledger');
+  assert.match(dry.stdout, /BACKFILL events=0 /, 'dry-run counts nothing as actually appended');
+
+  const rec = JSON.parse(readFileSync(runPath(fx.repo, 'sec/run-1'), 'utf8'));
+  assert.equal(rec.backfill, undefined, 'dry-run never writes run.backfill');
+  assert.equal(resolveObservations(fx.repo).active.length, registeredCount, 'dry-run leaves the ledger exactly as registration left it');
 });

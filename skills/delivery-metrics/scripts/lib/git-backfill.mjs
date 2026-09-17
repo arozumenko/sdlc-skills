@@ -63,6 +63,11 @@ export function deriveGitObservations({ repo, run, head, since = null, cutoff = 
   const obs = (item, event, at, sha, transition, extra = {}) => makeObservation({ user: null, host: 'git', plan: run.run, item_id: item.item_id, ref: item.ref, level: item.level, event, at, transition_id: transition, source: 'git', source_record_id: sha, basis: extra.basis ?? 'observed', raw: extra.raw ?? null, meta: meta(sha, extra.meta ?? {}) }, { now });
 
   const items = run.items.filter((i) => i.level === 'task' && !i.cancelled);
+  // Review fix: `matchMergeSubject` searches ALL of `run.items` (branch aliases can live on any
+  // level/state), so a merge whose branch happens to match a cancelled task's (or a non-task's)
+  // `branch` must still be rejected here — the same eligibility filter as `items` above, applied as
+  // a Set of eligible item ids rather than re-filtering per merge.
+  const eligibleIds = new Set(items.map((i) => i.item_id));
   const records = [];
 
   if (run.source?.rel) {
@@ -90,7 +95,7 @@ export function deriveGitObservations({ repo, run, head, since = null, cutoff = 
   const done = new Set();
   for (const c of gitLog(repo, ['--first-parent', '--merges', '--reverse', head])) {
     const it = matchMergeSubject(c.subject, run);
-    if (!it || c.parents.length < 2) continue;
+    if (!it || !eligibleIds.has(it.item_id) || c.parents.length < 2) continue;
     // F14: eligibility (episode-1 selection) uses the epoch/cutoff gate only — `--since` is applied
     // below, after the done set has already decided who is episode-1.
     if (!inEpoch(c.at)) continue;

@@ -345,7 +345,8 @@ function cmdBackfill(repo, p, io, now) {
   const f = p.flags;
   if (!f.git) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run]');
   if (f.pr) throw cliError('USAGE', '--pr is not in M1');
-  const run = resolveRun(repo, f.plan);
+  const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
+  const run = resolveRun(repo, planFlag);
   const headFlag = f.head != null ? requireValue(f, 'head') : null;
   if (!headFlag) throw cliError('USAGE', 'backfill needs --head <sha> on the integration ref');
   const head = git(repo, ['rev-parse', '--verify', `${headFlag}^{commit}`]);
