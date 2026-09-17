@@ -434,15 +434,16 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   // Header names the campaign, not the run id; the run id is the muted sub-line.
   assert.match(html, /<h2>sec-campaign <span class="sub">campaign sec\/run-1 · plan v1 · in progress<\/span><\/h2>/);
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Tasks this week', 'Within range', 'Typical error']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Completed in window', 'Velocity', 'Within range', 'Work vs estimate', 'Typical error']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
   assert.ok(html.includes('<span class="stat-value">1 / 1</span>'), 'tasks done 1 / 1');
   assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
   assert.doesNotMatch(html.split('<details>')[0], /\d\.\d\dh\b/, 'no two-decimal-hours in the human sections');
   // Per-task bar row: ref + state chip + bar + duration + estimate verdict.
-  assert.match(html, /<div class="row"><div class="lbl" title="sec\/run-1\/task-a">TASK-A<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div><div class="num">2 h<span class="sub"> · class S · mission G1 · estimate 1 h–3 h · <span class="oc oc-done">within range<\/span><\/span><\/div><\/div>/);
+  assert.match(html, /<div class="row"><div class="lbl" title="sec\/run-1\/task-a">TASK-A<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div><div class="num">2 h<span class="sub"> · class S · mission G1 · estimate 1 h–3 h · <span class="oc oc-done">within range<\/span> · 10 Sep 00:00 → 02:00 UTC<\/span><\/div><\/div>/);
   // Per-mission row carries the schedule-variance verdict in words.
-  assert.match(html, /G1<span class="oc oc-done">done<\/span>.*1\/1 tasks done · estimate 2 h–4 h · <span class="oc oc-done">within the estimate<\/span>/);
+  assert.match(html, /G1<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div>.*1\/1 tasks done · estimate 2 h–4 h · <span class="oc oc-done">within the estimate<\/span>/);
+  assert.ok(html.includes('of estimated time'), 'work vs estimate reads as a percentage of the estimate');
   // Assessor tables are still all there, but collapsed.
   const details = html.split('<details>');
   assert.ok(details.length >= 3, 'statistics + envelope are <details> blocks');

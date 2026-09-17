@@ -415,8 +415,14 @@ const fmtDur = (sec) => {
   return `${sign}${Math.round((a / 86400) * 10) / 10} d`;
 };
 const fmtRangeH = (est) => (est ? `${fmtDur(est.low * 3600)}–${fmtDur(est.high * 3600)}` : '—');
-const fmtTs = (iso) => { if (!iso) return '—'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtTs = (iso) => { if (!iso) return '—'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
 const elapsedS = (a, b) => (a && b ? (Date.parse(b) - Date.parse(a)) / 1000 : null);
+const hhmm = (d) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+// "12:52 → 12:53 UTC" when both clocks fall on the same UTC day, full stamps otherwise.
+const fmtSpan = (a, b) => { if (!a || !b) return null; const da = new Date(a), db = new Date(b); if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null; return da.toISOString().slice(0, 10) === db.toISOString().slice(0, 10) ? `${da.getUTCDate()} ${MONTHS[da.getUTCMonth()]} ${hhmm(da)} → ${hhmm(db)} UTC` : `${fmtTs(a)} → ${fmtTs(b)}`; };
+const pctOf = (ratio) => (ratio == null ? '—' : `${Math.round(ratio * 100)}%`);
+const projectOf = (e) => { const f = e.sources?.events_files?.[0]?.path ?? e.sources?.plan_files?.[0]?.path ?? ''; const m = /([^/]+)\/\.agents\//.exec(f); return m ? m[1] : null; };
 const needs = (n, floor) => `needs ≥${floor} <span class="stat-sub">(have ${n})</span>`;
 const spreadLine = (s) => (s ? `median ${s.median == null ? `— (needs ≥5, have ${s.n})` : fmtDur(s.median)} · min ${fmtDur(s.min)} · max ${fmtDur(s.max)}${s.samples ? ` · samples ${s.samples.map(fmtDur).join(', ')}` : ''}` : 'not measured');
 const verdictOf = (r) => {
@@ -440,7 +446,7 @@ export function renderHtml(doc) {
   const parts = [
     `<!doctype html><meta charset="utf-8"><title>Delivery monitor — ${esc(e.plans.join(', '))}</title><style>${PAGE_CSS}</style>`,
     '<h1>Delivery monitor</h1>',
-    `<p class="meta">Delivery view · generated ${fmtTs(e.generated_at)} · observed ${fmtTs(e.window.since)} → ${fmtTs(e.window.effective_end)} · ${e.plans.length} plan(s) · git ${esc((e.git.sha ?? '—').slice(0, 10))}${e.git.is_working_tree ? ' (uncommitted changes)' : ''}${metaFilters}</p>`,
+    `<p class="meta">Delivery view${projectOf(e) ? ` · project ${esc(projectOf(e))}` : ''} · generated ${fmtTs(e.generated_at)} · observed ${fmtTs(e.window.since)} → ${fmtTs(e.window.effective_end)} · ${e.plans.length} campaign run(s) · git ${esc((e.git.sha ?? '—').slice(0, 10))}${e.git.is_working_tree ? ' (uncommitted changes)' : ''}${metaFilters}</p>`,
   ];
   for (const p of doc.plans) {
     const m = p.metrics;
@@ -455,9 +461,10 @@ export function renderHtml(doc) {
     const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
     const es = m.estimates.task?.strata?.all ?? null;
     const doneTasks = count(tasks, 'done');
-    const weekOf = (lv) => { const t = m.throughput[lv]; const w = t?.weeks[t.weeks.length - 1]; return w ? `${w.count}${!w.covered ? '†' : (!w.whole ? '*' : '')} <span class="stat-sub">${esc(w.key)}</span>` : '—'; };
-    const vel = m.throughput.task;
-    const velTxt = vel?.velocity ? `${vel.velocity.median} / week` : `needs ${e.policy.minWholeWeeks} whole weeks <span class="stat-sub">(have ${vel ? vel.weeks.filter((w) => w.whole).length : 0})</span>`;
+    const weeksTxt = (lv) => { const t = m.throughput[lv]; if (!t?.weeks.length) return '—'; return t.weeks.map((w) => `${esc(w.key)}: ${w.count}${w.whole ? '' : ' <span class="stat-sub">(partial)</span>'}`).join(' · '); };
+    const vel = m.throughput.task; const wholeWeeks = vel ? vel.weeks.filter((w) => w.whole).length : 0;
+    const velTxt = vel?.velocity ? `${vel.velocity.median} <span class="stat-sub">tasks / week, median of ${vel.velocity.whole_weeks} whole weeks</span>` : `— <span class="stat-sub">needs ${e.policy.minWholeWeeks} whole weeks, have ${wholeWeeks}</span>`;
+    const windowS = elapsedS(e.window.since, e.window.effective_end);
     const statusWord = { open: 'in progress', closed: 'closed' }[p.status] ?? p.status;
 
     parts.push('<section class="plan">');
@@ -477,19 +484,19 @@ export function renderHtml(doc) {
         statCell('Tasks measured', ct ? `${ct.n} of ${doneTasks}` : `0 of ${doneTasks}`),
         statCell('Lead time <span class="stat-sub">planned → merge</span>', lt ? (lt.median == null ? `${fmtDur(lt.min)}–${fmtDur(lt.max)}` : fmtDur(lt.median)) : '—'),
       ], `Cycle time runs from the first observed dispatch to the merge; lead time from registration in the plan. Medians need ≥5 finished tasks, P85 ≥7, P90 ≥10 — smaller sets show the range instead.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
-      kpiCard('Throughput <span class="stat-sub">UTC ISO weeks</span>', [
-        statCell('Tasks this week', weekOf('task')),
-        statCell('Missions this week', weekOf('mission')),
-        statCell('Velocity <span class="stat-sub">tasks / whole week</span>', velTxt),
+      kpiCard('Throughput', [
+        statCell('Completed in window', `${doneTasks} <span class="stat-sub">tasks · ${count(missions, 'done')} missions${windowS != null ? ` in ${fmtDur(windowS)}` : ''}</span>`),
+        statCell('Velocity', velTxt),
+        statCell('Tasks per week', weeksTxt('task')),
         statCell('Open now', `${m.wip.task ?? 0} <span class="stat-sub">tasks · ${m.wip.mission ?? 0} missions</span>`),
-      ], '† week starts before the plan\'s observation window · * partial week. Velocity is the median of whole covered weeks — never extrapolated from a partial one.'),
+      ], 'Completions are counted per UTC ISO week (Monday–Sunday). A week is "whole" only when it lies entirely inside the observed window; velocity is the median of whole weeks and is never extrapolated from a partial one.'),
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
         statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
-        statCell('Actual ÷ estimate', es.work_ratio ? (es.work_ratio.median == null ? `×${Math.round(es.work_ratio.min * 100) / 100}–×${Math.round(es.work_ratio.max * 100) / 100} <span class="stat-sub">(${es.work_ratio.n}, no median under 5)</span>` : `×${Math.round(es.work_ratio.median * 100) / 100}`) : '—'),
+        statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
         statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
         statCell('Counted', `${es.eligible} of ${es.n} <span class="stat-sub">estimates</span>`),
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
-      `An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]. Error = median of |estimate − actual| ÷ actual.${es && excludedStr(es.excluded) ? ` Excluded: ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join('')}` : ''}`),
+      `An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Error = median of |estimate − actual| ÷ actual.${es && excludedStr(es.excluded) ? ` Excluded: ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join('')}` : ''}`),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
 
@@ -506,26 +513,29 @@ export function renderHtml(doc) {
         t.rework_count ? `${t.rework_count} rework` : null,
         t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
         !t.started_at && t.state !== 'planned' ? 'no observed start' : null,
+        fmtSpan(t.started_at, t.done_at),
       ].filter(Boolean).join(' · ');
       return `<div class="row"><div class="lbl" title="${esc(t.item_id)}">${esc(t.ref)}${stateChip(t.state)}</div><div class="track">${c != null ? `<div class="bar" style="width:${Math.max(1, (c / maxCycle) * 100)}%"></div>` : ''}</div><div class="num">${c != null ? fmtDur(c) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
     }).join('');
     parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the ranges the tech-lead declared and a named human accepted; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
 
     // Per mission — elapsed from first child dispatch to landing, against the mission's own range.
-    const missionRows = missions.map((g) => {
+    const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
+    const maxMission = Math.max(1, ...missionElapsed.filter((c) => c != null));
+    const missionRows = missions.map((g, idx) => {
       const kids = g.first_completion?.children ?? []; const kidItems = kids.map((k) => p.items.find((i) => i.item_id === k)).filter(Boolean);
-      const el = elapsedS(g.started_at, g.landing_at ?? g.done_at); const sv = svRow.get(g.ref);
+      const el = missionElapsed[idx]; const sv = svRow.get(g.ref);
       const detail = [
         `${kidItems.filter((i) => i.state === 'done').length}/${kids.length} tasks done`,
         g.estimate ? `estimate ${fmtRangeH(g.estimate)}` : 'no estimate',
         sv ? `<span class="oc ${sv.band.vs_low_s < 0 || sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done'}">${esc(bandText(sv))}</span>` : null,
         sv && (sv.scope.added || sv.scope.removed) ? `scope +${sv.scope.added}/−${sv.scope.removed}` : null,
-        g.start_basis ? `start ${esc(g.start_basis)}` : null,
+        fmtSpan(g.started_at, g.landing_at ?? g.done_at),
       ].filter(Boolean).join(' · ');
-      return `<div class="row"><div class="lbl" title="${esc(g.item_id)}">${esc(g.ref)}${stateChip(g.state)}</div><div class="track"></div><div class="num">${el != null ? fmtDur(el) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
+      return `<div class="row"><div class="lbl" title="${esc(g.item_id)}">${esc(g.ref)}${stateChip(g.state)}</div><div class="track">${el != null ? `<div class="bar" style="width:${Math.max(1, (el / maxMission) * 100)}%"></div>` : ''}</div><div class="num">${el != null ? fmtDur(el) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
     }).join('');
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
-    parts.push(`<section class="panel"><h2>Per mission</h2><p class="panel-sub">Elapsed = first task dispatched → mission landed (parent time is derived from its children, never dispatched itself).</p>${missionRows || '<p class="note">No missions in this plan.</p>'}${campaignLine}</section>`);
+    parts.push(`<section class="panel"><h2>Per mission</h2><p class="panel-sub">Bar = elapsed from the first task dispatched to the mission landing; a mission's clock is derived from its tasks (it is never dispatched itself). Bars are scaled per panel.</p>${missionRows || '<p class="note">No missions in this plan.</p>'}${campaignLine}</section>`);
 
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
@@ -537,7 +547,7 @@ export function renderHtml(doc) {
     if (m.estimate_rows.length) estimatesPanel += `<table><tr><th>ref</th><th>level</th><th>class</th><th>tier</th><th>base</th><th>range (h)</th><th>actual</th><th>basis</th><th>ratio</th><th>hit</th><th>reason</th></tr>${estimateRowsHtml(m)}</table>`;
     if (m.schedule_variance.length) estimatesPanel += `<ul>${scheduleVarianceHtml(m)}</ul>`;
     estimatesPanel += '</section>';
-    parts.push(`<details><summary>Statistics for assessors — strata, per-item rows, coverage${open.length ? '' : ', open items'} (the same figures as the Markdown/JSON export)</summary>`);
+    parts.push('<details><summary>Assessor statistics — the same figures as the Markdown/JSON export</summary>');
     parts.push(`<section class="panel"><h2>Flow time</h2><table><tr><th>metric</th><th>stratum</th><th>n</th><th>median</th><th>P85</th><th>P90</th><th>min–max</th></tr>${flowRowsHtml(m, e)}</table></section>`);
     parts.push(`<section class="panel"><h2>Throughput</h2><table><tr><th>level</th><th>week</th><th>count</th><th>mark</th></tr>${throughputRowsHtml(m)}</table><p class="note">*partial, †before declared coverage</p>${throughputLinesHtml(m, e)}</section>`);
     parts.push(`<section class="panel"><h2>Quality</h2>${qualityLinesHtml(m, p)}</section>`);
@@ -547,7 +557,7 @@ export function renderHtml(doc) {
     parts.push('</details>');
     parts.push('</section>');
   }
-  parts.push(`<details><summary>Envelope — ledger health, diagnostics, baselines, policy</summary>${envelopeHtml(e)}</details>`);
+  parts.push(`<details><summary>Envelope — ledger health, diagnostics, baselines</summary>${envelopeHtml(e)}</details>`);
   parts.push(caveatsHtml(e));
   return parts.join('\n');
 }
