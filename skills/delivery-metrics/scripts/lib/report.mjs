@@ -205,6 +205,9 @@ const pct = (r) => (r == null ? '—' : `${Math.round(r * 1000) / 10}%`);
 // Minor (b): the "how long has this open item been open, as of the window's effective end" figure
 // was duplicated at each open-items call-site — one shared helper.
 const ageH = (end, started) => (started ? `${toHours((Date.parse(end) - Date.parse(started)) / 1000)}h` : null);
+// Shared by Markdown and HTML flow/estimates excluded-reason lines — one string-builder, four call
+// sites (fix round 1, minor 3), so the two renderers can't drift on how a reason tally is spelled.
+const excludedStr = (obj) => Object.entries(obj).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ');
 
 // html-report brief: self-contained HTML renderer, house style ported from tokenomics'
 // team-report.mjs (escHtml/PAGE_CSS/statCell/kpiCard) — no external assets, no <script>, every
@@ -212,8 +215,8 @@ const ageH = (end, started) => (started ? `${toHours((Date.parse(end) - Date.par
 // token-composition bar/legend/share-cell classes tokenomics ships are dropped (unused here).
 export const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const PAGE_CSS = `
-:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--warn:#c53030;--ok:#2f855a}
-html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--warn:#e06c6c;--ok:#48a06f}
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--warn:#c53030}
+html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--warn:#e06c6c}
 *{box-sizing:border-box}
 body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1120px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
 h1{font-size:1.35rem;margin:0 0 .2rem}
@@ -264,7 +267,7 @@ export function renderMarkdown(doc) {
         L.push(`| ${lv} quality | ${st} | quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done} | | | | |`);
       }
       if (!Object.keys(f.strata).length) L.push(`| ${lv} cycle_time | all | — (not measured) | | | | |`);
-      const ex = Object.entries(f.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' '); if (ex) L.push(`| ${lv} excluded | | ${ex} | | | | |`);
+      const ex = excludedStr(f.excluded); if (ex) L.push(`| ${lv} excluded | | ${ex} | | | | |`);
     }
     L.push('', '## Throughput', '');
     for (const [lv, t] of Object.entries(m.throughput)) {
@@ -284,7 +287,7 @@ export function renderMarkdown(doc) {
     for (const lv of Object.keys(m.flow)) { const rows = p.items.filter((i) => i.level === lv); L.push(`- ${lv}: rework_proxy_items ${lv === 'task' ? m.rework_proxy_items : '—'}, deferred-episodes ${rows.filter((i) => i.reopened).length}, review rounds unknown (M2)`); }
     L.push('', '## Estimates', '', '| level | stratum | n | eligible | work_ratio median | MdMRE | PRED(25) | MAE | hit_rate | excluded |', '|---|---|---|---|---|---|---|---|---|---|');
     for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
-      const ex = Object.entries(x.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ') || '—';
+      const ex = excludedStr(x.excluded) || '—';
       L.push(`| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${ex} |`);
     }
     if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? `[${r.estimate.low}, ${r.estimate.high}]` : '—'} | ${h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
@@ -326,7 +329,7 @@ const flowRowsHtml = (m, e) => {
       L.push(`<tr><td>${escHtml(`${lv} quality`)}</td><td>${escHtml(st)}</td><td colspan="5">quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done}</td></tr>`);
     }
     if (!Object.keys(f.strata).length) L.push(`<tr><td>${escHtml(`${lv} cycle_time`)}</td><td>all</td><td colspan="5">— (not measured)</td></tr>`);
-    const ex = Object.entries(f.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ');
+    const ex = excludedStr(f.excluded);
     if (ex) L.push(`<tr><td>${escHtml(`${lv} excluded`)}</td><td></td><td colspan="5">${escHtml(ex)}</td></tr>`);
   }
   return L.join('');
@@ -357,7 +360,7 @@ const qualityLinesHtml = (m, p) => {
 const estimatesStrataRowsHtml = (m) => {
   const L = [];
   for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
-    const ex = Object.entries(x.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ') || '—';
+    const ex = excludedStr(x.excluded) || '—';
     const wr = x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—';
     L.push(`<tr><td>${escHtml(lv)}</td><td>${escHtml(st)}</td><td>${x.n}</td><td>${x.eligible}</td><td>${escHtml(String(wr))}</td><td>${x.mdmre ?? '—'}</td><td>${x.pred25 ?? '—'}</td><td>${x.mae_s == null ? '—' : h(x.mae_s)}</td><td>${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`}</td><td>${escHtml(ex)}</td></tr>`);
   }

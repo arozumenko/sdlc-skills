@@ -371,3 +371,49 @@ test('renderHtml: escapes user-controlled strings', () => {
   assert.ok(!html.includes('<b>TASK-9</b>'), 'raw markup must not appear unescaped');
   assert.ok(html.includes('&lt;b&gt;TASK-9&lt;/b&gt;&amp;&quot;x&quot;'), 'escaped form must appear');
 });
+
+// Fix round 1 (task review, "important"): `estimateRowsHtml` (the per-item Estimates table) is
+// never exercised by the shared `seed()` fixture — it has no estimates, so `m.estimate_rows` is
+// always `[]` there. Build a dedicated fixture WITH a real, fully-eligible estimate row (pattern
+// from the F17 test above: EST(low, high) + an `estimated` observation + a `done` so an actual
+// exists), and check the HTML table's row matches renderMarkdown's own cells for the same doc —
+// cross-checked against renderMarkdown's actual output rather than against a re-implementation of
+// its private `h()` formatting, so the two can never silently disagree.
+test('renderHtml: estimateRowsHtml renders a real per-item estimate row matching renderMarkdown, and escapes a malicious ref there', () => {
+  const repo = tmp();
+  const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 3) },
+  ] });
+  const o = (id, ref, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  const est = (id, ref, e) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/${id}/estimated/rev-0`, source: 'cli', source_record_id: `est-${id}`, estimate: e, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'created', '2026-09-09T00:00:00Z');
+  est('task-a', 'TASK-A', EST(1, 3));
+  o('task-a', 'TASK-A', 'dispatched', '2026-09-10T00:00:00Z'); o('task-a', 'TASK-A', 'done', '2026-09-10T02:00:00Z');
+
+  const doc = assemble(repo, { now: NOW });
+  const row = doc.plans[0].metrics.estimate_rows[0];
+  assert.equal(doc.plans[0].metrics.estimate_rows.length, 1, 'precondition: fixture yields exactly one real (non-excluded) estimate row');
+  assert.equal(row.ref, 'TASK-A'); assert.equal(row.reason, null, 'precondition: a fully eligible row, not an excluded one — exercises every cell');
+
+  const md = renderMarkdown(doc);
+  const mdLine = md.split('\n').find((l) => l.startsWith(`| ${row.ref} | ${row.level} |`));
+  assert.ok(mdLine, 'renderMarkdown per-item estimate row present');
+  const [mref, mlevel, mclass, mtier, mbase, mrange, mactual, mbasis, mratio, mhit, mreason] = mdLine.split('|').slice(1, -1).map((c) => c.trim());
+  assert.equal(mrange, '[1, 3]'); assert.equal(mhit, 'yes'); assert.equal(mreason, '—');
+
+  const html = renderHtml(doc);
+  const expectedHtmlRow = `<tr><td>${escHtml(mref)}</td><td>${escHtml(mlevel)}</td><td>${escHtml(mclass)}</td><td>${escHtml(mtier)}</td><td>${escHtml(mbase)}</td><td>${mrange}</td><td>${mactual}</td><td>${escHtml(mbasis)}</td><td>${mratio}</td><td>${mhit}</td><td>${escHtml(mreason)}</td></tr>`;
+  assert.ok(html.includes(expectedHtmlRow), 'HTML estimate row must match renderMarkdown\'s cells for the same doc, field for field');
+
+  // Escaping, specifically in the estimate table: mutate a copy of doc so TASK-A's ref carries
+  // markup, in both `items` and the matching `estimate_rows` entry the table renders from.
+  const mutated = JSON.parse(JSON.stringify(doc));
+  const evil = '<b>TASK-9</b>&"x"';
+  mutated.plans[0].items.find((i) => i.ref === 'TASK-A').ref = evil;
+  mutated.plans[0].metrics.estimate_rows.find((r) => r.ref === 'TASK-A').ref = evil;
+  const evilHtml = renderHtml(mutated);
+  assert.ok(!evilHtml.includes('<b>TASK-9</b>'), 'raw markup must not appear unescaped in the estimate table');
+  assert.ok(evilHtml.includes(`<tr><td>${escHtml(evil)}</td>`), 'escaped form must appear as the estimate table row\'s ref cell');
+});
