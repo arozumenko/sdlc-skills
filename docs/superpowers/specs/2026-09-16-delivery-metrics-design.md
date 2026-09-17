@@ -1,12 +1,12 @@
-# delivery-metrics — design spec (v5.1)
+# delivery-metrics — design spec (v5.2)
 
 > **Rename (2026-09-17):** the skill shipped as `skills/delivery-monitor/` ("delivery monitor"); this spec and its review-round notes keep the working name `delivery-metrics` used while they were written. Paths, ids and titles below map 1:1 (`delivery-metrics` → `delivery-monitor`).
 
 **Date:** 2026-09-16
 **Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
 **Branch:** feat/delivery-metrics-spec (worktree off `main`; spec only)
-**Status:** v5 — proportionality pass: guarantees capped at tokenomics' own; 13 mechanisms replaced by explicit limitations; ready for round 5. **v5.1:** §13 re-cut to Slice 1 (M1 = cycle time, velocity, estimate delta per task/mission/campaign) on the user's decision, 2026-09-17; no other section changed.
-**Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`; reviews `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v[1-4]-adversarial-review-codex.md`. House style: `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md`, read from `feat/security-testing-bundle-spec` (absent in this worktree).
+**Status:** v5 — proportionality pass: guarantees capped at tokenomics' own; 13 mechanisms replaced by explicit limitations; ready for round 5. **v5.1:** §13 re-cut to Slice 1 (M1 = cycle time, velocity, estimate delta per task/mission/campaign) on the user's decision, 2026-09-17; no other section changed. **v5.2 (2026-09-17):** research 09 (polyrepo indicators) applied — D24–D27 added (translatability rules, window rule, churn, polyrepo roll-up), §6.2 reserves `cancelled --reason`, `meta.round`, `--fixes`, `blocked --reason`; §6.10 records the human-readable report shape shipped in M1; §13 M2 re-scoped to the surviving indicators.
+**Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`, `docs/superpowers/notes/2026-09-17-delivery-monitor-research-09-polyrepo-indicators.md`; reviews `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v[1-4]-adversarial-review-codex.md`. House style: `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md`, read from `feat/security-testing-bundle-spec` (absent in this worktree).
 **Source aliases:** `TOK` = `bundles/test-automation/skills/tokenomics`; `TAW` = `bundles/test-automation/skills/test-automation-workflow`; `AS` = `bundles/test-automation/skills/automation-scoping`. All delivery schemas below are proposed requirements; §16 anchors existing-repository claims.
 
 ## 1. Purpose
@@ -56,6 +56,10 @@ A delivery performance tracker for the harness: tokenomics' cadence-and-cycle-ti
 | D21 | CLI 0 success, 1 internal error, 2 invalid input/identity/conflict, 3 not measurable with explanation. Hooks always exit 0 with diagnostics. |
 | D22 | Calibration is a saved measured reference, never an estimate writer. Index rebuilt from readable snapshots; no transactional plan/index consistency. |
 | D23 | Installed sibling tests and fixtures; verbatim copies checked for duplicates, transformed fixtures carry source provenance. |
+| D24 | **Translatability (research 09).** An indicator is reportable across repos only when each row compares an item to its *own* human commitment (accepted range, declared scope, declared base) or is a count of items by state. Cross-repo roll-up is a count-by-state or a table of per-repo rows — never a pooled percentile, a summed ratio, or a summed signed delta. Every row prints its measurability (n, coverage, open/censored count); a missing capture prints `—`, never 0. |
+| D25 | **Progress is since-inception; pace is rolling.** Progress = `k/N` completed against endpoint scope from `observation_start` to cutoff, always shown (burn-up: completed vs in-scope over time; scope steps on cancel/re-cut). Pace = completions per whole UTC ISO week over a rolling window, rendered only when ≥ `minWholeWeeks` whole weeks are covered — an empty pace figure is omitted, not shown as a dash; the weekly series has a coverage end at `plan close`. A since-inception *rate* is never printed. |
+| D26 | **Churn.** Two absolute forms are adopted: *fix rounds per reviewed task* (pre-merge; a git `address review` commit inside a hook fix-dispatch span is the same episode, counted once) and *post-merge corrective events per exposed task* (reopen-after-done, revert of the done sha, or a `--fixes`-linked task within 14 days; denominator = tasks merged ≥ 14 days before cutoff). Scope churn is a validity flag on pace/estimate figures, not a KPI. Line-level code churn and PR accept/reject rates are out of scope (§18). |
+| D27 | **Polyrepo scope.** The monitor is installed per repo; a campaign that spans repos is one `campaign_id/run_id` whose missions are declared with disjoint refs per repo (`parts: [{repo, campaign_id, run_id}]` on the plan). Roll-up = the same campaign id read from several ledgers at one shared `--cutoff` after `backfill --git` in every repo; per D24 it aggregates by counting missions/tasks by state and listing per-repo rows. Cross-project portfolio pages (`--roots`, tokenomics-style) are M2. |
 
 ## 4. Placement and roles
 
@@ -120,6 +124,8 @@ Reader: parse/count → collapse identical semantic retries across files (captur
 At the highest surviving source rank, equivalence requires equal at/event/episode/causal/interval/review/result/estimate/gate/disposition facts; capture envelope/raw labels/evidence locators may differ and provenance is retained. Disagreement quarantines occurrence with `CONFLICT`, no lower-source fallback. Unknown equivalence gives `AMBIGUOUS-TRANSITION`; never join by nearest clock.
 Retraction is simply the next revision with `status: retracted`; it withdraws only that source observation, allowing surviving sources to be reconsidered. Correct wrong-item A by retracting A and separately adding B; not atomic (`partial-update`). Same-source reimport of the old revision cannot resurrect A. No separate tombstone/reinstatement control schema; later corrections use the same revision rule.
 Sort selected events by at, explicit episode/causal ordering, then observation id. Unresolved incompatible ties/dependent transitions are `invalid-chain` and excluded, never reinterpret recompletion as original done. Apply revisions before cutoff: reports show corrected effective-time history from the bytes read, not knowledge-as-of history. Old archived JSON remains unchanged; orphan-plan events are `unregistered` and excluded.
+
+**Reserved for M2 (v5.2, D26/D27):** `cancelled` carries `meta.reason ∈ {rejected_output, descoped, superseded, duplicate, invalid}` (CLI `--reason`, required from M2); `rework_observed` carries `meta.round` (integer; hook fix dispatches set it from the description, git from `address review N`) for cross-source dedupe; a fix task may carry `meta.fixes = "<repo>/<item_id>"` (CLI `--fixes`) so a post-merge correction is credited to the originating repo; `blocked` carries `meta.reason ∈ {technical, scope, decision, dependency, review-wait, environment}`; tasks may carry `origin ∈ {human, agent}` in the plan block. All are additive `meta` keys — v2 lines without them stay valid.
 
 ### 6.3 Plan registration
 
@@ -209,6 +215,8 @@ Compute before rounding; floors D10, below floor show samples/min–max/n. Separ
 | Cost | active_min / cost_usd | quoted direct/loaded/batch totals with allocation/freshness/window labels (§6.12) |
 
 Retain genuine 30-second cycles/reviews and confirmed zero block time. Lead_time alone is excluded as retrospective-plan-proxy when same source commit contains creation/completion **and** elapsed≤profile.zeroDurationSec; duration alone is insufficient. Calibration contains only valid observed cycles, sample window and event references. Separate first episodes (no prior cancellation/reopen) from reopen episodes, include distinct-item count and prior terminal kind. Age P85 needs ≥7 compatible factory/level/class/basis/episode samples; no reopen reference→`not-comparable`, never first-cycle fallback. No Little's Law line.
+
+**Human-readable shape (v5.2, shipped in M1's HTML):** the page leads with the campaign name (run id, plan version and run status in small print, one sentence explaining them), then KPI cards with one bold value per stat and a one-line "why" each — Progress (D25), Cycle time (median or the spelled-out floor, range, measured-of-done with the still-open count, lead time), Pace (only when D25's floor is met), Estimates (within range k of n, work vs estimate as % of the midpoint, counted / not counted) — then the burn-up, per-task and per-mission bar rows with verdicts in words ("within range", "below range", "12.9 min under the low bound"), spread lines, open items in natural units, and every assessor table (strata, MdMRE/PRED(25)/MAE, coverage, envelope) collapsed but present. Durations render in natural units (s / min / h / d); Markdown and JSON keep hours and remain the assessor export. Every §8 caveat stays visible with a preface.
 
 ### 6.11 Report envelope and formats
 
@@ -304,7 +312,7 @@ Re-cut on 2026-09-17 (v5.1, user decision): **M1 is Slice 1** — cycle time, ve
 | | **Actuals** | `event <ref> dispatched\|done\|cancelled [--sha] [--at] --id <token>` (§6.5); `backfill --git --head <sha>` deriving `created`, `first_commit`, `done` for the local-branch mode (§6.7; PR mode deferred); one opt-in Claude `SubagentStop` hook emitting `dispatched`/`dispatch_ended` with roster/session guard and id resolution (§6.6), `install-hooks.mjs --host claude [--local] [--remove] [--doctor]`. Storage per §6.1 (append-only per-user JSONL, advisory mkdir lock, best-effort sync, `malformed-lines` counted). Timeline per §6.9 restricted to `created → dispatched/first_commit → done/cancelled` (blocked/reopen/review transitions are accepted by the schema but not derived in M1 — counted as `deferred-events`). |
 | | **Metrics** | `cycle_time` (task: first observed build dispatch → first `done`; mission/campaign: child-derived, labelled), `commit_to_done` when no dispatch, `lead_time`; `throughput` per UTC ISO week per level and `velocity` (≥3 whole weeks) (§6.9–6.10); estimate delta: per item actual vs `[low, high]` (inside/outside, `work_ratio` = actual ÷ midpoint), per level `MdMRE`, `PRED(25)`, `hit_rate`, per mission/campaign `schedule_variance` with scope added/removed (§6.4, §6.10). Coverage: dispatched/first-commit/done shares by source, unestimated/unaccepted counts, `malformed-lines`, `CONFLICT` count. |
 | | **Output + wiring** | `status` (PM one-screen), `report [--json] [--since --until --cutoff]` markdown + JSON envelope (§6.11); SKILL.md/README, `skills.json`, both `factory.json`, marketplaces; tech-lead template block, PM merge-step call, scout opt-in (§9.1). Golden fixture from the security-testing dataset (§12). |
-| M2 | Quality + episodes | `review_history`/`review_rounds`/`first_pass_rate`, `rework_observed`, `blocked`/`unblocked` intervals, `reopened` episodes and their separate ages/cycles, `work_item_age` vs P85, retraction/correction revisions, PR-mode backfill via `gh` and task↔PR association. |
+| M2 | Quality + episodes (re-scoped by v5.2 to the research-09 survivors: `dispatch_ended`→state and *open work waiting on humans*; fix rounds per reviewed task and post-merge corrective events (D26) with `cancelled --reason`, `meta.round`, `--fixes`; open-item age vs its own accepted bound; mission elapsed vs estimate with scope change since `accepted_at`; per-repo weekly series with a shared `--cutoff` and a `--roots` roll-up page (D27); `blocked --reason` intervals) | `review_history`/`review_rounds`/`first_pass_rate`, `rework_observed`, `blocked`/`unblocked` intervals, `reopened` episodes and their separate ages/cycles, `work_item_age` vs P85, retraction/correction revisions, PR-mode backfill via `gh` and task↔PR association. |
 | M3 | Automation + cost | test-automation `sync --automation` (generation-qualified imports, scorer estimates in `active_min`, scope/gate/receipt proxies, landing), the three tokenomics one-liners, cost quoting from existing exports with published-minute caveats (§6.12), calibration snapshots/index and playbook wiring (§9.2). |
 | M4 | Presentation | self-contained HTML, `--from-json` re-render, `--calibrate`; no forecasting. (HTML + `--from-json` delivered in M1, 2026-09-17) |
 
@@ -357,6 +365,8 @@ Storage D4/D19/D22 → §6.1/6.3/§8 → M1/2 → AC-11/16: best-effort and visi
 - **AC-18** First-open/reopened ages use separate compatible floors/distributions; repeated reopen retains history_age/reopen count and throughput 1; reopen calibration never falls back to first-cycle.
 
 ## 18. Not in scope / parking lot
+
+**Added by v5.2 (research 09):** line-level code churn; PR accept/reject rates as a quality signal; pooled cross-repo velocity or percentiles; summed schedule-variance bands ("programme slip"); elapsed/active flow-efficiency ratios; MdMRE/PRED(25)/MAE as headline figures (envelope only); per-`accepted_by` estimate cuts (D13).
 
 DORA, flow efficiency, benefit ROI, per-person/per-agent productivity, dashboards/uploads/OTel, story-point velocity, time-in-status heatmaps. Manual-qa native wiring and automatic run inference; Cursor/Kiro/Codex hooks; Stop gate/merge webhooks. Copilot automatic delivery capture and live pending starts (v1 F6) need separately tested host adapters. Raw tokenomics usage/live folding and feature-task attribution (v1 F13) remain parked. Little's Law (v1 F18) has no report line; forecasting/Monte Carlo (v1 F22) needs its own future scope. Removed durability/provenance machinery is not deferred into these four milestones.
 
@@ -438,6 +448,17 @@ Round 4 approved v4 (0 findings); this pass changes its guarantee ceiling, not t
 | Revision forks, tombstone/reinstatement controls, meta.resolves[] repair | v2 F1 retraction/F2 conflict; v1 F1 precedence | Ordinary higher correction/retracted revision; duplicate-number CONFLICT, invalid-chain/partial-update counts | §2–3, §6.2/6.5, §8, AC-17 |
 
 Guarantee ceiling: tokenomics' own append-only per-user JSONL, one appendFileSync, latest-wins reading, best-effort git sync and visible caveats; a local mkdir lock at most, no stronger storage or provenance promise.
+
+### 19.5 v5.1 → v5.2 (research 09, 2026-09-17)
+
+| Input | Resolution | Where |
+|---|---|---|
+| Research 09 rule 1 (self-referenced, never pooled) | **resolved** — D24; roll-up = count-by-state / per-repo rows | §3, §6.10, §13 |
+| Research 09 rule 2 (progress vs pace) | **resolved** — D25; burn-up always, Pace card gated on whole weeks, weekly coverage end | §3, §6.10 |
+| Research 09 churn split | **resolved** — D26; fix rounds (deduped across hook/git) + post-merge corrective events; scope churn as a guard | §3, §6.2, §13 |
+| Research 09 polyrepo semantics | **resolved** — D27; campaign parts per repo, shared cutoff, `--roots` page in M2 | §3, §13 |
+| Research 09 drops | **resolved by narrowing** — listed in §18 | §18 |
+| Dogfood findings S1/S2 and run-3 defects (open-mission k/N, rework double count, ISO stamps) | **resolved** — fixed in the skill; §6.10 records the shape | §6.10 |
 
 ## 20. Planning amendments
 
