@@ -4,7 +4,7 @@ Why: the SubagentStop payload and the sub-agent transcript layout are not
 pinned by tests; until this probe has been run, the hook's transcript
 handling is labelled `provisional` in every report caveat.
 
-1. In a repo with delivery-metrics installed, add a temporary hook entry
+1. In a repo with delivery-monitor installed, add a temporary hook entry
    to `.claude/settings.local.json`:
    `{"SubagentStop":[{"matcher":"*","hooks":[{"type":"command","command":"cat > /tmp/subagentstop-$(date +%s).json","timeout":5}]}]}`
 2. Dispatch (a) one Agent-tool sub-agent with a description, (b) one
@@ -17,7 +17,7 @@ handling is labelled `provisional` in every report caveat.
    the child path shape under `~/.claude/projects/<proj>/<session>/subagents/`,
    the `.meta.json` keys, and the first/last record `timestamp` presence.
 4. Save sanitised copies (ids only, no prompt text) under
-   `skills/delivery-metrics/fixtures/hooks/real/<claude-version>/` with a
+   `skills/delivery-monitor/fixtures/hooks/real/<claude-version>/` with a
    `README.md` naming the Claude Code version, date and the sanitisation
    done, and update `hooks/dispatch-hook.mjs` `SUPPORTED_SHAPES` + tests.
 5. Remove the temporary hook entry.

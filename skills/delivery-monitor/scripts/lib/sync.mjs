@@ -15,7 +15,7 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
   if (state.unmerged.length || state.merging) return { synced: false, reason: `unresolved merge in ${tel} — fix manually (delivery.mjs doctor)` };
   try {
     g('add', '-A');
-    if (g('status', '--porcelain')) g('commit', '-q', '-m', `delivery-metrics: ${new Date().toISOString()}`);
+    if (g('status', '--porcelain')) g('commit', '-q', '-m', `delivery-monitor: ${new Date().toISOString()}`);
     if (!g('remote')) return { synced: true, reason: 'no remote (local telemetry branch only)' };
     try { g('push', '-q'); return { synced: true }; } catch { /* rejected — integrate once */ }
     // Issue 4: fetch and merge fail for different reasons (network/remote down vs a real content

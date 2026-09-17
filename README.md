@@ -58,7 +58,7 @@ install time. Nothing duplicated.
 Most agents and skills live inside factories (`factories/<id>/agents/` and
 `factories/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
-and twelve skills (`deep-research`, `delivery-metrics`, `gathering-context`,
+and twelve skills (`deep-research`, `delivery-monitor`, `gathering-context`,
 `knowledge-curation`, `memory`, `microsoft-365`, `obsidian-vault`,
 `tosca-automation`, `verifying-outcomes`, `visual-testing`, `vividus`,
 `xray-testing`). `skills.json` registers those orphan monorepo skills and
@@ -366,7 +366,7 @@ installable via factories is listed below.
 | `verifying-outcomes` | Verify a task actually achieved its stated goal |
 | `gathering-context` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
-| `delivery-metrics` | Cycle time, velocity and estimate-vs-actual for harness work items; sibling of tokenomics |
+| `delivery-monitor` | Cycle time, velocity and estimate-vs-actual for harness work items; sibling of tokenomics |
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |

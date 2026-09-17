@@ -7,7 +7,7 @@ group: core
 theme: {color: colour213, icon: "📋", short_name: pm}
 aliases: [pm, max]
 skills: [issue-tracking, plan-feature, subagent-driven-development, dispatching-parallel-agents, memory]
-skills-on-demand: [delivery-metrics]
+skills-on-demand: [delivery-monitor]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -61,7 +61,7 @@ project's issue tracker is Jira or KB is Confluence (see
 GitLab-only projects, stay with `issue-tracking`.
 
 If `.agents/telemetry/delivery/plans/` has an open run, bind this session
-once: `node .claude/skills/delivery-metrics/scripts/delivery.mjs session set
+once: `node .claude/skills/delivery-monitor/scripts/delivery.mjs session set
 --host claude --session <session id> --plan <run>` (the id is in the
 tokenomics announce line when that is on; otherwise the newest `.jsonl`
 under `~/.claude/projects/<project>/`).
@@ -264,7 +264,7 @@ This matters because:
    them available in your status update.
 5. **Tell the user it shipped.** One-line status update to the user:
    "PR #<M> merged — <one-line summary>. <dev-name> is free for the
-   next task." Record it: `node .claude/skills/delivery-metrics/scripts/delivery.mjs
+   next task." Record it: `node .claude/skills/delivery-monitor/scripts/delivery.mjs
    event <TASK-NNN> done --sha <merge sha> --id done-<NNN>` (PR mode: `--at
    <mergedAt>`); when a group/milestone has landed to base: `event <Gn> done
    --sha <landing sha> --id land-<Gn>`; a task dropped from scope: `event
@@ -430,7 +430,7 @@ Keep your own inline status in your reply to the user — each subagent call ret
 - Unblock TASK-005 when TASK-003 completes
 
 ### Delivery
-<output of `node .claude/skills/delivery-metrics/scripts/delivery.mjs status`>
+<output of `node .claude/skills/delivery-monitor/scripts/delivery.mjs status`>
 ```
 
 ### Handling Blockers
@@ -440,7 +440,7 @@ When a developer reports a blocker:
 1. **Classify:** Technical (→ tech lead), scope (→ BA), decision (→ user), dependency (→ wait or reorder)
 2. **Route:** Hand off to the right person via a host-native subagent call (see `.agents/team-comms.md`) with full context
 3. **Track:** Note the blocker in your status; record it — `node
-   .claude/skills/delivery-metrics/scripts/delivery.mjs event <TASK-NNN>
+   .claude/skills/delivery-monitor/scripts/delivery.mjs event <TASK-NNN>
    blocked --id blk-<NNN>-<n>` (recorded now, derived in M2)
 4. **Follow up:** Check if it's resolved, report back to the blocked
    developer; record `event <TASK-NNN> unblocked --id blk-<NNN>-<n>` when it

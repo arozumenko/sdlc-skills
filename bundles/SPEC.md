@@ -299,12 +299,12 @@ order. Three conventions keep it that way:
   (a) an open plan it registered in this repo, (b) a session→plan association
   written by that plan's owner, and (c) the dispatched role in the roster
   snapshot the plan recorded (the union of participating factories' installed
-  agents) — and exit silently otherwise (`skills/delivery-metrics`).
+  agents) — and exit silently otherwise (`skills/delivery-monitor`).
 - **One shared telemetry submodule.** Durable telemetry lives in
   `.agents/telemetry` — a self-referential submodule on the repo's own
   `telemetry` branch, **one subfolder per factory or per cross-factory
   concern** (test-automation writes `automation/`; the orphan
-  `delivery-metrics` skill writes `delivery/`). A factory adopting durable
+  `delivery-monitor` skill writes `delivery/`). A factory adopting durable
   telemetry later adds its own subfolder and rides the same branch and sync
   machinery — never a second submodule or a second branch. Setup and
   mechanics: `factories/test-automation/skills/tokenomics/`.

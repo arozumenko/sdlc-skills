@@ -8,7 +8,7 @@ required: true
 theme: {color: colour252, icon: "üîç", short_name: scout}
 aliases: [kit]
 skills: [seeding-automation-project, memory]
-skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective, delivery-metrics]
+skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective, delivery-monitor]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -107,7 +107,7 @@ During onboarding, ask once whether the team wants continuous usage telemetry ‚Ä
 Ask once whether the team wants **delivery tracking** (cycle time, weekly
 throughput, estimate-vs-actual per task/mission/campaign into the shared
 telemetry submodule). If yes, run `node
-.claude/skills/delivery-metrics/scripts/install-hooks.mjs` (bootstraps the
+.claude/skills/delivery-monitor/scripts/install-hooks.mjs` (bootstraps the
 telemetry submodule when tokenomics has not, wires the Claude hook) and note
 the decision in the seed report; the tracker also works without the hook
 through the CLI and `backfill --git`.

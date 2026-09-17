@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// STDLIB ONLY. delivery-metrics CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
+// STDLIB ONLY. delivery-monitor CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
 import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

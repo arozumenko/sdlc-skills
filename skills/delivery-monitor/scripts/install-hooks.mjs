@@ -33,12 +33,12 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
   writeJson(file, settings); return file;
 }
 
-const BEGIN = '# >>> delivery-metrics (managed)', END = '# <<< delivery-metrics';
+const BEGIN = '# >>> delivery-monitor (managed)', END = '# <<< delivery-monitor';
 const ROOT_PATTERNS = ['.agents/telemetry/delivery/reports/', '.agents/telemetry/delivery/.lock/', '.agents/telemetry/delivery/.pending-*'];
 const INNER_PATTERNS = ['/delivery/reports/', '/delivery/.lock/', '/delivery/.pending-*'];
 // tokenomics install-hooks.mjs:307-311 — the four base transient patterns EVERY factory's
 // subfolder needs, plain (unmanaged) lines outside any BEGIN/END block since both skills' owned
-// blocks share this one inner .gitignore. Seeded once on bootstrap so a delivery-metrics-only
+// blocks share this one inner .gitignore. Seeded once on bootstrap so a delivery-monitor-only
 // install still ignores tokenomics' own transients (and vice versa) even before tokenomics ever
 // runs its own installer.
 const TOKENOMICS_BASE_LINES = ['*/live/', '*/scopes/.pending-*', '*/scopes/.nagged-*', '*/scopes/.unclosed-*'];
@@ -67,7 +67,7 @@ export function installIgnoreBlocks(repo, { remove = false } = {}) {
   return { root, inner };
 }
 
-const TELEMETRY_README = '# telemetry\n\nShared durable telemetry submodule (branch `telemetry`), one subfolder per factory or cross-factory concern: `automation/` (tokenomics), `delivery/` (delivery-metrics). Nobody hand-commits here; each capture moment commits and pushes best-effort.\n';
+const TELEMETRY_README = '# telemetry\n\nShared durable telemetry submodule (branch `telemetry`), one subfolder per factory or cross-factory concern: `automation/` (tokenomics), `delivery/` (delivery-monitor). Nobody hand-commits here; each capture moment commits and pushes best-effort.\n';
 /** Ported from tokenomics install-hooks.mjs:329-404 — same branch, same layout, so both skills share one submodule. */
 export function bootstrapTelemetry(repo) {
   const dir = join(repo, '.agents', 'telemetry');

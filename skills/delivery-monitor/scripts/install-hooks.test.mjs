@@ -14,7 +14,7 @@ const DELIVERY = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
 const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
 const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV } }).trim();
 const tmp = () => { const r = mkdtempSync(join(tmpdir(), 'dm-install-')); g(r, 'init', '-q', '-b', 'main'); g(r, 'commit', '-q', '--allow-empty', '-m', 'root'); return r; };
-const REL = '.claude/skills/delivery-metrics';
+const REL = '.claude/skills/delivery-monitor';
 /** Seeds the telemetry branch (via plumbing, no checkout) with a single file at `name` — used to
  * force a stash collision in bootstrapTelemetry without an actual clone. */
 const seedTelemetryBranchFile = (repo, name, content) => {
@@ -40,12 +40,12 @@ test('installIgnoreBlocks: root block replaced in place beside other owners; inn
   const repo = tmp();
   writeFileSync(join(repo, '.gitignore'), 'node_modules/\n# >>> tokenomics (managed)\n.agents/telemetry/automation/live/\n# <<< tokenomics\n');
   let r = installIgnoreBlocks(repo, {}); assert.equal(r.inner, 'skipped (no .agents/telemetry)');
-  let gi = readFileSync(join(repo, '.gitignore'), 'utf8'); assert.match(gi, /# >>> delivery-metrics \(managed\)[\s\S]*\.agents\/telemetry\/delivery\/\.lock\/[\s\S]*# <<< delivery-metrics/); assert.match(gi, /tokenomics \(managed\)/);
-  installIgnoreBlocks(repo, {}); assert.equal((readFileSync(join(repo, '.gitignore'), 'utf8').match(/delivery-metrics \(managed\)/g) || []).length, 1);
+  let gi = readFileSync(join(repo, '.gitignore'), 'utf8'); assert.match(gi, /# >>> delivery-monitor \(managed\)[\s\S]*\.agents\/telemetry\/delivery\/\.lock\/[\s\S]*# <<< delivery-monitor/); assert.match(gi, /tokenomics \(managed\)/);
+  installIgnoreBlocks(repo, {}); assert.equal((readFileSync(join(repo, '.gitignore'), 'utf8').match(/delivery-monitor \(managed\)/g) || []).length, 1);
   mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true });
   r = installIgnoreBlocks(repo, {}); assert.equal(r.inner, 'installed'); assert.match(readFileSync(join(repo, '.agents', 'telemetry', '.gitignore'), 'utf8'), /\/delivery\/reports\//, 'created even though no inner .gitignore existed');
   installIgnoreBlocks(repo, { remove: true }); gi = readFileSync(join(repo, '.gitignore'), 'utf8');
-  assert.ok(!/delivery-metrics/.test(gi)); assert.match(gi, /node_modules/); assert.match(gi, /tokenomics/); assert.ok(!/delivery/.test(readFileSync(join(repo, '.agents', 'telemetry', '.gitignore'), 'utf8')));
+  assert.ok(!/delivery-monitor/.test(gi)); assert.match(gi, /node_modules/); assert.match(gi, /tokenomics/); assert.ok(!/delivery/.test(readFileSync(join(repo, '.agents', 'telemetry', '.gitignore'), 'utf8')));
 });
 
 test('bootstrapTelemetry: creates the self-referential submodule on the telemetry branch, keeps interim files, idempotent', () => {
@@ -56,11 +56,11 @@ test('bootstrapTelemetry: creates the self-referential submodule on the telemetr
   assert.match(readFileSync(join(repo, '.gitmodules'), 'utf8'), /ignore = all/); assert.equal(g(join(repo, '.agents', 'telemetry'), 'branch', '--show-current'), 'telemetry');
   assert.ok(existsSync(join(repo, '.agents', 'telemetry', 'delivery', 'events-u.jsonl')), 'interim file restored'); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.gitignore')));
   // Review fix: the inner .gitignore also seeds tokenomics' four base transient lines (plain,
-  // outside our managed block) so a delivery-metrics-only install still ignores tokenomics'
+  // outside our managed block) so a delivery-monitor-only install still ignores tokenomics'
   // transients, alongside our own managed block.
   const innerGi = readFileSync(join(repo, '.agents', 'telemetry', '.gitignore'), 'utf8');
   for (const l of ['*/live/', '*/scopes/.pending-*', '*/scopes/.nagged-*', '*/scopes/.unclosed-*']) assert.ok(innerGi.split('\n').includes(l), `missing tokenomics base line ${l}`);
-  assert.match(innerGi, /# >>> delivery-metrics \(managed\)[\s\S]*\/delivery\/reports\/[\s\S]*# <<< delivery-metrics/, 'our own managed block also present');
+  assert.match(innerGi, /# >>> delivery-monitor \(managed\)[\s\S]*\/delivery\/reports\/[\s\S]*# <<< delivery-monitor/, 'our own managed block also present');
   assert.equal(bootstrapTelemetry(repo).status, 'already');
   assert.equal(bootstrapTelemetry(mkdtempSync(join(tmpdir(), 'nogit-'))).status, 'no-git');
 });
@@ -71,7 +71,7 @@ test('installer and doctor use the same main owner from a linked worktree', () =
   execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: wt, env: { ...process.env, CLAUDE_PROJECT_DIR: wt } });
   assert.equal(existsSync(join(repo, '.claude', 'settings.json')), true);
   assert.equal(existsSync(join(wt, '.claude', 'settings.json')), false);
-  assert.deepEqual(doctorReport(wt, 'skills/delivery-metrics'), doctorReport(repo, 'skills/delivery-metrics'));
+  assert.deepEqual(doctorReport(wt, 'skills/delivery-monitor'), doctorReport(repo, 'skills/delivery-monitor'));
 });
 
 test('doctorReport: wiring, plans, every ignore pattern in its owner, tracked transients, git state, caveats', () => {

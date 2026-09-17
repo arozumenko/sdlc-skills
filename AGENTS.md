@@ -24,7 +24,7 @@ own their `agents/` and `skills/` as real directories. Four factories ship:
 
 The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
 content: one agent (`personal-assistant`) and twelve skills (`deep-research`,
-`delivery-metrics`, `gathering-context`, `knowledge-curation`, `memory`,
+`delivery-monitor`, `gathering-context`, `knowledge-curation`, `memory`,
 `microsoft-365`, `obsidian-vault`, `tosca-automation`, `verifying-outcomes`,
 `visual-testing`, `vividus`, `xray-testing`).
 

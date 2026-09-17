@@ -18,7 +18,7 @@ document, next to the task templates from § 3 "Create Technical Tasks". Fill in
                                   agent name (see references/factory-roles.json)
 
 Register it with:
-  node .claude/skills/delivery-metrics/scripts/delivery.mjs plan register \
+  node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register \
     --from <this decomposition file> --id <plan-slug>-v1
 
 This example has two missions (G1, G2) and three tasks (TASK-001, TASK-002 in G1;

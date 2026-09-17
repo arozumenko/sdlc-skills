@@ -64,7 +64,7 @@ export function withLock(repo, fn, { staleMs = 60000, now = Date.now() } = {}) {
   try { mkdirSync(dir); } catch (e) {
     if (e.code !== 'EEXIST') throw e;
     let age = 0; try { age = now - statSync(dir).mtimeMs; } catch { age = staleMs + 1; }
-    if (age <= staleMs) throw cliError('LOCK-BUSY', `another delivery-metrics write holds ${dir} (advisory; stale after ${staleMs / 1000}s)`);
+    if (age <= staleMs) throw cliError('LOCK-BUSY', `another delivery-monitor write holds ${dir} (advisory; stale after ${staleMs / 1000}s)`);
     rmSync(dir, { recursive: true, force: true }); mkdirSync(dir);
   }
   try { return fn(); } finally { rmSync(dir, { recursive: true, force: true }); }

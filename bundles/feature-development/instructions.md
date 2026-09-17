@@ -96,7 +96,7 @@ state belongs in the delivery ledger (see Delivery tracking), not in either memo
 
 Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.
 
-## Delivery tracking (delivery-metrics)
+## Delivery tracking (delivery-monitor)
 
 Three moments, all recorded — never estimated: the tech-lead's plan block is
 **registered** (`delivery.mjs plan register`), every merge, landing or

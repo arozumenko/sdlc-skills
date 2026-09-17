@@ -1,4 +1,4 @@
-# delivery-metrics — cycle time, cadence, estimate vs actual
+# delivery-monitor — cycle time, cadence, estimate vs actual
 
 `tokenomics` answers *what did it cost*; this skill answers *how long did it
 take and how did that compare with what we said*. It never estimates, never
@@ -8,23 +8,23 @@ defaults a missing number, and labels every proxy as a proxy.
 
 ```bash
 # 1. Register the plan (the tech-lead's plan file carries a ```json delivery-plan block)
-node .claude/skills/delivery-metrics/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
+node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
 # 2. Bind this session (lets the hook attribute dispatches) and record transitions as they happen
-node .claude/skills/delivery-metrics/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1
-node .claude/skills/delivery-metrics/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
-node .claude/skills/delivery-metrics/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
+node .claude/skills/delivery-monitor/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 # 3. Fill in history that predates the ledger
-node .claude/skills/delivery-metrics/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
+node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
 # 4. Optional: automatic dispatch start/end on Claude Code (+ shared telemetry submodule)
-node .claude/skills/delivery-metrics/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
+node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
 # 5. Read
-node .claude/skills/delivery-metrics/scripts/delivery.mjs status
-node .claude/skills/delivery-metrics/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
-node .claude/skills/delivery-metrics/scripts/delivery.mjs report --html --out delivery.html
+node .claude/skills/delivery-monitor/scripts/delivery.mjs status
+node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
+node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 ```
 
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.
-Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.
+Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-monitor-design.md`.
 
 ## Telemetry mode
 

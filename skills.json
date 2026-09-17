@@ -250,9 +250,9 @@
       "description": "Per-role persistent memory as an Obsidian-grade vault \u2014 durable facts, preferences, decisions, and a daily log, as plain markdown with frontmatter, tags, aliases and wikilinks."
     },
     {
-      "id": "delivery-metrics",
+      "id": "delivery-monitor",
       "monorepo": "sdlc-skills",
-      "name": "delivery-metrics",
+      "name": "delivery-monitor",
       "description": "Delivery performance tracker for harness work items \u2014 cycle time, weekly throughput/velocity and estimate-vs-actual delta per campaign/mission/task from a git-committed event ledger; sibling of tokenomics."
     },
     {

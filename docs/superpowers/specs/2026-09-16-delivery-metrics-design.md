@@ -1,5 +1,7 @@
 # delivery-metrics — design spec (v5.1)
 
+> **Rename (2026-09-17):** the skill shipped as `skills/delivery-monitor/` ("delivery monitor"); this spec and its review-round notes keep the working name `delivery-metrics` used while they were written. Paths, ids and titles below map 1:1 (`delivery-metrics` → `delivery-monitor`).
+
 **Date:** 2026-09-16
 **Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
 **Branch:** feat/delivery-metrics-spec (worktree off `main`; spec only)

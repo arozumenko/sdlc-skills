@@ -28,7 +28,7 @@ for (const factory of ['feature-development', 'test-automation']) for (const [ta
     const installed = mkdtempSync(join(sandbox, 'install-'));
     execFileSync('node', [join(root, 'bin/init.mjs'), 'init', '--factory', factory, '--target', target, '--yes'], { cwd: installed, env, stdio: 'pipe' });
     const consumer = mkdtempSync(join(sandbox, 'consumer-')); cpSync(installed, consumer, { recursive: true, dereference: true }); rmSync(installed, { recursive: true });
-    const skill = join(consumer, dir, 'skills', 'delivery-metrics');
+    const skill = join(consumer, dir, 'skills', 'delivery-monitor');
     assert.ok(existsSync(join(skill, 'references', 'factory-roles.json')));
     const cli = (...args) => execFileSync('node', [join(skill, 'scripts/delivery.mjs'), ...args], { cwd: consumer, env: { ...env, CLAUDE_PROJECT_DIR: consumer }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     // Review fix (spec §6.5/D21): `doctor` always exits 0 now, `ok` is purely informational — plain
