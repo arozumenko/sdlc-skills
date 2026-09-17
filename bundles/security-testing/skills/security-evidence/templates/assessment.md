@@ -16,6 +16,7 @@ rejects
 unlocated
 engagement (the run's snapshot of the engagement record)
 threat-model (absent ⇒ INCOMPLETE(threat-model); the M1 empty model is {elements: [], threats: []})
+dispositions (dispositions.json, the index tm-lint check derives beside the snapshot; absent ⇒ INCOMPLETE(dispositions): an un-linted model never reaches a report)
 observations (observations.json index + observations/*)
 imports (imports.json index + ingest/*)
 verify-snapshots (verify-snapshots/*/verify.json, closed over their packets and receipts)

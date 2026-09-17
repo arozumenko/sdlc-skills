@@ -574,8 +574,10 @@ async function assessedRepo({ repo = readyRepo() } = {}) {
   assert.equal(c.code, 0, `coverage: ${c.stdout}${c.stderr}`);
   const claimed = readArtifact(join(dir, "findings.claimed.json"), { kind: "claimed" });
   const injection = claimed.payload.findings.find((f) => f.title === CLAIMS.injection.title).id;
-  // the M1 empty threat model, as an enveloped artifact on the path tm-lint check uses from M2
+  // the M1 empty threat model, as an enveloped artifact on the path tm-lint check uses from M2,
+  // and the index tm-lint check derives beside it (TASK-048: `dispositions` is a required assessment input)
   writeArtifact(join(dir, "threat-model.json"), makeEnvelope(headFor(repo, run_id, "threat-model"), { elements: [], threats: [] }), { exclusive: true });
+  writeArtifact(join(dir, "dispositions.json"), makeEnvelope(headFor(repo, run_id, "dispositions"), { dispositions: [] }), { exclusive: true });
   // register: one row for the injection finding, then the snapshot
   const add = await register(repo, ["add", "--subject", injection, "--priority", "p1", "--title", "sql built from request input", "--run", run_id]);
   assert.equal(add.code, 0, `register add: ${add.stdout}${add.stderr}`);
@@ -627,7 +629,7 @@ test("assessment built from a run prepared by run init + run snapshot register/v
   assert.equal(readFileSync(outputs(dir).report, "utf8").length > 0, true);
 });
 
-test("assessment: each required input deleted ⇒ exit 3 INCOMPLETE(<input>), incl. INCOMPLETE(threat-model) when absent and INCOMPLETE(register-events) when no snapshot was taken; no report (US-016 AC-2, table-driven)", async () => {
+test("assessment: each required input deleted ⇒ exit 3 INCOMPLETE(<input>), incl. INCOMPLETE(threat-model) when absent, INCOMPLETE(dispositions) when the model was never linted (TASK-048) and INCOMPLETE(register-events) when no snapshot was taken; no report (US-016 AC-2, table-driven)", async () => {
   const { repo, run_id, dir, scopePacket, vid } = await assessedRepo();
   const files = {
     scope: "scope.json",
@@ -640,6 +642,7 @@ test("assessment: each required input deleted ⇒ exit 3 INCOMPLETE(<input>), in
     packets: "packets",
     engagement: "engagement.json",
     "threat-model": "threat-model.json",
+    dispositions: "dispositions.json",
     observations: "observations.json",
     imports: "imports.json",
     "verify-snapshots": join("verify-snapshots", vid, "verify.json"),

@@ -846,6 +846,8 @@ async function assessedRepo() {
   ok(await evidence(repo, ["coverage", "--run", run_id, "--examined", examined]), "coverage");
   const { injection } = findings(dir);
   writeArtifact(join(dir, "threat-model.json"), makeEnvelope(headFor(repo, run_id, "threat-model"), { elements: [], threats: [] }), { exclusive: true });
+  // the index tm-lint check derives beside the empty model (TASK-048: a required assessment input)
+  writeArtifact(join(dir, "dispositions.json"), makeEnvelope(headFor(repo, run_id, "dispositions"), { dispositions: [] }), { exclusive: true });
   ok(await register(repo, ["add", "--subject", injection.id, "--priority", "p1", "--title", "sql built from request input", "--run", run_id]), "register add");
   ok(await evidence(repo, ["run", "snapshot", "register", "--run", run_id]), "snapshot register");
   const { vid } = plantVerifyRun(repo, "verified-two-acks");

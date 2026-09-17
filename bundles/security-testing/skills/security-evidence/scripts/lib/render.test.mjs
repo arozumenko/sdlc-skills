@@ -456,8 +456,8 @@ function synthAssessment({ withVerify = true, tamper = () => {}, reviewOptions =
 const assessmentTemplate = () => parseTemplate(readFileSync(join(TEMPLATES, "assessment.md"), "utf8"));
 const threatModelTemplate = () => parseTemplate(readFileSync(join(TEMPLATES, "threat-model.md"), "utf8"));
 
-test("parseTemplate: assessment and threat-model templates carry the spec §6.3 required-inputs lists", () => {
-  assert.deepEqual(assessmentTemplate().required_inputs, ["run", "scope", "claimed", "gate-result", "coverage", "examined", "packets", "receipts", "rejects", "unlocated", "engagement", "threat-model", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]);
+test("parseTemplate: assessment and threat-model templates carry the spec §6.3 required-inputs lists (+ dispositions on the assessment since TASK-048)", () => {
+  assert.deepEqual(assessmentTemplate().required_inputs, ["run", "scope", "claimed", "gate-result", "coverage", "examined", "packets", "receipts", "rejects", "unlocated", "engagement", "threat-model", "dispositions", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]);
   assert.deepEqual(threatModelTemplate().required_inputs, ["run", "threat-model", "packets", "receipts", "dispositions"]);
 });
 

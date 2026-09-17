@@ -9,8 +9,12 @@
 //                              runs them (TASK-034's SKILL.md test imports it
 //                              from here — the stopgap copy that lived in
 //                              secure-code-review.fixtures.test.mjs is gone)
-//   SD_EXTERNAL                the one M1 external (systematic-debugging) as
-//                              a harness fixture remote
+//   ROSTER_EXTERNALS           the two externals the final roster resolves
+//                              (systematic-debugging, dispatching-parallel-
+//                              agents — both obra/superpowers, so ONE fixture
+//                              remote serving both subdirs; TASK-048)
+//   SD_EXTERNAL                the M1 fixture (systematic-debugging alone),
+//                              kept for readers of the M1 shape
 //   E2E_ENV                    fixed clock + actor (G-1 byte-equality)
 //   PRODUCT_RECORD             the engagement record path (a)/(b) run under
 //   buildProductRepo(dir, env, files)
@@ -51,14 +55,42 @@ export const STANDALONE_SEQUENCE = Object.freeze([
   "evidence.mjs sign-off",
 ]);
 
-/** The one external skill the M1 roster resolves (plan §4.8), as a TASK-056 fixture remote. */
+const SD_SKILL_MD = "---\nname: systematic-debugging\ndescription: offline fixture copy (TASK-038 installed E2E)\n---\n\n# fixture body OFFLINE-FIXTURE-038\n";
+const DPA_SKILL_MD = "---\nname: dispatching-parallel-agents\ndescription: offline fixture copy (TASK-048 roster E2E)\n---\n\n# fixture body OFFLINE-FIXTURE-048\n";
+
+/** The one external skill the M1 roster resolved (plan §4.8), as a TASK-056 fixture remote. */
 export const SD_EXTERNAL = Object.freeze({
   id: "systematic-debugging",
   repo: "obra/superpowers",
   subdir: "skills/systematic-debugging",
-  files: {
-    "SKILL.md": "---\nname: systematic-debugging\ndescription: offline fixture copy (TASK-038 installed E2E)\n---\n\n# fixture body OFFLINE-FIXTURE-038\n",
-  },
+  files: { "SKILL.md": SD_SKILL_MD },
+});
+
+/**
+ * The externals the final roster resolves (plan §4.8 M3 row): the reviewer's
+ * `systematic-debugging` and the lead's `dispatching-parallel-agents`. Both
+ * live in obra/superpowers and the harness refuses one repo twice, so a
+ * single fixture remote carries both `skills/<id>/SKILL.md` — the installer
+ * copies `<cache>/obra__superpowers/<subdir>` per registry entry, exactly
+ * as it would from the real clone. Every full-roster install must be given
+ * these, or the missing one is an attempted https fetch.
+ */
+export const ROSTER_EXTERNALS = Object.freeze([
+  Object.freeze({
+    id: "systematic-debugging",
+    repo: "obra/superpowers",
+    subdir: "skills",
+    files: Object.freeze({
+      "systematic-debugging/SKILL.md": SD_SKILL_MD,
+      "dispatching-parallel-agents/SKILL.md": DPA_SKILL_MD,
+    }),
+  }),
+]);
+
+/** What the fixture remote serves per external id (the bytes an install must land verbatim). */
+export const ROSTER_EXTERNAL_BODIES = Object.freeze({
+  "systematic-debugging": SD_SKILL_MD,
+  "dispatching-parallel-agents": DPA_SKILL_MD,
 });
 
 /** Per-target directory the installer writes into (bin/init.mjs TARGETS). */
@@ -183,9 +215,21 @@ export function installedScripts(projectDir, target = "claude") {
 
 const SCRIPT_NAMES = new Set(["evidence", "verify", "register", "tm-lint", "plan"]);
 
-/** `<script>.mjs <command> [<subcommand>]` — the spelling STANDALONE_SEQUENCE uses (subcommands `init`, `validate`, `all`, `snapshot`). */
+/**
+ * The flags the five scripts accept WITHOUT a value (lib/argv.mjs spec kind
+ * `"boolean"`, plus the global `--quiet` / `--help`). `commandName` needs the
+ * list because it reads positionals by skipping the token after every other
+ * `--flag`; a boolean flag followed by a positional (`check --integrity
+ * <path>`) would otherwise swallow the positional (TASK-038 review
+ * follow-up, closed here by TASK-048). Grep `"boolean"` under lib/cmd-*.mjs
+ * when a command grows one.
+ */
+export const BOOLEAN_FLAGS = Object.freeze(["--drift", "--dry-run", "--help", "--integrity", "--json", "--quiet", "--rotate", "--write", "--yes"]);
+
+/** `<script>.mjs <command> [<subcommand>]` — the spelling STANDALONE_SEQUENCE uses (subcommands `init`, `validate`, `all`, `snapshot`, `print`, `verify`). */
 export function commandName(name, argv) {
-  const positional = argv.filter((a, i) => !a.startsWith("--") && (i === 0 || !argv[i - 1].startsWith("--")));
+  const takesValue = (a) => a.startsWith("--") && !a.includes("=") && !BOOLEAN_FLAGS.includes(a);
+  const positional = argv.filter((a, i) => !a.startsWith("--") && (i === 0 || !takesValue(argv[i - 1])));
   const [cmd, sub] = positional;
   const withSub = sub && ["init", "validate", "all", "snapshot", "print", "verify"].includes(sub) ? ` ${sub}` : "";
   return `${name}.mjs ${cmd}${withSub}`;

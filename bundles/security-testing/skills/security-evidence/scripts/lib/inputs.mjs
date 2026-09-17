@@ -23,7 +23,7 @@
 //   claimed        findings.claimed.json        examined        examined.json
 //   rejects        rejects.json                 unlocated       unlocated.json
 //   engagement     engagement.json              threat-model    threat-model.json
-//   verify         verify.json                  dispositions    dispositions.json
+//   verify         verify.json                  dispositions    dispositions.json (assessment + threat-model since TASK-048)
 //   register-events register-events.json        proposals-index proposals-index.json
 //   packets        packets/<sha>.json (set)     receipts        receipts/<sha>.json (set)
 //   imports        imports.json index → ingest/<import_sha256>.json (set)
@@ -73,7 +73,13 @@ const REVIEW = Object.freeze(["run", "scope", "claimed", "gate-result", "coverag
 /** The closed required-inputs list per template (spec §6.3 table; the template files carry the same list — cmd-build-report checks they agree). */
 export const REQUIRED = Object.freeze({
   review: REVIEW,
-  assessment: Object.freeze([...REVIEW, "engagement", "threat-model", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]),
+  // `dispositions` (TASK-048; PM ruling after G20/G21, G-7): the index tm-lint
+  // check derives beside the snapshot — required so a COMMITTED assessment
+  // always carries the script-derived index and an un-linted model (snapshot
+  // written, relationship lint failed or never run) is INCOMPLETE(dispositions),
+  // never a report. Absent at `run init` like the snapshot (spec P2; R1:
+  // write-once, never agent-authored, so no placeholder can be pre-written).
+  assessment: Object.freeze([...REVIEW, "engagement", "threat-model", "dispositions", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]),
   verify: Object.freeze(["run", "verify", "packets", "receipts"]),
   "threat-model": Object.freeze(["run", "threat-model", "packets", "receipts", "dispositions"]),
 });

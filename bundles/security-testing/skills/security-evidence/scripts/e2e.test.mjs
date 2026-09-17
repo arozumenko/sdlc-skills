@@ -1,13 +1,21 @@
 // TASK-038 — installed end-to-end tests, offline, both shapes + the remaining
 // §12 fixtures (spec v6.2 §12 "Installed end-to-end", plan §5 TASK-038;
 // US-030 AC-1 M1 portion, AC-2…AC-5, US-028 AC-4, US-007 AC-3, US-004 AC-5).
+// TASK-048 — path (a) re-run with the FINAL roster (three agents, six local
+// skills, both obra/superpowers externals offline) and the US-030 AC-1 M3
+// assertions (plan §4.8 table): `verifying-outcomes`, `gathering-context`,
+// `deep-research` from the monorepo `skills/`, `issue-tracking` through the
+// item index from the feature-development bundle (one notice line, no
+// fetch); the M1 hand-planted empty threat model replaced by the real
+// `tm-lint.mjs check` over an empty model of record, which writes the
+// snapshot AND the `dispositions.json` index the assessment now requires.
 //
 // Nothing here runs the scripts of this checkout: every command is the copy
 // `bin/init.mjs` INSTALLED into a consumer repository built in a temp dir,
-// provisioned with no network through the TASK-056 harness (a local bare
-// fixture remote for the one M1 external, `systematic-debugging`; a
-// GIT_CONFIG_GLOBAL rewrite that makes every https://github.com/ URL
-// unreachable). Two shapes:
+// provisioned with no network through the TASK-056 harness (one local bare
+// fixture remote serving both externals, `systematic-debugging` and
+// `dispatching-parallel-agents`; a GIT_CONFIG_GLOBAL rewrite that makes
+// every https://github.com/ URL unreachable). Two shapes:
 //
 //   (a) full bundle  `init --factory security-testing --target claude` →
 //       engagement init (twice: EDIT-ENGAGEMENT-AND-RERUN, then 0) → the
@@ -16,7 +24,8 @@
 //       + ingest qa-run → gate --claims → coverage --examined --scanner-rows
 //       → packet --kind subject → receipt validate → verify all pass 1 →
 //       register add → verify all --receipts pass 2 (VERIFIED, row fixed) →
-//       run snapshot verify|register|proposals → the M1 empty threat model
+//       run snapshot verify|register|proposals → tm-lint check over the
+//       empty model of record (snapshot + dispositions index)
 //       → build-report --template assessment → check --integrity --drift →
 //       register render → sign-off ⇒ exit 0, the review run listed as
 //       CONSISTENT-REDACTED-ONLY(1 citations) (four-step step 4), the
@@ -39,7 +48,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeEnvelope, readArtifact, writeArtifact } from "./canon.mjs";
+import { readArtifact } from "./canon.mjs";
 import { walk } from "./lib/fsx.mjs";
 import { redactString } from "./redact.mjs";
 import { FORBIDDEN_STRINGS } from "./lib/tokens.mjs";
@@ -48,17 +57,20 @@ import { assertNoNetwork, createOfflineInstall, runInstaller } from "./fixtures/
 import { BASE_FILES, CLAIM, DB_FIXED, FINDING_PATH } from "./fixtures/repo/build.mjs";
 import { cleanupAll } from "./fixtures/cli/harness.mjs";
 import {
+  BOOLEAN_FLAGS,
   CONFIG_CLEAN,
   CONFIG_PATH,
   CONSUMER_GITIGNORE,
   IGNORED_PRODUCT_PATH,
   PRODUCT_EXTRA_FILES,
   PRODUCT_RECORD,
-  SD_EXTERNAL,
+  ROSTER_EXTERNAL_BODIES,
+  ROSTER_EXTERNALS,
   ST,
   STANDALONE_SEQUENCE,
   TARGET_DIRS,
   buildProductRepo,
+  commandName,
   commitAll,
   commitIn,
   editEngagement,
@@ -69,7 +81,6 @@ import {
   makeRunner,
   parsePacketLine,
   parseRunLine,
-  E2E_ENV,
 } from "./fixtures/e2e/helpers.mjs";
 
 // The plan says this file exports the sequence; the definition lives in the
@@ -115,12 +126,8 @@ function treeDigest(dir) {
   for (const rel of walk(dir)) out[rel] = sha256(readFileSync(join(dir, rel)));
   return out;
 }
-/** The run's own envelope head for an artifact the test plants (the M1 threat model). */
-function headFor(project, run_id, kind) {
-  const run = readRun(project, run_id, "run.json", "run");
-  const { schema_version, engagement_id, key_id } = run.envelope;
-  return { schema_version, kind, run_id, engagement_id, key_id, now: () => E2E_ENV.SECURITY_EVIDENCE_NOW };
-}
+/** The empty threat model of record (D14 JSON; `{elements: [], threats: []}` is what TASK-024 calls the M1 empty model) — the test writes it where the threat-modeler would, `<st>/threat-model.json`, and lets the installed `tm-lint check` snapshot it. */
+const EMPTY_MODEL = Object.freeze({ elements: [], threats: [] });
 
 /** A provisioned consumer: product repo at its base commit, installed (args), the install committed, a runner over the installed scripts. */
 async function provision({ externals, args, target = "claude", name }) {
@@ -229,32 +236,72 @@ function parseVerify(fx, r) {
 }
 
 // ---------------------------------------------------------------------------
-// US-030 AC-1 (M1 portion) — provisioning
+// US-030 AC-1 — provisioning (M1 portion by TASK-038; the M3 portion — the
+// roster's monorepo, bundle-owned and second external skills — by TASK-048)
 
-test("offline provisioning — memory/knowledge-curation from monorepo, systematic-debugging from cache, no https fetch", { skip: SKIP }, async () => {
-  const fx = await provision({ externals: [SD_EXTERNAL], args: ["init", "--factory", "security-testing", "--target", "claude", "--yes"], name: "path (a) install" });
+/** The final roster (plan §4.8) and the skills each install must land, by where the installer resolves them from. */
+const ROSTER = Object.freeze(["security-lead", "threat-modeler", "security-reviewer"]);
+const LOCAL_SKILLS = Object.freeze(["security-evidence", "security-engagement", "threat-modeling", "secure-code-review", "security-test-planning", "risk-register"]);
+const MONOREPO_SKILLS = Object.freeze(["memory", "knowledge-curation", "verifying-outcomes", "gathering-context", "deep-research"]);
+const BUNDLE_SKILLS = Object.freeze({ "issue-tracking": "feature-development" });
+const EXTERNAL_SKILLS = Object.freeze(["systematic-debugging", "dispatching-parallel-agents"]);
+const FACTORY_INSTALL = Object.freeze(["init", "--factory", "security-testing", "--target", "claude", "--yes"]);
+
+test("full roster: verifying-outcomes/gathering-context/deep-research from monorepo, issue-tracking from the feature-development bundle, externals from cache, no https fetch", { skip: SKIP }, async () => {
+  const fx = await provision({ externals: ROSTER_EXTERNALS, args: FACTORY_INSTALL, name: "path (a) install" });
   const skills = join(fx.project, ".claude", "skills");
-  // monorepo skills: byte-identical copies of this checkout's skills/<id>/SKILL.md
-  for (const id of ["memory", "knowledge-curation"]) {
+  // monorepo skills (memory, knowledge-curation from factory.skills; the other three declared by the lead and the modeler): byte-identical copies of this checkout's skills/<id>/SKILL.md
+  for (const id of MONOREPO_SKILLS) {
     assert.ok(existsSync(join(skills, id, "SKILL.md")), `${id} installed`);
     assert.equal(readFileSync(join(skills, id, "SKILL.md"), "utf8"), readFileSync(join(REPO_ROOT, "skills", id, "SKILL.md"), "utf8"), `${id} is the monorepo copy`);
   }
-  // the external: the fixture body from the cache clone, whose origin is the local bare remote
-  const sd = readFileSync(join(skills, "systematic-debugging", "SKILL.md"), "utf8");
-  assert.equal(sd, SD_EXTERNAL.files["SKILL.md"], "systematic-debugging is the cache clone's SKILL.md");
+  // the bundle-owned id (the lead's `issue-tracking`): resolved through the item index to the alphabetical-first owner, feature-development,
+  // with exactly the one-line notice the installer prints for an id two factories own — never a fetch (SPIKE-002: resolved, nothing to do)
+  for (const [id, owner] of Object.entries(BUNDLE_SKILLS)) {
+    assert.ok(existsSync(join(skills, id, "SKILL.md")), `${id} installed`);
+    assert.equal(readFileSync(join(skills, id, "SKILL.md"), "utf8"), readFileSync(join(REPO_ROOT, "bundles", owner, "skills", id, "SKILL.md"), "utf8"), `${id} is the ${owner} bundle's copy`);
+    const notices = lines(fx.installOut).filter((l) => l.includes(`"${id}" exists in`));
+    assert.equal(notices.length, 1, `one notice for ${id}: ${notices.join(" | ")}`);
+    assert.match(notices[0], new RegExp(`"${id}" exists in ${owner}, [a-z-]+ — using ${owner}\\.`), notices[0]);
+    assert.ok(!existsSync(join(REPO_ROOT, "skills", id)), `${id} is not an orphan monorepo skill (the resolution really went through the index)`);
+  }
+  // the externals: the fixture bodies from the cache clone, whose origin is the local bare remote
+  for (const id of EXTERNAL_SKILLS) {
+    assert.equal(readFileSync(join(skills, id, "SKILL.md"), "utf8"), ROSTER_EXTERNAL_BODIES[id], `${id} is the cache clone's SKILL.md`);
+    assert.match(fx.installOut, new RegExp(`✓ skill  ${id} \\(external: obra/superpowers\\)`), `${id} reported as the external it is`);
+  }
   const clone = join(fx.h.cacheDir, "sdlc-skills", "registry", "obra__superpowers");
   assert.equal(gitIn(clone, ["remote", "get-url", "origin"], fx.genv), fx.h.remotes["obra/superpowers"], "the cache clone's origin is the bare fixture");
   assert.ok(!/https:\/\//.test(fx.installOut), "no https fetch attempted");
-  // the M1 roster + local skills + scripts
-  for (const s of ["security-evidence", "secure-code-review", "security-engagement"]) assert.ok(existsSync(join(skills, s, "SKILL.md")), `local skill ${s}`);
-  for (const f of ["evidence.mjs", "verify.mjs", "register.mjs", "version.json", "lib/cmd-sign-off.mjs"]) {
+  assert.ok(!/external fetch failed|not in skills\.json|pending content/.test(fx.installOut), `every declared skill resolved: ${fx.installOut}`);
+  // the six local skills + the scripts
+  for (const s of LOCAL_SKILLS) assert.ok(existsSync(join(skills, s, "SKILL.md")), `local skill ${s}`);
+  for (const f of ["evidence.mjs", "verify.mjs", "register.mjs", "tm-lint.mjs", "plan.mjs", "version.json", "lib/cmd-sign-off.mjs", "lib/cmd-tm-lint.mjs"]) {
     assert.ok(existsSync(join(skills, "security-evidence", "scripts", f)), `installed scripts/${f}`);
   }
   for (const f of ["references/redaction-rules.json", "templates/assessment.md"]) assert.ok(existsSync(join(skills, "security-evidence", f)), `installed ${f}`);
-  assert.ok(existsSync(join(fx.project, ".claude", "agents", "security-reviewer", "AGENT.md")), "the reviewer is installed");
-  assert.ok(existsSync(join(fx.project, ".agents", "memory", "security-reviewer", "project_briefing.md")), "briefing seeded");
-  // M1 asserts nothing about verifying-outcomes / issue-tracking: no installed item declares them (plan §4.8; TASK-048 owns the M3 assertions)
-  for (const absent of ["verifying-outcomes", "issue-tracking"]) assert.ok(!existsSync(join(skills, absent)), `${absent} is not requested by the M1 roster`);
+  // exactly the roster's skill set, nothing else
+  assert.deepEqual(readdirSync(skills).sort(), [...LOCAL_SKILLS, ...MONOREPO_SKILLS, ...Object.keys(BUNDLE_SKILLS), ...EXTERNAL_SKILLS].sort());
+  // the three agents as directories with every sibling (NOTES.md rides along inert, as it did for the reviewer), one briefing each (US-042 / TASK-047 AC-5 landing)
+  for (const role of ROSTER) {
+    for (const f of ["AGENT.md", "SOUL.md", "RULES.md", "NOTES.md"]) assert.ok(existsSync(join(fx.project, ".claude", "agents", role, f)), `${role}/${f} installed`);
+    assert.equal(readFileSync(join(fx.project, ".claude", "agents", role, "SOUL.md"), "utf8"), readFileSync(join(REPO_ROOT, "bundles", "security-testing", "agents", role, "SOUL.md"), "utf8"), `${role}/SOUL.md is the bundle's copy`);
+    const briefing = join(fx.project, ".agents", "memory", role, "project_briefing.md");
+    assert.ok(existsSync(briefing), `${role} briefing seeded`);
+    assert.equal(readFileSync(briefing, "utf8"), readFileSync(join(REPO_ROOT, "bundles", "security-testing", "briefings", `${role}.md`), "utf8"), `${role} briefing is briefings/${role}.md`);
+  }
+  assert.deepEqual(readdirSync(join(fx.project, ".claude", "agents")).sort(), [...ROSTER].sort(), "exactly the three roles");
+});
+
+test("commandName: a boolean flag never swallows the positional after it (TASK-038 follow-up)", () => {
+  assert.equal(commandName("evidence", ["check", "--integrity", ".agents/security-testing/runs/x"]), "evidence.mjs check");
+  assert.equal(commandName("evidence", ["check", ".agents/security-testing/runs/x", "--integrity", "--drift"]), "evidence.mjs check");
+  assert.equal(commandName("evidence", ["run", "init", "--kind", "assessment"]), "evidence.mjs run init");
+  assert.equal(commandName("evidence", ["--quiet", "run", "snapshot", "verify", "--run", "x", "--from", "y"]), "evidence.mjs run snapshot");
+  assert.equal(commandName("plan", ["admit", "--dry-run", "cases/x.md", "--run", "x"]), "plan.mjs admit");
+  assert.equal(commandName("evidence", ["check", "--root=/tmp/x", "runs/x"]), "evidence.mjs check");
+  assert.equal(commandName("tm-lint", ["check", "--run", "x"]), "tm-lint.mjs check");
+  assert.ok(BOOLEAN_FLAGS.includes("--integrity") && BOOLEAN_FLAGS.includes("--drift") && BOOLEAN_FLAGS.includes("--dry-run"));
 });
 
 // ---------------------------------------------------------------------------
@@ -267,7 +314,7 @@ function pathA() {
 }
 
 async function buildPathA() {
-  const fx = await provision({ externals: [SD_EXTERNAL], args: ["init", "--factory", "security-testing", "--target", "claude", "--yes"], name: "path (a)" });
+  const fx = await provision({ externals: ROSTER_EXTERNALS, args: FACTORY_INSTALL, name: "path (a)" });
   const { project, runner, genv } = fx;
   const st = join(project, ST);
   const { gitignoreSha, key_id } = await engage(fx, { seeded: true });
@@ -392,8 +439,15 @@ async function buildPathA() {
   writeFileSync(join(st, "proposals", "active-sqli-probe.proposal.md"), "---\nid: active-sqli-probe\n---\n# probe\n");
   const sp = ok(await runner.run("evidence", ["run", "snapshot", "proposals", "--run", assessment.run_id]), "run snapshot proposals");
   assert.equal(lines(sp.stdout)[0], "SNAPSHOT proposals n=1");
-  // the M1 empty threat model (tm-lint check writes it from M2; TASK-024)
-  writeArtifact(join(st, "runs", assessment.run_id, "threat-model.json"), makeEnvelope(headFor(project, assessment.run_id, "threat-model"), { elements: [], threats: [] }), { exclusive: true });
+  // the empty threat model of record, snapshotted by the INSTALLED tm-lint check (TASK-048): writes `<run>/threat-model.json`
+  // and the `<run>/dispositions.json` index the assessment template requires (R1: script-derived, never hand-planted)
+  writeFileSync(join(st, "threat-model.json"), `${JSON.stringify(EMPTY_MODEL, null, 2)}\n`);
+  const tm = ok(await runner.run("tm-lint", ["check", "--run", assessment.run_id]), "tm-lint check");
+  assert.deepEqual(lines(tm.stdout).map((l) => l.replace(/ sha256=[0-9a-f]{64}$/, "")), ["TM elements=0 threats=0 undisposed=0", `WROTE ${ST}/runs/${assessment.run_id}/threat-model.json`, `WROTE ${ST}/runs/${assessment.run_id}/dispositions.json`]);
+  assert.deepEqual(readRun(project, assessment.run_id, "threat-model.json", "threat-model").payload, EMPTY_MODEL);
+  assert.deepEqual(readRun(project, assessment.run_id, "dispositions.json", "dispositions").payload, { dispositions: [] });
+  const tmAgain = ok(await runner.run("tm-lint", ["check", "--run", assessment.run_id]), "tm-lint check again");
+  assert.equal(tmAgain.stdout, tm.stdout, "idempotent on an identical model: same snapshot, same index (write-once, G-10)");
   // the ignored product file changes: excluded coverage at sign-off, never a change
   writeFileSync(join(project, IGNORED_PRODUCT_PATH), "// built output v2\n");
 
@@ -459,7 +513,8 @@ test(".gitignore untouched by the pipeline after init", { skip: SKIP }, async ()
   const status = gitIn(project, ["status", "--porcelain", "--untracked-files=all"], genv).split("\n").filter(Boolean).map((l) => l.replace(/^[ MADRCU?!]{1,2}\s+/, ""));
   const managed = [`${ST}/private/`, `${ST}/ledger/`, `${ST}/runs/`, `${ST}/receipts/`, `${ST}/proposals/`, `${ST}/handoffs/`, `${ST}/imports/`, `${ST}/register/`, "reports/security/", "tasks/security-"];
   for (const p of status) assert.ok(!managed.some((m) => p.startsWith(m)), `${p} is under a managed path`);
-  assert.deepEqual(status.sort(), [".gitignore", `${ST}/engagement.md`, `${ST}/risk-register.md`].sort(), "exactly the three files outside the block that the engagement writes");
+  // threat-model.json is the model of record — outside the block, committed by policy like engagement.md (plan §3.2)
+  assert.deepEqual(status.sort(), [".gitignore", `${ST}/engagement.md`, `${ST}/risk-register.md`, `${ST}/threat-model.json`].sort(), "exactly the four files outside the block that the engagement writes");
   assert.equal(gitIn(project, ["ls-files", "--", ST], genv).split("\n").filter((p) => !p.startsWith(`${ST}/knowledge/`)).join(","), "", "nothing under <st> is tracked besides the seeded knowledge");
 });
 
@@ -585,10 +640,19 @@ test("additional §12 fixtures", { skip: SKIP }, async () => {
 });
 
 // ---------------------------------------------------------------------------
-// US-028 AC-4 — the reviewer in every host's native shape
+// US-028 AC-4 — the reviewer in every host's native shape (TASK-048: the
+// whole roster lands beside it — one file per role in the host's form)
+
+/** Where each host puts an agent (bin/init.mjs TARGETS): a directory with siblings, a flat .agent.md, or TOML. */
+const AGENT_FILE = Object.freeze({
+  claude: (role) => `.claude/agents/${role}/AGENT.md`,
+  cursor: (role) => `.cursor/agents/${role}/AGENT.md`,
+  copilot: (role) => `.github/agents/${role}.agent.md`,
+  codex: (role) => `.codex/agents/${role}.toml`,
+});
 
 test("security-reviewer appears in every host's native shape", { skip: SKIP }, async () => {
-  const h = createOfflineInstall({ externals: [SD_EXTERNAL] });
+  const h = createOfflineInstall({ externals: ROSTER_EXTERNALS });
   harnesses.push(h);
   const shapes = {
     claude: { file: ".claude/agents/security-reviewer/AGENT.md", soul: ".claude/agents/security-reviewer/SOUL.md", injected: false },
@@ -619,11 +683,19 @@ test("security-reviewer appears in every host's native shape", { skip: SKIP }, a
     assert.equal(text.includes("<!-- SKILLS-INJECTED: START -->"), shape.injected, `${target}: SKILLS-INJECTED ${shape.injected ? "present" : "absent"}`);
     if (shape.soul) assert.ok(existsSync(join(dir, shape.soul)), `${target}: SOUL.md sibling`);
     if (target === "copilot") assert.ok(!existsSync(join(dir, ".github", "agents", "security-reviewer")), "copilot: flat .agent.md, no directory");
-    // every target gets the scripts and the three local skills
+    // every target gets the scripts and the roster's whole skill set (six local, five monorepo, the bundle-owned one, two externals)
     const skillsDir = join(dir, TARGET_DIRS[target], "skills");
-    for (const s of ["security-evidence", "secure-code-review", "security-engagement", "memory", "knowledge-curation", "systematic-debugging"]) assert.ok(existsSync(join(skillsDir, s, "SKILL.md")), `${target}: skill ${s}`);
+    for (const s of [...LOCAL_SKILLS, ...MONOREPO_SKILLS, ...Object.keys(BUNDLE_SKILLS), ...EXTERNAL_SKILLS]) assert.ok(existsSync(join(skillsDir, s, "SKILL.md")), `${target}: skill ${s}`);
     assert.ok(existsSync(join(skillsDir, "security-evidence", "scripts", "evidence.mjs")), `${target}: scripts`);
-    assert.ok(existsSync(join(dir, ".agents", "memory", "security-reviewer", "project_briefing.md")), `${target}: briefing seeded`);
+    // the other two roles land in the same host form, each with its briefing (TASK-048)
+    for (const role of ROSTER) {
+      const roleFile = join(dir, AGENT_FILE[target](role));
+      assert.ok(existsSync(roleFile), `${target}: ${AGENT_FILE[target](role)}`);
+      const roleText = readFileSync(roleFile, "utf8");
+      assert.match(roleText, target === "codex" ? new RegExp(`^name = "${role}"$`, "m") : new RegExp(`^name: ${role}$`, "m"), `${target}: ${role} named`);
+      assert.equal(roleText.includes("<!-- SKILLS-INJECTED: START -->"), shape.injected, `${target}: ${role} SKILLS-INJECTED ${shape.injected ? "present" : "absent"}`);
+      assert.ok(existsSync(join(dir, ".agents", "memory", role, "project_briefing.md")), `${target}: ${role} briefing seeded`);
+    }
     for (const n of KNOWLEDGE_FILES) assert.ok(existsSync(join(dir, ST, "knowledge", n)), `${target}: knowledge/${n} seeded`);
   }
 });
