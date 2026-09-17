@@ -27,6 +27,28 @@ const GROUPS = [
     "skills/knowledge-curation/templates/bases/memory-curated.base",
     "skills/memory/templates/bases/memory-curated.base",
   ],
+  // security-testing: each script skill ships its own copy of the tiny lib so
+  // it installs standalone (`--skills security-testing/<skill>`).
+  [
+    "bundles/security-testing/skills/secure-code-review/scripts/lib/engagement.mjs",
+    "bundles/security-testing/skills/security-test-planning/scripts/lib/engagement.mjs",
+    "bundles/security-testing/skills/risk-register/scripts/lib/engagement.mjs",
+  ],
+  [
+    "bundles/security-testing/skills/secure-code-review/scripts/lib/cli.mjs",
+    "bundles/security-testing/skills/security-test-planning/scripts/lib/cli.mjs",
+    "bundles/security-testing/skills/risk-register/scripts/lib/cli.mjs",
+  ],
+  [
+    "bundles/security-testing/skills/secure-code-review/scripts/lib/redact.mjs",
+    "bundles/security-testing/skills/security-test-planning/scripts/lib/redact.mjs",
+    "bundles/security-testing/skills/risk-register/scripts/lib/redact.mjs",
+  ],
+  [
+    "bundles/security-testing/skills/secure-code-review/scripts/lib/redaction-rules.json",
+    "bundles/security-testing/skills/security-test-planning/scripts/lib/redaction-rules.json",
+    "bundles/security-testing/skills/risk-register/scripts/lib/redaction-rules.json",
+  ],
 ];
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
