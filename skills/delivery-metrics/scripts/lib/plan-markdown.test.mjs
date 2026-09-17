@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { parseExecutionBlock, parseTaskHeadings, importTasksMarkdown } from './plan-markdown.mjs';
 import { validatePlan, validateIds, assignIds } from './plan.mjs';
@@ -48,10 +47,17 @@ test('importTasksMarkdown: groups → missions, no estimates, ungrouped warning,
   assert.match(importTasksMarkdown('# empty', opts).warnings.join('\n'), /no TASK headings/);
 });
 
-// Step 4 sanity check from the brief, run against the real, pinned tasks-file: every task
-// belongs to exactly one group (30 groups, 59 memberships, 59 distinct members, 59 headings).
-test('real-file check: feat/security-testing-bundle-spec tasks-v2.md — 30 groups, 59/59 memberships, 59 headings', () => {
-  const real = execFileSync('git', ['show', 'feat/security-testing-bundle-spec:docs/superpowers/plans/2026-09-15-security-testing-bundle-tasks-v2.md'], { encoding: 'utf8', cwd: new URL('../../../..', import.meta.url) });
+// Step 4 sanity check from the brief, self-contained (no `git show`, no network, works in any
+// clone/CI checkout regardless of which branches are locally fetched): `tasks-v2-execution-plan.md`
+// embeds the real `## 1. Execution plan` fenced block verbatim (all 30 `G` lines, byte-for-byte,
+// including the G6 continuation line) from feat/security-testing-bundle-spec's
+// docs/superpowers/plans/2026-09-15-security-testing-bundle-tasks-v2.md, plus a minimal set of 59
+// `#### TASK-NNN:` headings (title/story/assignee/complexity only — no other content from that
+// file). Every task belongs to exactly one group (30 groups, 59 memberships, 59 distinct members,
+// 59 headings). The one-off `git show` verification that produced this fixture is documented in
+// the task-4 report, not re-run here.
+test('real-file check: tasks-v2 execution-plan fixture — 30 groups, 59/59 memberships, 59 headings', () => {
+  const real = readFileSync(new URL('../../fixtures/plan-markdown/tasks-v2-execution-plan.md', import.meta.url), 'utf8');
   const groups = parseExecutionBlock(real);
   const nums = groups.flatMap((g) => g.nums);
   assert.equal(groups.length, 30);
