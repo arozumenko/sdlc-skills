@@ -2,29 +2,41 @@
 // cite.mjs — the secure-code-review script (spec §6): `init` seeds the
 // engagement record and the managed `.gitignore` block (D9), `show` prints
 // numbered, redacted lines at a commit (the helper the reviewer reads with),
-// `check` verifies citations against the bytes at their oid (Tasks 4–5),
-// `redact` rewrites a Markdown file through the redaction rules (Task 5).
+// `check` verifies every citation of a findings file against the bytes at
+// its oid, stamps the file, tiles coverage and validates second opinions
+// (findings mode here; threat-model mode and `--md` in Task 5), `redact`
+// rewrites a Markdown file through the redaction rules (Task 5).
 //
 // Result lines (one per outcome; exit 0 ok · 2 usage / bad input · 4 the
 // check failed · 5 a record is corrupt):
 //   init   WROTE <path> · EDIT-ENGAGEMENT-AND-RERUN (2) · TRACKED <path> (4)
 //          IGNORE-BLOCK: written|present · INIT ok
 //   show   SHOW <path> <oid7> <start>-<end>, then `<n>\t<redacted line>`
-//   both   USAGE(<sub>: <why>) (2) · ENGAGEMENT-* tokens (2) · GIT-ERROR <m> (2)
+//   check  REFUSED agent-written key <key> (2) · DIRTY-SCOPE <path> (2)
+//          FAILED <finding-index>.<citation-index> <why> (4)
+//          SECOND <id> <assertion> · STALE-REVIEW <id> (4)
+//          COVERAGE examined=<n> partial=<n> unexamined=<n>
+//          CHECK verified=<n> failed=<n>   (always last; exit 4 on any FAILED/STALE)
+//   all    USAGE(<sub>: <why>) (2) · ENGAGEMENT-* tokens (2) · GIT-ERROR <m> (2)
 //          USAGE(cite: <why>) is the dispatcher's own (unknown command, bad flag)
 //
-// Every string printed or written passes through `redactString` first. Line
-// numbers are raw, as `git show` prints them (D3). Stdlib ESM only; every
-// child process is an argv array with `shell: false` (via lib/git.mjs); no
-// network. Imports only from ./lib/.
+// Every string printed or written passes through `redactString` first —
+// field-wise for JSON, because the `high-entropy` rule would otherwise eat
+// every 40-hex oid and 64-hex hash a serialised file carries (see `token`
+// and `redactDeep`). Line numbers are raw, as `git show` prints them (D3).
+// Stdlib ESM only; every child process is an argv array with `shell: false`
+// (via lib/git.mjs); no network. Imports only from ./lib/.
 
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { checkCitation, findingId, isOid } from "./lib/citations.mjs";
 import { UsageError, runCli } from "./lib/cli.mjs";
+import { CoverageError, tileCoverage } from "./lib/coverage.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
-import { GitError, revParse, showBytes } from "./lib/git.mjs";
+import { GitError, lsFiles, revParse, showBytes, statusPorcelain } from "./lib/git.mjs";
 import { GITIGNORE, probeTracked, readGitignore, upsertBlock } from "./lib/ignore-block.mjs";
 import { redactString } from "./lib/redact.mjs";
 
@@ -176,10 +188,270 @@ function show(args, ctx) {
   return 0;
 }
 
+// ---------------------------------------------------------------- check
+
+/**
+ * D10: agents never write `id`, `state` or `verdict`. Check itself writes
+ * `id` per finding, `state`/`snippet_redacted` per citation and `coverage`/
+ * `check_stamp` at the top (`OWN_KEYS`, by position); a file carrying any of
+ * those must carry a `check_stamp` that matches the rest of the file — check's
+ * own output re-runs freely, a hand-written value or an assertion edited
+ * underneath check's keys is REFUSED. `id`/`state`/`verdict` at ANY other
+ * position (a finding's `state`, a citation's `id`, a top-level `verdict`, a
+ * nested object) is never check's and is refused outright — otherwise it would
+ * be written back under a valid stamp, indistinguishable from script output.
+ * `oid` is not here: a citation may carry its own (spec §6 `oid?`); check
+ * stamps it only when absent.
+ */
+const OWN_KEYS = Object.freeze({ top: ["coverage", "check_stamp"], finding: ["id"], citation: ["state", "snippet_redacted"] });
+const D10_KEYS = new Set(["id", "state", "verdict"]);
+/** Keys whose value is a commit oid or a sha256 by construction; the walker keeps those as full hex. */
+const HEX_KEYS = new Set(["head", "oid", "id", "check_stamp", "finding_id", "findings_sha256"]);
+const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const ASSERTIONS = new Set(["confirmed", "refuted", "indeterminate"]);
+const SECOND_FILE = /^second-(.+)\.json$/;
+
+const sha256Hex = (input) => createHash("sha256").update(input).digest("hex");
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** A full oid or sha256 prints as is (the high-entropy rule would eat it); anything else is redacted. */
+const token = (s) => (typeof s === "string" && HEX.test(s) ? s : redactString(String(s)).text);
+
+/**
+ * `JSON.parse` that never lets the file's bytes into a thrown message (V8
+ * echoes a slice of the source in its SyntaxError).
+ * @param {Buffer} bytes
+ * @param {string} what for the usage line
+ * @returns {object}
+ * @throws {UsageError}
+ */
+function parseStrict(bytes, what) {
+  let doc;
+  try {
+    doc = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new UsageError(`${what} is not valid JSON`);
+  }
+  if (!isObject(doc)) throw new UsageError(`${what} is not a JSON object`);
+  return doc;
+}
+
+/**
+ * Deep copy with every string (keys included) redacted, except a value under
+ * one of `HEX_KEYS` that is a full oid/sha256. Arrays pass no key down.
+ * @param {unknown} value
+ * @param {string} [key] the property name `value` sits under
+ */
+function redactDeep(value, key) {
+  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : redactString(value).text;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+  if (isObject(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[redactString(k).text] = redactDeep(v, k);
+    return out;
+  }
+  return value;
+}
+
+/** The document without the keys `check` writes — the `check_stamp` preimage. */
+function stripCheckKeys(doc) {
+  const out = { ...doc };
+  delete out.check_stamp;
+  delete out.coverage;
+  if (Array.isArray(out.findings)) {
+    out.findings = out.findings.map((f) => {
+      if (!isObject(f)) return f;
+      const g = { ...f };
+      delete g.id;
+      if (Array.isArray(g.citations)) {
+        g.citations = g.citations.map((c) => {
+          if (!isObject(c)) return c;
+          const d = { ...c };
+          delete d.state;
+          delete d.oid;
+          delete d.snippet_redacted;
+          return d;
+        });
+      }
+      return g;
+    });
+  }
+  return out;
+}
+const stampOf = (doc) => sha256Hex(JSON.stringify(stripCheckKeys(doc)));
+
+/**
+ * Walk the whole document: `own` = check-written keys at check's own
+ * positions, `stray` = D10 keys anywhere else; both in document order.
+ * @returns {{own: string[], stray: string[]}}
+ */
+function d10Keys(doc) {
+  const own = [];
+  const stray = [];
+  const child = (pos, k) => (pos === "top" && k === "findings" ? "finding" : pos === "finding" && k === "citations" ? "citation" : "other");
+  const visit = (value, pos) => {
+    if (Array.isArray(value)) {
+      for (const v of value) visit(v, pos);
+      return;
+    }
+    if (!isObject(value)) return;
+    for (const [k, v] of Object.entries(value)) {
+      if (OWN_KEYS[pos]?.includes(k)) own.push(k);
+      else if (D10_KEYS.has(k)) stray.push(k);
+      visit(v, child(pos, k));
+    }
+  };
+  visit(doc, "top");
+  return { own, stray };
+}
+
+/** Raw line count of `path` at `oid` (lines as `git show` prints them); 0 when absent there. */
+function rawLineCount(root, oid, path) {
+  let bytes;
+  try {
+    bytes = showBytes(root, oid, path);
+  } catch (e) {
+    if (e instanceof GitError) return 0;
+    throw e;
+  }
+  if (bytes.length === 0) return 0;
+  let n = 0;
+  for (const b of bytes) if (b === 0x0a) n++;
+  return bytes[bytes.length - 1] === 0x0a ? n : n + 1;
+}
+
+/**
+ * Every `second-<id>.json` beside the findings file, validated against the
+ * findings as read (`findings_sha256` is the hash of the file bytes BEFORE
+ * this run's write-back — the lead runs `check` before dispatching the second
+ * opinion, so the reviewer hashes a stamped file, and a re-run of check on
+ * its own output leaves those bytes unchanged).
+ * @returns {{lines: string[], stale: number}}
+ */
+function secondOpinions(dir, findings, fileSha) {
+  const byId = new Map(findings.filter((f) => typeof f.id === "string").map((f) => [f.id, f]));
+  const lines = [];
+  let stale = 0;
+  for (const name of readdirSync(dir).filter((n) => SECOND_FILE.test(n)).sort()) {
+    let s = null;
+    try {
+      s = parseStrict(readFileSync(join(dir, name)), name);
+    } catch {
+      s = null;
+    }
+    const id = s !== null && typeof s.finding_id === "string" ? s.finding_id : name.match(SECOND_FILE)[1];
+    const f = byId.get(id);
+    const ok =
+      s !== null &&
+      f !== undefined &&
+      s.oid === f.citations[0].oid &&
+      s.findings_sha256 === fileSha &&
+      typeof s.assertion === "string" &&
+      ASSERTIONS.has(s.assertion) &&
+      typeof s.note === "string" &&
+      typeof s.by === "string";
+    if (ok) {
+      lines.push(`SECOND ${token(id)} ${s.assertion}`);
+    } else {
+      stale++;
+      lines.push(`STALE-REVIEW ${token(id)}`);
+    }
+  }
+  return { lines, stale };
+}
+
+function checkFindings(doc, { root, bytes, abs }, ctx) {
+  if (!Array.isArray(doc.findings)) throw new UsageError("findings must be an array");
+  if (!Array.isArray(doc.examined)) throw new UsageError("examined must be an array of {path, lines?}");
+  if (doc.head !== undefined && !isOid(doc.head)) throw new UsageError("head must be a 40-hex oid");
+  doc.findings.forEach((f, i) => {
+    if (!isObject(f) || typeof f.class !== "string" || f.class.length === 0 || !Array.isArray(f.citations) || f.citations.length === 0) {
+      throw new UsageError(`findings[${i}] must carry a class and a non-empty citations array`);
+    }
+  });
+  // D10: a stray id/state/verdict is never check's; check's own keys are fine only when the stamp matches.
+  const { own, stray } = d10Keys(doc);
+  if (stray.length > 0 || (own.length > 0 && doc.check_stamp !== stampOf(doc))) {
+    const offending = stray.length > 0 ? stray : own;
+    say(ctx, `REFUSED agent-written key ${[...D10_KEYS].find((k) => offending.includes(k)) ?? offending[0]}`);
+    return 2;
+  }
+  const { record } = readEngagement(root);
+  const scope = record.scope_paths;
+  // A rename renders as `XY old -> new`; the path that is dirty is the last segment.
+  const dirty = [...new Set(statusPorcelain(root, { paths: scope }).map((l) => l.slice(3).split(" -> ").pop()))].sort();
+  if (dirty.length > 0) {
+    for (const p of dirty) say(ctx, `DIRTY-SCOPE ${p}`);
+    return 2;
+  }
+  let head;
+  try {
+    head = revParse(root, doc.head ?? "HEAD");
+  } catch (e) {
+    if (e instanceof GitError) throw new UsageError(`head ${String(doc.head).slice(0, 7)} is not a commit`);
+    throw e;
+  }
+  const failed = [];
+  let verified = 0;
+  doc.findings.forEach((f, fi) => {
+    let first;
+    f.citations.forEach((c, ci) => {
+      const r = checkCitation(root, scope, c, { maxRangeLines: MAX_RANGE_LINES, defaultOid: head });
+      if (r.state === "VERIFIED") verified++;
+      else failed.push(`FAILED ${fi}.${ci} ${r.why}`);
+      if (ci === 0) first = r;
+      if (!isObject(c)) return; // nothing to stamp on a non-object; it is reported bad-shape above
+      if (r.path !== undefined) c.path = r.path;
+      if (r.oid !== undefined) c.oid = r.oid;
+      c.state = r.state === "VERIFIED" ? "VERIFIED" : `FAILED(${r.why})`;
+      if (r.state === "VERIFIED") c.snippet_redacted = r.snippet_redacted;
+      else delete c.snippet_redacted;
+    });
+    const allVerified = f.citations.every((c) => isObject(c) && c.state === "VERIFIED");
+    if (allVerified) f.id = findingId({ path: first.path, cls: f.class, normalisedSnippet: first.normalised });
+    else delete f.id;
+  });
+  const files = lsFiles(root, { paths: scope });
+  const counts = new Map(files.map((p) => [p, rawLineCount(root, head, p)]));
+  let coverage;
+  try {
+    coverage = tileCoverage(files, doc.examined, counts);
+  } catch (e) {
+    if (e instanceof CoverageError) throw new UsageError(`examined: ${e.message}`);
+    throw e;
+  }
+  doc.coverage = coverage;
+  const seconds = secondOpinions(dirname(abs), doc.findings, sha256Hex(bytes));
+  // Redact field-wise, then stamp the redacted document so a re-run matches.
+  const out = redactDeep(doc);
+  out.check_stamp = stampOf(out);
+  writeFileSync(abs, `${JSON.stringify(out, null, 2)}\n`);
+  for (const line of failed) say(ctx, line);
+  for (const line of seconds.lines) ctx.out(line); // already token-redacted; the ids must survive
+  say(ctx, `COVERAGE examined=${coverage.examined} partial=${coverage.partial} unexamined=${coverage.unexamined}`);
+  say(ctx, `CHECK verified=${verified} failed=${failed.length}`);
+  return failed.length > 0 || seconds.stale > 0 ? 4 : 0;
+}
+
+function check(args, ctx) {
+  const [file] = args._;
+  if (file === undefined) throw new UsageError("usage: check <findings.json | threat-model.json> [--md [--no-snippets]]");
+  const abs = resolve(ctx.cwd, file);
+  let bytes;
+  try {
+    bytes = readFileSync(abs);
+  } catch {
+    throw new UsageError(`${file} not found`);
+  }
+  const doc = parseStrict(bytes, file);
+  if (!("findings" in doc)) throw new UsageError("threat-model mode is not available yet");
+  return checkFindings(doc, { root: ctx.root, bytes, abs }, ctx);
+}
+
 // ---------------------------------------------------------------- main
 
-/** The command table; `check` and `redact` join it in later tasks. */
-export const COMMANDS = { init: command("init", init), show: command("show", show) };
+/** The command table; `redact` joins it in Task 5. */
+export const COMMANDS = { init: command("init", init), show: command("show", show), check: command("check", check) };
 
 /**
  * True when this file is the process entry script. Both sides are realpath'd:
