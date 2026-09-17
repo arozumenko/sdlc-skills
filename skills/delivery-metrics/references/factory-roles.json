@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "factories": {
+    "feature-development": [
+      "android-dev",
+      "ba",
+      "designer",
+      "ios-dev",
+      "js-dev",
+      "project-manager",
+      "python-dev",
+      "qa-engineer",
+      "scout",
+      "tech-lead",
+      "test-automation-engineer"
+    ],
+    "test-automation": [
+      "scout",
+      "test-automation-engineer",
+      "test-automation-lead"
+    ],
+    "manual-qa": [
+      "app-profiler",
+      "qa-auditor",
+      "test-author",
+      "test-reporter",
+      "test-run-lead",
+      "test-runner",
+      "test-sizer"
+    ]
+  }
+}
