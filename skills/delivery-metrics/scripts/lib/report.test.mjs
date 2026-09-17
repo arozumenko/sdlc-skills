@@ -78,7 +78,9 @@ test('renderStatus: one-screen counts and open ages (255 h); loadProfile merges 
   const s = renderStatus(assemble(repo, { now: NOW }));
   assert.match(s, /STATUS sec\/run-1 v1/); assert.match(s, /task: done=1 in_progress=1 planned=1 cancelled=0/); assert.match(s, /TASK-B[^\n]*age=255h/);
   assert.equal(loadProfile(repo).profile.minWholeWeeks, 3);
-  mkdirSync(deliveryDir(repo), { recursive: true });
+  // Minor (f): the derived, count-bearing caveats (not just the unconditional ones) are printed too.
+  assert.match(s, /caveat: acceptance: unauthenticated/, 'unconditional caveats still present');
+  assert.match(s, /caveat: 1 observation\(s\) for unregistered items — excluded/, 'derived caveat now printed by status');
 });
 
 // --- Round-3 review obligations (F15, F17, F18, F19, F20) -----------------------------------
@@ -229,6 +231,58 @@ test('F19: hook diagnostics counted by kind; admitted-but-unattributed dispatche
   assert.equal(cov.unregistered, 1, 'still only the ghost/run-9 observation — TASK-Q is registered (in run-2), not unregistered');
 });
 
+test('Important fix 1: unattributed_share is scoped to the selected runs and the window — a dispatch on another registered (unselected) run, and one after `end`, must not count', () => {
+  const repo = tmp(); seed(repo);
+  const R2 = 'sec/run-2';
+  saveRun(repo, { run: R2, campaign_id: 'sec', run_id: 'run-2', version: 1, status: 'open', observation_start: '2026-09-07T00:00:00Z', canonical_sha256: 'e'.repeat(64), items: [
+    { item_id: `${R2}/campaign`, ref: 'sec2', level: 'campaign', parent_item_id: null },
+    { item_id: `${R2}/task-r`, ref: 'TASK-R', level: 'task', parent_item_id: `${R2}/campaign`, class: 'S' },
+  ] });
+  const dispatchOn = (plan, id, ref, at, meta = {}) => appendObservation(repo, makeObservation({ user: 'u', host: 'claude', plan, item_id: id, ref, level: id ? 'task' : null, event: 'dispatched', at, transition_id: `${plan}/${ref ?? 'x'}/dispatched/${at}`, source: 'hook', source_record_id: `d-${ref ?? 'x'}-${at}`, meta: { version: 1, ...meta } }, { now: 0 }), { slug: 'u', now: 0 });
+
+  // A dispatch on run-2 — NOT selected (--plan selects only run-1) — must not count at all.
+  dispatchOn(R2, `${R2}/task-r`, 'TASK-R', '2026-09-11T00:00:00Z');
+  // An unattributed dispatch on run-1 but AFTER the window's effective_end (NOW = 2026-09-21) — must
+  // not count either.
+  dispatchOn(R, null, null, '2026-09-25T00:00:00Z', { unattributed: true });
+  // An unattributed dispatch on run-1 INSIDE the window — this one must count.
+  dispatchOn(R, null, null, '2026-09-11T00:00:00Z', { unattributed: true });
+
+  const cov = assemble(repo, { plans: [R], now: NOW }).envelope.coverage;
+  // In-window attributed dispatches on run-1 (from seed): TASK-A + TASK-B = 2. In-window unattributed
+  // on run-1: 1. run-2's dispatch and the post-window unattributed dispatch are invisible to both the
+  // numerator and the denominator — a pre-fix implementation counting the whole ledger would instead
+  // report unattributed_dispatches=2 and a share of 2/5.
+  assert.equal(cov.unattributed_dispatches, 1);
+  assert.equal(cov.unattributed_share, 0.3333);
+});
+
+test('Important fix 2: evidence.done for a landed non-task item matches on landing_at, not done_at — a child finishing after the explicit landing must not blank the landing evidence', () => {
+  const repo = tmp();
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null },
+    { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' },
+    { item_id: `${R}/task-b`, ref: 'TASK-B', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'M' },
+  ] });
+  const o = (id, ref, level, event, at, over = {}) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: id ? `${R}/${id}` : null, ref, level, event, at, transition_id: `${R}/${id ?? 'mission-g1'}/${event}/${over.t ?? 'episode-1'}`, source: 'cli', source_record_id: `${event}-${id ?? 'g1'}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'task', 'created', '2026-09-07T09:00:00Z'); o('task-b', 'TASK-B', 'task', 'created', '2026-09-07T09:00:00Z');
+  o('task-a', 'TASK-A', 'task', 'dispatched', '2026-09-08T09:00:00Z'); o('task-a', 'TASK-A', 'task', 'done', '2026-09-08T11:00:00Z');
+  // Explicit mission landing BEFORE task-b's own completion — timeline.mjs will later bump the
+  // mission's rolled-up done_at to task-b's later done_at, but landing_at stays pinned to this
+  // occurrence's own `at`.
+  o('mission-g1', 'G1', 'mission', 'done', '2026-09-09T00:00:00Z');
+  o('task-b', 'TASK-B', 'task', 'dispatched', '2026-09-10T09:00:00Z'); o('task-b', 'TASK-B', 'task', 'done', '2026-09-10T11:00:00Z');
+
+  const doc = assemble(repo, { now: NOW });
+  const g1 = doc.plans[0].items.find((i) => i.ref === 'G1');
+  assert.equal(g1.landing_at, '2026-09-09T00:00:00.000Z');
+  assert.equal(g1.done_at, '2026-09-10T11:00:00.000Z', 'done_at rolled up to the later child completion');
+  assert.notEqual(g1.done_at, g1.landing_at, 'precondition: this only proves the fix if the two clocks differ');
+  assert.ok(g1.evidence.done, 'landing evidence must not be null just because a child finished later');
+  assert.equal(g1.evidence.done.observation_id, 'cli:done-mission-g1:sec%2Frun-1%2Fmission-g1:done');
+});
+
 test('F20: invalid --since/--until/--cutoff and unknown --level are USAGE; --plan naming an unknown/malformed run is NO-PLAN; a malformed run file elsewhere is counted and skipped, never INTERNAL', () => {
   const repo = tmp(); seed(repo);
   assert.throws(() => assemble(repo, { now: NOW, since: 'not-a-date' }), (x) => x.code === 'USAGE');
@@ -245,4 +299,13 @@ test('F20: invalid --since/--until/--cutoff and unknown --level are USAGE; --pla
   assert.equal(doc.plans.length, 1, 'the malformed run is skipped, not thrown');
   assert.match(doc.envelope.caveats.join('\n'), /1 registered run file\(s\) malformed/);
   assert.throws(() => assemble(repo, { now: NOW, plans: ['sec/run-broken'] }), (x) => x.code === 'NO-PLAN', 'naming the malformed run by id is NO-PLAN, never INTERNAL');
+});
+
+test('minor (e): a run file with valid JSON but an item missing item_id is treated as malformed, not indexed with an undefined key', () => {
+  const repo = tmp(); seed(repo);
+  writeFileSync(runPath(repo, 'sec/run-noid'), `${JSON.stringify({ run: 'sec/run-noid', campaign_id: 'sec', run_id: 'run-noid', version: 1, status: 'open', observation_start: '2026-09-07T00:00:00Z', items: [{ ref: 'no-id-here', level: 'task', parent_item_id: null }] })}\n`);
+  const doc = assemble(repo, { now: NOW });
+  assert.equal(doc.envelope.coverage.malformed_runs, 1);
+  assert.equal(doc.plans.length, 1, 'only sec/run-1 is usable');
+  assert.throws(() => assemble(repo, { now: NOW, plans: ['sec/run-noid'] }), (x) => x.code === 'NO-PLAN');
 });

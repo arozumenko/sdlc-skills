@@ -46,7 +46,10 @@ function readAllRunFiles(repo) {
     const path = join(dir, f); const id = decodeSegment(f.replace(/\.json$/, ''));
     const buf = readFileSync(path);
     let rec = null, malformed = false;
-    try { const parsed = JSON.parse(buf.toString('utf8')); if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items) && parsed.run) rec = parsed; else malformed = true; }
+    // Minor (e): a run file whose catalogue has a row with no item_id is unusable to every caller
+    // that indexes items by item_id (known-set building, buildTimelines, evidence matching) — treat
+    // it the same as any other malformed run file, not a run with a silently-incomplete catalogue.
+    try { const parsed = JSON.parse(buf.toString('utf8')); if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items) && parsed.run && parsed.items.every((i) => i && typeof i === 'object' && i.item_id != null)) rec = parsed; else malformed = true; }
     catch { malformed = true; }
     return { id, path, buf, rec, malformed };
   });
@@ -88,10 +91,18 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
   return p ? { path: p.path ?? null, line: p.line ?? null, observation_id: p.observation_id ?? null } : null;
 }
 
+// F18 fix: for a task, `done_at` IS the occurrence's own `at` (reduceTimelineSnapshot sets
+// `it.done_at = o.at` directly), so matching on `done_at` finds the right occurrence. For a
+// non-task level with an explicit landing, `timeline.mjs` can bump `done_at` past the landing
+// occurrence's own `at` (`it.done_at = [explicit?.at, lastTerminal, ...].sort().pop()` — a later
+// child terminal wins) while `landing_at` stays pinned to the explicit occurrence's own `at`. So a
+// landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
+// landing occurrence whenever a child finished after it.
+const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
 const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
-  evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: evidenceFor(occ, i.item_id, 'done', i.done_at) } });
+  evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
 
 export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
   repo = resolveOwnerRepo(repo);
@@ -124,10 +135,15 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const unregistered = occurrences.filter((o) => !known.has(o.plan) || (o.item_id != null && !known.get(o.plan).has(o.item_id))).length;
   if (!occurrences.some((o) => runs.some((r) => r.run === o.plan) && o.at < end)) throw cliError('NO-EVENTS', `no observations before ${end} for ${runs.map((r) => r.run).join(',')}`);
 
-  // F19: admitted-but-unattributed dispatches — a hook-captured `dispatched` with no resolvable
-  // item_id (`meta.unattributed`). Counted globally (not per selected run): an unattributed dispatch
-  // has, by construction, no item_id to belong to any one run's catalogue.
-  const dispatches = occurrences.filter((o) => o.event === 'dispatched');
+  // F19 (fixed): admitted-but-unattributed dispatches — a hook-captured `dispatched` with no
+  // resolvable item_id (`meta.unattributed`). An unattributed dispatch has, by construction, no
+  // item_id to belong to any one run's catalogue, so it can't be scoped via `known`/`item_id` the way
+  // `unregistered` is — but it must still be scoped to the SELECTED runs (`o.plan` naming one of
+  // `runs`) and to the window (`o.at < end`), exactly like every other count in this report. Counting
+  // every dispatch in the whole ledger regardless of `--plan`/`--since`/`--cutoff` would make the
+  // share answer a question nobody asked.
+  const inScope = (o) => runs.some((r) => r.run === o.plan) && o.at < end;
+  const dispatches = occurrences.filter((o) => o.event === 'dispatched' && inScope(o));
   const unattributedDispatches = dispatches.filter((o) => o.item_id === null && o.meta?.unattributed === true).length;
   const attributedDispatches = dispatches.length - unattributedDispatches;
   const unattributedShare = attributedDispatches + unattributedDispatches ? Math.round((unattributedDispatches / (attributedDispatches + unattributedDispatches)) * 10000) / 10000 : null;
@@ -181,6 +197,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
 const h = (s) => (s == null ? '—' : `${toHours(s)}h`);
 const statRow = (name, stratum, s) => (s ? `| ${name} | ${stratum} | n=${s.n} | ${s.median == null ? '— (n<5)' : h(s.median)} | ${s.p85 == null ? '— (n<7)' : h(s.p85)} | ${s.p90 == null ? '— (n<10)' : h(s.p90)} | ${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''} |` : null);
 const pct = (r) => (r == null ? '—' : `${Math.round(r * 1000) / 10}%`);
+// Minor (b): the "how long has this open item been open, as of the window's effective end" figure
+// was duplicated at each open-items call-site — one shared helper.
+const ageH = (end, started) => (started ? `${toHours((Date.parse(end) - Date.parse(started)) / 1000)}h` : null);
 
 export function renderMarkdown(doc) {
   const e = doc.envelope; const L = [];
@@ -204,7 +223,10 @@ export function renderMarkdown(doc) {
     L.push('', '## Throughput', '');
     for (const [lv, t] of Object.entries(m.throughput)) {
       L.push(`- ${lv} per UTC ISO week: ${t.weeks.map((w) => `${w.key}=${w.count}${!w.covered ? '†' : (!w.whole ? '*' : '')}`).join(' ')} (*partial, †before declared coverage)`);
-      L.push(`- ${lv} velocity (median items per whole covered week): ${t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks} whole weeks)` : `— (${t.caveat.replace(/^velocity\([a-z]+\): /, '').replace(' — null', '')})`}`);
+      // Minor (c): built straight from data (t.velocity/t.weeks + the envelope's own
+      // policy.minWholeWeeks) rather than string-replacing metrics.mjs's `t.caveat` message — the
+      // rendered text no longer depends on that message's exact wording staying stable.
+      L.push(`- ${lv} velocity (median items per whole covered week): ${t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks} whole weeks)` : `— (${t.weeks.filter((w) => w.whole).length} whole weeks < ${e.policy.minWholeWeeks})`}`);
       L.push(`- ${lv} wip at end: ${m.wip[lv]}`);
     }
     if (m.mission_turnaround.pairs.length) L.push(`- mission_turnaround: ${m.mission_turnaround.pairs.map((x) => `${x.from}→${x.to} ${x.gap_s != null ? h(x.gap_s) : `overlap ${h(x.overlap_s)}`}`).join('; ')}`);
@@ -227,7 +249,7 @@ export function renderMarkdown(doc) {
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${JSON.stringify(c.sources)}`);
     L.push(`- registration_gaps=${p.registration_gaps}`);
     L.push('', '## Open items', '', '| ref | level | state | started | age |', '|---|---|---|---|---|');
-    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '— (no observed start)'} |`);
+    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
     L.push('');
   }
   L.push('### Envelope', '', `- ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}`);
@@ -250,11 +272,15 @@ export function renderStatus(doc) {
     L.push(`STATUS ${p.run} v${p.version} (${p.status}) at ${e.window.effective_end}`);
     for (const lv of ['campaign', 'mission', 'task', 'case']) { const rows = p.items.filter((i) => i.level === lv); if (!rows.length) continue; const n = (s) => rows.filter((i) => i.state === s).length; L.push(`  ${lv}: done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`); }
     for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
-    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${i.started_at ? `${toHours((Date.parse(e.window.effective_end) - Date.parse(i.started_at)) / 1000)}h` : '—'}`);
+    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}`);
     if (p.registration_gaps) L.push(`  registration_gaps=${p.registration_gaps} (items without a created observation)`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
   L.push(`  ledger: occurrence_conflicts=${e.coverage.occurrence_conflicts} ledger_conflicts=${e.coverage.ledger_conflicts} unregistered=${e.coverage.unregistered} malformed=${e.coverage.malformed_lines} malformed_runs=${e.coverage.malformed_runs}`);
-  for (const c of UNCONDITIONAL_CAVEATS) L.push(`  caveat: ${c}`);
+  // Minor (f): `e.caveats` is `[...UNCONDITIONAL_CAVEATS, ...derived]` (assemble) — printing the
+  // whole array, in that order, surfaces the derived count-bearing caveats (malformed lines,
+  // conflicts, unattributed dispatches, …) after the unconditional ones, instead of silently
+  // dropping them from `status` the way printing only the constant did.
+  for (const c of e.caveats) L.push(`  caveat: ${c}`);
   return `${L.join('\n')}\n`;
 }

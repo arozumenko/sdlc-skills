@@ -415,3 +415,19 @@ test('F20: report exits 2 (USAGE) on invalid date flags and unknown --level, exi
   assert.equal(badPlan.code, 3, badPlan.stderr); assert.match(badPlan.stderr, /^NO-PLAN\(/);
   for (const r of [run(repo, ['report', '--since', 'x']), badLevel, badPlan]) assert.ok(!/^INTERNAL/.test(r.stderr));
 });
+
+// Minor (a): --out/--plan bare flags are USAGE (via the shared requireValue guard), and --out
+// resolves against the repo the same way --from does elsewhere.
+test('minor (a): report/status bare --out/--plan are USAGE; --out resolves relative to repo', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const bareOut = run(repo, ['report', '--out']);
+  assert.equal(bareOut.code, 2, bareOut.stderr); assert.match(bareOut.stderr, /^USAGE\(--out requires a value/);
+  const barePlan = run(repo, ['report', '--plan']);
+  assert.equal(barePlan.code, 2, barePlan.stderr); assert.match(barePlan.stderr, /^USAGE\(--plan requires a value/);
+  const bareStatusPlan = run(repo, ['status', '--plan']);
+  assert.equal(bareStatusPlan.code, 2, bareStatusPlan.stderr); assert.match(bareStatusPlan.stderr, /^USAGE\(--plan requires a value/);
+  const rel = run(repo, ['report', '--out', 'report.md']);
+  assert.equal(rel.code, 0, rel.stderr); assert.ok(existsSync(join(repo, 'report.md')));
+  assert.match(rel.stdout, /^REPORT .*[/\\]report\.md\n$/, 'resolved (not left relative) against repo, like --from');
+});

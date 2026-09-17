@@ -315,16 +315,25 @@ function cmdProfile(repo, p, io) {
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
 
-/** F20: --from-json/--html/--calibrate are not in M1 — reject before assemble does any work. */
+/** F20: --from-json/--html/--calibrate are not in M1 — reject before assemble does any work.
+ * Minor (a): a bare `--out`/`--plan` (no value) must be USAGE via the same `requireValue` guard
+ * every other path/token flag already uses, not a boolean silently coerced into a plan id or a
+ * writeFileSync(true, ...) TypeError; `--out` resolves against `repo` like `--from` does elsewhere. */
 function cmdReport(repo, p, io, now) {
   const f = p.flags;
   for (const k of ['from-json', 'html', 'calibrate']) if (f[k]) throw cliError('USAGE', `--${k} is not in M1`);
-  const doc = assemble(repo, { plans: f.plan ? String(f.plan).split(',') : null, since: f.since ?? null, until: f.until ?? null, cutoff: f.cutoff ?? null, now, estimateBase: f['latest-estimate'] ? 'latest' : 'original', filters: { level: f.level ?? null, class: f.class ?? null } });
+  const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
+  const outFlag = f.out != null ? requireValue(f, 'out') : null;
+  const doc = assemble(repo, { plans: planFlag ? String(planFlag).split(',') : null, since: f.since ?? null, until: f.until ?? null, cutoff: f.cutoff ?? null, now, estimateBase: f['latest-estimate'] ? 'latest' : 'original', filters: { level: f.level ?? null, class: f.class ?? null } });
   const text = f.json ? `${JSON.stringify(doc, null, 2)}\n` : renderMarkdown(doc);
-  if (f.out) { writeFileSync(f.out, text); out(io, `REPORT ${f.out}`); } else io.stdout.write(text);
+  if (outFlag) { const outPath = resolve(repo, outFlag); writeFileSync(outPath, text); out(io, `REPORT ${outPath}`); } else io.stdout.write(text);
   return 0;
 }
-function cmdStatus(repo, p, io, now) { io.stdout.write(renderStatus(assemble(repo, { plans: p.flags.plan ? [p.flags.plan] : null, now }))); return 0; }
+function cmdStatus(repo, p, io, now) {
+  const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
+  io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now })));
+  return 0;
+}
 
 export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus };
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
