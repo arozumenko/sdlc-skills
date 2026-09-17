@@ -253,6 +253,25 @@ test("a corrupt log line ⇒ exit 5 CORRUPT and no write", () => {
   r = run(root, "status");
   assert.equal(r.code, 5);
   assert.ok(r.out[0].startsWith("CORRUPT events.jsonl:3"), r.out[0]);
+
+  // a hand-edited payload key never echoes raw in the CORRUPT line
+  const awsKey = "AKIA" + "A".repeat(16);
+  writeFileSync(join(root, LOG), before.split("\n").slice(0, 2).join("\n") + "\n" + JSON.stringify({ seq: 3, ts: "2026-01-01T00:00:00.000Z", actor: "x", row_id: "R-0001", event: "ticket", payload: { [awsKey]: "u" } }) + "\n");
+  r = run(root, "status");
+  assert.equal(r.code, 5);
+  assert.ok(r.out[0].startsWith("CORRUPT events.jsonl:3") && r.out[0].includes("<REDACTED:aws-key>") && !r.out[0].includes(awsKey), r.out[0]);
+
+  // a hand-edited line that folds fine still prints and renders redacted (belt and braces)
+  writeFileSync(join(root, LOG), before.split("\n").slice(0, 2).join("\n") + "\n" + JSON.stringify({ seq: 3, ts: "2026-01-01T00:00:00.000Z", actor: "x", row_id: "R-0001", event: "ticket", payload: { ticket_url: "https://x/?token=hunter22222" } }) + "\n");
+  r = run(root, "status", "--json");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const doc = JSON.parse(r.out.join("\n"));
+  assert.equal(doc.rows[0].ticket_url, "https://x/?token=<REDACTED:key-value>");
+  assert.equal(doc.rows[0].finding_id, FINDING_A, "identity hex survives the pass");
+  assert.match(doc.fingerprint, /^acme-2026-09:3:[0-9a-f]{64}$/, "the computed fingerprint is untouched");
+  assert.equal(run(root, "render").code, 0);
+  const md = readFileSync(join(root, `${ST}/risk-register.md`), "utf8");
+  assert.ok(md.includes("token=<REDACTED:key-value>") && !md.includes("hunter22222"), md);
 });
 
 test("a confirm verb does not exist; an unknown row is refused; the engagement is required", () => {
@@ -311,6 +330,7 @@ test("fixed/regressed are exported for verify.mjs and never print", async () => 
   assert.equal(readLog(root).at(-2).actor, "verify");
   assert.throws(() => mod.regressed(root, "R-0001", verifyPath), /regressed not allowed from regressed/);
   assert.throws(() => mod.fixed(root, "R-0009", verifyPath), /no row R-0009/);
+  assert.throws(() => mod.fixed(root, "token=hunter22222", verifyPath), { name: "UsageError", message: "a row id R-nnnn is required" }, "a bogus row id is refused by shape, never echoed");
   const { rows, seq } = mod.foldEvents(mod.readLog(root));
   assert.equal(seq, 3);
   assert.equal(rows.get("R-0001").status, "regressed");
@@ -353,6 +373,20 @@ test("redaction runs before any write: payload strings, the actor and an echoed 
   r = run(root, "fixed", "R-0001", "--verify", verifyPath);
   assert.equal(r.code, 0, r.out.join("\n"));
   assert.equal(readLog(root).at(-1).payload.head, head);
+
+  // a `head` that is not a full oid is content, not identity: redacted before the append (review 2)
+  writeFileSync(verifyPath, JSON.stringify({ verdict: "VERIFIED", head: `${awsKey} and token=hunter22222` }));
+  r = run(root, "regressed", "R-0001", "--verify", verifyPath);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const afterHead = readFileSync(join(root, LOG), "utf8");
+  assert.ok(afterHead.includes("<REDACTED:aws-key>"), afterHead);
+  assert.ok(!afterHead.includes(awsKey) && !afterHead.includes("hunter22222"), "a non-hex head never reaches events.jsonl raw");
+  assert.equal(readLog(root).at(-1).payload.head, "<REDACTED:aws-key> and token=<REDACTED:key-value>");
+
+  // a relative --verify resolves against the invoking cwd, not the root
+  const rel = spawnSync(process.execPath, [REG, "fixed", "R-0001", "--verify", "verify.json"], { cwd: verifyDir, encoding: "utf8", env: { ...process.env, USER: "env-user" } });
+  assert.equal(rel.status, 0, rel.stdout + rel.stderr);
+  assert.equal(readLog(root).at(-1).payload.verify, `${ST}/verify/aaaaaaaa-0123456/verify.json`, "recorded root-relative regardless of cwd");
 
   // the --verify path echoed in a USAGE line is redacted
   r = run(root, "regressed", "R-0001", "--verify", `no/such/${bearer}.json`);

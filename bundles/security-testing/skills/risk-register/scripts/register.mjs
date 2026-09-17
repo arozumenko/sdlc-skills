@@ -26,7 +26,9 @@
 // create a confirmed state. Messages never echo log bytes. Every operator
 // string (payload strings, the actor, an echoed --verify path) passes through
 // `lib/redact.mjs` before it is validated, appended or printed; `finding_id`
-// (64-hex) and `head` (40-hex) are identity, not content, and stay intact.
+// and `head` are identity, not content, and stay intact only when they are a
+// full 64-/40-hex value. Rendered cells and `status --json` rows pass through
+// it again, so a hand-edited log line never prints raw either.
 // Stdlib ESM only; no child process, no network. Imports only from ./lib/.
 
 import { createHash } from "node:crypto";
@@ -51,11 +53,23 @@ export const UNAUTHENTICATED_SENTENCE = "None of these records is authenticated.
 const sha256Hex = (input) => createHash("sha256").update(input).digest("hex");
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const short = (findingId) => `${findingId.slice(0, 8)}…`;
-/** Payload keys that are hex identity (a finding id, a commit) and never redacted. */
+/** Keys whose value is hex identity (a finding id, a commit) — exempt from redaction only when it is a full oid/sha256 (cite.mjs pattern). */
 const HEX_KEYS = new Set(["finding_id", "head"]);
+const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const clean = (s) => redactString(s).text;
-/** Every string value of a payload redacted, except the hex identity keys. */
-const redactPayload = (payload) => (isObject(payload) ? Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, typeof v === "string" && !HEX_KEYS.has(k) ? clean(v) : v])) : payload);
+/**
+ * Every string in a value redacted, recursively, except a string under one of
+ * `HEX_KEYS` that is a full oid/sha256. Arrays pass no key down. Runs on every
+ * payload before it is validated or appended, and on the rows `status --json`
+ * prints (belt and braces: a hand-edited log line still never prints raw).
+ */
+const redactDeep = (value, key) => {
+  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : clean(value);
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+  if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactDeep(v, k)]));
+  return value;
+};
+const redactPayload = (payload) => (isObject(payload) ? redactDeep(payload) : payload);
 
 /** The log cannot be folded; `.token` is the result line, exit 5. */
 export class CorruptError extends Error {
@@ -134,10 +148,10 @@ export function foldEvents(lines) {
     try {
       next = applyTransition(row, ev.event, ev.payload);
     } catch (e) {
-      if (e instanceof TransitionError) throw new CorruptError(n, e.message);
+      if (e instanceof TransitionError) throw new CorruptError(n, clean(e.message)); // a hand-edited key name would otherwise echo raw
       throw e;
     }
-    if (ev.event === "supersede" && !rows.has(ev.payload.by)) throw new CorruptError(n, `supersede target ${ev.payload.by} does not exist`);
+    if (ev.event === "supersede" && !rows.has(ev.payload.by)) throw new CorruptError(n, `supersede target ${clean(ev.payload.by)} does not exist`);
     next.id = ev.row_id;
     rows.set(ev.row_id, next);
     seq = ev.seq;
@@ -225,6 +239,7 @@ function verifyPayload(root, verifyPath) {
 }
 
 const verifyEvent = (event) => (root, rowId, verifyPath, by) => {
+  if (typeof rowId !== "string" || !ROW_ID.test(rowId)) throw new UsageError("a row id R-nnnn is required");
   const row = transition(root, { event, rowId, payload: verifyPayload(root, verifyPath), actor: actorOf(by) });
   return { id: row.id, status: row.status };
 };
@@ -313,9 +328,11 @@ function ticket(args, ctx) {
   sayRow(ctx, transition(ctx.root, { event: "ticket", rowId, payload: { ticket_url }, actor: actorOf(args.by) }));
 }
 
+/** The CLI resolves a relative `--verify` against the invoking cwd (the usual CLI convention); the in-process export takes a root-relative or absolute path. */
 const verifyVerb = (fn) => (args, ctx) => {
   readEngagement(ctx.root);
-  const row = fn(ctx.root, rowIdArg(args), args.verify, args.by);
+  const verify = typeof args.verify === "string" && args.verify.length > 0 ? resolve(ctx.cwd, args.verify) : args.verify;
+  const row = fn(ctx.root, rowIdArg(args), verify, args.by);
   ctx.out(`ROW ${row.id} ${row.status}`);
 };
 
@@ -377,7 +394,7 @@ function status(args, ctx) {
   const expected = typeof args.expect === "string" ? parseExpect(args.expect) : undefined; // before anything prints
   const s = summary(ctx.root);
   if (args.json === true) {
-    ctx.out(JSON.stringify(s, null, 2));
+    ctx.out(JSON.stringify({ ...s, rows: redactDeep(s.rows) }, null, 2)); // rows only: fingerprint/sha256 are computed hex the high-entropy rule would eat
   } else {
     for (const st of STATUSES) ctx.out(`COUNT ${st}=${s.counts[st]}`);
     ctx.out(`OPEN-EXPOSURE ${PRIORITIES.map((p) => `${p}=${s.open_exposure[p]}`).join(" ")}`);
@@ -390,9 +407,9 @@ function status(args, ctx) {
   return verdict === "DIVERGED" ? 4 : 0;
 }
 
-/** One Markdown table cell: never a pipe or a line break, never empty. */
+/** One Markdown table cell: redacted, never a pipe or a line break, never empty. */
 const cell = (v) => {
-  const flat = String(v ?? "").replace(/\r\n|\r|\n/g, " ").replace(/\|/g, "\\|");
+  const flat = clean(String(v ?? "")).replace(/\r\n|\r|\n/g, " ").replace(/\|/g, "\\|");
   return flat === "" ? "-" : flat;
 };
 const tableLine = (cells) => `| ${cells.join(" | ")} |`;
