@@ -253,3 +253,12 @@ test('minor: zero_midpoint is a mutually exclusive exclusion reason, not an elig
   assert.deepEqual(e.excluded, { excluded_item: 0, unestimated: 0, unaccepted: 0, no_eligible_latest: 0, unit_mismatch: 0, missing_actual: 0, late_accepted: 0, zero_midpoint: 1, zero_actual: 0, point: 0, clock_skew: 0 });
   assert.equal(e.work_ratio, null); assert.equal(e.mae_s, null);
 });
+
+test('research-09: weekKeys has a coverage end — weeks after a closed run are dropped, a straddling week is partial', () => {
+  const w = weekKeys('2026-09-01T00:00:00Z', '2026-10-15T00:00:00Z', '2026-09-01T00:00:00Z', '2026-09-23T12:00:00Z');
+  assert.deepEqual(w.map((x) => x.key), ['2026-W36', '2026-W37', '2026-W38', '2026-W39'], 'nothing after the close week');
+  assert.equal(w.find((x) => x.key === '2026-W39').whole, false, 'week straddling the close is not whole');
+  assert.equal(w.find((x) => x.key === '2026-W37').whole, true);
+  const open = weekKeys('2026-09-01T00:00:00Z', '2026-10-15T00:00:00Z');
+  assert.equal(open.length, 7, 'without a close the series runs to the window end');
+});

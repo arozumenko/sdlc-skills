@@ -99,7 +99,7 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags,
+const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, flags: i.flags,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -457,7 +457,7 @@ export function renderHtml(doc) {
     const campaign = byLevel('campaign')[0] ?? null;
     const estRow = new Map(m.estimate_rows.map((r) => [r.item_id, r]));
     const svRow = new Map(m.schedule_variance.map((r) => [r.ref, r]));
-    const missionOf = new Map(); for (const g of missions) for (const c of g.first_completion?.children ?? []) missionOf.set(c, g.ref);
+    const missionOf = new Map(); for (const t of tasks) if (t.parent_item_id) { const g = missions.find((x) => x.item_id === t.parent_item_id); if (g) missionOf.set(t.item_id, g.ref); }
     const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
     const es = m.estimates.task?.strata?.all ?? null;
     const doneTasks = count(tasks, 'done');
@@ -481,7 +481,7 @@ export function renderHtml(doc) {
       kpiCard('Cycle time <span class="stat-sub">dispatch → merge</span>', [
         statCell('Median', ct ? (ct.median == null ? needs(ct.n, 5) : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>'),
         statCell('Range', ct ? `${fmtDur(ct.min)}–${fmtDur(ct.max)}` : '—'),
-        statCell('Tasks measured', ct ? `${ct.n} of ${doneTasks}` : `0 of ${doneTasks}`),
+        statCell('Tasks measured', `${ct ? ct.n : 0} of ${doneTasks} done <span class="stat-sub">· ${count(tasks, 'in_progress')} still open</span>`),
         statCell('Lead time <span class="stat-sub">planned → merge</span>', lt ? (lt.median == null ? `${fmtDur(lt.min)}–${fmtDur(lt.max)}` : fmtDur(lt.median)) : '—'),
       ], `Cycle time runs from the first observed dispatch to the merge; lead time from registration in the plan. Medians need ≥5 finished tasks, P85 ≥7, P90 ≥10 — smaller sets show the range instead.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
       kpiCard('Throughput', [
@@ -493,10 +493,10 @@ export function renderHtml(doc) {
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
         statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
         statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
-        statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
         statCell('Counted', `${es.eligible} of ${es.n} <span class="stat-sub">estimates</span>`),
+        statCell('Not counted', excludedStr(es.excluded) ? Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `${v} <span class="stat-sub">${esc(k.replace(/_/g, ' '))}</span>`).join(' · ') : '0'),
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
-      `An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Error = median of |estimate − actual| ÷ actual.${es && excludedStr(es.excluded) ? ` Excluded: ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join('')}` : ''}`),
+      'An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Accuracy statistics (MdMRE, PRED(25), MAE) are in the assessor tables below.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
 
@@ -523,10 +523,11 @@ export function renderHtml(doc) {
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
     const maxMission = Math.max(1, ...missionElapsed.filter((c) => c != null));
     const missionRows = missions.map((g, idx) => {
-      const kids = g.first_completion?.children ?? []; const kidItems = kids.map((k) => p.items.find((i) => i.item_id === k)).filter(Boolean);
+      const cs = g.current_scope?.child_summary ?? { done: 0, cancelled: 0, open: 0, unknown: 0 };
+      const inScope = cs.done + cs.open + cs.unknown;
       const el = missionElapsed[idx]; const sv = svRow.get(g.ref);
       const detail = [
-        `${kidItems.filter((i) => i.state === 'done').length}/${kids.length} tasks done`,
+        `${cs.done}/${inScope} tasks done${cs.open ? ` · ${cs.open} open` : ''}${cs.cancelled ? ` · ${cs.cancelled} cancelled` : ''}`,
         g.estimate ? `estimate ${fmtRangeH(g.estimate)}` : 'no estimate',
         sv ? `<span class="oc ${sv.band.vs_low_s < 0 || sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done'}">${esc(bandText(sv))}</span>` : null,
         sv && (sv.scope.added || sv.scope.removed) ? `scope +${sv.scope.added}/−${sv.scope.removed}` : null,

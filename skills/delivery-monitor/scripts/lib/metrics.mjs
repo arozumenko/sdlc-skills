@@ -18,10 +18,13 @@ export function isoWeekUtc(iso) {
   const jan4 = new Date(Date.UTC(thu.getUTCFullYear(), 0, 4)); const week = 1 + Math.round(((thu - jan4) / 86400000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
   return `${thu.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
-export function weekKeys(since, end, coverageStart = since) {
-  const s = Date.parse(since), e = Date.parse(end), c = Date.parse(coverageStart); const out = [];
-  for (let w = weekStartUtc(since); w.getTime() < e; w = new Date(w.getTime() + 7 * 86400000)) {
-    const next = w.getTime() + 7 * 86400000; const covered = w.getTime() >= c && next <= e;
+// Research-09: the series has a coverage END as well as a start — once a run is closed, weeks after
+// the close are not "zero throughput", they are outside the observation; they are dropped rather
+// than zero-filled, and a week straddling the close is partial (not whole).
+export function weekKeys(since, end, coverageStart = since, coverageEnd = end) {
+  const s = Date.parse(since), e = Date.parse(end), c = Date.parse(coverageStart), ce = Math.min(e, Date.parse(coverageEnd)); const out = [];
+  for (let w = weekStartUtc(since); w.getTime() < ce; w = new Date(w.getTime() + 7 * 86400000)) {
+    const next = w.getTime() + 7 * 86400000; const covered = w.getTime() >= c && next <= ce;
     out.push({ key: isoWeekUtc(w.toISOString()), start: w.toISOString(), end: new Date(next).toISOString(), covered, whole: covered && w.getTime() >= s });
   }
   return out;
@@ -68,7 +71,9 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     excluded_items: { invalid_chain: completed.filter(invalidChain).length, deferred_episode: completed.filter(deferredEpisode).length, proxy_completions: completed.filter(proxyCompletion).length } },
     inventory: { excluded_items: { invalid_chain: all.filter(invalidChain).length, deferred_episode: all.filter(deferredEpisode).length, proxy_completions: all.filter(proxyCompletion).length } },
     flow: {}, throughput: {}, wip: {}, mission_turnaround: { pairs: [], stats: null }, estimates: {}, estimate_rows: [], schedule_variance: [], coverage: {}, rework_proxy_items: completed.filter((i) => i.rework_count > 0).length, caveats };
-  const weeks = weekKeys(sinceIso, endIso, covStart);
+  const covEnd = plan?.status === 'closed' && plan.updated_at && Date.parse(plan.updated_at) < Date.parse(endIso) ? new Date(Date.parse(plan.updated_at)).toISOString() : endIso;
+  data.window.coverage_end = covEnd;
+  const weeks = weekKeys(sinceIso, endIso, covStart, covEnd);
   for (const level of LEVELS) {
     const lvAll = all.filter((i) => i.level === level); if (!lvAll.length) continue;
     const done = completed.filter((i) => i.level === level);

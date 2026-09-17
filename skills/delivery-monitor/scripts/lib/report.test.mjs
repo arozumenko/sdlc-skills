@@ -424,6 +424,9 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
     { item_id: `${R}/campaign`, ref: 'sec-campaign', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1, estimate: EST(2, 4) },
     { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 3) },
+    { item_id: `${R}/mission-g2`, ref: 'G2', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 2 },
+    { item_id: `${R}/task-b`, ref: 'TASK-B', level: 'task', parent_item_id: `${R}/mission-g2`, class: 'M' },
+    { item_id: `${R}/task-c`, ref: 'TASK-C', level: 'task', parent_item_id: `${R}/mission-g2`, class: 'M' },
   ] });
   const o = (id, ref, level, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
   const est = (id, ref, level, e) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/${id}/estimated/rev-0`, source: 'cli', source_record_id: `est-${id}`, estimate: e, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
@@ -433,9 +436,10 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   const html = renderHtml(assemble(repo, { now: NOW }));
   // Header names the campaign, not the run id; the run id is the muted sub-line.
   assert.match(html, /<h2>sec-campaign <span class="sub">campaign sec\/run-1 · plan v1 · in progress<\/span><\/h2>/);
+  assert.ok(html.includes('2 task(s) not started yet'), 'planned tasks called out on the Delivery card');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Completed in window', 'Velocity', 'Within range', 'Work vs estimate', 'Typical error']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
-  assert.ok(html.includes('<span class="stat-value">1 / 1</span>'), 'tasks done 1 / 1');
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Completed in window', 'Velocity', 'Within range', 'Work vs estimate', 'Not counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  assert.ok(html.includes('<span class="stat-value">1 / 3</span>'), 'tasks done 1 / 3 (G2 tasks registered, not started)');
   assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
   assert.doesNotMatch(html.split('<details>')[0], /\d\.\d\dh\b/, 'no two-decimal-hours in the human sections');
@@ -444,6 +448,12 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   // Per-mission row carries the schedule-variance verdict in words.
   assert.match(html, /G1<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div>.*1\/1 tasks done · estimate 2 h–4 h · <span class="oc oc-done">within the estimate<\/span>/);
   assert.ok(html.includes('of estimated time'), 'work vs estimate reads as a percentage of the estimate');
+  // Research-09 defect: an OPEN mission must render k/N from current scope, never 0/0 (first_completion is null until it lands).
+  o('mission-g2', 'G2', 'mission', 'created', '2026-09-09T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'created', '2026-09-09T00:00:00Z'); o('task-c', 'TASK-C', 'task', 'created', '2026-09-09T00:00:00Z');
+  o('task-b', 'TASK-B', 'task', 'dispatched', '2026-09-11T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'done', '2026-09-11T01:00:00Z');
+  const html2 = renderHtml(assemble(repo, { now: NOW }));
+  assert.match(html2, /G2<span class="oc oc-in_progress">in progress<\/span>.*?1\/2 tasks done · 1 open/, 'open mission shows done/in-scope from current_scope.child_summary');
+  assert.match(html2, /TASK-C<span class="oc oc-planned">planned<\/span>.*?mission G2/, 'a never-dispatched task still knows its mission (parent link, not first_completion)');
   // Assessor tables are still all there, but collapsed.
   const details = html.split('<details>');
   assert.ok(details.length >= 3, 'statistics + envelope are <details> blocks');
