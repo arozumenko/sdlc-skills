@@ -8,7 +8,7 @@ required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
 skills: [seeding-automation-project, memory]
-skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective]
+skills-on-demand: [automation-scoping, efficiency-audit, tokenomics, session-retrospective, delivery-metrics]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -103,6 +103,14 @@ what you generate.)*
 ## Optional telemetry (ask, don't assume)
 
 During onboarding, ask once whether the team wants continuous usage telemetry — per-session tokens/cost/time captured into a git-committed ledger the whole team accumulates. If yes, run the `tokenomics` skill's `scripts/install-hooks.mjs` (it wires the capture hooks; installing the factory alone never activates capture) and note the decision in the seed report. Enabling it also activates the **work-scope contract** (tokenomics SKILL.md § Session scope): each work session declares what it's for at start and records case outcomes as they land — hooks announce the session id and gate-check the declaration on Claude and current Copilot CLIs; the lead's obligations live in the orchestration playbook (§ Intake, § Close). Measuring a past period on demand instead is `efficiency-audit`; mining sessions for lessons is `session-retrospective`.
+
+Ask once whether the team wants **delivery tracking** (cycle time, weekly
+throughput, estimate-vs-actual per task/mission/campaign into the shared
+telemetry submodule). If yes, run `node
+.claude/skills/delivery-metrics/scripts/install-hooks.mjs` (bootstraps the
+telemetry submodule when tokenomics has not, wires the Claude hook) and note
+the decision in the seed report; the tracker also works without the hook
+through the CLI and `backfill --git`.
 
 ## Scoping a batch of cases before automation starts
 

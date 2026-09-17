@@ -25,6 +25,30 @@ node .claude/skills/delivery-metrics/scripts/delivery.mjs report [--json] [--sin
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.
 Design: `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.
 
+## Telemetry mode
+
+`.agents/telemetry/` is a shared submodule (branch `telemetry`) `install-hooks.mjs` bootstraps —
+one `delivery/` subfolder alongside `tokenomics`' `automation/`, committed and pushed
+best-effort on every mutation (`DELIVERY_NO_SYNC=1` disables sync for local/offline use). Until
+that bootstrap has run (neither skill has wired it yet), records ride the main tree as a **plain
+directory** instead — fully usable, just not yet split into its own history/push cadence.
+`delivery.mjs doctor` and `install-hooks.mjs --doctor` report which mode is active
+(`telemetry: submodule` vs `telemetry: plain-dir`); `install-hooks.mjs --no-submodule` keeps
+plain-dir mode explicitly; `--remove` unwires the hook and ignore blocks without touching ledger
+data.
+
+## Roster
+
+`plan register` snapshots which installed agents are eligible to attribute dispatches to this
+run: the default roster is the **installed roles intersected with this skill's shipped
+factory→role map** (`references/factory-roles.json`) for the plan's own `factory`. A run whose
+work spans more than one factory supplies `--factories feature-development,test-automation` at
+registration (or later via `plan roster --plan <run> --agents <installed union>`) to widen that
+intersection. `--roster`/`plan roster --agents` must equal the computed union exactly — they
+assert it, they don't set it arbitrarily; an unknown factory or a role outside every named
+factory's map fails `USAGE`. The Claude hook reads this saved, already-validated roster snapshot
+only — it never re-walks installed agent directories or any source-checkout manifest itself.
+
 ## What it does not do
 
 This is an honest derivation from readable, local evidence — not a durability,
