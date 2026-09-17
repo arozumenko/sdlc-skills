@@ -1,0 +1,7 @@
+# Security Testing Team — shared conventions
+
+- **What the team does:** a threat-led, read-only security assessment of this repo — a code-derived STRIDE threat model with file:line citations, a secure code review whose citations anyone with the repo can re-check (`cite.mjs check`), passive security cases handed to the `manual-qa` / `test-automation` teams, fix verification with a script-emitted verdict (`verify.mjs`), and a residual-risk register whose acceptances are recorded as unauthenticated (`register.mjs`).
+- **Roles:** `security-lead` orchestrates and is the only human-facing role; `threat-modeler` writes the threat model and candidate passive cases; `security-reviewer` runs one contract per fresh dispatch — `review`, `vulnerability-review`, `mitigation-review`, `fix-review`.
+- **Start with** `claude --agent security-lead` — it runs `cite.mjs init`, dispatches the other two roles, checks their citations, admits cases, prints the hand-off prompts and stops.
+- **Artifacts live in** `.agents/security-testing/` (engagement record, reviews, threat model, cases, register, verify runs), `reports/security/` (the assessment report), and `tasks/security-<slug>-admitted/` (the admitted passive suite, written only by `cases.mjs admit`).
+- **Agents never merge, close, rotate or fix.** They write assertions, never `id`, `state` or `verdict`; approval-like records are stored `authenticated: false` and no command creates a confirmed state.
