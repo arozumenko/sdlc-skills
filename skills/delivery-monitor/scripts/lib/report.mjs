@@ -457,7 +457,7 @@ export function renderHtml(doc) {
         statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
         statCell('Counted', `${es.eligible} of ${es.n}${excludedStr(es.excluded) ? ` <span class="stat-sub">· ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `${v} ${esc(k.replace(/_/g, ' '))}`).join(', ')}</span>` : ' <span class="stat-sub">estimates</span>'}`),
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
-      'An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
+      'Only accepted estimates count; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
     const burnup = burnupSvg(p, e, tasks);
@@ -499,7 +499,7 @@ export function renderHtml(doc) {
       ].filter(Boolean).join(' · ');
       return `<div class="row"><div class="lbl" title="${esc(t.item_id)}">${esc(t.ref)}${stateChip(t.state)}</div><div class="track">${c != null ? `<div class="bar" style="width:${Math.max(1, (c / maxCycle) * 100)}%"></div>` : ''}</div><div class="num">${c != null ? fmtDur(c) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
     }).join('');
-    parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the ranges the tech-lead declared and a named human accepted; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
+    parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the accepted ranges from the plan; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
 
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
