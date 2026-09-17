@@ -41,6 +41,16 @@ test('resolveRefs: description, unique message match, branch alias, ambiguity, w
   assert.equal(resolveRefs(run, { description: 'TASK-0230', firstUserText: '' }).items.length, 0);
 });
 
+test('resolveRefs: task-level items take precedence over mission-level (controller ruling); case-insensitive whole word', () => {
+  // "G1 TASK-023 build" mentions both a mission ref (G1) and a task ref (TASK-023) — the task-level
+  // match wins outright, the mission-level candidate is never even considered.
+  assert.deepEqual(resolveRefs(run, { description: 'G1 TASK-023 build', firstUserText: '' }).items.map((i) => i.ref), ['TASK-023']);
+  // Two distinct tasks mentioned together stay ambiguous — never falls through to a mission-level guess.
+  assert.equal(resolveRefs(run, { description: 'G1 TASK-023 TASK-034 build', firstUserText: '' }).how, 'ambiguous');
+  // Case-insensitive (review minor b), matching the branch-alias comparison's existing lowercasing.
+  assert.deepEqual(resolveRefs(run, { description: 'fixing task-023 build issue', firstUserText: '' }).items.map((i) => i.ref), ['TASK-023']);
+});
+
 test('findChildTranscript: documented shape; agent_transcript_path accepted only when correlated to session and agent', () => {
   const t = transcripts();
   assert.equal(findChildTranscript(payload(t)).path, t.child);
@@ -90,6 +100,26 @@ test('F13: progress row + torn trailing JSON is not completion evidence — disp
   assert.equal(mine.length, 1); assert.equal(mine[0].event, 'dispatched'); assert.equal(mine[0].item_id, `${R}/task-task-023`);
 });
 
+test('F13: a torn trailing line after a parseable completion record still means not complete', () => {
+  const repo = setup();
+  const t = transcripts({ agentId: 'agent-22' }); // establishes the sess-1/subagents dir
+  const dir = dirname(t.child);
+  const child = join(dir, 'agent-23.jsonl');
+  writeFileSync(child, [
+    JSON.stringify({ type: 'user', timestamp: '2026-09-16T09:00:00.000Z', message: { role: 'user', content: [{ type: 'text', text: 'Implement TASK-023.' }] } }),
+    // Real completion evidence — but it is NOT the last non-blank line, so it must not be trusted.
+    JSON.stringify({ type: 'assistant', timestamp: '2026-09-16T09:15:00.000Z', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] } }),
+    // Torn/truncated trailing line.
+    '{"type":"assistant","timestamp":"2026-09-16T09:2',
+  ].join('\n') + '\n');
+  writeFileSync(join(dir, 'agent-23.meta.json'), JSON.stringify({ agentType: 'js-dev', description: 'Implement TASK-023' }));
+  const r = handleStop(payload(t, { agent_id: 'agent-23' }), { repo, now: NOW });
+  assert.equal(r.diagnostic, 'incomplete-transcript');
+  assert.deepEqual(r.wrote.map((w) => w.result), ['EVENT']);
+  const mine = resolveObservations(repo).active.filter((o) => o.agentId === 'agent-23');
+  assert.equal(mine.length, 1); assert.equal(mine[0].event, 'dispatched');
+});
+
 test('F9: hook re-fire after a plan re-cut (run.version bump) SKIPs — semantic identity excludes meta.version', () => {
   const repo = setup();
   const t = transcripts({ agentId: 'agent-30' });
@@ -117,6 +147,17 @@ test('guards: no open plan → nothing; unbound session → diagnostic; foreign-
   const foreign = setup(); assert.deepEqual(handleStop(payload(transcripts({ agentType: 'qa-auditor' })), { repo: foreign, now: NOW }), { wrote: [], diagnostic: null }, 'qa-auditor is not in the plan roster even if installed');
   const unknown = setup(); const ru = handleStop(payload(transcripts({ agentType: '' })), { repo: unknown, now: NOW }); assert.equal(ru.diagnostic, 'unknown-role'); assert.equal(ru.wrote.length, 2);
   const missing = setup(); const rm = handleStop(payload(t, { agent_id: 'agent-9' }), { repo: missing, now: NOW }); assert.equal(rm.diagnostic, 'no-transcript'); assert.equal(rm.wrote.length, 0);
+});
+
+test('invalid-roster: a tampered roster snapshot short-circuits before the transcript guard', () => {
+  const repo = setup();
+  const saved = loadRun(repo, R);
+  saveRun(repo, { ...saved, roster: { ...saved.roster, map_sha256: 'deadbeef'.repeat(8) } });
+  const t = transcripts(); // transcript is present and would otherwise resolve fine
+  const r = handleStop(payload(t), { repo, now: NOW });
+  assert.equal(r.diagnostic, 'invalid-roster');
+  assert.deepEqual(r.wrote, []);
+  assert.equal(resolveObservations(repo).active.length, 0);
 });
 
 test('diagnostics file lines: exactly {at, kind, session, agent_id, detail} (F19)', () => {
@@ -161,6 +202,12 @@ test('register and bind in an arbitrary linked worktree, capture there, report o
 
 test('script: malformed stdin / missing fields → exit 0, no stdout, no files', () => {
   const repo = setup();
+  const before = readdirSync(deliveryDir(repo)).sort();
   for (const input of ['not json', '{}', JSON.stringify({ session_id: 'sess-1' })]) assert.equal(execFileSync('node', [SCRIPT, '--stop'], { input, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo, DELIVERY_NO_SYNC: '1' } }), '');
   assert.equal(resolveObservations(repo).active.length, 0);
+  const after = readdirSync(deliveryDir(repo)).sort();
+  // Minor (a) (review round): prove no events-*/diagnostics-* files were created, not just that
+  // resolveObservations sees none (which could pass even if a diagnostics-*.jsonl file appeared).
+  assert.deepEqual(after, before);
+  assert.deepEqual(after.filter((f) => f.startsWith('events-') || f.startsWith('diagnostics-')), []);
 });

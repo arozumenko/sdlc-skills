@@ -60,29 +60,49 @@ function isCompletionEvidence(r) {
 export function parseTranscript(path) {
   const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false };
   let text; try { text = readFileSync(path, 'utf8'); } catch { return out; }
+  const lines = text.split('\n');
+  // F13 (review round): a torn/truncated FINAL line means the write is mid-flight, and the
+  // transcript as a whole is not trustworthy yet — even when an earlier, well-formed record already
+  // looks like completion evidence. Find the last *non-blank* line and check it parses on its own,
+  // independent of the main pass below (which silently skips unparseable lines wherever they occur).
+  let lastNonBlank = -1;
+  for (let i = lines.length - 1; i >= 0; i--) { if (lines[i].trim()) { lastNonBlank = i; break; } }
+  let tornTail = false;
+  if (lastNonBlank >= 0) { try { JSON.parse(lines[lastNonBlank]); } catch { tornTail = true; } }
   let sawUser = false, lastRecord = null, lastRecordTs = null;
-  for (const line of text.split('\n')) {
+  for (const line of lines) {
     if (!line.trim()) continue;
-    let r; try { r = JSON.parse(line); } catch { continue; } // malformed/torn lines (incl. a truncated trailing write) contribute no evidence
+    let r; try { r = JSON.parse(line); } catch { continue; } // malformed/torn lines contribute no evidence to lastRecord
     out.records++;
     const t = r.timestamp ? Date.parse(r.timestamp) : NaN;
     if (!Number.isNaN(t)) { const iso = new Date(t).toISOString(); if (!out.firstTs || iso < out.firstTs) out.firstTs = iso; lastRecord = r; lastRecordTs = iso; }
     if (r.type === 'user') sawUser = true; else if (sawUser) out.hasActivity = true;
     if (!out.firstUserText && r.type === 'user') out.firstUserText = textOf(r.message?.content);
   }
-  // Completion requires the LAST timestamped record — not merely some earlier non-user record — to be
-  // real completion evidence; a progress row or a torn trailing line leaves `complete` false even
-  // though `hasActivity` is true.
-  if (sawUser && lastRecord && lastRecord.type !== 'user' && isCompletionEvidence(lastRecord)) { out.complete = true; out.lastTs = lastRecordTs; }
+  // Completion requires the LAST timestamped (well-formed) record — not merely some earlier non-user
+  // record — to be real completion evidence, AND the file's actual last line must itself have parsed
+  // (`!tornTail`); a progress row, or a torn trailing line after real evidence, leaves `complete`
+  // false even though `hasActivity` is true.
+  if (!tornTail && sawUser && lastRecord && lastRecord.type !== 'user' && isCompletionEvidence(lastRecord)) { out.complete = true; out.lastTs = lastRecordTs; }
   return out;
 }
-const wordHit = (text, ref) => new RegExp(`(^|[^A-Za-z0-9-])${ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-])`).test(text ?? '');
-export function resolveRefs(run, { description = '', firstUserText = '', branch = null }) {
-  const tasks = run.items.filter((i) => i.level !== 'campaign' && !i.cancelled);
-  const inDesc = tasks.filter((i) => wordHit(description, i.ref)); if (inDesc.length === 1) return { items: inDesc, how: 'description' }; if (inDesc.length > 1) return { items: [], how: 'ambiguous' };
-  const inMsg = tasks.filter((i) => wordHit(firstUserText, i.ref)); if (inMsg.length === 1) return { items: inMsg, how: 'message' }; if (inMsg.length > 1) return { items: [], how: 'ambiguous' };
-  if (branch) { const b = tasks.filter((i) => i.branch && i.branch.toLowerCase() === branch.toLowerCase()); if (b.length === 1) return { items: b, how: 'branch' }; }
+// Case-insensitive (review minor b): a lowercase `task-023` in a description/message must match
+// `TASK-023` the same way the branch alias comparison already lowercases both sides.
+const wordHit = (text, ref) => new RegExp(`(^|[^A-Za-z0-9-])${ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-])`, 'i').test(text ?? '');
+const matchLevel = (items, { description, firstUserText, branch }) => {
+  const inDesc = items.filter((i) => wordHit(description, i.ref)); if (inDesc.length === 1) return { items: inDesc, how: 'description' }; if (inDesc.length > 1) return { items: [], how: 'ambiguous' };
+  const inMsg = items.filter((i) => wordHit(firstUserText, i.ref)); if (inMsg.length === 1) return { items: inMsg, how: 'message' }; if (inMsg.length > 1) return { items: [], how: 'ambiguous' };
+  if (branch) { const b = items.filter((i) => i.branch && i.branch.toLowerCase() === branch.toLowerCase()); if (b.length === 1) return { items: b, how: 'branch' }; }
   return { items: [], how: null };
+};
+// Controller ruling (review round): task-level items take precedence over mission-level items. Only
+// when no task-level match is found (and the task-level result isn't itself ambiguous — that stays
+// ambiguous rather than falling through to a mission-level guess) do we consider mission-level items.
+export function resolveRefs(run, opts) {
+  const candidates = run.items.filter((i) => i.level !== 'campaign' && !i.cancelled);
+  const taskResult = matchLevel(candidates.filter((i) => i.level === 'task'), opts);
+  if (taskResult.items.length || taskResult.how === 'ambiguous') return taskResult;
+  return matchLevel(candidates.filter((i) => i.level === 'mission'), opts);
 }
 export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k < 10; k++) { const res = appendObservation(repo, r, opts); if (res.result !== 'ID-CONFLICT') return res; r = { ...r, revision: r.revision + 1 }; } return { result: 'ID-CONFLICT', observation_id: rec.observation_id, revision: rec.revision }; }
 // F19: diagnostics lines are exactly {at, kind, session, agent_id, detail} with `kind` drawn from the
