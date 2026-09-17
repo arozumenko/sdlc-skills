@@ -1,0 +1,3 @@
+{ "capturePrompts": false, "zeroDurationSec": 60, "minWholeWeeks": 3,
+  "baselines": { "cycle_time_task_h": null, "cycle_time_mission_h": null, "throughput_task_per_week": null, "first_pass_rate": null, "hit_rate": null },
+  "tokenomics": "auto" }
