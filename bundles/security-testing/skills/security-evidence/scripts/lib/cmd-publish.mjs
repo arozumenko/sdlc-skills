@@ -231,7 +231,7 @@ function writeSet(ctx, { dest, profile, version, outputs, manifestName, source, 
   for (const o of outputs) {
     const path = join(dest.abs, o.relpath);
     if (existsSync(path) && statSync(path).isDirectory()) throw usageError(COMMAND, `${dest.rel}/${o.relpath} is a directory; choose another --to`);
-    if (differs(path, o.bytes)) throw usageError(COMMAND, `${dest.rel}/${o.relpath} already exists with different content; choose another --to`);
+    if (differs(path, o.bytes)) throw usageError(COMMAND, `${dest.rel}/${o.relpath} already exists with different content; ${M3_PROFILES.includes(profile) ? "remove the stale file first (its --to is fixed)" : "choose another --to"}`);
   }
   let existingManifest = null;
   if (existsSync(manifestPath)) {
@@ -303,6 +303,9 @@ function publishHandoff(ctx, { run_id, profile, to, opts, mod }) {
   if (profile === "handoff") {
     const base_url = opts.base_url ?? source.engagement?.payload?.base_url;
     if (typeof base_url !== "string") throw usageError(COMMAND, "the handoff profile needs a base_url: pass --base-url or set it in engagement.md");
+    // G-4 ahead of writeSet's self-check (review 1): a base_url redact.mjs rewrites (`?token=…`, a credential) would
+    // leave the prompt unredacted — 2 USAGE with the reason, not the self-check's internal error
+    if (redactString(base_url).text !== base_url) throw usageError(COMMAND, "the handoff base_url carries a value redact.mjs rewrites (a token, key or credential); pass a base URL without it");
     recorded.base_url = base_url;
   }
   const resolved = resolveDestination(ctx, profile, to, recorded);

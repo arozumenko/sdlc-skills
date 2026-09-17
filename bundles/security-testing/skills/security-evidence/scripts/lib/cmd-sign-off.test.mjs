@@ -625,6 +625,22 @@ test("a suite directory with no publish behind it ⇒ every file unadmitted; no 
   assert.match(r.stderr, /case\.export-manifest\.json is not the artifact it claims to be — its recorded suite is not trusted/);
 });
 
+test("review 1: a directory named <run>.case.export-manifest.json, or a plain file at the suite path, is skipped with a stderr note — sign-off still prints its verdict (never EISDIR/ENOTDIR)", async () => {
+  const { repo } = await signedRepo();
+  const handoffs = join(repo, ST, "handoffs");
+  mkdirSync(join(handoffs, `${"f".repeat(12)}-0001.case.export-manifest.json`), { recursive: true });
+  let r = await signOffCli(repo);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  assert.match(r.stderr, /case\.export-manifest\.json is not a regular file — its recorded suite is not trusted/);
+  mkdirSync(join(repo, "tasks"), { recursive: true });
+  writeFileSync(join(repo, "tasks", "security-my-product-admitted"), "not a directory\n");
+  r = await signOffCli(repo);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  assert.match(r.stderr, /tasks\/security-my-product-admitted is not a directory — its files are not listed/);
+});
+
 test("cmd-sign-off imports: no child process of its own, no network, no writer, stdout only through ctx (G-4, G-6, G-14)", () => {
   const src = readFileSync(new URL("./cmd-sign-off.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /child_process|\bfetch\(|node:http|node:net|node:dns/);

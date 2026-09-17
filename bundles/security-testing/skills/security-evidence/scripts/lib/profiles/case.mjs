@@ -32,6 +32,10 @@
 //       header is inspected on the document response — never a reload, a
 //       panel, a click or a form. Reload / "network panel" steps fold into
 //       the collection row; every other admitted step is kept verbatim.
+//   Line endings (review 1): CRLF candidates are rewritten on LF and
+//   re-expanded, so the CRLF output equals the LF output with `\n`→`\r\n`;
+//   a mixed-ending file becomes uniform CRLF. (admit accepts CRLF — the
+//   frontmatter and Steps regexes here are `$`-anchored and `.` excludes CR.)
 //   Refusals (CaseRefused — cmd-publish spells it 2 USAGE, check-export reads
 //   it as MISMATCH(output)), PM ruling: an id that is not `TC-NNN` (three
 //   digits) or a file name that is not `<id>_<slug>.md` is refused, never
@@ -41,10 +45,12 @@
 //   no candidate, or with two.
 //   suiteDir(slug) → `tasks/security-<slug>-admitted`; suiteFile(id, slug).
 //
-// Pure (G-9): imports ../admission-core.mjs (parseSteps) only. No fs, no
+// Pure (G-9): imports ../admission-core.mjs (parseSteps) and
+// ../ingest/_qa-markdown.mjs (parseFrontmatter, the tags reading) only. No fs, no
 // git, no clock.
 
 import { parseSteps } from "../admission-core.mjs";
+import { parseFrontmatter } from "../ingest/_qa-markdown.mjs";
 
 export const PROFILE = "case";
 export const PROFILE_VERSION = 1;
@@ -182,9 +188,15 @@ function rewriteFrontmatter(lines, close, refuse) {
       lines[i] = `priority: ${mapped}`;
     } else {
       sawTags = true;
-      const list = m[2].trim().replace(/^\[|\]$/g, "").split(",").map((t) => t.trim().replace(/^["']|["']$/g, "")).filter((t) => t !== "");
-      if (!list.includes("security")) list.push("security");
-      lines[i] = `tags: [${list.join(", ")}]`;
+      // read as manual-qa reads it (quoted items may carry commas — review 1); `security` is appended to the
+      // original text, never re-serialised, so a line that already carries it is verbatim
+      const { tags } = parseFrontmatter(lines[i]);
+      const list = tags === null ? [] : Array.isArray(tags) ? tags : [tags];
+      if (list.includes("security")) continue;
+      const raw = m[2].trim();
+      const close = raw.startsWith("[") ? raw.lastIndexOf("]") : -1;
+      if (close < 0) lines[i] = list.length === 0 ? "tags: [security]" : `tags: [${raw.replace(/[ \t]#.*$/, "").trim()}, security]`; // a bare scalar, its ` # comment` dropped as the parser drops it
+      else lines[i] = `tags: [${list.length === 0 ? "" : `${raw.slice(1, close).trim()}, `}security]${raw.slice(close + 1)}`;
     }
   }
   if (!sawTags) lines.splice(close, 0, "tags: [security]");
@@ -206,7 +218,12 @@ function publishOne(cand) {
   if (!CANONICAL_ID.test(id)) refuse(`id ${id} is not TC-NNN (three digits); rename the candidate and admit it again`);
   const nameMatch = new RegExp(`^${id}_([a-z0-9-]+)\\.md$`).exec(cand.name);
   if (!nameMatch) refuse(`file name ${cand.name} is not ${id}_<slug>.md; rename the candidate and admit it again`);
-  const lines = cand.redacted.split("\n");
+  // CRLF candidates (admit accepts them: splitFrontmatter / parseSteps split on /\r?\n/) are
+  // rewritten on LF and re-expanded at the end — the frontmatter regexes and STEPS_HEADING are
+  // `$`-anchored and JS `.` excludes CR. A mixed-ending file becomes uniform CRLF.
+  const crlf = cand.redacted.includes("\r\n");
+  const text = crlf ? cand.redacted.replace(/\r\n/g, "\n") : cand.redacted;
+  const lines = text.split("\n");
   const close = lines.findIndex((l, i) => i > 0 && /^---\s*$/.test(l));
   if (!/^---\s*$/.test(lines[0]) || close < 0) refuse("no frontmatter block");
   rewriteFrontmatter(lines, close, refuse);
@@ -222,7 +239,8 @@ function publishOne(cand) {
     }
     body = spliceSteps(body, renderSteps(rows));
   }
-  return { relpath: suiteFile(id, nameMatch[1]), bytes: Buffer.from(`${head}\n${body}`, "utf8"), case_sha256: cand.case_sha256 };
+  const out = `${head}\n${body}`;
+  return { relpath: suiteFile(id, nameMatch[1]), bytes: Buffer.from(crlf ? out.replace(/\n/g, "\r\n") : out, "utf8"), case_sha256: cand.case_sha256 };
 }
 
 /**

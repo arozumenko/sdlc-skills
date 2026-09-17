@@ -433,13 +433,19 @@ test("handoff prompt text exact: <st>/handoffs/<slug>.md is the §9.2 two-line p
   // a second run's handoff for the same slug: same prompt bytes, its own sidecar — never a clobber
   const other = await publish(repo, run_id, "handoff", HANDOFFS, ["--base-url", "https://qa.example.com"]);
   assert.equal(other.code, 2, "a different prompt at the same <slug>.md is refused");
-  assert.match(other.stdout, /already exists with different content/);
+  assert.match(other.stdout, /already exists with different content; remove the stale file first \(its --to is fixed\)/, "review 1: --to is fixed for the M3 profiles, so the way out is named");
   const overridden = await publish(repo, run_id, "handoff", HANDOFFS, ["--slug", "other", "--base-url", "https://qa.example.com"]);
   assert.equal(overridden.code, 2, "the same run already has a handoff sidecar for another export");
   assert.match(overridden.stdout, /already exists for a different export/);
   const bad = await publish(repo, run_id, "handoff", HANDOFFS, ["--base-url", "staging.example.com"]);
   assert.equal(bad.code, 2);
   assert.match(bad.stdout, /^USAGE\(publish: base_url must be an absolute http\(s\) URL/m);
+  // review 1: a base_url redact.mjs rewrites is 2 USAGE with the reason, not writeSet's G-4 self-check error
+  const secret = await publish(repo, run_id, "handoff", HANDOFFS, ["--slug", "other", "--base-url", "https://qa.example.com/?token=Qm9sZGx5R29pbmdOb3doZXJlMTIzNDU2Nzg5MA"]);
+  assert.equal(secret.code, 2, `${secret.stdout}${secret.stderr}`);
+  assert.match(secret.stdout, /^USAGE\(publish: the handoff base_url carries a value redact\.mjs rewrites \(a token, key or credential\); pass a base URL without it\)$/m);
+  assert.doesNotMatch(secret.stdout + secret.stderr, /Qm9sZGx5/, "the value never leaves the process");
+  assert.ok(!existsSync(join(repo, HANDOFFS, "other.md")), "nothing written");
 });
 
 test("case refusals name the case and rename nothing: TC-SEC-NNN id ⇒ 2 USAGE, nothing written; a candidate edited after admit ⇒ 2 USAGE (no candidate with that identity)", async () => {

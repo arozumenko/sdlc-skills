@@ -89,6 +89,21 @@ test("a plain (non header/cookie) case is the candidate verbatim below the front
   const [nt] = apply(source([noTags], [admission(noTags.case_sha256, "admitted-heuristic")]), null, {});
   assert.match(nt.bytes.toString("utf8"), /^tags: \[security\]\n---/m);
   assert.deepEqual(parseSteps(nt.bytes.toString("utf8")).steps.map((s) => s.action), rows.map((r) => r[0]));
+  // review 1: tags are read as manual-qa reads them — a quoted item with a comma stays one item; `security` is
+  // appended to the original text (a line that already carries it is verbatim); a bare scalar and an empty list work
+  const tagsLine = (t) => {
+    const c = candidate("TC-006_tags.md", caseText("TC-006", rows, { title: "Tags" }).replace("tags: [security, passive]", t));
+    const [o] = apply(source([c], [admission(c.case_sha256, "admitted-heuristic")]), null, {});
+    const text = o.bytes.toString("utf8");
+    return { line: /^tags:.*$/m.exec(text)[0], tags: parseTestCase(text).tags };
+  };
+  assert.deepEqual(tagsLine('tags: ["a, b", passive]'), { line: 'tags: ["a, b", passive, security]', tags: ["a, b", "passive", "security"] });
+  assert.deepEqual(tagsLine('tags: ["a, b", security]'), { line: 'tags: ["a, b", security]', tags: ["a, b", "security"] });
+  assert.deepEqual(tagsLine("tags: [security, passive]"), { line: "tags: [security, passive]", tags: ["security", "passive"] });
+  assert.deepEqual(tagsLine("tags: [passive] # keep"), { line: "tags: [passive, security] # keep", tags: ["passive", "security"] });
+  assert.deepEqual(tagsLine("tags: passive # keep"), { line: "tags: [passive, security]", tags: ["passive", "security"] });
+  assert.deepEqual(tagsLine("tags: []"), { line: "tags: [security]", tags: ["security"] });
+  assert.deepEqual(tagsLine("tags:"), { line: "tags: [security]", tags: ["security"] });
 });
 
 test("a header/cookie case is emitted in the audit-step form: open URL, collect the network requests, inspect one header per row — and contains no browser-action step (US-035 AC-2 audit branch)", () => {
@@ -124,6 +139,43 @@ test("a header/cookie case is emitted in the audit-step form: open URL, collect 
   const form = auditForm(parseSteps(fixture.redacted).steps);
   assert.equal(form.length, 5);
   assert.ok(form.every((r) => /^(Navigate to|Collect the network requests|Inspect the )/.test(r.action)));
+});
+
+test("review 1: a CRLF candidate (Windows checkout, admit accepts it) publishes as the LF twin with \\n→\\r\\n — priority mapped, one tags line, audit rows only", () => {
+  const lfText = caseText("TC-001", HEADER_ROWS).replace("priority: high", "priority: p1");
+  const crlfText = lfText.replace(/\n/g, "\r\n");
+  assert.ok(crlfText.includes("\r\n") && !lfText.includes("\r"));
+  const lf = candidate("TC-001_login-headers.md", lfText);
+  const crlf = candidate("TC-001_login-headers.md", crlfText);
+  assert.notEqual(lf.case_sha256, crlf.case_sha256, "distinct identities (the redacted bytes differ)");
+  const [lfOut] = apply(source([lf], [admission(lf.case_sha256, "admitted-heuristic")]), null, {});
+  const [crlfOut] = apply(source([crlf], [admission(crlf.case_sha256, "admitted-heuristic")]), null, {});
+  assert.equal(crlfOut.relpath, lfOut.relpath);
+  assert.equal(crlfOut.bytes.toString("utf8"), lfOut.bytes.toString("utf8").replace(/\n/g, "\r\n"), "CRLF output === LF output re-expanded");
+  const published = crlfOut.bytes.toString("utf8");
+  assert.ok(!/[^\r]\n/.test(published) && !/^\n/.test(published), "uniform CRLF: every \\n is preceded by \\r");
+  const tc = parseTestCase(published);
+  assert.equal(tc.priority, "high", "p1 → high");
+  assert.deepEqual(tc.tags, ["security", "passive"], "the original tags line, once — no second `tags: [security]` spliced in");
+  assert.equal((published.match(/^tags:/gm) ?? []).length, 1);
+  assert.deepEqual(
+    parseSteps(published).steps.map((s) => s.action),
+    [
+      "Navigate to `{{base_url}}/login`",
+      "Collect the network requests of the page (`browser_network_requests()`)",
+      "Inspect the `Content-Security-Policy` response header of the `/login` document",
+      "Inspect the `Strict-Transport-Security` response header of the `/login` document",
+      "Inspect the `Set-Cookie` response headers of the `/login` document",
+    ],
+    "the audit rows only — the reload/panel step is gone, the original table is not left in place",
+  );
+  assert.doesNotMatch(published, /network panel and reload/);
+  // a mixed-ending file becomes uniform CRLF
+  const mixed = candidate("TC-002_home-footer.md", caseText("TC-002", PLAIN_ROWS, { title: "Mixed endings" }).replace("\ntype:", "\r\ntype:"));
+  const [mx] = apply(source([mixed], [admission(mixed.case_sha256, "admitted-heuristic")]), null, {});
+  const mxText = mx.bytes.toString("utf8");
+  assert.ok(!/[^\r]\n/.test(mxText), "uniform CRLF");
+  assert.equal(parseTestCase(mxText).id, "TC-002");
 });
 
 test("isAuditStep / AUDIT_HEADERS: the manual-qa security-header table plus Set-Cookie flags; a step naming none is not an audit step", () => {

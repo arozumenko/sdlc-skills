@@ -143,7 +143,7 @@
 // `signOff(ctx, {engagement_id, expect}) → result` is the programmatic entry
 // (the E2E and TASK-035's checklist test read it); `run()` prints it.
 //
-// Imports: node:fs (existsSync, readFileSync, readdirSync — reads only),
+// Imports: node:fs (existsSync, readFileSync, readdirSync, statSync — reads only),
 // node:path, ../canon.mjs (readArtifact, sha256Hex), ../redact.mjs
 // (redactString), ./argv.mjs, ./baseline.mjs (readBaseline, diffBaseline,
 // observedPaths), ./cmd-check.mjs (checkRun), ./cmd-tm-lint.mjs (the
@@ -155,7 +155,7 @@
 // ./schema.mjs (validate), ./tokens.mjs. No child process of its own (G-6:
 // git only through the modules above), no network (G-14), no clock (G-1).
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readArtifact, sha256Hex } from "../canon.mjs";
 import { redactString } from "../redact.mjs";
@@ -361,6 +361,9 @@ function listedThreats(ctx, run) {
 
 // --- unadmitted (TASK-043) ------------------------------------------------------------------
 
+const isFile = (abs) => { try { return statSync(abs).isFile(); } catch { return false; } };
+const isDirectory = (abs) => { try { return statSync(abs).isDirectory(); } catch { return false; } };
+
 /** The suites and member identities every trustworthy case export manifest under <st>/handoffs/ records. */
 function recordedSuites(ctx) {
   const dir = join(ctx.st, HANDOFFS_SEGMENT);
@@ -369,6 +372,10 @@ function recordedSuites(ctx) {
   const names = existsSync(dir) ? readdirSync(dir).filter((n) => CASE_MANIFEST.test(n)).sort() : [];
   for (const name of names) {
     const untrusted = (why) => ctx.log(`${COMMAND}: ${HANDOFFS_SEGMENT}/${name} ${why} — its recorded suite is not trusted`);
+    if (!isFile(join(dir, name))) {
+      untrusted("is not a regular file"); // a directory of that name: EISDIR from readArtifact is not an integrity failure (review 1)
+      continue;
+    }
     let manifest;
     try {
       manifest = readArtifact(join(dir, name), { kind: "export-manifest" });
@@ -412,6 +419,10 @@ function unadmittedFiles(ctx, record) {
   for (const suite of sorted) {
     const abs = join(ctx.root, suite);
     if (!existsSync(abs)) continue;
+    if (!isDirectory(abs)) {
+      ctx.log(`${COMMAND}: ${suite} is not a directory — its files are not listed`); // a plain file at the suite path: ENOTDIR from walk (review 1)
+      continue;
+    }
     for (const rel of walk(abs)) {
       // identity over the REDACTED bytes: equal to what publish recorded for a published file, and never a plain hash over foreign content (G-2)
       const sha = sha256Hex(Buffer.from(redactString(readFileSync(join(abs, rel))).text, "utf8"));

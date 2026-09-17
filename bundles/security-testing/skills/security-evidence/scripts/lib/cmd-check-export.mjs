@@ -136,6 +136,9 @@ export async function run(argv, ctx) {
     derived = mod.apply(source, null, expected.opts);
   } catch (err) {
     if (err instanceof NotAccepted || err instanceof CaseRefused) throw mismatch();
+    // the handoff profile refuses argv-shaped opts with a TypeError (a recorded base_url that is not an
+    // absolute http(s) URL, or carries a `"`): the manifest cannot re-derive its output (review 1)
+    if (err instanceof TypeError && profile === "handoff") throw mismatch();
     throw err;
   }
   const byName = new Map(derived.map((o) => [o.relpath, o.bytes]));

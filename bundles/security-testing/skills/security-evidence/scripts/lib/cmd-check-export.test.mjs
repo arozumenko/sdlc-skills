@@ -220,9 +220,23 @@ test("TASK-043: handoff and case manifests are VERIFIED-DERIVATIVE with --source
   assert.equal(r.stdout, "MISMATCH(output)\n");
   // the handoff prompt edited ⇒ mismatch with and without the source
   const prompt = join(repo, HANDOFFS, "my-product.md");
-  writeFileSync(prompt, readFileSync(prompt, "utf8").replace("staging", "prod"));
+  const promptBytes = readFileSync(prompt);
+  writeFileSync(prompt, promptBytes.toString("utf8").replace("staging", "prod"));
   assert.equal((await check(repo, handoffManifest)).stdout, "MISMATCH(output)\n");
   assert.equal((await check(repo, handoffManifest, runRel(run_id))).stdout, "MISMATCH(output)\n");
+  writeFileSync(prompt, promptBytes);
+  // review 1: a handoff manifest whose recorded base_url passes the schema but not handoff.promptLines (not http(s), a `"`)
+  // is MISMATCH(output) with the source, never an escaped TypeError
+  const em = readArtifact(join(repo, handoffManifest), { kind: "export-manifest" });
+  const run = readArtifact(join(repo, runRel(run_id), "run.json"), { kind: "run" });
+  const head = { schema_version: run.envelope.schema_version, kind: "export-manifest", run_id, engagement_id: run.envelope.engagement_id, key_id: run.envelope.key_id, now: () => ENV.SECURITY_EVIDENCE_NOW };
+  for (const base_url of ["ftp://staging.example.com", 'https://staging.example.com/"']) {
+    writeArtifact(join(repo, handoffManifest), makeEnvelope(head, { ...em.payload, opts: { ...em.payload.opts, base_url } }));
+    assert.equal((await check(repo, handoffManifest)).stdout, "LINKED-ONLY\n", base_url);
+    r = await check(repo, handoffManifest, runRel(run_id));
+    assert.equal(r.code, 5, `${base_url}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.stdout, "MISMATCH(output)\n");
+  }
 });
 
 test("cmd-check-export writes nothing (no fs writer imported) and prints only through ctx.out", () => {
