@@ -270,6 +270,14 @@ test("agent-written id/state/verdict ⇒ REFUSED, nothing written", () => {
     ["snippet_redacted", (d) => { d.findings[0].citations[0].snippet_redacted = "x"; }],
     ["coverage", (d) => { d.coverage = { examined: 2, partial: 0, unexamined: 0, rows: [] }; }],
     ["check_stamp", (d) => { d.check_stamp = "0".repeat(64); }],
+    // D10 keys at positions check never writes are refused outright, stamp or not.
+    ["state", (d) => { d.findings[0].state = "VERIFIED"; }],
+    ["id", (d) => { d.findings[0].citations[0].id = "x"; }],
+    ["verdict", (d) => { d.verdict = "VERIFIED"; }],
+    ["state", (d) => { d.state = "VERIFIED"; }],
+    ["id", (d) => { d.id = "x"; }],
+    ["state", (d) => { d.examined[0].state = "VERIFIED"; }],
+    ["verdict", (d) => { d.findings[0].extra = { nested: { verdict: "VERIFIED" } }; }],
   ]) {
     const d = agentDoc(oid2);
     mutate(d);
@@ -289,6 +297,15 @@ test("agent-written id/state/verdict ⇒ REFUSED, nothing written", () => {
   r = run(root, "check", rel);
   assert.equal(r.code, 2, r.out.join("\n"));
   assert.equal(r.out[0], "REFUSED agent-written key id");
+  // A stray D10 key added to a correctly stamped file is refused by name, not as a stamp mismatch.
+  writeDoc(file, agentDoc(oid2));
+  assert.equal(run(root, "check", rel).code, 0);
+  const stampedAgain = readDoc(file);
+  stampedAgain.findings[0].state = "VERIFIED";
+  writeDoc(file, stampedAgain);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 2, r.out.join("\n"));
+  assert.equal(r.out[0], "REFUSED agent-written key state");
 });
 
 test("dirty scope ⇒ DIRTY-SCOPE and exit 2; dirt outside scope does not block", () => {

@@ -191,14 +191,20 @@ function show(args, ctx) {
 // ---------------------------------------------------------------- check
 
 /**
- * Keys only `check` writes (D10). A file carrying any of them must carry a
- * `check_stamp` that matches the rest of the file — check's own output
- * re-runs freely; a hand-written `id`/`state`/`verdict`, or an assertion
- * edited underneath check's keys, is REFUSED. `oid` is not here: a citation
- * may carry its own (spec §6 `oid?`); check stamps it only when absent.
- * `verdict` is never written by check, so it is refused whenever present.
+ * D10: agents never write `id`, `state` or `verdict`. Check itself writes
+ * `id` per finding, `state`/`snippet_redacted` per citation and `coverage`/
+ * `check_stamp` at the top (`OWN_KEYS`, by position); a file carrying any of
+ * those must carry a `check_stamp` that matches the rest of the file — check's
+ * own output re-runs freely, a hand-written value or an assertion edited
+ * underneath check's keys is REFUSED. `id`/`state`/`verdict` at ANY other
+ * position (a finding's `state`, a citation's `id`, a top-level `verdict`, a
+ * nested object) is never check's and is refused outright — otherwise it would
+ * be written back under a valid stamp, indistinguishable from script output.
+ * `oid` is not here: a citation may carry its own (spec §6 `oid?`); check
+ * stamps it only when absent.
  */
-const CHECK_KEYS = Object.freeze({ finding: ["id", "verdict"], citation: ["state", "verdict", "snippet_redacted"], top: ["coverage", "check_stamp"] });
+const OWN_KEYS = Object.freeze({ top: ["coverage", "check_stamp"], finding: ["id"], citation: ["state", "snippet_redacted"] });
+const D10_KEYS = new Set(["id", "state", "verdict"]);
 /** Keys whose value is a commit oid or a sha256 by construction; the walker keeps those as full hex. */
 const HEX_KEYS = new Set(["head", "oid", "id", "check_stamp", "finding_id", "findings_sha256"]);
 const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -274,19 +280,29 @@ function stripCheckKeys(doc) {
 }
 const stampOf = (doc) => sha256Hex(JSON.stringify(stripCheckKeys(doc)));
 
-/** Every check-written key the file carries, findings first (the keys D10 names come first). */
-function checkKeysPresent(doc) {
-  const found = [];
-  for (const f of Array.isArray(doc.findings) ? doc.findings : []) {
-    if (!isObject(f)) continue;
-    for (const k of CHECK_KEYS.finding) if (Object.hasOwn(f, k)) found.push(k);
-    for (const c of Array.isArray(f.citations) ? f.citations : []) {
-      if (!isObject(c)) continue;
-      for (const k of CHECK_KEYS.citation) if (Object.hasOwn(c, k)) found.push(k);
+/**
+ * Walk the whole document: `own` = check-written keys at check's own
+ * positions, `stray` = D10 keys anywhere else; both in document order.
+ * @returns {{own: string[], stray: string[]}}
+ */
+function d10Keys(doc) {
+  const own = [];
+  const stray = [];
+  const child = (pos, k) => (pos === "top" && k === "findings" ? "finding" : pos === "finding" && k === "citations" ? "citation" : "other");
+  const visit = (value, pos) => {
+    if (Array.isArray(value)) {
+      for (const v of value) visit(v, pos);
+      return;
     }
-  }
-  for (const k of CHECK_KEYS.top) if (Object.hasOwn(doc, k)) found.push(k);
-  return found;
+    if (!isObject(value)) return;
+    for (const [k, v] of Object.entries(value)) {
+      if (OWN_KEYS[pos]?.includes(k)) own.push(k);
+      else if (D10_KEYS.has(k)) stray.push(k);
+      visit(v, child(pos, k));
+    }
+  };
+  visit(doc, "top");
+  return { own, stray };
 }
 
 /** Raw line count of `path` at `oid` (lines as `git show` prints them); 0 when absent there. */
@@ -353,10 +369,11 @@ function checkFindings(doc, { root, bytes, abs }, ctx) {
       throw new UsageError(`findings[${i}] must carry a class and a non-empty citations array`);
     }
   });
-  // D10: check's own keys are fine when the stamp matches; otherwise someone wrote them.
-  const present = checkKeysPresent(doc);
-  if (present.length > 0 && doc.check_stamp !== stampOf(doc)) {
-    say(ctx, `REFUSED agent-written key ${present[0]}`);
+  // D10: a stray id/state/verdict is never check's; check's own keys are fine only when the stamp matches.
+  const { own, stray } = d10Keys(doc);
+  if (stray.length > 0 || (own.length > 0 && doc.check_stamp !== stampOf(doc))) {
+    const offending = stray.length > 0 ? stray : own;
+    say(ctx, `REFUSED agent-written key ${[...D10_KEYS].find((k) => offending.includes(k)) ?? offending[0]}`);
     return 2;
   }
   const { record } = readEngagement(root);
