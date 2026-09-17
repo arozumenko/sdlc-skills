@@ -966,3 +966,38 @@ export function ticketedLine({ row, url }) {
   if (typeof url !== "string" || url.length === 0 || /[\s]/.test(url)) throw new TypeError("ticketedLine: url must be a non-empty string without whitespace");
   return `TICKETED ${row} ${url}`;
 }
+
+// --- plan admit | propose (TASK-042; plan §4.5, §5 TASK-042; spec §9.1, D7, P5; US-034, US-038) ---
+// `admit` prints the ADMISSION line then the WROTE line of
+// `<run>/admissions/<case_sha256>.json`; `propose` prints the PROPOSAL line
+// (a Markdown file, not an enveloped artifact — the register's RENDER line
+// is the precedent) then a NEXT line naming the snapshot command. The
+// `SCHEMA-INVALID(proposal: …)` / `SCHEMA-INVALID(case: …)` spellings of the
+// M1 stub and the case adapter stay as the off-schema input tokens (exit 2).
+const ADMISSION_CLASSIFICATIONS = Object.freeze(["admitted-heuristic", "admitted-reviewed", "proposal"]);
+/** `ADMISSION case=<case_sha256> classification=<admitted-heuristic|admitted-reviewed|proposal> hits=<n>` — the admission record's verdict (spec §9.1), exit 0 for every classification. */
+export function admissionLine({ case_sha256, classification, hits } = {}) {
+  if (typeof case_sha256 !== "string" || !SHA256.test(case_sha256)) throw new TypeError("admissionLine: case_sha256 must be 64 hex chars");
+  if (!ADMISSION_CLASSIFICATIONS.includes(classification)) throw new TypeError(`admissionLine: classification must be one of ${ADMISSION_CLASSIFICATIONS.join("|")}, got ${String(classification)}`);
+  return `ADMISSION case=${case_sha256} classification=${classification} hits=${requireCount("admissionLine", "hits", hits)}`;
+}
+/** `ADMISSION-EXISTS` — exit 2: `<run>/admissions/<case_sha256>.json` already holds a DIFFERENT record for this case (write-once, G-10: the same record is idempotent; a changed route or receipt is a new run). */
+export const ADMISSION_EXISTS = "ADMISSION-EXISTS";
+/** `RECEIPT-MISMATCH(<reason>)` — exit 4: the `--receipt` named an admitted receipt that is not a `vulnerability-review` on a case packet over this case (US-034 AC-4: "receipt on a different packet ⇒ exit 4"). */
+export function receiptMismatch(reason) {
+  if (typeof reason !== "string" || reason.length === 0 || /[\r\n]/.test(reason)) throw new TypeError("receiptMismatch: reason must be a non-empty one-line string");
+  return `RECEIPT-MISMATCH(${reason})`;
+}
+/** `PROPOSAL <repo-relative path> id=<P-nnn> sha256=<h>` — `plan.mjs propose` wrote `<st>/proposals/<id>.proposal.md`; `sha256` is over the redacted text, the identity `run snapshot proposals` indexes. */
+export function proposalLine({ relPath, id, sha256 } = {}) {
+  requireRepoRelative("proposalLine", relPath);
+  if (typeof id !== "string" || !/^P-[0-9]{3}$/.test(id)) throw new TypeError(`proposalLine: id must be P-nnn, got ${String(id)}`);
+  if (typeof sha256 !== "string" || !SHA256.test(sha256)) throw new TypeError("proposalLine: sha256 must be 64 hex chars");
+  return `PROPOSAL ${relPath} id=${id} sha256=${sha256}`;
+}
+/** `PROPOSAL-UNDER-TASKS` — exit 2: the proposal file lies under `tasks/` (spec D7 / §9.4: active work is a proposal OUTSIDE `tasks/`; the hand-off suite holds admitted cases only). */
+export const PROPOSAL_UNDER_TASKS = "PROPOSAL-UNDER-TASKS";
+/** `NEXT: run snapshot proposals --run <run_id>` — the proposal is on disk; the run sees it through its proposals index (P2, TL-3). */
+export function nextSnapshotProposals(run_id) {
+  return `NEXT: run snapshot proposals --run ${requireRunId("nextSnapshotProposals", run_id)}`;
+}

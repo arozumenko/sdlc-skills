@@ -46,9 +46,21 @@
 //                         gives the ranges; the worktree supplies bytes and
 //                         oids). From the CLI ⇒ 2 USAGE — a run directory
 //                         has no worktree to hash.
-//   case                  SEAM for TASK-042 (M3): the case file at `head`,
-//                         id = case_sha256. ⇒ 2 NOT-IMPLEMENTED(M3) until
-//                         then; the resolver slot is `SUBJECT_SOURCES.case`.
+//   case                  TASK-042 (M3): `--subject` is the repo-relative
+//                         PATH of a candidate case (`<st>/cases/<slug>/
+//                         TC-NNN_<slug>.md`, committed); the packet lists the
+//                         file at `head` (whole normalised range, the blob's
+//                         oid) and its subject id is `case_sha256` =
+//                         sha256 over the redacted text of that blob
+//                         (admission-core.caseSha256 — the identity `plan
+//                         admit` records and `ingest case` imports under).
+//                         The path must name a blob in the tree at
+//                         `head_oid` ⇒ 2 USAGE otherwise (commit the case,
+//                         start a run at that head); two paths with the same
+//                         identity ⇒ 2 USAGE. `--type case` is required (a
+//                         path is neither id shape). The receipt this packet
+//                         asks for is a `vulnerability-review` whose
+//                         `confirmed` means "confirmed passive" (spec §9.1).
 //
 // Without `--type`, every id must be of one shape (all 64-hex or all
 // `M-nnn`) — one packet, one contract; a mix ⇒ 2 USAGE. The oid per file is
@@ -90,24 +102,28 @@
 //
 // stdout: `PACKET <path> sha256=<h> kind=<k> files=<n>` then `WROTE <path>
 // sha256=<h>` — the same sha, the packet's identity. Exit 0; 2 USAGE /
-// RUN-COMMITTED / KEY: unavailable / SCHEMA-INVALID / UNVERIFIABLE-SUBJECT /
-// NOT-IMPLEMENTED(M3); 3 INCOMPLETE(…); 5 INCONSISTENT(…) or when run.json /
+// RUN-COMMITTED / KEY: unavailable / SCHEMA-INVALID / UNVERIFIABLE-SUBJECT;
+// 3 INCOMPLETE(…); 5 INCONSISTENT(…) or when run.json /
 // scope.json / gate-result.json / findings.claimed.json / threat-model.json
 // is not the artifact it claims to be (readArtifact).
 //
 // Imports: node:fs (existsSync, readFileSync — every write is
-// canon.writeArtifact), node:path, ../canon.mjs, ../redact.mjs (redactDeep:
-// the payload is redacted in-process before it is named, so the identity is
-// over what leaves memory, G-4), ./argv.mjs, ./cite.mjs (the one resolver,
-// G-6: git runs only inside git.mjs), ./exit.mjs, ./git.mjs (blobOid, for
-// the base oid a `base` citation names), ./ledger.mjs (RUN_ID),
-// ./packet-core.mjs, ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs.
-// No network (G-14), no clock (G-1: created_at is ctx.now()).
+// canon.writeArtifact), node:path, ../canon.mjs, ../normalize.mjs (the case
+// file's normalised line count), ../redact.mjs (redactDeep: the payload is
+// redacted in-process before it is named, so the identity is over what
+// leaves memory, G-4), ./admission-core.mjs (caseSha256), ./argv.mjs,
+// ./cite.mjs (the one resolver, G-6: git runs only inside git.mjs),
+// ./exit.mjs, ./git.mjs (blobOid, for the base oid a `base` citation names
+// and the case blob at head), ./ledger.mjs (RUN_ID), ./packet-core.mjs,
+// ./run-index.mjs (runDir), ./schema.mjs, ./tokens.mjs. No network (G-14),
+// no clock (G-1: created_at is ctx.now()).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CanonError, IntegrityError, artifactId, makeEnvelope, parseStrict, readArtifact, writeArtifact } from "../canon.mjs";
+import { normalizeText } from "../normalize.mjs";
 import { DEFAULT_RULES, redactDeep } from "../redact.mjs";
+import { caseSha256 } from "./admission-core.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { ObjectMissing, SIDES, SnapshotMismatch, SnapshotMissing, resolveSide } from "./cite.mjs";
 import { CliError, EXIT, integrityFailure, usageError } from "./exit.mjs";
@@ -116,7 +132,7 @@ import { RUN_ID } from "./ledger.mjs";
 import { PACKET_KINDS, POLICY_PATH, buildPacket } from "./packet-core.mjs";
 import { runDir } from "./run-index.mjs";
 import { validate } from "./schema.mjs";
-import { COMMITTED, KEY_UNAVAILABLE, RUN_COMMITTED, incomplete, inconsistent, notImplemented, packetLine, schemaInvalid, unverifiableSubject } from "./tokens.mjs";
+import { COMMITTED, KEY_UNAVAILABLE, RUN_COMMITTED, incomplete, inconsistent, packetLine, schemaInvalid, unverifiableSubject } from "./tokens.mjs";
 
 const COMMAND = "packet";
 const POLICY_SCHEMA = "packet-policy.v1";
@@ -301,11 +317,43 @@ function resolveMitigations(ctx, inputs, subjects) {
   return citedFiles(cited).map((f) => ({ ...f, oid: oidFor(ctx, inputs, f) }));
 }
 
+/** A candidate case path as the packet may spell it: repo-relative posix, no `..`, no leading `/`, no `.`/empty segment, no backslash, no NUL (the shape cite.resolveSide requires — a user-typed value, so a usage error, not a TypeError). */
+function isCasePath(path) {
+  if (typeof path !== "string" || path === "" || path.includes("\0") || path.includes("\\") || path.startsWith("/")) return false;
+  return path.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..");
+}
+
 /**
- * One resolver per `--type`: `(ctx, inputs, subjects) → files` for
- * packet-core, or a refusal. `fix-review` and `case` are the documented
- * seams (header): TASK-027 builds the fix-review packet in-process over its
- * worktree; TASK-042 fills `case` (the case file at head, id = case_sha256).
+ * Cases (`case`, TASK-042): each subject is the repo-relative path of a
+ * committed candidate case; the file at `head` is the packet's one entry
+ * per case (whole normalised range, blob oid) and the subject id is the
+ * case identity over that blob's redacted text. Returns `{subject_ids,
+ * files}` — the ids replace the paths given in argv.
+ */
+function resolveCases(ctx, { run, scope }, subjects) {
+  const { head_oid } = run.payload;
+  const byId = new Map();
+  const files = [];
+  for (const path of subjects) {
+    if (!isCasePath(path)) throw usageError(COMMAND, `--subject ${path} is not a repo-relative case path (--type case takes the path of a committed candidate case)`);
+    const oid = blobOid(ctx.root, head_oid, path);
+    if (oid === null) throw usageError(COMMAND, `case ${path} is not in the tree at head ${head_oid.slice(0, 12)} (commit the case and start a run at that head)`);
+    const bytes = resolveSide(ctx, run, scope, { path, side: "head" });
+    const { case_sha256 } = caseSha256(bytes);
+    if (byId.has(case_sha256)) throw usageError(COMMAND, `cases ${byId.get(case_sha256)} and ${path} have the same identity (one case, one subject)`);
+    byId.set(case_sha256, path);
+    const lines = normalizeText(bytes).lines.length;
+    files.push({ path, side: "head", oid, ranges: lines > 0 ? [[1, lines]] : [] });
+  }
+  return { subject_ids: [...byId.keys()], files };
+}
+
+/**
+ * One resolver per `--type`: `(ctx, inputs, subjects) → files` (or
+ * `{subject_ids, files}` when the source derives the ids, as `case` does)
+ * for packet-core, or a refusal. `fix-review` is the documented seam
+ * (header): TASK-027 builds the fix-review packet in-process over its
+ * worktree.
  */
 const SUBJECT_SOURCES = Object.freeze({
   "vulnerability-review": resolveFindings,
@@ -313,9 +361,7 @@ const SUBJECT_SOURCES = Object.freeze({
   "fix-review": () => {
     throw usageError(COMMAND, "--type fix-review packets are built by verify all over its worktree, not from a run directory");
   },
-  case: () => {
-    throw new CliError(EXIT.USAGE, notImplemented("M3"));
-  },
+  case: resolveCases,
 });
 
 /** Without `--type`: the shape of the ids picks the source, and every id must share it (one packet, one contract). */
@@ -387,7 +433,8 @@ export async function run(argv, ctx) {
   let spec;
   if (args.kind === "subject") {
     const type = args.type ?? inferType(args.subjects);
-    spec = { kind: "subject", subject_ids: args.subjects, files: SUBJECT_SOURCES[type](ctx, inputs, args.subjects) };
+    const resolved = SUBJECT_SOURCES[type](ctx, inputs, args.subjects);
+    spec = Array.isArray(resolved) ? { kind: "subject", subject_ids: args.subjects, files: resolved } : { kind: "subject", subject_ids: resolved.subject_ids, files: resolved.files };
   } else {
     spec = { kind: "scope", subject_ids: [], files: scopeFiles(inputs.scope) };
   }

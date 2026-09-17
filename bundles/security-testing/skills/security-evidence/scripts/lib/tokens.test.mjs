@@ -459,3 +459,24 @@ test("tracker read-back → ticketed rows (TASK-045; plan §4.1 row `ingest`, §
   assert.throws(() => tokens.ticketedLine({ row: "R-0007", url: "two\nlines" }), /url/);
   assert.throws(() => tokens.ticketedLine({ row: "R-0007", url: "with space" }), /url/);
 });
+
+test("plan admit | propose rows (TASK-042; plan §4.5, §5 TASK-042; spec §9.1): the ADMISSION line over the three classifications, ADMISSION-EXISTS, RECEIPT-MISMATCH(<reason>), the PROPOSAL line, PROPOSAL-UNDER-TASKS and the NEXT line", () => {
+  const sha = "a".repeat(64);
+  for (const classification of ["admitted-heuristic", "admitted-reviewed", "proposal"]) {
+    assert.equal(tokens.admissionLine({ case_sha256: sha, classification, hits: 2 }), `ADMISSION case=${sha} classification=${classification} hits=2`);
+  }
+  assert.throws(() => tokens.admissionLine({ case_sha256: sha, classification: "admitted", hits: 0 }), /classification/);
+  assert.throws(() => tokens.admissionLine({ case_sha256: "abc", classification: "proposal", hits: 0 }), /case_sha256/);
+  assert.throws(() => tokens.admissionLine({ case_sha256: sha, classification: "proposal", hits: -1 }), /hits/);
+  assert.equal(tokens.ADMISSION_EXISTS, "ADMISSION-EXISTS");
+  assert.equal(tokens.receiptMismatch("receipt subject x is not this case"), "RECEIPT-MISMATCH(receipt subject x is not this case)");
+  assert.throws(() => tokens.receiptMismatch(""), /reason/);
+  assert.throws(() => tokens.receiptMismatch("two\nlines"), /reason/);
+  assert.equal(tokens.proposalLine({ relPath: ".agents/security-testing/proposals/P-001.proposal.md", id: "P-001", sha256: sha }), `PROPOSAL .agents/security-testing/proposals/P-001.proposal.md id=P-001 sha256=${sha}`);
+  assert.throws(() => tokens.proposalLine({ relPath: ".agents/x.md", id: "P-1", sha256: sha }), /P-nnn/);
+  assert.throws(() => tokens.proposalLine({ relPath: "/abs/x.md", id: "P-001", sha256: sha }), /relPath|repo-relative/);
+  assert.throws(() => tokens.proposalLine({ relPath: ".agents/x.md", id: "P-001", sha256: "zz" }), /sha256/);
+  assert.equal(tokens.PROPOSAL_UNDER_TASKS, "PROPOSAL-UNDER-TASKS");
+  assert.equal(tokens.nextSnapshotProposals("abcdefabcdef-0001"), "NEXT: run snapshot proposals --run abcdefabcdef-0001");
+  assert.throws(() => tokens.nextSnapshotProposals("abc"), /run_id|run id/i);
+});
