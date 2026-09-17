@@ -23,9 +23,10 @@ own their `agents/` and `skills/` as real directories. Four factories ship:
   `docs/discovery/`.
 
 The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
-content: one agent (`personal-assistant`) and eight skills (`deep-research`,
-`gathering-context`, `verifying-outcomes`, `microsoft-365`, `obsidian-vault`,
-`tosca-automation`, `vividus`, `xray-testing`).
+content: one agent (`personal-assistant`) and twelve skills (`deep-research`,
+`delivery-metrics`, `gathering-context`, `knowledge-curation`, `memory`,
+`microsoft-365`, `obsidian-vault`, `tosca-automation`, `verifying-outcomes`,
+`visual-testing`, `vividus`, `xray-testing`).
 
 - **`<owner>/agents/<name>/AGENT.md` + `SOUL.md`** — role personas. Each
   agent's frontmatter declares the skills it depends on.

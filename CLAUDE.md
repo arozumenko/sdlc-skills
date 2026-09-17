@@ -15,10 +15,11 @@ runtime.
 or skill id may appear in several factories with different content (intentional
 divergence is normal). Top-level `agents/` and `skills/` hold only the
 standalone-only "orphan" content not belonging to any factory: one agent
-(`personal-assistant`) and eight skills (`deep-research`, `gathering-context`,
-`verifying-outcomes`, `microsoft-365`, `obsidian-vault`, `tosca-automation`,
+(`personal-assistant`) and twelve skills (`deep-research`, `delivery-metrics`,
+`gathering-context`, `knowledge-curation`, `memory`, `microsoft-365`,
+`obsidian-vault`, `tosca-automation`, `verifying-outcomes`, `visual-testing`,
 `vividus`, `xray-testing`). `skills.json` registers those orphan monorepo skills
-plus the 28 external (`repo:`) skills fetched from upstream at install time.
+plus the 30 external (`repo:`) skills fetched from upstream at install time.
 
 Read `README.md` for the full catalog and install paths, `AGENTS.md` for the
 consumer-facing summary, and `factories/SPEC.md` before touching factories.
