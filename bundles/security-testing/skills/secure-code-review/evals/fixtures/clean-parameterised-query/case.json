@@ -1,0 +1,11 @@
+{
+  "id": "clean-parameterised-query",
+  "kind": "clean-control",
+  "contract": "review",
+  "description": "The same search route with the query parameterised ($1, $2), the search term validated against an allowlist pattern and the limit parsed and capped. The LIKE wildcard wrapping happens in the parameter value, never in the SQL text. No finding is expected: a claim here is a false positive.",
+  "packet": {
+    "files": [
+      { "path": "src/search.js", "side": "head", "ranges": [[1, 9]] }
+    ]
+  }
+}

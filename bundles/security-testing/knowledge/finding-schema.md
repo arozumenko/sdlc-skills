@@ -11,8 +11,8 @@ citation carries a commit oid and a range of at most 40 raw lines, so
 
 | field | type | meaning |
 |---|---|---|
-| `head` | string | the commit oid the review was performed at (`git rev-parse HEAD`) |
-| `scope_paths` | string[] | copied from `engagement.md`; every citation path must fall under one of them |
+| `head` | string | the commit oid the review was performed at — always the tip under review (`git rev-parse HEAD`): coverage is tiled over the index's files with line counts at `head`, so an older `head` shows files added since as 0-line `unexamined` rows |
+| `scope_paths` | string[] | copied from `engagement.md`, informational: `check` validates citation paths against the engagement's own list, not this copy |
 | `examined` | `{path, lines?}[]` | what the reviewer actually read; `lines: [s, e]` marks a partial read, no `lines` means the whole file. `check` tiles these once against `git ls-files -- <scope_paths>` and prints `COVERAGE examined=<n> partial=<n> unexamined=<n>` |
 | `findings` | finding[] | the assertions below; an empty list is a valid review |
 
@@ -44,8 +44,12 @@ citation carries a commit oid and a range of at most 40 raw lines, so
 writes the file back with, per citation, `state: VERIFIED | FAILED(<why>)`,
 the stamped `oid` and the redacted `snippet`; per finding, `id =
 sha256(path \0 class \0 redact(normalise(snippet)) \0 first line)` (spec D5),
-so no published hash has a secret in its preimage. A `FAILED` citation is
-fixed in place and re-checked; nothing is write-once.
+so no published hash has a secret in its preimage. Nothing is write-once:
+`check` re-runs freely on its own output (the `check_stamp` matches), but a
+stamped file edited by hand is `REFUSED agent-written key id` — a `FAILED`
+citation is fixed in the reviewer's unstamped `findings.json` (or with
+`id`, `state`, `snippet_redacted`, `coverage` and `check_stamp` stripped;
+`oid` may stay) and the file is re-checked.
 
 ## Second opinions — `second-<id>.json`
 
@@ -55,13 +59,14 @@ file beside `findings.json`:
 ```json
 {
   "finding_id": "<id>",
-  "oid": "<the review head>",
-  "findings_sha256": "<sha256 of findings.json as read>",
+  "oid": "<the finding's first citation's oid, all 40 hex>",
+  "findings_sha256": "<sha256 of findings.json exactly as on disk after the lead's check>",
   "assertion": "confirmed | refuted | indeterminate",
   "note": "one paragraph",
   "by": "<session or agent name>"
 }
 ```
 
-`check` validates every `second-<id>.json` in the directory; a wrong `oid`
-or a stale `findings_sha256` prints `STALE-REVIEW <id>`.
+`check` validates every `second-<id>.json` in the directory; a wrong or
+short `oid`, or a `findings_sha256` of any bytes other than the stamped file
+`check` last wrote, prints `STALE-REVIEW <id>` (exit 4).
