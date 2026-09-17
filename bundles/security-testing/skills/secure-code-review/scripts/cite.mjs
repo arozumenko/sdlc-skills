@@ -99,13 +99,15 @@ const command = (sub, fn) => (args, ctx) => {
 
 /**
  * The engagement template: the skill-relative copy in this repo's bundle
- * tree first, then the copy the installer seeds under `<st>/knowledge/`.
+ * tree first, then the copy the installer seeds under `<st>/knowledge/`,
+ * then the skill's own `references/` copy (a one-skill standalone install
+ * seeds no `knowledge/`).
  * @param {string} root
  * @returns {string} absolute path
- * @throws {UsageError} neither copy exists
+ * @throws {UsageError} no copy exists
  */
 function templatePath(root) {
-  const candidates = [join(HERE, "..", "..", "..", TEMPLATE_REL), join(stDir(root), TEMPLATE_REL)];
+  const candidates = [join(HERE, "..", "..", "..", TEMPLATE_REL), join(stDir(root), TEMPLATE_REL), join(HERE, "..", "references", "engagement.md.template")];
   const found = candidates.find((p) => existsSync(p));
   if (found === undefined) throw new UsageError(`engagement template not found (looked in ${candidates.map((p) => resolve(p)).join(", ")})`);
   return found;
