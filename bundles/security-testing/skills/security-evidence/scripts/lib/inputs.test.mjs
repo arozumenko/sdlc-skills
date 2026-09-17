@@ -52,7 +52,8 @@ function reviewRun() {
 test("REQUIRED: one closed list per template, review ⊂ assessment, and every template file's required-inputs block equals its list (US-016 AC-7)", () => {
   assert.deepEqual(Object.keys(REQUIRED).sort(), [...REPORT_TEMPLATES].sort());
   assert.deepEqual([...REQUIRED.review], ["run", "scope", "claimed", "gate-result", "coverage", "examined", "packets", "receipts", "rejects", "unlocated"]);
-  assert.deepEqual([...REQUIRED.assessment], [...REQUIRED.review, "engagement", "threat-model", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]);
+  // TASK-048 (PM ruling, TASK-024 follow-up after G20): `dispositions` follows `threat-model` so a COMMITTED assessment always carries the script-derived index (G-7)
+  assert.deepEqual([...REQUIRED.assessment], [...REQUIRED.review, "engagement", "threat-model", "dispositions", "observations", "imports", "verify-snapshots", "register-events", "proposals-index"]);
   assert.deepEqual([...REQUIRED.verify], ["run", "verify", "packets", "receipts"]);
   assert.deepEqual([...REQUIRED["threat-model"]], ["run", "threat-model", "packets", "receipts", "dispositions"]);
   for (const list of Object.values(REQUIRED)) {
@@ -225,7 +226,7 @@ test("closeOver(verify): run + verify.json + the fix-review packet + receipts; t
   assert.throws(() => closeOver(dir, "verify"), (err) => err instanceof CliError && err.token === "INCOMPLETE(verify)");
 });
 
-test("closeOver(assessment): the run-init-shaped run (empty indexes, no threat model) is INCOMPLETE(threat-model); with a model, INCOMPLETE(register-events) until a snapshot is taken; imports/observations close over their members", () => {
+test("closeOver(assessment): the run-init-shaped run (empty indexes, no threat model) is INCOMPLETE(threat-model); with a model but no index, INCOMPLETE(dispositions) (TASK-048: the un-linted model never reaches a report); with the index, INCOMPLETE(register-events) until a snapshot is taken; imports/observations close over their members", () => {
   const { dir } = reviewRun();
   write(dir, "engagement.json", "engagement", { engagement_id: "e" });
   write(dir, "imports.json", "imports-index", { imports: [] });
@@ -233,10 +234,19 @@ test("closeOver(assessment): the run-init-shaped run (empty indexes, no threat m
   write(dir, "proposals-index.json", "proposals-index", { proposals: [] });
   assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.token === "INCOMPLETE(threat-model)");
   write(dir, "threat-model.json", "threat-model", { elements: [], threats: [] });
+  assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.token === "INCOMPLETE(dispositions)");
+  const index = write(dir, "dispositions.json", "dispositions", { dispositions: [] });
   assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.token === "INCOMPLETE(register-events)");
   write(dir, "register-events.json", "register-snapshot", { engagement_id: "e", seq: 0, chain_sha256: "0".repeat(64), events: [], aliases: [] });
   const inputs = closeOver(dir, "assessment");
   assert.deepEqual(Object.keys(inputs.hashes), [...REQUIRED.assessment].sort());
+  assert.equal(inputs.hashes.dispositions, index.envelope.self_sha256, "the index is a singleton: its own identity enters the manifest (R1: write-once, script-derived)");
+  // an index enveloped for another run is self-consistent but not this run's (ownRun; closes the TASK-041 foreign-envelope nit, PM log after G21)
+  rmSync(join(dir, "dispositions.json"));
+  writeArtifact(join(dir, "dispositions.json"), makeEnvelope({ ...head("dispositions"), run_id: "abcdef012345-0099" }, { dispositions: [] }));
+  assert.throws(() => closeOver(dir, "assessment"), (err) => err instanceof CliError && err.token === "INCONSISTENT(dispositions.json)");
+  rmSync(join(dir, "dispositions.json"));
+  write(dir, "dispositions.json", "dispositions", { dispositions: [] });
   assert.equal(inputs.hashes.imports, setIdentity([]));
   assert.equal(inputs.hashes.observations, setIdentity([]));
   assert.equal(inputs.hashes["verify-snapshots"], setIdentity([]));
@@ -253,6 +263,7 @@ test("closeOver(assessment): a verify snapshot is filed under its own run id —
   write(dir, "observations.json", "observations-index", { observations: [] });
   write(dir, "proposals-index.json", "proposals-index", { proposals: [] });
   write(dir, "threat-model.json", "threat-model", { elements: [], threats: [] });
+  write(dir, "dispositions.json", "dispositions", { dispositions: [] });
   write(dir, "register-events.json", "register-snapshot", { engagement_id: "e", seq: 0, chain_sha256: "0".repeat(64), events: [], aliases: [] });
   const rule = "verified-two-acks";
   const verify = readArtifact(join(VERIFY_FIXTURES, `${rule}.json`), { kind: "verify" });

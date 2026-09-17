@@ -3,10 +3,14 @@
   "title": "Security Testing Team",
   "description": "Threat-led, read-only security testing team: code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register.",
   "agents": [],
-  "localAgents": ["security-reviewer"],
-  "localSkills": ["security-evidence", "secure-code-review", "security-engagement"],
+  "localAgents": ["security-lead", "threat-modeler", "security-reviewer"],
+  "localSkills": ["security-evidence", "security-engagement", "threat-modeling", "secure-code-review", "security-test-planning", "risk-register"],
   "skills": ["memory", "knowledge-curation"],
-  "briefings": { "security-reviewer": "briefings/security-reviewer.md" },
+  "briefings": {
+    "security-lead": "briefings/security-lead.md",
+    "threat-modeler": "briefings/threat-modeler.md",
+    "security-reviewer": "briefings/security-reviewer.md"
+  },
   "seed": { "knowledge": ".agents/security-testing/knowledge" },
   "instructions": "instructions.md"
 }

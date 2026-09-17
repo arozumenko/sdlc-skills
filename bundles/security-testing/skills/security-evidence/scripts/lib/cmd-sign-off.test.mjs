@@ -63,10 +63,14 @@ const EMPTY_MODEL = Object.freeze({ elements: [], threats: [] });
  * scope packet, gate over `claims`, coverage over `declared`, and — for an
  * assessment — the threat model (planted as the snapshot, or linted by the
  * real `tm-lint check` when `lint` is set, which also writes the
- * dispositions index), an optionally planted `dispositions.json` (`index`:
- * the rows, Dispositions shape) and the register snapshot.
+ * dispositions index), the planted `dispositions.json` (`index`: the rows,
+ * Dispositions shape; default: the empty index tm-lint check derives for
+ * EMPTY_MODEL; `null` plants none) and the register snapshot. Since TASK-048
+ * `dispositions` is a required assessment input, so an assessment with a
+ * snapshot but no index never reaches COMMITTED: pass `commit: false` to
+ * assert build-report's `3 INCOMPLETE(dispositions)` instead.
  */
-async function committedRun(repo, kind, { claims = [claim()], declared = [{ path: "src/app.js", ranges: [[1, 1]] }], model = EMPTY_MODEL, index = null, lint = false } = {}) {
+async function committedRun(repo, kind, { claims = [claim()], declared = [{ path: "src/app.js", ranges: [[1, 1]] }], model = EMPTY_MODEL, index = model === EMPTY_MODEL ? [] : null, lint = false, commit = true } = {}) {
   const run_id = await initRun(repo, kind);
   const dir = runDir(repo, run_id);
   ok(await evidence(repo, ["scope", "--run", run_id]), "scope");
@@ -86,8 +90,10 @@ async function committedRun(repo, kind, { claims = [claim()], declared = [{ path
     if (index !== null) writeArtifact(join(dir, "dispositions.json"), makeEnvelope(headFor(repo, run_id, "dispositions"), { dispositions: index }), { exclusive: true });
     ok(await evidence(repo, ["run", "snapshot", "register", "--run", run_id]), "snapshot register");
   }
-  ok(await evidence(repo, ["build-report", "--run", run_id, "--template", kind]), `build-report ${kind}`);
-  return { run_id, dir, claimsFile };
+  const built = await evidence(repo, ["build-report", "--run", run_id, "--template", kind]);
+  if (commit) ok(built, `build-report ${kind}`);
+  else assert.equal(built.code, 3, `build-report ${kind} (expected INCOMPLETE): ${built.stdout}${built.stderr}`);
+  return { run_id, dir, claimsFile, built };
 }
 
 /** A repo with src/db.js + package.json committed, a baseline, and one COMMITTED assessment run (seq 1). */
@@ -387,11 +393,11 @@ function setPolicy(repo, require_dispositions) {
   writeFileSync(join(repo, ST, "engagement.md"), engagementMd(record));
 }
 
-/** A repo with one COMMITTED assessment carrying THREAT_MODEL as its snapshot and, unless `index: null`, INDEX as its dispositions index. */
-async function dispositionsRepo({ index = INDEX, model = THREAT_MODEL, lint = false } = {}) {
+/** A repo with one COMMITTED assessment carrying THREAT_MODEL as its snapshot and INDEX as its dispositions index (`index: null` plants none — the run then stays INCOMPLETE, TASK-048). */
+async function dispositionsRepo({ index = INDEX, model = THREAT_MODEL, lint = false, commit = true } = {}) {
   const repo = readyRepo();
   ok(await evidence(repo, ["engagement", "baseline"]), "baseline");
-  const run = await committedRun(repo, "assessment", { model, index, lint });
+  const run = await committedRun(repo, "assessment", { model, index, lint, commit });
   return { repo, ...run };
 }
 
@@ -426,7 +432,7 @@ test("all ⇒ exit 4 naming threat ids: DISPOSITIONS(<threat ids>) over the inde
 });
 
 test("none ⇒ not evaluated: no DISPOSITIONS fail, no threat named, the index not even read (US-033 AC-3)", async () => {
-  const { repo } = await dispositionsRepo({ index: null }); // absent index: would list every threat under any other policy
+  const { repo } = await dispositionsRepo(); // INDEX carries two rows any other policy would list; `linted: false` below proves it was never read
   setPolicy(repo, "none");
   const r = await signOffCli(repo);
   assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
@@ -436,27 +442,30 @@ test("none ⇒ not evaluated: no DISPOSITIONS fail, no threat named, the index n
   assert.deepEqual(result.dispositions, { policy: "none", evaluated: false, linted: false, listed: [] });
 });
 
-test("absent dispositions.json ⇒ every threat of the snapshot counts as undisposed — the agent's unvalidated `ticketed`/`mitigated` assertions never dispose anything (G-7; PM log after G20)", async () => {
-  const { repo, run_id } = await dispositionsRepo({ index: null });
-  setPolicy(repo, undefined);
-  let r = await signOffCli(repo);
-  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
-  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 4 undisposed-or-planned policy=executed-or-ticketed", "  T-001 undisposed", "  T-002 undisposed", "  T-003 undisposed", "  T-004 undisposed"]);
-  assert.match(r.stderr, new RegExp(`sign-off: runs/${run_id} has no dispositions\\.json .*not linted`), "the reason is on stderr");
-  assert.ok(!r.stderr.includes(repo), "no absolute path on stderr");
-  setPolicy(repo, "all");
-  r = await signOffCli(repo);
-  assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
-  assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(DISPOSITIONS(T-001, T-002, T-003, T-004))"]);
+test("absent dispositions.json ⇒ the assessment never reaches COMMITTED (3 INCOMPLETE(dispositions), TASK-048) and sign-off sees no assessment — the agent's unvalidated `ticketed`/`mitigated` assertions never dispose anything (G-7; PM log after G20/G21)", async () => {
+  const { repo, run_id, dir, built } = await dispositionsRepo({ index: null, commit: false });
+  assert.equal(built.stdout, "INCOMPLETE(dispositions)\n", "the un-linted model (snapshot written, no index) is not a report");
+  assert.ok(!existsSync(join(dir, "COMMITTED")));
+  for (const policy of [undefined, "all", "none"]) {
+    setPolicy(repo, policy);
+    const r = await signOffCli(repo);
+    assert.equal(r.code, 4, `${policy}: ${r.stdout}${r.stderr}`);
+    assert.deepEqual(failLines(r.stdout), ["SIGN-OFF: FAIL(NO-ASSESSMENT)"]);
+    const out = lines(r.stdout);
+    assert.ok(out.includes("INCOMPLETE: 1") && out.includes(`  ${run_id} seq=1 kind=assessment`), r.stdout);
+    assert.ok(out.includes("DISPOSITIONS: not evaluated"));
+    assert.ok(!r.stdout.includes("T-00") && !r.stderr.includes("T-00"), "no threat of the un-linted snapshot is ever listed");
+    assert.ok(!r.stderr.includes(repo), "no absolute path on stderr");
+  }
   const result = await signOff(ctxFor(repo), { engagement_id: EID });
-  assert.equal(result.dispositions.linted, false);
-  assert.equal(result.dispositions.evaluated, true);
-  // a snapshot without threats has nothing to dispose: nothing listed, nothing on stderr
-  const empty = await dispositionsRepo({ index: null, model: EMPTY_MODEL });
+  assert.deepEqual(result.dispositions, { policy: "none", evaluated: false, linted: false, listed: [] });
+  // a linted snapshot without threats has nothing to dispose: nothing listed, nothing on stderr
+  const empty = await dispositionsRepo({ model: EMPTY_MODEL, index: [] });
   setPolicy(empty.repo, "all");
-  r = await signOffCli(empty.repo);
+  const r = await signOffCli(empty.repo);
   assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
   assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: 0 undisposed-or-planned policy=all"]);
+  assert.ok(!r.stderr.includes("not linted"));
 });
 
 test("the index the real `tm-lint check` writes is the one sign-off reads (R1: script-derived, never agent-authored)", async () => {
@@ -486,12 +495,14 @@ test("a dispositions.json that is not the snapshot's index (rows for other threa
   r = await signOffCli(rekinded.repo);
   assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
   assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions)) run=${rekinded.run_id}`]);
-  // the file rewritten after the fact
+  // the file rewritten after the fact: since TASK-048 the index is a required assessment input, so the run's own
+  // `check` names the file (INCONSISTENT(dispositions.json), the closeOver spelling) before sign-off's index read runs
   const tampered = await dispositionsRepo();
   writeFileSync(join(tampered.dir, "dispositions.json"), '{"envelope":{},"payload":{"dispositions":[]}}\n');
   r = await signOffCli(tampered.repo);
   assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
-  assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions)) run=${tampered.run_id}`]);
+  assert.deepEqual(failLines(r.stdout), [`SIGN-OFF: FAIL(INCONSISTENT(dispositions.json)) run=${tampered.run_id}`]);
+  assert.deepEqual(dispositionsBlock(r.stdout), ["DISPOSITIONS: not evaluated"]);
 });
 
 // --- run kind: the ledger entry must agree with run.json's template (PM log after G16; fail-closed) --------

@@ -264,7 +264,7 @@ test("two concurrent run init processes ⇒ two distinct seqs, index parses", as
   assert.deepEqual(readdirSync(join(repo, ST, "ledger")).filter((n) => n.includes("lock")), [], "no lock left behind");
 });
 
-test("assessment run has the three empty index artifacts and no threat-model.json; review run has none of them", async () => {
+test("assessment run has the three empty index artifacts and neither threat-model.json nor dispositions.json; review run has none of them", async () => {
   const repo = readyRepo();
   const a = await runScript("evidence", ["run", "init", "--kind", "assessment"], { cwd: repo, env: ENV });
   assert.equal(a.code, 0, a.stderr);
@@ -282,6 +282,10 @@ test("assessment run has the three empty index artifacts and no threat-model.jso
     assert.equal(art.envelope.run_id, run_id);
   }
   assert.ok(!existsSync(join(dir, "threat-model.json")), "absence is the INCOMPLETE(threat-model) signal");
+  // TASK-048: `dispositions` joined the assessment's required inputs, but the index is NOT pre-written here —
+  // it is write-once and script-derived by `tm-lint check` (R1), so a placeholder `{dispositions: []}` would make
+  // every non-empty model's lint 5 INCONSISTENT(dispositions); absence is the INCOMPLETE(dispositions) signal (spec P2).
+  assert.ok(!existsSync(join(dir, "dispositions.json")), "absence is the INCOMPLETE(dispositions) signal");
   const lines = a.stdout.trimEnd().split("\n");
   assert.equal(lines.length, 6, "RUN + five WROTE lines");
   assert.deepEqual(
