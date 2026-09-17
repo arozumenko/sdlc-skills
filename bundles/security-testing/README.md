@@ -17,8 +17,9 @@ never a runnable case.
 **v1 ships the full team** (spec §3 D1, §4): three agents — `security-lead`,
 `threat-modeler`, `security-reviewer` — and six skills. Every script lives in
 `security-evidence`, so any install that includes it runs every command; the
-two-skill standalone install (no agents) runs the full command set except
-the threat-model and planning commands, which need their agents.
+two-skill standalone install (no agents) runs every command too — the
+threat-model and planning commands simply have nothing to lint or admit
+without their agents' input (a `threat-model.json`, candidate cases).
 
 ## Install
 
@@ -49,6 +50,91 @@ A standalone install seeds nothing and splices nothing; `evidence.mjs
 engagement init` writes the knowledge templates itself when the seeded
 copies are absent (D12). See [Standalone review](#standalone-review-human-driven)
 for the exact sequence.
+
+### Smoke: four targets + two skills
+
+`skills/security-evidence/scripts/smoke.test.mjs` runs the five installs
+below **offline** from a checkout (each line as `node bin/init.mjs <args>`
+through the bundle's offline harness: one local bare fixture remote serves
+both externals and every `https://github.com/` URL is rewritten to an
+unreachable path), each into an empty directory holding only a consumer
+`CLAUDE.md`, then drives the two-skill install through the
+[standalone sequence](#standalone-review-human-driven) up to `check`. It is
+opt-in — `SDLC_SMOKE=1 npm test` — and skips otherwise so `npm test` stays
+fast; the command block below is compared against the script's own list on
+every `npm test`, so the two cannot drift. The same commands run by hand
+against any host, with the network, install the same shapes.
+
+<!-- smoke:commands -->
+```bash
+npx github:arozumenko/sdlc-skills init --factory security-testing --target claude --yes
+npx github:arozumenko/sdlc-skills init --factory security-testing --target cursor --yes
+npx github:arozumenko/sdlc-skills init --factory security-testing --target codex --yes
+npx github:arozumenko/sdlc-skills init --factory security-testing --target copilot --yes
+npx github:arozumenko/sdlc-skills init --skills security-testing/secure-code-review,security-testing/security-evidence --target claude --yes
+```
+
+Every factory install, on any of the four targets, prints these lines
+(indentation, the `Catalog:` line and the `Launch …` line vary; in a
+directory that already has an `AGENTS.md` the instructions line reads
+`(appended)`, and without a `CLAUDE.md` it reads `(not present; skipped)`):
+
+<!-- smoke:expected-factory -->
+```text
+Factory: Security Testing Team — 0 shared agent(s), 3 local agent(s), 6 local skill(s), 8 extra skill(s)
+• "issue-tracking" exists in feature-development, test-automation — using feature-development. Qualify as <factory>/issue-tracking to pick another.
+✓ agent  security-lead (factory-local)
+✓ agent  threat-modeler (factory-local)
+✓ agent  security-reviewer (factory-local)
+✓ skill  security-evidence (factory-local)
+✓ skill  dispatching-parallel-agents (external: obra/superpowers)
+✓ skill  systematic-debugging (external: obra/superpowers)
+✓ briefing security-lead
+✓ briefing threat-modeler
+✓ briefing security-reviewer
+✓ instructions AGENTS.md (created)
+✓ instructions CLAUDE.md (appended)
+✓ seed .agents/security-testing/knowledge
+Done: 21 installed, 0 skipped.
+```
+
+and lands the host's native shape — the smoke asserts each:
+
+| Target | Agents | `SKILLS-INJECTED` block | Skills + scripts |
+|---|---|---|---|
+| `claude` | `.claude/agents/<role>/` directories (`AGENT.md`, `SOUL.md`, `RULES.md`) | absent (Claude preloads `skills:`) | `.claude/skills/<id>/`, scripts under `security-evidence/scripts/` |
+| `cursor` | `.cursor/agents/<role>/` directories | present | `.cursor/skills/<id>/` |
+| `codex` | flat TOML `.codex/agents/<role>.toml` (`name = "<role>"`, a `developer_instructions` body), no directory | absent (the TOML carries the inventory) | `.codex/skills/<id>/` |
+| `copilot` | flat `.github/agents/<role>.agent.md`, no directory | present | `.github/skills/<id>/` |
+
+On every target the `<!-- FACTORY:security-testing START -->` …
+`<!-- FACTORY:security-testing END -->` block appears exactly once in
+`AGENTS.md` (created) and once in `CLAUDE.md` (appended after the
+consumer's own text), and `.agents/memory/<role>/project_briefing.md` is
+byte-equal to `briefings/<role>.md` for each of the three roles.
+
+The two-skill install prints:
+
+<!-- smoke:expected-skills -->
+```text
+✓ skill  secure-code-review
+✓ skill  security-evidence
+Done: 2 installed, 0 skipped.
+```
+
+with no agents, no seed and no splice; the smoke then runs the standalone
+sequence — `engagement init` (twice), `run init --kind review`, `scope`,
+`packet --kind scope`, `gate`, `coverage`, `packet --kind subject` +
+`receipt validate`, `build-report --template review` — and
+`check <st>/runs/<run_id> --integrity --drift` prints exactly:
+
+<!-- smoke:expected-check -->
+```text
+CONSISTENT
+CURRENT
+ORIGIN: unauthenticated
+KEY: available
+```
 
 ## Roster
 
