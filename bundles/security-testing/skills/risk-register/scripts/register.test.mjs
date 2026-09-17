@@ -295,9 +295,20 @@ test("fixed/regressed are exported for verify.mjs and never print", async () => 
   const verifyPath = join(root, `${ST}/verify/aaaaaaaa-deadbee/verify.json`);
   mkdirSync(join(root, `${ST}/verify/aaaaaaaa-deadbee`), { recursive: true });
   writeFileSync(verifyPath, JSON.stringify({ verdict: "VERIFIED", head: "deadbeef" }));
-  assert.deepEqual(mod.fixed(root, "R-0001", verifyPath, "verify"), { id: "R-0001", status: "fixed" });
-  assert.equal(readLog(root).at(-1).actor, "verify");
-  assert.deepEqual(mod.regressed(root, "R-0001", verifyPath), { id: "R-0001", status: "regressed" });
+  const written = [];
+  const realWrite = process.stdout.write;
+  process.stdout.write = (chunk, ...rest) => {
+    written.push(String(chunk));
+    return true;
+  };
+  try {
+    assert.deepEqual(mod.fixed(root, "R-0001", verifyPath, "verify"), { id: "R-0001", status: "fixed" });
+    assert.deepEqual(mod.regressed(root, "R-0001", verifyPath), { id: "R-0001", status: "regressed" });
+  } finally {
+    process.stdout.write = realWrite;
+  }
+  assert.deepEqual(written, [], "the in-process entry points write nothing to stdout");
+  assert.equal(readLog(root).at(-2).actor, "verify");
   assert.throws(() => mod.regressed(root, "R-0001", verifyPath), /regressed not allowed from regressed/);
   assert.throws(() => mod.fixed(root, "R-0009", verifyPath), /no row R-0009/);
   const { rows, seq } = mod.foldEvents(mod.readLog(root));
@@ -305,4 +316,58 @@ test("fixed/regressed are exported for verify.mjs and never print", async () => 
   assert.equal(rows.get("R-0001").status, "regressed");
   assert.equal(mod.rowForFinding(rows, FINDING_A).id, "R-0001");
   assert.equal(mod.rowForFinding(rows, FINDING_B), undefined);
+});
+
+test("redaction runs before any write: payload strings, the actor and an echoed --verify path", () => {
+  const root = tmpRepoWithEngagement();
+  const bearer = "Bearer " + "x".repeat(36);
+  const awsKey = "AKIA" + "A".repeat(16);
+  let r = run(root, "add", "--finding", FINDING_A, "--priority", "p1", "--title", `leak ${bearer}`, "--owner", awsKey, "--by", "token=supersecret1");
+  assert.equal(r.code, 0, r.out.join("\n") + r.err);
+  assert.equal(r.out[0], "ROW R-0001 open");
+  const log = readFileSync(join(root, LOG), "utf8");
+  assert.ok(log.includes("<REDACTED:bearer>"), log);
+  assert.ok(log.includes("<REDACTED:aws-key>"), log);
+  assert.ok(log.includes("token=<REDACTED:key-value>"), "the actor is redacted too");
+  assert.ok(!log.includes("x".repeat(36)) && !log.includes(awsKey) && !log.includes("supersecret1"), "no raw secret reaches events.jsonl");
+  const ev = readLog(root)[0];
+  assert.equal(ev.payload.finding_id, FINDING_A, "finding_id is identity and stays full hex");
+  assert.equal(ev.payload.title, "leak Bearer <REDACTED:bearer>");
+  assert.equal(ev.payload.owner, "<REDACTED:aws-key>");
+
+  r = run(root, "render");
+  assert.equal(r.code, 0);
+  const md = readFileSync(join(root, `${ST}/risk-register.md`), "utf8");
+  assert.ok(md.includes("<REDACTED:bearer>") && md.includes("<REDACTED:aws-key>"), md);
+  assert.ok(!md.includes("x".repeat(36)) && !md.includes(awsKey), "no raw secret reaches risk-register.md");
+  r = run(root, "status", "--json");
+  assert.equal(JSON.parse(r.out.join("\n")).rows[0].finding_id, FINDING_A, "status --json still carries the full finding id");
+
+  // a 40-hex head is identity, never redacted (high-entropy would otherwise eat it)
+  const head = "0123456789abcdef".repeat(2) + "01234567";
+  assert.equal(head.length, 40);
+  const verifyDir = join(root, `${ST}/verify/aaaaaaaa-0123456`);
+  mkdirSync(verifyDir, { recursive: true });
+  const verifyPath = join(verifyDir, "verify.json");
+  writeFileSync(verifyPath, JSON.stringify({ verdict: "VERIFIED", head }));
+  r = run(root, "fixed", "R-0001", "--verify", verifyPath);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.equal(readLog(root).at(-1).payload.head, head);
+
+  // the --verify path echoed in a USAGE line is redacted
+  r = run(root, "regressed", "R-0001", "--verify", `no/such/${bearer}.json`);
+  assert.equal(r.code, 2);
+  assert.match(r.out[0], /^USAGE\(regressed: no such file /);
+  assert.ok(r.out[0].includes("<REDACTED:bearer>") && !r.out[0].includes("x".repeat(36)), r.out[0]);
+});
+
+test("--expect parses an engagement id that itself contains a colon", () => {
+  const root = tmpRepoWithEngagement({ engagement_id: "acme:2026" });
+  assert.equal(run(root, "add", "--finding", FINDING_A, "--priority", "p2", "--title", "t").code, 0);
+  let r = run(root, "status");
+  const fp = r.out.at(-1);
+  assert.match(fp, /^FINGERPRINT acme:2026:1:[0-9a-f]{64}$/);
+  r = run(root, "status", "--expect", fp);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.equal(r.out.at(-1), "MATCH");
 });

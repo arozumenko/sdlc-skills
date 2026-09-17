@@ -23,8 +23,11 @@
 // Open exposure counts rows in open|regressed|accepted per priority: an
 // approval never subtracts (spec §2 row 6). Every approval payload carries
 // `authenticated: false`; there is no `confirm` verb and nothing here can
-// create a confirmed state. Messages never echo log bytes. Stdlib ESM only;
-// no child process, no network. Imports only from ./lib/.
+// create a confirmed state. Messages never echo log bytes. Every operator
+// string (payload strings, the actor, an echoed --verify path) passes through
+// `lib/redact.mjs` before it is validated, appended or printed; `finding_id`
+// (64-hex) and `head` (40-hex) are identity, not content, and stay intact.
+// Stdlib ESM only; no child process, no network. Imports only from ./lib/.
 
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -33,6 +36,7 @@ import { fileURLToPath } from "node:url";
 
 import { UsageError, runCli } from "./lib/cli.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
+import { redactString } from "./lib/redact.mjs";
 import { LIVE_STATUSES, PRIORITIES, ROW_ID, STATUSES, TRANSITIONS, TransitionError, applyTransition, isCalendarDay } from "./lib/transitions.mjs";
 
 const LOG_REL = join("register", "events.jsonl");
@@ -47,6 +51,11 @@ export const UNAUTHENTICATED_SENTENCE = "None of these records is authenticated.
 const sha256Hex = (input) => createHash("sha256").update(input).digest("hex");
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const short = (findingId) => `${findingId.slice(0, 8)}…`;
+/** Payload keys that are hex identity (a finding id, a commit) and never redacted. */
+const HEX_KEYS = new Set(["finding_id", "head"]);
+const clean = (s) => redactString(s).text;
+/** Every string value of a payload redacted, except the hex identity keys. */
+const redactPayload = (payload) => (isObject(payload) ? Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, typeof v === "string" && !HEX_KEYS.has(k) ? clean(v) : v])) : payload);
 
 /** The log cannot be folded; `.token` is the result line, exit 5. */
 export class CorruptError extends Error {
@@ -155,14 +164,18 @@ export function rowForFinding(rows, findingId) {
 const actorOf = (by) => (typeof by === "string" && by.length > 0 ? by : process.env.USER || "unknown");
 
 /**
- * Fold, apply one event to one row, append one line. The fold happens first,
- * so a corrupt log or a refused transition writes nothing.
+ * Fold, apply one event to one row, append one line. The payload and actor
+ * are redacted first, so validation, the appended line and the returned row
+ * all see redacted values; the fold happens next, so a corrupt log or a
+ * refused transition writes nothing.
  * @param {string} root
  * @param {{event: string, rowId?: string, payload: object, actor: string}} ev `rowId` absent ⇒ `add`
  * @returns {object} the row after the event
  * @throws {CorruptError | RefusedError}
  */
-function transition(root, { event, rowId, payload, actor }) {
+function transition(root, { event, rowId, payload: rawPayload, actor: rawActor }) {
+  const payload = redactPayload(rawPayload);
+  const actor = clean(String(rawActor));
   const { rows, seq } = foldEvents(readLog(root));
   const id = event === "add" ? nextId(rows) : rowId;
   const row = rows.get(id);
@@ -203,9 +216,9 @@ function verifyPayload(root, verifyPath) {
   try {
     doc = JSON.parse(readFileSync(abs, "utf8"));
   } catch (e) {
-    throw new UsageError(e && e.code === "ENOENT" ? `no such file ${verifyPath}` : `${verifyPath} is not valid JSON`);
+    throw new UsageError(e && e.code === "ENOENT" ? `no such file ${clean(verifyPath)}` : `${clean(verifyPath)} is not valid JSON`);
   }
-  if (!isObject(doc)) throw new UsageError(`${verifyPath} is not a JSON object`);
+  if (!isObject(doc)) throw new UsageError(`${clean(verifyPath)} is not a JSON object`);
   const rel = relative(realpathSync(root), realpathSync(abs)); // both realpath'd: an aliased tmpdir (/var → /private/var) would otherwise never be "under" the root
   const verify = rel.startsWith("..") || isAbsolute(rel) ? abs : rel.split("\\").join("/");
   return { verify, verdict: typeof doc.verdict === "string" ? doc.verdict : "", head: typeof doc.head === "string" ? doc.head : "" };
@@ -339,7 +352,8 @@ function summary(root) {
   return { engagement_id: record.engagement_id, seq, sha256: sha, fingerprint, counts, open_exposure, unauthenticated_approvals, rows: [...rows.values()].sort((a, b) => a.id.localeCompare(b.id)) };
 }
 
-const FINGERPRINT = /^([^:]+):(\d+):([0-9a-f]{64})$/;
+/** Parsed from the right: the `<seq>:<sha256>` tail is fixed-shape, so an engagement id may itself contain `:`. */
+const FINGERPRINT = /^(.+):(\d+):([0-9a-f]{64})$/;
 
 /**
  * `--expect <FINGERPRINT>` (the pasted line, with or without its

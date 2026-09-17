@@ -102,6 +102,7 @@ test("supersede sets superseded_by; ticket sets ticket_url and keeps the status"
   assert.equal(sup.status, "superseded");
   assert.equal(sup.superseded_by, "R-0002");
   assert.throws(() => applyTransition(rowIn("open"), "supersede", { by: "R-1" }), /by/);
+  assert.equal(applyTransition(rowIn("open"), "supersede", { by: "R-10000" }).superseded_by, "R-10000", "row ids grow past four digits");
   const t = applyTransition(rowIn("accepted"), "ticket", { ticket_url: "https://x/1" });
   assert.equal(t.status, "accepted");
   assert.equal(t.ticket_url, "https://x/1");

@@ -45,7 +45,7 @@ export const EVENTS = Object.freeze(Object.keys(TRANSITIONS));
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-export const ROW_ID = /^R-\d{4}$/;
+export const ROW_ID = /^R-\d{4,}$/; // at least four digits: row 10000 is R-10000, never a line the fold refuses
 
 /** An (event, from) pair outside the table, or a payload the event does not accept. Messages never echo payload values. */
 export class TransitionError extends Error {
