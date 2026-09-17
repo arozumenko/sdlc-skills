@@ -40,7 +40,10 @@
 //      the proposals reach the run through `run snapshot`):
 //        planned    proposal id ∈ <run>/proposals-index.json, or a 64-hex
 //                   case id with <run>/admissions/<id>.json (kind admission,
-//                   payload.case_sha256 = id)
+//                   payload.case_sha256 = id) whose classification is
+//                   `admitted-*` — a `proposal` record is not planned (PM
+//                   ruling after G22, TASK-044; the reason stays the core's
+//                   "no admission record")
 //        executed   <run>/observations/<id>.json (kind observation,
 //                   payload.observation_id = id; the id must be the schema's
 //                   `O-<12 hex>` before it is used as a file name)
@@ -117,6 +120,8 @@ export const VIEW_FILE = "threat-model.md";
 export const REGISTER_SNAPSHOT_FILE = "register-events.json";
 /** observation.schema.json `observation_id` — the only ref used as a file name that is not already 64-hex. */
 const OBSERVATION_ID = /^O-[0-9a-f]{12}$/;
+/** admission.schema.json classifications that admit a case (`admitted-heuristic` | `admitted-reviewed`); `proposal` does not (TASK-044). */
+const ADMITTED_CLASSIFICATION = /^admitted-/;
 
 // --- the run ---------------------------------------------------------------------------
 
@@ -221,8 +226,10 @@ function evidenceOf(dir) {
       return proposals.some((p) => p.id === id);
     },
     admission(sha) {
+      // PM ruling (after G22, taken by TASK-044): `planned(<case_sha256>)` needs an ADMITTED record —
+      // a `proposal`-classified record is not planned (the case never enters the hand-off suite, D7).
       const a = readOptional(dir, join("admissions", `${sha}.json`), "admission", `admissions/${sha}`);
-      return a !== null && a.payload.case_sha256 === sha;
+      return a !== null && a.payload.case_sha256 === sha && ADMITTED_CLASSIFICATION.test(a.payload.classification ?? "");
     },
     observation(id) {
       if (!OBSERVATION_ID.test(id)) return false;

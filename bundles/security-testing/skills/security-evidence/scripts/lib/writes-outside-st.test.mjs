@@ -59,8 +59,10 @@ const KNOWN_WRITERS = Object.freeze([
   "lib/keys.mjs",
   "lib/knowledge-templates.mjs",
   "lib/ledger.mjs",
+  "lib/observations.mjs", // TASK-044: <run>/observations/<id>.json (writeArtifact) — under <st>
   "lib/register-core.mjs",
   "lib/run-index.mjs",
+  "lib/ta-units.mjs", // TASK-044: <run>/ta-units/<import_sha256>.json (writeExclusive) — under <st>
 ]);
 
 function sources(dir, out = []) {

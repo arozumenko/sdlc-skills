@@ -329,6 +329,7 @@ async function buildPathA() {
       const qm = /^IMPORT qa-run import_sha256=([0-9a-f]{64}) records=(\d+) unlocated=(\d+) rejected=(\d+)$/.exec(lines(qa.stdout)[0]);
       assert.ok(qm, qa.stdout);
       assert.equal(Number(qm[2]), 4, "one run record + three result rows");
+      assert.equal(Number(qm[3]), 3, "TASK-044: no case of the report has an admission in this run, so each result row is an unlocated candidate (unadmitted-case), never an observation");
       const qaRecord = readRun(project, run_id, join("ingest", `${qm[1]}.json`), "import");
       assert.equal(qaRecord.payload.records[0].trusted.record, "run");
       assert.equal(qaRecord.payload.records[0].trusted.environment_host_allowed, true, "staging.example.com ∈ targets.browser");
@@ -338,8 +339,9 @@ async function buildPathA() {
     coverageArgs: ({ sarifSha }) => ["--scanner-rows", drop(project, assessment.run_id, "scanner-rows.json", { rows: [{ import_sha256: sarifSha }] })],
   });
   assert.equal(av.scopeLine, "SCOPE files=3 ranges=3 skipped=0 snapshot=0");
-  // the scanner's record and the reviewer's claim on src/db.js share one identity: one finding, the duplicate counted as rejected
-  assert.equal(av.gateLine, "GATE accepted=2 unverifiable=0 rejected=1 unlocated=0");
+  // the scanner's record and the reviewer's claim on src/db.js share one identity: one finding, the duplicate counted as rejected;
+  // the three unadmitted qa-run rows are the unlocated candidates gate folds into unlocated.json (TASK-044, US-036 AC-2)
+  assert.equal(av.gateLine, "GATE accepted=2 unverifiable=0 rejected=1 unlocated=3");
   assert.deepEqual(av.gateResult.payload.rejected_counts, { "duplicate-id": 1 });
   // every range declared examined ⇒ no scanner-only piece; the scanner row is still recorded on coverage.json
   assert.equal(av.coverageLine, "COVERAGE examined=3 skipped=0 scanner=0");

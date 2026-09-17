@@ -68,6 +68,13 @@
 //            with the model (every entry names a threat the model carries,
 //            with the same kind and ref, no threat twice)
 //            ⇒ InconsistentInput("dispositions") otherwise.
+//   qa_fail  (assessment; TASK-044, spec §9.2, US-036 AC-3) every
+//            observation whose `result` is FAIL, rendered as recorded in
+//            section 9 with its case identity — a candidate, never a
+//            finding; the block says that a mitigation decision needs a
+//            separate `mitigation-review` receipt citing the observation.
+//            Nothing here reads the receipts for an observation: no state
+//            is derived for one.
 //
 // TL-16 (TASK-024 reading; templates/README.md): section 3's "incomplete
 // runs" cannot be counted inside the run directory — the ledger is outside
@@ -748,7 +755,9 @@ function assessmentView(inputs, opts, run_id) {
   }
   view.summary.unauthenticated_approvals = register.unauthenticated_approvals;
   view.summary.incomplete_runs = INCOMPLETE_RUNS_SEE_SIGN_OFF;
-  view.unresolved.qa_fail = observations.filter((o) => o.payload.result === "FAIL").map((o) => ({ observation_id: o.payload.observation_id, case_id: o.payload.case_id, result: o.payload.result, import_sha256: o.payload.import_sha256, head_oid: o.payload.head_oid }));
+  view.unresolved.qa_fail = observations
+    .filter((o) => o.payload.result === "FAIL")
+    .map((o) => ({ observation_id: o.payload.observation_id, case_id: o.payload.case_id, case_sha256: o.payload.case_sha256, result: o.payload.result, import_sha256: o.payload.import_sha256, head_oid: o.payload.head_oid }));
   view.unresolved.browser_evidence = `${NOT_ASSESSED} — no browser-evidence input at M1`;
   view.limitations.push(`outside the local policy: ${eng.committed_artifacts.length === 0 ? "(none — every artifact_policy entry is local)" : `${eng.committed_artifacts.join(", ")} (artifact_policy: committed)`}`);
   view.limitations.push(`verify runs snapshotted: ${verify_history.length}${verify_history.length === 0 ? " — no fix has been verified in this assessment" : ""}`);
@@ -1150,7 +1159,8 @@ const ASSESSMENT_BLOCKS = {
     const out = REVIEW_BLOCKS.unresolved(v);
     out.push("", "QA FAIL observations (passive cases the QA bundles ran; an observation is never a finding):", "");
     if (v.unresolved.qa_fail.length === 0) out.push(`(none) ${marker("unresolved.qa_fail")}`);
-    else out.push(...header(["observation", "case", "result", "import_sha256"]), ...v.unresolved.qa_fail.map((o, i) => row([o.observation_id, o.case_id, o.result, o.import_sha256], `unresolved.qa_fail[${i}]`)));
+    else out.push(...header(["observation", "case", "case_sha256", "result", "import_sha256"]), ...v.unresolved.qa_fail.map((o, i) => row([o.observation_id, o.case_id, o.case_sha256, o.result, o.import_sha256], `unresolved.qa_fail[${i}]`)));
+    out.push("", "A FAIL observation stays a candidate: a mitigation decision needs a separate `mitigation-review` receipt citing the observation (spec §9.2); no state is derived for an observation here.");
     out.push("", bullet("browser-evidence candidates", v.unresolved.browser_evidence, "unresolved.browser_evidence"));
     return out;
   },
