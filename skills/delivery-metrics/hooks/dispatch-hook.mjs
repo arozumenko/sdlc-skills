@@ -12,7 +12,15 @@ import { validRoster } from '../scripts/lib/roster.mjs';
 
 export const SUPPORTED_SHAPES = ['claude-projects-subagents-v1'];
 const STAGE = [[/\b(fix round|address review)\b/i, 'fix'], [/\b(mini-gate|hardening gate|gate)\b/i, 'gate'], [/\bmerge\b/i, 'merge'], [/\breview\w*/i, 'review'], [/\b(implement\w*|build)\b/i, 'build']];
-export function classifyStage(text) { for (const [re, s] of STAGE) if (re.test(text ?? '')) return s; return 'other'; }
+// Spike finding S2: over a full first message every stage word tends to appear ("implement …; do not
+// merge; request review"), so list order picked `merge` for an implementation dispatch and the task
+// never got a measured start. The earliest match in the text wins instead — what the message is
+// about comes first; caveats come later.
+export function classifyStage(text) {
+  let best = null;
+  for (const [re, s] of STAGE) { const m = re.exec(text ?? ''); if (m && (best === null || m.index < best.index)) best = { index: m.index, s }; }
+  return best ? best.s : 'other';
+}
 
 export function readStdinBounded(ms = 2000, max = 65536) {
   return new Promise((done) => {

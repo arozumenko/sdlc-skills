@@ -22,7 +22,9 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
   const existed = existsSync(file);
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   const kept = (Array.isArray(settings.hooks.SubagentStop) ? settings.hooks.SubagentStop : []).filter((e) => !e || !e[MARKER]);
-  if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "${posix(resolve(repo, rel, 'hooks/dispatch-hook.mjs'))}" --stop`, timeout: 30, async: true }], [MARKER]: true });
+  // Spike finding S1: same shape as tokenomics — `${CLAUDE_PROJECT_DIR}` + repo-relative path, so a
+  // cloned or moved checkout keeps a working hook instead of a dangling absolute path.
+  if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/${posix(join(rel, 'hooks/dispatch-hook.mjs'))}" --stop`, timeout: 30, async: true }], [MARKER]: true });
   if (kept.length) settings.hooks.SubagentStop = kept; else delete settings.hooks.SubagentStop;
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
   // --remove on a settings file that never existed, with nothing else left to write, must not

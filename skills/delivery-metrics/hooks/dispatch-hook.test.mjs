@@ -31,6 +31,11 @@ const NOW = Date.parse('2026-09-16T10:00:05Z');
 test('classifyStage', () => {
   assert.equal(classifyStage('Implement TASK-1'), 'build'); assert.equal(classifyStage('Build the thing'), 'build'); assert.equal(classifyStage('Review PR for TASK-1'), 'review');
   assert.equal(classifyStage('fix round 2 for TASK-1'), 'fix'); assert.equal(classifyStage('TASK-1: address review 1'), 'fix'); assert.equal(classifyStage('mini-gate'), 'gate'); assert.equal(classifyStage('merge task'), 'merge'); assert.equal(classifyStage('write docs'), 'other');
+  // S2: earliest match wins over list order — an implementation prompt that also says "do not merge"
+  // / "request review" is still a build dispatch; a review prompt that mentions the implementation is not.
+  assert.equal(classifyStage('You are implementing TASK-1. Commit on the branch. Do not merge into main; request review when done.'), 'build');
+  assert.equal(classifyStage('Review the implementation of TASK-1 and merge if green'), 'review');
+  assert.equal(classifyStage('TASK-1: address review 1 — implement the requested changes'), 'fix');
 });
 
 test('resolveRefs: description, unique message match, branch alias, ambiguity, whole word', () => {

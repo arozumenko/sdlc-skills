@@ -27,7 +27,7 @@ read-time resolution order and source precedence.
 | `status` | `active \| retracted` — retraction is simply the next revision with `status: retracted` |
 | `basis` | `observed \| derived-child \| scope-proxy \| gate-proxy \| receipt-proxy \| plan-commit` — how trustworthy the fact is, kept as a separate population from `source` (who produced it) |
 | `meta.version` | the plan **catalogue version** (`run.version` at record time) this observation was made against — carried by registration, CLI `event`, and hook records; deliberately excluded from semantic identity (`facts()` in `lib/events.mjs`) so a plan re-cut or a CLI retry against the re-cut plan reproduces the same identity for an otherwise-unchanged historical observation |
-| `meta.git_sha`, `meta.stage`, `meta.round`, `meta.clock`, `meta.note`, `meta.unattributed` | evidence locator / hook stage label / rework round / `'corrected'` when `--sha` and `--at` disagreed / free-text note / unattributed-dispatch flag |
+| `meta.git_sha`, `meta.stage`, `meta.round`, `meta.clock`, `meta.note`, `meta.unattributed` | evidence locator / hook stage label (`fix\|gate\|merge\|review\|build\|other`, classified from the dispatch description, else from the full first user message; when several stage words appear, the **earliest** in the text wins, so "implement …, do not merge" is `build`) / rework round / `'corrected'` when `--sha` and `--at` disagreed / free-text note / unattributed-dispatch flag |
 | `estimate` | present only on `event: estimated`; `{unit,low,high,tier,proposed_by,proposed_at,accepted_by,accepted_at,reference?,probability?}` — see `references/plan-block.md` |
 | `session`, `agentId`, `role`, `label` | nullable host-qualified handles the hook fills in; the CLI leaves them null |
 
