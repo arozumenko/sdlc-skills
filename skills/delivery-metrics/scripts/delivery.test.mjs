@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, validateTransition } from './delivery.mjs';
 import { deliveryDir, runPath } from './lib/paths.mjs';
 import { resolveObservations } from './lib/events.mjs';
+import { deriveGitObservations } from './lib/git-backfill.mjs';
+import { buildFixtureRepo } from './lib/git-backfill.test.mjs';
 
 const CLI = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-cli-'));
@@ -430,4 +432,53 @@ test('minor (a): report/status bare --out/--plan are USAGE; --out resolves relat
   const rel = run(repo, ['report', '--out', 'report.md']);
   assert.equal(rel.code, 0, rel.stderr); assert.ok(existsSync(join(repo, 'report.md')));
   assert.match(rel.stdout, /^REPORT .*[/\\]report\.md\n$/, 'resolved (not left relative) against repo, like --from');
+});
+
+// Task 9: `backfill --git` wires lib/git-backfill.mjs's deriveGitObservations into the CLI —
+// registers a delivery-plan block INSIDE the git-backfill fixture repo (committed there, so the
+// plan register command's own git-derived `created` basis works off the same history), backfills
+// against the fixture's pinned `head`, and checks: the CLI's own event count matches a direct
+// deriveGitObservations() call; a second run is fully idempotent (events=0, same skipped count);
+// and the resulting report shows commit_to_done (first_commit -> done, no dispatched events were
+// ever recorded) rather than cycle_time.
+test('backfill --git: CLI event count matches deriveGitObservations directly; idempotent retry; report shows commit_to_done not cycle_time', () => {
+  const fx = buildFixtureRepo();
+  const tasks = [
+    { ref: 'TASK-001', branch: 'task/task-001' },
+    { ref: 'TASK-002', branch: 'task/task-002' },
+    { ref: 'TASK-003', branch: 'task/task-003' },
+    { ref: 'TASK-004', branch: 'task/task-004' },
+  ];
+  const p = plan(1, tasks);
+  p.observation_start = '2026-09-15T00:00:00Z';
+  p.source_epoch = { from: '2026-09-15T00:00:00Z', until: null, integration_ref: 'main' };
+  // The fixture's own plan.md already carries the `#### TASK-NNN: x` headings buildFixtureRepo used
+  // for `created` git-derivation — keep them, and append the fenced delivery-plan block register needs.
+  const planText = `# plan\n#### TASK-001: a\n#### TASK-002: b\n#### TASK-003: c\n#### TASK-004: d\n\n\`\`\`json delivery-plan\n${JSON.stringify(p)}\n\`\`\`\n`;
+  writeFileSync(join(fx.repo, 'plan.md'), planText);
+  execFileSync('git', ['-C', fx.repo, 'add', 'plan.md']);
+  execFileSync('git', ['-C', fx.repo, 'commit', '-q', '-m', 'plan: register block'], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } });
+
+  const reg = run(fx.repo, ['plan', 'register', '--from', join(fx.repo, 'plan.md'), '--id', 'reg-1']);
+  assert.equal(reg.code, 0, reg.stderr);
+  const registered = JSON.parse(readFileSync(runPath(fx.repo, 'sec/run-1'), 'utf8'));
+
+  const direct = deriveGitObservations({ repo: fx.repo, run: registered, head: fx.head, cutoff: '2026-12-31T00:00:00Z' });
+  assert.ok(direct.records.length > 0);
+
+  const bf1 = run(fx.repo, ['backfill', '--git', '--head', fx.head, '--cutoff', '2026-12-31T00:00:00Z']);
+  assert.equal(bf1.code, 0, bf1.stderr);
+  assert.match(bf1.stdout, new RegExp(`BACKFILL events=${direct.records.length} skipped=0 conflicts=0`));
+
+  const bf2 = run(fx.repo, ['backfill', '--git', '--head', fx.head, '--cutoff', '2026-12-31T00:00:00Z']);
+  assert.equal(bf2.code, 0, bf2.stderr);
+  assert.match(bf2.stdout, new RegExp(`BACKFILL events=0 skipped=${direct.records.length} conflicts=0`));
+
+  const rec = JSON.parse(readFileSync(runPath(fx.repo, 'sec/run-1'), 'utf8'));
+  assert.equal(rec.backfill.head, fx.head);
+
+  const rpt = JSON.parse(run(fx.repo, ['report', '--json', '--cutoff', '2026-12-31T00:00:00Z']).stdout);
+  const taskAll = rpt.plans[0].metrics.flow.task.strata.all;
+  assert.ok(taskAll.commit_to_done, 'commit_to_done measured from first_commit -> done (no dispatched events recorded)');
+  assert.equal(taskAll.cycle_time, null, 'no dispatched events were ever observed -> no cycle_time');
 });

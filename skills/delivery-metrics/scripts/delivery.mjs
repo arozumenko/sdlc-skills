@@ -8,6 +8,7 @@ import { EVENTS, appendObservation, makeObservation, resolveObservations } from 
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
+import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderStatus } from './lib/report.mjs';
@@ -335,7 +336,38 @@ function cmdStatus(repo, p, io, now) {
   return 0;
 }
 
-export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus };
+/** F14/F20: `--head`/`--since`/`--cutoff` are user input — a bare boolean flag (no value) must be
+ * USAGE via requireValue, same as every other path/token flag in this file, before it reaches
+ * git()/isoOrThrow. deriveGitObservations itself throws USAGE for an unresolvable integration ref or
+ * a head that is not on it, so no separate handling is needed here beyond letting main()'s catch map
+ * cliError → exit 2. */
+function cmdBackfill(repo, p, io, now) {
+  const f = p.flags;
+  if (!f.git) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run]');
+  if (f.pr) throw cliError('USAGE', '--pr is not in M1');
+  const run = resolveRun(repo, f.plan);
+  const headFlag = f.head != null ? requireValue(f, 'head') : null;
+  if (!headFlag) throw cliError('USAGE', 'backfill needs --head <sha> on the integration ref');
+  const head = git(repo, ['rev-parse', '--verify', `${headFlag}^{commit}`]);
+  if (!head) throw cliError('USAGE', `head ${headFlag} not found`);
+  const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
+  const cutoff = f.cutoff != null ? isoOrThrow(requireValue(f, 'cutoff'), '--cutoff') : nowIso(now);
+  const { records, notes, skippedOutsideEpoch } = deriveGitObservations({ repo, run, head, since, cutoff, now });
+  for (const n of notes) out(io, `NOTE ${n}`);
+  let events = 0, skipped = 0, conflicts = 0;
+  for (const r of records) {
+    if (f['dry-run']) { out(io, `WOULD ${r.observation_id} ${r.at}`); continue; }
+    const res = appendObservation(repo, r, { now });
+    out(io, `${res.result} ${res.observation_id} ${r.at}`);
+    if (res.result === 'EVENT') events++; else if (res.result === 'SKIP') skipped++; else conflicts++;
+  }
+  if (!f['dry-run']) { run.backfill = { head, at: nowIso(now) }; saveRun(repo, run); }
+  out(io, `BACKFILL events=${events} skipped=${skipped} conflicts=${conflicts} outside_epoch=${skippedOutsideEpoch} head=${head}`);
+  if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} git observation(s) conflict`);
+  return 0;
+}
+
+export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill };
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
