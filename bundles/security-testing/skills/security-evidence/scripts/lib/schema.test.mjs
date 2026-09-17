@@ -370,6 +370,22 @@ test("admission: receipt_sha256 required iff admitted-reviewed", () => {
   assert.deepEqual(validate("admission", { ...heuristic, classification: "proposal" }), []);
 });
 
+test("export-manifest (TASK-043 G-15 extension): `opts` is optional and closed — slug (lowercase-hyphen), base_url, members [{relpath, sha256}]; the four M1 keys are unchanged", () => {
+  const m = fixture("export-manifest", "ok");
+  assert.deepEqual(validate("export-manifest", m), [], "the M1 shape still validates");
+  assert.deepEqual(validate("export-manifest", { ...m, profile: "handoff", opts: { slug: "my-product", base_url: "https://staging.example.com" } }), []);
+  assert.deepEqual(validate("export-manifest", { ...m, profile: "case", opts: { slug: "my-product", members: [{ relpath: "TC-001_headers.md", sha256: SHA256 }] } }), []);
+  assert.deepEqual(validate("export-manifest", { ...m, opts: {} }), [], "every opts key is optional");
+  assert.ok(validate("export-manifest", { ...m, opts: { slug: "My Product" } }).length > 0, "slug shape");
+  assert.ok(validate("export-manifest", { ...m, opts: { run_id: "x" } }).length > 0, "opts is closed (run_id lives in the envelope)");
+  assert.ok(validate("export-manifest", { ...m, opts: { members: [{ relpath: "sub/x.md", sha256: SHA256 }] } }).length > 0, "a member is a plain file name");
+  assert.ok(validate("export-manifest", { ...m, opts: { members: [{ relpath: "x.md", sha256: "nope" }] } }).length > 0, "a member carries a sha256");
+  assert.ok(validate("export-manifest", { ...m, opts: { members: [{ relpath: "x.md", sha256: SHA256, bytes: "no" }] } }).length > 0, "a member is closed");
+  assert.ok(validate("export-manifest", { ...m, opts: "x" }).length > 0);
+  assert.deepEqual(Object.keys(entryOf("export-manifest").properties).sort(), ["opts", "output_sha256", "profile", "profile_version", "source_manifest_sha256"]);
+  assert.deepEqual(entryOf("export-manifest").required, ["source_manifest_sha256", "profile", "profile_version", "output_sha256"]);
+});
+
 // ---------------------------------------------------------------------------
 // Table-driven fixtures
 // ---------------------------------------------------------------------------

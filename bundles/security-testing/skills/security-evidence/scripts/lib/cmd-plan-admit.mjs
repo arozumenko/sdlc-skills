@@ -1,5 +1,5 @@
 // lib/cmd-plan-admit.mjs — `plan.mjs admit --run <id> <case.md> [--receipt
-// <sha256>]` (TASK-042; plan §4.5, §5 TASK-042; spec §9.1 "Admission", D7
+// <sha256>] [--dry-run]` (TASK-042, `--dry-run` TASK-043; plan §4.5, §5 TASK-042; spec §9.1 "Admission", D7
 // "passive admission by effect with an admission record", P5
 // "`admitted-reviewed` needs assertion `confirmed`"; US-034 AC-1…AC-4). The
 // heuristic itself is lib/admission-core.mjs (pure); this file is its I/O.
@@ -12,7 +12,7 @@
 // Order (so a refusal leaves nothing behind):
 //
 //   1. argv: `--run <id>` (RUN_ID shape), exactly one `<case.md>`, optional
-//      `--receipt <64 hex>` (2 USAGE);
+//      `--receipt <64 hex>`, optional `--dry-run` (2 USAGE);
 //   2. the run: `<run>/run.json` (unknown ⇒ 2 USAGE); `COMMITTED` present ⇒
 //      2 RUN-COMMITTED (G-10); `<run>/engagement.json` (the record the run
 //      was started with — the authority policy the hosts are checked
@@ -64,10 +64,15 @@
 //      nothing rewritten); one carrying a different payload ⇒ 2
 //      ADMISSION-EXISTS (the route changed — retry = new seq, G-10); one that
 //      is not the artifact it claims to be ⇒ 5 INCONSISTENT(admissions/<sha>).
+//      With `--dry-run` (TASK-043, the G22 follow-up) steps 1–7 run as
+//      above and step 8 does not: the ADMISSION line is printed, nothing is
+//      persisted, no WROTE line — so the lead can read the hits and choose
+//      the route (heuristic, review, proposal) before the write-once record
+//      pins it (a changed route would otherwise cost a new run).
 //
 // stdout: `ADMISSION case=<case_sha256> classification=<c> hits=<n>` then
-// `WROTE <path> sha256=<h>`. Every classification exits 0: the record is the
-// result. 2 USAGE / RUN-COMMITTED / SCHEMA-INVALID(case: …) /
+// `WROTE <path> sha256=<h>` (the WROTE line only without `--dry-run`).
+// Every classification exits 0: the record is the result. 2 USAGE / RUN-COMMITTED / SCHEMA-INVALID(case: …) /
 // ADMISSION-EXISTS; 3 INCOMPLETE(engagement); 4 RECEIPT-MISMATCH(<reason>);
 // 5 INCONSISTENT(…) or when run.json / engagement.json / a receipt / a
 // packet is not the artifact it claims to be (readArtifact). Nothing of the
@@ -104,13 +109,13 @@ const CASES_SEGMENT = "cases";
 // --- argv + inputs ------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const { flags, positionals } = parseCommandArgv(COMMAND, argv, { run: "value", receipt: "value" });
+  const { flags, positionals } = parseCommandArgv(COMMAND, argv, { run: "value", receipt: "value", "dry-run": "boolean" });
   if (typeof flags.run !== "string") throw usageError(COMMAND, "--run <id> is required");
   if (!RUN_ID.test(flags.run)) throw usageError(COMMAND, `--run must be <12 hex>-<4 digits>, got ${flags.run}`);
   if (positionals.length === 0) throw usageError(COMMAND, "<case.md> is required");
   if (positionals.length > 1) throw usageError(COMMAND, `unexpected argument ${positionals[1]}`);
   if (flags.receipt !== undefined && !SHA256.test(flags.receipt)) throw usageError(COMMAND, "--receipt must be a sha256");
-  return { run_id: flags.run, path: positionals[0], receipt: flags.receipt };
+  return { run_id: flags.run, path: positionals[0], receipt: flags.receipt, dryRun: flags["dry-run"] === true };
 }
 
 /** The run's artifacts; every refusal here is a token, nothing is written. */
@@ -244,6 +249,11 @@ export const admit = {
     const errors = validate("admission", payload);
     if (errors.length > 0) throw new Error(`${COMMAND}: admission payload is off-schema: ${errors[0]}`);
 
+    if (args.dryRun) {
+      ctx.out(admissionLine({ case_sha256, classification, hits: lint_hits.length }));
+      ctx.log(`${COMMAND}: --dry-run — nothing persisted (hits: ${lint_hits.map((h) => `${h.rule}@${h.step}`).join(", ") || "none"})`);
+      return EXIT.OK;
+    }
     const { path, written, existed } = persist(ctx, inputs, payload);
     if (existed) ctx.log(`${COMMAND}: ${ctx.rel(path)} already present with this record; nothing rewritten`);
     ctx.out(admissionLine({ case_sha256, classification, hits: lint_hits.length }));

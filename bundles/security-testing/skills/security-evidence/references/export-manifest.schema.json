@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "export-manifest.schema.json",
   "title": "export-manifest",
-  "description": "export-manifest.json written next to every `publish --profile` output.",
+  "description": "export-manifest.json written next to every `publish --profile` output (the M3 profiles write a per-run sidecar under .agents/security-testing/handoffs/, TASK-043).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,6 +33,41 @@
     "output_sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "opts": {
+      "type": "object",
+      "description": "TASK-043 (G-15 extension): what re-application needs beyond the source \u2014 `slug` and `base_url` for the handoff profile, `slug` for the case profile \u2014 and, for the case profile, `members`: the sorted [{relpath, sha256}] list `output_sha256` hashes, the published identities sign-off's UNADMITTED listing compares the suite against.",
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relpath",
+              "sha256"
+            ],
+            "properties": {
+              "relpath": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

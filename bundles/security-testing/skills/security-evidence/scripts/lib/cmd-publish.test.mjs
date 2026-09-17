@@ -65,12 +65,14 @@ test("each profile emits only its allowed fields; full-report needs the explicit
   const unknown = await publish(repo, run_id, "pdf", "reports/security/x");
   assert.equal(unknown.code, 2);
   assert.match(unknown.stdout, /^USAGE\(publish: --profile must be one of /m);
-  for (const m3 of ["handoff", "case"]) {
-    const s = await publish(repo, run_id, m3, "tasks/security-x-admitted");
-    assert.equal(s.code, 2, m3);
-    assert.equal(s.stdout, "NOT-IMPLEMENTED(M3)\n");
-    assert.ok(!existsSync(join(repo, "tasks")));
-  }
+  // the M3 profiles (TASK-043) on a run without admissions: case refuses (nothing to publish), handoff needs its fixed destination
+  const noCase = await publish(repo, run_id, "case", "tasks/security-my-product-admitted");
+  assert.equal(noCase.code, 2);
+  assert.match(noCase.stdout, /^USAGE\(publish: run [0-9a-f]{12}-\d{4} has no admitted case \(plan\.mjs admit first\); nothing to publish\)$/m);
+  assert.ok(!existsSync(join(repo, "tasks")));
+  const wrongTo = await publish(repo, run_id, "handoff", "tasks/security-x-admitted");
+  assert.equal(wrongTo.code, 2);
+  assert.match(wrongTo.stdout, /^USAGE\(publish: --to must be \.agents\/security-testing\/handoffs for the handoff profile/m);
   const noTo = await evidence(repo, ["publish", "--run", run_id, "--profile", "redacted-report"]);
   assert.equal(noTo.code, 2);
   assert.match(noTo.stdout, /^USAGE\(publish: --to is required\)$/m);
@@ -300,4 +302,156 @@ test("evidence.mjs routes `publish` and `check-export`; cmd-publish writes only 
   assert.doesNotMatch(src, /console\.(log|error)/);
   assert.doesNotMatch(src, /writeFileSync|appendFileSync|process\.stdout/);
   assert.doesNotMatch(src, /from "node:child_process"|fetch\(|from "node:http/);
+});
+
+// --- TASK-043: publish --profile case | handoff (plan §5 TASK-043; spec §9.2, D7; US-035, US-038 AC-3) ---
+
+const SUITE = "tasks/security-my-product-admitted";
+const CASES = join(ST, "cases", "my-product");
+const HEADER_ROWS = [
+  ["Navigate to `{{base_url}}/login`", "Login page loads, Email and Password visible"],
+  ["Open the browser network panel and reload the page", "The document response for `/login` is listed"],
+  ["Inspect the response headers of the `/login` document", "`Content-Security-Policy` is present and does not contain `unsafe-inline`"],
+  ["Inspect the `Set-Cookie` headers of the `/login` document", "Every cookie carries `Secure` and `HttpOnly`"],
+];
+const PLAIN_ROWS = [
+  ["Navigate to `{{base_url}}/`", "The home page loads"],
+  ["Inspect the page footer", "No framework version string is shown"],
+];
+
+/** A COMMITTED review run with three admitted candidates (one header/cookie case, one p1-priority case, one plain case) and one proposal under <st>/cases/my-product/. */
+async function admittedRun(extraCases = []) {
+  const { caseText } = await import("../fixtures/plan/helpers.mjs");
+  const written = {};
+  const admitted = {};
+  return committedReviewRun({
+    before: async (repo, run_id) => {
+      mkdirSync(join(repo, CASES), { recursive: true });
+      const cases = [
+        ["TC-001_login-headers.md", caseText("TC-001", HEADER_ROWS)],
+        ["TC-002_home-footer.md", caseText("TC-002", PLAIN_ROWS, { title: "Verify the footer hides versions" }).replace("priority: high", "priority: p1")],
+        ["TC-003_plain.md", caseText("TC-003", PLAIN_ROWS, { title: "Verify a plain observation", extra: "account: unauthenticated" })],
+        ["TC-004_submit.md", caseText("TC-004", [["Submit the login form", "Redirect"]], { title: "Submit login" })],
+        ...extraCases,
+      ];
+      for (const [name, text] of cases) {
+        writeFileSync(join(repo, CASES, name), text);
+        written[name] = text;
+        const a = await runPlan(repo, ["admit", "--run", run_id, `${CASES}/${name}`]);
+        assert.equal(a.code, 0, `${name}: ${a.stdout}${a.stderr}`);
+        admitted[name] = /^ADMISSION case=([0-9a-f]{64}) classification=(\S+)/m.exec(a.stdout).slice(1, 3);
+      }
+    },
+  }).then((built) => ({ ...built, written, admitted }));
+}
+
+async function runPlan(repo, argv) {
+  const { runScript } = await import("../fixtures/cli/harness.mjs");
+  return runScript("plan", argv, { cwd: repo, env: ENV });
+}
+
+test("three admitted + one proposal ⇒ exactly three TC files and nothing else in tasks/security-<slug>-admitted/; the manifest is the per-run sidecar in <st>/handoffs/ carrying opts.members; republish is idempotent (US-035 AC-1)", async () => {
+  const { repo, run_id, admitted } = await admittedRun();
+  assert.equal(admitted["TC-004_submit.md"][1], "proposal");
+  const r = await publish(repo, run_id, "case", SUITE);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  assert.deepEqual(listAll(join(repo, SUITE)), ["TC-001_login-headers.md", "TC-002_home-footer.md", "TC-003_plain.md"], "nothing else in the suite: no manifest, no proposal");
+  assert.equal(out.length, 4);
+  assert.match(out[0], /^PUBLISHED profile=case output=\.\/tasks\/security-my-product-admitted\/TC-001_login-headers\.md sha256=[0-9a-f]{64}$/);
+  assert.match(out[1], /^PUBLISHED profile=case output=\.\/tasks\/security-my-product-admitted\/TC-002_home-footer\.md sha256=/);
+  assert.match(out[2], /^PUBLISHED profile=case output=\.\/tasks\/security-my-product-admitted\/TC-003_plain\.md sha256=/);
+  assert.match(out[3], new RegExp(`^WROTE \\.agents/security-testing/handoffs/${run_id}\\.case\\.export-manifest\\.json sha256=[0-9a-f]{64}$`));
+  const em = readArtifact(join(repo, HANDOFFS, `${run_id}.case.export-manifest.json`), { kind: "export-manifest" });
+  assert.deepEqual(validate("export-manifest", em.payload), []);
+  assert.equal(em.payload.profile, "case");
+  assert.equal(em.payload.opts.slug, "my-product");
+  const outputs = ["TC-001_login-headers.md", "TC-002_home-footer.md", "TC-003_plain.md"].map((relpath) => ({ relpath, bytes: readFileSync(join(repo, SUITE, relpath)) }));
+  assert.equal(em.payload.output_sha256, exportIdentity(outputs));
+  assert.deepEqual(em.payload.opts.members, outputs.map((o) => ({ relpath: o.relpath, sha256: sha256Hex(o.bytes) })), "the published identities, recorded where the manifest lives");
+  for (const o of outputs) assert.equal(out.find((l) => l.includes(o.relpath)).slice(-64), sha256Hex(o.bytes));
+  const again = await publish(repo, run_id, "case", SUITE);
+  assert.equal(again.code, 0, `${again.stdout}${again.stderr}`);
+  assert.equal(again.stdout, r.stdout, "idempotent");
+  // --to must be the suite directory of the slug; --slug changes it; the bundle's own state is never a destination
+  const elsewhere = await publish(repo, run_id, "case", "tasks/security-other-admitted");
+  assert.equal(elsewhere.code, 2);
+  assert.match(elsewhere.stdout, /^USAGE\(publish: --to must be tasks\/security-my-product-admitted for the case profile/m);
+  const badSlug = await publish(repo, run_id, "case", SUITE, ["--slug", "My Product"]);
+  assert.equal(badSlug.code, 2);
+  assert.match(badSlug.stdout, /^USAGE\(publish: --slug must be lowercase/m);
+  assert.ok(!existsSync(join(repo, "tasks", "security-other-admitted")));
+});
+
+test("every published case parses as a manual-qa TC (parser = the TASK-018 fixture adapter); priority p1 → high, the manual-qa vocabulary kept; the security tag present; a plain case is the candidate verbatim below the frontmatter (US-035 AC-2)", async () => {
+  const { parseTestCase } = await import("./ingest/case.mjs");
+  const { repo, run_id, written } = await admittedRun();
+  assert.equal((await publish(repo, run_id, "case", SUITE)).code, 0);
+  for (const name of ["TC-001_login-headers.md", "TC-002_home-footer.md", "TC-003_plain.md"]) {
+    const tc = parseTestCase(readFileSync(join(repo, SUITE, name), "utf8"));
+    assert.equal(tc.id, name.slice(0, 6));
+    assert.ok(["critical", "high", "medium", "low"].includes(tc.priority), `${name}: ${tc.priority}`);
+    assert.ok(tc.tags.includes("security"));
+  }
+  assert.equal(parseTestCase(readFileSync(join(repo, SUITE, "TC-002_home-footer.md"), "utf8")).priority, "high");
+  const plain = readFileSync(join(repo, SUITE, "TC-003_plain.md"), "utf8");
+  const bodyOf = (t) => t.slice(t.indexOf("\n---\n") + 5);
+  assert.equal(bodyOf(plain), bodyOf(written["TC-003_plain.md"]));
+  assert.match(plain, /^account: unauthenticated$/m);
+});
+
+test("a header/cookie case is emitted in the audit-step form (navigate, collect the network requests, inspect one header per row) and contains no browser-action step (US-035 AC-2, audit branch)", async () => {
+  const { parseSteps } = await import("./admission-core.mjs");
+  const { repo, run_id } = await admittedRun();
+  assert.equal((await publish(repo, run_id, "case", SUITE)).code, 0);
+  const text = readFileSync(join(repo, SUITE, "TC-001_login-headers.md"), "utf8");
+  const { steps } = parseSteps(text);
+  assert.deepEqual(
+    steps.map((s) => s.action),
+    ["Navigate to `{{base_url}}/login`", "Collect the network requests of the page (`browser_network_requests()`)", "Inspect the `Content-Security-Policy` response header of the `/login` document", "Inspect the `Set-Cookie` response headers of the `/login` document"],
+  );
+  assert.equal(steps[2].expected, "`Content-Security-Policy` is present and does not contain `unsafe-inline`");
+  for (const s of steps) assert.doesNotMatch(s.action, /reload|panel|click|fill|submit|press|type /i);
+  assert.ok(!text.includes("proposal") && !text.includes("Submit the login form"), "no proposal path or text (US-038 AC-3)");
+});
+
+test("handoff prompt text exact: <st>/handoffs/<slug>.md is the §9.2 two-line prompt, printed after the PUBLISHED/WROTE pair; --base-url overrides the engagement's; no proposal, no case path (US-035 AC-3; US-038 AC-3)", async () => {
+  const { repo, run_id } = await admittedRun();
+  const r = await publish(repo, run_id, "handoff", HANDOFFS);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  assert.equal(out.length, 4);
+  assert.match(out[0], /^PUBLISHED profile=handoff output=\.agents\/security-testing\/handoffs\/my-product\.md sha256=[0-9a-f]{64}$/);
+  assert.match(out[1], new RegExp(`^WROTE \\.agents/security-testing/handoffs/${run_id}\\.handoff\\.export-manifest\\.json sha256=`));
+  assert.equal(out[2], "Run as the active agent (claude --agent test-run-lead):");
+  assert.equal(out[3], '"Run the suite at tasks/security-my-product-admitted/ against base_url=https://staging.example.com."');
+  const prompt = readFileSync(join(repo, HANDOFFS, "my-product.md"), "utf8");
+  assert.equal(prompt, 'Run as the active agent (claude --agent test-run-lead):\n"Run the suite at tasks/security-my-product-admitted/ against base_url=https://staging.example.com."\n');
+  const em = readArtifact(join(repo, HANDOFFS, `${run_id}.handoff.export-manifest.json`), { kind: "export-manifest" });
+  assert.deepEqual(em.payload.opts, { slug: "my-product", base_url: "https://staging.example.com" });
+  assert.ok(!prompt.includes("proposal") && !prompt.includes("TC-") && !prompt.includes(".agents/"));
+  // a second run's handoff for the same slug: same prompt bytes, its own sidecar — never a clobber
+  const other = await publish(repo, run_id, "handoff", HANDOFFS, ["--base-url", "https://qa.example.com"]);
+  assert.equal(other.code, 2, "a different prompt at the same <slug>.md is refused");
+  assert.match(other.stdout, /already exists with different content/);
+  const overridden = await publish(repo, run_id, "handoff", HANDOFFS, ["--slug", "other", "--base-url", "https://qa.example.com"]);
+  assert.equal(overridden.code, 2, "the same run already has a handoff sidecar for another export");
+  assert.match(overridden.stdout, /already exists for a different export/);
+  const bad = await publish(repo, run_id, "handoff", HANDOFFS, ["--base-url", "staging.example.com"]);
+  assert.equal(bad.code, 2);
+  assert.match(bad.stdout, /^USAGE\(publish: base_url must be an absolute http\(s\) URL/m);
+});
+
+test("case refusals name the case and rename nothing: TC-SEC-NNN id ⇒ 2 USAGE, nothing written; a candidate edited after admit ⇒ 2 USAGE (no candidate with that identity)", async () => {
+  const { caseText } = await import("../fixtures/plan/helpers.mjs");
+  const { repo, run_id } = await admittedRun([["TC-SEC-005.md", caseText("TC-SEC-005", PLAIN_ROWS, { title: "Legacy id" })]]);
+  const r = await publish(repo, run_id, "case", SUITE);
+  assert.equal(r.code, 2);
+  assert.match(r.stdout, /^USAGE\(publish: admitted case [0-9a-f]{12}: id TC-SEC-005 is not TC-NNN \(three digits\); rename the candidate and admit it again\)$/m);
+  assert.ok(!existsSync(join(repo, "tasks")), "nothing written");
+  writeFileSync(join(repo, CASES, "TC-SEC-005.md"), caseText("TC-005", PLAIN_ROWS, { title: "Legacy id" }));
+  const moved = await publish(repo, run_id, "case", SUITE);
+  assert.equal(moved.code, 2);
+  assert.match(moved.stdout, /^USAGE\(publish: admitted case [0-9a-f]{12}: no candidate under \.agents\/security-testing\/cases\/ has this identity/m);
+  assert.ok(!existsSync(join(repo, "tasks")));
 });

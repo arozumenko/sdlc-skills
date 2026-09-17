@@ -1,8 +1,10 @@
 // lib/cmd-sign-off.mjs — `evidence.mjs sign-off --engagement <id> [--expect
-// <anchor>]` (TASK-033, disposition policy TASK-041; plan §4.1 row
-// `sign-off`, §5 TASK-033 / TASK-041; spec §7 closed table, §2 last row,
-// §6.8, §6.9 step 2, §6.10, §12; US-025 AC-1…AC-5, US-006 AC-2…AC-4, US-014
-// AC-3, US-033 AC-1…AC-3). Reads only; writes nothing of its own (the
+// <anchor>]` (TASK-033, disposition policy TASK-041, the UNADMITTED listing
+// TASK-043; plan §4.1 row `sign-off`, §5 TASK-033 / TASK-041 / TASK-043;
+// spec §7 closed table, §2 last row and "Only admitted cases are written to
+// the hand-off suite", §6.8, §6.9 step 2, §6.10, §9.2, §12; US-025 AC-1…AC-6,
+// US-006 AC-2…AC-4, US-014 AC-3, US-033 AC-1…AC-3, US-035 AC-4). Reads only;
+// writes nothing of its own (the
 // register's recovery rule may rebuild `projection.json`, as it does on every
 // register command — §6.8). Every line leaves through ctx.out (G-4).
 //
@@ -27,7 +29,8 @@
 //   CHANGES-SINCE-BASELINE: <n> | not observed      per-path `  changed|added|removed <path>` (baseline.diffBaseline)
 //   EXCLUDED-COVERAGE: ignored=<n> | not observed   `  <configured path> ignored=<n>` per path
 //   UNAUTHENTICATED-APPROVALS: <n> | not observed   `  <R-id> status=<s> <kinds>` per row (register-fold.summarize's rule)
-//   UNADMITTED: not evaluated                       M3 (TASK-043)
+//   UNADMITTED: <n>                                 `  <path>` per file under a suite directory whose identity
+//                                                   no `publish --profile case` recorded (below)
 //   DISPOSITIONS: not evaluated | <n> undisposed-or-planned policy=<p>   `  <T-id> <kind>` per listed threat
 //
 // Exit 0 with SIGN-OFF: OK; 4 whenever a FAIL line was printed (the
@@ -110,6 +113,26 @@
 //                  spec makes the observation informational, so its absence is
 //                  not a fail cause. (A missing run key fails the run's check
 //                  as STRUCTURE-ONLY anyway.)
+//   unadmitted     (TASK-043, PM ruling 4) the suite directories are the
+//                  engagement's `tasks/security-<slug>-admitted/` plus every
+//                  suite a `<st>/handoffs/<run_id>.case.export-manifest.json`
+//                  names in `opts.slug`; the admitted identities are the
+//                  `opts.members` those manifests record — what `publish
+//                  --profile case` wrote (a suite file is the candidate
+//                  rewritten: mapped priority, the security tag, the audit
+//                  form — so its identity is NOT the candidate's
+//                  `case_sha256`, and the run's admissions are never compared
+//                  directly). A manifest that is not the artifact it claims
+//                  to be, is off-schema, or whose members do not hash to its
+//                  `output_sha256` is skipped with a stderr note (fail-closed:
+//                  its files then read as unadmitted). Every file under a
+//                  suite directory (recursively, sorted) whose identity is
+//                  not recorded is listed by path — never its content, never
+//                  a hash. The identity is sha256 over the file's REDACTED
+//                  bytes (redact.mjs is idempotent, so a published file hashes
+//                  to what publish recorded; a foreign file never has plain
+//                  sha256 taken over unredacted content — G-2). Informational:
+//                  spec §7's fail table is closed; the lead reads the list.
 //   check throws   checkRun's own USAGE (run.json gone after the marker was
 //                  seen) or INCOMPLETE(COMMITTED) (marker gone) and any other
 //                  non-CliError (PM log after G15: an EISDIR under a tampered
@@ -120,28 +143,36 @@
 // `signOff(ctx, {engagement_id, expect}) → result` is the programmatic entry
 // (the E2E and TASK-035's checklist test read it); `run()` prints it.
 //
-// Imports: node:fs (existsSync — reads only), node:path, ../canon.mjs
-// (readArtifact), ./argv.mjs, ./baseline.mjs (readBaseline, diffBaseline,
+// Imports: node:fs (existsSync, readFileSync, readdirSync — reads only),
+// node:path, ../canon.mjs (readArtifact, sha256Hex), ../redact.mjs
+// (redactString), ./argv.mjs, ./baseline.mjs (readBaseline, diffBaseline,
 // observedPaths), ./cmd-check.mjs (checkRun), ./cmd-tm-lint.mjs (the
-// snapshot and index file names — the writer's own constants), ./exit.mjs, ./ignore-block.mjs
-// (probeManagedPaths), ./ledger.mjs (readIndex), ./register-core.mjs
-// (openRegister), ./register-fold.mjs (anchorVerify, parseAnchor, summarize),
-// ./run-index.mjs (runDir), ./tokens.mjs. No child process of its own (G-6:
+// snapshot and index file names — the writer's own constants), ./exit.mjs,
+// ./fsx.mjs (walk), ./ignore-block.mjs (probeManagedPaths), ./ledger.mjs
+// (readIndex), ./profiles/case.mjs (suiteDir), ./profiles/index.mjs
+// (memberIdentity), ./register-core.mjs (openRegister), ./register-fold.mjs
+// (anchorVerify, parseAnchor, summarize), ./run-index.mjs (runDir),
+// ./schema.mjs (validate), ./tokens.mjs. No child process of its own (G-6:
 // git only through the modules above), no network (G-14), no clock (G-1).
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { readArtifact } from "../canon.mjs";
+import { readArtifact, sha256Hex } from "../canon.mjs";
+import { redactString } from "../redact.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { diffBaseline, observedPaths, readBaseline } from "./baseline.mjs";
 import { checkRun } from "./cmd-check.mjs";
 import { DISPOSITIONS_FILE, SNAPSHOT_FILE } from "./cmd-tm-lint.mjs";
 import { CliError, EXIT, isIntegrityFailure, usageError } from "./exit.mjs";
+import { walk } from "./fsx.mjs";
 import { probeManagedPaths } from "./ignore-block.mjs";
 import { readIndex } from "./ledger.mjs";
+import { suiteDir } from "./profiles/case.mjs";
+import { memberIdentity } from "./profiles/index.mjs";
 import { openRegister } from "./register-core.mjs";
 import { anchorVerify, parseAnchor, summarize } from "./register-fold.mjs";
 import { runDir } from "./run-index.mjs";
+import { validate } from "./schema.mjs";
 import {
   ANCHOR_MATCH,
   APPROVALS_NOT_OBSERVED,
@@ -155,7 +186,6 @@ import {
   NO_ASSESSMENT,
   SIGN_OFF_OK,
   STRUCTURE_ONLY,
-  UNADMITTED_NOT_EVALUATED,
   approvalEntry,
   approvalsHeader,
   changeEntry,
@@ -174,9 +204,14 @@ import {
   scopeDrifted,
   signOffFail,
   tracked,
+  unadmittedEntry,
+  unadmittedHeader,
 } from "./tokens.mjs";
 
 const COMMAND = "sign-off";
+const HANDOFFS_SEGMENT = "handoffs";
+const CASE_MANIFEST = /^[0-9a-f]{12}-[0-9]{4}\.case\.export-manifest\.json$/;
+const SLUG = /^[a-z0-9-]+$/;
 
 /**
  * Every `<cause>` a `SIGN-OFF: FAIL(<cause>)` line can carry, spelled with
@@ -324,6 +359,68 @@ function listedThreats(ctx, run) {
   return { listed: rows.filter((r) => LISTED_DISPOSITIONS.includes(r.kind)).map((r) => ({ id: r.threat_id, kind: r.kind })), linted: true, inconsistent: null };
 }
 
+// --- unadmitted (TASK-043) ------------------------------------------------------------------
+
+/** The suites and member identities every trustworthy case export manifest under <st>/handoffs/ records. */
+function recordedSuites(ctx) {
+  const dir = join(ctx.st, HANDOFFS_SEGMENT);
+  const suites = new Set();
+  const identities = new Set();
+  const names = existsSync(dir) ? readdirSync(dir).filter((n) => CASE_MANIFEST.test(n)).sort() : [];
+  for (const name of names) {
+    const untrusted = (why) => ctx.log(`${COMMAND}: ${HANDOFFS_SEGMENT}/${name} ${why} — its recorded suite is not trusted`);
+    let manifest;
+    try {
+      manifest = readArtifact(join(dir, name), { kind: "export-manifest" });
+    } catch (err) {
+      if (!isIntegrityFailure(err)) throw err;
+      untrusted("is not the artifact it claims to be");
+      continue;
+    }
+    const { payload } = manifest;
+    const opts = payload.opts ?? {};
+    if (payload.profile !== "case" || validate("export-manifest", payload).length > 0 || typeof opts.slug !== "string" || !SLUG.test(opts.slug) || !Array.isArray(opts.members)) {
+      untrusted("is not a case export manifest with opts.slug and opts.members");
+      continue;
+    }
+    let identity;
+    try {
+      identity = memberIdentity(opts.members);
+    } catch {
+      identity = null;
+    }
+    if (identity !== payload.output_sha256) {
+      untrusted("records members that do not hash to its output_sha256");
+      continue;
+    }
+    suites.add(suiteDir(opts.slug));
+    for (const m of opts.members) identities.add(m.sha256);
+  }
+  return { suites, identities };
+}
+
+/**
+ * The files under every suite directory whose identity no case export
+ * manifest recorded (header: "unadmitted"). Paths only.
+ * @returns {{suites: string[], files: string[]}}
+ */
+function unadmittedFiles(ctx, record) {
+  const { suites, identities } = recordedSuites(ctx);
+  if (typeof record.slug === "string" && SLUG.test(record.slug)) suites.add(suiteDir(record.slug));
+  const files = [];
+  const sorted = [...suites].sort();
+  for (const suite of sorted) {
+    const abs = join(ctx.root, suite);
+    if (!existsSync(abs)) continue;
+    for (const rel of walk(abs)) {
+      // identity over the REDACTED bytes: equal to what publish recorded for a published file, and never a plain hash over foreign content (G-2)
+      const sha = sha256Hex(Buffer.from(redactString(readFileSync(join(abs, rel))).text, "utf8"));
+      if (!identities.has(sha)) files.push(`${suite}/${rel}`);
+    }
+  }
+  return { suites: sorted, files };
+}
+
 // --- approvals -----------------------------------------------------------------------------
 
 /** register-fold.summarize's per-row rule, spelled per row for the listing. */
@@ -345,7 +442,7 @@ function approvalRows(projection) {
  * Evaluate the sign-off (see the header). Prints nothing.
  * @param {object} ctx
  * @param {{engagement_id: string, expect?: string | null}} opts `expect` is a parsed-valid anchor string or null
- * @returns {{code: number, ok: boolean, engagement_id: string, causes: {cause: string, run_id: string | null}[], runs: {run_id: string, seq: number, kind: string, check: object}[], incomplete: {run_id: string, seq: number, kind: string}[], latest: string | null, baseline: null | {changed: string[], added: string[], removed: string[], ignored_counts: Record<string, number>}, register: {corrupt: boolean, anchor: string | null, approvals: null | {count: number, rows: {id: string, status: string, kinds: string[]}[]}}, dispositions: {policy: string, evaluated: boolean, linted: boolean, listed: {id: string, kind: string}[]}, tracked: string[]}}
+ * @returns {{code: number, ok: boolean, engagement_id: string, causes: {cause: string, run_id: string | null}[], runs: {run_id: string, seq: number, kind: string, check: object}[], incomplete: {run_id: string, seq: number, kind: string}[], latest: string | null, baseline: null | {changed: string[], added: string[], removed: string[], ignored_counts: Record<string, number>}, register: {corrupt: boolean, anchor: string | null, approvals: null | {count: number, rows: {id: string, status: string, kinds: string[]}[]}}, dispositions: {policy: string, evaluated: boolean, linted: boolean, listed: {id: string, kind: string}[]}, tracked: string[], unadmitted: {suites: string[], files: string[]}}}
  * @throws {CliError} 2 USAGE (the id is not engagement.md's) · 2 ENGAGEMENT-MISSING · 5 INCONSISTENT(ledger/index.json)
  */
 export async function signOff(ctx, { engagement_id, expect = null } = {}) {
@@ -418,7 +515,10 @@ export async function signOff(ctx, { engagement_id, expect = null } = {}) {
   if (trackedPaths.length > 0) fail(tracked(trackedPaths[0]));
   for (const pattern of probe.notIgnored) ctx.log(`${COMMAND}: managed pattern ${pattern} is not ignored (engagement validate would report NOT-IGNORED)`);
 
-  // 6. the baseline observation (informational)
+  // 6. the hand-off suite against what publish --profile case recorded (informational, TASK-043)
+  const unadmitted = unadmittedFiles(ctx, record);
+
+  // 7. the baseline observation (informational)
   let baseline = null;
   const stored = readBaseline(ctx, engagement_id);
   if (stored === null) {
@@ -444,6 +544,7 @@ export async function signOff(ctx, { engagement_id, expect = null } = {}) {
     register,
     dispositions,
     tracked: trackedPaths,
+    unadmitted,
   };
 }
 
@@ -480,7 +581,8 @@ function print(ctx, result) {
     for (const row of result.register.approvals.rows) ctx.out(approvalEntry(row));
   }
 
-  ctx.out(UNADMITTED_NOT_EVALUATED);
+  ctx.out(unadmittedHeader(result.unadmitted.files.length));
+  for (const path of result.unadmitted.files) ctx.out(unadmittedEntry(path));
 
   if (!result.dispositions.evaluated) {
     ctx.out(DISPOSITIONS_NOT_EVALUATED);

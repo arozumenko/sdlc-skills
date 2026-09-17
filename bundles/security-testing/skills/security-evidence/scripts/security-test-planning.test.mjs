@@ -148,3 +148,27 @@ test("passive-admission.md names every lint rule, every allowed operation and ve
   assert.match(ref, /<run>\/admissions\/<case_sha256>\.json/);
   assert.match(ref, /sha256 over the \*\*redacted\*\* text/);
 });
+
+test("audit-branch.md (TASK-043): names every header the case profile recognises with its audit-step Action, the collection row, the priority map, the reload/panel fold, the Navigate-first refusal and the UNADMITTED comparison; the mutating-verb row of passive-admission.md states the clause anchoring", async () => {
+  const { AUDIT_HEADERS, AUDIT_STEPS, PRIORITY_MAP } = await import("./lib/profiles/case.mjs");
+  const ref = read(join("references", "audit-branch.md"));
+  for (const h of AUDIT_HEADERS) assert.ok(new RegExp(`^\\| \`${h}\`( flags[^|]*)? \\|`, "m").test(ref), `a mapping row for ${h}`);
+  for (const h of AUDIT_HEADERS.filter((x) => x !== "Set-Cookie")) assert.ok(ref.includes(`Inspect the \\\`${h}\\\` response header`), `the emitted Action for ${h}`);
+  assert.ok(ref.includes(AUDIT_STEPS.cookies("<path>").replace(/`/g, "\\`")), "the Set-Cookie Action");
+  assert.ok(ref.includes(AUDIT_STEPS.collect.replace(/`/g, "\\`")), "the collection row");
+  assert.ok(ref.includes(AUDIT_STEPS.collected("<path>").replace(/`/g, "\\`")), "the collection row's expectation");
+  for (const [p, qa] of Object.entries(PRIORITY_MAP)) assert.ok(ref.includes(`${p} →\n\`${qa}\``) || ref.includes(`${p} → \`${qa}\``), `priority ${p} → ${qa}`);
+  assert.match(ref, /folded into the collection row/);
+  assert.match(ref, /before any Navigate step/);
+  assert.match(ref, /`UNADMITTED:`/);
+  assert.match(ref, /never instructs a browser action beyond "open URL,\s+inspect response"/);
+  assert.match(ref, /browser_network_requests\(\)/);
+  assert.doesNotMatch(ref, /(?<!")\bsafe\b/);
+  assert.match(reference(), /^\| `mutating-verb` \| a state-changing verb \*\*at the start of the Action or of a clause after `and` \/ `then` \/ `or` \/ `;` \/ `,`\*\*/m);
+  const skill = read("SKILL.md");
+  assert.doesNotMatch(skill, /TASK-043/, "the pointer TASK-042 left is replaced");
+  assert.match(skill, /\[references\/audit-branch\.md\]\(references\/audit-branch\.md\)/);
+  assert.match(skill, /publish --run <run_id> --profile case --to tasks\/security-<slug>-admitted/);
+  assert.match(skill, /publish --run <run_id> --profile handoff --to \.agents\/security-testing\/handoffs/);
+  assert.match(skill, /plan\.mjs admit --run <run_id> <case> --dry-run/);
+});

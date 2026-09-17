@@ -199,7 +199,9 @@ test("disclosure-profiles explains every publish profile and what each reveals",
   assert.match(text, /`VERIFIED-DERIVATIVE`/);
   assert.match(text, /`LINKED-ONLY`/);
   assert.match(text, /`MISMATCH\(output\)`/);
-  assert.match(text, /`2 NOT-IMPLEMENTED\(M3\)`/, "handoff and case are M3 at this milestone");
+  assert.doesNotMatch(text, /NOT-IMPLEMENTED\(M3\)/, "handoff and case landed with TASK-043");
+  assert.match(text, /`<run_id>\.case\.export-manifest\.json`/, "the case manifest sidecar");
+  assert.match(text, /audit-step form/, "the case profile names the audit branch");
   assert.match(text, /already exists with different content/, "--to refuses to clobber a file it did not derive");
 });
 

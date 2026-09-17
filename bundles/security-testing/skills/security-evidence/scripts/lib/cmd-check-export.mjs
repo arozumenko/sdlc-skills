@@ -13,13 +13,17 @@
 //      matches) is 2 USAGE(check-export: <p> is not an export manifest (…)):
 //      the file is the user's input, so the check/exit-5 rule (lib/exit.mjs)
 //      makes it an exit-2 result here, never a 5. Its `profile` must be a
-//      registered name (M3 ⇒ 2 NOT-IMPLEMENTED(M3)), its `profile_version`
-//      the shipped one, and its file name the profile's (`export-manifest.json`,
-//      or `<finding_id>.export-manifest.json` for a tracker sidecar —
-//      lib/profiles/index.mjs `expectedOutputs`), which is how the output
-//      files are known: the schema is closed and lists none.
-//   2. the outputs on disk — every expected file next to the manifest must
-//      exist and the set's identity must equal `output_sha256`; otherwise
+//      registered name, its `profile_version` the shipped one, and its file
+//      name the profile's (`export-manifest.json`; `<finding_id>.export-manifest.json`
+//      for a tracker sidecar; `<run_id>.handoff|case.export-manifest.json`
+//      for the M3 sidecars, TASK-043 — lib/profiles/index.mjs
+//      `expectedOutputs`), which is how the output files are known: the M1
+//      shape lists none, and the M3 manifests carry the recorded `opts`
+//      (`slug` + `base_url` for handoff, `slug` + `members` for case) that
+//      name them — a case or handoff manifest without them is 2 USAGE.
+//   2. the outputs on disk — every expected file (next to the manifest; for
+//      the case profile under `tasks/security-<slug>-admitted/`) must exist
+//      and the set's identity must equal `output_sha256`; otherwise
 //      `MISMATCH(output)`, exit 5, with or without a source (an output edited
 //      after publication no longer matches its own manifest).
 //   3. without `--source` ⇒ `LINKED-ONLY`, exit 0.
@@ -28,12 +32,16 @@
 //      5 INCONSISTENT(<file>)); its manifest's self_sha256 must equal
 //      `source_manifest_sha256` (otherwise 2 USAGE: it is not this export's
 //      source); the profile is re-applied with the opts the manifest name
-//      determines and every output byte-compared ⇒ `VERIFIED-DERIVATIVE`,
-//      exit 0, or `MISMATCH(output)`, exit 5 (a tracker sidecar naming a
-//      finding the source never accepted is a mismatch too).
+//      determines (and the M3 manifest records) and every output
+//      byte-compared ⇒ `VERIFIED-DERIVATIVE`, exit 0, or `MISMATCH(output)`,
+//      exit 5 (a tracker sidecar naming a finding the source never accepted
+//      is a mismatch too; so is a case suite whose candidate under
+//      `<st>/cases/` changed or moved since publication — the case profile
+//      derives from the run's admissions AND the candidates' text, which is
+//      why its source is loaded with `casesDir`).
 //
-// stdout: exactly one line. Exit 0 / 0 / 5; 2 USAGE / NOT-IMPLEMENTED(M3);
-// 5 INCONSISTENT(<file>) from the source.
+// stdout: exactly one line. Exit 0 / 0 / 5; 2 USAGE; 5 INCONSISTENT(<file>)
+// from the source.
 //
 // Imports: node:fs (existsSync, readFileSync, statSync — reads only),
 // node:path, ../canon.mjs (the error classes, readArtifact), ./argv.mjs,
@@ -46,12 +54,14 @@ import { CanonError, IntegrityError, readArtifact } from "../canon.mjs";
 import { parseCommandArgv } from "./argv.mjs";
 import { CliError, EXIT, usageError } from "./exit.mjs";
 import { loadSource } from "./profiles/_source.mjs";
-import { EXPORT_MANIFEST_FILE, SIDECAR_SUFFIX, exportIdentity, expectedOutputs, profileModule } from "./profiles/index.mjs";
+import { CaseRefused } from "./profiles/case.mjs";
+import { EXPORT_MANIFEST_FILE, M3_PROFILES, SIDECAR_SUFFIX, exportIdentity, expectedOutputs, profileModule } from "./profiles/index.mjs";
 import { NotAccepted } from "./profiles/tracker.mjs";
 import { validate } from "./schema.mjs";
-import { LINKED_ONLY, MISMATCH_OUTPUT, VERIFIED_DERIVATIVE, notImplemented } from "./tokens.mjs";
+import { LINKED_ONLY, MISMATCH_OUTPUT, VERIFIED_DERIVATIVE } from "./tokens.mjs";
 
 const COMMAND = "check-export";
+const CASES_SEGMENT = "cases";
 
 function parseArgs(argv) {
   const { flags, positionals } = parseCommandArgv(COMMAND, argv, { source: "value" });
@@ -89,22 +99,19 @@ export async function run(argv, ctx) {
   const args = parseArgs(argv);
   const manifestAbs = ctx.input(COMMAND, args.manifest);
   const manifest = readManifest(manifestAbs, args.manifest);
-  const { profile, profile_version, source_manifest_sha256, output_sha256 } = manifest.payload;
+  const { profile, profile_version, source_manifest_sha256, output_sha256, opts } = manifest.payload;
   const mod = profileModule(profile);
-  if (mod === null) {
-    ctx.out(notImplemented("M3"));
-    return EXIT.USAGE;
-  }
   const name = basename(manifestAbs);
-  const expected = expectedOutputs(profile, name);
+  const expected = expectedOutputs(profile, name, opts ?? {});
   if (expected === null) {
-    const shape = profile === "tracker" ? `<finding_id>${SIDECAR_SUFFIX}` : EXPORT_MANIFEST_FILE;
-    throw usageError(COMMAND, `a ${profile} export manifest must be named ${shape}, got ${name}`);
+    const shape = profile === "tracker" ? `<finding_id>${SIDECAR_SUFFIX}` : M3_PROFILES.includes(profile) ? `<run_id>.${profile}${SIDECAR_SUFFIX}` : EXPORT_MANIFEST_FILE;
+    const needs = profile === "handoff" ? " and record opts.slug and opts.base_url" : profile === "case" ? " and record opts.slug and opts.members" : "";
+    throw usageError(COMMAND, `a ${profile} export manifest must be named ${shape}${needs}, got ${name}`);
   }
   if (profile_version !== mod.PROFILE_VERSION) throw usageError(COMMAND, `profile ${profile} version ${profile_version} is not the shipped version ${mod.PROFILE_VERSION}`);
 
   // 2. the outputs against their own manifest
-  const dir = dirname(manifestAbs);
+  const dir = expected.dir === null ? dirname(manifestAbs) : join(ctx.root, expected.dir);
   const onDisk = [];
   for (const relpath of expected.relpaths) {
     const path = join(dir, relpath);
@@ -122,13 +129,13 @@ export async function run(argv, ctx) {
   // 4. re-apply over the source
   const sourceAbs = ctx.input(COMMAND, args.source);
   if (!existsSync(sourceAbs) || !statSync(sourceAbs).isDirectory()) throw usageError(COMMAND, `--source must be a run directory, got ${args.source}`);
-  const source = loadSource(sourceAbs, { command: COMMAND });
+  const source = loadSource(sourceAbs, { command: COMMAND, casesDir: profile === "case" ? join(ctx.st, CASES_SEGMENT) : undefined });
   if (source.manifest.envelope.self_sha256 !== source_manifest_sha256) throw usageError(COMMAND, `--source ${args.source} is not the source of this export (its manifest sha256 differs)`);
   let derived;
   try {
     derived = mod.apply(source, null, expected.opts);
   } catch (err) {
-    if (err instanceof NotAccepted) throw mismatch();
+    if (err instanceof NotAccepted || err instanceof CaseRefused) throw mismatch();
     throw err;
   }
   const byName = new Map(derived.map((o) => [o.relpath, o.bytes]));

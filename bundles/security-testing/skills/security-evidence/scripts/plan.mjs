@@ -7,7 +7,8 @@ import { main } from "./lib/cli.mjs";
 const USAGE = `usage: plan.mjs [--root <dir>] [--actor <name>] [--quiet] <command> [flags]
 
 commands
-  admit --run <id> <case.md> [--receipt <sha256>]      passive admission by effect → <run>/admissions/<case_sha256>.json
+  admit --run <id> <case.md> [--receipt <sha256>] [--dry-run]
+                                                       passive admission by effect → <run>/admissions/<case_sha256>.json (--dry-run: the ADMISSION line only, nothing persisted)
   propose --run <id> <proposal.md>                     validate proposal frontmatter, write <st>/proposals/<id>.proposal.md (never under tasks/)
   ta-prompt --run <id> --slug <s> --base <branch>      print the test-automation hand-off prompt from admitted cases only
 

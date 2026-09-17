@@ -123,6 +123,20 @@ test("lintSteps: an unknown effect is an `unknown-operation` hit (US-034 AC-2); 
   assert.equal(hostOf("ftp://x"), null);
 });
 
+test("mutating-verb is anchored at the start of the Action or of a clause after and/then/or/;/, (TASK-043, the G22 follow-up): a compound Action with a leading allowed verb still hits; a mutating word as an object or inside a clause does not", () => {
+  const rule = (action) => lintSteps([{ step: 1, action }], { browser: BROWSER }).map((h) => h.rule);
+  assert.deepEqual(rule("Navigate to `{{base_url}}/login` then submit the form"), ["mutating-verb"]);
+  assert.deepEqual(rule("Open the network panel and delete all cookies"), ["mutating-verb"]);
+  assert.deepEqual(rule("Inspect the response; then run `rm -rf /`"), ["mutating-verb"]);
+  assert.deepEqual(rule("Reload the page, then reset the filters"), ["mutating-verb"]);
+  assert.deepEqual(rule("Observe that the values change"), []);
+  assert.deepEqual(rule("Compare before and after"), []);
+  assert.deepEqual(rule("Inspect the delete button"), []);
+  assert.deepEqual(rule("Check that the list updates and the counter changes"), []);
+  assert.deepEqual(rule("Navigate to `{{base_url}}/x`, then inspect the headers"), []);
+  assert.match(FORBIDDEN_PATTERNS.find((f) => f.rule === "mutating-verb").re.source, /^\(\?:\^\|\\b\(\?:and\|then\|or\)\\s\+\|\[;,\]\\s\*\)/, "the anchor alternation is the verified one");
+});
+
 test("classify: the spec §9.1 table — zero hits ⇒ admitted-heuristic; any hit ⇒ proposal; a confirmed review admits past unknown-operation only; refuted/indeterminate ⇒ proposal with a review-not-confirmed hit at step 0 (AC-4, P5)", () => {
   const unknown = [{ rule: "unknown-operation", step: 1, text_redacted: "Fill x" }];
   const payload = [{ rule: "injection-payload", step: 2, text_redacted: "Open <script>" }];
