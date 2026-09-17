@@ -1,0 +1,8 @@
+{
+  "finding_id": "$ID",
+  "oid": "$HEAD",
+  "findings_sha256": "$SHA",
+  "assertion": "confirmed",
+  "note": "Re-read the sink; the literal is used as the admin password.",
+  "by": "s1"
+}
