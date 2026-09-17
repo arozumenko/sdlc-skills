@@ -139,9 +139,10 @@ contract (`AGENT.md`, Phases 1–6) spells every argv with its stdout line.
    (`RUN-COMMITTED`).
 5. The threat model. Dispatch `threat-modeler` (`threat-model` contract)
    with the refs the evidence above supports — row ids in the snapshot,
-   proposal ids in the index, admitted `case_sha256`s, observation ids,
-   ticket URLs read back into this run; without a ref a threat is
-   `undisposed`, which is honest. It writes `<st>/threat-model.json`
+   proposal ids in the index, admitted `case_sha256`s, observation ids —
+   never a ticket URL: threats are not ticketed in v1 (the tracker rules
+   say why), so a threat is disposed `planned`, `executed`, `accepted` or
+   `mitigated`; without a ref it is `undisposed`, which is honest. It writes `<st>/threat-model.json`
    (code-derived elements with one citation each, STRIDE threats,
    mitigation claims, dispositions) and runs
    `node <scripts>/tm-lint.mjs check --run <run_id>` itself: the model is

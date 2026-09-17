@@ -247,6 +247,11 @@ test("workflow Assess and Plan describe the M3 state (final-review I-1): the pla
   assert.match(assess, /<run>\/dispositions\.json/);
   assert.match(assess, /confirmed passive/, "a case packet's `confirmed` means confirmed passive (I-2)");
   assert.match(assess, /same run,\s+same model/, "the mitigated sequence runs inside one run (I-4)");
+  // re-review after I-5: the modeler dispatch never offers a ticket URL as a threat ref (mirrors agents.test.mjs)
+  const modelerStep = assess.slice(assess.indexOf("5. The threat model"), assess.indexOf("6. "));
+  assert.doesNotMatch(modelerStep, /ticket URLs? read back/i, "workflow no longer tells the lead to pass ticket URLs as threat refs");
+  assert.match(modelerStep, /never a ticket URL: threats are not ticketed in v1/);
+  assert.match(modelerStep, /`planned`, `executed`, `accepted` or\s+`mitigated`/, "the four v1 ways to dispose a threat");
   assert.match(plan, /PROPOSAL <st>\/proposals\/<id>\.proposal\.md id=<P-nnn> sha256=<h>/);
   assert.match(plan, /PUBLISHED profile=case output=\.\/tasks\/security-<slug>-admitted\/TC-NNN_<slug>\.md sha256=<h>/);
   // the M1/M2-dated sentences are gone

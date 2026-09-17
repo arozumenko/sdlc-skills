@@ -745,6 +745,12 @@ test("security-lead verify: two-pass verify all with its stdout lines; tracker: 
   assert.match(tracker, /do not write `\{finding_id: "T-nnn"\}`[\s\S]{0,40}by hand/, "no hand-authored threat payload");
   assert.match(tracker, /v2 item/);
   assert.match(byName.assess, /not ticket URLs: a threat is not ticketed in v1/, "step 17 no longer offers ticket URLs as threat refs");
+  assert.doesNotMatch(byName.assess, /ticket URLs? read back into this run/, "no leftover of the pre-I-5 ref list");
+  // the modeler's side of the same decision (re-review): its ref lists carry no ticket URL / read-back either
+  const modeler = readFileSync(join(BUNDLE, "agents", "threat-modeler", "AGENT.md"), "utf8");
+  assert.doesNotMatch(modeler, /ticket\s+URLs it read back|ticket read-backs \(`ingest tracker-readback`\)/, "the modeler is not handed threat ticket URLs");
+  assert.match(modeler, /never a ticket URL: the lead has no v1\s+producer for a threat ticket/);
+  assert.match(modeler, /no ticket read-backs: threats are not ticketed in v1/);
 
   // --- accept: the lead proposes; a human approves elsewhere; the record stays unauthenticated
   const accept = byName.accept;

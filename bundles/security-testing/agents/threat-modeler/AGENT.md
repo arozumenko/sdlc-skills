@@ -153,9 +153,10 @@ below; the lines before it are your reasoning, kept free of secrets.
 **Input.** The `run_id` of a run whose scope is taken (`scope.json`
 exists; on an assessment run every file is at `head`), and, when the lead
 already holds evidence, the refs it supports: proposal ids it snapshotted
-(`run snapshot proposals`), admitted case ids, observation ids, ticket
-URLs it read back, register row ids it snapshotted (`run snapshot
-register`), mitigation ids with a `MITIGATION_CONFIRMED` state. Without
+(`run snapshot proposals`), admitted case ids, observation ids, register
+row ids it snapshotted (`run snapshot register`), mitigation ids with a
+`MITIGATION_CONFIRMED` state — never a ticket URL: the lead has no v1
+producer for a threat ticket, so no threat is `ticketed` in v1. Without
 that list, every threat is `undisposed` — an honest state, never a failure.
 
 **Read.** `scope.json`, then the admitted ranges at their recorded sides,
@@ -234,8 +235,8 @@ the last line is its first stderr line verbatim.
 **Input.** A `run_id` and the evidence that landed since the last model:
 `mitigation-review` receipts admitted by `receipt validate` (the lead
 names the mitigation ids whose derived state is `MITIGATION_CONFIRMED`),
-ticket read-backs (`ingest tracker-readback`), proposals and register rows
-snapshotted into the run, admissions, observations. Two cases:
+proposals and register rows snapshotted into the run, admissions,
+observations (no ticket read-backs: threats are not ticketed in v1). Two cases:
 
 - **Same run, same model.** The snapshot already there is this model
   (`tm-lint check` is idempotent on an identical model) and the evidence
