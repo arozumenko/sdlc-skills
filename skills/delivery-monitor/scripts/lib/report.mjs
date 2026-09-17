@@ -261,8 +261,6 @@ svg.burnup{width:100%;height:auto;display:block;margin:.3rem 0 .2rem}
 .legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.82rem;color:var(--text-secondary)}
 .legend-swatch{display:inline-block;width:18px;height:0;border-top:2px solid var(--series-1);vertical-align:middle;margin-right:.4rem}
 .legend-swatch.scope{border-top:2px dashed var(--text-muted)}
-details{margin-top:1.1rem}
-summary{cursor:pointer;color:var(--text-secondary);font-size:.9rem}
 @media(max-width:640px){.row{grid-template-columns:110px 1fr}.row .num{grid-column:1/-1}}
 `;
 const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
@@ -339,81 +337,8 @@ export function renderMarkdown(doc) {
   return `${L.join('\n')}\n`;
 }
 
-// html-report brief §renderHtml(doc) contract: reproduces every figure/row renderMarkdown prints —
-// same helpers (h/pct/ageH/toHours), same rounding — never a second source of truth for a number.
-const flowRowsHtml = (m, e) => {
-  const L = [];
-  for (const [lv, f] of Object.entries(m.flow)) {
-    for (const [st, mm] of Object.entries(f.strata)) {
-      for (const [name, s] of Object.entries(mm)) {
-        if (name === 'quality' || !s) continue;
-        const label = name === 'lead_time' ? ` (${e.policy.labels.lead_time})` : '';
-        L.push(`<tr><td>${escHtml(`${lv} ${name}${label}`)}</td><td>${escHtml(st)}</td><td>n=${s.n}</td><td>${s.median == null ? '— (n&lt;5)' : h(s.median)}</td><td>${s.p85 == null ? '— (n&lt;7)' : h(s.p85)}</td><td>${s.p90 == null ? '— (n&lt;10)' : h(s.p90)}</td><td>${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''}</td></tr>`);
-      }
-      L.push(`<tr><td>${escHtml(`${lv} quality`)}</td><td>${escHtml(st)}</td><td colspan="5">quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done}</td></tr>`);
-    }
-    if (!Object.keys(f.strata).length) L.push(`<tr><td>${escHtml(`${lv} cycle_time`)}</td><td>all</td><td colspan="5">— (not measured)</td></tr>`);
-    const ex = excludedStr(f.excluded);
-    if (ex) L.push(`<tr><td>${escHtml(`${lv} excluded`)}</td><td></td><td colspan="5">${escHtml(ex)}</td></tr>`);
-  }
-  return L.join('');
-};
-const throughputRowsHtml = (m) => {
-  const L = [];
-  for (const [lv, t] of Object.entries(m.throughput)) for (const w of t.weeks) {
-    const mark = !w.covered ? '†' : (!w.whole ? '*' : '');
-    L.push(`<tr><td>${escHtml(lv)}</td><td>${escHtml(w.key)}</td><td>${w.count}</td><td>${mark}</td></tr>`);
-  }
-  return L.join('');
-};
-const throughputLinesHtml = (m, e) => {
-  const L = [];
-  for (const [lv, t] of Object.entries(m.throughput)) {
-    L.push(`<li>${escHtml(lv)} velocity (median items per whole covered week): ${t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks} whole weeks)` : `— (${t.weeks.filter((w) => w.whole).length} whole weeks < ${e.policy.minWholeWeeks})`}</li>`);
-    L.push(`<li>${escHtml(lv)} wip at end: ${m.wip[lv]}</li>`);
-  }
-  if (m.mission_turnaround.pairs.length) L.push(`<li>mission_turnaround: ${escHtml(m.mission_turnaround.pairs.map((x) => `${x.from}→${x.to} ${x.gap_s != null ? h(x.gap_s) : `overlap ${h(x.overlap_s)}`}`).join('; '))}</li>`);
-  return `<ul>${L.join('')}</ul>`;
-};
-const qualityLinesHtml = (m, p) => {
-  const L = []; const cs = m.quality.cancelled_share;
-  L.push(`<li>cancelled_share: ${cs.denominator ? `${cs.numerator}/${cs.denominator} (${pct(cs.ratio)})` : '— (n=0 created in window)'}</li>`);
-  for (const lv of Object.keys(m.flow)) { const rows = p.items.filter((i) => i.level === lv); L.push(`<li>${escHtml(lv)}: rework_proxy_items ${lv === 'task' ? m.rework_proxy_items : '—'}, deferred-episodes ${rows.filter((i) => i.reopened).length}, review rounds unknown (M2)</li>`); }
-  return `<ul>${L.join('')}</ul>`;
-};
-const estimatesStrataRowsHtml = (m) => {
-  const L = [];
-  for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
-    const ex = excludedStr(x.excluded) || '—';
-    const wr = x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—';
-    L.push(`<tr><td>${escHtml(lv)}</td><td>${escHtml(st)}</td><td>${x.n}</td><td>${x.eligible}</td><td>${escHtml(String(wr))}</td><td>${x.mdmre ?? '—'}</td><td>${x.pred25 ?? '—'}</td><td>${x.mae_s == null ? '—' : h(x.mae_s)}</td><td>${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`}</td><td>${escHtml(ex)}</td></tr>`);
-  }
-  return L.join('');
-};
-const estimateRowsHtml = (m) => m.estimate_rows.map((r) => `<tr><td>${escHtml(r.ref)}</td><td>${escHtml(r.level)}</td><td>${escHtml(r.class ?? '—')}</td><td>${escHtml(r.tier ?? '—')}</td><td>${escHtml(r.base)}</td><td>${r.estimate ? `[${r.estimate.low}, ${r.estimate.high}]` : '—'}</td><td>${h(r.actual_s)}</td><td>${escHtml(r.actual_basis ?? '—')}</td><td>${r.ratio ?? '—'}</td><td>${r.hit == null ? '—' : r.hit ? 'yes' : 'no'}</td><td>${escHtml(r.reason ?? '—')}</td></tr>`).join('');
-const scheduleVarianceHtml = (m) => m.schedule_variance.map((sv) => `<li>schedule_variance ${escHtml(sv.level)} ${escHtml(sv.ref)}: actual ${h(sv.actual_s)} vs [${sv.estimate.low}, ${sv.estimate.high}] → [${toHours(sv.band.vs_high_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_high_s)}h, ${toHours(sv.band.vs_low_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_low_s)}h]; scope added ${sv.scope.added}, removed ${sv.scope.removed}</li>`).join('');
-const coverageLinesHtml = (m, p) => {
-  const L = [];
-  for (const [lv, c] of Object.entries(m.coverage)) L.push(`<li>${escHtml(lv)}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${escHtml(JSON.stringify(c.sources))}</li>`);
-  L.push(`<li>registration_gaps=${p.registration_gaps}</li>`);
-  return `<ul>${L.join('')}</ul>`;
-};
-const openItemsRowsHtml = (p, e) => p.items.filter((i) => i.state === 'in_progress').map((i) => `<tr><td>${escHtml(i.ref)}</td><td>${escHtml(i.level)}</td><td>${escHtml(i.state)}${i.flags.length ? ` (${escHtml(i.flags.join(', '))})` : ''}</td><td>${escHtml(i.started_at ?? '—')}</td><td>${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'}</td></tr>`).join('');
-const envelopeHtml = (e) => {
-  const conflictLis = e.coverage.conflict_list.map((c) => `<li>conflict ${escHtml(c.item_id ?? '—')} ${escHtml(c.transition_id)} (${escHtml(c.reason)}): ${escHtml(c.sources.join(', '))}</li>`).join('');
-  const malformedLis = e.coverage.malformed.map((mm) => `<li>malformed ${escHtml(mm.path)}:${mm.line} ${escHtml(mm.reason)}</li>`).join('');
-  const sub = conflictLis || malformedLis ? `<ul>${conflictLis}${malformedLis}</ul>` : '';
-  return `<section class="panel"><h2>Envelope</h2><ul>` +
-    `<li>ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}${sub}</li>` +
-    `<li>plans: malformed_runs=${e.coverage.malformed_runs}</li>` +
-    `<li>capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}</li>` +
-    `<li>diagnostics: ${escHtml(DIAG_KINDS.map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' '))}</li>` +
-    `<li>baselines: ${escHtml(Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', '))}</li>` +
-    `<li>policy: weeks ${escHtml(e.policy.weeks)}, percentiles ${escHtml(e.policy.percentile)} (floors median≥5 P85≥7 P90≥10), estimate base ${escHtml(e.policy.estimate_base)}, ${escHtml(e.policy.durations)}, tokenomics ${escHtml(e.sources.tokenomics)}, sources hashed as read</li>` +
-    `</ul></section>`;
-};
-const caveatsHtml = (e) => `<section class="callout-warn"><strong>Caveats</strong> — standing limitations of this measurement, printed on every report; they are not errors.<ul>${e.caveats.map((c) => `<li>${escHtml(c)}</li>`).join('')}</ul></section>`;
-
+// The HTML page is the human view: KPI cards, burn-up, per-item rows. The assessor figures (strata,
+// coverage, envelope, caveats) are the Markdown/JSON export's job and are not repeated here.
 // Human-readable helpers for the page (the assessor tables below keep `h`/toHours for parity with
 // Markdown). Durations pick their own unit by magnitude; a null is always '—', never a guess.
 const fmtDur = (sec) => {
@@ -529,33 +454,14 @@ export function renderHtml(doc) {
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
         statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
         statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
-        statCell('Counted', `${es.eligible} of ${es.n} <span class="stat-sub">estimates</span>`),
-        statCell('Not counted', excludedStr(es.excluded) ? Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `${v} <span class="stat-sub">${esc(k.replace(/_/g, ' '))}</span>`).join(' · ') : '0'),
+        statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
+        statCell('Counted', `${es.eligible} of ${es.n}${excludedStr(es.excluded) ? ` <span class="stat-sub">· ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `${v} ${esc(k.replace(/_/g, ' '))}`).join(', ')}</span>` : ' <span class="stat-sub">estimates</span>'}`),
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
-      'An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Accuracy statistics (MdMRE, PRED(25), MAE) are in the assessor tables below.'),
+      'An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
     const burnup = burnupSvg(p, e, tasks);
     if (burnup) parts.push(`<section class="panel"><h2>Progress over time</h2><p class="panel-sub">Cumulative completed tasks against the tasks in scope, from plan start to the report cutoff. Scope steps down when a task is cancelled and up when one is added after the start. Hover a marker for the task.</p>${burnup}</section>`);
-
-    // Per task — the tokenomics per-case idiom: label + state chip, bar = cycle time, number + muted detail.
-    const cycles = tasks.map((t) => elapsedS(t.started_at, t.done_at));
-    const maxCycle = Math.max(1, ...cycles.filter((c) => c != null));
-    const taskRows = tasks.map((t, idx) => {
-      const c = cycles[idx]; const r = estRow.get(t.item_id); const v = verdictOf(r);
-      const detail = [
-        t.class ? `class ${esc(t.class)}` : null,
-        missionOf.has(t.item_id) ? `mission ${esc(missionOf.get(t.item_id))}` : null,
-        t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : (t.estimate_status === 'unaccepted' ? 'estimate not accepted' : 'no estimate')),
-        v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : null,
-        t.rework_count ? `${t.rework_count} rework` : null,
-        t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
-        !t.started_at && t.state !== 'planned' ? 'no observed start' : null,
-        fmtSpan(t.started_at, t.done_at),
-      ].filter(Boolean).join(' · ');
-      return `<div class="row"><div class="lbl" title="${esc(t.item_id)}">${esc(t.ref)}${stateChip(t.state)}</div><div class="track">${c != null ? `<div class="bar" style="width:${Math.max(1, (c / maxCycle) * 100)}%"></div>` : ''}</div><div class="num">${c != null ? fmtDur(c) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
-    }).join('');
-    parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the ranges the tech-lead declared and a named human accepted; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
 
     // Per mission — elapsed from first child dispatch to landing, against the mission's own range.
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
@@ -576,28 +482,34 @@ export function renderHtml(doc) {
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
     parts.push(`<section class="panel"><h2>Per mission</h2><p class="panel-sub">Bar = elapsed from the first task dispatched to the mission landing; a mission's clock is derived from its tasks (it is never dispatched itself). Bars are scaled per panel.</p>${missionRows || '<p class="note">No missions in this plan.</p>'}${campaignLine}</section>`);
 
+    // Per task — the tokenomics per-case idiom: label + state chip, bar = cycle time, number + muted detail.
+    const cycles = tasks.map((t) => elapsedS(t.started_at, t.done_at));
+    const maxCycle = Math.max(1, ...cycles.filter((c) => c != null));
+    const taskRows = tasks.map((t, idx) => {
+      const c = cycles[idx]; const r = estRow.get(t.item_id); const v = verdictOf(r);
+      const detail = [
+        t.class ? `class ${esc(t.class)}` : null,
+        missionOf.has(t.item_id) ? `mission ${esc(missionOf.get(t.item_id))}` : null,
+        t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : (t.estimate_status === 'unaccepted' ? 'estimate not accepted' : 'no estimate')),
+        v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : null,
+        t.rework_count ? `${t.rework_count} rework` : null,
+        t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
+        !t.started_at && t.state !== 'planned' ? 'no observed start' : null,
+        fmtSpan(t.started_at, t.done_at),
+      ].filter(Boolean).join(' · ');
+      return `<div class="row"><div class="lbl" title="${esc(t.item_id)}">${esc(t.ref)}${stateChip(t.state)}</div><div class="track">${c != null ? `<div class="bar" style="width:${Math.max(1, (c / maxCycle) * 100)}%"></div>` : ''}</div><div class="num">${c != null ? fmtDur(c) : '—'}<span class="sub"> · ${detail}</span></div></div>`;
+    }).join('');
+    parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the ranges the tech-lead declared and a named human accepted; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
+
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     const open = p.items.filter((i) => i.state === 'in_progress');
     if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);
 
-    // Everything the assessor export prints, unchanged, one click away.
-    let estimatesPanel = `<section class="panel"><h2>Estimates</h2><table><tr><th>level</th><th>stratum</th><th>n</th><th>eligible</th><th>work_ratio median</th><th>MdMRE</th><th>PRED(25)</th><th>MAE</th><th>hit_rate</th><th>excluded</th></tr>${estimatesStrataRowsHtml(m)}</table>`;
-    if (m.estimate_rows.length) estimatesPanel += `<table><tr><th>ref</th><th>level</th><th>class</th><th>tier</th><th>base</th><th>range (h)</th><th>actual</th><th>basis</th><th>ratio</th><th>hit</th><th>reason</th></tr>${estimateRowsHtml(m)}</table>`;
-    if (m.schedule_variance.length) estimatesPanel += `<ul>${scheduleVarianceHtml(m)}</ul>`;
-    estimatesPanel += '</section>';
-    parts.push('<details><summary>Assessor statistics — the same figures as the Markdown/JSON export</summary>');
-    parts.push(`<section class="panel"><h2>Flow time</h2><table><tr><th>metric</th><th>stratum</th><th>n</th><th>median</th><th>P85</th><th>P90</th><th>min–max</th></tr>${flowRowsHtml(m, e)}</table></section>`);
-    parts.push(`<section class="panel"><h2>Throughput</h2><table><tr><th>level</th><th>week</th><th>count</th><th>mark</th></tr>${throughputRowsHtml(m)}</table><p class="note">*partial, †before declared coverage</p>${throughputLinesHtml(m, e)}</section>`);
-    parts.push(`<section class="panel"><h2>Quality</h2>${qualityLinesHtml(m, p)}</section>`);
-    parts.push(estimatesPanel);
-    parts.push(`<section class="panel"><h2>Coverage</h2>${coverageLinesHtml(m, p)}</section>`);
-    if (!open.length) parts.push('<section class="panel"><h2>Open items</h2><p class="note">None.</p></section>');
-    parts.push('</details>');
     parts.push('</section>');
   }
-  parts.push(`<details><summary>Envelope — ledger health, diagnostics, baselines</summary>${envelopeHtml(e)}</details>`);
-  parts.push(caveatsHtml(e));
+  // One honest footer instead of the assessor blocks: what the numbers are and where the detail lives.
+  parts.push(`<p class="note">Figures come from observed events only (plan registration, dispatch hooks, merges, git history); nothing is estimated or inferred. Percentile floors, per-stratum statistics, capture coverage and the standing caveats are in the Markdown/JSON export (<code>report</code>, <code>report --json</code>).</p>`);
   return parts.join('\n');
 }
 

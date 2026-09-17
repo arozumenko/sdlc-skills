@@ -335,29 +335,20 @@ test('renderHtml: self-contained document — no external assets, no script', ()
   assert.doesNotMatch(html, /<img/i);
 });
 
-test('renderHtml: every section and figure of the Markdown render is present', () => {
+test('renderHtml: human sections only — no assessor tables, envelope or caveat list; one footer points at the export', () => {
   const repo = tmp(); seed(repo);
   const doc = assemble(repo, { now: NOW });
   const html = renderHtml(doc);
-  for (const r of doc.plans[0].metrics.estimate_rows) assert.match(html, new RegExp(`>${escHtml(r.ref)}<`), r.ref);
-  const leadTimePresent = Object.values(doc.plans[0].metrics.flow).some((f) => Object.values(f.strata).some((s) => s.lead_time));
-  if (leadTimePresent) assert.match(html, /plan-tracked, not idea-to-done/);
-  for (const heading of ['cycle_time', 'Flow time', 'Throughput', 'Estimates', 'Coverage', 'Open items', 'Envelope', 'Caveats']) assert.ok(html.includes(heading), heading);
-  assert.match(html, /registration_gaps/);
+  for (const heading of ['Progress', 'Cycle time', 'Estimates', 'Progress over time', 'Per task', 'Per mission', 'Spread']) assert.ok(html.includes(heading), heading);
+  for (const gone of ['<h2>Flow time</h2>', '<h2>Coverage</h2>', '<h2>Envelope</h2>', '<strong>Caveats</strong>', '<details>', 'PRED(25)</th>', 'registration_gaps']) assert.ok(!html.includes(gone), `${gone} must not be on the human page`);
+  assert.ok(html.includes('nothing is estimated or inferred') && html.includes('<code>report --json</code>'), 'footer names the export');
 });
 
-test('renderHtml: every envelope caveat is rendered, in order', () => {
+test('caveats: every envelope caveat is in the Markdown export, none on the human HTML page', () => {
   const repo = tmp(); seed(repo);
   const doc = assemble(repo, { now: NOW });
-  const html = renderHtml(doc);
-  const expected = doc.envelope.caveats.map((c) => `<li>${escHtml(c)}</li>`);
-  let cursor = -1;
-  for (const li of expected) {
-    const idx = html.indexOf(li);
-    assert.ok(idx >= 0, li);
-    assert.ok(idx > cursor, `${li} rendered out of order`);
-    cursor = idx;
-  }
+  const md = renderMarkdown(doc), html = renderHtml(doc);
+  for (const c of doc.envelope.caveats) { assert.ok(md.includes(`- caveat: ${c}`), c); assert.ok(!html.includes(escHtml(c)), `${c} must not be on the HTML page`); }
 });
 
 test('renderHtml: escapes user-controlled strings', () => {
@@ -372,53 +363,7 @@ test('renderHtml: escapes user-controlled strings', () => {
   assert.ok(html.includes('&lt;b&gt;TASK-9&lt;/b&gt;&amp;&quot;x&quot;'), 'escaped form must appear');
 });
 
-// Fix round 1 (task review, "important"): `estimateRowsHtml` (the per-item Estimates table) is
-// never exercised by the shared `seed()` fixture — it has no estimates, so `m.estimate_rows` is
-// always `[]` there. Build a dedicated fixture WITH a real, fully-eligible estimate row (pattern
-// from the F17 test above: EST(low, high) + an `estimated` observation + a `done` so an actual
-// exists), and check the HTML table's row matches renderMarkdown's own cells for the same doc —
-// cross-checked against renderMarkdown's actual output rather than against a re-implementation of
-// its private `h()` formatting, so the two can never silently disagree.
-test('renderHtml: estimateRowsHtml renders a real per-item estimate row matching renderMarkdown, and escapes a malicious ref there', () => {
-  const repo = tmp();
-  const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
-  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
-    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
-    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 3) },
-  ] });
-  const o = (id, ref, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
-  const est = (id, ref, e) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/${id}/estimated/rev-0`, source: 'cli', source_record_id: `est-${id}`, estimate: e, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
-  o('task-a', 'TASK-A', 'created', '2026-09-09T00:00:00Z');
-  est('task-a', 'TASK-A', EST(1, 3));
-  o('task-a', 'TASK-A', 'dispatched', '2026-09-10T00:00:00Z'); o('task-a', 'TASK-A', 'done', '2026-09-10T02:00:00Z');
-
-  const doc = assemble(repo, { now: NOW });
-  const row = doc.plans[0].metrics.estimate_rows[0];
-  assert.equal(doc.plans[0].metrics.estimate_rows.length, 1, 'precondition: fixture yields exactly one real (non-excluded) estimate row');
-  assert.equal(row.ref, 'TASK-A'); assert.equal(row.reason, null, 'precondition: a fully eligible row, not an excluded one — exercises every cell');
-
-  const md = renderMarkdown(doc);
-  const mdLine = md.split('\n').find((l) => l.startsWith(`| ${row.ref} | ${row.level} |`));
-  assert.ok(mdLine, 'renderMarkdown per-item estimate row present');
-  const [mref, mlevel, mclass, mtier, mbase, mrange, mactual, mbasis, mratio, mhit, mreason] = mdLine.split('|').slice(1, -1).map((c) => c.trim());
-  assert.equal(mrange, '[1, 3]'); assert.equal(mhit, 'yes'); assert.equal(mreason, '—');
-
-  const html = renderHtml(doc);
-  const expectedHtmlRow = `<tr><td>${escHtml(mref)}</td><td>${escHtml(mlevel)}</td><td>${escHtml(mclass)}</td><td>${escHtml(mtier)}</td><td>${escHtml(mbase)}</td><td>${mrange}</td><td>${mactual}</td><td>${escHtml(mbasis)}</td><td>${mratio}</td><td>${mhit}</td><td>${escHtml(mreason)}</td></tr>`;
-  assert.ok(html.includes(expectedHtmlRow), 'HTML estimate row must match renderMarkdown\'s cells for the same doc, field for field');
-
-  // Escaping, specifically in the estimate table: mutate a copy of doc so TASK-A's ref carries
-  // markup, in both `items` and the matching `estimate_rows` entry the table renders from.
-  const mutated = JSON.parse(JSON.stringify(doc));
-  const evil = '<b>TASK-9</b>&"x"';
-  mutated.plans[0].items.find((i) => i.ref === 'TASK-A').ref = evil;
-  mutated.plans[0].metrics.estimate_rows.find((r) => r.ref === 'TASK-A').ref = evil;
-  const evilHtml = renderHtml(mutated);
-  assert.ok(!evilHtml.includes('<b>TASK-9</b>'), 'raw markup must not appear unescaped in the estimate table');
-  assert.ok(evilHtml.includes(`<tr><td>${escHtml(evil)}</td>`), 'escaped form must appear as the estimate table row\'s ref cell');
-});
-
-test('renderHtml: human sections — campaign header, KPI cards, per-task bar rows in natural units, assessor tables collapsed', () => {
+test('renderHtml: human sections — campaign header, KPI cards, per-task bar rows in natural units', () => {
   const repo = tmp();
   const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
   saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
@@ -445,11 +390,11 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.ok(html.includes('>1 done</text>') && html.includes('>scope 3</text>'), 'end labels carry the counts');
   assert.match(html, /<circle class="pt"[^>]*><title>TASK-A merged 10 Sep 2026 02:00 UTC<\/title><\/circle>/, 'native tooltip on the completion marker');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Within range', 'Work vs estimate', 'Not counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Within range', 'Work vs estimate', 'Typical error', 'Counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
   assert.ok(html.includes('<span class="stat-value">1 / 3</span>'), 'tasks done 1 / 3 (G2 tasks registered, not started)');
   assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
-  assert.doesNotMatch(html.split('<details>')[0], /\d\.\d\dh\b/, 'no two-decimal-hours in the human sections');
+  assert.doesNotMatch(html, /\d\.\d\dh\b/, 'no two-decimal-hours anywhere on the page');
   // Per-task bar row: ref + state chip + bar + duration + estimate verdict.
   assert.match(html, /<div class="row"><div class="lbl" title="sec\/run-1\/task-a">TASK-A<span class="oc oc-done">done<\/span><\/div><div class="track"><div class="bar" style="width:100%"><\/div><\/div><div class="num">2 h<span class="sub"> · class S · mission G1 · estimate 1 h–3 h · <span class="oc oc-done">within range<\/span> · 10 Sep 00:00 → 02:00 UTC<\/span><\/div><\/div>/);
   // Per-mission row carries the schedule-variance verdict in words.
@@ -461,12 +406,8 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   const html2 = renderHtml(assemble(repo, { now: NOW }));
   assert.match(html2, /G2<span class="oc oc-in_progress">in progress<\/span>.*?1\/2 tasks done · 1 open/, 'open mission shows done/in-scope from current_scope.child_summary');
   assert.match(html2, /TASK-C<span class="oc oc-planned">planned<\/span>.*?mission G2/, 'a never-dispatched task still knows its mission (parent link, not first_completion)');
-  // Assessor tables are still all there, but collapsed.
-  const details = html.split('<details>');
-  assert.ok(details.length >= 3, 'statistics + envelope are <details> blocks');
-  assert.ok(details[1].includes('<h2>Flow time</h2>') && details[1].includes('<h2>Coverage</h2>'), 'assessor panels live inside the first details block');
-  assert.ok(!details[0].includes('<h2>Flow time</h2>'), 'flow-time strata are not in the human part');
-  assert.ok(html.includes('<strong>Caveats</strong> — standing limitations'), 'caveats stay visible with a preface');
+  assert.ok(!html.includes('<details>'), 'no collapsed assessor blocks on the human page');
+  assert.ok(html.indexOf('<h2>Per mission</h2>') < html.indexOf('<h2>Per task</h2>'), 'missions before tasks');
   // Human open-items rows use natural units, never raw ISO stamps; the assessor copy keeps ISO.
   assert.match(html2, /<h2>Open items<\/h2>.*?<td>G2<\/td><td>mission<\/td><td>in progress<\/td><td>11 Sep 2026 00:00 UTC<\/td><td>10 d<\/td>/s);
 });
@@ -487,4 +428,24 @@ test('renderHtml: the Pace card appears only once the run spans minWholeWeeks wh
   assert.match(html, /<span class="stat-label">Whole weeks observed<\/span><span class="stat-value">7<\/span>/);
   assert.match(html, /<span class="stat-label">Velocity<\/span><span class="stat-value">0 <span class="stat-sub">tasks \/ week, median of 7 whole weeks/);
   assert.ok(!html.includes('Pace per week appears once'), 'no floor note when the card is shown');
+});
+
+test('renderHtml: per-task rows escape a hostile ref (the estimate verdict path)', () => {
+  const repo = tmp();
+  const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 3) },
+  ] });
+  const o = (id, ref, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/task-a/estimated/rev-0`, source: 'cli', source_record_id: 'est-a', estimate: EST(1, 3), meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'created', '2026-09-09T00:00:00Z'); o('task-a', 'TASK-A', 'dispatched', '2026-09-10T00:00:00Z'); o('task-a', 'TASK-A', 'done', '2026-09-10T02:00:00Z');
+  const doc = assemble(repo, { now: NOW });
+  const evil = '<b>TASK-9</b>&"x"';
+  const mutated = JSON.parse(JSON.stringify(doc));
+  mutated.plans[0].items.find((i) => i.ref === 'TASK-A').ref = evil; mutated.plans[0].metrics.estimate_rows[0].ref = evil;
+  const html = renderHtml(mutated);
+  assert.ok(!html.includes('<b>TASK-9</b>'), 'raw markup must not appear');
+  assert.ok(html.includes(`>${escHtml(evil)}<span class="oc oc-done">done</span>`), 'escaped ref in the per-task row label');
+  assert.ok(html.includes('within range'), 'verdict still rendered for the row');
 });
