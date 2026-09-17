@@ -213,6 +213,19 @@ test("body contains the four rules and the four return-line grammars; the review
   // fresh-dispatch refusal for the three assertion contracts (spec §6.4 "never the instance that authored the claim")
   for (const name of Object.keys(VOCABULARY)) assert.match(byName[name], /fresh dispatch|fresh context|refuse/i, `### ${name} lacks the fresh-dispatch rule`);
 
+  // final-review I-2: vulnerability-review knows the case packet (spec §9.1 reviewed admission) — the subject is a
+  // case identity, the one file is a manual-qa test case, `confirmed` means confirmed passive against passive-admission.md
+  const vr = byName["vulnerability-review"];
+  assert.match(vr, /packet --kind subject --type case/, "names how the lead builds a case packet");
+  assert.match(vr, /case_sha256/, "the subject id of a case packet is the case identity");
+  assert.match(vr, /\.agents\/security-testing\/cases\/<slug>\/TC-NNN_<slug>\.md/, "the packet's one file is the candidate case");
+  assert.match(vr, /not code/i, "a case packet is a Markdown test case, not code");
+  assert.match(vr, /security-test-planning\/references\/passive-admission\.md/, "the steps are read against the passive rules");
+  assert.match(vr, /`confirmed` means \*\*confirmed passive\*\*/, "the meaning of confirmed over a case packet");
+  assert.match(vr, /`refuted` means a step is active/, "refuted names the active step");
+  assert.match(vr, /leaves the case a `proposal`/, "refuted / indeterminate leave the case a proposal (fail-closed)");
+  assert.match(vr, /never run `admit`/, "the admitting command stays the lead's");
+
   // the admitting commands belong to the lead, never run by the agent on its own output
   const contractsText = section("Contracts").text + section("Never").text;
   assert.match(contractsText, /receipt validate/);
@@ -595,11 +608,43 @@ test("security-lead body: the four rules; the assess procedure lists the real co
   assert.match(assess, /SNAPSHOT verify from=<id> sha256=<h>/);
   assert.match(assess, /SNAPSHOT proposals n=<n>/);
   assert.match(assess, /SNAPSHOT-EXISTS/);
-  // routed: the first `mitigated` disposition costs a rebuilt mitigation packet + a fresh mitigation-review on the NEW run
+  // final-review I-4 (verified against cmd-tm-lint.mjs: the snapshot persists before lintDispositions; dogfood run 2): the
+  // `mitigated` disposition written up front is a SAME-RUN sequence — first check fails the relationship after the
+  // snapshot → packet → fresh mitigation-review → receipt validate → second check exits 0; a disposition CHANGED after the
+  // snapshot is SNAPSHOT-EXISTS and a new run
   assert.match(assess, /MITIGATION_CONFIRMED/);
   assert.match(assess, /TM-INVALID\(T-nnn: mitigated\(M-nnn\)/);
-  assert.match(assess, /new run[\s\S]{0,600}?packet --run <run_id> --kind subject --subject M-nnn[\s\S]{0,300}?fresh[\s\S]{0,80}?`mitigation-review`/, "the mitigated re-dispatch on the new run is spelled");
+  const step19 = assess.slice(assess.indexOf("19. "), assess.indexOf("**Phase 6"));
+  assert.match(step19, /\*\*same-run\*\* sequence/, "step 19 says the mitigated sequence is same-run");
+  assert.doesNotMatch(step19, /costs a run|always means, on the \*\*new run\*\*/, "the 'always a new run' framing is gone");
+  assertOrdered(
+    step19,
+    [
+      "up front",
+      "tm-lint.mjs check --run <run_id>",
+      "TM-INVALID(T-nnn: mitigated(M-nnn): M-nnn has no MITIGATION_CONFIRMED state (not independently reviewed))",
+      "packet --run <run_id> --kind subject --subject M-nnn",
+      "`mitigation-review`",
+      "receipt validate --run <run_id> <receipt path>",
+      "same run and the same model",
+      "tm-lint.mjs check --run <run_id>",
+      "TM elements=<n> threats=<n> undisposed=<n>",
+      "No new run",
+      "**changed after** the snapshot",
+      "2 SNAPSHOT-EXISTS",
+      "new run",
+    ],
+    "### assess step 19",
+  );
+  assert.match(step19, /fresh `security-reviewer` `mitigation-review`/, "the mitigation review is a fresh dispatch");
+  assert.match(step19, /holds the check \*\*and\*\* where it is\s+applied, in one ≤ 40-line range/, "dogfood awkward #1: the citation advice");
   assert.match(assess, /TM elements=<n> threats=<n> undisposed=<n>/);
+  // final-review M-9 / PM log after G26: the INCOMPLETE causes name dispositions; TEMPLATES is quoted per file; the
+  // --scanner-rows payload has a named, lead-owned home
+  assert.match(assess, /`dispositions` until a lint \*\*exited 0\*\*/, "INCOMPLETE(dispositions) cause is named");
+  assert.match(assess, /TEMPLATES: engagement\.md\.template=written finding-schema\.md=written report-reading-guide\.md=written/, "dogfood #8: the per-file TEMPLATES line");
+  assert.doesNotMatch(assess, /`TEMPLATES: written`/);
+  assert.match(assess, /--scanner-rows <file>` is a payload-only file you write and save\s+under `\.agents\/security-testing\/imports\/`/, "the scanner-rows file lives under imports/");
   // close: the report, check and sign-off lines
   assert.match(assess, /REPORT <path>/);
   assert.match(assess, /MANIFEST sha256=<h>/);
@@ -693,6 +738,13 @@ test("security-lead verify: two-pass verify all with its stdout lines; tracker: 
   assert.match(tracker, /EMITTER-ONLY\(ticketed\)/);
   assert.match(tracker, /not `COMMITTED`|not COMMITTED|open run/i, "ingest needs a run that is not COMMITTED — say which run the read-back goes into");
   assert.match(tracker, /never (post|file)[^.]*by hand|never post from the report/i);
+  // final-review I-5: the v1 decision on threat tickets, stated where the lead would otherwise look for the procedure
+  assert.match(tracker, /\*\*Threats are not ticketed in v1\.\*\*/);
+  assert.match(tracker, /`publish --profile tracker` emits\s+finding tickets only/);
+  assert.match(tracker, /`planned`[\s\S]{0,80}`executed`[\s\S]{0,60}`accepted`[\s\S]{0,80}`mitigated`/, "the four v1 ways to dispose a threat");
+  assert.match(tracker, /do not write `\{finding_id: "T-nnn"\}`[\s\S]{0,40}by hand/, "no hand-authored threat payload");
+  assert.match(tracker, /v2 item/);
+  assert.match(byName.assess, /not ticket URLs: a threat is not ticketed in v1/, "step 17 no longer offers ticket URLs as threat refs");
 
   // --- accept: the lead proposes; a human approves elsewhere; the record stays unauthenticated
   const accept = byName.accept;

@@ -1,6 +1,6 @@
 {
   "harness_version": 1,
-  "prompt_sha256": "6d079816ccc0454a38ec55477671bc3e21f2841fac4107a2736d26a90689e4eb",
+  "prompt_sha256": "4a815d772ee6c63be3cff7c3f459fa8efcd3c16249d90273592f90b7a5b1ba07",
   "prompt_files": ["SKILL.md", "references/taxonomy.md", "references/refutation-criteria.md", "references/do-not-flag.md", "evals/prompt.md"],
   "model_id": "claude-sonnet-5",
   "sampling": { "temperature": 0, "top_p": 1, "max_tokens": 16000 },

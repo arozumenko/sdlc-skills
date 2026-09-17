@@ -16,8 +16,11 @@ outside the block is yours — notes, links, people, rules of engagement.
    no record: step 0 writes `<st>/knowledge/` (the field-by-field
    `engagement.md.template`, `finding-schema.md`,
    `report-reading-guide.md`) when the seeded copies are absent, writes
-   `<st>/engagement.md` from the template, prints `TEMPLATES: written` and
-   `ENGAGEMENT: template written — edit and re-run`, and exits
+   `<st>/engagement.md` from the template, prints the per-file line
+   `TEMPLATES: engagement.md.template=written finding-schema.md=written report-reading-guide.md=written`
+   (each file `=written` or `=present` — `present` when the factory `seed`
+   already placed it) and `ENGAGEMENT: template written — edit and re-run`,
+   and exits
    `2 EDIT-ENGAGEMENT-AND-RERUN`. Nothing else happens on that run.
 2. Edit the block. The template's example is deliberately valid, so an
    unedited file keys an engagement called `eng-2026-001` for a product
@@ -36,7 +39,8 @@ outside the block is yours — notes, links, people, rules of engagement.
    `# security-testing:begin` and `# security-testing:end`; step 2 fails
    closed if git tracks or does not ignore anything under a managed path;
    step 3 mints the HMAC key; step 4 takes the baseline over
-   `scope_paths ∪ product_paths`. Output: `TEMPLATES: present`,
+   `scope_paths ∪ product_paths`. Output:
+   `TEMPLATES: engagement.md.template=present finding-schema.md=present report-reading-guide.md=present`,
    `ENGAGEMENT: present`, `IGNORE-BLOCK: written`, `KEY: <key_id> created`,
    `BASELINE: <n files> ignored=<n>`. Re-running is idempotent
    (`IGNORE-BLOCK: unchanged`, `KEY: <key_id> reused`); `--rotate` mints a
@@ -45,7 +49,8 @@ outside the block is yours — notes, links, people, rules of engagement.
    `IGNORE-BLOCK: ok|stale`, `TRACKED: none`, `KEY: available|unavailable`,
    `BASELINE: present|absent` — exit 4 on any bad line, nothing written.
 
-Commit `engagement.md`, `risk-register.md` and (from M2) `threat-model.json`
+Commit `engagement.md`, `risk-register.md`, `threat-model.json` and the
+candidate cases under `<st>/cases/`
 by your normal policy; they sit outside the managed block. Everything the
 block covers stays local unless `artifact_policy` says otherwise.
 
@@ -69,48 +74,121 @@ holds, stop, report the line to the human and do not improvise around it.
 
 An assessment is the engagement's deliverable: a `COMMITTED` assessment run
 is what `sign-off` requires (`4 NO-ASSESSMENT` otherwise). It is the review
-chain below run on a clean tree, plus the cross-run inputs snapshotted in.
+chain below run on a clean tree, plus the passive cases, the threat model
+and every cross-run input snapshotted into the run directory before
+`build-report` (P2). This is the canonical order; the lead's `assess`
+contract (`AGENT.md`, Phases 1–6) spells every argv with its stdout line.
 
-1. `node <scripts>/evidence.mjs run init --kind assessment [--base <ref>]`
-   — `--base` defaults to head, `--head` must be `HEAD`; the tree under the assessed paths must be
-   clean (`3 DIRTY-TREE`); prints `RUN <run_id> seq=<n> kind=assessment
-   base=<oid> head=<oid>` and writes the empty `imports.json`,
-   `observations.json`, `proposals-index.json` (the run's inputs are all
-   inside the run directory, P2). Note the `run_id`.
-2. The threat model. At M2 the `threat-modeler` writes
-   `<st>/threat-model.json` (code-derived elements with one citation each,
-   STRIDE threats, dispositions) and the lint command snapshots it into
-   `<run>/threat-model.json`. The assessment template requires that input
-   (`3 INCOMPLETE(threat-model)` without it), and at M1 no command writes
-   it — the bundle's end-to-end test writes the documented empty model
-   `{elements: [], threats: []}` through the scripts' own artifact writer.
-   Until M2 lands, a human-driven engagement's deliverable is the review
-   run, its report and `check`; `sign-off` reports `NO-ASSESSMENT` by
-   design (D12). Say so rather than hand-craft an artifact.
-3. Run the **Review** chain below on this run (`scope` → `packet --kind
-   scope` → dispatch → `gate` → `coverage` → subject packets → fresh
-   `vulnerability-review` dispatches → `receipt validate`).
-4. Pull the cross-run inputs in:
-   `node <scripts>/evidence.mjs run snapshot register --run <run_id>`
-   (`SNAPSHOT register events=<n> chain=<sha>`),
+1. Commit what the run must see first: candidate cases live at
+   `<st>/cases/<slug>/TC-NNN_<slug>.md` (never under `tasks/`) and the
+   case packet binds the blob at `head_oid`. Then
+   `node <scripts>/evidence.mjs run init --kind assessment [--base <ref>]`
+   — `--base` defaults to head, `--head` must be `HEAD`; the tree under the
+   assessed paths must be clean (`3 DIRTY-TREE`); prints `RUN <run_id>
+   seq=<n> kind=assessment base=<oid> head=<oid>` and writes the empty
+   `imports.json`, `observations.json`, `proposals-index.json` (the run's
+   inputs are all inside the run directory, P2). Note the `run_id`. Then
+   `node <scripts>/evidence.mjs scope --run <run_id> [--include <path-or-glob>]… [--max-bytes <n>]`
+   — `SCOPE files=<n> ranges=<n> skipped=<n> snapshot=<n>` (`snapshot=0`
+   on an assessment).
+2. Passive cases and every other input, **before `gate`** (it folds the
+   unlocated candidates of every import into `<run>/unlocated.json`).
+   Per candidate case:
+   `node <scripts>/plan.mjs admit --run <run_id> <case> --dry-run` reads
+   the hits without a record; then zero hits ⇒
+   `node <scripts>/plan.mjs admit --run <run_id> <st>/cases/<slug>/TC-NNN_<slug>.md`;
+   hits all `unknown-operation` ⇒ the review route —
+   `node <scripts>/evidence.mjs packet --run <run_id> --kind subject --type case --subject <case>`,
+   a **fresh** `security-reviewer` `vulnerability-review` over that case
+   packet — a Markdown test case, not code, so `confirmed` means
+   "confirmed passive" — `node <scripts>/evidence.mjs receipt validate --run <run_id> <receipt path>`,
+   then `node <scripts>/plan.mjs admit --run <run_id> <case> --receipt <sha256>`;
+   a forbidden hit ⇒ a proposal, never an admission. Each prints
+   `ADMISSION case=<case_sha256> classification=<admitted-heuristic|admitted-reviewed|proposal> hits=<n>`
+   (write-once: `2 ADMISSION-EXISTS` when the same case would get a
+   different record — a changed route is a new run). Then
+   `node <scripts>/evidence.mjs ingest case <candidate> --run <run_id>`
+   per admitted candidate — the `case_id ↔ case_sha256` join a later
+   observation resolves through; the results of an earlier hand-off,
+   `node <scripts>/evidence.mjs ingest qa-run <report> --run <run_id>`
+   (`IMPORT qa-run …`, then `OBSERVATION <id> case=<c> result=<r>` per row
+   that resolved to an admitted case of this run) or
+   `node <scripts>/evidence.mjs ingest ta-report <report> --run <run_id>`
+   (`TA-UNITS <run>/ta-units/<sha>.json units=<n> sha256=<h>`); and
+   everything else that reached you as text,
+   `node <scripts>/evidence.mjs ingest sarif|ticket|pr|doc|audit <file> --run <run_id>`.
+3. Run the **Review** chain below on this run (`packet --kind scope` →
+   dispatch → `gate` → `coverage` → subject packets → fresh
+   `vulnerability-review` dispatches → `receipt validate` → `receipt apply`).
+4. The register and the cross-run inputs. A row per accepted finding you
+   track, `node <scripts>/register.mjs add --subject <finding_id> --priority p0|p1|p2|p3 --title <t> --run <run_id>`
+   then `node <scripts>/register.mjs render`; a proposal per piece of
+   active work, `node <scripts>/plan.mjs propose --run <run_id> <path>`
+   (`PROPOSAL <st>/proposals/<id>.proposal.md id=<P-nnn> sha256=<h>`). Then
    `node <scripts>/evidence.mjs run snapshot verify --run <run_id> --from <verify_run_id>`
    per verify run you want the report to carry (`SNAPSHOT verify from=<id>
    sha256=<h>`; `3 INCOMPLETE(verify:<id>)` if that run is not COMMITTED),
+   `node <scripts>/evidence.mjs run snapshot register --run <run_id>`
+   after the last register mutation of this run
+   (`SNAPSHOT register events=<n> chain=<sha>`; write-once,
+   `2 SNAPSHOT-EXISTS` — an `accepted(R-nnnn)` disposition validates only
+   from it), and
    `node <scripts>/evidence.mjs run snapshot proposals --run <run_id>`
-   (`SNAPSHOT proposals n=<n>`; `n=0` at M1). A snapshot into a COMMITTED
-   run is refused (`RUN-COMMITTED`).
-5. `node <scripts>/evidence.mjs build-report --run <run_id> --template assessment`
-   — `REPORT <path>`, `MANIFEST sha256=<h>`, `COMMITTED` last.
-6. `node <scripts>/evidence.mjs check <st>/runs/<run_id> --integrity --drift`
+   (`SNAPSHOT proposals n=<n>`; a `planned(P-nnn)` disposition validates
+   only from it). A snapshot into a COMMITTED run is refused
+   (`RUN-COMMITTED`).
+5. The threat model. Dispatch `threat-modeler` (`threat-model` contract)
+   with the refs the evidence above supports — row ids in the snapshot,
+   proposal ids in the index, admitted `case_sha256`s, observation ids,
+   ticket URLs read back into this run; without a ref a threat is
+   `undisposed`, which is honest. It writes `<st>/threat-model.json`
+   (code-derived elements with one citation each, STRIDE threats,
+   mitigation claims, dispositions) and runs
+   `node <scripts>/tm-lint.mjs check --run <run_id>` itself: the model is
+   snapshotted into `<run>/threat-model.json` **before** the dispositions
+   are validated, and `<run>/dispositions.json` is written on exit 0
+   (`TM elements=<n> threats=<n> undisposed=<n>` + two `WROTE` lines).
+   Both files are required assessment inputs — `build-report` is
+   `3 INCOMPLETE(threat-model)` / `3 INCOMPLETE(dispositions)` without
+   them. Per mitigation the modeler named:
+   `node <scripts>/evidence.mjs packet --run <run_id> --kind subject --subject M-nnn`
+   → a **fresh** `security-reviewer` `mitigation-review` →
+   `node <scripts>/evidence.mjs receipt validate --run <run_id> <receipt path>`
+   → `node <scripts>/tm-lint.mjs check --run <run_id>` again, same run,
+   same model (the `mitigated` sequence is the lead's step 19; a
+   disposition **changed** after the snapshot is `2 SNAPSHOT-EXISTS` and
+   a new run).
+6. `node <scripts>/evidence.mjs build-report --run <run_id> --template assessment`
+   — `REPORT <path>`, `MANIFEST sha256=<h>`, `COMMITTED` last;
+   `3 INCOMPLETE(<input>)` names the missing input and writes nothing.
+7. `node <scripts>/evidence.mjs check <st>/runs/<run_id> --integrity --drift`
    before you show the report to anyone — see the sign-off checklist.
 
 ## Plan
 
-Deciding what each threat and finding becomes: a test, a ticket or a
-register row. The planning commands (admission of passive cases, proposals
-for active work, the hand-off suite under `tasks/security-<slug>-admitted/`)
-land with M3; until then a plan is:
+Deciding what each threat and finding becomes: a passive test, a proposal
+for active work, a ticket or a register row. The planning commands are
+`plan.mjs` (`admit`, `propose`, `ta-prompt`) and the `case` / `handoff`
+profiles of `publish`; the lead's `assess` contract (Phase 2 for
+admission, step 24 for the hand-off) holds every argv and stdout line, and
+the `security-test-planning` skill holds the case format and the passive
+rules. A plan is:
 
+- a passive case, admitted (Assess step 2):
+  `node <scripts>/plan.mjs admit --run <run_id> <st>/cases/<slug>/TC-NNN_<slug>.md`
+  — the heuristic route on zero hits, the review route (a case packet, a
+  fresh `vulnerability-review`, `--receipt <sha256>`) on
+  `unknown-operation` hits only — then
+  `node <scripts>/evidence.mjs ingest case <candidate> --run <run_id>` so
+  a later QA result resolves to it; a `planned(<case_sha256>)` disposition
+  validates from the admission record;
+- active work, proposed: a ````json proposal```` block anywhere under
+  `<st>/` (never under `tasks/`), then
+  `node <scripts>/plan.mjs propose --run <run_id> <path>` →
+  `PROPOSAL <st>/proposals/<id>.proposal.md id=<P-nnn> sha256=<h>`;
+  `authorization.status` stays `proposed` and `authenticated: false` — a
+  human decides outside this bundle; `run snapshot proposals` puts it in
+  the index a `planned(P-nnn)` disposition validates from;
 - a register row per finding you intend to track:
   `node <scripts>/register.mjs add --subject <finding_id> --priority p0|p1|p2|p3 --title <t> --run <run_id> [--owner <o>]`
   prints `ROW <R-id> status=open priority=<p> seq=<n>`; `node <scripts>/register.mjs render`
@@ -120,7 +198,17 @@ land with M3; until then a plan is:
 - an acceptance for a risk the product owner carries:
   `node <scripts>/register.mjs accept <R-id> --until <YYYY-MM-DD> --approved-by <who> --approval-ref <ref>`
   — a record with `authenticated: false`; it lapses at 00:00 UTC of the day
-  after `until` (`register.mjs check` flips it back to `open`).
+  after `until` (`register.mjs check` flips it back to `open`);
+- the hand-off suite, from a `COMMITTED` run only:
+  `node <scripts>/evidence.mjs publish --run <run_id> --profile case --to tasks/security-<slug>-admitted`
+  writes one file per `admitted-*` record of the run
+  (`PUBLISHED profile=case output=./tasks/security-<slug>-admitted/TC-NNN_<slug>.md sha256=<h>`
+  each — the suite is written by nothing else); then
+  `node <scripts>/evidence.mjs publish --run <run_id> --profile handoff --to <st>/handoffs [--base-url <url>]`
+  prints the manual-qa prompt, or
+  `node <scripts>/plan.mjs ta-prompt --run <run_id> --slug <slug> --base <branch>`
+  the test-automation one. Print the prompt, stop; what comes back enters
+  the **next** run through `ingest qa-run` / `ingest ta-report`.
 
 Nothing in a plan changes a state: a row is `open` until a verdict says
 otherwise, and a threat is disposed only by a relationship a script

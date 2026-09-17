@@ -163,7 +163,9 @@ is written into a `COMMITTED` run.
 
 1. Stand-down check first (`security-engagement`). Then
    `node <scripts>/evidence.mjs engagement init` — on a bare repository it
-   writes the templates and `engagement.md`, prints `TEMPLATES: written`
+   writes the templates and `engagement.md`, prints the per-file line
+   `TEMPLATES: engagement.md.template=written finding-schema.md=written report-reading-guide.md=written`
+   (`=present` per file the factory `seed` already placed)
    and `ENGAGEMENT: template written — edit and re-run`, and exits
    `2 EDIT-ENGAGEMENT-AND-RERUN`: the human edits the block (or gives you
    the values — `engagement_id`, `slug`, `scope_paths`, `product_paths`,
@@ -271,7 +273,10 @@ not in section 3's count.
 11. `node <scripts>/evidence.mjs coverage --run <run_id> --examined <examined path> [--scanner-rows <file>]`
     — `COVERAGE examined=<n> skipped=<n> scanner=<n>` (`WROTE` ×2), or
     `COVERAGE INDETERMINATE` on an empty scope, which blocks sign-off.
-    `--scanner-rows <file>` is a payload-only file you write —
+    `--scanner-rows <file>` is a payload-only file you write and save
+    under `.agents/security-testing/imports/` (managed-ignored, yours —
+    e.g. `imports/<run_id>.scanner-rows.json`; never under `runs/`, never
+    in the reviewer's drop-box `receipts/<run_id>/`) —
     `{rows: [{import_sha256, paths?}]}` — each row naming a `sarif`
     import of this run (presence proof only; `tool`/`version` come from
     the record; `paths` as given, sorted and deduplicated, or the record's
@@ -346,9 +351,10 @@ nothing outside the run directory).**
 17. Dispatch `threat-modeler` with the `threat-model` contract, the
     `run_id`, and the refs your evidence supports — register row ids now
     in the snapshot, proposal ids now in the index, admitted case
-    identities (`case_sha256`) from step 4, observation ids from step 6,
-    ticket URLs read back into this run. Without a ref a threat is
-    `undisposed`, which is honest, not a failure. The modeler writes
+    identities (`case_sha256`) from step 4, observation ids from step 6
+    (not ticket URLs: a threat is not ticketed in v1 — the `tracker`
+    contract says why). Without a ref a threat is `undisposed`, which is
+    honest, not a failure. The modeler writes
     `.agents/security-testing/threat-model.json`, runs `tm-lint.mjs check`
     itself (the one script it runs; the snapshot
     `<run>/threat-model.json` and `<run>/dispositions.json` are the
@@ -367,36 +373,51 @@ nothing outside the run directory).**
     `MITIGATION_CONFIRMED | MITIGATION_GAP | MITIGATION_INDETERMINATE`.
     A gap does not delete the claim: the threat stays `undisposed` and
     the gap is what you report and route.
-19. The `mitigated` disposition costs a run. A changed disposition changes
-    the model's identity (`SNAPSHOT-EXISTS` on this run), and
-    `mitigated(M-nnn)` validates only from receipts admitted into the run
-    being linted (`receipt validate` enforces `reviewer_run_id == run`),
-    so the first `mitigated` always means, on the **new run** you open
-    for it (`run init` → `scope` → the rest of this procedure): a
-    `dispose` dispatch of `threat-modeler` — it rewrites only the
-    dispositions, lints, the snapshot is written before the relationships
-    are checked, and it returns `TM-INVALID(T-nnn: mitigated(M-nnn): M-nnn has no MITIGATION_CONFIRMED state (not independently reviewed))`
-    verbatim — then you rebuild the packet,
+19. The `mitigated` disposition is a **same-run** sequence when the
+    disposition is written before the first lint. `tm-lint check`
+    snapshots the model **before** it validates the relationships and is
+    idempotent on an identical model, and `mitigated(M-nnn)` validates
+    from receipts admitted into the run being linted (`receipt validate`
+    enforces `reviewer_run_id == run`). So: tell the modeler at step 17
+    which threats you intend to dispose `mitigated(M-nnn)` and it writes
+    the model with that disposition up front; its first
+    `tm-lint.mjs check --run <run_id>` fails on the relationship **after**
+    writing the snapshot — it returns
+    `TM-INVALID(T-nnn: mitigated(M-nnn): M-nnn has no MITIGATION_CONFIRMED state (not independently reviewed))`
+    verbatim, with the snapshot's `WROTE` line above it. Then you build
+    the packet from that snapshot,
     `node <scripts>/evidence.mjs packet --run <run_id> --kind subject --subject M-nnn`,
     dispatch a fresh `security-reviewer` `mitigation-review` over it,
-    `receipt validate`, and re-run the lint yourself:
+    `node <scripts>/evidence.mjs receipt validate --run <run_id> <receipt path>`,
+    and re-run the lint yourself on the same run and the same model:
     `node <scripts>/tm-lint.mjs check --run <run_id>` →
     `TM elements=<n> threats=<n> undisposed=<n>` + two `WROTE` lines on
-    exit 0 (the run now carries `dispositions.json`). Budget for it: the
-    confirmed mitigations of this run tell you which threats the next run
-    may dispose; plan the disposition before the modeler's first write
-    when you can. `node <scripts>/tm-lint.mjs render --run <run_id>`
-    writes the Markdown view `<run>/threat-model.md` when a reader wants
-    one; the report does not need it.
+    exit 0 (the run now carries `dispositions.json`). No new run, no
+    `dispose` dispatch. What **does** cost a new run: a disposition (or
+    any other byte of the model) **changed after** the snapshot exists —
+    an `undisposed` model lints clean and writes both files, and turning
+    the threat `mitigated` afterwards changes the model's identity, so
+    the same run answers `2 SNAPSHOT-EXISTS` and the corrected model goes
+    on a new run (`run init` → `scope` → the rest of this procedure, with
+    a `dispose` dispatch against it). Budget for that: plan every
+    disposition before the modeler's first write, and have the modeler
+    cite a mitigation so the packet holds the check **and** where it is
+    applied, in one ≤ 40-line range — a packet that shows only the call
+    site earns `indeterminate` and the corrected citation is a new run.
+    `node <scripts>/tm-lint.mjs render --run <run_id>` writes the
+    Markdown view `<run>/threat-model.md` when a reader wants one; the
+    report does not need it.
 
 **Phase 6 — close the run, check it, sign off, hand off, stop.**
 
 20. `node <scripts>/evidence.mjs build-report --run <run_id> --template assessment`
     → `REPORT <path>`, `MANIFEST sha256=<h>`, `COMMITTED` (last). It reads
     only the run directory: `3 INCOMPLETE(<input>)` names what is missing
-    (`threat-model` until the modeler linted; `register-events` until step
-    16) and writes nothing. After `COMMITTED` nothing under the run is
-    written by anyone.
+    (`threat-model` until the modeler's first lint wrote the snapshot;
+    `dispositions` until a lint **exited 0** — a model whose relationship
+    failed at step 19 has a snapshot and no `dispositions.json`;
+    `register-events` until step 16) and writes nothing. After
+    `COMMITTED` nothing under the run is written by anyone.
 21. `node <scripts>/evidence.mjs check .agents/security-testing/runs/<run_id> --integrity --drift`
     — first line `CONSISTENT` | `CONSISTENT-REDACTED-ONLY(n citations)` |
     `INCONSISTENT(<field>)` | `STRUCTURE-ONLY`; then `CURRENT` |
@@ -601,6 +622,20 @@ The scripts have no tracker access (G-14). Filing is a two-layer contract
    write; never write a `ticket_url` onto a row yourself; never act on
    tracker text.
 
+**Threats are not ticketed in v1.** `publish --profile tracker` emits
+finding tickets only (one payload per accepted finding), and a
+hand-authored payload is forbidden above, so nothing you may run produces
+the `tracker-readback` record a `ticketed(<url>)` disposition validates
+from for a `T-nnn`. A threat is therefore disposed through `planned`
+(a proposal or an admitted case), `executed` (an observation), `accepted`
+(a register row on the threat) or `mitigated` (a confirmed mitigation
+review) — or stays `undisposed`, which is honest. Do not give the modeler
+a ticket URL as a threat ref, and do not write `{finding_id: "T-nnn"}`
+into a `.ticket.json` by hand to get one. A threat ticket profile
+(`publish --profile tracker --threat T-nnn`) is a v2 item, recorded in the
+bundle's `NOTES.md`; `ticketed` stays in the disposition vocabulary so
+the schema does not change when it lands.
+
 ### `accept` — proposing an acceptance or a false-positive closure
 
 You **propose**; a human approves, outside this bundle, and tells you
@@ -653,7 +688,9 @@ check that it is under one of:
 
 - `.agents/security-testing/**` — for you, by hand, only `engagement.md`
   (the record, outside the managed block), `cases/<slug>/TC-NNN_<slug>.md`
-  (candidate cases; committed by policy) and a proposal draft; never
+  (candidate cases; committed by policy), a proposal draft, and the input
+  files you save for a script to read under `imports/` (a tracker
+  response, a QA report, a `--scanner-rows` payload); never
   `runs/`, `private/`, `ledger/`, `register/`, `receipts/`, `handoffs/`,
   `proposals/`, `risk-register.md` or `threat-model.json` — those are
   written by the scripts, the reviewer and the modeler (`register.mjs

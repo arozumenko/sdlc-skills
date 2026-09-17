@@ -106,6 +106,28 @@ test("a plain (non header/cookie) case is the candidate verbatim below the front
   assert.deepEqual(tagsLine("tags:"), { line: "tags: [security]", tags: ["security"] });
 });
 
+test("a sized candidate publishes with `size:` verbatim and in place (final-review I-3): the admitted suite ships sized, so test-run-lead never edits a suite file", () => {
+  // the planning skill's template carries `size: M` between tags and account; the profile rewrites only priority/tags
+  const text = caseText("TC-007", PLAIN_ROWS, { title: "Sized case", extra: "size: M\naccount: unauthenticated" }).replace("priority: high", "priority: p1");
+  const cand = candidate("TC-007_sized.md", text);
+  const [out] = apply(source([cand], [admission(cand.case_sha256, "admitted-heuristic")]), null, {});
+  const published = out.bytes.toString("utf8");
+  const fm = published.slice(0, published.indexOf("\n---\n"));
+  assert.match(fm, /^size: M$/m, "size: survives publish verbatim");
+  assert.deepEqual(
+    fm.split("\n").slice(1).map((l) => l.split(":")[0]),
+    ["id", "title", "priority", "type", "module", "requirements", "tags", "size", "account"],
+    "every frontmatter key is kept, in the candidate's order",
+  );
+  assert.equal(parseTestCase(published).size, "M", "the manual-qa reader sees the size");
+  assert.equal(parseTestCase(published).priority, "high");
+  // an unsized candidate publishes unsized: the profile never invents a size (that would be test-sizer's word)
+  const unsized = candidate("TC-008_unsized.md", caseText("TC-008", PLAIN_ROWS, { title: "Unsized case" }));
+  const [u] = apply(source([unsized], [admission(unsized.case_sha256, "admitted-heuristic")]), null, {});
+  assert.doesNotMatch(u.bytes.toString("utf8"), /^size:/m);
+  assert.equal(parseTestCase(u.bytes.toString("utf8")).size, null);
+});
+
 test("a header/cookie case is emitted in the audit-step form: open URL, collect the network requests, inspect one header per row — and contains no browser-action step (US-035 AC-2 audit branch)", () => {
   const cand = candidate("TC-001_login-headers.md", caseText("TC-001", HEADER_ROWS));
   const [out] = apply(source([cand], [admission(cand.case_sha256, "admitted-heuristic")]), null, {});

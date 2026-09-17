@@ -25,7 +25,12 @@ written into the model.
   otherwise), checkable against the citation alone: a reviewer with only
   the packet must be able to confirm or refute it.
 - `citation` — optional; the same range rule as an element's (≤ 40 lines,
-  inside an admitted range of a scope file, no dirty file). A mitigation
+  inside an admitted range of a scope file, no dirty file). Cite a
+  mitigation so the packet holds the check **and** where it is applied, in
+  one ≤ 40-line range: a reviewer who sees only the call site of a
+  predicate (or only the predicate, never its use) cannot confirm the
+  claim and answers `indeterminate`; the snapshot is write-once, so a
+  narrower citation than that costs the lead a whole new run. A mitigation
   without a citation is a claim about something outside the scope (a
   platform control, a contract); it can be listed but it can never be
   reviewed — `packet --kind subject --subject M-nnn` refuses it — and so

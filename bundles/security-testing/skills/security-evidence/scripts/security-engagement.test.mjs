@@ -53,7 +53,8 @@ function backtickedSpans(text) {
   return spans;
 }
 
-const SCRIPTS = ["evidence.mjs", "verify.mjs", "register.mjs"];
+// plan.mjs and tm-lint.mjs joined the workflow with M3 (final-review I-1); every one of them lives in security-evidence (D1).
+const SCRIPTS = ["evidence.mjs", "verify.mjs", "register.mjs", "plan.mjs", "tm-lint.mjs"];
 /** A span "names a command" when it invokes a program or a `.mjs` file. */
 const COMMAND_SHAPED = /^(?:node|git|npm|npx|gh|curl|sh|bash|python3?|pip)\b|\.mjs\b/;
 
@@ -63,7 +64,7 @@ function invokedScript(span) {
   return s.split(/\s+/)[0];
 }
 
-test("skill dir has no scripts/; every backticked command starts with evidence.mjs|verify.mjs|register.mjs", () => {
+test("skill dir has no scripts/; every backticked command starts with evidence.mjs|verify.mjs|register.mjs|plan.mjs|tm-lint.mjs", () => {
   assert.ok(existsSync(SKILL_MD), "SKILL.md exists");
   assert.ok(!existsSync(join(SKILL_DIR, "scripts")), "US-027 AC-1: the skill ships no scripts/ (every script lives in security-evidence, D1)");
   for (const name of REFERENCES) assert.ok(existsSync(join(SKILL_DIR, "references", `${name}.md`)), `references/${name}.md exists`);
@@ -141,6 +142,13 @@ test("tracker-rules names both dedupe layers and tracker-readback", () => {
   assert.match(text, /`targets\.repo`/, "targets.repo is read from engagement.md, not the payload");
   for (const key of TICKET_KEYS) assert.ok(text.includes(`\`${key}\``), `tracker rules name the payload key \`${key}\``);
   assert.match(text, /`fingerprint`[^\n]*sha256\(path\\0class\)|sha256\(path\\0class\)/, "the fingerprint's preimage is stated so the lead knows what the search key means");
+  // final-review I-5 (PM log after G20, decided): no v1 producer of a threat ticket — `ticketed(<url>)` on a threat is
+  // unreachable by design; threats dispose through the other four kinds; the profile is a v2 item in NOTES.md
+  assert.match(text, /## Threats are not ticketed in v1/);
+  assert.match(text, /`publish --profile tracker` writes finding tickets only/);
+  assert.match(text, /`planned`, `executed`, `accepted` or `mitigated`/);
+  assert.match(text, /v2 item/);
+  assert.match(text, /`NOTES.md`/);
 });
 
 test("workflow states the P1 order and the stand-down check", () => {
@@ -193,6 +201,63 @@ test("workflow states the P1 order and the stand-down check", () => {
   // purge's plan shape (PM log after TASK-032).
   assert.match(text, /`PURGE <repo-relative path>`/);
   assert.match(text, /purge --engagement <engagement_id> --yes/);
+});
+
+test("workflow Assess and Plan describe the M3 state (final-review I-1): the planning commands, the threat-model lint and its two run files; no milestone-dated text", () => {
+  const text = ref("workflow");
+  const assess = text.slice(text.indexOf("## Assess"), text.indexOf("## Plan"));
+  const plan = text.slice(text.indexOf("## Plan"), text.indexOf("## Review"));
+  // the M3 commands the lead's assess contract runs, named in the canonical order
+  const ASSESS_SPANS = [
+    "plan.mjs admit --run <run_id> <case> --dry-run",
+    "plan.mjs admit --run <run_id> <st>/cases/<slug>/TC-NNN_<slug>.md",
+    "packet --run <run_id> --kind subject --type case --subject <case>",
+    "plan.mjs admit --run <run_id> <case> --receipt <sha256>",
+    "ingest case <candidate> --run <run_id>",
+    "ingest qa-run <report> --run <run_id>",
+    "ingest ta-report <report> --run <run_id>",
+    "plan.mjs propose --run <run_id> <path>",
+    "tm-lint.mjs check --run <run_id>",
+    "build-report --run <run_id> --template assessment",
+  ];
+  const PLAN_SPANS = [
+    "plan.mjs admit --run <run_id> <st>/cases/<slug>/TC-NNN_<slug>.md",
+    "ingest case <candidate> --run <run_id>",
+    "plan.mjs propose --run <run_id> <path>",
+    "publish --run <run_id> --profile case --to tasks/security-<slug>-admitted",
+    "publish --run <run_id> --profile handoff --to <st>/handoffs",
+    "plan.mjs ta-prompt --run <run_id> --slug <slug> --base <branch>",
+  ];
+  for (const [name, where, spans] of [["Assess", assess, ASSESS_SPANS], ["Plan", plan, PLAN_SPANS]]) {
+    let at = 0;
+    for (const span of spans) {
+      const i = where.indexOf(span, at);
+      assert.ok(i >= 0, `## ${name} names \`${span}\` in order`);
+      at = i;
+    }
+  }
+  // the tokens the scripts print (tokens.mjs), quoted as printed
+  assert.match(assess, /ADMISSION case=<case_sha256> classification=<admitted-heuristic\|admitted-reviewed\|proposal> hits=<n>/);
+  assert.match(assess, /OBSERVATION <id> case=<c> result=<r>/);
+  assert.match(assess, /TA-UNITS <run>\/ta-units\/<sha>\.json units=<n> sha256=<h>/);
+  assert.match(assess, /TM elements=<n> threats=<n> undisposed=<n>/);
+  assert.match(assess, /3 INCOMPLETE\(threat-model\)/);
+  assert.match(assess, /3 INCOMPLETE\(dispositions\)/, "dispositions.json is a required assessment input (TASK-048)");
+  assert.match(assess, /<run>\/threat-model\.json/);
+  assert.match(assess, /<run>\/dispositions\.json/);
+  assert.match(assess, /confirmed passive/, "a case packet's `confirmed` means confirmed passive (I-2)");
+  assert.match(assess, /same run,\s+same model/, "the mitigated sequence runs inside one run (I-4)");
+  assert.match(plan, /PROPOSAL <st>\/proposals\/<id>\.proposal\.md id=<P-nnn> sha256=<h>/);
+  assert.match(plan, /PUBLISHED profile=case output=\.\/tasks\/security-<slug>-admitted\/TC-NNN_<slug>\.md sha256=<h>/);
+  // the M1/M2-dated sentences are gone
+  for (const stale of ["Until M2 lands", "land with M3", "at M1", "at M2", "(from M2)", "hand-craft"]) {
+    assert.ok(!text.includes(stale), `workflow no longer says "${stale}"`);
+  }
+  assert.doesNotMatch(text, /\bM[123]\b/, "no milestone-dated text in the preloaded workflow");
+  // TEMPLATES is quoted per file, as templatesLine prints it (dogfood #8)
+  assert.match(text, /TEMPLATES: engagement\.md\.template=written finding-schema\.md=written report-reading-guide\.md=written/);
+  assert.match(text, /TEMPLATES: engagement\.md\.template=present finding-schema\.md=present report-reading-guide\.md=present/);
+  assert.doesNotMatch(text, /TEMPLATES: (?:written|present)`/, "no bare `TEMPLATES: written|present` spelling");
 });
 
 test("disclosure-profiles explains every publish profile and what each reveals", () => {

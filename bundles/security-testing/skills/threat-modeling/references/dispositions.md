@@ -50,12 +50,21 @@ structure — schema, ids, names, citations — passes). The
 `mitigation-review` packet is built from that snapshot, so on a fresh run
 the sequence is:
 
-1. model with the threat `undisposed` (or already `mitigated(M-nnn)` —
-   the first check then fails on that threat, but the snapshot is written);
+1. model with the threat already `mitigated(M-nnn)` — write the
+   disposition you intend **before** the first check. That check fails on
+   the relationship (`TM-INVALID(T-nnn: mitigated(M-nnn): M-nnn has no
+   MITIGATION_CONFIRMED state (not independently reviewed))`), but the
+   snapshot is written and its `WROTE` line printed;
 2. `packet --kind subject --subject M-nnn` → fresh `security-reviewer` →
    `receipt validate`;
 3. `tm-lint check` again with the same model: `mitigated(M-nnn)` now
    validates, `dispositions.json` is written, exit 0.
+
+Do **not** start with the threat `undisposed` and dispose it afterwards:
+an `undisposed` model lints clean on the first check and writes both the
+snapshot and `dispositions.json`; changing the disposition then changes
+the model's identity, and the same run answers `SNAPSHOT-EXISTS` — the
+corrected model costs a new run.
 
 The same holds for every other kind: the evidence (`run snapshot
 proposals`, `run snapshot register`, `ingest tracker-readback`, an

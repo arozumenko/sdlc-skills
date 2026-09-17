@@ -174,11 +174,16 @@ CLAIMS <claims path> EXAMINED <examined path> findings=<n> read=<n files>
 files you opened (equal to the packet's `files[]` length when you read them
 all — say so in the reply if it is not).
 
-### `vulnerability-review` — an assertion over one gated finding
+### `vulnerability-review` — an assertion over one gated finding, or over one passive case
 
 **Input.** A `kind: subject` packet whose `subject_ids` names one finding id
 (64 hex), built by `packet --kind subject` from that finding's primary and
-typed citations, and the `run_id`.
+typed citations, and the `run_id`. The same contract, over a **case
+packet**: when the lead built it with `packet --kind subject --type case`,
+`subject_ids` is a case identity (`case_sha256`, also 64 hex) and the
+packet lists exactly one `.agents/security-testing/cases/<slug>/TC-NNN_<slug>.md`
+file — a manual-qa test case in Markdown, not code (the reviewed admission
+route of `security-test-planning`, spec §9.1).
 
 **Fresh dispatch.** This contract is never performed by the instance that
 authored the claim (spec §6.4). The lead enforces it by dispatching anew;
@@ -204,6 +209,20 @@ from `secure-code-review` is shown in the packet's bytes — name it in your
 reply), `indeterminate` (the packet cannot show it either way — never a
 hedge). One receipt per subject per run: two with different assertions
 collapse to `REVIEW_INDETERMINATE`.
+
+**Over a case packet** the question is not "is the defect there" but "is
+every step passive". Read the case's `## Steps` table against
+`security-test-planning/references/passive-admission.md` (the allowed
+operations and the forbidden patterns; load it by path — it is not
+preloaded). `confirmed` means **confirmed passive**: every `Action` does
+only what that reference allows (navigate, reload, observe — no state
+change, no payload, no tool, no volume, no host outside `targets.browser`).
+`refuted` means a step is active — name the step number and the verb or
+pattern in your reply. `indeterminate` means the packet cannot show it
+(an Action whose effect you cannot tell from its text). The receipt shape
+and the fresh-dispatch rule are unchanged; `plan.mjs admit --receipt`
+turns a `confirmed` receipt into `admitted-reviewed`, anything else
+leaves the case a `proposal` — you never run `admit`.
 
 **Return** (last line):
 

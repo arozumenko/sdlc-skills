@@ -105,7 +105,7 @@ Only touch files that are actually inconsistent; skip the rest.
 ## Step 2 — Size Unsized Cases (when needed)
 
 Read each TC file's frontmatter and check for a `size:` value.
-- For any case **missing** `size:`, dispatch `test-sizer` to score it (it writes `size:` into the frontmatter via Edit):
+- For any case **missing** `size:`, dispatch `test-sizer` to score it (it writes `size:` into the frontmatter via Edit) — **unless Step 0 routed a security admitted suite** (`tasks/security-<slug>-admitted/`): run it unsized / as-is; never Edit those files and never dispatch `test-sizer` on them (a changed byte makes the file `UNADMITTED` at the security lead's sign-off):
   ```
   Agent: test-sizer
   Prompt: "Score the size (S/M/L) of these test cases and write `size:` into each file's frontmatter: {paths of unsized TC files}"

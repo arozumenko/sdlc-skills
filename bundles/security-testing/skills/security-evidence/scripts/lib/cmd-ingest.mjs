@@ -28,8 +28,13 @@
 //      mapping_version}; the record payload is assembled and validated
 //      against import.schema.json (an off-schema adapter result is an
 //      internal error, exit 1 — never written);
-//   6a. `tracker-readback` only (TASK-045): when the record's `mismatch` is
-//      empty (the PM's gate — a foreign host is already a `url` mismatch on
+//   6a. `tracker-readback` only (TASK-045): first the read-back `url` is
+//      held to the rule the TICKETED line enforces (tokens.ticketedLine: no
+//      whitespace) — a url that carries any is 2 USAGE here, BEFORE any
+//      persist (final-review I-6: the earlier order wrote the record and the
+//      `ticketed` event, then threw a TypeError from the line; `new URL`
+//      percent-encodes a space, so hostAllowed lets it through). Then, when
+//      the record's `mismatch` is empty (the PM's gate — a foreign host is already a `url` mismatch on
 //      a kept record, so "host ∈ targets.tracker and mismatch empty" is
 //      exactly `mismatch.length === 0`) the register is READ — readEvents +
 //      replay, chain-verified, no lock, no directory created, no projection
@@ -202,6 +207,9 @@ function liveRowsFor(rows, finding_id) {
  * @returns {{row_id: string} | null}
  */
 function resolveTicketRow(ctx, record) {
+  // the url the TICKETED line and the `ticketed` event would carry; refused before the mismatch gate so a whitespace url
+  // never persists as a record either (it could not print, and a `ticketed(<url>)` disposition could never spell it)
+  if (/\s/.test(record.trusted.url)) throw usageError(COMMAND, "read-back url carries whitespace; a tracker url has none — fix the response and re-run; nothing written");
   if (record.trusted.mismatch.length !== 0) return null;
   const projection = readProjection(ctx);
   const rows = liveRowsFor(projection.rows, record.trusted.finding_id);

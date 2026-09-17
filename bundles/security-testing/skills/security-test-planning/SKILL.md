@@ -81,9 +81,16 @@ is installed, or the example below.
   this case.
 - **Frontmatter:** `id`, `title`, `priority` (`critical | high | medium |
   low`), `type`, `module`, `requirements` (the threat or requirement ids
-  it traces to), `tags` (include `security`, `passive`), and `account:` —
+  it traces to), `tags` (include `security`, `passive`), `size` (manual-qa's
+  closed vocabulary `S | M | L` — a passive case is almost always `S`;
+  header checks over one page `M`), and `account:` —
   the label of the test account the steps assume (`unauthenticated` when
-  none; omit it and the record says `unknown`, never blank).
+  none; omit it and the record says `unknown`, never blank). Always write
+  `size:`: the admitted suite ships **sized**, so the manual-qa
+  `test-run-lead` never has to Edit a suite file (`publish --profile case`
+  keeps every frontmatter key in order; a `size:` written into the suite
+  by `test-sizer` would change the file's identity and `sign-off` would
+  list it as `UNADMITTED`).
 - **Steps:** a `## Steps` table with `#`, `Action`, `Expected Result`.
   One verb, one object per Action; the Expected Result is an observation.
   URLs are `{{base_url}}/<path>` or a literal on a host in
@@ -107,6 +114,7 @@ type: regression
 module: authentication
 requirements: [T-003]
 tags: [security, passive, headers]
+size: M
 account: unauthenticated
 ---
 

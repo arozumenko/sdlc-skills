@@ -374,6 +374,45 @@ test("mismatch or foreign host ⇒ no event; no row ⇒ `READBACK: ok (no regist
   assert.equal(eventsOf(repo).length, 2, "the two adds, nothing else");
 });
 
+test("a read-back url carrying whitespace is 2 USAGE before any persist: no record, no blob, no index entry, no event (final-review I-6)", async () => {
+  // `new URL` percent-encodes the space, so hostAllowed passes and mismatch is empty; before the fix the record and the
+  // `ticketed` event were written, then tokens.ticketedLine threw a TypeError ⇒ exit 1, no TICKETED line, IMPORT-EXISTS on re-run
+  const { repo, run_id } = await trackerRepo();
+  const rowId = await addRow(repo, run_id);
+  const before = {
+    events: readFileSync(join(repo, REGISTER, "events.jsonl")),
+    projection: readFileSync(join(repo, REGISTER, "projection.json")),
+    records: readdirSync(join(runDir(repo, run_id), "ingest")).sort(),
+    blobs: readdirSync(join(repo, ST, "ledger", run_id, "imports")).sort(),
+    index: readFileSync(join(runDir(repo, run_id), "imports.json")),
+  };
+  const spaced = join(IMPORTS, "readback.spaced.json");
+  writeFileSync(join(repo, spaced), JSON.stringify({ ...JSON.parse(readFileSync(fixture("readback.json"), "utf8")), url: "https://github.com/my-org/my-product/issues/7 (dup)" }));
+  const r = await ingest(repo, ["tracker-readback", spaced, "--run", run_id, "--sent", SENT]);
+  assert.equal(r.code, 2, r.stdout + r.stderr);
+  assert.match(r.stdout, /^USAGE\(ingest: read-back url carries whitespace; [^)]*; nothing written\)$/m);
+  assert.doesNotMatch(r.stdout, /^IMPORT |^TICKETED |^READBACK/m, "no IMPORT, READBACK or TICKETED line");
+  assert.doesNotMatch(r.stderr, /TypeError/, "a refusal, not a thrown line");
+  assert.ok(readFileSync(join(repo, REGISTER, "events.jsonl")).equals(before.events), "no event appended");
+  assert.ok(readFileSync(join(repo, REGISTER, "projection.json")).equals(before.projection));
+  assert.equal(projectionOf(repo).rows[rowId].ticket_url, "", "ticket_url untouched");
+  assert.deepEqual(readdirSync(join(runDir(repo, run_id), "ingest")).sort(), before.records, "no import record");
+  assert.deepEqual(readdirSync(join(repo, ST, "ledger", run_id, "imports")).sort(), before.blobs, "no blob");
+  assert.ok(readFileSync(join(runDir(repo, run_id), "imports.json")).equals(before.index), "imports.json untouched");
+  // the same holds with no register at all, and on a read-back that would have mismatched anyway: the url rule is first
+  const bare = await trackerRepo();
+  writeFileSync(join(bare.repo, spaced), JSON.stringify({ ...JSON.parse(readFileSync(fixture("readback.mismatch.json"), "utf8")), url: "https://github.com/my-org/my-product/issues/7 (dup)" }));
+  const b = await ingest(bare.repo, ["tracker-readback", spaced, "--run", bare.run_id, "--sent", SENT]);
+  assert.equal(b.code, 2, b.stdout + b.stderr);
+  assert.match(b.stdout, /^USAGE\(ingest: read-back url carries whitespace/m);
+  assert.deepEqual(readdirSync(join(runDir(bare.repo, bare.run_id), "ingest")).sort(), [], "nothing written");
+  assert.ok(!existsSync(join(bare.repo, REGISTER)), "no register created");
+  // the well-formed read-back still lands (the rule refuses whitespace only)
+  const ok = await ingest(repo, ["tracker-readback", join(IMPORTS, "readback.json"), "--run", run_id, "--sent", SENT]);
+  assert.equal(ok.code, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, new RegExp(`^TICKETED ${rowId} https://github\\.com/my-org/my-product/issues/7$`, "m"));
+});
+
 test("subsequent publish --profile tracker dedupes on the recorded ticket_url (US-039 AC-3 end to end)", async () => {
   const { committedReviewRun, registerAdd } = await import("../fixtures/publish/setup.mjs");
   const { repo, run_id, ids } = await committedReviewRun();

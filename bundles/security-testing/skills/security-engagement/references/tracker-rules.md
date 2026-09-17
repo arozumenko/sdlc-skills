@@ -85,6 +85,20 @@ Read-back after every mutation — creation, an edit of the body, a
 relabel, a comment that carries the id — not only after the first post.
 A tracker state you did not read back is a state you do not know.
 
+## Threats are not ticketed in v1
+
+The `ticketed(<url>)` disposition of a threat (`threat-modeling`
+`references/dispositions.md`) validates from a `tracker-readback` record
+whose sent `finding_id` is the `T-nnn`. Nothing in v1 produces that
+payload: `publish --profile tracker` writes finding tickets only, and the
+Never list below forbids a hand-authored one — so no threat can reach
+`ticketed` under these rules, by design. Dispose a threat through
+`planned`, `executed`, `accepted` or `mitigated`, or leave it
+`undisposed` (the default `executed-or-ticketed` sign-off policy does not
+block on it). A threat ticket profile is a v2 item (the bundle's
+`NOTES.md`); the vocabulary keeps `ticketed` so its arrival changes no
+schema.
+
 ## Never
 
 - **Never merge, never close.** A ticket is closed by the developer's

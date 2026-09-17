@@ -111,6 +111,7 @@ envelope).
 |---|---|---|---|
 | `review` | scope packet (`kind: scope`, whole files) | `claims-<n>.json` and `examined-<n>.json` under `.agents/security-testing/receipts/<run_id>/` | claims (below); no assertion |
 | `vulnerability-review` | subject packet (`kind: subject`) over one gated finding, built from its citations — a **fresh** dispatch, never the instance that authored the claim | receipt payload | `confirmed` \| `refuted` \| `indeterminate` |
+| `vulnerability-review` over a **case packet** (`packet --kind subject --type case`: `subject_ids` is a `case_sha256`, the one file is a manual-qa test case, not code) | the case's `## Steps` table, read against `security-test-planning/references/passive-admission.md` — the same fresh-dispatch rule | receipt payload | `confirmed` = every step is passive ("confirmed passive") \| `refuted` = a step is active, name it \| `indeterminate` |
 | `mitigation-review` | subject packet over a threat-model mitigation claim | receipt payload | `confirmed` \| `gap` \| `indeterminate` |
 | `fix-review` | subject packet built by `verify.mjs all` from the fix worktree at `head` | receipt payload; plus one `ack` receipt per suppression indicator you examined and accept | `not-refound` \| `refound` \| `indeterminate`; `ack: {indicator_id}` |
 

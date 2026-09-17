@@ -122,6 +122,27 @@ test("SKILL.md: the four standing rules, both routes and the proposal exit, the 
   assert.doesNotMatch(text, /UNGATED|exact checkout/, "G-13 forbidden strings");
 });
 
+test("the candidate template ships sized (final-review I-3): `size:` in manual-qa's S|M|L vocabulary, the reason stated; manual-qa's test-run-lead Step 2 skips test-sizer on a security admitted suite", () => {
+  const text = read("SKILL.md");
+  const prose = text.replace(/\s+/g, " ");
+  const template = /```markdown\n---\n([\s\S]*?)\n---\n/.exec(text);
+  assert.ok(template, "SKILL.md carries the candidate template");
+  assert.match(template[1], /^size: [SML]$/m, "the template carries size: from the closed vocabulary");
+  assert.match(prose, /`size` \(manual-qa's closed vocabulary `S \| M \| L`/);
+  assert.match(prose, /admitted suite ships \*\*sized\*\*/);
+  assert.match(prose, /`test-run-lead` never has to Edit a suite file/);
+  assert.match(prose, /`size:` written into the suite by `test-sizer` would change the file's identity/);
+  // the receiving half: manual-qa's test-run-lead Step 2 (the sizing step) carries the security-suite exception
+  const trl = readFileSync(resolve(HERE, "..", "..", "..", "..", "manual-qa", "agents", "test-run-lead", "AGENT.md"), "utf8");
+  const step2 = trl.slice(trl.indexOf("## Step 2"), trl.indexOf("## Step 3"));
+  assert.match(step2, /unless Step 0 routed a security admitted suite/, "Step 2 defers to the Step 0 route");
+  assert.match(step2, /tasks\/security-<slug>-admitted\//);
+  assert.match(step2, /run it unsized/);
+  assert.match(step2, /never Edit those files/);
+  assert.match(step2, /never dispatch `test-sizer` on them/);
+  assert.match(step2, /UNADMITTED/);
+});
+
 test("passive-admission.md names every lint rule, every allowed operation and verb, the reviewable rule, the classification table and the schema's record keys", () => {
   const ref = reference();
   for (const rule of LINT_RULES) assert.ok(ref.includes(`\`${rule}\``), `names rule ${rule}`);

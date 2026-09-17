@@ -138,6 +138,9 @@ test("mitigations-as-claims: claims, never states — the three derived states, 
   assert.match(text, /\*\*fresh\*\* `security-reviewer`/);
   assert.ok(text.includes(NOT_INDEPENDENTLY_REVIEWED), "the report's wording for a mitigation without a receipt");
   assert.match(text, /never grade your own claim/);
+  // final-review I-4 / dogfood awkward #1: the citation advice that saves a run
+  assert.match(text, /holds the check \*\*and\*\* where it is applied, in\s+one ≤ 40-line range/, "cite the check and its application in one range");
+  assert.match(text, /costs the lead a whole new run/);
 });
 
 test("dispositions: every kind and every resolved_via of the schema, the sign-off policies, and the exact TM-INVALID wordings tm-lint-core prints", () => {
@@ -169,4 +172,12 @@ test("dispositions: every kind and every resolved_via of the schema, the sign-of
   assert.ok(text.includes("no observation observations/"));
   assert.ok(text.includes("no tracker-readback record shows a ticket body at that url carrying"));
   assert.doesNotMatch(text, /\bconfirm\b(?! state)/i, "no `confirm` command, no confirmed state (D15); `confirmed` is the reviewer's assertion only");
+  // final-review I-4: the order of operations is one path — the disposition written BEFORE the first check; the
+  // "undisposed first, mitigated later" alternative ends in SNAPSHOT-EXISTS and is named as the wrong path
+  const order = text.slice(text.indexOf("## Order of operations"), text.indexOf("## Sign-off policy"));
+  assert.match(order, /1\. model with the threat already `mitigated\(M-nnn\)`/);
+  assert.match(order, /\*\*before\*\* the first check/);
+  assert.doesNotMatch(order, /`undisposed` \(or already/, "no undisposed-first alternative");
+  assert.match(order, /Do \*\*not\*\* start with the threat `undisposed`/);
+  assert.match(order, /answers `SNAPSHOT-EXISTS`/);
 });
