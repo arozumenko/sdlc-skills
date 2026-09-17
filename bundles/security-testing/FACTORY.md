@@ -26,9 +26,10 @@ residual-risk register whose approvals are stored and reported as
 unauthenticated. It produces a **security assessment**, not a penetration
 test, and never merges, closes, rotates or fixes anything.
 
-**M1 shape** (this release): one agent (`security-reviewer`) and three skills
-(`security-evidence` — every script and schema; `secure-code-review`;
-`security-engagement`). The threat-modeler and the lead land in M2/M3.
+**Roster:** `security-lead` (the only human-facing role), `threat-modeler`,
+`security-reviewer`. **Skills:** `security-evidence` (every script and
+schema), `security-engagement`, `threat-modeling`, `secure-code-review`,
+`security-test-planning`, `risk-register`.
 
 ## Install
 

@@ -322,6 +322,60 @@
       "source": "./factories/product-management/skills/discovery-status",
       "description": "Read-only discovery pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item.",
       "version": "0.2.0"
+    },
+    {
+      "name": "security-lead",
+      "source": "./factories/security-testing/agents/security-lead",
+      "description": "Security lead agent (Noor) — runs a threat-led, read-only security engagement: engagement init, dispatches threat-modeler and security-reviewer, builds and signs off the assessment, publishes to the tracker, prints the QA hand-off prompt; the only human-facing security role.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeler",
+      "source": "./factories/security-testing/agents/threat-modeler",
+      "description": "Threat modeler agent (Ilse) — code-derived data-flow diagram with a citation per element, STRIDE threats, mitigations as claims, one disposition per threat, linted by tm-lint check.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-reviewer",
+      "source": "./factories/security-testing/agents/security-reviewer",
+      "description": "Security reviewer agent (Vera) — evidence-gated secure code review: review, vulnerability-review, mitigation-review and fix-review contracts, each a fresh dispatch over one packet; writes claims and assertions, the scripts derive ids, states and verdicts.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-evidence",
+      "source": "./factories/security-testing/skills/security-evidence",
+      "description": "Every script and schema of the security-testing bundle — evidence.mjs, verify.mjs, register.mjs, tm-lint.mjs, plan.mjs; run/scope/gate/coverage/packet/receipt/report/check/publish/sign-off, the JSON schemas and report templates.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-engagement",
+      "source": "./factories/security-testing/skills/security-engagement",
+      "description": "Security lead workflow — engagement record, stand-down check, assess → plan → review → verify, sign-off checklist, tracker rules (two dedupe layers), disclosure profiles.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeling",
+      "source": "./factories/security-testing/skills/threat-modeling",
+      "description": "Code-derived DFD + STRIDE threat modeling with a citation per element, mitigations as claims, dispositions per threat; tm-lint check | render lives in security-evidence.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "secure-code-review",
+      "source": "./factories/security-testing/skills/secure-code-review",
+      "description": "Investigate-then-refute secure code review — fifteen-class taxonomy with CWE anchors, refutation criteria, typed citations, closed assertion vocabularies, the human-driven standalone sequence, fixtures and a frozen eval harness.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-test-planning",
+      "source": "./factories/security-testing/skills/security-test-planning",
+      "description": "Passive security test cases in manual-qa format, admission by lint or by review, proposals for active work outside tasks/; plan.mjs admit | propose | ta-prompt lives in security-evidence.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "risk-register",
+      "source": "./factories/security-testing/skills/risk-register",
+      "description": "Residual-risk register — rows for findings and threats, unauthenticated acceptances and revocations, false-positive closes, supersession, anchor verification, the rendered risk-register.md view; register.mjs lives in security-evidence.",
+      "version": "0.2.0"
     }
   ]
 }

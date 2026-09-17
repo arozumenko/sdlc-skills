@@ -147,3 +147,37 @@ test("the subcommand stays at the head of the command argv; the cmd module route
   assert.equal(await main({ name: "fake", usage: USAGE, commands: cmds }, ["engagement", "init"], { cwd: repo, env: {}, ...s }), 0);
   assert.equal(await main({ name: "fake", usage: USAGE, commands: cmds }, ["engagement", "nope"], { cwd: repo, env: {}, ...s }), 2);
 });
+
+// ---------------------------------------------------------------------------
+// TASK-052 — EPIPE on stdout (`… | head -1`, PM log after G20): the reader
+// went away; main() still returns the code it computed and Node prints no
+// stack. Only EPIPE is swallowed — any other write error surfaces as before.
+
+test("EPIPE on stdout: --help into a pipe whose reader closed first exits 0 with nothing on stderr", async () => {
+  const { spawn } = await import("node:child_process");
+  const r = await new Promise((done) => {
+    const child = spawn(process.execPath, [join(SCRIPTS_DIR, "evidence.mjs"), "--help"], { cwd: tmpDir(), env: { PATH: process.env.PATH }, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.destroy(); // the reader is gone before the child ever writes (node start-up ≫ this call)
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("close", (code, signal) => done({ code, signal, stderr }));
+  });
+  assert.equal(r.signal, null);
+  assert.equal(r.code, 0, `exit code (stderr: ${r.stderr})`);
+  assert.equal(r.stderr, "", "no EPIPE stack on stderr");
+});
+
+test("main() attaches one EPIPE-only error listener to a stdout that can emit; other write errors still throw", async () => {
+  const { EventEmitter } = await import("node:events");
+  const stdout = Object.assign(new EventEmitter(), { text: "", write(s) { this.text += s; return true; } });
+  const { stderr } = streams();
+  assert.equal(await main(app(), ["--help"], { cwd: tmpDir(), env: {}, stdout, stderr }), 0);
+  assert.equal(stdout.text, USAGE);
+  assert.equal(stdout.listenerCount("error"), 1);
+  assert.doesNotThrow(() => stdout.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" })));
+  assert.throws(() => stdout.emit("error", Object.assign(new Error("write EIO"), { code: "EIO" })), /EIO/);
+  // a plain `{write}` stdout (every other test here) needs no listener and is never touched
+  const plain = streams();
+  assert.equal(await main(app(), ["--help"], { cwd: tmpDir(), env: {}, ...plain }), 0);
+});

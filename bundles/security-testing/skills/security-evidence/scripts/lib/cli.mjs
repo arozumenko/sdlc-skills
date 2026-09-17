@@ -17,7 +17,10 @@
 // returns its code · an integrity failure escaping run() is 5 · anything
 // else is 1 with a redacted message on stderr. main() never rejects: the
 // one catch below wraps the whole body, so an entry script's `await main()`
-// cannot let Node print an unredacted stack.
+// cannot let Node print an unredacted stack. A stdout reader that closes
+// early (`… | head -1`) raises EPIPE on the stream, not in main(); the one
+// listener below swallows exactly that code so the process still exits with
+// the computed code and no stack (TASK-052).
 // Usage, unknown command and `--help` never need a git work tree: the
 // context is created only once a registered command is about to run.
 
@@ -89,6 +92,18 @@ export async function main(app, argv, { cwd = process.cwd(), env = process.env, 
   const script = `${app.name}.mjs`;
   const say = (line) => stdout.write(`${redactString(line).text}\n`);
   const complain = (line) => stderr.write(`${redactString(line).text}\n`);
+
+  // EPIPE on stdout (`… | head -1`, TASK-052): the reader went away, so the
+  // result tokens have no one to reach — exit quietly with the code computed
+  // below instead of Node's unhandled-'error' stack. Node destroys the stream
+  // on the first EPIPE and drops later writes itself, so `once` is enough;
+  // any other write error is rethrown and surfaces exactly as before. Test
+  // stdouts are plain `{write}` objects and are left alone.
+  if (typeof stdout.once === "function") {
+    stdout.once("error", (err) => {
+      if (err?.code !== "EPIPE") throw err;
+    });
+  }
 
   try {
     const { flags, rest } = parseGlobalFlags(argv);
