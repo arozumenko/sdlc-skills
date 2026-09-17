@@ -260,7 +260,7 @@ const kpiCard = (title, cells, callout) => `<div class="kpi-card"><h3>${title}</
 
 export function renderMarkdown(doc) {
   const e = doc.envelope; const L = [];
-  L.push('# Delivery report', '', `generated ${e.generated_at} · cutoff ${e.cutoff} · window [${e.window.since}, ${e.window.effective_end}) · sha ${e.git.sha ?? '—'}${e.git.is_working_tree ? ' (dirty)' : ''} · plans ${e.plans.join(', ')}${e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${JSON.stringify(e.policy.filters)}` : ''}`, '');
+  L.push('# Delivery monitor', '', `generated ${e.generated_at} · cutoff ${e.cutoff} · window [${e.window.since}, ${e.window.effective_end}) · sha ${e.git.sha ?? '—'}${e.git.is_working_tree ? ' (dirty)' : ''} · plans ${e.plans.join(', ')}${e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${JSON.stringify(e.policy.filters)}` : ''}`, '');
   for (const p of doc.plans) {
     const m = p.metrics;
     L.push(`## Plan ${p.run} v${p.version} (${p.status}) — completed ${m.cohorts.completed}, created ${m.cohorts.created}, excluded items invalid-chain=${m.cohorts.excluded_items.invalid_chain} deferred-episode=${m.cohorts.excluded_items.deferred_episode}`, '');
@@ -438,8 +438,8 @@ export function renderHtml(doc) {
   const e = doc.envelope; const esc = escHtml;
   const metaFilters = e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${esc(JSON.stringify(e.policy.filters))}` : '';
   const parts = [
-    `<!doctype html><meta charset="utf-8"><title>Delivery report — ${esc(e.plans.join(', '))}</title><style>${PAGE_CSS}</style>`,
-    '<h1>Delivery report</h1>',
+    `<!doctype html><meta charset="utf-8"><title>Delivery monitor — ${esc(e.plans.join(', '))}</title><style>${PAGE_CSS}</style>`,
+    '<h1>Delivery monitor</h1>',
     `<p class="meta">Delivery view · generated ${fmtTs(e.generated_at)} · observed ${fmtTs(e.window.since)} → ${fmtTs(e.window.effective_end)} · ${e.plans.length} plan(s) · git ${esc((e.git.sha ?? '—').slice(0, 10))}${e.git.is_working_tree ? ' (uncommitted changes)' : ''}${metaFilters}</p>`,
   ];
   for (const p of doc.plans) {

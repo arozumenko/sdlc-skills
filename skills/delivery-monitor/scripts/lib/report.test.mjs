@@ -328,7 +328,7 @@ test('renderHtml: self-contained document — no external assets, no script', ()
   const html = renderHtml(assemble(repo, { now: NOW }));
   assert.match(html, /^<!doctype html>/);
   assert.match(html, /<style>/);
-  assert.match(html, /<title>Delivery report/);
+  assert.match(html, /<title>Delivery monitor/);
   assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /<link/i);
   assert.doesNotMatch(html, /https?:\/\//);
