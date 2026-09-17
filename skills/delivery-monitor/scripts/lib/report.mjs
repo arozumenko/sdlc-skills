@@ -99,7 +99,7 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -251,13 +251,16 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
-svg.burnup{width:100%;height:auto;display:block;margin:.3rem 0 .2rem}
-.burnup .grid{stroke:var(--gridline);stroke-width:1}
-.burnup .done{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:round}
-.burnup .scope{fill:none;stroke:var(--text-muted);stroke-width:1.5;stroke-dasharray:4 3}
-.burnup .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
-.burnup text{font:11px -apple-system,"Segoe UI",sans-serif;fill:var(--text-muted)}
-.burnup text.lbl{fill:var(--text-primary);font-weight:600}
+svg.trend{width:100%;height:auto;display:block;margin:.3rem 0 .2rem}
+.trend .grid{stroke:var(--gridline);stroke-width:1}
+.trend .ref{stroke:var(--text-muted);stroke-width:1.5;stroke-dasharray:4 3}
+.trend .roll{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:round}
+.trend .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
+.trend .pt.rework{fill:var(--warn)}
+.trend text{font:11px -apple-system,"Segoe UI",sans-serif;fill:var(--text-muted)}
+.trend text.lbl{fill:var(--text-primary);font-weight:600}
+.legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--series-1);vertical-align:middle;margin-right:.4rem}
+.legend-dot.rework{background:var(--warn)}
 .legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.82rem;color:var(--text-secondary)}
 .legend-swatch{display:inline-block;width:18px;height:0;border-top:2px solid var(--series-1);vertical-align:middle;margin-right:.4rem}
 .legend-swatch.scope{border-top:2px dashed var(--text-muted)}
@@ -291,6 +294,7 @@ export function renderMarkdown(doc) {
       if (!Object.keys(f.strata).length) L.push(`| ${lv} cycle_time | all | — (not measured) | | | | |`);
       const ex = excludedStr(f.excluded); if (ex) L.push(`| ${lv} excluded | | ${ex} | | | | |`);
     }
+    if (m.flow.task?.trend) { const t = m.flow.task.trend; L.push(`| task trend (latest half ÷ earlier half, observed cycle_time) | all | n=${t.n} | ${t.ratio == null ? `— (n<${t.floor})` : `${t.ratio} (${t.direction})`} | earlier ${t.earlier?.median == null ? '—' : h(t.earlier.median)} | latest ${t.latest?.median == null ? '—' : h(t.latest.median)} | |`); }
     L.push('', '## Throughput', '');
     for (const [lv, t] of Object.entries(m.throughput)) {
       L.push(`- ${lv} per UTC ISO week: ${t.weeks.map((w) => `${w.key}=${w.count}${!w.covered ? '†' : (!w.whole ? '*' : '')}`).join(' ')} (*partial, †before declared coverage)`);
@@ -375,30 +379,36 @@ const bandText = (sv) => {
 };
 const stateChip = (state) => `<span class="oc oc-${escHtml(state)}">${escHtml(state.replace('_', ' '))}</span>`;
 
-// Burn-up: completed tasks (cumulative, stepped) against in-scope tasks over the observed window.
-// Always rendered — it reads at any scale, unlike weekly throughput. Inline SVG, no assets; native
-// <title> tooltips on the completion markers. Scope steps up on late registration and down on cancel.
-const burnupSvg = (p, e, tasks) => {
-  const x0 = Date.parse(e.window.since), x1 = Date.parse(e.window.effective_end);
-  if (!(x1 > x0) || !tasks.length) return '';
-  const W = 640, H = 150, L = 34, R = 70, T = 12, B = 22, pw = W - L - R, ph = H - T - B;
-  const doneEv = tasks.filter((t) => t.state === 'done' && t.done_at).map((t) => ({ at: Date.parse(t.done_at), ref: t.ref, iso: t.done_at })).filter((d) => d.at >= x0 && d.at <= x1).sort((a, b) => a.at - b.at);
-  const scopeEv = [];
-  for (const t of tasks) { const c = t.created_at ? Date.parse(t.created_at) : x0; scopeEv.push({ at: Math.max(x0, Math.min(c, x1)), d: +1 }); if (t.state === 'cancelled' && t.cancelled_at) scopeEv.push({ at: Math.max(x0, Math.min(Date.parse(t.cancelled_at), x1)), d: -1 }); }
-  scopeEv.sort((a, b) => a.at - b.at);
-  const scopeMax = Math.max(1, ...(() => { let n = 0, m = 0; for (const ev of scopeEv) { n += ev.d; m = Math.max(m, n); } return [m]; })());
-  const yMax = Math.max(scopeMax, doneEv.length, 1);
-  const X = (t) => L + ((t - x0) / (x1 - x0)) * pw, Y = (n) => T + ph - (n / yMax) * ph;
-  const step = (evs, val) => { let n = 0; const pts = [`${X(x0).toFixed(1)},${Y(0).toFixed(1)}`]; for (const ev of evs) { pts.push(`${X(ev.at).toFixed(1)},${Y(n).toFixed(1)}`); n += val(ev); pts.push(`${X(ev.at).toFixed(1)},${Y(n).toFixed(1)}`); } pts.push(`${X(x1).toFixed(1)},${Y(n).toFixed(1)}`); return { d: `M${pts.join(' L')}`, n }; };
-  const scope = step(scopeEv, (ev) => ev.d), done = step(doneEv, () => 1);
-  const marks = doneEv.length <= 40 ? doneEv.map((d, i) => `<circle class="pt" cx="${X(d.at).toFixed(1)}" cy="${Y(i + 1).toFixed(1)}" r="4"><title>${escHtml(d.ref)} merged ${escHtml(fmtTs(d.iso))}</title></circle>`).join('') : '';
-  const gridN = [0, Math.ceil(yMax / 2), yMax].filter((v, i, a) => a.indexOf(v) === i);
-  return `<svg class="burnup" viewBox="0 0 ${W} ${H}" role="img" aria-label="Completed tasks over time against scope">
-${gridN.map((n) => `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(n).toFixed(1)}" y2="${Y(n).toFixed(1)}"/><text x="${L - 6}" y="${(Y(n) + 4).toFixed(1)}" text-anchor="end">${n}</text>`).join('')}
-<path class="scope" d="${scope.d}"/><path class="done" d="${done.d}"/>${marks}
-<text class="lbl" x="${L + pw + 6}" y="${(Y(done.n) + 4).toFixed(1)}">${done.n} done</text><text x="${L + pw + 6}" y="${(Y(scope.n) + (Math.abs(Y(scope.n) - Y(done.n)) < 12 ? 16 : 4)).toFixed(1)}">scope ${scope.n}</text>
-<text x="${L}" y="${H - 6}">${escHtml(fmtTs(e.window.since))}</text><text x="${L + pw}" y="${H - 6}" text-anchor="end">${escHtml(fmtTs(e.window.effective_end))}</text>
-</svg><div class="legend"><span><span class="legend-swatch"></span>completed tasks (cumulative)</span><span><span class="legend-swatch scope"></span>tasks in scope</span></div>`;
+// "Are we getting faster?" — one dot per merged task in completion order (y = observed cycle time),
+// a rolling median through them and the overall median as a dashed reference. Inline SVG, no
+// assets; native <title> tooltips. The y unit is picked from the largest value so the axis reads.
+const unitFor = (maxS) => (maxS < 120 ? ['s', 1] : maxS < 7200 ? ['min', 60] : maxS < 172800 ? ['h', 3600] : ['d', 86400]);
+const rollingMedian = (vals, w = 5) => vals.map((_, i) => { if (i + 1 < w) return null; const win = [...vals.slice(i + 1 - w, i + 1)].sort((a, b) => a - b); return win[Math.floor((w - 1) / 2)]; });
+const trendSvg = (trend) => {
+  const pts = trend?.series ?? []; if (pts.length < 2) return '';
+  const W = 640, H = 170, L = 40, R = 84, T = 14, B = 24, pw = W - L - R, ph = H - T - B;
+  const maxS = Math.max(...pts.map((p) => p.cycle_s)), [unit, div] = unitFor(maxS);
+  const yMax = Math.max(maxS / div, 1e-9);
+  const X = (i) => L + (pts.length === 1 ? pw / 2 : (i / (pts.length - 1)) * pw), Y = (v) => T + ph - (v / yMax) * ph;
+  const sorted = [...pts.map((p) => p.cycle_s)].sort((a, b) => a - b); const overall = pts.length >= 5 ? sorted[Math.floor((sorted.length - 1) / 2)] : null;
+  const roll = rollingMedian(pts.map((p) => p.cycle_s));
+  const rollPath = roll.map((v, i) => (v == null ? null : `${X(i).toFixed(1)},${Y(v / div).toFixed(1)}`)).filter(Boolean);
+  const fmtV = (v) => `${Math.round((v / div) * 10) / 10} ${unit}`;
+  const gridV = [0, yMax / 2, yMax];
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cycle time per merged task in completion order">
+${gridV.map((v) => `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${Math.round(v * 10) / 10}</text>`).join('')}
+<text x="${L - 6}" y="${T - 4}" text-anchor="end">${unit}</text>
+${overall != null ? `<line class="ref" x1="${L}" x2="${L + pw}" y1="${Y(overall / div).toFixed(1)}" y2="${Y(overall / div).toFixed(1)}"/><text x="${L + pw + 6}" y="${(Y(overall / div) + 4).toFixed(1)}">median ${fmtV(overall)}</text>` : ''}
+${rollPath.length >= 2 ? `<path class="roll" d="M${rollPath.join(' L')}"/><text class="lbl" x="${L + pw + 6}" y="${(Y(roll[roll.length - 1] / div) + (overall != null && Math.abs(Y(roll[roll.length - 1] / div) - Y(overall / div)) < 12 ? 16 : 4)).toFixed(1)}">rolling median</text>` : ''}
+${pts.map((p, i) => `<circle class="pt${p.rework_count ? ' rework' : ''}" cx="${X(i).toFixed(1)}" cy="${Y(p.cycle_s / div).toFixed(1)}" r="4.5"><title>${escHtml(p.ref)} · ${fmtV(p.cycle_s)}${p.rework_count ? ` · ${p.rework_count} fix round(s)` : ''} · merged ${escHtml(fmtTs(p.done_at))}</title></circle>`).join('')}
+<text x="${L}" y="${H - 6}">first merged ${escHtml(fmtTs(pts[0].done_at))}</text><text x="${L + pw}" y="${H - 6}" text-anchor="end">last merged ${escHtml(fmtTs(pts[pts.length - 1].done_at))}</text>
+</svg><div class="legend"><span><span class="legend-dot"></span>merged task (cycle time)</span><span><span class="legend-dot rework"></span>had a fix round</span><span><span class="legend-swatch"></span>rolling median (5 tasks)</span><span><span class="legend-swatch scope"></span>overall median</span></div>`;
+};
+const trendText = (t) => {
+  if (!t) return null;
+  if (t.ratio == null) return `needs ≥${t.floor} finished tasks <span class="stat-sub">(has ${t.n})</span>`;
+  const pct = Math.round((t.ratio - 1) * 100);
+  return `${pct > 0 ? '+' : ''}${pct}% <span class="stat-sub">${t.direction} — latest ${t.latest.n} vs earlier ${t.earlier.n}</span>`;
 };
 
 export function renderHtml(doc) {
@@ -420,6 +430,7 @@ export function renderHtml(doc) {
     const svRow = new Map(m.schedule_variance.map((r) => [r.ref, r]));
     const missionOf = new Map(); for (const t of tasks) if (t.parent_item_id) { const g = missions.find((x) => x.item_id === t.parent_item_id); if (g) missionOf.set(t.item_id, g.ref); }
     const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
+    const rw = m.flow.task?.strata?.all?.review_wait ?? null, ag = m.flow.task?.strata?.all?.agent_span ?? null;
     const es = m.estimates.task?.strata?.all ?? null;
     const doneTasks = count(tasks, 'done');
     const weeksTxt = (lv) => { const t = m.throughput[lv]; if (!t?.weeks.length) return '—'; return t.weeks.map((w) => `${esc(w.key)}: ${w.count}${w.whole ? '' : ' <span class="stat-sub">(partial)</span>'}`).join(' · '); };
@@ -443,14 +454,20 @@ export function renderHtml(doc) {
         statCell('Median', ct ? (ct.median == null ? needs(ct.n, 5) : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>'),
         statCell('Range', ct ? `${fmtDur(ct.min)}–${fmtDur(ct.max)}` : '—'),
         statCell('Tasks measured', `${ct ? ct.n : 0} of ${doneTasks} done <span class="stat-sub">· ${count(tasks, 'in_progress')} still open</span>`),
-        statCell('Lead time <span class="stat-sub">planned → merge</span>', lt ? (lt.median == null ? `${fmtDur(lt.min)}–${fmtDur(lt.max)}` : fmtDur(lt.median)) : '—'),
-      ], `Cycle time runs from the first observed dispatch to the merge; lead time from registration in the plan. Medians need ≥5 finished tasks, P85 ≥7, P90 ≥10 — smaller sets show the range instead.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
+        statCell('Trend <span class="stat-sub">latest half vs earlier</span>', trendText(m.flow.task?.trend) ?? '—'),
+      ], `Cycle time runs from the first observed dispatch to the merge. Trend compares the median of the latest half of finished tasks with the earlier half — a changing mix of task sizes can move it, so read it with the class column below. Medians need ≥5 tasks per side.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
       ...(wholeWeeks >= e.policy.minWholeWeeks ? [kpiCard('Pace <span class="stat-sub">per UTC ISO week</span>', [
         statCell('Velocity', velTxt),
         statCell('Tasks per week', weeksTxt('task')),
         statCell('Missions per week', weeksTxt('mission')),
         statCell('Whole weeks observed', `${wholeWeeks}`),
       ], 'Completions per Monday–Sunday week. Velocity is the median over whole weeks inside the observed window — a partial week is shown but never extrapolated.')] : []),
+      kpiCard('Quality & review', [
+        statCell('Fix rounds <span class="stat-sub">before merge</span>', doneTasks ? `${m.rework_proxy_items} of ${doneTasks} <span class="stat-sub">tasks (${Math.round((m.rework_proxy_items / doneTasks) * 100)}%)</span>` : '—'),
+        statCell('Review turnaround <span class="stat-sub">agent done → merged</span>', rw ? (rw.median == null ? `${fmtDur(rw.min)}–${fmtDur(rw.max)} <span class="stat-sub">(n=${rw.n})</span>` : fmtDur(rw.median)) : '— <span class="stat-sub">no hook capture</span>'),
+        statCell('Agent time <span class="stat-sub">per task</span>', ag ? (ag.median == null ? `${fmtDur(ag.min)}–${fmtDur(ag.max)} <span class="stat-sub">(n=${ag.n})</span>` : fmtDur(ag.median)) : '—'),
+        statCell('Cancelled', `${count(tasks, 'cancelled')} <span class="stat-sub">of ${tasks.length} tasks</span>`),
+      ], 'A fix round is a task sent back after review before it merged (a defect caught in implementation). Review turnaround is the time from the agent finishing to the merge — the human part of the cycle; agent time is the sum of its dispatch spans.'),
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
         statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
         statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
@@ -460,8 +477,8 @@ export function renderHtml(doc) {
       'Only accepted estimates count; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
-    const burnup = burnupSvg(p, e, tasks);
-    if (burnup) parts.push(`<section class="panel"><h2>Progress over time</h2><p class="panel-sub">Cumulative completed tasks against the tasks in scope, from plan start to the report cutoff. Scope steps down when a task is cancelled and up when one is added after the start. Hover a marker for the task.</p>${burnup}</section>`);
+    const trendChart = trendSvg(m.flow.task?.trend);
+    if (trendChart) parts.push(`<section class="panel"><h2>Are we getting faster?</h2><p class="panel-sub">Each dot is a merged task in completion order; height is its cycle time. The line is the rolling median of the last five tasks — sloping down means faster, up means slower; a dot far above it is the task to ask about. Hover a dot for the task.</p>${trendChart}</section>`);
 
     // Per mission — elapsed from first child dispatch to landing, against the mission's own range.
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
@@ -492,7 +509,8 @@ export function renderHtml(doc) {
         missionOf.has(t.item_id) ? `mission ${esc(missionOf.get(t.item_id))}` : null,
         t.estimate ? `estimate ${fmtRangeH(t.estimate)}` : (r?.reason ? null : (t.estimate_status === 'unaccepted' ? 'estimate not accepted' : 'no estimate')),
         v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : null,
-        t.rework_count ? `${t.rework_count} rework` : null,
+        t.rework_count ? `${t.rework_count} fix round${t.rework_count > 1 ? 's' : ''}` : null,
+        t.review_wait_s != null ? `review ${fmtDur(t.review_wait_s)}` : null,
         t.start_basis && t.start_basis !== 'observed' ? `start ${esc(t.start_basis)}` : null,
         !t.started_at && t.state !== 'planned' ? 'no observed start' : null,
         fmtSpan(t.started_at, t.done_at),
@@ -501,7 +519,7 @@ export function renderHtml(doc) {
     }).join('');
     parts.push(`<section class="panel"><h2>Per task</h2><p class="panel-sub">Bar = cycle time from the first observed dispatch to the merge. Estimates are the accepted ranges from the plan; the verdict compares the actual with that range.</p>${taskRows || '<p class="note">No tasks in this plan.</p>'}</section>`);
 
-    parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time: ${spreadLine(lt)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
+    parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     const open = p.items.filter((i) => i.state === 'in_progress');
     if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);

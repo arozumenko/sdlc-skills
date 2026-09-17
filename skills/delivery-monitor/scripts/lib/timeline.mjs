@@ -69,7 +69,7 @@ const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, created_source: null, estimates: [], estimate_original: null, estimate_latest: null,
   scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, start_source: null, first_commit_at: null,
   first_commit_source: null, done_at: null, done_basis: null, done_sha: null, done_source: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, proxy_dispatches: 0, rework_count: 0,
-  deferred_events: 0, reopened: false, fix_spans: [], children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
+  deferred_events: 0, reopened: false, fix_spans: [], hook_spans: [], children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
 
 function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
@@ -92,7 +92,7 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         // separately in `proxy_dispatches` and must never upgrade to a measured start.
         if (o.basis !== 'observed') { it.proxy_dispatches++; }
         else if (START_STAGES.has(o.meta.stage) && !it.started_at && !terminal && it.level === 'task') { it.started_at = o.at; it.start_basis = 'observed'; it.start_source = o.source; }
-        if (o.source === 'hook' && o.meta.stage === 'fix') it.fix_spans.push({ from: o.at, to: null, agent: o.agentId ?? null });
+        if (o.source === 'hook') { const sp = { from: o.at, to: null, agent: o.agentId ?? null, stage: o.meta.stage ?? null }; it.hook_spans.push(sp); if (o.meta.stage === 'fix') it.fix_spans.push(sp); }
         if (it.state === 'planned') it.state = 'in_progress';
         break;
       case 'first_commit': if (!it.first_commit_at) { it.first_commit_at = o.at; it.first_commit_source = o.source; } if (it.state === 'planned') it.state = 'in_progress'; break;
@@ -114,7 +114,7 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
       // witness the same rework episode. A git rework whose commit falls inside a hook fix-dispatch
       // span (open or closed) for this item is that episode, not a second one — counted once.
       case 'rework_observed': if (!(o.source === 'git' && it.fix_spans.some((sp) => o.at >= sp.from && (sp.to == null || o.at <= sp.to)))) it.rework_count++; break;
-      case 'dispatch_ended': { const sp = it.fix_spans.find((x) => x.to == null && (x.agent == null || x.agent === (o.agentId ?? null))); if (sp) sp.to = o.at; break; }
+      case 'dispatch_ended': { const sp = it.hook_spans.find((x) => x.to == null && (x.agent == null || x.agent === (o.agentId ?? null))); if (sp) sp.to = o.at; break; }
       default: if (DEFERRED.has(o.event)) { it.deferred_events++; counts.deferredEvents++; }
     }
   }
@@ -164,7 +164,23 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
       if (it.state !== 'planned') it.seen = true;
     }
   }
-  for (const it of items.values()) { it.estimate_latest = estimateLatest(it.estimates, it.started_at); delete it.seen; }
+  for (const it of items.values()) {
+    it.estimate_latest = estimateLatest(it.estimates, it.started_at); delete it.seen;
+    // Research-09 split of the task cycle: agent time = union of the hook's dispatch spans up to the
+    // merge; review wait = merge − the last dispatch that ended before it (the human/lead part).
+    // Both null unless the hook witnessed the task (a CLI-only task has no spans, never a guess).
+    it.agent_span_s = null; it.review_wait_s = null;
+    if (it.level === 'task' && it.done_at && it.hook_spans.length) {
+      const doneT = Date.parse(it.done_at);
+      const closed = it.hook_spans.filter((sp) => sp.to && Date.parse(sp.to) <= doneT).map((sp) => [Date.parse(sp.from), Date.parse(sp.to)]).sort((a, b) => a[0] - b[0]);
+      if (closed.length) {
+        let total = 0, [cs, ce] = closed[0];
+        for (const [a, b] of closed.slice(1)) { if (a <= ce) ce = Math.max(ce, b); else { total += ce - cs; [cs, ce] = [a, b]; } }
+        total += ce - cs;
+        it.agent_span_s = total / 1000; it.review_wait_s = (doneT - Math.max(...closed.map(([, b]) => b))) / 1000;
+      }
+    }
+  }
   return { items, counts };
 }
 

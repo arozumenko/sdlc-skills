@@ -339,7 +339,7 @@ test('renderHtml: human sections only — no assessor tables, envelope or caveat
   const repo = tmp(); seed(repo);
   const doc = assemble(repo, { now: NOW });
   const html = renderHtml(doc);
-  for (const heading of ['Progress', 'Cycle time', 'Estimates', 'Progress over time', 'Per task', 'Per mission', 'Spread']) assert.ok(html.includes(heading), heading);
+  for (const heading of ['Progress', 'Cycle time', 'Quality & review', 'Estimates', 'Per task', 'Per mission', 'Spread']) assert.ok(html.includes(heading), heading);
   for (const gone of ['<h2>Flow time</h2>', '<h2>Coverage</h2>', '<h2>Envelope</h2>', '<strong>Caveats</strong>', '<details>', 'PRED(25)</th>', 'registration_gaps']) assert.ok(!html.includes(gone), `${gone} must not be on the human page`);
   assert.ok(html.includes('nothing is estimated or inferred') && html.includes('<code>report --json</code>'), 'footer names the export');
 });
@@ -384,13 +384,12 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.ok(html.includes('<span class="stat-label">Not started</span><span class="stat-value">2 <span class="stat-sub">tasks</span></span>'), 'planned tasks on the Progress card');
   assert.ok(!html.includes('<h3>Pace'), 'no Pace card below the whole-weeks floor');
   assert.match(html, /Pace per week appears once the run spans 3 whole ISO weeks \(has [0-2]\)/, 'the missing pace is explained in one line, not an empty card');
-  // Burn-up: always present, inline SVG, one series + a scope reference line, direct end labels, no scripts.
-  assert.match(html, /<svg class="burnup"[^>]*role="img"/);
-  assert.match(html, /<path class="scope" d="M[^"]+"\/><path class="done" d="M[^"]+"\/>/);
-  assert.ok(html.includes('>1 done</text>') && html.includes('>scope 3</text>'), 'end labels carry the counts');
-  assert.match(html, /<circle class="pt"[^>]*><title>TASK-A merged 10 Sep 2026 02:00 UTC<\/title><\/circle>/, 'native tooltip on the completion marker');
+  // One finished task: no trend chart (needs ≥2 points) and the trend stat spells out its floor.
+  assert.ok(!html.includes('<svg class="trend"'), 'no run chart with a single point');
+  assert.ok(html.includes('needs ≥10 finished tasks <span class="stat-sub">(has 1)</span>'), 'trend floor explained');
+  assert.ok(html.includes('<span class="stat-label">Fix rounds <span class="stat-sub">before merge</span></span><span class="stat-value">0 of 1'), 'fix-round share on the Quality card');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Within range', 'Work vs estimate', 'Typical error', 'Counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Trend', 'Fix rounds', 'Review turnaround', 'Within range', 'Work vs estimate', 'Typical error', 'Counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
   assert.ok(html.includes('<span class="stat-value">1 / 3</span>'), 'tasks done 1 / 3 (G2 tasks registered, not started)');
   assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
@@ -448,4 +447,37 @@ test('renderHtml: per-task rows escape a hostile ref (the estimate verdict path)
   assert.ok(!html.includes('<b>TASK-9</b>'), 'raw markup must not appear');
   assert.ok(html.includes(`>${escHtml(evil)}<span class="oc oc-done">done</span>`), 'escaped ref in the per-task row label');
   assert.ok(html.includes('within range'), 'verdict still rendered for the row');
+});
+
+test('renderHtml + metrics: run chart, trend halves, agent time / review wait from hook spans', () => {
+  const repo = tmp();
+  const items = [{ item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 }];
+  for (let k = 1; k <= 12; k++) items.push({ item_id: `${R}/task-${k}`, ref: `TASK-${k}`, level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items });
+  const at = (day, h, mi = 0) => `2026-09-${String(day).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}:00.000Z`;
+  const cli = (k, event, when) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/task-${k}`, ref: `TASK-${k}`, level: 'task', event, at: when, transition_id: `${R}/task-${k}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${k}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  const hook = (k, event, when, stage = 'build') => appendObservation(repo, makeObservation({ user: 'u', host: 'claude', plan: R, item_id: `${R}/task-${k}`, ref: `TASK-${k}`, level: 'task', event, at: when, transition_id: `${R}/task-${k}/${event}/agent-${k}`, source: 'hook', source_record_id: `claude:s:agent-${k}`, agentId: `agent-${k}`, meta: { version: 1, stage } }, { now: 0 }), { slug: 'u', now: 0 });
+  // 12 tasks, one per day: the first six take 4 h dispatch→merge (3 h agent + 1 h review), the last six take 2 h (1.5 h + 0.5 h) — clearly faster.
+  for (let k = 1; k <= 12; k++) {
+    const fast = k > 6; cli(k, 'created', at(1, 0));
+    hook(k, 'dispatched', at(k + 1, 8)); hook(k, 'dispatch_ended', at(k + 1, fast ? 9 : 11, fast ? 30 : 0)); cli(k, 'done', at(k + 1, fast ? 10 : 12));
+  }
+  const doc = assemble(repo, { now: NOW });
+  const t = doc.plans[0].metrics.flow.task.trend;
+  assert.equal(t.n, 12); assert.equal(t.earlier.median, 4 * 3600); assert.equal(t.latest.median, 2 * 3600); assert.equal(t.ratio, 0.5); assert.equal(t.direction, 'faster');
+  const all = doc.plans[0].metrics.flow.task.strata.all;
+  assert.equal(all.agent_span.n, 12); assert.equal(all.review_wait.n, 12); assert.equal(all.review_wait.median, 1800, 'review wait median is the faster half\'s 30 min or the slower half\'s 60 min — nearest-rank picks 30 min at n=12');
+  assert.equal(doc.plans[0].items.find((i) => i.ref === 'TASK-1').review_wait_s, 3600);
+  const md = renderMarkdown(doc);
+  assert.ok(md.includes('| task trend (latest half ÷ earlier half, observed cycle_time) | all | n=12 | 0.5 (faster) | earlier 4h | latest 2h | |'), 'trend line in the assessor Markdown');
+  assert.ok(md.includes('| task agent_span | all | n=12 |') && md.includes('| task review_wait | all | n=12 |'), 'split rows in the Markdown flow table');
+  const html = renderHtml(doc);
+  assert.ok(html.includes('<span class="stat-label">Trend <span class="stat-sub">latest half vs earlier</span></span><span class="stat-value">-50% <span class="stat-sub">faster — latest 6 vs earlier 6</span>'), 'trend stat on the Cycle time card');
+  assert.match(html, /<h2>Are we getting faster\?<\/h2>/);
+  assert.match(html, /<svg class="trend"[^>]*role="img"/);
+  assert.equal((html.match(/<circle class="pt"/g) ?? []).length, 12, 'one dot per merged task');
+  assert.match(html, /<path class="roll" d="M[^"]+"\/>/, 'rolling median line');
+  assert.match(html, /<title>TASK-12 · 2 h · merged 13 Sep 2026 10:00 UTC<\/title>/);
+  assert.ok(html.includes('<span class="stat-label">Review turnaround <span class="stat-sub">agent done → merged</span></span><span class="stat-value">30 min</span>'), 'review turnaround on the Quality card');
+  assert.match(html, /TASK-1<span class="oc oc-done">done<\/span>.*?review 1 h/, 'per-task row shows the review wait');
 });

@@ -85,7 +85,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     // F17: every class present in the done cohort gets a stratum (so quality denominators are never
     // silently dropped for a class whose items were all excluded from durations), plus 'all'.
     const classKeys = new Set(['all', ...done.map((i) => i.class).filter(Boolean)]);
-    const strata = {}; for (const cls of classKeys) strata[cls] = { cycle_time: [], commit_to_done: [], lead_time: [], parent_elapsed: [] };
+    const strata = {}; for (const cls of classKeys) strata[cls] = { cycle_time: [], commit_to_done: [], lead_time: [], parent_elapsed: [], agent_span: [], review_wait: [] };
     const bucket = (cls) => strata[cls];
     const actualOf = new Map();
     for (const i of measurable) {
@@ -93,7 +93,13 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
       if (i.started_at) {
         const s = secondsBetween(i.started_at, i.done_at);
         if (s < 0) { ex.clock_skew_cycle++; actualOf.set(i.item_id, { skew: true }); }
-        else if (i.start_basis === 'observed') { targets.forEach((t) => t.cycle_time.push(s)); actualOf.set(i.item_id, { s, basis: 'observed' }); }
+        else if (i.start_basis === 'observed') {
+          targets.forEach((t) => t.cycle_time.push(s)); actualOf.set(i.item_id, { s, basis: 'observed' });
+          // Research-09: the observed cycle splits into agent time (hook dispatch spans) and review
+          // wait (last dispatch end → merge); both only where the hook witnessed the task.
+          if (i.agent_span_s != null) targets.forEach((t) => t.agent_span.push(i.agent_span_s));
+          if (i.review_wait_s != null && i.review_wait_s >= 0) targets.forEach((t) => t.review_wait.push(i.review_wait_s));
+        }
         else { targets.forEach((t) => t.parent_elapsed.push(s)); actualOf.set(i.item_id, { s, basis: 'derived-child' }); }
       } else if (i.first_commit_at) { const s = secondsBetween(i.first_commit_at, i.done_at); if (s < 0) ex.clock_skew_commit++; else targets.forEach((t) => t.commit_to_done.push(s)); }
       else ex.missing_start++;
@@ -108,6 +114,16 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     // including 'all') — no level-level duplicate.
     data.flow[level] = { strata: Object.fromEntries(Object.entries(strata).map(([k, v]) => [k, { ...Object.fromEntries(Object.entries(v).map(([m, arr]) => [m, stats(arr)])), quality: qualityFor(k === 'all' ? done : done.filter((i) => i.class === k)) }])),
       excluded: ex };
+    // "Are we getting faster?" — observed cycle times in completion order, earlier half vs latest
+    // half; medians only above the floor (≥5 each side), so the ratio is never a guess. Self-
+    // referenced (the run against itself), which is what makes it comparable across repos.
+    if (level === 'task') {
+      const series = measurable.filter((i) => i.started_at && i.start_basis === 'observed' && actualOf.get(i.item_id)?.s != null).sort((a, b) => Date.parse(a.done_at) - Date.parse(b.done_at)).map((i) => ({ item_id: i.item_id, ref: i.ref, class: i.class ?? null, done_at: i.done_at, cycle_s: actualOf.get(i.item_id).s, rework_count: i.rework_count }));
+      const half = Math.floor(series.length / 2);
+      const earlier = stats(series.slice(0, half).map((x) => x.cycle_s)), latest = stats(series.slice(half).map((x) => x.cycle_s));
+      const ratio = earlier?.median != null && latest?.median != null && earlier.median > 0 ? Math.round((latest.median / earlier.median) * 1000) / 1000 : null;
+      data.flow.task.trend = { n: series.length, floor: 10, earlier: earlier ? { n: earlier.n, median: earlier.median } : null, latest: latest ? { n: latest.n, median: latest.median } : null, ratio, direction: ratio == null ? null : (ratio < 0.95 ? 'faster' : ratio > 1.05 ? 'slower' : 'steady'), series };
+    }
     const counts = weeks.map((w) => ({ key: w.key, count: throughputDone.filter((i) => i.done_at >= w.start && i.done_at < w.end).length, whole: w.whole, covered: w.covered }));
     const whole = counts.filter((w) => w.whole).map((w) => w.count); let velocity = null, caveat = null;
     // Minor fix: `mean` dropped — median is the only reported central tendency (a mean of small
