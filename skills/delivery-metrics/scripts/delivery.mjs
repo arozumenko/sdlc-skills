@@ -370,8 +370,9 @@ function cmdBackfill(repo, p, io, now) {
 }
 
 function cmdDoctor(repo, p, io) {
-  for (const l of doctorReport(repo, relative(repo, skillRootOf(import.meta.url))).lines) out(io, l);
-  return 0;
+  const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)));
+  for (const l of d.lines) out(io, l);
+  return d.ok ? 0 : 1;
 }
 
 export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };

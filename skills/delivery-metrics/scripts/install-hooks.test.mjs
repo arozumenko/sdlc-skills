@@ -9,9 +9,18 @@ import { installClaude, installIgnoreBlocks, doctorReport, bootstrapTelemetry, M
 import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./install-hooks.mjs', import.meta.url));
-const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' } }).trim();
+const DELIVERY = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
+const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
+const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV } }).trim();
 const tmp = () => { const r = mkdtempSync(join(tmpdir(), 'dm-install-')); g(r, 'init', '-q', '-b', 'main'); g(r, 'commit', '-q', '--allow-empty', '-m', 'root'); return r; };
 const REL = '.claude/skills/delivery-metrics';
+/** Seeds the telemetry branch (via plumbing, no checkout) with a single file at `name` — used to
+ * force a stash collision in bootstrapTelemetry without an actual clone. */
+const seedTelemetryBranchFile = (repo, name, content) => {
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: content, encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
+  const tree = execFileSync('git', ['mktree'], { cwd: repo, input: `100644 blob ${blob}\t${name}\n`, encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'seed collide'));
+};
 
 test('installClaude: marked entry, foreign entries and later user edits preserved, idempotent, --remove strips ours only', () => {
   const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
@@ -80,7 +89,61 @@ test('doctorReport: wiring, plans, every ignore pattern in its owner, tracked tr
   d = doctorReport(repo, REL); assert.ok(d.lines.some((l) => /tracked transients: 1/.test(l))); assert.equal(d.ok, false);
 });
 
-test('doctorReport: git-state surfaces an unmerged conflict and a dirty tree in the telemetry repo without touching either', () => {
+test('F6 fallback: when check-ignore refuses, the fallback reads the real .gitignore (present vs absent pattern), not a tautological probe-vs-itself check', () => {
+  // A plain (non-git) directory: `git check-ignore --no-index` refuses with "not a git repository"
+  // for every probe, forcing every ROOT_PATTERNS check through the fallback.
+  const dir = mkdtempSync(join(tmpdir(), 'dm-norepo-'));
+  writeFileSync(join(dir, '.gitignore'), 'node_modules/\n.agents/telemetry/delivery/reports/\nsomething/else/\n');
+  const d = doctorReport(dir, REL);
+  // Exactly one of the three ROOT_PATTERNS is a literal line in that file. A tautological
+  // probe-derived-from-the-same-pattern check would read either 0/3 or 3/3 regardless of content;
+  // reading the real file must land on 1/3.
+  assert.ok(d.lines.some((l) => /^ignore root: MISSING \(1\/3\) \(pattern-check\)$/.test(l)), d.lines.join('\n'));
+});
+
+test('F6 fallback: a missing .gitignore during the fallback is undetermined, not a false ok/MISSING', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dm-norepo-'));
+  const d = doctorReport(dir, REL);
+  assert.ok(d.lines.some((l) => /^ignore root: undetermined \(git refused: .+\)$/.test(l)), d.lines.join('\n'));
+  assert.equal(d.ok, false);
+});
+
+test('bootstrapTelemetry: an interim file colliding with a name already on the telemetry branch is stranded in the stash dir, surfaced by doctor', () => {
+  const repo = tmp();
+  seedTelemetryBranchFile(repo, 'collide.txt', 'from branch\n');
+  mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true });
+  writeFileSync(join(repo, '.agents', 'telemetry', 'collide.txt'), 'interim content\n');
+  assert.equal(bootstrapTelemetry(repo).status, 'created');
+  const stash = join(repo, '.agents', 'telemetry.pre-submodule');
+  assert.ok(existsSync(stash), 'stash dir left behind for the colliding file');
+  assert.equal(readFileSync(join(stash, 'collide.txt'), 'utf8'), 'interim content\n');
+  const d = doctorReport(repo, REL);
+  assert.ok(d.lines.some((l) => l === 'stranded interim files: 1 in .agents/telemetry.pre-submodule (collide.txt) — move the files back by hand, then rm -r .agents/telemetry.pre-submodule'), d.lines.join('\n'));
+  assert.equal(d.ok, false);
+});
+
+test('installClaude --remove never creates settings.json (or settings.local.json) when none existed', () => {
+  const repo = tmp();
+  const file = installClaude(repo, REL, { remove: true });
+  assert.equal(existsSync(file), false);
+  const localFile = installClaude(repo, REL, { remove: true, local: true });
+  assert.equal(existsSync(localFile), false);
+});
+
+test('doctor exits 1 when not ok, 0 when ok — both the standalone script and `delivery.mjs doctor`', () => {
+  const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
+  let code = 0; try { execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { code = e.status; }
+  assert.equal(code, 1);
+  let dCode = 0; try { execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { dCode = e.status; }
+  assert.equal(dCode, 1);
+  execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  let okCode = 0; try { execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } }); } catch (e) { okCode = e.status; }
+  assert.equal(okCode, 0);
+  let dOkCode = 0; try { execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } }); } catch (e) { dOkCode = e.status; }
+  assert.equal(dOkCode, 0);
+});
+
+test('doctorReport: git-state surfaces a dirty telemetry tree without touching it (no unmerged/merging state exercised here)', () => {
   const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
   bootstrapTelemetry(repo); installClaude(repo, REL, {}); installIgnoreBlocks(repo, {});
   const tel = join(repo, '.agents', 'telemetry');

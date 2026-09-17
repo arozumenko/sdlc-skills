@@ -18,11 +18,15 @@ const writeJson = (p, o) => { mkdirSync(dirname(p), { recursive: true }); writeF
 
 export function installClaude(repo, rel, { local = false, remove = false } = {}) {
   const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
+  const existed = existsSync(file);
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   const kept = (Array.isArray(settings.hooks.SubagentStop) ? settings.hooks.SubagentStop : []).filter((e) => !e || !e[MARKER]);
   if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "${posix(resolve(repo, rel, 'hooks/dispatch-hook.mjs'))}" --stop`, timeout: 30, async: true }], [MARKER]: true });
   if (kept.length) settings.hooks.SubagentStop = kept; else delete settings.hooks.SubagentStop;
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
+  // --remove on a settings file that never existed, with nothing else left to write, must not
+  // conjure an empty settings.json into existence.
+  if (remove && !existed && !Object.keys(settings).length) return file;
   writeJson(file, settings); return file;
 }
 
@@ -55,10 +59,9 @@ export function bootstrapTelemetry(repo) {
   const stash = `${dir}.pre-submodule`; let stashed = false;
   const restore = () => { if (!stashed || !existsSync(stash)) return; try { mkdirSync(dir, { recursive: true }); for (const n of readdirSync(stash)) if (!existsSync(join(dir, n))) renameSync(join(stash, n), join(dir, n)); if (!readdirSync(stash).length) rmSync(stash, { recursive: true, force: true }); stashed = false; } catch { /* data preserved in stash; doctor surfaces it */ } };
   try {
-    let hasBranch = true;
     try { git(['rev-parse', '--verify', 'refs/heads/telemetry']); } catch {
       try { git(['rev-parse', '--verify', 'refs/remotes/origin/telemetry']); git(['branch', 'telemetry', 'origin/telemetry']); }
-      catch { const tree = git(['hash-object', '-t', 'tree', '/dev/null']); const commit = git(['commit-tree', tree, '-m', 'telemetry: root']); git(['update-ref', 'refs/heads/telemetry', commit]); hasBranch = false; }
+      catch { const tree = git(['hash-object', '-t', 'tree', '/dev/null']); const commit = git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit-tree', tree, '-m', 'telemetry: root']); git(['update-ref', 'refs/heads/telemetry', commit]); }
     }
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
     if (hadFiles) { renameSync(dir, stash); stashed = true; }
@@ -72,48 +75,57 @@ export function bootstrapTelemetry(repo) {
     // Same as tokenomics: seed content (README + inner .gitignore, plus any restored interim files)
     // must land as a real commit on the telemetry branch, not sit untracked in the checkout — an
     // untracked seed leaves `gitState` permanently "dirty" and a teammate's first
-    // `clone --recurse-submodules` would pin an empty/unpushed commit.
-    if (!hasBranch || hadFiles) {
-      git(['add', '-A'], dir);
-      try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], dir); } catch { /* nothing to commit */ }
-      try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* no remote / offline */ }
-      git(['add', '.agents/telemetry']); // re-stage the gitlink at the commit the seed just moved it to
-    }
+    // `clone --recurse-submodules` would pin an empty/unpushed commit. Always attempt it (not just
+    // when a fresh branch or interim files triggered it) — the README/.gitignore writes above can
+    // themselves be the only change (e.g. bootstrapping onto a telemetry branch another factory
+    // already created), and `git commit` failing on "nothing to commit" is caught, so this is a
+    // no-op when there truly is nothing new.
+    git(['add', '-A'], dir);
+    try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], dir); } catch { /* nothing to commit */ }
+    try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* no remote / offline */ }
+    git(['add', '.agents/telemetry']); // re-stage the gitlink at the commit the seed just moved it to
     return { status: 'created' };
   } catch (e) { restore(); return { status: 'failed', reason: String(e.message).split('\n')[0] }; }
 }
 
 export function telemetryMode(repo) { return existsSync(join(repo, '.agents', 'telemetry', '.git')) ? 'submodule' : 'plain-dir'; }
 
-// F6: once bootstrapTelemetry() turns .agents/telemetry into a real gitlink, a plain
-// `git check-ignore -q <probe>` run from the MAIN repo refuses any pathspec that lands inside the
-// submodule's working tree ("fatal: Pathspec '...' is in submodule '.agents/telemetry'", exit 128) —
-// verified against a fresh repo + real `submodule add`. The brief's doctor read that refusal as
-// "not ignored" and reported 0/3 even though both blocks were installed correctly. `--no-index`
-// answers purely from the .gitignore files on disk (no index/tree lookup, so it never asks whether
-// the path crosses a submodule boundary) and was verified to return the correct 0/1 exit code for
-// every ROOT_PATTERNS probe in both plain-dir and post-bootstrap submodule states. checkIgnoreOne
-// still returns null — rather than guessing — if some other git version refuses for a different
-// reason; checkPatterns then falls back to a tiny literal matcher against the same fixed patterns
-// and labels the line so a fallback answer is never silently indistinguishable from a real one.
+// F6: `--no-index` answers purely from the .gitignore files on disk, so it works both before and
+// after bootstrapTelemetry() turns .agents/telemetry into a submodule (unlike a plain
+// `git check-ignore -q <probe>`, which refuses any pathspec inside a registered submodule's working
+// tree). If check-ignore refuses for some other reason, `checkIgnoreOne` returns `hit: null` rather
+// than guessing, and the fallback in `checkPatterns` reads the owner's actual `.gitignore` and looks
+// for the pattern as a literal line, in any block — never a probe compared against itself.
 function checkIgnoreOne(cwd, probe) {
-  try { execFileSync('git', ['check-ignore', '-q', '--no-index', '--', probe], { cwd, stdio: 'ignore' }); return true; }
-  catch (e) { return e.status === 1 ? false : null; }
+  try { execFileSync('git', ['check-ignore', '-q', '--no-index', '--', probe], { cwd, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] }); return { hit: true }; }
+  catch (e) {
+    if (e.status === 1) return { hit: false };
+    const reason = (e.stderr ? String(e.stderr) : String(e.message)).trim().split('\n')[0] || `exit ${e.status}`;
+    return { hit: null, reason };
+  }
 }
-function patternMatchesProbe(pattern, probe) {
-  if (pattern.endsWith('/')) return probe === pattern.slice(0, -1) || probe.startsWith(pattern);
-  if (pattern.includes('*')) { const [pre, suf] = pattern.split('*'); return probe.startsWith(pre) && probe.endsWith(suf); }
-  return probe === pattern;
+function gitignoreLines(cwd) {
+  const file = join(cwd, '.gitignore');
+  if (!existsSync(file)) return null;
+  try { return readFileSync(file, 'utf8').split('\n').map((l) => l.trim()); } catch { return null; }
 }
 function checkPatterns(cwd, patterns, probeOf) {
-  let fellBack = false;
+  let fellBack = false, undetermined = null;
   const okCount = patterns.reduce((n, p) => {
-    const probe = probeOf(p);
-    let hit = checkIgnoreOne(cwd, probe);
-    if (hit === null) { fellBack = true; hit = patternMatchesProbe(p, probe); }
+    const r = checkIgnoreOne(cwd, probeOf(p));
+    let hit = r.hit;
+    if (hit === null) {
+      fellBack = true;
+      const lines = gitignoreLines(cwd);
+      if (lines === null) { undetermined = undetermined ?? r.reason; hit = false; } else hit = lines.includes(p.trim());
+    }
     return n + (hit ? 1 : 0);
   }, 0);
-  return { okCount, total: patterns.length, fellBack };
+  return { okCount, total: patterns.length, fellBack, undetermined };
+}
+function renderIgnoreLine(label, res) {
+  if (res.undetermined) return `ignore ${label}: undetermined (git refused: ${res.undetermined})`;
+  return `ignore ${label}: ${res.okCount === res.total ? 'ok' : 'MISSING'} (${res.okCount}/${res.total})${res.fellBack ? ' (pattern-check)' : ''}`;
 }
 
 // F6: check-ignore only proves the PATTERN matches a probe path; it never proves git would actually
@@ -139,11 +151,21 @@ export function doctorReport(repo, rel) {
   const runs = listRuns(repo); lines.push(`plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   lines.push(`sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   const rootRes = checkPatterns(repo, ROOT_PATTERNS, (p) => p.replace(/\*$/, 'x').replace(/\/$/, '/x'));
-  lines.push(`ignore root: ${rootRes.okCount === rootRes.total ? 'ok' : 'MISSING'} (${rootRes.okCount}/${rootRes.total})${rootRes.fellBack ? ' (pattern-check)' : ''}`); if (rootRes.okCount !== rootRes.total) ok = false;
+  lines.push(renderIgnoreLine('root', rootRes)); if (rootRes.undetermined || rootRes.okCount !== rootRes.total) ok = false;
   const tel = join(repo, '.agents', 'telemetry'); const mode = telemetryMode(repo); lines.push(`telemetry: ${mode}${mode === 'plain-dir' ? ' (records ride the main tree until install-hooks.mjs bootstraps the shared submodule)' : ''}`);
+  // F6/restore(): a bootstrap that found a same-named file already checked out on the telemetry
+  // branch leaves that interim file stranded in the sibling stash dir instead of silently dropping
+  // it — surfaced here (regardless of submodule/plain-dir mode) rather than only promised in a code
+  // comment.
+  const stash = `${tel}.pre-submodule`;
+  if (existsSync(stash)) {
+    const stranded = readdirSync(stash);
+    lines.push(`stranded interim files: ${stranded.length} in .agents/telemetry.pre-submodule (${stranded.join(', ')}) — move the files back by hand, then rm -r .agents/telemetry.pre-submodule`);
+    ok = false;
+  }
   if (mode === 'submodule') {
     const innerRes = checkPatterns(tel, INNER_PATTERNS, (p) => p.replace(/^\//, '').replace(/\*$/, 'x').replace(/\/$/, '/x'));
-    lines.push(`ignore inner: ${innerRes.okCount === innerRes.total ? 'ok' : 'MISSING'} (${innerRes.okCount}/${innerRes.total})${innerRes.fellBack ? ' (pattern-check)' : ''}`); if (innerRes.okCount !== innerRes.total) ok = false;
+    lines.push(renderIgnoreLine('inner', innerRes)); if (innerRes.undetermined || innerRes.okCount !== innerRes.total) ok = false;
     const tracked = (gitq(tel, ['ls-files', 'delivery/reports', 'delivery/.lock']) ?? '').split('\n').filter(Boolean); lines.push(`tracked transients: ${tracked.length}${tracked.length ? ` — ${tracked.join(', ')} (git -C .agents/telemetry rm --cached <path>)` : ''}`); if (tracked.length) ok = false;
     const leaked = stagingLeaks(tel);
     if (leaked === null) lines.push('staging: undetermined (disposable-index git add -A failed)');
@@ -161,7 +183,7 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
   const host = val('--host') ?? 'claude'; if (host !== 'claude') { process.stderr.write(`UNSUPPORTED-HOST(${host})\n`); return 2; }
   const rel = posix(relative(repo, skillRootOf()));
-  if (has('--doctor')) { for (const l of doctorReport(repo, rel).lines) console.log(l); return 0; }
+  if (has('--doctor')) { const d = doctorReport(repo, rel); for (const l of d.lines) console.log(l); return d.ok ? 0 : 1; }
   const remove = has('--remove');
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
