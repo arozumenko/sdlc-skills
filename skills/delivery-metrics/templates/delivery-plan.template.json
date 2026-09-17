@@ -1,0 +1,30 @@
+{
+  "campaign_id": "<campaign-id>",
+  "run_id": "<run-1>",
+  "version": 1,
+  "factory": "feature-development",
+  "observation_start": "2026-01-01T00:00:00Z",
+  "source_epoch": { "from": "2026-01-01T00:00:00Z", "until": null, "integration_ref": "main" },
+  "campaign": {
+    "ref": "<campaign-id>",
+    "estimate": { "unit": "h", "low": 1, "high": 1, "tier": "ROM", "proposed_by": "<Name>", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null }
+  },
+  "mission_kind": "group",
+  "missions": [
+    {
+      "ref": "G1",
+      "sequence": 1,
+      "estimate": { "unit": "h", "low": 1, "high": 1, "tier": "ROM", "proposed_by": "<Name>", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null },
+      "tasks": [
+        {
+          "ref": "TASK-001",
+          "story": "US-001",
+          "class": "S",
+          "role": "js-dev",
+          "branch": "task/task-001",
+          "estimate": { "unit": "h", "low": 1, "high": 1, "tier": "ROM", "proposed_by": "<Name>", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null }
+        }
+      ]
+    }
+  ]
+}
