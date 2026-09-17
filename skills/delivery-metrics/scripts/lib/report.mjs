@@ -187,7 +187,12 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     schema: SCHEMA, generated_at: nowIso(now), cutoff: cutoffIso, window: { since: sinceIso, until: untilIso, effective_end: end, requested: { since, until, cutoff } },
     git: { sha, is_working_tree: sha ? Boolean(git(repo, ['status', '--porcelain'])) : null }, plans: runs.map((r) => r.run),
     sources: { events_files: res.files, plans: selected.map((f) => ({ run: f.rec.run, path: f.path, file_sha256: sha256(f.buf), canonical_sha256: f.rec.canonical_sha256 ?? null })), profile: { path: profilePath(repo), sha256: profileSha, source: profileSource }, tokenomics: 'absent' },
-    policy: { weeks: 'UTC ISO', percentile: 'nearest-rank', floors: { median: 5, p85: 7, p90: 10 }, zeroDurationSec: profile.zeroDurationSec, minWholeWeeks: profile.minWholeWeeks, estimate_base: estimateBase, history: 'corrected-effective-time', durations: 'seconds; hours rounded at render', filters },
+    policy: { weeks: 'UTC ISO', percentile: 'nearest-rank', floors: { median: 5, p85: 7, p90: 10 }, zeroDurationSec: profile.zeroDurationSec, minWholeWeeks: profile.minWholeWeeks, estimate_base: estimateBase, history: 'corrected-effective-time', durations: 'seconds; hours rounded at render', filters,
+      // Review fix (§6.10): named labels so a reader never mistakes a plan-tracked clock for a
+      // true idea-to-done lead time, or a PR-open-to-merge clock for cycle time — time_to_merge
+      // itself is not computed until M2 (PR-mode backfill), but the label travels with the policy
+      // now so both metrics carry the same honest caveat wherever they're read.
+      labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time' } },
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
@@ -212,7 +217,13 @@ export function renderMarkdown(doc) {
       // F17: every stratum metrics.mjs emitted (all + every class present, plus its own per-stratum
       // `quality`) is rendered — nothing is dropped by only reading a fixed set of class names.
       for (const [st, mm] of Object.entries(f.strata)) {
-        for (const [name, s] of Object.entries(mm)) { if (name === 'quality') continue; const row = statRow(`${lv} ${name}`, st, s); if (row) L.push(row); }
+        for (const [name, s] of Object.entries(mm)) {
+          if (name === 'quality') continue;
+          // Review fix (§6.10/policy.labels): every lead_time row carries its honesty label inline
+          // in Markdown, matching `envelope.policy.labels.lead_time` in the JSON export.
+          const label = name === 'lead_time' ? ` (${e.policy.labels.lead_time})` : '';
+          const row = statRow(`${lv} ${name}${label}`, st, s); if (row) L.push(row);
+        }
         // F17: the stratum's own quality denominator sits immediately next to its speed rows, not
         // collapsed into one level-wide line — `strata.<class>.quality` is where metrics.mjs puts it.
         L.push(`| ${lv} quality | ${st} | quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done} | | | | |`);

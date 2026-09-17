@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { deliveryDir, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
+import { validRoster } from './lib/roster.mjs';
 import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
 
 export const MARKER = '_delivery';
@@ -33,6 +34,21 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
 const BEGIN = '# >>> delivery-metrics (managed)', END = '# <<< delivery-metrics';
 const ROOT_PATTERNS = ['.agents/telemetry/delivery/reports/', '.agents/telemetry/delivery/.lock/', '.agents/telemetry/delivery/.pending-*'];
 const INNER_PATTERNS = ['/delivery/reports/', '/delivery/.lock/', '/delivery/.pending-*'];
+// tokenomics install-hooks.mjs:307-311 — the four base transient patterns EVERY factory's
+// subfolder needs, plain (unmanaged) lines outside any BEGIN/END block since both skills' owned
+// blocks share this one inner .gitignore. Seeded once on bootstrap so a delivery-metrics-only
+// install still ignores tokenomics' own transients (and vice versa) even before tokenomics ever
+// runs its own installer.
+const TOKENOMICS_BASE_LINES = ['*/live/', '*/scopes/.pending-*', '*/scopes/.nagged-*', '*/scopes/.unclosed-*'];
+function seedTokenomicsBaseLines(file) {
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const have = new Set(text.split('\n').map((l) => l.trim()));
+  const missing = TOKENOMICS_BASE_LINES.filter((l) => !have.has(l));
+  if (!missing.length) return;
+  mkdirSync(dirname(file), { recursive: true });
+  const sep = text && !text.endsWith('\n') ? '\n' : '';
+  writeFileSync(file, `${text}${sep}${missing.join('\n')}\n`);
+}
 function spliceBlock(file, lines, remove) {
   const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
   const re = new RegExp(`\\n?${BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*[\\s\\S]*?${END}\\n?`);
@@ -71,6 +87,7 @@ export function bootstrapTelemetry(repo) {
     git(['config', '-f', '.gitmodules', 'submodule..agents/telemetry.ignore', 'all']); git(['add', '.gitmodules']);
     restore();
     if (!existsSync(join(dir, 'README.md'))) writeFileSync(join(dir, 'README.md'), TELEMETRY_README);
+    seedTokenomicsBaseLines(join(dir, '.gitignore'));
     spliceBlock(join(dir, '.gitignore'), INNER_PATTERNS, false);
     // Same as tokenomics: seed content (README + inner .gitignore, plus any restored interim files)
     // must land as a real commit on the telemetry branch, not sit untracked in the checkout — an
@@ -174,7 +191,21 @@ export function doctorReport(repo, rel) {
   }
   const diag = existsSync(deliveryDir(repo)) ? readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')) : [];
   lines.push(`diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)`);
+  for (const r of runs.filter((r) => r.status === 'open')) {
+    const rosterOk = validRoster(r.roster);
+    lines.push(`roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`); if (!rosterOk) ok = false;
+  }
+  if (existsSync(sessionsDir(repo))) {
+    for (const f of readdirSync(sessionsDir(repo)).filter((n) => n.endsWith('.json')).sort()) {
+      let sess = null; try { sess = JSON.parse(readFileSync(join(sessionsDir(repo), f), 'utf8')); } catch { /* surfaced generically below */ }
+      if (!sess || typeof sess !== 'object') { lines.push(`session: ${f} malformed`); ok = false; continue; }
+      const owner = runs.find((r) => r.run === sess.plan);
+      const status = !owner ? 'missing' : owner.status === 'closed' ? 'closed' : 'ok';
+      lines.push(`session: ${sess.host}:${sess.session} -> ${sess.plan} ${status}`); if (status !== 'ok') ok = false;
+    }
+  }
   for (const c of UNCONDITIONAL_CAVEATS) lines.push(`caveat: ${c}`);
+  lines.push(`doctor: ${ok ? 'ok' : 'attention'}`);
   return { lines, ok };
 }
 
@@ -183,7 +214,9 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
   const host = val('--host') ?? 'claude'; if (host !== 'claude') { process.stderr.write(`UNSUPPORTED-HOST(${host})\n`); return 2; }
   const rel = posix(relative(repo, skillRootOf()));
-  if (has('--doctor')) { const d = doctorReport(repo, rel); for (const l of d.lines) console.log(l); return d.ok ? 0 : 1; }
+  // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, printed as the
+  // final `doctor: ok`/`doctor: attention` line (doctorReport), never mapped to a nonzero exit.
+  if (has('--doctor')) { const d = doctorReport(repo, rel); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });

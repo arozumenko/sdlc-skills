@@ -73,6 +73,17 @@ test('renderMarkdown: sections, n beside figures, strata, per-item estimate rows
   assert.ok(!/byPerson/i.test(md)); assert.ok(!/^\|\s*mean/m.test(md)); assert.match(md, /no baseline/); assert.match(md, /acceptance: unauthenticated/);
 });
 
+test('review fix: lead_time carries its "plan-tracked, not idea-to-done" label beside every Markdown row and in the JSON envelope policy', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  assert.equal(doc.envelope.policy.labels.lead_time, 'plan-tracked, not idea-to-done');
+  assert.equal(doc.envelope.policy.labels.time_to_merge, 'PR open to merge — not lead time, not cycle time');
+  const md = renderMarkdown(doc);
+  const leadTimeRows = md.split('\n').filter((l) => /\blead_time\b/.test(l));
+  assert.ok(leadTimeRows.length > 0, 'seed fixture has at least one lead_time row');
+  for (const row of leadTimeRows) assert.match(row, /\(plan-tracked, not idea-to-done\)/, row);
+});
+
 test('renderStatus: one-screen counts and open ages (255 h); loadProfile merges template', () => {
   const repo = tmp(); seed(repo);
   const s = renderStatus(assemble(repo, { now: NOW }));

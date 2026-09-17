@@ -23,7 +23,7 @@ node .claude/skills/delivery-metrics/scripts/delivery.mjs report [--json] [--sin
 ```
 
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.
-Design: `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.
+Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.
 
 ## Telemetry mode
 

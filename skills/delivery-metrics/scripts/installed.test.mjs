@@ -31,12 +31,9 @@ for (const factory of ['feature-development', 'test-automation']) for (const [ta
     const skill = join(consumer, dir, 'skills', 'delivery-metrics');
     assert.ok(existsSync(join(skill, 'references', 'factory-roles.json')));
     const cli = (...args) => execFileSync('node', [join(skill, 'scripts/delivery.mjs'), ...args], { cwd: consumer, env: { ...env, CLAUDE_PROJECT_DIR: consumer }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    // `doctor` intentionally exits 1 whenever it isn't fully `ok` (delivery.mjs cmdDoctor
-    // `return d.ok ? 0 : 1`, confirmed by install-hooks.test.mjs's "doctor exits 1 when not ok"
-    // case) — this fixture never runs install-hooks.mjs and the consumer dir isn't a git repo,
-    // so `doctor` is never `ok` here. `cliTolerant` still captures and returns stdout on a
-    // nonzero exit instead of throwing, so the diagnostic text itself can still be asserted on.
-    const cliTolerant = (...args) => { try { return cli(...args); } catch (e) { return e.stdout ?? ''; } };
+    // Review fix (spec §6.5/D21): `doctor` always exits 0 now, `ok` is purely informational — plain
+    // `cli(...)` works here even though this fixture never runs install-hooks.mjs and the consumer
+    // dir isn't a git repo (so doctor prints `doctor: attention`, never a nonzero exit).
     const block = { campaign_id: 'smoke', run_id: 'r1', version: 1, factory, observation_start: '2026-09-14T00:00:00Z', source_epoch: { from: '2026-09-14T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'smoke' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-001' }] }] };
     writeFileSync(join(consumer, 'plan.json'), JSON.stringify(block));
     assert.match(cli('plan', 'register', '--from', 'plan.json', '--id', 'r', '--created-at', '2026-09-14T00:00:00Z'), /PLAN smoke\/r1/);
@@ -49,6 +46,6 @@ for (const factory of ['feature-development', 'test-automation']) for (const [ta
     cli('event', 'TASK-001', 'done', '--id', 'f', '--at', '2026-09-14T11:00:00Z');
     const report = JSON.parse(cli('report', '--json', '--cutoff', '2026-09-17T00:00:00Z'));
     assert.equal(report.plans[0].metrics.flow.task.strata.all.cycle_time.min, 7200);
-    assert.match(cliTolerant('doctor'), /plans: 1 open/);
+    assert.match(cli('doctor'), /plans: 1 open/);
   });
 }

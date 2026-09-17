@@ -130,7 +130,9 @@ test('computeMetrics: velocity over whole covered weeks; overlap; filters; lates
   const plan = { run: 'p', observation_start: '2026-08-31T00:00:00Z', items: [...items.values()] };
   const d = computeMetrics({ items, plan, since: '2026-08-31T00:00:00Z', end: '2026-09-28T00:00:00Z', profile: PROFILE });
   assert.deepEqual(d.throughput.task.weeks.map((w) => [w.key, w.count, w.whole]), [['2026-W36', 0, true], ['2026-W37', 7, true], ['2026-W38', 0, true], ['2026-W39', 0, true]]);
-  assert.deepEqual(d.throughput.task.velocity, { median: 0, mean: 1.75, whole_weeks: 4 });
+  // Review fix (minor): velocity carries `median`/`whole_weeks` only — `mean` was dropped as an
+  // unreported, unconsumed field.
+  assert.deepEqual(d.throughput.task.velocity, { median: 0, whole_weeks: 4 });
   assert.deepEqual(d.mission_turnaround.pairs, [{ from: 'm1', to: 'm2', gap_s: null, overlap_s: 120 * H }]);
   const late = computeMetrics({ items, plan: { ...plan, observation_start: '2026-09-08T00:00:00Z' }, since: '2026-08-31T00:00:00Z', end: '2026-09-28T00:00:00Z', profile: PROFILE });
   assert.deepEqual(late.throughput.task.weeks.map((w) => [w.key, w.whole]), [['2026-W36', false], ['2026-W37', false], ['2026-W38', true], ['2026-W39', true]]);

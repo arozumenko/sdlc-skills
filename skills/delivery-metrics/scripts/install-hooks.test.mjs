@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installClaude, installIgnoreBlocks, doctorReport, bootstrapTelemetry, MARKER } from './install-hooks.mjs';
 import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
+import { runPath, sessionPath, sessionsDir } from './lib/paths.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./install-hooks.mjs', import.meta.url));
 const DELIVERY = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
@@ -54,6 +55,12 @@ test('bootstrapTelemetry: creates the self-referential submodule on the telemetr
   assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.git'))); assert.equal(g(repo, 'rev-parse', '--verify', 'refs/heads/telemetry').length, 40);
   assert.match(readFileSync(join(repo, '.gitmodules'), 'utf8'), /ignore = all/); assert.equal(g(join(repo, '.agents', 'telemetry'), 'branch', '--show-current'), 'telemetry');
   assert.ok(existsSync(join(repo, '.agents', 'telemetry', 'delivery', 'events-u.jsonl')), 'interim file restored'); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.gitignore')));
+  // Review fix: the inner .gitignore also seeds tokenomics' four base transient lines (plain,
+  // outside our managed block) so a delivery-metrics-only install still ignores tokenomics'
+  // transients, alongside our own managed block.
+  const innerGi = readFileSync(join(repo, '.agents', 'telemetry', '.gitignore'), 'utf8');
+  for (const l of ['*/live/', '*/scopes/.pending-*', '*/scopes/.nagged-*', '*/scopes/.unclosed-*']) assert.ok(innerGi.split('\n').includes(l), `missing tokenomics base line ${l}`);
+  assert.match(innerGi, /# >>> delivery-metrics \(managed\)[\s\S]*\/delivery\/reports\/[\s\S]*# <<< delivery-metrics/, 'our own managed block also present');
   assert.equal(bootstrapTelemetry(repo).status, 'already');
   assert.equal(bootstrapTelemetry(mkdtempSync(join(tmpdir(), 'nogit-'))).status, 'no-git');
 });
@@ -130,17 +137,20 @@ test('installClaude --remove never creates settings.json (or settings.local.json
   assert.equal(existsSync(localFile), false);
 });
 
-test('doctor exits 1 when not ok, 0 when ok — both the standalone script and `delivery.mjs doctor`', () => {
+// Review fix (spec §6.5/D21): doctor always exits 0, whether or not it is `ok` — `ok` is purely
+// informational, surfaced as the trailing `doctor: ok`/`doctor: attention` line. This replaces the
+// earlier "doctor exits 1 when not ok" contract.
+test('doctor always exits 0, not ok — both the standalone script and `delivery.mjs doctor` — with an informational doctor: ok/attention line', () => {
   const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
-  let code = 0; try { execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { code = e.status; }
-  assert.equal(code, 1);
-  let dCode = 0; try { execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { dCode = e.status; }
-  assert.equal(dCode, 1);
+  const notOk = execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.match(notOk, /doctor: attention/);
+  const dNotOk = execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.match(dNotOk, /doctor: attention/);
   execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
-  let okCode = 0; try { execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } }); } catch (e) { okCode = e.status; }
-  assert.equal(okCode, 0);
-  let dOkCode = 0; try { execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } }); } catch (e) { dOkCode = e.status; }
-  assert.equal(dOkCode, 0);
+  const okOut = execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.match(okOut, /doctor: ok/);
+  const dOkOut = execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.match(dOkOut, /doctor: ok/);
 });
 
 test('doctorReport: git-state surfaces a dirty telemetry tree without touching it (no unmerged/merging state exercised here)', () => {
@@ -154,6 +164,37 @@ test('doctorReport: git-state surfaces a dirty telemetry tree without touching i
   // staged-and-unstaged 'MM', and not committed away) proves doctor read but never touched it.
   assert.equal(g(tel, 'status', '--porcelain'), 'M README.md', 'doctor must never stage/commit/discard — dirty state left exactly as found');
   assert.equal(g(tel, 'diff', '--cached'), '', 'doctor must never stage the dirty file');
+});
+
+test('doctorReport: per-open-run roster validity (tampered map_sha256 → INVALID) and per-session ok/closed/missing lines', () => {
+  const repo = tmp();
+  const cli = (...args) => execFileSync('node', [DELIVERY, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo, DELIVERY_NO_SYNC: '1' } });
+  const block = (runId, ref) => ({ campaign_id: 'sec', run_id: runId, version: 1, factory: 'feature-development', observation_start: '2026-09-14T00:00:00Z', source_epoch: { from: '2026-09-14T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'sec' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref }] }] });
+  const write = (name, obj) => { writeFileSync(join(repo, name), `\`\`\`json delivery-plan\n${JSON.stringify(obj)}\n\`\`\`\n`); return name; };
+  cli('plan', 'register', '--from', write('p1.md', block('run-1', 'TASK-001')), '--id', 'reg-1', '--created-at', '2026-09-14T00:00:00Z');
+  cli('plan', 'register', '--from', write('p2.md', block('run-2', 'TASK-002')), '--id', 'reg-2', '--created-at', '2026-09-14T00:00:00Z');
+  cli('session', 'set', '--host', 'claude', '--session', 's1', '--plan', 'sec/run-1');
+  cli('session', 'set', '--host', 'claude', '--session', 's2', '--plan', 'sec/run-2');
+  // A session file can name a plan that no longer resolves (e.g. an orphaned/hand-edited file) —
+  // `session set` itself always validates the plan exists, so this is written directly.
+  mkdirSync(sessionsDir(repo), { recursive: true });
+  writeFileSync(sessionPath(repo, 'claude', 'ghost'), `${JSON.stringify({ host: 'claude', session: 'ghost', plan: 'sec/does-not-exist', at: '2026-09-14T00:00:00.000Z' })}\n`);
+  cli('plan', 'close', '--plan', 'sec/run-2');
+  // Tamper run-1's saved roster snapshot — a stale/hand-edited `map_sha256` must be caught by
+  // `validRoster`, not silently trusted.
+  const runFile = runPath(repo, 'sec/run-1');
+  const rec = JSON.parse(readFileSync(runFile, 'utf8'));
+  rec.roster = { ...rec.roster, map_sha256: 'deadbeef'.repeat(8) };
+  writeFileSync(runFile, `${JSON.stringify(rec, null, 2)}\n`);
+  const d = doctorReport(repo, REL);
+  assert.ok(d.lines.some((l) => /^roster: sec\/run-1 INVALID \(refresh with plan roster\)$/.test(l)), d.lines.join('\n'));
+  // run-2 is closed, so it no longer appears in the open-run roster check.
+  assert.ok(!d.lines.some((l) => l.startsWith('roster: sec/run-2 ')));
+  assert.ok(d.lines.some((l) => l === 'session: claude:s1 -> sec/run-1 ok'), d.lines.join('\n'));
+  assert.ok(d.lines.some((l) => l === 'session: claude:s2 -> sec/run-2 closed'), d.lines.join('\n'));
+  assert.ok(d.lines.some((l) => l === 'session: claude:ghost -> sec/does-not-exist missing'), d.lines.join('\n'));
+  assert.equal(d.ok, false);
+  assert.match(d.lines.join('\n'), /doctor: attention/);
 });
 
 test('script: --host copilot exits 2 UNSUPPORTED-HOST; default installs and prints INSTALLED', () => {

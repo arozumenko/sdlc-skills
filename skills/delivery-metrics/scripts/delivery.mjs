@@ -4,7 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, makeObservation, resolveObservations } from './lib/events.mjs';
+import { EVENTS, appendObservation, factKey, makeObservation, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
@@ -207,6 +207,29 @@ function buildEvent(repo, run, item, ev, f, token, now) {
     source_record_id: token, at, revision, status: f.status ?? 'active', raw: f.raw ?? null, meta }, { now });
 }
 
+/** CONFLICT guard (spec §6.5/D21): two DIFFERENT tokens (different observation_id) at the same
+ * source rank — in M1 the CLI only ever writes `source: 'cli'`, so "same source rank" collapses to
+ * "another active cli record" — both claiming the same occurrence (plan, item_id, transition_id,
+ * basis) but disagreeing on the facts that matter (`factKey`, which folds in `at`) is a genuine
+ * disagreement between equal-priority evidence: neither can silently win, so it is rejected rather
+ * than written. A *correction* (`--revision >= n` against the SAME token/observation_id) is
+ * deliberately excluded — that is the documented way to resolve this, not another instance of it.
+ * Equivalent facts recorded twice under different tokens (e.g. two teammates both reporting the
+ * same `done` at the same instant) are NOT a disagreement and are allowed to coalesce.
+ *
+ * M1's `done`/`cancelled`/`reopened` transition_id is always the literal `.../episode-1` — it does
+ * NOT vary per reopen episode — so a later episode's `done` legitimately reuses the exact same
+ * occurrence key as an earlier episode's `done` (see F11/deferred-episode) without being a
+ * disagreement about the SAME fact. `history` (the item's own sorted done/cancelled/reopened
+ * history) lets us tell those apart: two records only conflict when they fall in the same episode
+ * (no `reopened` between them) — across a reopen they are, by construction, different episodes. */
+function conflictingRecord(activeList, rec, history) {
+  const episodeOf = (at) => history.filter((h) => h.event === 'reopened' && h.at <= at).length;
+  const episode = episodeOf(rec.at);
+  return activeList.find((o) => o.source === rec.source && o.plan === rec.plan && o.item_id === rec.item_id && o.transition_id === rec.transition_id
+    && o.basis === rec.basis && o.observation_id !== rec.observation_id && episodeOf(o.at) === episode && factKey(o) !== factKey(rec)) ?? null;
+}
+
 function cmdEvent(repo, p, io, now) {
   const run = resolveRun(repo, p.flags.plan);
   const { active } = resolveObservations(repo);
@@ -214,18 +237,26 @@ function cmdEvent(repo, p, io, now) {
   // SAME batch, not just the pre-batch ledger snapshot. Accumulate per-item history as rows succeed.
   const historyByItem = new Map();
   const historyFor = (item) => { if (!historyByItem.has(item.item_id)) historyByItem.set(item.item_id, itemHistory(active, item)); return historyByItem.get(item.item_id); };
+  // The CONFLICT guard reads a live snapshot too — a batch row must see conflicts against rows
+  // appended earlier in the SAME batch, not just the pre-batch ledger.
+  const seenActive = [...active];
   const one = (ref, ev, f, token) => {
     const item = resolveRef(run, ref, { allowCancelled: Boolean(f['allow-cancelled']) });
     const rec = buildEvent(repo, run, item, ev, f, token, now);
-    // F10.2: corrections (--revision >= 1) still run validateTransition — a correction that merely
-    // re-affirms the same event is "the same occurrence" and passes; a correction that would smuggle
-    // in a genuinely different transition is still rejected.
-    if (rec.status === 'active') { const why = validateTransition(historyFor(item), ev); if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`); }
+    if (rec.status === 'active') {
+      // F10.2: corrections (--revision >= 1) still run validateTransition — a correction that merely
+      // re-affirms the same event is "the same occurrence" and passes; a correction that would smuggle
+      // in a genuinely different transition is still rejected.
+      const why = validateTransition(historyFor(item), ev); if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`);
+      const conflict = conflictingRecord(seenActive, rec, historyFor(item));
+      if (conflict) throw cliError('CONFLICT', `${ref} ${ev}: an equal-priority record disagrees (${conflict.observation_id} rev ${conflict.revision}); record a correction with --revision or retract it`);
+    }
     const res = appendObservation(repo, rec, { now });
     // Minor (a): re-sort after every push so a batch's rows fold in timeline order even when the
     // input file lists them out of chronological order (historyFor returns the live array reference,
     // so sorting in place keeps every later lookup for this item consistent).
     if (res.result === 'EVENT' && TERMINAL_HISTORY_EVENTS.includes(ev)) { const h = historyFor(item); h.push({ event: ev, at: rec.at }); h.sort((a, b) => a.at.localeCompare(b.at)); }
+    if (res.result === 'EVENT') seenActive.push(rec);
     out(io, `${res.result} ${res.observation_id} ${rec.at}`);
     return res;
   };
@@ -369,10 +400,12 @@ function cmdBackfill(repo, p, io, now) {
   return 0;
 }
 
+// Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, surfaced as the
+// final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io) {
   const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)));
   for (const l of d.lines) out(io, l);
-  return d.ok ? 0 : 1;
+  return 0;
 }
 
 export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };

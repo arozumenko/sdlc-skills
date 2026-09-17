@@ -105,7 +105,9 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
       excluded: ex };
     const counts = weeks.map((w) => ({ key: w.key, count: throughputDone.filter((i) => i.done_at >= w.start && i.done_at < w.end).length, whole: w.whole, covered: w.covered }));
     const whole = counts.filter((w) => w.whole).map((w) => w.count); let velocity = null, caveat = null;
-    if (whole.length >= minWeeks) velocity = { median: nearestRank([...whole].sort((a, b) => a - b), 0.5), mean: Math.round((whole.reduce((a, b) => a + b, 0) / whole.length) * 100) / 100, whole_weeks: whole.length };
+    // Minor fix: `mean` dropped — median is the only reported central tendency (a mean of small
+    // whole-week counts is easily skewed by one outlier week and was never rendered/consumed).
+    if (whole.length >= minWeeks) velocity = { median: nearestRank([...whole].sort((a, b) => a - b), 0.5), whole_weeks: whole.length };
     else { caveat = `velocity(${level}): ${whole.length} whole weeks < ${minWeeks} — null`; caveats.push(caveat); }
     data.throughput[level] = { weeks: counts, velocity, caveat };
     data.wip[level] = lvAll.filter((i) => i.state === 'in_progress' && !i.cancelled_in_plan).length;

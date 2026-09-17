@@ -151,7 +151,11 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
       else if (allTerminal && (explicit || level === 'campaign')) { it.state = 'done'; it.done_at = [explicit?.at, lastTerminal, it.membership_since].filter(Boolean).sort().pop(); it.done_basis = explicit ? explicit.basis : 'derived-child'; it.done_sha = explicit?.meta?.git_sha ?? null; }
       else if (allTerminal) { it.flags.push('awaiting-landing'); it.state = 'in_progress'; counts.awaitingLanding++; }
       else if (explicit) { it.flags.push('PARENT-INCOMPLETE'); it.state = 'in_progress'; it.done_at = null; counts.parentIncomplete++; }
-      else if (it.state === 'planned' && (starts.length || kids.some((k) => k.seen))) it.state = 'in_progress';
+      // Review fix: `kids.some((k) => k.seen)` fired on a bare `created`-only occurrence (`seen` is
+      // set the moment ANY occurrence lands, not just a non-planned one) and wrongly promoted a
+      // register-only parent to `in_progress`. Promotion now requires real progress — an observed
+      // descendant start, or a child that has itself moved past `planned` (in_progress/done/cancelled).
+      else if (it.state === 'planned' && (starts.length > 0 || kids.some((k) => k.state !== 'planned'))) it.state = 'in_progress';
       if (s.cancelled > 0 && s.done > 0) it.flags.push('partial-cancelled');
       if (it.state !== 'planned') it.seen = true;
     }

@@ -15,6 +15,12 @@ that are **not** computed yet (M2+).
 | `commit_to_done` | `first_commit` | `done` | seconds internal, hours rendered | measurable items with **no** observed dispatch start (dispatch missing → this is the fallback clock) |
 | `lead_time` | `created` | `done` | seconds internal, hours rendered | measurable items with a `created_at`, excluding the retrospective-plan-proxy case below |
 
+`lead_time` is labelled **"plan-tracked, not idea-to-done"** everywhere it is surfaced — both
+beside every `lead_time` row in the Markdown report and as `envelope.policy.labels.lead_time` in
+the JSON export (`report.mjs`). `created_at` is the plan's own registration/backfill clock, not
+when the idea for the work first existed — the label keeps a reader from over-reading it as a
+true idea-to-done duration.
+
 All four are grouped per level (`campaign\|mission\|task\|case`) into strata — `all` plus one
 stratum per `class` value actually present in the completed cohort (`strata.<class>`), via
 `stats()`.
@@ -102,7 +108,9 @@ parked; `envelope.sources.tokenomics` always reads `"absent"`.
 
 ## M2+ (described in the design spec, not landed)
 
-- `time_to_merge` / `time_in_review` (PR-mode backfill)
+- `time_to_merge` / `time_in_review` (PR-mode backfill) — `time_to_merge` already carries its
+  label, `envelope.policy.labels.time_to_merge` = **"PR open to merge — not lead time, not cycle
+  time"**, even though the metric itself is not computed until this lands
 - `time_blocked` (derives `blocked`/`unblocked` into clipped intervals — M1 records the events
   but does not derive state from them, see `references/event-model.md`)
 - `work_item_age` / `reopened_age` / `history_age` / `reopen_cycle_time`

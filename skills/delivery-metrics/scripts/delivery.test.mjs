@@ -87,6 +87,22 @@ test('plan register: schema error → SCHEMA-INVALID; markdown import prints blo
   assert.equal(yes.code, 0, yes.stderr); assert.match(yes.stdout, /unestimated=3/);
 });
 
+test('review fix: a freshly registered plan (created events only, no dispatch) never promotes mission/campaign to in_progress', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const r = run(repo, ['report', '--json']);
+  assert.equal(r.code, 0, r.stderr);
+  const doc = JSON.parse(r.stdout);
+  const items = doc.plans[0].items;
+  for (const i of items.filter((i) => i.level !== 'task')) assert.equal(i.state, 'planned', `${i.ref} (${i.level}) should stay planned on bare registration`);
+  assert.equal(doc.plans[0].metrics.wip.mission, 0);
+  assert.equal(doc.plans[0].metrics.wip.campaign, 0);
+  const status = run(repo, ['status']);
+  assert.equal(status.code, 0, status.stderr);
+  assert.doesNotMatch(status.stdout, /mission: done=\d+ in_progress=[1-9]/);
+  assert.ok(!/open G1/.test(status.stdout), 'no open mission listed');
+});
+
 test('event: --sha clock, SKIP, correction via --revision, at/sha disagreement, transition validation, errors are exit 2/3 never INTERNAL', () => {
   const repo = initRepo();
   run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
@@ -108,6 +124,23 @@ test('event: --sha clock, SKIP, correction via --revision, at/sha disagreement, 
   const empty = initRepo(); const np = run(empty, ['event', 'TASK-1', 'done', '--id', 'z']); assert.equal(np.code, 3); assert.match(np.stderr, /^NO-PLAN/);
   mkdirSync(join(deliveryDir(repo), '.lock'), { recursive: true });
   const busy = run(repo, ['event', 'TASK-002', 'dispatched', '--id', 'l1']); assert.equal(busy.code, 2); assert.match(busy.stderr, /^LOCK-BUSY/);
+});
+
+test('event: CLI CONFLICT guard — two equal-rank cli records disagreeing on the same occurrence are rejected (ledger unchanged); equivalent facts under a different token still coalesce', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const a = run(repo, ['event', 'TASK-001', 'done', '--id', 'A', '--at', '2026-09-16T11:00:00Z']);
+  assert.equal(a.code, 0, a.stderr);
+  const b = run(repo, ['event', 'TASK-001', 'done', '--id', 'B', '--at', '2026-09-16T12:00:00Z']);
+  assert.equal(b.code, 2);
+  assert.match(b.stderr, /^CONFLICT\(TASK-001 done: an equal-priority record disagrees \(cli:A:sec%2Frun-1%2Ftask-task-001:done rev 0\); record a correction with --revision or retract it\)/);
+  const afterConflict = resolveObservations(repo).active.filter((o) => o.event === 'done');
+  assert.equal(afterConflict.length, 1, 'the conflicting record was never appended — ledger unchanged');
+  assert.equal(afterConflict[0].at, '2026-09-16T11:00:00.000Z');
+  const c = run(repo, ['event', 'TASK-001', 'done', '--id', 'C', '--at', '2026-09-16T11:00:00Z']);
+  assert.equal(c.code, 0, c.stderr, 'same at as token A, different token — equivalent facts coalesce, allowed');
+  assert.match(c.stdout, /^EVENT/);
+  assert.equal(resolveObservations(repo).active.filter((o) => o.event === 'done').length, 2, 'A and C are both recorded as separate observations of the identical fact');
 });
 
 test('validateTransition rules', () => {

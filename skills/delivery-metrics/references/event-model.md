@@ -45,7 +45,7 @@ counted, and deferred.
 | `estimated` | `plan register` | appends to `estimates[]`; `estimate_original`/`estimate_latest` derive from it |
 | `dispatched` | CLI `event`, Claude hook | `dispatch_count++`; only `basis: observed` can set `started_at` (task level, `stage` build/none); any other basis counts as `proxy_dispatches`; `planned → in_progress` |
 | `first_commit` | CLI `event`, `backfill --git` | sets `first_commit_at`; `planned → in_progress` |
-| `done` | CLI `event`, `backfill --git`, hook (mission/campaign explicit landing) | task: sets `done_at`/`done_basis`/`done_sha`, state → `done`; non-task: only `basis: observed` counts as landing evidence (`landing_at`) |
+| `done` | CLI `event`, `backfill --git` (the hook only ever emits `dispatched`/`dispatch_ended`/`rework_observed` — never `done`) | task: sets `done_at`/`done_basis`/`done_sha`, state → `done`; non-task: only `basis: observed` counts as landing evidence (`landing_at`) |
 | `cancelled` | CLI `event`, `plan register` (scope removal) | sets `cancelled_at`, state → `cancelled` (unless already `done` without a later `reopened` — then `invalid-chain`) |
 | `reopened` | CLI `event`, `plan register` (scope re-addition) | flags `deferred-episode`, opens a new episode |
 | `rework_observed` | Claude hook (`stage: fix`), `backfill --git` (`address review` commits) | `rework_count++` — activity/quality proxy, never a state transition |
