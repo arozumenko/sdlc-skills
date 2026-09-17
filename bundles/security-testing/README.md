@@ -14,11 +14,11 @@ rotates or fixes anything.
 unknown or active effect into a *proposal* — a document outside `tasks/`,
 never a runnable case.
 
-**This release is M1.** One agent and three skills ship; the threat-modeler
-(M2), the lead, the planning skill and the register prose (M3) follow. Every
-script already lives in `security-evidence`, so the M1 install and the
-two-skill standalone install run the full command set except the
-threat-model and planning commands.
+**v1 ships the full team** (spec §3 D1, §4): three agents — `security-lead`,
+`threat-modeler`, `security-reviewer` — and six skills. Every script lives in
+`security-evidence`, so any install that includes it runs every command; the
+two-skill standalone install (no agents) runs the full command set except
+the threat-model and planning commands, which need their agents.
 
 ## Install
 
@@ -28,12 +28,13 @@ Full bundle:
 npx github:arozumenko/sdlc-skills init --factory security-testing
 ```
 
-Installs `security-reviewer` into the host's agent directory, the three
-local skills plus `memory` and `knowledge-curation` (monorepo skills, no
-network), seeds `.agents/security-testing/knowledge/` (the engagement
-template, the human reading of the finding schema, the report reading
-guide), seeds the reviewer's `project_briefing.md`, and splices a
-**role-scoped** block into `AGENTS.md` / `CLAUDE.md` inside
+Installs the three agents into the host's agent directory, the six local
+skills plus `memory` and `knowledge-curation` (monorepo skills, no network)
+and the two externals the agents declare on demand (`systematic-debugging`,
+`dispatching-parallel-agents`), seeds `.agents/security-testing/knowledge/`
+(the engagement template, the human reading of the finding schema, the
+report reading guide), seeds one `project_briefing.md` per role, and splices
+a **role-scoped** block into `AGENTS.md` / `CLAUDE.md` inside
 `<!-- FACTORY:security-testing -->` markers — it binds only this bundle's
 roles. The bundle declares no hooks (D4); the installer's core context hooks
 install as they do for every bundle and are outside this bundle's control.
@@ -49,14 +50,16 @@ engagement init` writes the knowledge templates itself when the seeded
 copies are absent (D12). See [Standalone review](#standalone-review-human-driven)
 for the exact sequence.
 
-## Roster (M1)
+## Roster
 
 | Role | Model | Does | `skills:` | `skills-on-demand:` |
 |---|---|---|---|---|
+| `security-lead` | sonnet | Orchestrator, the only human-facing role. `engagement init`; the `assess` / `verify` / `tracker` / `accept` flows; dispatches the specialists; `build-report`; `sign-off`; `publish` to the tracker with a read-back; prints the hand-off prompts and stops; proposes acceptances. | `memory`, `security-engagement` | `risk-register`, `security-evidence`, `issue-tracking`, `dispatching-parallel-agents`, `verifying-outcomes` |
+| `threat-modeler` | opus | Code-derived DFD with a citation per element; STRIDE per element; mitigations as claims for a separate `mitigation-review`; one disposition per threat. Returns `MODEL_WRITTEN elements=<n> threats=<n> undisposed=<n>` only on `tm-lint check` exit 0. | `memory`, `threat-modeling` | `security-test-planning`, `security-evidence`, `gathering-context`, `deep-research` |
 | `security-reviewer` | sonnet | Four contracts, each a fresh dispatch over one packet: `review` (claims over a scope packet), `vulnerability-review`, `mitigation-review`, `fix-review` (an assertion over a subject packet). Writes claims and assertions; the scripts derive ids, states and verdicts. | `memory`, `secure-code-review` | `security-evidence`, `systematic-debugging` |
 
-M2 adds `threat-modeler` (opus); M3 adds `security-lead` (sonnet), the only
-human-facing role.
+Every agent writes assertions, never states, verdicts, ids or gate stamps;
+none merges, closes, rotates or fixes.
 
 ## Skills
 
@@ -65,6 +68,9 @@ human-facing role.
 | `security-evidence` | **Every script and schema.** `evidence.mjs` (`engagement init\|validate\|baseline`, `run init`, `run snapshot`, `scope`, `packet`, `ingest <kind>`, `gate`, `coverage`, `receipt`, `build-report`, `check`, `check-export`, `publish`, `sign-off`, `purge`), `verify.mjs all`, `register.mjs`, `tm-lint.mjs`, `plan.mjs`, plus `canon.mjs`, `normalize.mjs`, `redact.mjs`; the JSON schemas; the report templates with their required-inputs lists. Its `SKILL.md` is the command index. |
 | `secure-code-review` | Prose for the reviewer: investigate-then-refute loop, the fifteen-class taxonomy with CWE anchors, refutation criteria, do-not-flag list, typed citations, the closed assertion vocabularies, the human-driven standalone sequence; fixtures and the frozen eval harness. |
 | `security-engagement` | Prose for the lead: engagement record, stand-down check, assess → plan → review → verify workflow, sign-off checklist, tracker rules (two dedupe layers), disclosure profiles. No scripts of its own. |
+| `threat-modeling` | Prose for the threat-modeler: code-derived DFD with a citation per element, STRIDE per element, mitigations as claims, one disposition per threat; `tm-lint.mjs check \| render` lives in `security-evidence`. |
+| `security-test-planning` | Prose for the lead and the threat-modeler: passive security cases in the manual-qa format, the passive-admission grammar (admitted by lint or by review, unknown effects ⇒ proposal), proposals for active work outside `tasks/`; `plan.mjs admit \| propose \| ta-prompt` lives in `security-evidence`. |
+| `risk-register` | Prose for the lead: register rows for findings and threats, unauthenticated acceptances and revocations, false-positive closes, supersession, the anchor a consumer can verify, the rendered `risk-register.md` view; `register.mjs` lives in `security-evidence`. |
 
 ## How a review flows
 
@@ -79,9 +85,11 @@ packet --kind subject → one gated finding for a fresh `vulnerability-review` d
 build-report     → report.md + manifest.json + COMMITTED, last
 check            → recomputes every derived value from the recorded inputs, byte-compares the report
 verify.mjs all   → fix verification in an OS temp worktree: tests from a validated test-start snapshot, suppression indicators, fix-review packet → VERDICT
-register.mjs     → residual-risk register: append-only log, replayed projection, anchor, unauthenticated approvals
-sign-off         → walks the ledger, checks every COMMITTED run, lists changes since baseline
-publish --profile → the only path out of .agents/security-testing/: redacted-report | full-report | tracker payload
+tm-lint.mjs check|render → the threat-modeler's model validated and snapshotted into the run with its dispositions index (assessment runs)
+plan.mjs admit|propose|ta-prompt → passive cases admitted by lint or by review; active work as a proposal outside tasks/; the test-automation prompt
+register.mjs     → residual-risk register: append-only log, replayed projection, anchor, unauthenticated approvals, `ticketed` from the tracker read-back
+sign-off         → walks the ledger, checks every COMMITTED run, applies the disposition policy, lists changes since baseline and unadmitted suite files
+publish --profile → the only path out of .agents/security-testing/: redacted-report | full-report | tracker payload | case (the admitted suite) | handoff (the manual-qa prompt)
 ```
 
 Consumer state lives under `.agents/security-testing/` (a managed
@@ -105,7 +113,7 @@ is outside every script row (see [Not guaranteed](#not-guaranteed)).
 | **Integrity against the recorded snapshot and drift against the current tree**, at citation and scope level: every citation is re-read at its recorded `base_oid` / `head_oid`; `side: snapshot` citations (dirty files in `review` runs only) revalidate against the original only while the working file still matches the recorded HMAC, else `CONSISTENT-REDACTED-ONLY`; drift prints `CURRENT`, `CITATION-DRIFTED(n)` or `SCOPE-DRIFTED(n files)`. | script — `evidence.mjs check --integrity --drift`, `lib/cite.mjs` | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; assessment runs cite a clean tree at `head_oid` (`3 DIRTY-TREE` otherwise) |
 | **Tests execute from a validated test-start snapshot.** `verify.mjs all` checks out the fix's `head` in an OS temp worktree, installs dependencies, compares the tree to `head_oid` after installation, fails the run on tracked changes unless the operator record allows them (then the verdict names the derived `tested_tree`, not `head_oid`), and runs only the argv from `engagement.md`. The verdict is script-emitted: `VERDICT <token> finding=… base=… head=… tested_tree=… verify=…`. | script — `verify.mjs all`, `lib/verify-steps.mjs`, `lib/evaluate.mjs` | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; `VERIFIED` requires an applied `not-refound` fix-review receipt, and a suppression indicator without an `ack` keeps the verdict `UNVERIFIED-SUPPRESSION` |
 | **Bounded redaction before any persistence, including under `private/`.** No artifact this bundle writes contains original bytes that match a redaction rule; reconstruction needs are met with redacted bytes plus keyed HMACs of the originals (read → HMAC → redact → persist). **No publishable artifact carries a plain hash whose preimage contains protected content**: identity is keyed with the engagement key whenever the cited content matches a rule, regardless of finding class. The guarantee is bounded to the rule list in `references/redaction-rules.json` (versioned; every record names the `redaction_version` it used). | script — `redact.mjs` through `canon.writeArtifact`, `lib/imports.mjs`, `evidence.mjs gate` (keyed ids) | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; bounded to the rule list — secrets outside it are not detected |
-| **Only admitted cases are written to the hand-off suite**, `tasks/security-<slug>-admitted/`, a directory that contains nothing else. Admission is by effect (`admitted-heuristic` by lint, `admitted-reviewed` by a `confirmed` vulnerability-review receipt); unknown effects become proposals outside `tasks/`. `sign-off` compares the suite's hash against the admission records and lists anything placed there by hand as unadmitted. | script — `plan.mjs admit`, `evidence.mjs publish --profile case`, `evidence.mjs sign-off` (M3; the M1 scripts print `NOT-IMPLEMENTED(M3)` and `UNADMITTED: not evaluated`) | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; "admitted by lint or by review", never "safe" |
+| **Only admitted cases are written to the hand-off suite**, `tasks/security-<slug>-admitted/`, a directory that contains nothing else. Admission is by effect (`admitted-heuristic` by lint, `admitted-reviewed` by a `confirmed` vulnerability-review receipt); unknown effects become proposals outside `tasks/`. `publish --profile case` writes only files with an `admitted-*` record and records each file's identity in its export manifest; `sign-off` compares every file in the suite against the identities `publish --profile case` recorded and lists anything else — placed there by hand, or edited since — as `UNADMITTED: <n>` with one path per line. | script — `plan.mjs admit`, `evidence.mjs publish --profile case`, `evidence.mjs sign-off` | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; "admitted by lint or by review", never "safe" |
 | **Every approval-like record is stored and reported as unauthenticated.** `accept`, `revoke` and `close-false-positive` store `{recorded_by, approved_by, approval_ref, authenticated: false}`; there is no `confirm` verb, no confirmed state, and no approval reduces open exposure in `status`. | script — `register.mjs accept \| revoke \| close-false-positive`, `lib/register-transitions.mjs`, `lib/schema.mjs` (grep-guarded) | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; the register chain is replayed and anchored (`anchor verify` → `MATCH \| TRUNCATED \| DIVERGED`) |
 | **Per-path observation of working-tree changes** between `engagement init` and `sign-off` for tracked files and non-ignored untracked files under `scope_paths ∪ product_paths`; the count of ignored files under those paths is recorded so the excluded coverage is visible. | script — `evidence.mjs engagement init` / `engagement baseline` (`lib/baseline.mjs`), `evidence.mjs sign-off` (per-path listing) | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; observation only — no attribution of a change to a role, no view of git-ignored files |
 | **Tracker publication, first dedupe layer.** `publish --profile tracker` writes a validated, redacted payload per finding (`handoffs/<finding_id>.ticket.json`) and dedupes against the register and prior imports; `ingest tracker-readback` records the tracker's response and emits `ticketed`. The scripts have no tracker access. | script — `evidence.mjs publish --profile tracker`, `evidence.mjs ingest tracker-readback` | for runs carrying a `COMMITTED` marker produced by the canonical pipeline; dedupe has **two layers** — the script's, against the register and imports, and the lead's search of the live tracker by fingerprint through the `issue-tracking` skill before posting — and **only the first layer is promised** |
@@ -225,16 +233,20 @@ it shows went through `gate`, and `check` can recompute it.
 
 ## Hand-offs
 
-- **manual-qa** (M3): admitted cases are written to a dedicated suite
-  `tasks/security-<slug>-admitted/` in manual-qa's `TC-*.md` format
-  (priority map p0 → critical … p3 → low). The prompt to `test-run-lead` is
-  printed by `publish --profile handoff`; results return through
-  `ingest qa-run` as observations. Mitigation decisions are separate
+- **manual-qa**: admitted cases are written by `publish --profile case` to a
+  dedicated suite `tasks/security-<slug>-admitted/` in manual-qa's `TC-*.md`
+  format (priority map p0 → critical … p3 → low; header/cookie checks via
+  the audit branch). The prompt to `test-run-lead` is printed by
+  `publish --profile handoff`; results return through `ingest qa-run` as
+  observations (`OBSERVATION <O-id> case=<id> result=…`, one per result row
+  whose case has an admitted record). Mitigation decisions are separate
   `mitigation-review` receipts citing observations.
-- **test-automation** (M3): a prompt with the admitted cases, `slug` and
-  `base`; `ingest ta-report` records per unit outcome, coverage, exclusions
-  and findings; `delivered` without a gate receipt is recorded as
-  `delivered-unwitnessed`.
+- **test-automation**: `plan.mjs ta-prompt` prints the prompt with the
+  admitted cases, `slug` and `base` from the published suite; `ingest
+  ta-report` records per unit outcome, coverage, exclusions and findings;
+  `delivered` without a gate receipt is recorded as `delivered-unwitnessed`.
+  Both QA bundles carry a receiving-side `docs/execution-authorization.md`
+  note.
 - **Tracker.** `publish --profile tracker` produces the validated, redacted
   payload file; the lead posts it through the `issue-tracking` skill after
   searching the live tracker by fingerprint, then `ingest tracker-readback`
@@ -256,14 +268,17 @@ carries `ORIGIN: unauthenticated` unless a consumer-held digest matched.
 ```
 bundles/security-testing/
   factory.json  FACTORY.md  README.md  CHANGELOG.md  instructions.md
-  agents/security-reviewer/{AGENT.md,SOUL.md,RULES.md,NOTES.md}
-  briefings/security-reviewer.md
+  agents/{security-lead,threat-modeler,security-reviewer}/{AGENT.md,SOUL.md,RULES.md,NOTES.md}
+  briefings/{security-lead,threat-modeler,security-reviewer}.md
   knowledge/{engagement.md.template,finding-schema.md,report-reading-guide.md}   # seeded to .agents/security-testing/knowledge/
   skills/security-evidence/{SKILL.md, references/*.schema.json, references/{sarif-mapping.v1.json,redaction-rules.json,packet-policy.v1.json},
                             templates/{assessment,review,verify,threat-model}.md, templates/knowledge/,
                             scripts/{evidence,verify,register,tm-lint,plan,canon,normalize,redact}.mjs (+ *.test.mjs), scripts/lib/, scripts/fixtures/}
   skills/secure-code-review/{SKILL.md, references/, fixtures/, evals/, scripts/score-findings.mjs}
   skills/security-engagement/{SKILL.md, references/{workflow,sign-off-checklist,tracker-rules,disclosure-profiles}.md}
+  skills/threat-modeling/{SKILL.md, references/}
+  skills/security-test-planning/{SKILL.md, references/{passive-admission,audit-branch}.md}
+  skills/risk-register/{SKILL.md, references/}
 ```
 
 Every script is plain ESM Node, stdlib only, no shell scripts, no network;

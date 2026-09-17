@@ -8,7 +8,7 @@ of native plugin formats and a shared npx installer.
 ## What's here
 
 Content lives in **factories** (`bundles/<id>/`) — team presets that physically
-own their `agents/` and `skills/` as real directories. Four factories ship:
+own their `agents/` and `skills/` as real directories. Five factories ship:
 
 - **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
   Python / JS / iOS / Android devs, QA, Scout, test-automation-engineer.
@@ -21,6 +21,16 @@ own their `agents/` and `skills/` as real directories. Four factories ship:
 - **`product-management`** — Product Owner discovery pipeline: product-owner
   (Priya), discovery-researcher (Sam); 10 discovery skills seeding
   `docs/discovery/`.
+- **`security-testing`** — threat-led, read-only security testing team:
+  security-lead (Noor, the only human-facing role), threat-modeler (Ilse),
+  security-reviewer (Vera); six skills (`security-evidence` holds every
+  script and schema; `security-engagement`, `threat-modeling`,
+  `secure-code-review`, `security-test-planning`, `risk-register` are
+  prose). Code-derived STRIDE threat model, evidence-gated secure code
+  review with re-checkable citations, passive security cases for the
+  manual-qa and test-automation bundles, fix verification from a validated
+  test-start snapshot, a residual-risk register; never merges, closes,
+  rotates or fixes. See `bundles/security-testing/README.md`.
 
 The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
 content: one agent (`personal-assistant`) and eight skills (`deep-research`,

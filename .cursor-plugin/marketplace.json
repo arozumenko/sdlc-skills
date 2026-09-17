@@ -96,6 +96,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "security-lead",
+      "source": "./bundles/security-testing/agents/security-lead",
+      "description": "Use when a human asks for a security engagement on a repository: starts it with engagement init, runs assessments and reviews over a scope, dispatches the security-reviewer and threat-modeler and admits what they return with the security-evidence scripts, verifies fixes with verify.mjs all, keeps the risk register and its rendered view current, files findings to the tracker through issue-tracking with a read-back, prints the manual-qa and test-automation hand-off prompt and stops, and proposes acceptances a human approves; the only human-facing role of the bundle; never writes a state, verdict, id or gate stamp.",
+      "version": "0.2.0"
+    },
+    {
       "name": "security-reviewer",
       "source": "./bundles/security-testing/agents/security-reviewer",
       "description": "Use when a security-lead dispatches a review over a scope packet, or a vulnerability-review, mitigation-review or fix-review over a subject packet. Reads only the packet's listed files; the review contract returns a claims file, the other three return a receipt path carrying an assertion from that contract's closed vocabulary; never writes a state, verdict, id or gate stamp.",
@@ -147,6 +153,12 @@
       "name": "test-sizer",
       "source": "./bundles/manual-qa/agents/test-sizer",
       "description": "Use when test cases need a size/complexity rating (S/M/L) — scoring rough descriptions before authoring (flagging Large ones to split) or scoring existing TC files and writing `size:` into their frontmatter. Runs before test-author to keep cases lean and estimable.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeler",
+      "source": "./bundles/security-testing/agents/threat-modeler",
+      "description": "Use when a security-lead dispatches the threat model of a run: derives the data-flow diagram from the code in scope with one citation per element, enumerates STRIDE threats per element, writes mitigations as claims for a separate mitigation-review, asserts one disposition per threat, then runs tm-lint check and returns MODEL_WRITTEN elements=<n> threats=<n> undisposed=<n> only on exit 0, otherwise the lint line verbatim; never writes a state, verdict, id or gate stamp.",
       "version": "0.2.0"
     },
     {
@@ -330,6 +342,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "risk-register",
+      "source": "./bundles/security-testing/skills/risk-register",
+      "description": "Use when working the residual-risk register of the security-testing bundle — adding a row for a finding or a threat, recording or revoking an acceptance, closing a false positive, superseding a row, reading what open exposure and an unauthenticated approval mean, keeping the anchor a consumer can later verify, or refreshing the rendered risk-register.md view. Prose only; every command it names is register.mjs (or evidence.mjs) from the security-evidence skill installed next to it.",
+      "version": "0.2.0"
+    },
+    {
       "name": "root-cause-analysis",
       "source": "./bundles/feature-development/skills/root-cause-analysis",
       "description": "Use when a bug has been reproduced or confirmed and needs its exact cause traced before a fix is proposed, or when the user says 'investigate issue'. Traces a bug to its exact cause in the codebase. Investigation only — reports the cause on the ticket; does not edit code.",
@@ -357,6 +375,12 @@
       "name": "security-evidence",
       "source": "./bundles/security-testing/skills/security-evidence",
       "description": "Use when running any command of the security-testing bundle — starting an engagement, allocating a run, scoping, building a packet, ingesting a SARIF file or a ticket, gating claims, accounting coverage, admitting receipts, building or re-checking a report, verifying a fix, working the residual-risk register, publishing a redacted report or a tracker payload, signing off, purging — or when a schema, a template or a result token's exact spelling is needed. Every script and every schema of the bundle lives here; the other security skills are prose that name these commands.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-test-planning",
+      "source": "./bundles/security-testing/skills/security-test-planning",
+      "description": "Use when turning a threat or a finding of a security-testing engagement into work the QA bundles can run — writing a passive security test case in the manual-qa format, deciding whether a case is admitted by lint or by review or stays a proposal, writing a proposal for active work outside tasks/, or reading an admission record. The planning skill of the lead (who runs `plan.mjs`) and the threat-modeler (who sketches the case a `planned` disposition needs); the script lives in the security-evidence skill installed next to it.",
       "version": "0.2.0"
     },
     {
