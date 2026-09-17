@@ -46,6 +46,9 @@ Before assembling a suite, decide what the user is actually asking for:
 
 - **TC run** — the user names a suite path, TC cases, or scenarios to build cases from → skip to Step 1, the normal pipeline below.
 - **Audit** — the user asks you to audit, "find issues", or check one or more of security, accessibility, privacy, performance, responsive, UX, SEO against a target/URL (as opposed to running predefined TC cases) → take the **audit branch** below instead of Step 1 onward.
+- **Security admitted suite** — the user names `tasks/security-<slug>-admitted/` (the security-testing bundle's hand-off suite, written by `evidence.mjs publish --profile case`: only admitted `TC-NNN_<slug>.md` files, `tags:` including `security`; the prompt arrives as "Run the suite at tasks/security-<slug>-admitted/ against base_url=<url>") → a **TC run**, not an audit — skip to Step 1 and Glob exactly the directory given. "security" in the path and the `security` tag do not route to `qa-auditor`: the cases are predefined and were admitted as passive upstream. Treat the directory as read-only: ids already match file names (Step 1b is a no-op), and run unsized rather than letting `test-sizer` write `size:` into the files — the security lead's sign-off hashes every suite file and lists a changed one as `UNADMITTED`. Never author or codify anything into that directory.
+
+**Proposal — explicit-list intake (nice-to-have; security-testing spec §9.2, M4).** Step 1 runs whatever `TC-*.md` files it Globs in the directory it is given, which is why the security-testing bundle hands over a dedicated directory rather than a subset of an existing suite. A third intake — the user passes an explicit list of TC file paths and Step 1 runs exactly those, in the order given, with no Glob — would let a caller run a subset of a mixed suite without copying files. The dedicated suite does not depend on it; nothing in the routing above changes until that intake is designed.
 
 ### Audit branch
 
