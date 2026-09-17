@@ -96,7 +96,10 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         break;
       case 'first_commit': if (!it.first_commit_at) { it.first_commit_at = o.at; it.first_commit_source = o.source; } if (it.state === 'planned') it.state = 'in_progress'; break;
       case 'done':
-        if (it.level !== 'task') { if ((!it.scope_since || o.at >= it.scope_since) && !explicitDone.has(it.item_id)) { explicitDone.set(it.item_id, o); it.landing_at = o.at; } break; }
+        // Review fix: a non-task `done` only counts as landing evidence when it is itself
+        // basis === 'observed' — a scope/gate/receipt-proxy "done" is not a witnessed landing and
+        // must not set landing_at or become the explicit completion the rollup below reads.
+        if (it.level !== 'task') { if (o.basis === 'observed' && (!it.scope_since || o.at >= it.scope_since) && !explicitDone.has(it.item_id)) { explicitDone.set(it.item_id, o); it.landing_at = o.at; } break; }
         if (it.state === 'cancelled' && !it.reopened) { if (!it.flags.includes('invalid-chain')) { it.flags.push('invalid-chain'); counts.invalidChains++; } break; }
         // F12: `done_basis` reflects the occurrence's own basis (a proxy `done` stays a proxy) —
         // it is never hard-coded to 'observed', so downstream consumers can tell measured
@@ -125,17 +128,27 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
       const starts = all.map((k) => k.started_at).filter(Boolean).sort();
       it.started_at = starts[0] ?? null; it.start_basis = starts.length ? 'derived-child' : null;
       const s = { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: all.length - kids.length };
-      for (const k of kids) { if (k.state === 'done') s.done++; else if (k.state === 'cancelled') s.cancelled++; else if (k.seen || k.children.some((c) => items.get(c).seen)) s.open++; else s.unknown++; }
+      // F10: a child quarantined as `invalid-chain` is excluded from measurement entirely — its
+      // `state` still reflects whichever terminal it reached first, but that terminal is not
+      // trustworthy evidence of delivery or cancellation. Count it as open so it can never, by
+      // itself, complete or all-cancel its parent.
+      for (const k of kids) {
+        if (k.flags.includes('invalid-chain')) { s.open++; continue; }
+        if (k.state === 'done') s.done++; else if (k.state === 'cancelled') s.cancelled++; else if (k.seen || k.children.some((c) => items.get(c).seen)) s.open++; else s.unknown++;
+      }
       it.child_summary = s;
       const allTerminal = kids.length > 0 && s.open === 0 && s.unknown === 0;
       const lastTerminal = kids.map((k) => k.done_at ?? k.cancelled_at).filter(Boolean).sort().pop() ?? null;
       const explicit = explicitDone.get(it.item_id);
-      // F11 (part 1): all-terminal scope with zero *delivered* children is cancelled — landing
-      // evidence never turns wholly cancelled scope into throughput. This check runs before the
-      // explicit-landing branch below, so an explicit mission/campaign `done` can no longer paper
-      // over an all-cancelled child set.
-      if (allTerminal && s.done === 0) { it.state = 'cancelled'; it.cancelled_at = lastTerminal; }
-      else if (allTerminal && (explicit || level === 'campaign')) { it.state = 'done'; it.done_at = [explicit?.at, lastTerminal, it.membership_since].filter(Boolean).sort().pop(); it.done_basis = explicit ? 'observed' : 'derived-child'; it.done_sha = explicit?.meta?.git_sha ?? null; }
+      // F11 (part 1) + minor: all-terminal scope with zero *delivered* children is cancelled —
+      // landing evidence never turns wholly cancelled throughput. Likewise, a parent whose entire
+      // child set is scope-cancelled (`kids.length === 0`) has nothing left it could ever deliver,
+      // so an explicit landing over an empty required-scope closes it as cancelled rather than
+      // stalling it as PARENT-INCOMPLETE forever. Both checks run before the explicit-landing/done
+      // branch below, so an explicit mission/campaign `done` can no longer paper over a child set
+      // with nothing delivered.
+      if ((allTerminal && s.done === 0) || (kids.length === 0 && explicit)) { it.state = 'cancelled'; it.cancelled_at = lastTerminal ?? explicit?.at ?? null; }
+      else if (allTerminal && (explicit || level === 'campaign')) { it.state = 'done'; it.done_at = [explicit?.at, lastTerminal, it.membership_since].filter(Boolean).sort().pop(); it.done_basis = explicit ? explicit.basis : 'derived-child'; it.done_sha = explicit?.meta?.git_sha ?? null; }
       else if (allTerminal) { it.flags.push('awaiting-landing'); it.state = 'in_progress'; counts.awaitingLanding++; }
       else if (explicit) { it.flags.push('PARENT-INCOMPLETE'); it.state = 'in_progress'; it.done_at = null; counts.parentIncomplete++; }
       else if (it.state === 'planned' && (starts.length || kids.some((k) => k.seen))) it.state = 'in_progress';

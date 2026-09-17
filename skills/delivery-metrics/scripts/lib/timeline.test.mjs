@@ -52,11 +52,42 @@ test('F8: ledger-conflict variants union quarantines every disputed occurrence k
   assert.equal(r.conflicts.length, 2);
   assert.ok(r.conflicts.every((c) => c.reason === 'ledger-conflict'));
   assert.deepEqual(r.conflicts.map((c) => c.transition_id).sort(), [`${R}/task-a/cancelled/ep-B`, `${R}/task-a/done/ep-A`]);
-  // A higher-ranked correction (cli, matching rank) for one of the two keys still clears only that
-  // occurrence's block — the other key, unrelated to the correction, stays quarantined.
+  // A same-rank (cli) correction for one of the two disputed keys does NOT clear its block — the
+  // conflict's variant for ep-A is itself cli rank, so a same-rank local record still satisfies
+  // `conflictRank <= best` and stays quarantined (F8 only lets a STRICTLY higher-ranked local
+  // record clear a ledger conflict; see the dedicated survives-a-lower-priority-conflict test).
   const cA = obs('task-a', 'done', '2026-09-16T09:30:00Z', { transition_id: `${R}/task-a/done/ep-A`, token: 'cA' });
   const r2 = selectOccurrences([gA, gB, cA], [conflict]);
   assert.equal(r2.occurrences.length, 0, 'ep-A is a ledger conflict at cli rank too — a same-rank cli record does not clear it');
+});
+
+// F8 (clearing case): a ledger conflict only quarantines an occurrence key when the conflict's own
+// best rank is <= the best rank among the surviving local records at that key. A LOWER-priority
+// (higher-numbered, e.g. git) ledger conflict must not block a HIGHER-priority (cli) local record —
+// and this must hold regardless of where in `variants[]` the disputed key appears.
+test('F8: a lower-priority (git-rank) ledger conflict does not block a higher-priority (cli) local record, regardless of variants[] order', () => {
+  const c = obs('task-a', 'done', '2026-09-16T11:00:00Z'); // cli, default source, rank 0
+  const conflict = ledgerConflict([{ item_id: it('task-a').item_id, transition_id: `${R}/task-a/done/episode-1`, basis: 'observed', source: 'git', plan: R }]);
+  const r = selectOccurrences([c], [conflict]);
+  assert.equal(r.occurrences.length, 1, 'the cli local record outranks a git-rank ledger conflict for the same key and survives');
+  assert.equal(r.conflicts.length, 0);
+  assert.equal(r.occurrences[0].source, 'cli');
+
+  // A multi-variant conflict entry disputes two keys: one (done/episode-1) the cli record clears,
+  // the other (cancelled/other) is itself contested at git rank by a local git record and stays
+  // quarantined. Reversing the variants[] array must not change which key survives.
+  const gOther = obs('task-a', 'cancelled', '2026-09-16T09:00:00Z', { source: 'git', transition_id: `${R}/task-a/cancelled/other`, token: 'gOther' });
+  const variants = [
+    { item_id: it('task-a').item_id, transition_id: `${R}/task-a/cancelled/other`, basis: 'observed', source: 'git', plan: R },
+    { item_id: it('task-a').item_id, transition_id: `${R}/task-a/done/episode-1`, basis: 'observed', source: 'git', plan: R },
+  ];
+  for (const ordered of [variants, [...variants].reverse()]) {
+    const rr = selectOccurrences([c, gOther], [ledgerConflict(ordered)]);
+    assert.equal(rr.occurrences.length, 1, 'variants[] order does not change which key survives');
+    assert.equal(rr.occurrences[0].event, 'done');
+    assert.equal(rr.conflicts.length, 1);
+    assert.equal(rr.conflicts[0].transition_id, `${R}/task-a/cancelled/other`);
+  }
 });
 
 test('replay: spec §12 example (dispatch → cycle start, first_commit proxy), review dispatch is activity, dispatch after done is not a start', () => {
@@ -137,6 +168,96 @@ test('F11: all-cancelled children stay cancelled despite landing; a scope-cancel
   const m2 = tl(earliestStartFromScopeCancelledChild).items.get(M);
   assert.equal(m2.started_at, '2026-09-15T00:00:00.000Z', 'the scope-cancelled child started first and still sets the derived start');
   assert.equal(m2.child_summary.cancelled_scope, 1, 'task-c remains excluded from the all-terminal/child_summary accounting');
+});
+
+// F11 (part 2, versioned-removal fixture): the shared-plan fixture above proves the mechanism with
+// a task that was ALWAYS cancelled_in_plan; this fixture proves the realistic path — a child that
+// was in scope and started under plan v1, then removed from scope in plan v2 (a real run record
+// `versions[]` history whose v2 items[] omits it, so `mergeCatalogue`'s removal branch marks it
+// `cancelled: true` in the resulting catalogue row). The parent's derived-child `started_at` must
+// still reflect that child's pre-removal start.
+test('F11 (versioned removal): a started child removed via a later plan version still supplies the derived-child start', () => {
+  const A = it('task-a').item_id, M = it('mission-g1').item_id, C = it('campaign').item_id;
+  const v1 = plan.items.filter((i) => [C, M, A].includes(i.item_id));
+  const v2 = plan.items.filter((i) => [C, M].includes(i.item_id)); // task-a removed from scope in v2
+  const history = { ...plan, items: v2, versions: [
+    { version: 1, at: '2026-09-13T00:00:00.000Z', items: v1 },
+    { version: 2, at: '2026-09-15T00:00:00.000Z', items: v2 },
+  ] };
+  const occurrences = selectOccurrences([
+    obs('task-a', 'created', '2026-09-13T09:00:00Z'),
+    obs('task-a', 'dispatched', '2026-09-14T09:00:00Z', { meta: { stage: 'build' } }),
+  ]).occurrences;
+  const { items } = buildTimelines({ occurrences, plan: history, end: END });
+  const m = items.get(M);
+  assert.equal(m.started_at, '2026-09-14T09:00:00.000Z', "the removed child's pre-removal start still sets the derived parent start");
+  assert.equal(m.start_basis, 'derived-child');
+  assert.equal(m.child_summary.cancelled_scope, 1, 'the removed (mergeCatalogue-cancelled) child is excluded from the all-terminal test post-removal');
+});
+
+// Minor: a parent whose entire (non-scope-cancelled) child set is empty — every child is
+// cancelled_in_plan — has nothing it could ever deliver. An explicit landing over that empty
+// required scope must close it as 'cancelled', not strand it as PARENT-INCOMPLETE forever.
+test('minor: zero non-scope-cancelled children plus landing is cancelled, not PARENT-INCOMPLETE', () => {
+  const M = it('mission-g1').item_id;
+  const allScopeCancelled = { run: R, items: plan.items.map((i) => (i.level === 'task' ? { ...i, cancelled: true } : i)) };
+  const landing = obs('mission-g1', 'done', '2026-09-16T00:00:00Z');
+  const { items } = buildTimelines({ occurrences: selectOccurrences([landing]).occurrences, plan: allScopeCancelled, end: END });
+  const m = items.get(M);
+  assert.equal(m.state, 'cancelled', 'zero non-scope-cancelled children can never be delivered, landing notwithstanding');
+  assert.ok(!m.flags.includes('PARENT-INCOMPLETE'));
+  assert.equal(m.child_summary.cancelled_scope, 3);
+});
+
+// F10: a child quarantined `invalid-chain` (done-after-cancelled or cancelled-after-done without an
+// intervening reopened) keeps its `state` at whichever terminal it reached first, but that terminal
+// is explicitly NOT trustworthy per the replay rules — it must never, by itself, let its parent
+// complete. The rollup's done/cancelled child_summary counts must exclude it (treat it as open)
+// regardless of its `state`.
+test('F10: an invalid-chain child never closes its mission — counted as open (PARENT-INCOMPLETE) even with landing', () => {
+  const M = it('mission-g1').item_id;
+  const o = [
+    obs('task-a', 'created', '2026-09-14T00:00:00Z'), obs('task-a', 'dispatched', '2026-09-14T09:00:00Z', { meta: { stage: 'build' } }), obs('task-a', 'done', '2026-09-14T11:00:00Z'),
+    // task-b: cancelled then done without a reopened in between → invalid-chain, state stays at the
+    // first terminal ('cancelled'), per the replay rules already proven in the cutoff/invalid-chain
+    // test above.
+    obs('task-b', 'created', '2026-09-14T00:00:00Z'), obs('task-b', 'cancelled', '2026-09-15T00:00:00Z'), obs('task-b', 'done', '2026-09-16T00:00:00Z', { source: 'git' }),
+    obs('mission-g1', 'done', '2026-09-17T00:00:00Z'),
+  ];
+  const { items, counts } = tl(o);
+  const b = items.get(it('task-b').item_id);
+  assert.ok(b.flags.includes('invalid-chain'));
+  assert.equal(counts.invalidChains, 1);
+  const m = items.get(M);
+  assert.equal(m.child_summary.done, 1, 'only task-a; the invalid-chain task-b is excluded from done');
+  assert.equal(m.child_summary.cancelled, 0, 'the invalid-chain task-b is excluded from cancelled too');
+  assert.equal(m.child_summary.open, 1, 'the invalid-chain task-b is counted as open instead');
+  assert.ok(m.flags.includes('PARENT-INCOMPLETE'), 'landing exists but the child set is not all-terminal because of the quarantined child');
+  assert.equal(m.state, 'in_progress');
+  assert.equal(m.done_at, null, 'never closes as done off the back of a quarantined child');
+});
+
+// Review fix: a non-task `done` only counts as landing evidence when its own basis is 'observed' —
+// a scope/gate/receipt-proxy "done" on a mission/campaign is not a witnessed landing. done_basis
+// also now carries the explicit occurrence's own basis rather than a hard-coded 'observed' literal.
+test('landing basis: a proxy-basis parent done is not landing evidence; an observed one sets done_basis from its own basis', () => {
+  const M = it('mission-g1').item_id;
+  const bothDone = [
+    obs('task-a', 'created', '2026-09-14T00:00:00Z'), obs('task-a', 'dispatched', '2026-09-14T09:00:00Z', { meta: { stage: 'build' } }), obs('task-a', 'done', '2026-09-14T11:00:00Z'),
+    obs('task-b', 'created', '2026-09-14T00:00:00Z'), obs('task-b', 'dispatched', '2026-09-14T09:00:00Z', { meta: { stage: 'build' }, transition_id: `${it('task-b').item_id}/dispatched/x` }), obs('task-b', 'done', '2026-09-15T11:00:00Z'),
+  ];
+  const proxyLanding = obs('mission-g1', 'done', '2026-09-16T00:00:00Z', { basis: 'gate-proxy' });
+  const proxy = tl([...bothDone, proxyLanding]).items.get(M);
+  assert.equal(proxy.state, 'in_progress');
+  assert.ok(proxy.flags.includes('awaiting-landing'), 'all children terminal but no OBSERVED landing yet');
+  assert.equal(proxy.done_at, null);
+  assert.equal(proxy.landing_at, null, 'a proxy-basis done is not landing evidence at all — landing_at is never set from it');
+
+  const observedLanding = obs('mission-g1', 'done', '2026-09-16T00:00:00Z');
+  const observed = tl([...bothDone, observedLanding]).items.get(M);
+  assert.equal(observed.state, 'done');
+  assert.equal(observed.done_basis, 'observed', 'done_basis carries the explicit occurrence\'s own basis');
+  assert.equal(observed.landing_at, '2026-09-16T00:00:00.000Z');
 });
 
 // F12: replay must not silently promote proxy evidence into measured facts. A `dispatched`
