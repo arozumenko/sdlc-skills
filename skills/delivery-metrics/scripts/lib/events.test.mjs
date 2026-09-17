@@ -161,3 +161,40 @@ test('F8: a same-revision conflict with >2 variants exports every variant\'s occ
   assert.equal(rCleared.conflicts.length, 0, 'a unique higher revision clears the conflict');
   assert.equal(rCleared.active.find((o) => o.source_record_id === 'v8').transition_id, 'sec/run-1/task-023/done/episode-4');
 });
+
+// Review fix: `plan` must be carried per-variant in a conflict's `variants` array (not only
+// hoisted to the conflict entry), since two conflicting variants of the same observation_id +
+// revision can disagree on plan too — a hoisted single `plan` would misdirect a downstream
+// consumer for whichever variant didn't "win" the hoist.
+test('resolveObservations: conflicting variants that disagree on plan carry their own plan in variants[]', () => {
+  const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true });
+  const variantP1 = base({ source_record_id: 'plan-conflict', plan: 'sec/run-1' });
+  const variantP2 = base({ source_record_id: 'plan-conflict', plan: 'sec/run-1-recut' });
+  appendFileSync(eventsPath(repo, 'a'), `${JSON.stringify(variantP1)}\n`);
+  appendFileSync(eventsPath(repo, 'b'), `${JSON.stringify(variantP2)}\n`);
+  const r = resolveObservations(repo);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual(r.conflicts[0].variants.map((v) => v.plan).sort(), ['sec/run-1', 'sec/run-1-recut']);
+});
+
+// Review fix: blank/whitespace-only lines are counted under counts.blank rather than silently
+// disappearing, so a reader can distinguish "file has gaps" from "file is fully accounted for".
+test('readRaw: blank/whitespace-only lines are counted under counts.blank, not silently dropped', () => {
+  const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true });
+  writeFileSync(eventsPath(repo, 'a'), `${JSON.stringify(base())}\n\n   \n${JSON.stringify(base({ source_record_id: 't2' }))}\n`);
+  const raw = readRaw(repo);
+  assert.equal(raw.counts.blank, 2);
+  assert.equal(raw.counts.parsed, 2);
+  assert.equal(raw.counts.malformed, 0);
+});
+
+// Review fix: a JSON line that parses to a non-object (array, string, number, null, boolean) is
+// classified as malformed with reason "not an object", not silently folded into unknownVersion.
+test('readRaw: JSON that parses to a non-object is malformed ("not an object"), not unknownVersion', () => {
+  const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true });
+  writeFileSync(eventsPath(repo, 'a'), ['[1,2,3]', '"a string"', '42', 'null', 'true'].map((l) => `${l}\n`).join(''));
+  const raw = readRaw(repo);
+  assert.equal(raw.counts.malformed, 5);
+  assert.equal(raw.counts.unknownVersion, 0);
+  assert.ok(raw.malformed.every((m) => m.reason === 'not an object'));
+});

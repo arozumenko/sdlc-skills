@@ -91,7 +91,7 @@ export const semanticKey = (r) => JSON.stringify(sortKeys({ observation_id: r.ob
 const decoder = new TextDecoder('utf-8', { fatal: true });
 export function readRaw(repo) {
   const dir = deliveryDir(repo);
-  const counts = { files: 0, parsed: 0, malformed: 0, unknownVersion: 0 };
+  const counts = { files: 0, parsed: 0, malformed: 0, unknownVersion: 0, blank: 0 };
   const lines = [], files = [], malformed = [];
   if (!existsSync(dir)) return { lines, files, counts, malformed };
   for (const f of readdirSync(dir).filter((n) => /^events-.*\.jsonl$/.test(n)).sort()) {
@@ -103,10 +103,11 @@ export function readRaw(repo) {
     while (start < buf.length) {
       let end = buf.indexOf(0x0a, start); if (end === -1) end = buf.length;
       const slice = buf.subarray(start, end); start = end + 1; lineNo++;
-      if (!slice.length || !slice.toString('latin1').trim()) continue;
+      if (!slice.length || !slice.toString('latin1').trim()) { counts.blank++; continue; }
       let text; try { text = decoder.decode(slice); } catch { counts.malformed++; malformed.push({ path, line: lineNo, reason: 'invalid utf-8' }); continue; }
       let rec; try { rec = JSON.parse(text); } catch { counts.malformed++; malformed.push({ path, line: lineNo, reason: 'invalid json' }); continue; }
-      if (!rec || typeof rec !== 'object' || rec.v !== SCHEMA_VERSION) { counts.unknownVersion++; continue; }
+      if (rec === null || typeof rec !== 'object' || Array.isArray(rec)) { counts.malformed++; malformed.push({ path, line: lineNo, reason: 'not an object' }); continue; }
+      if (rec.v !== SCHEMA_VERSION) { counts.unknownVersion++; continue; }
       const errs = validateRecord(rec);
       if (errs.length) { counts.malformed++; malformed.push({ path, line: lineNo, reason: errs[0] }); continue; }
       counts.parsed++;
@@ -136,14 +137,15 @@ export function resolveObservations(repo) {
     const variants = [...entry.variants.values()];
     if (variants.length > 1) {
       // F8: report the union of every conflicting variant's occurrence key (item_id, transition_id,
-      // basis, source), not just the first one read — a downstream consumer (the timeline) must be
-      // able to quarantine fallback for each occurrence this observation_id disagrees about,
-      // regardless of file/arrival order.
+      // basis, source, plan), not just the first one read — a downstream consumer (the timeline)
+      // must be able to quarantine fallback for each occurrence this observation_id disagrees
+      // about, regardless of file/arrival order. `plan` is carried per-variant (not just hoisted
+      // to the conflict entry) because variants can disagree on plan too.
       conflicts.push({
         observation_id: id,
         revision: top,
         plan: variants[0].plan,
-        variants: variants.map((v) => ({ item_id: v.item_id, transition_id: v.transition_id, basis: v.basis, source: v.source })),
+        variants: variants.map((v) => ({ item_id: v.item_id, transition_id: v.transition_id, basis: v.basis, source: v.source, plan: v.plan })),
         paths: entry.paths,
       });
       continue;
