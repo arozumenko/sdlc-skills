@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-metrics CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
 import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
 import { EVENTS, appendObservation, makeObservation, resolveObservations } from './lib/events.mjs';
@@ -12,6 +12,7 @@ import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderStatus } from './lib/report.mjs';
+import { doctorReport, skillRootOf } from './install-hooks.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -368,7 +369,12 @@ function cmdBackfill(repo, p, io, now) {
   return 0;
 }
 
-export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill };
+function cmdDoctor(repo, p, io) {
+  for (const l of doctorReport(repo, relative(repo, skillRootOf(import.meta.url))).lines) out(io, l);
+  return 0;
+}
+
+export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
