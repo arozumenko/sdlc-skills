@@ -73,3 +73,59 @@ test("refusals: unknown run dir ⇒ 2 USAGE(<command>: unknown run …); not COM
   assert.throws(() => loadSource(dir, {}), /command/);
   assert.ok(PathGuardError, "the loader reads through inputs.pathGuard");
 });
+
+// --- TASK-043: engagement, admissions and the candidate cases ---------------------------------
+
+test("TASK-043: the run's engagement snapshot and every admission record are part of the source; `casesDir` adds the candidates under <st>/cases/** by identity (redacted text, admission-core.caseSha256); a tampered admission is 5 INCONSISTENT(admissions/<sha>)", async () => {
+  const { mkdirSync, readdirSync } = await import("node:fs");
+  const { caseSha256 } = await import("../admission-core.mjs");
+  const { caseText, PASSIVE_ROWS, plan } = await import("../../fixtures/plan/helpers.mjs");
+  const repo = readyRepo();
+  const casesDir = join(repo, ".agents", "security-testing", "cases");
+  const rel = ".agents/security-testing/cases/my-product/TC-001_headers.md";
+  const text = caseText("TC-001", PASSIVE_ROWS);
+  const { dir } = await committedReviewRun({
+    repo,
+    before: async (r, id) => {
+      mkdirSync(join(casesDir, "my-product"), { recursive: true });
+      writeFileSync(join(r, rel), text);
+      writeFileSync(join(casesDir, "my-product", "notes.txt"), "not a case\n");
+      const a = await plan(r, ["admit", "--run", id, rel]);
+      if (a.code !== 0) throw new Error(a.stdout + a.stderr);
+    },
+  });
+  const plain = loadSource(dir, { command: "publish" });
+  assert.equal(plain.engagement.envelope.kind, "engagement");
+  assert.equal(plain.engagement.payload.slug, "my-product");
+  assert.equal(plain.admissions.length, 1);
+  assert.equal(plain.admissions[0].envelope.kind, "admission");
+  assert.equal(plain.admissions[0].payload.classification, "admitted-heuristic");
+  assert.deepEqual(plain.cases, [], "no casesDir ⇒ no candidates read");
+
+  const source = loadSource(dir, { command: "publish", casesDir });
+  assert.equal(source.cases.length, 2, "every file under <st>/cases/** (recursively), sorted");
+  const [tc, notes] = source.cases;
+  assert.equal(notes.relpath, "my-product/notes.txt");
+  assert.equal(tc.relpath, "my-product/TC-001_headers.md");
+  assert.equal(tc.name, "TC-001_headers.md");
+  assert.equal(tc.case_sha256, caseSha256(Buffer.from(text)).case_sha256);
+  assert.equal(tc.case_sha256, source.admissions[0].payload.case_sha256, "the admission names the candidate by the same number");
+  assert.equal(tc.redacted, text);
+  assert.ok(Object.isFrozen(source.cases) && Object.isFrozen(tc));
+  assert.deepEqual(loadSource(dir, { command: "publish", casesDir: join(repo, "nowhere") }).cases, [], "a missing cases dir is an empty list");
+
+  const [name] = readdirSync(join(dir, "admissions"));
+  const path = join(dir, "admissions", name);
+  const bytes = readFileSync(path);
+  writeFileSync(path, bytes.toString("utf8").replace("admitted-heuristic", "admitted-reviewed"));
+  try {
+    loadSource(dir, { command: "publish" });
+    assert.fail("expected a refusal");
+  } catch (err) {
+    assert.ok(err instanceof CliError, err.message);
+    assert.equal(err.code, 5);
+    assert.equal(err.token, `INCONSISTENT(admissions/${name.slice(0, -5)})`);
+  }
+  writeFileSync(path, bytes);
+  assert.throws(() => loadSource(dir, { command: "publish", casesDir: "relative" }), /absolute/);
+});

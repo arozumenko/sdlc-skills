@@ -9,7 +9,7 @@
 // per test (the key lives inside the repo, so a copy checks identically).
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeEnvelope, readArtifact, writeArtifact } from "../canon.mjs";
 import { cleanupAll, git, runScript, tmpDir } from "../fixtures/cli/harness.mjs";
@@ -225,7 +225,7 @@ for (const c of CASES) {
     assert.equal(r.code, 4, `${r.stdout}${r.stderr}`);
     assert.deepEqual(failLines(r.stdout), c.expect(fx));
     assert.equal(lines(r.stdout)[0], c.expect(fx)[0], "the verdict comes first");
-    assert.ok(lines(r.stdout).includes("UNADMITTED: not evaluated"), "the listings still follow");
+    assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), "the listings still follow");
     if (c.also) c.also(r.stdout, fx);
   });
 }
@@ -537,6 +537,108 @@ test("FAIL_CAUSES and LISTING_HEADERS: frozen, non-empty, spelled from tokens.mj
   assert.equal(tokens.coverageIndeterminate("0123456789ab-0001"), "COVERAGE-INDETERMINATE(0123456789ab-0001)");
   assert.equal(tokens.dispositionsBlocking(["T-001", "T-002"]), "DISPOSITIONS(T-001, T-002)");
   assert.throws(() => tokens.dispositionsBlocking([]), /threat/);
+});
+
+// --- TASK-043: UNADMITTED — the suite against what publish --profile case recorded (spec §2, §12; US-025 AC-6, US-035 AC-4) ---
+
+/** A COMMITTED review run in `repo` with `<st>/cases/my-product/<name>` admitted (heuristic route), published to the suite; returns the run id. */
+async function publishedSuite(repo, cases) {
+  const { caseText } = await import("../fixtures/plan/helpers.mjs");
+  const casesDir = join(repo, ST, "cases", "my-product");
+  mkdirSync(casesDir, { recursive: true });
+  const run_id = await initRun(repo, "review");
+  const dir = runDir(repo, run_id);
+  ok(await evidence(repo, ["scope", "--run", run_id]), "scope");
+  const scope = readArtifact(join(dir, "scope.json"), { kind: "scope" });
+  const packet = packetSha(ok(await evidence(repo, ["packet", "--run", run_id, "--kind", "scope"]), "scope packet").stdout);
+  ok(await evidence(repo, ["gate", "--run", run_id, "--claims", drop(repo, run_id, "claims-1.json", { scope_sha256: scope.envelope.self_sha256, packet_sha256: packet, findings: [claim()] })]), "gate");
+  ok(await evidence(repo, ["coverage", "--run", run_id, "--examined", drop(repo, run_id, "examined-1.json", { packet_sha256: packet, declared: [{ path: "src/app.js", ranges: [[1, 1]] }] })]), "coverage");
+  for (const [name, rows, title] of cases) {
+    writeFileSync(join(casesDir, name), caseText(name.slice(0, 6), rows, { title }));
+    ok(await runScript("plan", ["admit", "--run", run_id, join(ST, "cases", "my-product", name)], { cwd: repo, env: ENV }), `admit ${name}`);
+  }
+  ok(await evidence(repo, ["build-report", "--run", run_id, "--template", "review"]), "build-report review");
+  ok(await evidence(repo, ["publish", "--run", run_id, "--profile", "case", "--to", "tasks/security-my-product-admitted"]), "publish case");
+  return run_id;
+}
+
+test("extra TC placed in the admitted suite by hand ⇒ listed as unadmitted; the published cases are not; the comparison is the published file's identity (what publish recorded), not the candidate's; informational — exit unchanged (spec §12; US-025 AC-6, US-035 AC-4)", async () => {
+  const { repo } = await signedRepo();
+  const suite = join(repo, "tasks", "security-my-product-admitted");
+  await publishedSuite(repo, [
+    ["TC-001_headers.md", [["Navigate to `{{base_url}}/login`", "Loads"], ["Inspect the response headers of the `/login` document", "`X-Frame-Options` is DENY"]], "Headers"],
+    ["TC-002_plain.md", [["Navigate to `{{base_url}}/`", "Loads"]], "Plain"],
+  ]);
+  assert.deepEqual(readdirSync(suite).sort(), ["TC-001_headers.md", "TC-002_plain.md"]);
+  let r = await signOffCli(repo);
+  assert.equal(r.code, 0, `${r.stdout}${r.stderr}`);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  // the audit-form rewrite gives TC-001 a different identity than its candidate: still admitted, because publish recorded it
+  const candidate = readFileSync(join(repo, ST, "cases", "my-product", "TC-001_headers.md"));
+  assert.ok(!readFileSync(join(suite, "TC-001_headers.md")).equals(candidate), "the published file is not the candidate byte for byte");
+
+  writeFileSync(join(suite, "TC-003_by-hand.md"), "---\nid: TC-003\ntitle: Sneaked in\npriority: high\n---\n\n## Steps\n\n| # | Action | Expected Result |\n|---|---|---|\n| 1 | Submit the form | ok |\n");
+  writeFileSync(join(suite, "README.md"), "# not a case\n");
+  mkdirSync(join(suite, "nested"));
+  writeFileSync(join(suite, "nested", "TC-004_deep.md"), "deep\n");
+  // a copy of the candidate itself (the admitted identity, but not what publish wrote) is unadmitted too
+  writeFileSync(join(suite, "TC-005_candidate-copy.md"), candidate);
+  r = await signOffCli(repo);
+  assert.equal(r.code, 0, `informational: ${r.stdout}${r.stderr}`);
+  const out = lines(r.stdout);
+  const at = out.indexOf("UNADMITTED: 4");
+  assert.ok(at > 0, r.stdout);
+  assert.deepEqual(out.slice(at + 1, at + 5), [
+    "  tasks/security-my-product-admitted/README.md",
+    "  tasks/security-my-product-admitted/TC-003_by-hand.md",
+    "  tasks/security-my-product-admitted/TC-005_candidate-copy.md",
+    "  tasks/security-my-product-admitted/nested/TC-004_deep.md",
+  ]);
+  assert.ok(!r.stdout.includes("Sneaked") && !/[0-9a-f]{64}/.test(out.slice(at, at + 5).join("\n")), "paths only: no content, no hash");
+  assert.ok(out.findIndex((l) => l.startsWith("UNAUTHENTICATED-APPROVALS:")) < at && at < out.findIndex((l) => l.startsWith("DISPOSITIONS:")), "in the plan §4.1 order");
+  const result = await signOff(ctxFor(repo), { engagement_id: EID });
+  assert.deepEqual(result.unadmitted.files, out.slice(at + 1, at + 5).map((l) => l.trim()));
+  assert.deepEqual(result.unadmitted.suites, ["tasks/security-my-product-admitted"]);
+  assert.ok(result.ok);
+});
+
+test("a suite directory with no publish behind it ⇒ every file unadmitted; no suite directory ⇒ UNADMITTED: 0; a case manifest that is not the artifact it claims to be is skipped with a stderr note (fail-closed: its members count for nothing)", async () => {
+  const { repo } = await signedRepo();
+  let r = await signOffCli(repo);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  const suite = join(repo, "tasks", "security-my-product-admitted");
+  mkdirSync(suite, { recursive: true });
+  writeFileSync(join(suite, "TC-001_x.md"), "x\n");
+  r = await signOffCli(repo);
+  assert.equal(r.code, 0);
+  const out = lines(r.stdout);
+  assert.deepEqual(out.slice(out.indexOf("UNADMITTED: 1"), out.indexOf("UNADMITTED: 1") + 2), ["UNADMITTED: 1", "  tasks/security-my-product-admitted/TC-001_x.md"]);
+  rmSync(suite, { recursive: true });
+  await publishedSuite(repo, [["TC-002_plain.md", [["Navigate to `{{base_url}}/`", "Loads"]], "Plain"]]);
+  assert.ok(lines((await signOffCli(repo)).stdout).includes("UNADMITTED: 0"));
+  const [manifest] = readdirSync(join(repo, ST, "handoffs")).filter((n) => n.endsWith(".case.export-manifest.json"));
+  const path = join(repo, ST, "handoffs", manifest);
+  writeFileSync(path, readFileSync(path, "utf8").replace('"slug":"my-product"', '"slug":"my-prodact"'));
+  r = await signOffCli(repo);
+  assert.equal(r.code, 0);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 1"), r.stdout);
+  assert.match(r.stderr, /case\.export-manifest\.json is not the artifact it claims to be — its recorded suite is not trusted/);
+});
+
+test("review 1: a directory named <run>.case.export-manifest.json, or a plain file at the suite path, is skipped with a stderr note — sign-off still prints its verdict (never EISDIR/ENOTDIR)", async () => {
+  const { repo } = await signedRepo();
+  const handoffs = join(repo, ST, "handoffs");
+  mkdirSync(join(handoffs, `${"f".repeat(12)}-0001.case.export-manifest.json`), { recursive: true });
+  let r = await signOffCli(repo);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  assert.match(r.stderr, /case\.export-manifest\.json is not a regular file — its recorded suite is not trusted/);
+  mkdirSync(join(repo, "tasks"), { recursive: true });
+  writeFileSync(join(repo, "tasks", "security-my-product-admitted"), "not a directory\n");
+  r = await signOffCli(repo);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(lines(r.stdout).includes("UNADMITTED: 0"), r.stdout);
+  assert.match(r.stderr, /tasks\/security-my-product-admitted is not a directory — its files are not listed/);
 });
 
 test("cmd-sign-off imports: no child process of its own, no network, no writer, stdout only through ctx (G-4, G-6, G-14)", () => {

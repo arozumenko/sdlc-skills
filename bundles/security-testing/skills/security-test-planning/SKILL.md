@@ -89,9 +89,11 @@ is installed, or the example below.
   URLs are `{{base_url}}/<path>` or a literal on a host in
   `targets.browser`. Header and cookie checks (`Content-Security-Policy`,
   `Strict-Transport-Security`, `Set-Cookie` flags, …) are "inspect the
-  response headers" steps — the audit-step form the hand-off suite emits
-  for them is `references/audit-branch.md` (lands with the admitted-suite
-  publisher, TASK-043).
+  response headers" steps — lead with a Navigate step and name the header;
+  the hand-off suite emits them in the audit-step form of
+  [references/audit-branch.md](references/audit-branch.md) (open URL,
+  collect the network requests, inspect the header — never a reload or a
+  panel).
 - **Test data:** literal values, no real credentials. A `password=…`
   assignment is redacted before anything is hashed or recorded, but the
   runner still reads the file you committed.
@@ -145,15 +147,26 @@ Unauthenticated, still on `{{base_url}}/login`. No request other than the page l
    → `node <scripts>/plan.mjs admit --run <run_id> <case> --receipt <admitted receipt sha256>`.
    Decide the route **before** the first `admit`: the record is
    write-once (`2 ADMISSION-EXISTS` when the same case would get a
-   different record); a changed route is a new run.
+   different record); a changed route is a new run. To read the hits
+   first without writing the record, add `--dry-run`:
+   `node <scripts>/plan.mjs admit --run <run_id> <case> --dry-run` prints
+   the ADMISSION line and persists nothing.
 3. Proposal route: write the proposal (below), then
    `node <scripts>/plan.mjs propose --run <run_id> <path>` → `PROPOSAL
    <st>/proposals/<id>.proposal.md id=<P-nnn> sha256=<h>` and `NEXT: run
    snapshot proposals --run <run_id>`. Run that snapshot so the
    assessment lists it and a `planned(P-nnn)` disposition validates.
-4. Hand off: `evidence.mjs publish --profile case` and `--profile
-   handoff` write the admitted suite and the prompt (TASK-043); results
-   return through `ingest qa-run` as observations (TASK-044).
+4. Hand off:
+   `node <scripts>/evidence.mjs publish --run <run_id> --profile case --to tasks/security-<slug>-admitted`
+   writes the admitted suite (one `TC-NNN_<slug>.md` per `admitted-*`
+   record — a `TC-SEC-NNN` id or a file name that is not `<id>_<slug>.md`
+   is refused, never renamed; the manifest with the published identities
+   lands in `<st>/handoffs/`), then
+   `node <scripts>/evidence.mjs publish --run <run_id> --profile handoff --to .agents/security-testing/handoffs [--base-url <url>]`
+   writes `<st>/handoffs/<slug>.md` and prints the two-line prompt for
+   the manual-qa `test-run-lead`. Results return through `ingest qa-run`
+   as observations (TASK-044). `sign-off` lists under `UNADMITTED:` any
+   file in the suite that `publish` did not write.
 
 ## Writing a proposal (active work)
 
@@ -175,7 +188,7 @@ this bundle; the record of that decision stays `authenticated: false`
 | Need | Read |
 |---|---|
 | The allowed-operation grammar, the forbidden-pattern list, the hit rules, the classification table | [references/passive-admission.md](references/passive-admission.md) |
-| How a header / cookie check is emitted for the manual-qa audit branch | `references/audit-branch.md` (TASK-043, with `publish --profile case`) |
+| How a header / cookie check is emitted for the manual-qa audit branch, and how to write one | [references/audit-branch.md](references/audit-branch.md) |
 | The record shapes | `references/admission.schema.json`, `references/proposal.schema.json` in `security-evidence` |
 | The case format the runner reads | `bundles/manual-qa/knowledge/test-case-format.md` (installed with manual-qa) |
 | What `planned(<case_sha256>)` / `planned(P-nnn)` need in the run | the `threat-modeling` skill, `references/dispositions.md` |

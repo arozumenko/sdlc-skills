@@ -16,8 +16,8 @@ material leaves the run directory.
 | `redacted-report` | `report.md` | the run's rendered report: identity, coverage, every finding's id, class, priority, path, lines, state, the verify verdicts, the register summary, unauthenticated approvals, limitations | every indented code block (each finding's evidence — `snippet`, `snippet_redacted` and `context_redacted` alike, a redacted snippet is still a snippet — and a verify report's test output), each finding's reproduction row, the test executable path and any line naming `.agents/` — replaced by `<label>: withheld by the redacted-report profile` | M1 |
 | `full-report` | `report.md` + `findings.json` | the report byte for byte, plus every gated finding as `gate` stored it: `snippet` for a non-sensitive citation, `snippet_redacted` / `context_redacted` for a sensitive one (the redacted form is what is on disk; original bytes never leave `private/`) | nothing beyond what redaction already removed | M1, explicit only |
 | `tracker` | `<st>/handoffs/<finding_id>.ticket.json` per finding, canonical one-line JSON | exactly nine keys: `finding_id`, `title`, `class`, `priority`, `path`, `lines`, `context_redacted`, `fix_prompt`, `fingerprint` | never `snippet`, never `snippet_redacted`; no report text, no `targets.repo` (read it from `engagement.md`), no register content beyond the dedupe it performs | M1; the read-back's `ticketed` event and the full fix route are M3 |
-| `handoff` | `<st>/handoffs/<slug>.md` | admitted case paths and `base_url` only | everything else | M3: `2 NOT-IMPLEMENTED(M3)` |
-| `case` | `tasks/security-<slug>-admitted/` | the test-case text of admitted cases only — a directory that contains nothing else | proposals, findings, the report | M3: `2 NOT-IMPLEMENTED(M3)` |
+| `handoff` | `<st>/handoffs/<slug>.md` — the exact two-line prompt for the manual-qa `test-run-lead` (the suite directory + `base_url`), also printed on stdout | the suite directory name and `base_url` only | everything else: no case path, no proposal, no run directory | M3 (TASK-043) |
+| `case` | `tasks/security-<slug>-admitted/TC-NNN_<slug>.md` — the test-case text of admitted cases only, a directory that contains nothing else (its manifest is `<st>/handoffs/<run_id>.case.export-manifest.json`, which records the published files' identities for `sign-off`'s `UNADMITTED:` list) | each admitted candidate's redacted text: priority mapped to the manual-qa words, the `security` tag ensured, header / cookie checks in the audit-step form (`security-test-planning` `references/audit-branch.md`) | proposals, findings, the report; a candidate whose id is not `TC-NNN` or whose file name is not `<id>_<slug>.md` is refused (`2 USAGE`), never renamed | M3 (TASK-043) |
 
 Choosing: a reader outside the repository who must not see code gets
 `redacted-report`; an auditor with repository access who will re-check
@@ -35,7 +35,12 @@ back.
   differently-cased spelling is refused everywhere). `reports/security/`
   is the conventional destination and is inside the managed ignore block
   (`artifact_policy.reports: committed` lifts it).
-- `tracker`: `--to` must be exactly `.agents/security-testing/handoffs`.
+- `tracker` and `handoff`: `--to` must be exactly `.agents/security-testing/handoffs`;
+  `case`: exactly `tasks/security-<slug>-admitted` (the engagement's slug, or
+  `--slug`). The M3 manifests are per-run sidecars in `<st>/handoffs/`
+  (`<run_id>.handoff.export-manifest.json`, `<run_id>.case.export-manifest.json`)
+  and record the `opts` (`slug`, `base_url`, the case `members`) that
+  `check-export` re-derives from.
 - An existing file at the destination is refused. An existing output with
   different bytes is
   `2 USAGE(publish: <path> already exists with different content; choose another --to)`

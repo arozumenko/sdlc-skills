@@ -98,13 +98,16 @@ export const ALLOWED_OPERATIONS = Object.freeze([
 
 /**
  * The forbidden-pattern list: `{rule, re}` over the Action cell. A match is
- * a hit under `rule`; the verbs are anchored at the verb position, the
- * payloads, tools and volume words anywhere in the cell.
+ * a hit under `rule`; the verbs are anchored at the verb position — the
+ * start of the Action or of a clause after `and` / `then` / `or` / `;` / `,`
+ * (TASK-043, the G22 follow-up: "Navigate to … then submit the form" is a
+ * hit; "Inspect the delete button" is not) — the payloads, tools and volume
+ * words anywhere in the cell.
  */
 export const FORBIDDEN_PATTERNS = Object.freeze([
   Object.freeze({
     rule: "mutating-verb",
-    re: /^(?:submit|send|post|put|patch|delete|remove|drop|upload|create|register|sign\s*up|modify|update|edit|change|alter|inject|exploit|brute[\s-]?force|fuzz|scan|spray|bypass|escalate|tamper|intercept|replay|forge|overwrite|execute|run|install|deploy|reset|disable|enable|grant|revoke|transfer|pay|purchase|check\s*out|approve|reject|cancel|order|book|import|export|migrate|truncate|wipe|kill|restart|shut\s*down)\b/i,
+    re: /(?:^|\b(?:and|then|or)\s+|[;,]\s*)(?:submit|send|post|put|patch|delete|remove|drop|upload|create|register|sign\s*up|modify|update|edit|change|alter|inject|exploit|brute[\s-]?force|fuzz|scan|spray|bypass|escalate|tamper|intercept|replay|forge|overwrite|execute|run|install|deploy|reset|disable|enable|grant|revoke|transfer|pay|purchase|check\s*out|approve|reject|cancel|order|book|import|export|migrate|truncate|wipe|kill|restart|shut\s*down)\b/i,
   }),
   Object.freeze({
     rule: "injection-payload",

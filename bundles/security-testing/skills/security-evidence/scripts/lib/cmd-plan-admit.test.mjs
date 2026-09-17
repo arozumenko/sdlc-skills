@@ -101,6 +101,32 @@ test("structure: a case without a Steps table, without frontmatter or with a bad
   assert.match(r.stderr, /file name TC-SEC-004\.md is not TC-NNN_<slug>\.md/);
 });
 
+test("--dry-run (TASK-043, the G22 follow-up): prints the ADMISSION line and persists nothing — no admissions/ entry, no WROTE line, the hits named on stderr — so the route can be chosen before the write-once record; the same argv without it then writes the record", async () => {
+  const repo = readyRepo();
+  const rel = writeCase(repo, "TC-001_typing.md", caseText("TC-001", [...PASSIVE_ROWS, ["Type the email address into the Email field", "Value set"]]));
+  commitAll(repo);
+  const run_id = await scopedRun(repo);
+  const dry = await plan(repo, ["admit", "--run", run_id, rel, "--dry-run"]);
+  assert.equal(dry.code, 0, dry.stdout + dry.stderr);
+  const sha = caseSha256(readFileSync(join(repo, rel))).case_sha256;
+  assert.equal(dry.stdout, `ADMISSION case=${sha} classification=proposal hits=1\n`, "the ADMISSION line only");
+  assert.match(dry.stderr, /--dry-run — nothing persisted \(hits: unknown-operation@5\)/);
+  assert.deepEqual(admissionsOf(repo, run_id), [], "nothing written");
+  // the dry run left no record, so the reviewed route is still open in this run
+  const packet = await casePacket(repo, run_id, [rel]);
+  const receipt = await admitReceipt(repo, run_id, { type: "vulnerability-review", subject_id: sha, packet_sha256: packet.sha256, assertion: "confirmed", reviewer_run_id: run_id });
+  const dryReviewed = await plan(repo, ["admit", "--run", run_id, rel, "--receipt", receipt, "--dry-run"]);
+  assert.equal(dryReviewed.stdout, `ADMISSION case=${sha} classification=admitted-reviewed hits=1\n`);
+  assert.deepEqual(admissionsOf(repo, run_id), []);
+  const real = await plan(repo, ["admit", "--run", run_id, rel, "--receipt", receipt]);
+  assert.equal(real.code, 0, real.stdout + real.stderr);
+  assert.match(real.stdout, /^ADMISSION case=[0-9a-f]{64} classification=admitted-reviewed hits=1\nWROTE /);
+  assert.deepEqual(admissionsOf(repo, run_id), [`${sha}.json`]);
+  const withValue = await plan(repo, ["admit", "--run", run_id, rel, "--dry-run=yes"]);
+  assert.equal(withValue.code, 2);
+  assert.match(withValue.stdout, /^USAGE\(admit: --dry-run takes no value\)$/m);
+});
+
 test("write-once (G-10): the same case admitted twice is one record; the same case with a different route (a receipt) ⇒ 2 ADMISSION-EXISTS, the first record untouched", async () => {
   const repo = readyRepo();
   const rel = writeCase(repo, "TC-001_typing.md", caseText("TC-001", [...PASSIVE_ROWS, ["Type the email address into the Email field", "Value set"]]));

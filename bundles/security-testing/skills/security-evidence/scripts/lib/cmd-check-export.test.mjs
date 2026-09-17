@@ -157,11 +157,86 @@ test("the manifest argument: missing ⇒ 2 USAGE; outside the work tree ⇒ 2 US
   r = await check(repo, join(HANDOFFS, "export-manifest.json"));
   assert.equal(r.code, 2);
   assert.match(r.stdout, /^USAGE\(check-export: a tracker export manifest must be named <finding_id>\.export-manifest\.json/m);
-  // an M3 profile in a manifest: registered, not implemented
-  writeArtifact(join(repo, "reports", "security", "m3.json"), makeEnvelope({ schema_version: run.envelope.schema_version, kind: "export-manifest", run_id, engagement_id: run.envelope.engagement_id, key_id: run.envelope.key_id, now: () => ENV.SECURITY_EVIDENCE_NOW }, { source_manifest_sha256: readArtifact(join(dir, "manifest.json")).envelope.self_sha256, profile: "case", profile_version: 1, output_sha256: "1".repeat(64) }));
+  // an M3 manifest (TASK-043) must be the run-named sidecar and record its opts
+  const head = { schema_version: run.envelope.schema_version, kind: "export-manifest", run_id, engagement_id: run.envelope.engagement_id, key_id: run.envelope.key_id, now: () => ENV.SECURITY_EVIDENCE_NOW };
+  const sourceSha = readArtifact(join(dir, "manifest.json")).envelope.self_sha256;
+  writeArtifact(join(repo, "reports", "security", "m3.json"), makeEnvelope(head, { source_manifest_sha256: sourceSha, profile: "case", profile_version: 1, output_sha256: "1".repeat(64) }));
   r = await check(repo, "reports/security/m3.json", runRel(run_id));
   assert.equal(r.code, 2);
-  assert.equal(r.stdout, "NOT-IMPLEMENTED(M3)\n");
+  assert.match(r.stdout, /^USAGE\(check-export: a case export manifest must be named <run_id>\.case\.export-manifest\.json and record opts\.slug and opts\.members, got m3\.json\)$/m);
+  writeArtifact(join(repo, "reports", "security", `${run_id}.handoff.export-manifest.json`), makeEnvelope(head, { source_manifest_sha256: sourceSha, profile: "handoff", profile_version: 1, output_sha256: "1".repeat(64), opts: { slug: "my-product" } }));
+  r = await check(repo, `reports/security/${run_id}.handoff.export-manifest.json`);
+  assert.equal(r.code, 2);
+  assert.match(r.stdout, /^USAGE\(check-export: a handoff export manifest must be named <run_id>\.handoff\.export-manifest\.json and record opts\.slug and opts\.base_url/m);
+});
+
+// --- TASK-043: the M3 profiles re-derive byte for byte from the recorded opts (PM ruling 2) ---
+
+test("TASK-043: handoff and case manifests are VERIFIED-DERIVATIVE with --source and LINKED-ONLY without; the case suite is compared under tasks/security-<slug>-admitted/ (not next to the manifest); an edited suite file or a candidate changed since publication ⇒ MISMATCH(output)", async () => {
+  const { caseText, PASSIVE_ROWS } = await import("../fixtures/plan/helpers.mjs");
+  const { runScript } = await import("../fixtures/cli/harness.mjs");
+  const CASES = join(ST, "cases", "my-product");
+  const { repo, run_id } = await committedReviewRun({
+    before: async (r, id) => {
+      mkdirSync(join(r, CASES), { recursive: true });
+      writeFileSync(join(r, CASES, "TC-001_headers.md"), caseText("TC-001", PASSIVE_ROWS));
+      writeFileSync(join(r, CASES, "TC-002_plain.md"), caseText("TC-002", [["Navigate to `{{base_url}}/`", "Loads"]], { title: "Plain" }));
+      for (const name of ["TC-001_headers.md", "TC-002_plain.md"]) {
+        const a = await runScript("plan", ["admit", "--run", id, `${CASES}/${name}`], { cwd: r, env: ENV });
+        assert.equal(a.code, 0, a.stdout + a.stderr);
+      }
+    },
+  });
+  const suite = "tasks/security-my-product-admitted";
+  for (const [profile, to] of [["case", suite], ["handoff", HANDOFFS]]) {
+    const p = await evidence(repo, ["publish", "--run", run_id, "--profile", profile, "--to", to]);
+    assert.equal(p.code, 0, `${profile}: ${p.stdout}${p.stderr}`);
+  }
+  const caseManifest = join(HANDOFFS, `${run_id}.case.export-manifest.json`);
+  const handoffManifest = join(HANDOFFS, `${run_id}.handoff.export-manifest.json`);
+  for (const m of [caseManifest, handoffManifest]) {
+    const withSource = await check(repo, m, runRel(run_id));
+    assert.equal(withSource.stdout, "VERIFIED-DERIVATIVE\n", `${m}: ${withSource.stderr}`);
+    assert.equal(withSource.code, 0);
+    const without = await check(repo, m);
+    assert.equal(without.stdout, "LINKED-ONLY\n", m);
+    assert.equal(without.code, 0);
+  }
+  // an extra file in the suite is not the export's business (sign-off lists it); an edited published file is
+  writeFileSync(join(repo, suite, "TC-009_by-hand.md"), "# not published\n");
+  assert.equal((await check(repo, caseManifest, runRel(run_id))).stdout, "VERIFIED-DERIVATIVE\n");
+  const published = join(repo, suite, "TC-002_plain.md");
+  const bytes = readFileSync(published);
+  writeFileSync(published, Buffer.concat([bytes, Buffer.from("edited\n")]));
+  let r = await check(repo, caseManifest);
+  assert.equal(r.code, 5);
+  assert.equal(r.stdout, "MISMATCH(output)\n");
+  writeFileSync(published, bytes);
+  // the candidate moved after publication: the suite still matches its manifest, but cannot be re-derived from the source
+  rmSync(join(repo, CASES, "TC-002_plain.md"));
+  assert.equal((await check(repo, caseManifest)).stdout, "LINKED-ONLY\n");
+  r = await check(repo, caseManifest, runRel(run_id));
+  assert.equal(r.code, 5);
+  assert.equal(r.stdout, "MISMATCH(output)\n");
+  // the handoff prompt edited ⇒ mismatch with and without the source
+  const prompt = join(repo, HANDOFFS, "my-product.md");
+  const promptBytes = readFileSync(prompt);
+  writeFileSync(prompt, promptBytes.toString("utf8").replace("staging", "prod"));
+  assert.equal((await check(repo, handoffManifest)).stdout, "MISMATCH(output)\n");
+  assert.equal((await check(repo, handoffManifest, runRel(run_id))).stdout, "MISMATCH(output)\n");
+  writeFileSync(prompt, promptBytes);
+  // review 1: a handoff manifest whose recorded base_url passes the schema but not handoff.promptLines (not http(s), a `"`)
+  // is MISMATCH(output) with the source, never an escaped TypeError
+  const em = readArtifact(join(repo, handoffManifest), { kind: "export-manifest" });
+  const run = readArtifact(join(repo, runRel(run_id), "run.json"), { kind: "run" });
+  const head = { schema_version: run.envelope.schema_version, kind: "export-manifest", run_id, engagement_id: run.envelope.engagement_id, key_id: run.envelope.key_id, now: () => ENV.SECURITY_EVIDENCE_NOW };
+  for (const base_url of ["ftp://staging.example.com", 'https://staging.example.com/"']) {
+    writeArtifact(join(repo, handoffManifest), makeEnvelope(head, { ...em.payload, opts: { ...em.payload.opts, base_url } }));
+    assert.equal((await check(repo, handoffManifest)).stdout, "LINKED-ONLY\n", base_url);
+    r = await check(repo, handoffManifest, runRel(run_id));
+    assert.equal(r.code, 5, `${base_url}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.stdout, "MISMATCH(output)\n");
+  }
 });
 
 test("cmd-check-export writes nothing (no fs writer imported) and prints only through ctx.out", () => {

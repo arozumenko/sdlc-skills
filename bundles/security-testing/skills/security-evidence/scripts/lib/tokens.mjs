@@ -776,7 +776,7 @@ export const INDICATOR_IGNORE_FILE_EDIT = "ignore-file-edit";
 export const INDICATOR_INLINE_SUPPRESS = "inline-suppress";
 export const INDICATOR_TEST_SKIP = "test-skip";
 // --- publish + check-export (TASK-031; plan §4.1 rows `publish` / `check-export`; spec §6.9 "Publication", §9.4 / P4) ---
-/** The five publication profiles (spec §6.9), in spec order; `handoff` and `case` are M3 (NOT-IMPLEMENTED(M3) until TASK-043). */
+/** The five publication profiles (spec §6.9), in spec order; `handoff` and `case` landed with TASK-043. */
 export const PUBLISH_PROFILES = Object.freeze(["redacted-report", "full-report", "tracker", "handoff", "case"]);
 /** `PUBLISHED profile=<p> output=<repo-relative path> sha256=<h>` — one line per published file; `sha256` is that file's own hash (the manifest's `output_sha256` is the set identity, carried by the WROTE line's artifact). */
 export function publishedLine({ profile, relPath, sha256 }) {
@@ -911,8 +911,6 @@ export function approvalEntry({ id, status, kinds }) {
   if (!Array.isArray(kinds) || kinds.length === 0 || !kinds.every((k) => APPROVAL_KINDS.includes(k))) throw new TypeError(`approvalEntry: kinds must name one or more of ${APPROVAL_KINDS.join("|")}`);
   return `  ${id} status=${status} ${kinds.join(",")}`;
 }
-/** `UNADMITTED: not evaluated` — the admitted-suite comparison is M3 (TASK-043; US-025 AC-6). */
-export const UNADMITTED_NOT_EVALUATED = "UNADMITTED: not evaluated";
 /** `DISPOSITIONS: not evaluated` — `sign_off.require_dispositions: none`, or no assessment run to read a threat model from. */
 export const DISPOSITIONS_NOT_EVALUATED = "DISPOSITIONS: not evaluated";
 const DISPOSITION_POLICIES = Object.freeze(["executed-or-ticketed", "all"]);
@@ -1000,4 +998,21 @@ export const PROPOSAL_UNDER_TASKS = "PROPOSAL-UNDER-TASKS";
 /** `NEXT: run snapshot proposals --run <run_id>` — the proposal is on disk; the run sees it through its proposals index (P2, TL-3). */
 export function nextSnapshotProposals(run_id) {
   return `NEXT: run snapshot proposals --run ${requireRunId("nextSnapshotProposals", run_id)}`;
+}
+
+// --- publish --profile handoff | case, sign-off UNADMITTED (TASK-043; plan §4.1 rows `publish` / `sign-off`, §5 TASK-043; spec §9.2, §2 "Only admitted cases are written to the hand-off suite"; US-025 AC-6, US-035 AC-4) ---
+// `publish --profile handoff` prints the PUBLISHED / WROTE pair and then the
+// §9.2 prompt itself (two lines, lib/profiles/handoff.mjs promptLines — the
+// prompt is the profile's output, spelled once). The `UNADMITTED: not
+// evaluated` placeholder of TASK-033 is retired: sign-off now lists every
+// file in a suite directory whose identity `publish --profile case` did not
+// record (its export manifest's `opts.members`).
+/** `UNADMITTED: <n>` — the files under `tasks/security-<slug>-admitted/` no `publish --profile case` recorded; informational (spec §7's fail table is closed), one `  <path>` entry per file. */
+export function unadmittedHeader(n) {
+  return `UNADMITTED: ${requireCount("unadmittedHeader", "n", n)}`;
+}
+/** `  <repo-relative path>` — one per unadmitted suite file; the path only, never its content or hash. */
+export function unadmittedEntry(relPath) {
+  requireRepoRelative("unadmittedEntry", relPath);
+  return `  ${relPath}`;
 }
