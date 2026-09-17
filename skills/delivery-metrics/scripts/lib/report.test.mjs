@@ -1,0 +1,248 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { appendObservation, makeObservation } from './events.mjs';
+import { saveRun } from './plan.mjs';
+import { deliveryDir, eventsPath, plansDir, runPath, sha256 } from './paths.mjs';
+import { assemble, renderMarkdown, renderStatus, loadProfile, UNCONDITIONAL_CAVEATS } from './report.mjs';
+
+const tmp = () => mkdtempSync(join(tmpdir(), 'dm-report-'));
+const R = 'sec/run-1';
+const seed = (repo) => {
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-07T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' }, { item_id: `${R}/task-b`, ref: 'TASK-B', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'M' }, { item_id: `${R}/task-z`, ref: 'TASK-Z', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'M' }] });
+  const o = (id, ref, level, event, at, over = {}) => appendObservation(repo, makeObservation({ user: 'u', host: over.source === 'hook' ? 'claude' : 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event, at, transition_id: `${R}/${id}/${event}/${over.t ?? 'episode-1'}`, source: over.source ?? 'cli', source_record_id: `${event}-${id}`, meta: { version: 1, ...(over.meta ?? {}) } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'task', 'created', '2026-09-07T09:00:00Z'); o('task-b', 'TASK-B', 'task', 'created', '2026-09-07T09:00:00Z');
+  o('task-a', 'TASK-A', 'task', 'dispatched', '2026-09-09T09:00:00Z', { source: 'hook', t: 'agent-1' }); o('task-a', 'TASK-A', 'task', 'done', '2026-09-09T11:00:00Z');
+  o('task-b', 'TASK-B', 'task', 'dispatched', '2026-09-10T09:00:00Z', { source: 'hook', t: 'agent-2' });
+  // an observation for an item no run knows
+  appendFileSync(eventsPath(repo, 'u'), `${JSON.stringify(makeObservation({ user: 'u', host: 'cli', plan: 'ghost/run-9', item_id: 'ghost/run-9/task-x', ref: 'X', level: 'task', event: 'done', at: '2026-09-09T00:00:00Z', transition_id: 'ghost/run-9/task-x/done/episode-1', source: 'cli', source_record_id: 'g1', meta: { version: 1 } }, { now: 0 }))}\n`);
+};
+const NOW = Date.parse('2026-09-21T00:00:00Z');
+
+test('historical registration alone supplies per-item creation cohorts and lead time', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { main } = await import('../delivery.mjs');
+  const repo = tmp();
+  const g = (args, at = '2026-09-10T08:00:00Z') => execFileSync('git', args, { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x', GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } });
+  g(['init', '-q', '-b', 'main']);
+  const block = { campaign_id: 'sec', run_id: 'run-1', version: 1, factory: 'feature-development', observation_start: '2026-09-01T00:00:00Z', source_epoch: { from: '2026-09-01T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'sec' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-001' }] }] };
+  const commit = (at) => { writeFileSync(join(repo, 'plan.json'), JSON.stringify(block)); g(['add', 'plan.json']); g(['commit', '-q', '-m', 'plan'], at); };
+  commit('2026-09-10T08:00:00Z'); block.missions[0].tasks.push({ ref: 'TASK-002' }); commit('2026-09-12T08:00:00Z');
+  const io = { write() {} }, now = Date.parse('2026-09-18T12:00:00Z');
+  const call = (args) => main(args, { repo, now, stdout: io, stderr: io, env: { DELIVERY_NO_SYNC: '1' } });
+  assert.equal(await call(['plan', 'register', '--from', 'plan.json', '--id', 'reg']), 0);
+  for (const ref of ['TASK-001', 'TASK-002']) assert.equal(await call(['event', ref, 'done', '--id', ref, '--at', '2026-09-16T10:00:00Z']), 0);
+  const d = assemble(repo, { since: '2026-09-10T00:00:00Z', cutoff: '2026-09-17T00:00:00Z', now, filters: { level: 'task' } });
+  assert.equal(d.plans[0].metrics.flow.task.strata.all.lead_time.min, 98 * 3600);
+  assert.equal(d.plans[0].metrics.flow.task.strata.all.lead_time.max, 146 * 3600);
+  const creation = assemble(repo, { since: '2026-09-10T00:00:00Z', cutoff: '2026-09-11T00:00:00Z', now, filters: { level: 'task' } });
+  assert.equal(creation.plans[0].metrics.cohorts.created, 1);
+});
+
+test('assemble: window defaults normalised, read-once provenance, coverage counts (unregistered, registration gaps), unconditional caveats', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const e = doc.envelope;
+  assert.equal(e.window.since, '2026-09-07T00:00:00.000Z'); assert.equal(e.window.effective_end, '2026-09-21T00:00:00.000Z');
+  assert.equal(e.sources.events_files.length, 1); assert.match(e.sources.events_files[0].sha256, /^[0-9a-f]{64}$/);
+  assert.match(e.sources.plans[0].file_sha256, /^[0-9a-f]{64}$/); assert.equal(e.sources.plans[0].canonical_sha256, 'c'.repeat(64)); assert.equal(e.sources.profile.source, 'template-default');
+  assert.equal(e.schema.ledger, 2); assert.equal(e.policy.durations, 'seconds; hours rounded at render');
+  assert.equal(e.coverage.unregistered, 1); assert.equal(e.coverage.registration_gaps, 3, 'campaign, G1, TASK-Z have no created');
+  for (const c of UNCONDITIONAL_CAVEATS) assert.ok(e.caveats.includes(c), c);
+  const m = doc.plans[0].metrics;
+  assert.deepEqual(m.flow.task.strata.all.cycle_time.samples, [7200]); assert.equal(m.wip.task, 1);
+  assert.equal(doc.plans[0].items.find((i) => i.ref === 'TASK-B').state, 'in_progress');
+  assert.throws(() => assemble(repo, { now: NOW, since: '2026-09-22T00:00:00Z' }), (x) => x.code === 'USAGE');
+  assert.throws(() => assemble(repo, { now: NOW, plans: ['nope/x'] }), (x) => x.code === 'NO-PLAN');
+  assert.throws(() => assemble(repo, { now: Date.parse('2026-09-01T00:00:00Z'), until: '2026-09-02T00:00:00Z', since: '2026-08-01T00:00:00Z' }), (x) => x.code === 'NO-EVENTS', 'no observations before the effective end');
+  assert.equal(assemble(repo, { now: NOW, since: '2026-09-15T00:00:00Z' }).plans[0].metrics.cohorts.completed, 0, 'events exist but none in the window → measurable zero');
+});
+
+test('renderMarkdown: sections, n beside figures, strata, per-item estimate rows, em-dash reasons, no byPerson/mean headline', () => {
+  const repo = tmp(); seed(repo);
+  const md = renderMarkdown(assemble(repo, { now: NOW }));
+  for (const h of ['## Flow Time', '## Throughput', '## Quality', '## Estimates', '## Coverage & caveats', '## Open items']) assert.ok(md.includes(h), h);
+  assert.match(md, /cycle_time \| all \| n=1 \| — \(n<5\)/); assert.match(md, /cycle_time \| S \| n=1/);
+  assert.match(md, /velocity[^\n]*— \(2 whole weeks < 3\)/); assert.match(md, /quality: reviewed=unknown eligible=unknown done=1/);
+  assert.match(md, /registration_gaps=3/); assert.match(md, /unregistered=1/);
+  assert.ok(!/byPerson/i.test(md)); assert.ok(!/^\|\s*mean/m.test(md)); assert.match(md, /no baseline/); assert.match(md, /acceptance: unauthenticated/);
+});
+
+test('renderStatus: one-screen counts and open ages (255 h); loadProfile merges template', () => {
+  const repo = tmp(); seed(repo);
+  const s = renderStatus(assemble(repo, { now: NOW }));
+  assert.match(s, /STATUS sec\/run-1 v1/); assert.match(s, /task: done=1 in_progress=1 planned=1 cancelled=0/); assert.match(s, /TASK-B[^\n]*age=255h/);
+  assert.equal(loadProfile(repo).profile.minWholeWeeks, 3);
+  mkdirSync(deliveryDir(repo), { recursive: true });
+});
+
+// --- Round-3 review obligations (F15, F17, F18, F19, F20) -----------------------------------
+
+test('F15: cancelled_share uses the creation cohort (metrics.cohorts.created), not the whole catalogue, and respects --class; same numerator/denominator in Markdown and JSON', () => {
+  const repo = tmp();
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    // OLD: created and cancelled entirely BEFORE the window — must never move the window's cancelled_share.
+    { item_id: `${R}/task-old`, ref: 'TASK-OLD', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' },
+    // IN-WINDOW S class: one created+cancelled in window, one created+done in window.
+    { item_id: `${R}/task-s1`, ref: 'TASK-S1', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' },
+    { item_id: `${R}/task-s2`, ref: 'TASK-S2', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' },
+    // IN-WINDOW M class: created and cancelled in window — must not leak into an S-class filter.
+    { item_id: `${R}/task-m1`, ref: 'TASK-M1', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'M' },
+  ] });
+  const o = (id, ref, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-old', 'TASK-OLD', 'created', '2026-09-01T00:00:00Z'); o('task-old', 'TASK-OLD', 'cancelled', '2026-09-01T01:00:00Z');
+  o('task-s1', 'TASK-S1', 'created', '2026-09-10T00:00:00Z'); o('task-s1', 'TASK-S1', 'cancelled', '2026-09-10T01:00:00Z');
+  o('task-s2', 'TASK-S2', 'created', '2026-09-10T00:00:00Z'); o('task-s2', 'TASK-S2', 'done', '2026-09-10T02:00:00Z');
+  o('task-m1', 'TASK-M1', 'created', '2026-09-10T00:00:00Z'); o('task-m1', 'TASK-M1', 'cancelled', '2026-09-10T01:00:00Z');
+
+  const win = { since: '2026-09-05T00:00:00Z', cutoff: '2026-09-15T00:00:00Z', now: NOW };
+  const unfiltered = assemble(repo, win).plans[0].metrics;
+  // Whole-catalogue-wrong answer would be 3/5 (TASK-OLD + TASK-S1 + TASK-M1 cancelled of 5 total).
+  // Creation-cohort-correct answer is 2/3 (TASK-S1 + TASK-M1 of the 3 created inside the window).
+  assert.equal(unfiltered.cohorts.created, 3);
+  assert.equal(unfiltered.quality.cancelled_share.denominator, unfiltered.cohorts.created);
+  assert.equal(unfiltered.quality.cancelled_share.numerator, 2);
+  assert.equal(unfiltered.quality.cancelled_share.ratio, 0.6667);
+
+  const filtered = assemble(repo, { ...win, filters: { class: 'S' } }).plans[0].metrics;
+  assert.equal(filtered.cohorts.created, 2, 'class filter narrows the creation cohort to S');
+  assert.equal(filtered.quality.cancelled_share.denominator, 2);
+  assert.equal(filtered.quality.cancelled_share.numerator, 1, 'only TASK-S1 is S-class and cancelled');
+  assert.equal(filtered.quality.cancelled_share.ratio, 0.5);
+
+  const md = renderMarkdown(assemble(repo, { ...win, filters: { class: 'S' } }));
+  assert.match(md, /cancelled_share: 1\/2 \(50%\)/);
+});
+
+test('F17: every stratum renders (flow strata.<class>, estimates strata.<class>/tier:*/class|tier), per-stratum quality denominators, coverage.sources + done_basis', () => {
+  const repo = tmp();
+  const EST = (low, high) => ({ unit: 'h', low, high, tier: 'budgetary', proposed_by: 'lead', proposed_at: '2026-09-09T00:00:00Z', accepted_by: 'lead', accepted_at: '2026-09-09T00:00:00Z' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S', estimate: EST(1, 2) },
+    { item_id: `${R}/task-b`, ref: 'TASK-B', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'M', estimate: EST(2, 4) },
+  ] });
+  const o = (id, ref, event, at, meta = {}) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1, ...meta } }, { now: 0 }), { slug: 'u', now: 0 });
+  const est = (id, ref, e) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event: 'estimated', at: '2026-09-09T00:00:00Z', transition_id: `${R}/${id}/estimated/rev-0`, source: 'cli', source_record_id: `est-${id}`, estimate: e, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'created', '2026-09-09T00:00:00Z'); o('task-b', 'TASK-B', 'created', '2026-09-09T00:00:00Z');
+  est('task-a', 'TASK-A', EST(1, 2)); est('task-b', 'TASK-B', EST(2, 4));
+  o('task-a', 'TASK-A', 'dispatched', '2026-09-10T00:00:00Z'); o('task-a', 'TASK-A', 'done', '2026-09-10T02:00:00Z');
+  o('task-b', 'TASK-B', 'dispatched', '2026-09-11T00:00:00Z'); o('task-b', 'TASK-B', 'done', '2026-09-11T03:00:00Z');
+
+  const doc = assemble(repo, { now: NOW });
+  const m = doc.plans[0].metrics;
+  const flowKeys = Object.keys(m.flow.task.strata);
+  assert.deepEqual(flowKeys.sort(), ['S', 'M', 'all'].sort(), 'flow strata: all + every class present');
+  for (const st of flowKeys) assert.ok('quality' in m.flow.task.strata[st] && typeof m.flow.task.strata[st].quality.done === 'number', `${st} carries a quality denominator`);
+
+  const estKeys = Object.keys(m.estimates.task.strata);
+  for (const k of ['all', 'S', 'M', 'tier:budgetary', 'S|budgetary', 'M|budgetary']) assert.ok(estKeys.includes(k), `estimates strata missing ${k}`);
+
+  assert.ok('sources' in m.coverage.task); assert.ok('done_basis' in m.coverage.task);
+  assert.equal(m.coverage.task.done_basis.observed, 2);
+
+  const md = renderMarkdown(doc);
+  for (const st of flowKeys) assert.match(md, new RegExp(`task quality \\| ${st} \\| quality: reviewed=unknown eligible=unknown done=\\d+`));
+  for (const k of ['all', 'S', 'M', 'tier:budgetary', 'S\\|budgetary', 'M\\|budgetary']) assert.match(md, new RegExp(`\\| task \\| ${k} \\|`), `estimates row missing ${k}`);
+  assert.match(md, /done_basis observed=2 derived-child=0 proxy=0/);
+  assert.match(md, /sources \{/);
+});
+
+test('F18: run/profile hashes describe the bytes actually read (single read); compact items carry evidence {created, started, done} = occurrence provenance {path, line, observation_id}', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const e = doc.envelope;
+  // The bytes on disk right now hash to the same value the envelope reports — proving the hash
+  // describes the file as read, not a re-read of a possibly-different later state.
+  const onDisk = sha256(readFileSync(runPath(repo, R)));
+  assert.equal(e.sources.plans[0].file_sha256, onDisk);
+
+  const a = doc.plans[0].items.find((i) => i.ref === 'TASK-A');
+  assert.ok(a.evidence.created, 'created evidence present'); assert.match(a.evidence.created.observation_id, /created-task-a/);
+  assert.equal(typeof a.evidence.created.line, 'number');
+  assert.ok(a.evidence.started, 'started evidence present (observed dispatch)'); assert.match(a.evidence.started.observation_id, /dispatched-task-a/);
+  assert.ok(a.evidence.done, 'done evidence present'); assert.match(a.evidence.done.observation_id, /done-task-a/);
+  // The mission has no explicit done occurrence (never terminal in the seed) so its done evidence is
+  // honestly null rather than invented.
+  const g1 = doc.plans[0].items.find((i) => i.ref === 'G1');
+  assert.equal(g1.evidence.done, null);
+});
+
+test('F18 (part 2): a plan file changed after an earlier read is never re-opened for hashing — the hash always matches the bytes assemble itself just read, and the module never calls loadRun/listRuns at all', () => {
+  const text = readFileSync(new URL('./report.mjs', import.meta.url), 'utf8');
+  assert.ok(!/from '\.\/plan\.mjs'/.test(text), 'report.mjs must not import anything from plan.mjs (no loadRun/listRuns) — it reads run files itself, once, for both parsing and hashing');
+
+  const repo = tmp(); seed(repo);
+  const first = assemble(repo, { now: NOW }).envelope.sources.plans[0].file_sha256;
+  // Mutate the run file on disk (simulating another writer) between two assemble() calls.
+  const rec = JSON.parse(readFileSync(runPath(repo, R), 'utf8')); rec.status = 'closed';
+  writeFileSync(runPath(repo, R), `${JSON.stringify(rec, null, 2)}\n`);
+  const second = assemble(repo, { now: NOW }).envelope.sources.plans[0].file_sha256;
+  assert.notEqual(first, second, 'the hash tracks the bytes actually on disk at read time, not a stale cached value');
+  assert.equal(second, sha256(readFileSync(runPath(repo, R))));
+});
+
+test('F19: hook diagnostics counted by kind; admitted-but-unattributed dispatches counted with a share; unregistered is checked against ALL registered runs even when --plan selects one', () => {
+  const repo = tmp(); seed(repo);
+  // A second, unselected run — an item registered only here must not be miscounted as unregistered
+  // when the report selects only run-1.
+  const R2 = 'sec/run-2';
+  saveRun(repo, { run: R2, campaign_id: 'sec', run_id: 'run-2', version: 1, status: 'open', observation_start: '2026-09-07T00:00:00Z', canonical_sha256: 'd'.repeat(64), items: [
+    { item_id: `${R2}/campaign`, ref: 'sec2', level: 'campaign', parent_item_id: null },
+    { item_id: `${R2}/task-q`, ref: 'TASK-Q', level: 'task', parent_item_id: `${R2}/campaign`, class: 'S' },
+  ] });
+  appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R2, item_id: `${R2}/task-q`, ref: 'TASK-Q', level: 'task', event: 'created', at: '2026-09-08T00:00:00Z', transition_id: `${R2}/task-q/created/0`, source: 'cli', source_record_id: 'q1', meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+
+  // An admitted-but-unattributed dispatch (hook couldn't resolve the item, but recorded the fact).
+  appendObservation(repo, makeObservation({ user: 'u', host: 'claude', plan: R, item_id: null, ref: null, level: null, event: 'dispatched', at: '2026-09-11T00:00:00Z', transition_id: `${R}/unattributed/dispatched/episode-1`, source: 'hook', source_record_id: 'unatt-1', meta: { version: 1, unattributed: true } }, { now: 0 }), { slug: 'u', now: 0 });
+
+  mkdirSync(deliveryDir(repo), { recursive: true });
+  const diagPath = join(deliveryDir(repo), 'diagnostics-u.jsonl');
+  writeFileSync(diagPath, [
+    JSON.stringify({ at: '2026-09-09T00:00:00Z', kind: 'unbound-session', session: 's1', agent_id: 'a1', detail: 'no plan bound' }),
+    JSON.stringify({ at: '2026-09-09T00:01:00Z', kind: 'incomplete-transcript', session: 's2', agent_id: 'a2', detail: 'truncated' }),
+    JSON.stringify({ at: '2026-09-09T00:02:00Z', kind: 'incomplete-transcript', session: 's3', agent_id: 'a3', detail: 'truncated' }),
+    'not json at all',
+    JSON.stringify({ at: '2026-09-09T00:03:00Z', kind: 'no-such-kind', session: 's4', agent_id: 'a4', detail: 'x' }),
+  ].join('\n') + '\n');
+
+  const doc = assemble(repo, { plans: [R], now: NOW });
+  const cov = doc.envelope.coverage;
+  assert.equal(cov.diagnostics['unbound-session'], 1);
+  assert.equal(cov.diagnostics['incomplete-transcript'], 2);
+  assert.equal(cov.diagnostics.malformed, 2, 'invalid json line + unknown kind both fold into malformed');
+  assert.equal(cov.diagnostics['unknown-role'], 0);
+
+  assert.equal(cov.unattributed_dispatches, 1);
+  // attributed dispatches in the ledger: TASK-A + TASK-B (from seed) = 2; unattributed = 1 → 1/3.
+  assert.equal(cov.unattributed_share, 0.3333);
+
+  // TASK-Q belongs to run-2, which is registered but NOT selected — its `created` occurrence must
+  // not be counted as unregistered, and run-1's own unregistered count (the `ghost/run-9` item from
+  // seed()) is unaffected by run-2 existing.
+  assert.equal(cov.unregistered, 1, 'still only the ghost/run-9 observation — TASK-Q is registered (in run-2), not unregistered');
+});
+
+test('F20: invalid --since/--until/--cutoff and unknown --level are USAGE; --plan naming an unknown/malformed run is NO-PLAN; a malformed run file elsewhere is counted and skipped, never INTERNAL', () => {
+  const repo = tmp(); seed(repo);
+  assert.throws(() => assemble(repo, { now: NOW, since: 'not-a-date' }), (x) => x.code === 'USAGE');
+  assert.throws(() => assemble(repo, { now: NOW, until: 'not-a-date' }), (x) => x.code === 'USAGE');
+  assert.throws(() => assemble(repo, { now: NOW, cutoff: 'not-a-date' }), (x) => x.code === 'USAGE');
+  assert.throws(() => assemble(repo, { now: NOW, filters: { level: 'sprint' } }), (x) => x.code === 'USAGE');
+  assert.throws(() => assemble(repo, { now: NOW, plans: ['sec/run-1', 'sec/run-9'] }), (x) => x.code === 'NO-PLAN');
+
+  // A second run file that is simply not valid JSON.
+  mkdirSync(plansDir(repo), { recursive: true });
+  writeFileSync(runPath(repo, 'sec/run-broken'), '{ not json');
+  const doc = assemble(repo, { now: NOW });
+  assert.equal(doc.envelope.coverage.malformed_runs, 1);
+  assert.equal(doc.plans.length, 1, 'the malformed run is skipped, not thrown');
+  assert.match(doc.envelope.caveats.join('\n'), /1 registered run file\(s\) malformed/);
+  assert.throws(() => assemble(repo, { now: NOW, plans: ['sec/run-broken'] }), (x) => x.code === 'NO-PLAN', 'naming the malformed run by id is NO-PLAN, never INTERNAL');
+});

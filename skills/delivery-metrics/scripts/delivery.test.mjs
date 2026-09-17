@@ -384,3 +384,34 @@ test('minor (b): bare --from/--at/--revision and a directory --from all exit USA
   const dirEventFrom = run(repo, ['event', '--from', repo]);
   assert.equal(dirEventFrom.code, 2); assert.match(dirEventFrom.stderr, /^USAGE\(.*is not a file/);
 });
+
+test('report/status commands: markdown, --json, --out, --level/--class filters, M4 flags refused, NO-PLAN exit 3', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  run(repo, ['event', 'TASK-001', 'dispatched', '--at', '2026-09-16T09:00:00Z', '--id', 'd1']); run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T11:00:00Z', '--id', 'd2']);
+  const md = run(repo, ['report', '--cutoff', '2026-09-21T00:00:00Z']); assert.equal(md.code, 0, md.stderr); assert.match(md.stdout, /## Flow Time/);
+  const js = run(repo, ['report', '--json', '--cutoff', '2026-09-21T00:00:00Z', '--out', join(repo, 'r.json')]); assert.match(js.stdout, /^REPORT /);
+  const doc = JSON.parse(readFileSync(join(repo, 'r.json'), 'utf8')); assert.equal(doc.plans[0].metrics.flow.task.strata.all.cycle_time.samples[0], 7200);
+  assert.equal(JSON.parse(run(repo, ['report', '--json', '--cutoff', '2026-09-21T00:00:00Z', '--class', 'M']).stdout).plans[0].metrics.coverage.task?.done ?? 0, 0);
+  for (const flag of ['--from-json', '--html', '--calibrate']) assert.match(run(repo, ['report', flag, 'x']).stderr, /is not in M1/);
+  assert.match(run(repo, ['status']).stdout, /STATUS sec\/run-1 v1/);
+  assert.equal(run(initRepo(), ['report']).code, 3);
+});
+
+// F20: report/status input failures must map to a proper cliError exit code (never INTERNAL/exit 1) —
+// invalid --since/--until/--cutoff and an unknown --level are USAGE (exit 2); --plan naming an
+// unknown run is NO-PLAN (exit 3, the same mapping resolveRun already uses for every other command —
+// paths.mjs's EXIT table is shared and intentionally left unchanged here).
+test('F20: report exits 2 (USAGE) on invalid date flags and unknown --level, exits 3 (NO-PLAN) on an unknown --plan, never INTERNAL', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  for (const flag of ['--since', '--until', '--cutoff']) {
+    const r = run(repo, ['report', flag, 'not-a-date']);
+    assert.equal(r.code, 2, `${flag}: ${r.stderr}`); assert.match(r.stderr, /^USAGE\(/);
+  }
+  const badLevel = run(repo, ['report', '--level', 'sprint']);
+  assert.equal(badLevel.code, 2, badLevel.stderr); assert.match(badLevel.stderr, /^USAGE\(/);
+  const badPlan = run(repo, ['report', '--plan', 'sec/run-9']);
+  assert.equal(badPlan.code, 3, badPlan.stderr); assert.match(badPlan.stderr, /^NO-PLAN\(/);
+  for (const r of [run(repo, ['report', '--since', 'x']), badLevel, badPlan]) assert.ok(!/^INTERNAL/.test(r.stderr));
+});

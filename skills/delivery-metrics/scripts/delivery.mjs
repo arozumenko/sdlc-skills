@@ -10,6 +10,7 @@ import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
+import { assemble, renderMarkdown, renderStatus } from './lib/report.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -314,7 +315,18 @@ function cmdProfile(repo, p, io) {
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
 
-export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile };
+/** F20: --from-json/--html/--calibrate are not in M1 — reject before assemble does any work. */
+function cmdReport(repo, p, io, now) {
+  const f = p.flags;
+  for (const k of ['from-json', 'html', 'calibrate']) if (f[k]) throw cliError('USAGE', `--${k} is not in M1`);
+  const doc = assemble(repo, { plans: f.plan ? String(f.plan).split(',') : null, since: f.since ?? null, until: f.until ?? null, cutoff: f.cutoff ?? null, now, estimateBase: f['latest-estimate'] ? 'latest' : 'original', filters: { level: f.level ?? null, class: f.class ?? null } });
+  const text = f.json ? `${JSON.stringify(doc, null, 2)}\n` : renderMarkdown(doc);
+  if (f.out) { writeFileSync(f.out, text); out(io, `REPORT ${f.out}`); } else io.stdout.write(text);
+  return 0;
+}
+function cmdStatus(repo, p, io, now) { io.stdout.write(renderStatus(assemble(repo, { plans: p.flags.plan ? [p.flags.plan] : null, now }))); return 0; }
+
+export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus };
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
