@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { appendObservation, makeObservation } from './events.mjs';
 import { saveRun } from './plan.mjs';
 import { deliveryDir, eventsPath, plansDir, runPath, sha256 } from './paths.mjs';
-import { assemble, renderMarkdown, renderStatus, loadProfile, UNCONDITIONAL_CAVEATS } from './report.mjs';
+import { assemble, renderMarkdown, renderHtml, renderStatus, loadProfile, escHtml, UNCONDITIONAL_CAVEATS } from './report.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-report-'));
 const R = 'sec/run-1';
@@ -319,4 +319,55 @@ test('minor (e): a run file with valid JSON but an item missing item_id is treat
   assert.equal(doc.envelope.coverage.malformed_runs, 1);
   assert.equal(doc.plans.length, 1, 'only sec/run-1 is usable');
   assert.throws(() => assemble(repo, { now: NOW, plans: ['sec/run-noid'] }), (x) => x.code === 'NO-PLAN');
+});
+
+// --- HTML renderer (brief: .superpowers/sdd/html-report/brief.md) --------------------------
+
+test('renderHtml: self-contained document — no external assets, no script', () => {
+  const repo = tmp(); seed(repo);
+  const html = renderHtml(assemble(repo, { now: NOW }));
+  assert.match(html, /^<!doctype html>/);
+  assert.match(html, /<style>/);
+  assert.match(html, /<title>Delivery report/);
+  assert.doesNotMatch(html, /<script/i);
+  assert.doesNotMatch(html, /<link/i);
+  assert.doesNotMatch(html, /https?:\/\//);
+  assert.doesNotMatch(html, /<img/i);
+});
+
+test('renderHtml: every section and figure of the Markdown render is present', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const html = renderHtml(doc);
+  for (const r of doc.plans[0].metrics.estimate_rows) assert.match(html, new RegExp(`>${escHtml(r.ref)}<`), r.ref);
+  const leadTimePresent = Object.values(doc.plans[0].metrics.flow).some((f) => Object.values(f.strata).some((s) => s.lead_time));
+  if (leadTimePresent) assert.match(html, /plan-tracked, not idea-to-done/);
+  for (const heading of ['cycle_time', 'Flow time', 'Throughput', 'Estimates', 'Coverage', 'Open items', 'Envelope', 'Caveats']) assert.ok(html.includes(heading), heading);
+  assert.match(html, /registration_gaps/);
+});
+
+test('renderHtml: every envelope caveat is rendered, in order', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const html = renderHtml(doc);
+  const expected = doc.envelope.caveats.map((c) => `<li>${escHtml(c)}</li>`);
+  let cursor = -1;
+  for (const li of expected) {
+    const idx = html.indexOf(li);
+    assert.ok(idx >= 0, li);
+    assert.ok(idx > cursor, `${li} rendered out of order`);
+    cursor = idx;
+  }
+});
+
+test('renderHtml: escapes user-controlled strings', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const mutated = JSON.parse(JSON.stringify(doc));
+  const evil = '<b>TASK-9</b>&"x"';
+  // TASK-B is in_progress in the seed fixture — its ref is rendered in the Open items table.
+  mutated.plans[0].items.find((i) => i.ref === 'TASK-B').ref = evil;
+  const html = renderHtml(mutated);
+  assert.ok(!html.includes('<b>TASK-9</b>'), 'raw markup must not appear unescaped');
+  assert.ok(html.includes('&lt;b&gt;TASK-9&lt;/b&gt;&amp;&quot;x&quot;'), 'escaped form must appear');
 });

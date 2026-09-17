@@ -206,6 +206,41 @@ const pct = (r) => (r == null ? '—' : `${Math.round(r * 1000) / 10}%`);
 // was duplicated at each open-items call-site — one shared helper.
 const ageH = (end, started) => (started ? `${toHours((Date.parse(end) - Date.parse(started)) / 1000)}h` : null);
 
+// html-report brief: self-contained HTML renderer, house style ported from tokenomics'
+// team-report.mjs (escHtml/PAGE_CSS/statCell/kpiCard) — no external assets, no <script>, every
+// dynamic string escaped. Trimmed to the panels/chip/table chrome this report actually uses; the
+// token-composition bar/legend/share-cell classes tokenomics ships are dropped (unused here).
+export const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const PAGE_CSS = `
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--warn:#c53030;--ok:#2f855a}
+html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--warn:#e06c6c;--ok:#48a06f}
+*{box-sizing:border-box}
+body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1120px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
+h1{font-size:1.35rem;margin:0 0 .2rem}
+.meta{color:var(--text-muted);font-size:.85rem;margin:0 0 1.1rem}
+section{margin-top:1.1rem}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:.8rem}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;min-width:0}
+.kpi-card h3{margin:0 0 .55rem;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat-label{font-size:.74rem;color:var(--text-secondary)}
+.stat-value{font-size:1.02rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3;overflow-wrap:anywhere}
+.kpi-callout{margin-top:.65rem;padding:.45rem .6rem;background:var(--page);border:1px solid var(--gridline);border-radius:7px;font-size:.81rem;color:var(--text-secondary)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;overflow-x:auto;min-width:0}
+.panel h2{margin:0;font-size:1rem}
+.callout-warn{margin-top:.8rem;color:var(--warn);border:1px solid var(--warn);border-radius:7px;padding:.5rem .7rem;font-size:.86rem;background:var(--surface)}
+.note{color:var(--text-muted);font-size:.84rem}
+table{border-collapse:collapse;width:100%;font-size:.87rem;margin:.4rem 0}
+th{text-align:left;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--gridline);padding:.3rem .5rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+td{border-bottom:1px solid var(--gridline);padding:.3rem .5rem;font-variant-numeric:tabular-nums}
+.chip{font-size:.8rem;border:1px solid var(--gridline);border-radius:8px;padding:.1rem .5rem;margin-right:.4rem;color:var(--text-secondary);display:inline-block}
+ul{margin:.3rem 0;padding-left:1.3rem}
+li{margin:.15rem 0}
+`;
+const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
+const kpiCard = (title, cells, callout) => `<div class="kpi-card"><h3>${title}</h3><div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
+
 export function renderMarkdown(doc) {
   const e = doc.envelope; const L = [];
   L.push('# Delivery report', '', `generated ${e.generated_at} · cutoff ${e.cutoff} · window [${e.window.since}, ${e.window.effective_end}) · sha ${e.git.sha ?? '—'}${e.git.is_working_tree ? ' (dirty)' : ''} · plans ${e.plans.join(', ')}${e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${JSON.stringify(e.policy.filters)}` : ''}`, '');
@@ -275,6 +310,133 @@ export function renderMarkdown(doc) {
   for (const c of e.caveats) L.push(`- caveat: ${c}`);
   L.push(`- policy: weeks ${e.policy.weeks}, percentiles ${e.policy.percentile} (floors median≥5 P85≥7 P90≥10), estimate base ${e.policy.estimate_base}, ${e.policy.durations}, tokenomics ${e.sources.tokenomics}, sources hashed as read`);
   return `${L.join('\n')}\n`;
+}
+
+// html-report brief §renderHtml(doc) contract: reproduces every figure/row renderMarkdown prints —
+// same helpers (h/pct/ageH/toHours), same rounding — never a second source of truth for a number.
+const flowRowsHtml = (m, e) => {
+  const L = [];
+  for (const [lv, f] of Object.entries(m.flow)) {
+    for (const [st, mm] of Object.entries(f.strata)) {
+      for (const [name, s] of Object.entries(mm)) {
+        if (name === 'quality' || !s) continue;
+        const label = name === 'lead_time' ? ` (${e.policy.labels.lead_time})` : '';
+        L.push(`<tr><td>${escHtml(`${lv} ${name}${label}`)}</td><td>${escHtml(st)}</td><td>n=${s.n}</td><td>${s.median == null ? '— (n<5)' : h(s.median)}</td><td>${s.p85 == null ? '— (n<7)' : h(s.p85)}</td><td>${s.p90 == null ? '— (n<10)' : h(s.p90)}</td><td>${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''}</td></tr>`);
+      }
+      L.push(`<tr><td>${escHtml(`${lv} quality`)}</td><td>${escHtml(st)}</td><td colspan="5">quality: reviewed=${mm.quality.reviewed ?? 'unknown'} eligible=${mm.quality.eligible ?? 'unknown'} done=${mm.quality.done}</td></tr>`);
+    }
+    if (!Object.keys(f.strata).length) L.push(`<tr><td>${escHtml(`${lv} cycle_time`)}</td><td>all</td><td colspan="5">— (not measured)</td></tr>`);
+    const ex = Object.entries(f.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ');
+    if (ex) L.push(`<tr><td>${escHtml(`${lv} excluded`)}</td><td></td><td colspan="5">${escHtml(ex)}</td></tr>`);
+  }
+  return L.join('');
+};
+const throughputRowsHtml = (m) => {
+  const L = [];
+  for (const [lv, t] of Object.entries(m.throughput)) for (const w of t.weeks) {
+    const mark = !w.covered ? '†' : (!w.whole ? '*' : '');
+    L.push(`<tr><td>${escHtml(lv)}</td><td>${escHtml(w.key)}</td><td>${w.count}</td><td>${mark}</td></tr>`);
+  }
+  return L.join('');
+};
+const throughputLinesHtml = (m, e) => {
+  const L = [];
+  for (const [lv, t] of Object.entries(m.throughput)) {
+    L.push(`<li>${escHtml(lv)} velocity (median items per whole covered week): ${t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks} whole weeks)` : `— (${t.weeks.filter((w) => w.whole).length} whole weeks < ${e.policy.minWholeWeeks})`}</li>`);
+    L.push(`<li>${escHtml(lv)} wip at end: ${m.wip[lv]}</li>`);
+  }
+  if (m.mission_turnaround.pairs.length) L.push(`<li>mission_turnaround: ${escHtml(m.mission_turnaround.pairs.map((x) => `${x.from}→${x.to} ${x.gap_s != null ? h(x.gap_s) : `overlap ${h(x.overlap_s)}`}`).join('; '))}</li>`);
+  return `<ul>${L.join('')}</ul>`;
+};
+const qualityLinesHtml = (m, p) => {
+  const L = []; const cs = m.quality.cancelled_share;
+  L.push(`<li>cancelled_share: ${cs.denominator ? `${cs.numerator}/${cs.denominator} (${pct(cs.ratio)})` : '— (n=0 created in window)'}</li>`);
+  for (const lv of Object.keys(m.flow)) { const rows = p.items.filter((i) => i.level === lv); L.push(`<li>${escHtml(lv)}: rework_proxy_items ${lv === 'task' ? m.rework_proxy_items : '—'}, deferred-episodes ${rows.filter((i) => i.reopened).length}, review rounds unknown (M2)</li>`); }
+  return `<ul>${L.join('')}</ul>`;
+};
+const estimatesStrataRowsHtml = (m) => {
+  const L = [];
+  for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
+    const ex = Object.entries(x.excluded).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ') || '—';
+    const wr = x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—';
+    L.push(`<tr><td>${escHtml(lv)}</td><td>${escHtml(st)}</td><td>${x.n}</td><td>${x.eligible}</td><td>${escHtml(String(wr))}</td><td>${x.mdmre ?? '—'}</td><td>${x.pred25 ?? '—'}</td><td>${x.mae_s == null ? '—' : h(x.mae_s)}</td><td>${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`}</td><td>${escHtml(ex)}</td></tr>`);
+  }
+  return L.join('');
+};
+const estimateRowsHtml = (m) => m.estimate_rows.map((r) => `<tr><td>${escHtml(r.ref)}</td><td>${escHtml(r.level)}</td><td>${escHtml(r.class ?? '—')}</td><td>${escHtml(r.tier ?? '—')}</td><td>${escHtml(r.base)}</td><td>${r.estimate ? `[${r.estimate.low}, ${r.estimate.high}]` : '—'}</td><td>${h(r.actual_s)}</td><td>${escHtml(r.actual_basis ?? '—')}</td><td>${r.ratio ?? '—'}</td><td>${r.hit == null ? '—' : r.hit ? 'yes' : 'no'}</td><td>${escHtml(r.reason ?? '—')}</td></tr>`).join('');
+const scheduleVarianceHtml = (m) => m.schedule_variance.map((sv) => `<li>schedule_variance ${escHtml(sv.level)} ${escHtml(sv.ref)}: actual ${h(sv.actual_s)} vs [${sv.estimate.low}, ${sv.estimate.high}] → [${toHours(sv.band.vs_high_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_high_s)}h, ${toHours(sv.band.vs_low_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_low_s)}h]; scope added ${sv.scope.added}, removed ${sv.scope.removed}</li>`).join('');
+const coverageLinesHtml = (m, p) => {
+  const L = [];
+  for (const [lv, c] of Object.entries(m.coverage)) L.push(`<li>${escHtml(lv)}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${escHtml(JSON.stringify(c.sources))}</li>`);
+  L.push(`<li>registration_gaps=${p.registration_gaps}</li>`);
+  return `<ul>${L.join('')}</ul>`;
+};
+const openItemsRowsHtml = (p, e) => p.items.filter((i) => i.state === 'in_progress').map((i) => `<tr><td>${escHtml(i.ref)}</td><td>${escHtml(i.level)}</td><td>${escHtml(i.state)}${i.flags.length ? ` (${escHtml(i.flags.join(', '))})` : ''}</td><td>${escHtml(i.started_at ?? '—')}</td><td>${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'}</td></tr>`).join('');
+const envelopeHtml = (e) => {
+  const conflictLis = e.coverage.conflict_list.map((c) => `<li>conflict ${escHtml(c.item_id ?? '—')} ${escHtml(c.transition_id)} (${escHtml(c.reason)}): ${escHtml(c.sources.join(', '))}</li>`).join('');
+  const malformedLis = e.coverage.malformed.map((mm) => `<li>malformed ${escHtml(mm.path)}:${mm.line} ${escHtml(mm.reason)}</li>`).join('');
+  const sub = conflictLis || malformedLis ? `<ul>${conflictLis}${malformedLis}</ul>` : '';
+  return `<section class="panel"><h2>Envelope</h2><ul>` +
+    `<li>ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}${sub}</li>` +
+    `<li>plans: malformed_runs=${e.coverage.malformed_runs}</li>` +
+    `<li>capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}</li>` +
+    `<li>diagnostics: ${escHtml(DIAG_KINDS.map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' '))}</li>` +
+    `<li>baselines: ${escHtml(Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', '))}</li>` +
+    `<li>policy: weeks ${escHtml(e.policy.weeks)}, percentiles ${escHtml(e.policy.percentile)} (floors median≥5 P85≥7 P90≥10), estimate base ${escHtml(e.policy.estimate_base)}, ${escHtml(e.policy.durations)}, tokenomics ${escHtml(e.sources.tokenomics)}, sources hashed as read</li>` +
+    `</ul></section>`;
+};
+const caveatsHtml = (e) => `<section class="callout-warn"><strong>Caveats</strong><ul>${e.caveats.map((c) => `<li>${escHtml(c)}</li>`).join('')}</ul></section>`;
+
+export function renderHtml(doc) {
+  const e = doc.envelope; const esc = escHtml;
+  const metaFilters = e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${esc(JSON.stringify(e.policy.filters))}` : '';
+  const parts = [
+    `<!doctype html><meta charset="utf-8"><title>Delivery report — ${esc(e.plans.join(', '))}</title><style>${PAGE_CSS}</style>`,
+    '<h1>Delivery report</h1>',
+    `<p class="meta">generated ${esc(e.generated_at)} · cutoff ${esc(e.cutoff)} · window [${esc(e.window.since)}, ${esc(e.window.effective_end)}) · sha ${esc(e.git.sha ?? '—')}${e.git.is_working_tree ? ' (dirty)' : ''} · plans ${esc(e.plans.join(', '))}${metaFilters}</p>`,
+  ];
+  for (const p of doc.plans) {
+    const m = p.metrics;
+    // KPI row (contract §2a): Progress / Task cycle time / Throughput / Estimates.
+    const progressCells = LEVELS.filter((lv) => p.items.some((i) => i.level === lv)).map((lv) => {
+      const rows = p.items.filter((i) => i.level === lv); const n = (st) => rows.filter((i) => i.state === st).length;
+      return statCell(esc(lv), `done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`);
+    });
+    const ct = m.flow.task?.strata?.all?.cycle_time;
+    const ctExcluded = Object.entries(m.flow.task?.excluded ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ');
+    const cycleCells = ct
+      ? [statCell('n', ct.n), statCell('median', ct.median == null ? '— (n<5)' : h(ct.median)), statCell('P85', ct.p85 == null ? '— (n<7)' : h(ct.p85)), statCell('min–max', `${h(ct.min)}–${h(ct.max)}`)]
+      : [statCell('cycle_time', '— (not measured)')];
+    const throughputCells = Object.entries(m.throughput).map(([lv, t]) => {
+      const last = t.weeks[t.weeks.length - 1];
+      const mark = last ? (!last.covered ? '†' : (!last.whole ? '*' : '')) : '';
+      const lastTxt = last ? `${esc(last.key)}=${last.count}${mark}` : '—';
+      const velTxt = t.velocity ? `${t.velocity.median} (n=${t.velocity.whole_weeks})` : `— (${t.weeks.filter((w) => w.whole).length} whole weeks < ${e.policy.minWholeWeeks})`;
+      return statCell(esc(lv), `${lastTxt} · velocity ${velTxt} · wip ${m.wip[lv]}`);
+    });
+    const es = m.estimates.task?.strata?.all;
+    const estimatesCells = es
+      ? [statCell('hit_rate', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits}/${es.hit_rate.ranged}`), statCell('MdMRE', es.mdmre ?? '—'), statCell('PRED(25)', es.pred25 ?? '—'), statCell('MAE', es.mae_s == null ? '—' : h(es.mae_s)), statCell('n / eligible', `${es.n} / ${es.eligible}`)]
+      : [statCell('estimates', '—')];
+    const estimatesExcluded = es ? Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `<span class="chip">${esc(k)}=${v}</span>`).join('') : '';
+
+    parts.push('<section class="plan">');
+    parts.push(`<h2>Plan ${esc(p.run)} v${p.version} (${esc(p.status)})</h2>`);
+    parts.push(`<section class="kpi-row">${kpiCard('Progress', progressCells)}${kpiCard('Task cycle time', cycleCells, !ct && ctExcluded ? esc(ctExcluded) : null)}${kpiCard('Throughput', throughputCells)}${kpiCard('Estimates', estimatesCells, estimatesExcluded || null)}</section>`);
+    parts.push(`<section class="panel"><h2>Flow time</h2><table><tr><th>metric</th><th>stratum</th><th>n</th><th>median</th><th>P85</th><th>P90</th><th>min–max</th></tr>${flowRowsHtml(m, e)}</table></section>`);
+    parts.push(`<section class="panel"><h2>Throughput</h2><table><tr><th>level</th><th>week</th><th>count</th><th>mark</th></tr>${throughputRowsHtml(m)}</table><p class="note">*partial, †before declared coverage</p>${throughputLinesHtml(m, e)}</section>`);
+    parts.push(`<section class="panel"><h2>Quality</h2>${qualityLinesHtml(m, p)}</section>`);
+    let estimatesPanel = `<section class="panel"><h2>Estimates</h2><table><tr><th>level</th><th>stratum</th><th>n</th><th>eligible</th><th>work_ratio median</th><th>MdMRE</th><th>PRED(25)</th><th>MAE</th><th>hit_rate</th><th>excluded</th></tr>${estimatesStrataRowsHtml(m)}</table>`;
+    if (m.estimate_rows.length) estimatesPanel += `<table><tr><th>ref</th><th>level</th><th>class</th><th>tier</th><th>base</th><th>range (h)</th><th>actual</th><th>basis</th><th>ratio</th><th>hit</th><th>reason</th></tr>${estimateRowsHtml(m)}</table>`;
+    if (m.schedule_variance.length) estimatesPanel += `<ul>${scheduleVarianceHtml(m)}</ul>`;
+    parts.push(`${estimatesPanel}</section>`);
+    parts.push(`<section class="panel"><h2>Coverage</h2>${coverageLinesHtml(m, p)}</section>`);
+    parts.push(`<section class="panel"><h2>Open items</h2><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>age</th></tr>${openItemsRowsHtml(p, e)}</table></section>`);
+    parts.push('</section>');
+  }
+  parts.push(envelopeHtml(e));
+  parts.push(caveatsHtml(e));
+  return parts.join('\n');
 }
 
 export function renderStatus(doc) {

@@ -304,7 +304,7 @@ Re-cut on 2026-09-17 (v5.1, user decision): **M1 is Slice 1** — cycle time, ve
 | | **Output + wiring** | `status` (PM one-screen), `report [--json] [--since --until --cutoff]` markdown + JSON envelope (§6.11); SKILL.md/README, `skills.json`, both `factory.json`, marketplaces; tech-lead template block, PM merge-step call, scout opt-in (§9.1). Golden fixture from the security-testing dataset (§12). |
 | M2 | Quality + episodes | `review_history`/`review_rounds`/`first_pass_rate`, `rework_observed`, `blocked`/`unblocked` intervals, `reopened` episodes and their separate ages/cycles, `work_item_age` vs P85, retraction/correction revisions, PR-mode backfill via `gh` and task↔PR association. |
 | M3 | Automation + cost | test-automation `sync --automation` (generation-qualified imports, scorer estimates in `active_min`, scope/gate/receipt proxies, landing), the three tokenomics one-liners, cost quoting from existing exports with published-minute caveats (§6.12), calibration snapshots/index and playbook wiring (§9.2). |
-| M4 | Presentation | self-contained HTML, `--from-json` re-render, `--calibrate`; no forecasting. |
+| M4 | Presentation | self-contained HTML, `--from-json` re-render, `--calibrate`; no forecasting. (HTML + `--from-json` delivered in M1, 2026-09-17) |
 
 Each milestone includes its §12 tests and §17 acceptance criteria; AC rows that name M2+ capabilities (review completeness, reopen, automation, cost) are asserted at their milestone, not at M1. This edit changes only §13 and the header; cited amendments remain proposed implementation work.
 

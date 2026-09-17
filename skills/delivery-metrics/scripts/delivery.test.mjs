@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, validateTransition } from './delivery.mjs';
+import { main, parseArgs, validateTransition } from './delivery.mjs';
 import { deliveryDir, runPath } from './lib/paths.mjs';
 import { resolveObservations } from './lib/events.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
@@ -420,7 +420,7 @@ test('minor (b): bare --from/--at/--revision and a directory --from all exit USA
   assert.equal(dirEventFrom.code, 2); assert.match(dirEventFrom.stderr, /^USAGE\(.*is not a file/);
 });
 
-test('report/status commands: markdown, --json, --out, --level/--class filters, M4 flags refused, NO-PLAN exit 3', () => {
+test('report/status commands: markdown, --json, --out, --level/--class filters, --calibrate refused (M1), NO-PLAN exit 3', () => {
   const repo = initRepo();
   run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
   run(repo, ['event', 'TASK-001', 'dispatched', '--at', '2026-09-16T09:00:00Z', '--id', 'd1']); run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T11:00:00Z', '--id', 'd2']);
@@ -428,9 +428,68 @@ test('report/status commands: markdown, --json, --out, --level/--class filters, 
   const js = run(repo, ['report', '--json', '--cutoff', '2026-09-21T00:00:00Z', '--out', join(repo, 'r.json')]); assert.match(js.stdout, /^REPORT /);
   const doc = JSON.parse(readFileSync(join(repo, 'r.json'), 'utf8')); assert.equal(doc.plans[0].metrics.flow.task.strata.all.cycle_time.samples[0], 7200);
   assert.equal(JSON.parse(run(repo, ['report', '--json', '--cutoff', '2026-09-21T00:00:00Z', '--class', 'M']).stdout).plans[0].metrics.coverage.task?.done ?? 0, 0);
-  for (const flag of ['--from-json', '--html', '--calibrate']) assert.match(run(repo, ['report', flag, 'x']).stderr, /is not in M1/);
+  assert.match(run(repo, ['report', '--calibrate', 'x']).stderr, /is not in M1/);
   assert.match(run(repo, ['status']).stdout, /STATUS sec\/run-1 v1/);
   assert.equal(run(initRepo(), ['report']).code, 3);
+});
+
+// html-report brief: `report --html` self-contained page (CLI wiring; renderHtml itself is unit
+// tested in lib/report.test.mjs), `--out` and stdout paths, `--json`/`--html` mutual exclusion.
+test('report --html: --out writes a self-contained page and prints REPORT <path>; without --out writes the same to stdout; --json --html is USAGE', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  run(repo, ['event', 'TASK-001', 'dispatched', '--at', '2026-09-16T09:00:00Z', '--id', 'd1']); run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T11:00:00Z', '--id', 'd2']);
+  const withOut = run(repo, ['report', '--html', '--cutoff', '2026-09-21T00:00:00Z', '--out', join(repo, 'r.html')]);
+  assert.equal(withOut.code, 0, withOut.stderr); assert.match(withOut.stdout, /^REPORT /);
+  assert.match(readFileSync(join(repo, 'r.html'), 'utf8'), /^<!doctype html>/);
+  const toStdout = run(repo, ['report', '--html', '--cutoff', '2026-09-21T00:00:00Z']);
+  assert.equal(toStdout.code, 0, toStdout.stderr); assert.match(toStdout.stdout, /^<!doctype html>/);
+  const exclusive = run(repo, ['report', '--json', '--html']);
+  assert.equal(exclusive.code, 2, exclusive.stderr); assert.match(exclusive.stderr, /^USAGE\(--json and --html are exclusive/);
+});
+
+// html-report brief: `--from-json` re-renders an archived `report --json` doc without recomputation
+// — same `now` on both sides makes the direct and from-json renders byte-for-byte comparable. Uses
+// main() directly (not the execFileSync `run()` helper) so `now` is pinned across both invocations.
+test('report --from-json: markdown/html byte-for-byte match a direct report using the same now; non-report/malformed input and disallowed flag combos are USAGE', async () => {
+  const repo = initRepo();
+  const now = Date.parse('2026-09-20T00:00:00Z');
+  const call = async (args) => {
+    let stdout = '', stderr = '';
+    const code = await main(args, { repo, now, stdout: { write: (s) => { stdout += s; } }, stderr: { write: (s) => { stderr += s; } }, env: { DELIVERY_NO_SYNC: '1' } });
+    return { code, stdout, stderr };
+  };
+  assert.equal((await call(['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1'])).code, 0);
+  assert.equal((await call(['event', 'TASK-001', 'dispatched', '--at', '2026-09-16T09:00:00Z', '--id', 'd1'])).code, 0);
+  assert.equal((await call(['event', 'TASK-001', 'done', '--at', '2026-09-16T11:00:00Z', '--id', 'd2'])).code, 0);
+
+  const directMd = await call(['report', '--cutoff', '2026-09-21T00:00:00Z']);
+  assert.equal(directMd.code, 0, directMd.stderr);
+  const jsonOut = await call(['report', '--json', '--cutoff', '2026-09-21T00:00:00Z', '--out', 'r.json']);
+  assert.equal(jsonOut.code, 0, jsonOut.stderr);
+  const fromJsonMd = await call(['report', '--from-json', 'r.json']);
+  assert.equal(fromJsonMd.code, 0, fromJsonMd.stderr);
+  assert.equal(fromJsonMd.stdout, directMd.stdout, 'from-json markdown must byte-for-byte match a direct report using the same now');
+
+  const directHtml = await call(['report', '--html', '--cutoff', '2026-09-21T00:00:00Z']);
+  assert.equal(directHtml.code, 0, directHtml.stderr);
+  const fromJsonHtml = await call(['report', '--from-json', 'r.json', '--html']);
+  assert.equal(fromJsonHtml.code, 0, fromJsonHtml.stderr);
+  assert.equal(fromJsonHtml.stdout, directHtml.stdout, 'from-json html must byte-for-byte match a direct html report using the same now');
+
+  writeFileSync(join(repo, 'bad.json'), '{"a":1}');
+  const bad = await call(['report', '--from-json', 'bad.json']);
+  assert.equal(bad.code, 2, bad.stderr); assert.match(bad.stderr, /^USAGE\(from-json: not a delivery report/);
+
+  writeFileSync(join(repo, 'broken.json'), '{ not json');
+  const broken = await call(['report', '--from-json', 'broken.json']);
+  assert.equal(broken.code, 2, broken.stderr); assert.match(broken.stderr, /^USAGE\(from-json: not a delivery report/);
+
+  const withJson = await call(['report', '--from-json', 'r.json', '--json']);
+  assert.equal(withJson.code, 2, withJson.stderr); assert.match(withJson.stderr, /^USAGE\(--from-json re-renders/);
+
+  const withSince = await call(['report', '--from-json', 'r.json', '--since', '2026-01-01']);
+  assert.equal(withSince.code, 2, withSince.stderr); assert.match(withSince.stderr, /^USAGE\(--from-json takes the archived window as-is/);
 });
 
 // F20: report/status input failures must map to a proper cliError exit code (never INTERNAL/exit 1) —

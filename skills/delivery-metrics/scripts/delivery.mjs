@@ -11,7 +11,7 @@ import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
-import { assemble, renderMarkdown, renderStatus } from './lib/report.mjs';
+import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -348,18 +348,34 @@ function cmdProfile(repo, p, io) {
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
 
-/** F20: --from-json/--html/--calibrate are not in M1 — reject before assemble does any work.
+/** F20: --calibrate is not in M1 — reject before assemble does any work. `--html`/`--from-json`
+ * (html-report brief) are now wired: `--json`/`--html` are mutually exclusive; `--from-json <f>`
+ * re-renders an archived `report --json` doc as-is (no assemble, no ledger read, no git call) and
+ * refuses to combine with `--json` or any window/filter flag, since there is no ledger call left
+ * to apply them to.
  * Minor (a): a bare `--out`/`--plan` (no value) must be USAGE via the same `requireValue` guard
  * every other path/token flag already uses, not a boolean silently coerced into a plan id or a
  * writeFileSync(true, ...) TypeError; `--out` resolves against `repo` like `--from` does elsewhere. */
 function cmdReport(repo, p, io, now) {
   const f = p.flags;
-  for (const k of ['from-json', 'html', 'calibrate']) if (f[k]) throw cliError('USAGE', `--${k} is not in M1`);
-  const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
+  if (f.calibrate) throw cliError('USAGE', '--calibrate is not in M1');
+  if (f.json && f.html) throw cliError('USAGE', '--json and --html are exclusive');
   const outFlag = f.out != null ? requireValue(f, 'out') : null;
+  const write = (text) => { if (outFlag) { const outPath = resolve(repo, outFlag); writeFileSync(outPath, text); out(io, `REPORT ${outPath}`); } else io.stdout.write(text); };
+  if (f['from-json'] != null) {
+    const fromJsonFlag = requireValue(f, 'from-json');
+    if (f.json) throw cliError('USAGE', '--from-json re-renders; nothing to do with --json');
+    const forbidden = ['plan', 'since', 'until', 'cutoff', 'level', 'class', 'latest-estimate'];
+    if (forbidden.some((k) => f[k] != null)) throw cliError('USAGE', '--from-json takes the archived window as-is');
+    let doc = null;
+    try { doc = JSON.parse(readFileSync(resolve(repo, fromJsonFlag), 'utf8')); } catch { doc = null; }
+    if (!doc || doc.envelope?.schema?.report !== SCHEMA.report) throw cliError('USAGE', `from-json: not a delivery report (schema.report ${SCHEMA.report} expected)`);
+    write(f.html ? renderHtml(doc) : renderMarkdown(doc));
+    return 0;
+  }
+  const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
   const doc = assemble(repo, { plans: planFlag ? String(planFlag).split(',') : null, since: f.since ?? null, until: f.until ?? null, cutoff: f.cutoff ?? null, now, estimateBase: f['latest-estimate'] ? 'latest' : 'original', filters: { level: f.level ?? null, class: f.class ?? null } });
-  const text = f.json ? `${JSON.stringify(doc, null, 2)}\n` : renderMarkdown(doc);
-  if (outFlag) { const outPath = resolve(repo, outFlag); writeFileSync(outPath, text); out(io, `REPORT ${outPath}`); } else io.stdout.write(text);
+  write(f.json ? `${JSON.stringify(doc, null, 2)}\n` : (f.html ? renderHtml(doc) : renderMarkdown(doc)));
   return 0;
 }
 function cmdStatus(repo, p, io, now) {

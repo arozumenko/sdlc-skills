@@ -19,7 +19,8 @@ node .claude/skills/delivery-metrics/scripts/delivery.mjs backfill --git --plan 
 node .claude/skills/delivery-metrics/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
 # 5. Read
 node .claude/skills/delivery-metrics/scripts/delivery.mjs status
-node .claude/skills/delivery-metrics/scripts/delivery.mjs report [--json] [--since 2026-09-01] [--level task] [--class M]
+node .claude/skills/delivery-metrics/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
+node .claude/skills/delivery-metrics/scripts/delivery.mjs report --html --out delivery.html
 ```
 
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.

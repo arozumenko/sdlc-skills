@@ -106,6 +106,16 @@ estimate's version.
 Not computed in M1 — `active_min`/`cost_usd` (spec §6.10 Cost row, §6.12 tokenomics join) are
 parked; `envelope.sources.tokenomics` always reads `"absent"`.
 
+## Outputs
+
+`report` renders Markdown by default. `--json` emits the full envelope for programmatic/assessor
+consumption. `--html` renders the same figures as a self-contained page (own `<style>`, no
+external assets or `<script>`) — same `h`/`pct`/`ageH` rounding as Markdown, so the two never
+disagree. `--from-json <file>` re-renders an already-archived `report --json` output (Markdown or,
+with `--html`, the page) without recomputation or a JSON rewrite — no ledger read, no git call;
+it refuses to combine with `--json` or any window/filter flag, since there is no assemble step
+left to apply them to.
+
 ## M2+ (described in the design spec, not landed)
 
 - `time_to_merge` / `time_in_review` (PR-mode backfill) — `time_to_merge` already carries its
@@ -118,6 +128,5 @@ parked; `envelope.sources.tokenomics` always reads `"absent"`.
 - `review_rounds` / `first_pass_rate` (needs `review_history` completeness, not derived in M1)
 - `calibration` (`--calibrate`, saved reference snapshots by factory/level/class/episode kind)
 - `active_min` / `cost_usd` (tokenomics join, §6.12)
-- `--from-json` / `--html` report outputs
 - the `test-automation` sync adapter (`scope_declared`/`gate_observed`/`outcome_observed` are
   schema-accepted but nothing produces them yet)
