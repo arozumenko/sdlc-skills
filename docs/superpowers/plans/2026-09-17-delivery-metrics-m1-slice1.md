@@ -1,6 +1,6 @@
-# delivery-metrics M1 (Slice 1) Implementation Plan (v3)
+# delivery-metrics M1 (Slice 1) Implementation Plan (v3.1)
 
-**Plan version:** v3 — 2026-09-17; v1 review (`docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v1-adversarial-review-codex.md`, 19 blockers / 14 majors) applied by the plan author; round-2 review (`docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v2-adversarial-review-codex.md`, 1 blocker / 3 majors) applied in v3 — see "Review rounds" at the end.
+**Plan version:** v3.1 — 2026-09-17; three review rounds (v1 19/14, v2 1/3, v3 15/5). Round 3's findings are carried as **implementation obligations** (below): they are code-level defects a plan reviewed in memory cannot settle, so each task's implementer resolves them against real `node --test` runs and records the outcome in the task's commit message.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -3603,3 +3603,33 @@ git commit -m "feat(delivery-metrics): factory wiring (tech-lead block, PM momen
 | F2 | resolved | Tasks 1, 5, 11, 13: shipped factory map, installed-role intersection and validated snapshot; multi-factory/foreign-role hook fixtures and six offline installed CLI smokes. |
 | F3 | resolved | Tasks 1, 5, 8, 11, 12: common owner before telemetry exists; source evidence remains in the invoking checkout; linked-worktree register/bind/capture/report and installer/doctor tests. |
 | F4 | resolved | Tasks 5–8: effective membership replay, first_completion separate from current_scope, new-scope landing boundary, Monday/Tuesday regression, first-delivery accuracy/throughput and pending WIP/status. |
+
+
+### v3 findings → implementation obligations (2026-09-17)
+
+The loop was stopped after round 3: the fix passes introduced as many defects as they removed, and every remaining finding is verifiable only by executing the code. Each row is an obligation on the named task's implementer — resolve it, keep the test that proves it, and cite the id (`F<n>` of the v3 note) in the commit.
+
+| id | severity | slug | task/step | obligation |
+|---|---|---|---|---|
+| F1 | blocker | `markdown-group-parser` | Task 4 steps 3–4, Task 10 step 1 | Golden input loses five memberships after parenthetical stripping |
+| F2 | blocker | `estimate-revision-fixture-mismatch` | Task 3 steps 1, 3–4 | Registration-observation test expects an unsupplied estimate revision |
+| F3 | blocker | `roster-refresh-fixture-missing-agents` | Task 5 step 1 | CLI roster fixture asserts roles it never installs |
+| F4 | blocker | `backfill-fixture-history-mismatch` | Task 9 step 1 | Negative backfill fixture contradicts ancestry and its clock helper |
+| F5 | blocker | `golden-registration-gap-mismatch` | Task 10 steps 3–4 | Golden expects creation gaps already filled by registration |
+| F6 | blocker | `inner-ignore-doctor-incomplete` | Task 12 steps 1, 3, 5 | Doctor root ignore probes fail inside a telemetry submodule |
+| F7 | blocker | `acceptance-only-update-dropped` | Tasks 3 and 5 — estimate delta | Accepting an unchanged estimate emits no ledger observation |
+| F8 | blocker | `revision-conflict-fallback` | Tasks 2 and 6 — current conflict resolution | Only one conflicting variant blocks lower-source fallback |
+| F9 | blocker | `observation-version-retry-conflict` | Tasks 2, 5, 9 and 11 — semantic identity | Capture version breaks retries while acceptance eligibility is ignored |
+| F10 | blocker | `invalid-transition-replay` | Tasks 3, 5–7 — validation and quarantine | Invalid chains are accepted and still qualify throughput and parents |
+| F11 | blocker | `parent-integration-boundary` | Task 6 step 3 | Landing delivers wholly cancelled scope and historical starts are discarded |
+| F12 | blocker | `proxy-clocks-promoted-observed` | Task 6 step 3, Task 7 metrics | Proxy dispatch and completion are promoted to observed cycle time |
+| F13 | blocker | `hook-unvalidated-child-clocks` | Task 11 step 3 | Progress and truncated transcripts satisfy hook completion |
+| F14 | blocker | `backfill-wrong-completion-history` | Task 9 step 3 | Import filtering redefines first delivery and missing integration refs pass |
+| F15 | blocker | `cancelled-share-wrong-cohort` | Task 8 step 3 | Cancellation share ignores creation cohort and class filtering |
+| F16 | major | `invalid-stable-id-migration` | Tasks 3 and 5 — supersedes | Supersedes declarations are accepted without applying continuity |
+| F17 | major | `missing-strata-quality-denominators` | Tasks 6–8 — metrics grouping and coverage | Required strata, source shares and matching quality denominators are absent |
+| F18 | major | `report-provenance-not-read-bytes` | Task 8 step 3 | Plan hashes reread files and metric evidence is dropped |
+| F19 | major | `missing-honesty-caveats-gaps` | Tasks 8, 11 and 12 — coverage | Reports lose capture diagnostics and miscount unregistered events |
+| F20 | major | `cli-exit-window-contract` | Tasks 3, 5 and 8 — input validation | Invalid input yields INTERNAL and profile values defeat metric floors |
+
+Full evidence and concrete changes: `docs/superpowers/notes/2026-09-17-delivery-metrics-m1-plan-v3-adversarial-review-codex.md`.
