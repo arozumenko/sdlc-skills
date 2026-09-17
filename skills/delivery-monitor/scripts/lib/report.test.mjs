@@ -436,9 +436,16 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   const html = renderHtml(assemble(repo, { now: NOW }));
   // Header names the campaign, not the run id; the run id is the muted sub-line.
   assert.match(html, /<h2>sec-campaign <span class="sub">campaign sec\/run-1 · plan v1 · in progress<\/span><\/h2>/);
-  assert.ok(html.includes('2 task(s) not started yet'), 'planned tasks called out on the Delivery card');
+  assert.ok(html.includes('<span class="stat-label">Not started</span><span class="stat-value">2 <span class="stat-sub">tasks</span></span>'), 'planned tasks on the Progress card');
+  assert.ok(!html.includes('<h3>Pace'), 'no Pace card below the whole-weeks floor');
+  assert.match(html, /Pace per week appears once the run spans 3 whole ISO weeks \(has [0-2]\)/, 'the missing pace is explained in one line, not an empty card');
+  // Burn-up: always present, inline SVG, one series + a scope reference line, direct end labels, no scripts.
+  assert.match(html, /<svg class="burnup"[^>]*role="img"/);
+  assert.match(html, /<path class="scope" d="M[^"]+"\/><path class="done" d="M[^"]+"\/>/);
+  assert.ok(html.includes('>1 done</text>') && html.includes('>scope 3</text>'), 'end labels carry the counts');
+  assert.match(html, /<circle class="pt"[^>]*><title>TASK-A merged 10 Sep 2026 02:00 UTC<\/title><\/circle>/, 'native tooltip on the completion marker');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'Completed in window', 'Velocity', 'Within range', 'Work vs estimate', 'Not counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Within range', 'Work vs estimate', 'Not counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
   assert.ok(html.includes('<span class="stat-value">1 / 3</span>'), 'tasks done 1 / 3 (G2 tasks registered, not started)');
   assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
@@ -462,4 +469,22 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.ok(html.includes('<strong>Caveats</strong> — standing limitations'), 'caveats stay visible with a preface');
   // Human open-items rows use natural units, never raw ISO stamps; the assessor copy keeps ISO.
   assert.match(html2, /<h2>Open items<\/h2>.*?<td>G2<\/td><td>mission<\/td><td>in progress<\/td><td>11 Sep 2026 00:00 UTC<\/td><td>10 d<\/td>/s);
+});
+
+test('renderHtml: the Pace card appears only once the run spans minWholeWeeks whole ISO weeks', () => {
+  const repo = tmp();
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-08-03T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
+    { item_id: `${R}/task-a`, ref: 'TASK-A', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' }, { item_id: `${R}/task-b`, ref: 'TASK-B', level: 'task', parent_item_id: `${R}/mission-g1`, class: 'S' },
+  ] });
+  const o = (id, ref, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'created', '2026-08-03T00:00:00Z'); o('task-b', 'TASK-B', 'created', '2026-08-03T00:00:00Z');
+  o('task-a', 'TASK-A', 'dispatched', '2026-08-11T00:00:00Z'); o('task-a', 'TASK-A', 'done', '2026-08-12T00:00:00Z');
+  o('task-b', 'TASK-B', 'dispatched', '2026-09-01T00:00:00Z'); o('task-b', 'TASK-B', 'done', '2026-09-02T00:00:00Z');
+  // observation_start Mon 3 Aug → cutoff Mon 21 Sep: seven whole ISO weeks ≥ minWholeWeeks 3
+  const html = renderHtml(assemble(repo, { now: NOW, since: '2026-08-03T00:00:00Z' }));
+  assert.ok(html.includes('<h3>Pace <span class="stat-sub">per UTC ISO week</span></h3>'), 'Pace card present');
+  assert.match(html, /<span class="stat-label">Whole weeks observed<\/span><span class="stat-value">7<\/span>/);
+  assert.match(html, /<span class="stat-label">Velocity<\/span><span class="stat-value">0 <span class="stat-sub">tasks \/ week, median of 7 whole weeks/);
+  assert.ok(!html.includes('Pace per week appears once'), 'no floor note when the card is shown');
 });

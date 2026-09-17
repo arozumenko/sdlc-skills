@@ -251,6 +251,16 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
+svg.burnup{width:100%;height:auto;display:block;margin:.3rem 0 .2rem}
+.burnup .grid{stroke:var(--gridline);stroke-width:1}
+.burnup .done{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:round}
+.burnup .scope{fill:none;stroke:var(--text-muted);stroke-width:1.5;stroke-dasharray:4 3}
+.burnup .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
+.burnup text{font:11px -apple-system,"Segoe UI",sans-serif;fill:var(--text-muted)}
+.burnup text.lbl{fill:var(--text-primary);font-weight:600}
+.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.82rem;color:var(--text-secondary)}
+.legend-swatch{display:inline-block;width:18px;height:0;border-top:2px solid var(--series-1);vertical-align:middle;margin-right:.4rem}
+.legend-swatch.scope{border-top:2px dashed var(--text-muted)}
 details{margin-top:1.1rem}
 summary{cursor:pointer;color:var(--text-secondary);font-size:.9rem}
 @media(max-width:640px){.row{grid-template-columns:110px 1fr}.row .num{grid-column:1/-1}}
@@ -440,6 +450,32 @@ const bandText = (sv) => {
 };
 const stateChip = (state) => `<span class="oc oc-${escHtml(state)}">${escHtml(state.replace('_', ' '))}</span>`;
 
+// Burn-up: completed tasks (cumulative, stepped) against in-scope tasks over the observed window.
+// Always rendered — it reads at any scale, unlike weekly throughput. Inline SVG, no assets; native
+// <title> tooltips on the completion markers. Scope steps up on late registration and down on cancel.
+const burnupSvg = (p, e, tasks) => {
+  const x0 = Date.parse(e.window.since), x1 = Date.parse(e.window.effective_end);
+  if (!(x1 > x0) || !tasks.length) return '';
+  const W = 640, H = 150, L = 34, R = 70, T = 12, B = 22, pw = W - L - R, ph = H - T - B;
+  const doneEv = tasks.filter((t) => t.state === 'done' && t.done_at).map((t) => ({ at: Date.parse(t.done_at), ref: t.ref, iso: t.done_at })).filter((d) => d.at >= x0 && d.at <= x1).sort((a, b) => a.at - b.at);
+  const scopeEv = [];
+  for (const t of tasks) { const c = t.created_at ? Date.parse(t.created_at) : x0; scopeEv.push({ at: Math.max(x0, Math.min(c, x1)), d: +1 }); if (t.state === 'cancelled' && t.cancelled_at) scopeEv.push({ at: Math.max(x0, Math.min(Date.parse(t.cancelled_at), x1)), d: -1 }); }
+  scopeEv.sort((a, b) => a.at - b.at);
+  const scopeMax = Math.max(1, ...(() => { let n = 0, m = 0; for (const ev of scopeEv) { n += ev.d; m = Math.max(m, n); } return [m]; })());
+  const yMax = Math.max(scopeMax, doneEv.length, 1);
+  const X = (t) => L + ((t - x0) / (x1 - x0)) * pw, Y = (n) => T + ph - (n / yMax) * ph;
+  const step = (evs, val) => { let n = 0; const pts = [`${X(x0).toFixed(1)},${Y(0).toFixed(1)}`]; for (const ev of evs) { pts.push(`${X(ev.at).toFixed(1)},${Y(n).toFixed(1)}`); n += val(ev); pts.push(`${X(ev.at).toFixed(1)},${Y(n).toFixed(1)}`); } pts.push(`${X(x1).toFixed(1)},${Y(n).toFixed(1)}`); return { d: `M${pts.join(' L')}`, n }; };
+  const scope = step(scopeEv, (ev) => ev.d), done = step(doneEv, () => 1);
+  const marks = doneEv.length <= 40 ? doneEv.map((d, i) => `<circle class="pt" cx="${X(d.at).toFixed(1)}" cy="${Y(i + 1).toFixed(1)}" r="4"><title>${escHtml(d.ref)} merged ${escHtml(fmtTs(d.iso))}</title></circle>`).join('') : '';
+  const gridN = [0, Math.ceil(yMax / 2), yMax].filter((v, i, a) => a.indexOf(v) === i);
+  return `<svg class="burnup" viewBox="0 0 ${W} ${H}" role="img" aria-label="Completed tasks over time against scope">
+${gridN.map((n) => `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(n).toFixed(1)}" y2="${Y(n).toFixed(1)}"/><text x="${L - 6}" y="${(Y(n) + 4).toFixed(1)}" text-anchor="end">${n}</text>`).join('')}
+<path class="scope" d="${scope.d}"/><path class="done" d="${done.d}"/>${marks}
+<text class="lbl" x="${L + pw + 6}" y="${(Y(done.n) + 4).toFixed(1)}">${done.n} done</text><text x="${L + pw + 6}" y="${(Y(scope.n) + (Math.abs(Y(scope.n) - Y(done.n)) < 12 ? 16 : 4)).toFixed(1)}">scope ${scope.n}</text>
+<text x="${L}" y="${H - 6}">${escHtml(fmtTs(e.window.since))}</text><text x="${L + pw}" y="${H - 6}" text-anchor="end">${escHtml(fmtTs(e.window.effective_end))}</text>
+</svg><div class="legend"><span><span class="legend-swatch"></span>completed tasks (cumulative)</span><span><span class="legend-swatch scope"></span>tasks in scope</span></div>`;
+};
+
 export function renderHtml(doc) {
   const e = doc.envelope; const esc = escHtml;
   const metaFilters = e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${esc(JSON.stringify(e.policy.filters))}` : '';
@@ -472,24 +508,24 @@ export function renderHtml(doc) {
     parts.push(`<p class="panel-sub">${tasks.length} task(s) in ${missions.length} mission(s)${campaign ? `; campaign ${esc(campaign.state.replace('_', ' '))}` : ''}. A run is one execution of the campaign; the plan version counts re-cuts of its scope; "${esc(statusWord)}" is the run's own status (\`plan close\` ends it).</p>`);
 
     const cards = [
-      kpiCard('Delivery', [
-        statCell('Tasks done', `${doneTasks} / ${tasks.length}`),
+      kpiCard('Progress <span class="stat-sub">since plan start</span>', [
+        statCell('Tasks done', `${doneTasks} / ${tasks.length - count(tasks, 'cancelled')}${count(tasks, 'cancelled') ? ` <span class="stat-sub">+${count(tasks, 'cancelled')} cancelled</span>` : ''}`),
         statCell('Missions done', `${count(missions, 'done')} / ${missions.length}`),
-        statCell('In progress', `${count(tasks, 'in_progress')} <span class="stat-sub">tasks</span>`),
-        statCell('Cancelled', `${count(tasks, 'cancelled')} <span class="stat-sub">tasks</span>`),
-      ], count(tasks, 'planned') ? `${count(tasks, 'planned')} task(s) not started yet` : null),
+        statCell('In progress', `${count(tasks, 'in_progress')} <span class="stat-sub">tasks · ${m.wip.mission ?? count(missions, 'in_progress')} missions</span>`),
+        statCell('Not started', `${count(tasks, 'planned')} <span class="stat-sub">tasks</span>`),
+      ], `${doneTasks} task(s) and ${count(missions, 'done')} mission(s) completed${windowS != null ? ` in ${fmtDur(windowS)} of observed time` : ''}.${wholeWeeks >= e.policy.minWholeWeeks ? '' : ` Pace per week appears once the run spans ${e.policy.minWholeWeeks} whole ISO weeks (has ${wholeWeeks}).`}`),
       kpiCard('Cycle time <span class="stat-sub">dispatch → merge</span>', [
         statCell('Median', ct ? (ct.median == null ? needs(ct.n, 5) : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>'),
         statCell('Range', ct ? `${fmtDur(ct.min)}–${fmtDur(ct.max)}` : '—'),
         statCell('Tasks measured', `${ct ? ct.n : 0} of ${doneTasks} done <span class="stat-sub">· ${count(tasks, 'in_progress')} still open</span>`),
         statCell('Lead time <span class="stat-sub">planned → merge</span>', lt ? (lt.median == null ? `${fmtDur(lt.min)}–${fmtDur(lt.max)}` : fmtDur(lt.median)) : '—'),
       ], `Cycle time runs from the first observed dispatch to the merge; lead time from registration in the plan. Medians need ≥5 finished tasks, P85 ≥7, P90 ≥10 — smaller sets show the range instead.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
-      kpiCard('Throughput', [
-        statCell('Completed in window', `${doneTasks} <span class="stat-sub">tasks · ${count(missions, 'done')} missions${windowS != null ? ` in ${fmtDur(windowS)}` : ''}</span>`),
+      ...(wholeWeeks >= e.policy.minWholeWeeks ? [kpiCard('Pace <span class="stat-sub">per UTC ISO week</span>', [
         statCell('Velocity', velTxt),
         statCell('Tasks per week', weeksTxt('task')),
-        statCell('Open now', `${m.wip.task ?? 0} <span class="stat-sub">tasks · ${m.wip.mission ?? 0} missions</span>`),
-      ], 'Completions are counted per UTC ISO week (Monday–Sunday). A week is "whole" only when it lies entirely inside the observed window; velocity is the median of whole weeks and is never extrapolated from a partial one.'),
+        statCell('Missions per week', weeksTxt('mission')),
+        statCell('Whole weeks observed', `${wholeWeeks}`),
+      ], 'Completions per Monday–Sunday week. Velocity is the median over whole weeks inside the observed window — a partial week is shown but never extrapolated.')] : []),
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
         statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
         statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
@@ -499,6 +535,8 @@ export function renderHtml(doc) {
       'An estimate counts once a named human accepted its range; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Accuracy statistics (MdMRE, PRED(25), MAE) are in the assessor tables below.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
+    const burnup = burnupSvg(p, e, tasks);
+    if (burnup) parts.push(`<section class="panel"><h2>Progress over time</h2><p class="panel-sub">Cumulative completed tasks against the tasks in scope, from plan start to the report cutoff. Scope steps down when a task is cancelled and up when one is added after the start. Hover a marker for the task.</p>${burnup}</section>`);
 
     // Per task — the tokenomics per-case idiom: label + state chip, bar = cycle time, number + muted detail.
     const cycles = tasks.map((t) => elapsedS(t.started_at, t.done_at));
