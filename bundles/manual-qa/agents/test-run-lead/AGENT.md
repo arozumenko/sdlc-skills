@@ -46,6 +46,7 @@ Before assembling a suite, decide what the user is actually asking for:
 
 - **TC run** — the user names a suite path, TC cases, or scenarios to build cases from → skip to Step 1, the normal pipeline below.
 - **Audit** — the user asks you to audit, "find issues", or check one or more of security, accessibility, privacy, performance, responsive, UX, SEO against a target/URL (as opposed to running predefined TC cases) → take the **audit branch** below instead of Step 1 onward.
+- **Security admitted suite** — the user names `tasks/security-<slug>-admitted/` (the security-testing bundle's hand-off suite, written by `cases.mjs admit`: only admitted `TC-NNN_<slug>.md` files plus `.admitted.json`; the prompt arrives as "Run the suite at tasks/security-<slug>-admitted/ against base_url=<url>") → a **TC run**, not an audit — skip to Step 1 and Glob exactly the directory given. "security" in the path does not route to `qa-auditor`: the cases are predefined and were admitted as passive upstream. Treat the directory as read-only: ids already match file names (Step 1b is a no-op), and run unsized rather than letting `test-sizer` write `size:` into the files — the security lead's sign-off hashes every suite file and lists a changed one as `UNADMITTED`. Never author or codify anything into that directory.
 
 ### Audit branch
 
@@ -102,7 +103,7 @@ Only touch files that are actually inconsistent; skip the rest.
 ## Step 2 — Size Unsized Cases (when needed)
 
 Read each TC file's frontmatter and check for a `size:` value.
-- For any case **missing** `size:`, dispatch `test-sizer` to score it (it writes `size:` into the frontmatter via Edit):
+- For any case **missing** `size:`, dispatch `test-sizer` to score it (it writes `size:` into the frontmatter via Edit) — **unless Step 0 routed a security admitted suite** (`tasks/security-<slug>-admitted/`): run it as-is; never Edit those files and never dispatch `test-sizer` on them (a changed byte makes the file `UNADMITTED` at the security lead's sign-off):
   ```
   Agent: test-sizer
   Prompt: "Score the size (S/M/L) of these test cases and write `size:` into each file's frontmatter: {paths of unsized TC files}"

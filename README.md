@@ -149,6 +149,7 @@ npx github:arozumenko/sdlc-skills init --factory feature-development   # cross-p
 npx github:arozumenko/sdlc-skills init --factory manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 npx github:arozumenko/sdlc-skills init --factory product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
+npx github:arozumenko/sdlc-skills init --factory security-testing  # threat-led, read-only security testing team (security-lead, threat-modeler, security-reviewer)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -171,7 +172,7 @@ npx github:arozumenko/sdlc-skills init --all --update
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
 `CLAUDE.md`, applies per-role **skill overlays**, and can **seed reference
-files** into the project — one command instead of hand-listing roles. Four
+files** into the project — one command instead of hand-listing roles. Five
 ship today:
 
 | Factory | Roster | What it's for |
@@ -180,6 +181,7 @@ ship today:
 | `manual-qa` | 7 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter, qa-auditor) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Also ships a specialist audit mode: `qa-auditor` runs security/accessibility/privacy/performance/responsive/UX/SEO passes via Playwright MCP, writes a findings report, and codifies notable findings into regression TC cases. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
+| `security-testing` | 3 factory-local agents (`security-lead`, `threat-modeler`, `security-reviewer`) + 5 factory-local skills (`secure-code-review`, `threat-modeling`, `security-test-planning`, `risk-register`, `security-engagement`) | Threat-led, read-only security testing team: code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register. See [`bundles/security-testing/README.md`](bundles/security-testing/README.md). |
 
 See [`factories/SPEC.md`](factories/SPEC.md) and each factory's `README.md` to
 author your own. (`--bundle` still works as a silent back-compat alias for

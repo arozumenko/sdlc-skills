@@ -180,9 +180,21 @@
       "version": "0.2.0"
     },
     {
+      "name": "quality-evals",
+      "source": "./bundles/manual-qa/skills/quality-evals",
+      "description": "Use when a team wants to validate test-runner's bug-detection accuracy or test-author's authoring fidelity against their OWN app before trusting the manual-qa bundle on real work — \"how good is this agent, really\", \"benchmark test-author/test-runner\", \"build a gold suite\", \"self-eval the manual QA team\". Ports a held-out-answer-key eval methodology (deterministic Tier A scoring + a judged Tier B rubric) that keeps a self-authored eval honest, generalized to any app.",
+      "version": "0.2.0"
+    },
+    {
       "name": "reproducing-issues",
       "source": "./bundles/feature-development/skills/reproducing-issues",
       "description": "Use when a bug is unclear or unconfirmed and needs reproduction before RCA or any fix. Turns a vague bug report into precise, repeatable steps with evidence and a CONFIRMED / CANNOT-REPRODUCE / PARTIAL verdict. Reproduction and documentation only — does not fix code.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "risk-register",
+      "source": "./bundles/security-testing/skills/risk-register",
+      "description": "Use when recording, accepting, expiring, closing, superseding or ticketing residual security risks in the append-only register, or reading its exposure and approval counts; provides register.mjs.",
       "version": "0.2.0"
     },
     {
@@ -195,6 +207,24 @@
       "name": "screen-specs",
       "source": "./bundles/feature-development/skills/screen-specs",
       "description": "Use when screens need designing or documenting as reference a developer or agent can build from — \"design the screens\", \"screen specs\", \"what should this screen look like\", \"turn the flows into designs\", \"document the UI\", or when a flow map's nodes need to become actual screens. Produces standalone HTML pages showing each screen as a device-framed mock beside its spec — regions with Material component and token names, every state the criteria demand, the MD3-vs-platform calls, accessibility notes, and traceability back to a flow node and acceptance criterion. Mock and spec are generated from one source so they cannot drift. NOT for flow/journey diagrams (use user-flow-maps), NOT a design tool replacement, and NOT for writing the screens' production code.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "secure-code-review",
+      "source": "./bundles/security-testing/skills/secure-code-review",
+      "description": "Use when reviewing code for security defects with citations anyone can re-check, giving a second opinion on one finding, or verifying a fix at a commit; provides cite.mjs and verify.mjs.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-engagement",
+      "source": "./bundles/security-testing/skills/security-engagement",
+      "description": "Use when running a security engagement end to end as the lead — init, review, register, model, cases, hand-off, report, fix, acceptances, sign-off; points at the other security-testing skills rather than duplicating their commands.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-test-planning",
+      "source": "./bundles/security-testing/skills/security-test-planning",
+      "description": "Use when turning a threat model's candidate cases or your own drafts into passive security test cases in manual-qa format, admitting them by lint against the allowed-operation grammar, and handing off a verified suite; provides cases.mjs.",
       "version": "0.2.0"
     },
     {
@@ -237,6 +267,12 @@
       "name": "test-case-analysis",
       "source": "./bundles/feature-development/skills/test-case-analysis",
       "description": "Use when a TMS test case needs manual execution, selector discovery, or defect investigation before automation — \"analyse SCRUM-T101\", \"run this case and emit an AFS\", any pre-automation case exploration. Produces an Automation-Friendly Spec (AFS); does not write test code.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeling",
+      "source": "./bundles/security-testing/skills/threat-modeling",
+      "description": "Use when deriving a data-flow diagram and STRIDE threats from code, with a citation per element and mitigations recorded as claims a fresh reviewer can confirm or refute; provides the threat-model.json shape cite.mjs check validates.",
       "version": "0.2.0"
     },
     {

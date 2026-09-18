@@ -322,6 +322,54 @@
       "source": "./factories/product-management/skills/discovery-status",
       "description": "Read-only discovery pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item.",
       "version": "0.2.0"
+    },
+    {
+      "name": "security-lead",
+      "source": "./factories/security-testing/agents/security-lead",
+      "description": "Security lead agent (Noor) — orchestrates a threat-led security engagement: dispatches the threat-modeler and security-reviewer, checks their citations, admits passive test cases, writes and signs off the assessment, verifies fixes, and proposes acceptances. The only human-facing security role.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeler",
+      "source": "./factories/security-testing/agents/threat-modeler",
+      "description": "Threat modeler agent (Ilse) — derives a code-based data-flow diagram and STRIDE threats with a citation per element, records mitigations as claims, and assigns one disposition per threat.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-reviewer",
+      "source": "./factories/security-testing/agents/security-reviewer",
+      "description": "Security reviewer agent (Vera) — evidence-gated secure code review: review, vulnerability-review, mitigation-review, and fix-review, each a fresh dispatch with re-checkable citations.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "secure-code-review",
+      "source": "./factories/security-testing/skills/secure-code-review",
+      "description": "Evidence-gated secure code review with re-checkable file:line citations — findings, second opinions, and fix verification via cite.mjs and verify.mjs.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "threat-modeling",
+      "source": "./factories/security-testing/skills/threat-modeling",
+      "description": "Code-derived data-flow diagram and STRIDE threat model with a citation per element and mitigations recorded as claims a fresh reviewer can confirm or refute.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-test-planning",
+      "source": "./factories/security-testing/skills/security-test-planning",
+      "description": "Turns a threat model's candidate cases into passive security test cases in manual-qa format, admits them by lint, and hands off a verified suite via cases.mjs.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "risk-register",
+      "source": "./factories/security-testing/skills/risk-register",
+      "description": "Append-only residual-risk register — records, accepts, expires, closes, supersedes and tickets risks via register.mjs.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "security-engagement",
+      "source": "./factories/security-testing/skills/security-engagement",
+      "description": "Orchestrates a security engagement end to end for the security-lead — init, review, register, model, cases, hand-off, report, fix, acceptances, sign-off.",
+      "version": "0.2.0"
     }
   ]
 }

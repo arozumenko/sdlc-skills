@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -485,4 +485,64 @@ test("no 'Placeholder' / 'replaced in Task' text remains anywhere under the bund
     const t = readFileSync(abs, "utf8");
     for (const re of STUB) assert.ok(!re.test(t), `${abs}: ${re}`);
   }
+});
+
+// ---------------------------------------------------------------- Task 13: catalog wiring
+
+const ROOT = join(B, "..", "..");
+
+test("README.md, AGENTS.md and bundles/SPEC.md each name the security-testing roster on one line", () => {
+  for (const relPath of ["README.md", "AGENTS.md", "bundles/SPEC.md"]) {
+    const text = readFileSync(join(ROOT, relPath), "utf8");
+    const line = text
+      .split("\n")
+      .find(
+        (l) =>
+          l.includes("security-testing") &&
+          l.includes("security-lead") &&
+          l.includes("threat-modeler") &&
+          l.includes("security-reviewer"),
+      );
+    assert.ok(line, `${relPath}: no single line names security-testing, security-lead, threat-modeler and security-reviewer`);
+  }
+});
+
+test("no stale 'exact checkout' phrase anywhere in the catalog docs, the marketplaces, or the bundle", () => {
+  const targets = [
+    "README.md",
+    "AGENTS.md",
+    "bundles/SPEC.md",
+    ".claude-plugin/marketplace.json",
+    ".cursor-plugin",
+    ".codex-plugin",
+    ".github/plugin",
+    "bundles/security-testing",
+  ].map((p) => join(ROOT, p));
+  // --exclude the *.test.mjs files themselves: this very assertion (and the
+  // pre-existing README-prose check above) necessarily name the banned phrase.
+  let status;
+  try {
+    execFileSync("grep", ["-rl", "--exclude=*.test.mjs", "exact checkout", ...targets], { encoding: "utf8" });
+    status = 0;
+  } catch (err) {
+    status = err.status;
+  }
+  assert.equal(status, 1, 'grep -rl "exact checkout" should find nothing outside *.test.mjs (exit 1)');
+});
+
+test(".claude-plugin/marketplace.json parses and mentions security-lead", () => {
+  const mp = JSON.parse(readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf8"));
+  assert.ok(JSON.stringify(mp).includes("security-lead"), "marketplace.json mentions security-lead");
+});
+
+test("manual-qa test-run-lead routes the security admitted suite and never edits it", () => {
+  const t = readFileSync(join(ROOT, "bundles/manual-qa/agents/test-run-lead/AGENT.md"), "utf8");
+  assert.ok(t.includes("tasks/security-<slug>-admitted/"), "names the admitted-suite path");
+  assert.ok(t.includes("never Edit those files"), "states the never-Edit rule");
+});
+
+test("feature-development code-review routes security findings to secure-code-review and verify.mjs", () => {
+  const t = readFileSync(join(ROOT, "bundles/feature-development/skills/code-review/SKILL.md"), "utf8");
+  assert.ok(t.includes("secure-code-review"), "points at secure-code-review");
+  assert.ok(t.includes("verify.mjs --finding"), "points at the fix-verification command");
 });
