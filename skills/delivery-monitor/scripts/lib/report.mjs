@@ -218,7 +218,7 @@ const PAGE_CSS = `
 :root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--gridline:#e1e0d9;--border:rgba(11,11,11,0.10);--series-1:#2a78d6;--warn:#c53030;--ok:#2f855a}
 html[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#898781;--gridline:#2c2c2a;--border:rgba(255,255,255,0.10);--series-1:#3987e5;--warn:#e06c6c;--ok:#48a06f}
 *{box-sizing:border-box}
-body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1120px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
+body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary);background:var(--page);max-width:1360px;margin:0 auto;padding:1.8rem 1.2rem 3rem}
 h1{font-size:1.35rem;margin:0 0 .2rem}
 .meta{color:var(--text-muted);font-size:.85rem;margin:0 0 1.1rem}
 section{margin-top:1.1rem}
@@ -246,9 +246,12 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
-.items{font-size:.87rem;min-width:860px}
-.mrow{display:grid;grid-template-columns:minmax(150px,1.3fr) 110px minmax(180px,1.6fr) minmax(120px,1fr) minmax(130px,1.1fr) 120px minmax(190px,1.3fr);gap:.6rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid var(--gridline);white-space:nowrap}
-.mrow.head .c{color:var(--text-muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+.items{font-size:.87rem;min-width:900px}
+.mrow{display:grid;grid-template-columns:minmax(140px,1.1fr) 96px minmax(170px,1.5fr) minmax(110px,.9fr) minmax(160px,1.4fr) 64px 64px minmax(170px,1.2fr);gap:.6rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid var(--gridline)}
+.mrow .c{min-width:0;overflow-wrap:anywhere}
+.mrow .c.num,.mrow .c.span,.cell-bar .num{white-space:nowrap}
+.mrow .oc{white-space:normal;line-height:1.35}
+.mrow.head .c{color:var(--text-muted);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;line-height:1.2}
 .mrow.mission{background:var(--page);font-weight:600;border-top:2px solid var(--gridline)}
 .mrow.mission .c.ref,.mrow.task .c.ref{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.84rem}
 .mrow.task .c.ref{padding-left:1.4rem}
@@ -354,9 +357,10 @@ const fmtRangeH = (est) => (est ? `${fmtDur(est.low * 3600)}–${fmtDur(est.high
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fmtTs = (iso) => { if (!iso) return '—'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
 const elapsedS = (a, b) => (a && b ? (Date.parse(b) - Date.parse(a)) / 1000 : null);
+const fmtShort = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`; };
 const hhmm = (d) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 // "12:52 → 12:53 UTC" when both clocks fall on the same UTC day, full stamps otherwise.
-const fmtSpan = (a, b) => { if (!a || !b) return null; const da = new Date(a), db = new Date(b); if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null; return da.toISOString().slice(0, 10) === db.toISOString().slice(0, 10) ? `${da.getUTCDate()} ${MONTHS[da.getUTCMonth()]} ${hhmm(da)} → ${hhmm(db)} UTC` : `${fmtTs(a)} → ${fmtTs(b)}`; };
+const fmtSpan = (a, b) => { if (!a || !b) return null; const da = new Date(a), db = new Date(b); if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null; return da.toISOString().slice(0, 10) === db.toISOString().slice(0, 10) ? `${da.getUTCDate()} ${MONTHS[da.getUTCMonth()]} ${hhmm(da)} → ${hhmm(db)}` : `${fmtShort(a)} → ${fmtShort(b)}`; };
 const pctOf = (ratio) => (ratio == null ? '—' : `${Math.round(ratio * 100)}%`);
 const projectOf = (e) => { const f = e.sources?.events_files?.[0]?.path ?? e.sources?.plan_files?.[0]?.path ?? ''; const m = /([^/]+)\/\.agents\//.exec(f); return m ? m[1] : null; };
 const needs = (n, floor) => `needs ≥${floor} <span class="stat-sub">(have ${n})</span>`;
@@ -462,7 +466,7 @@ export function renderHtml(doc) {
     const taskRow = (t) => {
       const c = cycleOf.get(t.item_id); const r = estRow.get(t.item_id); const v = verdictOf(r) ?? (t.estimate ? null : (t.estimate_status === 'unaccepted' ? { text: 'not accepted', cls: '' } : (t.state === 'done' ? { text: 'no estimate', cls: '' } : null)));
       const start = t.started_at ? '' : (t.state === 'planned' || t.state === 'cancelled' ? '' : ' <span class="sub">(no observed start)</span>');
-      return `<div class="mrow task">${cell('ref', `<span title="${esc(t.item_id)}">${esc(t.ref)}</span>${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}`)}${cell('', stateChip(t.state))}${cell('', `${bar(c, maxCycle)}${start}`)}${cell('', t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>')}${cell('', verdictChip(v))}${cell('', t.rework_count ? String(t.rework_count) : '<span class="sub">—</span>')}${cell('span', fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtTs(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
+      return `<div class="mrow task">${cell('ref', `<span title="${esc(t.item_id)}">${esc(t.ref)}</span>${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}`)}${cell('', stateChip(t.state))}${cell('', `${bar(c, maxCycle)}${start}`)}${cell('', t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>')}${cell('', verdictChip(v))}${cell('num', '')}${cell('num', t.rework_count ? String(t.rework_count) : '<span class="sub">—</span>')}${cell('span', fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtShort(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
     };
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
     const maxMission = Math.max(1, ...missionElapsed.filter((c) => c != null));
@@ -476,14 +480,14 @@ export function renderHtml(doc) {
       const v = sv ? { text: bandText(sv), cls: sv.band.vs_low_s < 0 ? '' : sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done' } : null;
       const kids = tasks.filter((t) => t.parent_item_id === g.item_id);
       const expanded = tasks.length <= COLLAPSE_ABOVE || g.state !== 'done';
-      const header = `<div class="mrow mission">${cell('ref', `<span title="${esc(g.item_id)}">${esc(g.ref)}</span>`)}${cell('', stateChip(g.state))}${cell('', bar(el, maxMission))}${cell('', g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>')}${cell('', `${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}`)}${cell('', `${cs.done}/${inScope}${cs.cancelled ? ` <span class="sub">+${cs.cancelled} cancelled</span>` : ''}`)}${cell('span', fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtTs(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
+      const header = `<div class="mrow mission">${cell('ref', `<span title="${esc(g.item_id)}">${esc(g.ref)}</span>`)}${cell('', stateChip(g.state))}${cell('', bar(el, maxMission))}${cell('', g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>')}${cell('', `${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}`)}${cell('num', `${cs.done}/${inScope}${cs.cancelled ? `<br><span class="sub">+${cs.cancelled} canc.</span>` : ''}`)}${cell('num', (() => { const n = kids.reduce((a, t) => a + (t.rework_count || 0), 0); return n ? String(n) : '<span class="sub">—</span>'; })())}${cell('span', fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtShort(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
       return `<details class="mission"${expanded ? ' open' : ''}><summary>${header}</summary>${kids.map(taskRow).join('') || '<div class="mrow task"><div class="c ref sub">no tasks</div></div>'}</details>`;
     };
     const orphanTasks = tasks.filter((t) => !t.parent_item_id || !missions.some((g) => g.item_id === t.parent_item_id));
-    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<details class="mission" open><summary><div class="mrow mission">${cell('ref', 'no mission')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', `${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}`)}${cell('span', '')}</div></summary>${orphanTasks.map(taskRow).join('')}</details>` : '');
+    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<details class="mission" open><summary><div class="mrow mission">${cell('ref', 'no mission')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('num', `${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}`)}${cell('num', '')}${cell('span', '')}</div></summary>${orphanTasks.map(taskRow).join('')}</details>` : '');
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
-    parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks. Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; "fix rounds" counts times a task was sent back before it merged.</p>
-<div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">tasks done / fix rounds</div><div class="c">started → finished</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
+    parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks (click a mission to fold it). Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; "fixes" counts the times a task was sent back before it merged.</p>
+<div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">done</div><div class="c">fixes</div><div class="c">started → finished (UTC)</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     const open = p.items.filter((i) => i.state === 'in_progress');

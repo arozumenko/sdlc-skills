@@ -81,3 +81,15 @@ the report/status output where it applies, never silently dropped.
   starts, raw tokenomics folding, and feature-task attribution are parked for
   a later milestone.
 - Cost per case: use `tokenomics`. Sizing new work: use `automation-scoping`.
+
+## Previewing the HTML page while changing the renderer
+
+`report --html` is a self-contained page; render it against a fixture ledger (or an archived
+`report --json`) and look at it before shipping a layout change — the unit tests pin content, not
+geometry. Headless Chrome/Edge takes a screenshot without any dependency:
+
+```bash
+node .claude/skills/delivery-monitor/scripts/delivery.mjs report --from-json delivery.json --html > delivery.html
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
+  --window-size=1440,1700 --screenshot=delivery.png "file://$PWD/delivery.html"   # repeat at 1100 for narrow screens
+```
