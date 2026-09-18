@@ -383,15 +383,16 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.match(html, /<h2>sec-campaign <span class="sub">campaign sec\/run-1 · plan v1 · in progress<\/span><\/h2>/);
   assert.ok(html.includes('<span class="stat-label">Not started</span><span class="stat-value">2 <span class="stat-sub">tasks</span></span>'), 'planned tasks on the Progress card');
   assert.ok(!html.includes('<h3>Pace'), 'no Pace card below the whole-weeks floor');
-  assert.match(html, /Pace per week appears once the run spans 3 whole ISO weeks \(has [0-2]\)/, 'the missing pace is explained in one line, not an empty card');
+  assert.match(html, /Weekly pace appears after 3 whole weeks \(has [0-2]\)/, 'the missing pace is explained in one line, not an empty card');
   // The trend stat spells out its floor; the run chart itself is deferred to the next iteration.
   assert.ok(!html.includes('<svg'), 'no chart on the page in this iteration');
   assert.ok(html.includes('needs ≥10 finished tasks <span class="stat-sub">(has 1)</span>'), 'trend floor explained');
-  assert.ok(html.includes('<span class="stat-label">Fix rounds <span class="stat-sub">before merge</span></span><span class="stat-value">0 of 1'), 'fix-round share on the Quality card');
+  assert.ok(html.includes('<span class="hero-value">0 <span class="stat-sub">of 1 · 0%</span></span><span class="hero-label">tasks needed a fix round before merge</span>'), 'fix-round share is the Quality hero');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
-  for (const label of ['Tasks done', 'Missions done', 'Median', 'Range', 'In progress', 'Not started', 'Trend', 'Fix rounds', 'Review turnaround', 'Within range', 'Work vs estimate', 'Typical error', 'Counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
-  assert.ok(html.includes('<span class="stat-value">1 / 3</span>'), 'tasks done 1 / 3 (G2 tasks registered, not started)');
-  assert.ok(html.includes('needs ≥5 <span class="stat-sub">(have 1)</span>'), 'median floor is explained, not a bare n<5');
+  for (const label of ['Missions done', 'Range', 'Measured', 'In progress', 'Not started', 'Trend', 'Review turnaround', 'Agent time', 'Work vs estimate', 'Typical error', 'Counted']) assert.ok(html.includes(`<span class="stat-label">${label}`), label);
+  for (const hero of ['tasks done', 'median cycle time per task', 'tasks needed a fix round before merge', 'tasks finished within their estimated range']) assert.ok(html.includes(`<span class="hero-label">${hero}</span>`), hero);
+  assert.ok(html.includes('<span class="hero-value">1 <span class="stat-sub">/ 3</span></span><span class="hero-label">tasks done</span>'), 'tasks done 1 / 3 as the Progress hero');
+  assert.ok(html.includes('— <span class="stat-sub">median needs ≥5 (has 1)</span></span><span class="hero-label">median cycle time per task</span>'), 'median floor is explained, not a bare n<5');
   assert.ok(html.includes('2 h–2 h'), 'range in natural units');
   assert.doesNotMatch(html, /\d\.\d\dh\b/, 'no two-decimal-hours anywhere on the page');
   // Per-task bar row: ref + state chip + bar + duration + estimate verdict.
@@ -399,7 +400,7 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.match(html, /<div class="mrow task"><div class="c ref"><span title="sec\/run-1\/task-a">TASK-A<\/span> <span class="chip">S<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div><div class="c "><div class="cell-bar"><div class="track"><div class="bar" style="width:100%"><\/div><\/div><span class="num">2 h<\/span><\/div><\/div><div class="c ">1 h–3 h<\/div><div class="c "><span class="oc oc-done">within range<\/span><\/div><div class="c num"><\/div><div class="c num"><span class="sub">—<\/span><\/div><div class="c span">10 Sep 00:00 → 02:00<\/div><\/div>/);
   // Per-mission row carries the schedule-variance verdict in words.
   assert.match(html, /<details class="mission" open><summary><div class="mrow mission"><div class="c ref"><span title="sec\/run-1\/mission-g1">G1<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div>.*?<div class="c ">2 h–4 h<\/div><div class="c "><span class="oc oc-done">within the estimate<\/span><\/div><div class="c num">1\/1<\/div>/, 'mission header (summary) carries k\/N, estimate and verdict; small plans start expanded');
-  assert.ok(html.includes('of estimated time'), 'work vs estimate reads as a percentage of the estimate');
+  assert.ok(html.includes('of estimate (median)') || html.includes('of estimate ('), 'work vs estimate reads as a percentage of the estimate');
   // Research-09 defect: an OPEN mission must render k/N from current scope, never 0/0 (first_completion is null until it lands).
   o('mission-g2', 'G2', 'mission', 'created', '2026-09-09T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'created', '2026-09-09T00:00:00Z'); o('task-c', 'TASK-C', 'task', 'created', '2026-09-09T00:00:00Z');
   o('task-b', 'TASK-B', 'task', 'dispatched', '2026-09-11T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'done', '2026-09-11T01:00:00Z');
@@ -426,7 +427,7 @@ test('renderHtml: the Pace card appears only once the run spans minWholeWeeks wh
   const html = renderHtml(assemble(repo, { now: NOW, since: '2026-08-03T00:00:00Z' }));
   assert.ok(html.includes('<h3>Pace <span class="stat-sub">per UTC ISO week</span></h3>'), 'Pace card present');
   assert.match(html, /<span class="stat-label">Whole weeks observed<\/span><span class="stat-value">7<\/span>/);
-  assert.match(html, /<span class="stat-label">Velocity<\/span><span class="stat-value">0 <span class="stat-sub">tasks \/ week, median of 7 whole weeks/);
+  assert.match(html, /<span class="hero-value">0 <span class="stat-sub">tasks \/ week, median of 7 whole weeks<\/span><\/span><span class="hero-label">velocity<\/span>/);
   assert.ok(!html.includes('Pace per week appears once'), 'no floor note when the card is shown');
 });
 
@@ -473,7 +474,7 @@ test('renderHtml + metrics: run chart, trend halves, agent time / review wait fr
   assert.ok(md.includes('| task trend (latest half ÷ earlier half, observed cycle_time) | all | n=12 | 0.5 (faster) | earlier 4h | latest 2h | |'), 'trend line in the assessor Markdown');
   assert.ok(md.includes('| task agent_span | all | n=12 |') && md.includes('| task review_wait | all | n=12 |'), 'split rows in the Markdown flow table');
   const html = renderHtml(doc);
-  assert.ok(html.includes('<span class="stat-label">Trend <span class="stat-sub">latest half vs earlier</span></span><span class="stat-value">-50% <span class="stat-sub">faster — latest 6 vs earlier 6</span>'), 'trend stat on the Cycle time card');
+  assert.ok(html.includes('<span class="stat-label">Trend <span class="stat-sub">latest ½ vs earlier ½</span></span><span class="stat-value">-50% <span class="stat-sub">faster — latest 6 vs earlier 6</span>'), 'trend stat on the Cycle time card');
   assert.ok(!html.includes('Are we getting faster'), 'run chart deferred to the next iteration');
   assert.ok(html.includes('<span class="stat-label">Review turnaround <span class="stat-sub">agent done → merged</span></span><span class="stat-value">30 min</span>'), 'review turnaround on the Quality card');
   assert.match(html, /<span title="sec\/run-1\/task-1">TASK-1<\/span> <span class="chip">S<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div>/, 'task rows present in the grouped table');

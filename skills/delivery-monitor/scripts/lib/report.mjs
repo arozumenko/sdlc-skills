@@ -222,10 +222,16 @@ body{font:14px/1.5 -apple-system,"Segoe UI",sans-serif;color:var(--text-primary)
 h1{font-size:1.35rem;margin:0 0 .2rem}
 .meta{color:var(--text-muted);font-size:.85rem;margin:0 0 1.1rem}
 section{margin-top:1.1rem}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:.8rem}
-.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;min-width:0}
+.kpi-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
+@media(max-width:880px){.kpi-row{grid-template-columns:1fr}}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem 0.9rem;min-width:0;display:flex;flex-direction:column}
+.kpi-card .kpi-callout{margin-top:auto}
 .kpi-card h3{margin:0 0 .55rem;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
-.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem .9rem;margin-top:.7rem;padding-top:.6rem;border-top:1px solid var(--gridline)}
+.hero{display:flex;flex-direction:column;min-width:0}
+.hero-value{font-size:1.9rem;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hero-value .stat-sub{font-size:1rem;font-weight:400}
+.hero-label{font-size:.8rem;color:var(--text-secondary);margin-top:.15rem}
 .stat{display:flex;flex-direction:column;min-width:0}
 .stat-label{font-size:.74rem;color:var(--text-secondary)}
 .stat-value{font-size:1.02rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3;overflow-wrap:anywhere}
@@ -267,7 +273,7 @@ details.mission[open]>summary .c.ref::before{transform:rotate(90deg)}
 .oc-below{color:var(--text-secondary)}
 `;
 const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
-const kpiCard = (title, cells, callout) => `<div class="kpi-card"><h3>${title}</h3><div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
+const kpiCard = (title, cells, callout, hero = null) => `<div class="kpi-card"><h3>${title}</h3>${hero ? `<div class="hero"><span class="hero-value">${hero.value}</span><span class="hero-label">${hero.label}</span></div>` : ''}<div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
 
 export function renderMarkdown(doc) {
   const e = doc.envelope; const L = [];
@@ -421,36 +427,36 @@ export function renderHtml(doc) {
 
     const cards = [
       kpiCard('Progress <span class="stat-sub">since plan start</span>', [
-        statCell('Tasks done', `${doneTasks} / ${tasks.length - count(tasks, 'cancelled')}${count(tasks, 'cancelled') ? ` <span class="stat-sub">+${count(tasks, 'cancelled')} cancelled</span>` : ''}`),
         statCell('Missions done', `${count(missions, 'done')} / ${missions.length}`),
         statCell('In progress', `${count(tasks, 'in_progress')} <span class="stat-sub">tasks · ${m.wip.mission ?? count(missions, 'in_progress')} missions</span>`),
-        statCell('Not started', `${count(tasks, 'planned')} <span class="stat-sub">tasks</span>`),
-      ], `${doneTasks} task(s) and ${count(missions, 'done')} mission(s) completed${windowS != null ? ` in ${fmtDur(windowS)} of observed time` : ''}.${wholeWeeks >= e.policy.minWholeWeeks ? '' : ` Pace per week appears once the run spans ${e.policy.minWholeWeeks} whole ISO weeks (has ${wholeWeeks}).`}`),
-      kpiCard('Cycle time <span class="stat-sub">dispatch → merge</span>', [
-        statCell('Median', ct ? (ct.median == null ? needs(ct.n, 5) : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>'),
+        statCell('Not started', `${count(tasks, 'planned')} <span class="stat-sub">tasks</span>${count(tasks, 'cancelled') ? ` <span class="stat-sub">· ${count(tasks, 'cancelled')} cancelled</span>` : ''}`),
+      ], `${windowS != null ? `Completed in ${fmtDur(windowS)} of observed time.` : ''}${wholeWeeks >= e.policy.minWholeWeeks ? '' : ` Weekly pace appears after ${e.policy.minWholeWeeks} whole weeks (has ${wholeWeeks}).`}`.trim() || null,
+      { value: `${doneTasks} <span class="stat-sub">/ ${tasks.length - count(tasks, 'cancelled')}</span>`, label: 'tasks done' }),
+      kpiCard('Cycle time <span class="stat-sub">first dispatch → merge</span>', [
         statCell('Range', ct ? `${fmtDur(ct.min)}–${fmtDur(ct.max)}` : '—'),
-        statCell('Tasks measured', `${ct ? ct.n : 0} of ${doneTasks} done <span class="stat-sub">· ${count(tasks, 'in_progress')} still open</span>`),
-        statCell('Trend <span class="stat-sub">latest half vs earlier</span>', trendText(m.flow.task?.trend) ?? '—'),
-      ], `Cycle time runs from the first observed dispatch to the merge. Trend compares the median of the latest half of finished tasks with the earlier half — a changing mix of task sizes can move it, so read it with the class column below. Medians need ≥5 tasks per side.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`),
+        statCell('Measured', `${ct ? ct.n : 0} of ${doneTasks} <span class="stat-sub">done · ${count(tasks, 'in_progress')} open</span>`),
+        statCell('Trend <span class="stat-sub">latest ½ vs earlier ½</span>', trendText(m.flow.task?.trend) ?? '—'),
+      ], `Trend compares medians of the latest and earlier halves of finished tasks (≥5 each); a changing mix of task sizes can move it.${!ct && excludedStr(m.flow.task?.excluded ?? {}) ? ` Not measured: ${esc(excludedStr(m.flow.task.excluded))}.` : ''}`,
+      { value: ct ? (ct.median == null ? `— <span class="stat-sub">median needs ≥5 (has ${ct.n})</span>` : fmtDur(ct.median)) : '— <span class="stat-sub">not measured</span>', label: 'median cycle time per task' }),
       ...(wholeWeeks >= e.policy.minWholeWeeks ? [kpiCard('Pace <span class="stat-sub">per UTC ISO week</span>', [
-        statCell('Velocity', velTxt),
         statCell('Tasks per week', weeksTxt('task')),
         statCell('Missions per week', weeksTxt('mission')),
         statCell('Whole weeks observed', `${wholeWeeks}`),
-      ], 'Completions per Monday–Sunday week. Velocity is the median over whole weeks inside the observed window — a partial week is shown but never extrapolated.')] : []),
+      ], 'Velocity is the median over whole Monday–Sunday weeks inside the observed window; a partial week is shown but never extrapolated.',
+      { value: velTxt, label: 'velocity' })] : []),
       kpiCard('Quality & review', [
-        statCell('Fix rounds <span class="stat-sub">before merge</span>', doneTasks ? `${m.rework_proxy_items} of ${doneTasks} <span class="stat-sub">tasks (${Math.round((m.rework_proxy_items / doneTasks) * 100)}%)</span>` : '—'),
         statCell('Review turnaround <span class="stat-sub">agent done → merged</span>', rw ? (rw.median == null ? `${fmtDur(rw.min)}–${fmtDur(rw.max)} <span class="stat-sub">(n=${rw.n})</span>` : fmtDur(rw.median)) : '— <span class="stat-sub">no hook capture</span>'),
-        statCell('Agent time <span class="stat-sub">per task</span>', ag ? (ag.median == null ? `${fmtDur(ag.min)}–${fmtDur(ag.max)} <span class="stat-sub">(n=${ag.n})</span>` : fmtDur(ag.median)) : '—'),
+        statCell('Agent time <span class="stat-sub">median per task</span>', ag ? (ag.median == null ? `${fmtDur(ag.min)}–${fmtDur(ag.max)} <span class="stat-sub">(n=${ag.n})</span>` : fmtDur(ag.median)) : '—'),
         statCell('Cancelled', `${count(tasks, 'cancelled')} <span class="stat-sub">of ${tasks.length} tasks</span>`),
-      ], 'A fix round is a task sent back after review before it merged (a defect caught in implementation). Review turnaround is the time from the agent finishing to the merge — the human part of the cycle; agent time is the sum of its dispatch spans.'),
+      ], 'A fix round is a task sent back after review before it merged; review turnaround is the human part of the cycle, agent time the sum of dispatch spans.',
+      { value: doneTasks ? `${m.rework_proxy_items} <span class="stat-sub">of ${doneTasks} · ${Math.round((m.rework_proxy_items / doneTasks) * 100)}%</span>` : '—', label: 'tasks needed a fix round before merge' }),
       kpiCard('Estimates <span class="stat-sub">vs accepted ranges</span>', es ? [
-        statCell('Within range', es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} of ${es.hit_rate.ranged}`),
-        statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimated time (${es.work_ratio.n} tasks; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimated time (median)</span>`) : '—'),
+        statCell('Work vs estimate', es.work_ratio ? (es.work_ratio.median == null ? `${pctOf(es.work_ratio.min)}–${pctOf(es.work_ratio.max)} <span class="stat-sub">of estimate (${es.work_ratio.n}; median from 5)</span>` : `${pctOf(es.work_ratio.median)} <span class="stat-sub">of estimate (median)</span>`) : '—'),
         statCell('Typical error <span class="stat-sub">MdMRE</span>', es.mdmre == null ? '—' : `${Math.round(es.mdmre * 100)}%`),
         statCell('Counted', `${es.eligible} of ${es.n}${excludedStr(es.excluded) ? ` <span class="stat-sub">· ${Object.entries(es.excluded).filter(([, v]) => v).map(([k, v]) => `${v} ${esc(k.replace(/_/g, ' '))}`).join(', ')}</span>` : ' <span class="stat-sub">estimates</span>'}`),
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
-      'Only accepted estimates count; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
+      'Only accepted estimates count. "Work vs estimate" = actual ÷ midpoint of the range; typical error = median |estimate − actual| ÷ actual (MdMRE).',
+      es ? { value: es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} <span class="stat-sub">of ${es.hit_rate.ranged}</span>`, label: 'tasks finished within their estimated range' } : null),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
 
