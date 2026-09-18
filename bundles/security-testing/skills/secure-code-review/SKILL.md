@@ -75,9 +75,11 @@ A stamped file edited by hand is `REFUSED agent-written key id` — the
 `check_stamp` no longer matches. Keep your unstamped `findings.json` as the
 source (or strip `id`, `state`, `snippet_redacted`, `coverage`,
 `check_stamp`; `oid` may stay), fix `lines` / `snippet` from a fresh `show`,
-write the whole file, and the lead re-runs `check`. Second opinions hashed
-against the earlier stamped bytes print `STALE-REVIEW` on that run and are
-valid again on the next `check` when the stamped bytes are unchanged.
+write the whole file, and the lead re-runs `check`. That re-run changes the
+stamped bytes, so a second opinion hashed against the earlier bytes now
+prints `STALE-REVIEW` and must be redone against the freshly stamped file; a
+second opinion stays valid only across a `check` re-run that leaves the
+stamped bytes byte-identical (its own output, re-run freely).
 
 ## Commands
 
@@ -106,13 +108,17 @@ commands:
   `INIT ok`); a tracked private path ⇒ `TRACKED <path>` (exit 4, D9).
 - `show <path> [start end] [--at <oid>]` — `SHOW <path> <oid7> <s>-<e>`
   then `<n>\t<redacted line>`; default `HEAD`, ≤ 40 lines, under scope.
-- `check <findings.json | threat-model.json> [--md [--no-snippets]]` —
+- `check <findings.json | threat-model.json> [--md [--no-snippets]] [--reviews <dir>]` —
   `REFUSED agent-written key <key>` (2) · `DIRTY-SCOPE <path>` (2) ·
   `FAILED <locus>.<i> <why>` per bad citation (`why` ∈ `bad-shape`,
   `path-not-in-scope`, `range-over-40`, `not-in-tree`, `snippet-not-found`)
-  · findings: `SECOND <id> <assertion>`, `STALE-REVIEW <id>` (4),
-  `COVERAGE examined=<n> partial=<n> unexamined=<n>` · threat model:
-  `TM-INVALID <locus>: <why>` (4), `MODEL elements=<n> threats=<n> open=<n>`
+  · findings: `SECOND <id> <assertion>`, `STALE-REVIEW <id>` (4) from
+  `second-<64-hex-id>.json` beside the file (`second-M-nnn.json` there is
+  ignored), `COVERAGE examined=<n> partial=<n> unexamined=<n>` · threat
+  model: `TM-INVALID <locus>: <why>` (4), `--reviews <dir>` validates every
+  `second-M-nnn.json` in `<dir>` ⇒ `SECOND M-nnn <assertion>` /
+  `STALE-REVIEW M-nnn` (4), omitted ⇒ `SECOND: no review directory given`,
+  `MODEL elements=<n> threats=<n> open=<n>`
   · `CHECK verified=<n> failed=<n>` (exit 4 on any FAILED / STALE /
   TM-INVALID). Writes the file back with `state`, `oid`, `snippet_redacted`,
   (findings) `id`, `coverage`, `check_stamp`. `--md` prints the tables after

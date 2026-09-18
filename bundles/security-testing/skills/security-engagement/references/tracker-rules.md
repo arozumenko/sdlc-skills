@@ -21,7 +21,7 @@ the only dedupe layer, so do it before you post.
    of the finding.
 3. **Record the URL.**
    ```
-   node ../risk-register/scripts/register.mjs ticket <R-id> <url>
+   node <skills>/risk-register/scripts/register.mjs ticket <R-id> <url>
    ```
    `ROW <id> <status>` — status is unchanged; only `ticket_url` is set.
    Run this every time you post or find an existing ticket for a row —

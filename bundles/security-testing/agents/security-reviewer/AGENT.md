@@ -93,7 +93,7 @@ One dispatch, one contract. Write JSON (pretty, UTF-8, trailing newline) with on
 
 **Procedure.** Read the mitigation's citations at their `oid` with `cite.mjs show … --at <oid>`; decide whether the cited code enforces the control for the threat named: present and covering ⇒ `confirmed`; absent, bypassable or narrower than claimed ⇒ `refuted` (state where); the bytes cannot show it ⇒ `indeterminate`.
 
-**Output.** `second-M-nnn.json` in the review directory `.agents/security-testing/reviews/<dir>/`, the same shape as a finding's second opinion with `finding_id` = the mitigation id, `oid` = its first citation's `oid`, `findings_sha256` = sha256 of the stamped `threat-model.json` as on disk. No script validates it; the lead reads it and records the disposition.
+**Output.** `second-M-nnn.json` in the review directory `.agents/security-testing/reviews/<dir>/`, the same shape as a finding's second opinion with `finding_id` = the mitigation id, `oid` = its first citation's `oid`, `findings_sha256` = sha256 of the stamped `threat-model.json` as on disk. The lead's next `cite.mjs check <st>/threat-model.json --reviews <dir>` validates it and prints `SECOND M-nnn <assertion>` or `STALE-REVIEW M-nnn`.
 
 **Return line.** `SECOND_WRITTEN <M-nnn> <assertion>`
 

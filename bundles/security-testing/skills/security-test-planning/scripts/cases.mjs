@@ -14,10 +14,13 @@
 //                     Hits ⇒ the redacted text is copied to <st>/proposals/:
 //                       PROPOSAL <st>/proposals/<file> hits=<n>
 //                       HIT <rule> step <n>: <action>        (one per hit)
-//   verify-suite      every TC-*.md in the suite is in `.admitted.json` with
-//                     its current sha256 ⇒ SUITE ok=<n> then the manual-qa
-//                     and test-automation hand-off prompts (spec §8); else
-//                     UNADMITTED: <path> per offender, exit 4, no prompts.
+//   verify-suite      every directory entry other than `.admitted.json` must
+//                     be a `TC-*.md` indexed in `.admitted.json` with its
+//                     current sha256 (a stray file, a non-`TC-*.md` name, a
+//                     subdirectory — anything else) ⇒ SUITE ok=<n> then the
+//                     manual-qa and test-automation hand-off prompts (spec
+//                     §8); else UNADMITTED: <path> per offender, exit 4, no
+//                     prompts.
 //   all               USAGE(<sub>: <why>) (2) · ENGAGEMENT-* (2) ·
 //                     CORRUPT <suite>/.admitted.json (5)
 //
@@ -30,7 +33,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -139,12 +142,23 @@ function verifySuite(args, ctx) {
   const rel = suiteRel(record.slug);
   const dir = join(ctx.root, rel);
   const index = new Map(readIndex(ctx.root, record.slug).map((e) => [e.file, e.sha256]));
-  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^TC-.*\.md$/.test(f)).sort() : [];
+  const entries = existsSync(dir)
+    ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.name !== ADMITTED_INDEX).sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const cases = [];
   let bad = 0;
-  for (const file of files) {
+  for (const entry of entries) {
+    const file = entry.name;
+    // Anything but a file whose name is indexed (a stray file, a wrong-case
+    // or malformed TC name, a subdirectory) is UNADMITTED without reading it.
+    const expected = entry.isFile() && CASE_FILE.test(file) ? index.get(file) : undefined;
+    if (expected === undefined) {
+      ctx.out(`UNADMITTED: ${rel}/${file}`);
+      bad++;
+      continue;
+    }
     const bytes = readFileSync(join(dir, file));
-    if (index.get(file) !== sha256Hex(bytes)) {
+    if (expected !== sha256Hex(bytes)) {
       ctx.out(`UNADMITTED: ${rel}/${file}`);
       bad++;
       continue;
@@ -184,6 +198,20 @@ export const COMMANDS = Object.freeze({
   "verify-suite": command("verify-suite", verifySuite),
 });
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exit(runCli(COMMANDS, process.argv.slice(2), { name: "cases" }));
+/**
+ * True when this file is the process entry script. Both sides are realpath'd:
+ * `import.meta.url` is already canonical, `argv[1]` is whatever the caller
+ * typed — a file symlink, a `--symlink` install, or a copy under an aliased
+ * tmpdir (`/var/…` → `/private/var/…` on macOS) would otherwise never match
+ * and main would silently not run.
+ * @returns {boolean}
+ */
+function isEntryScript() {
+  try {
+    return process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
 }
+
+if (isEntryScript()) process.exit(runCli(COMMANDS, process.argv.slice(2), { name: "cases" }));

@@ -43,8 +43,12 @@ citation carries a commit oid and a range of at most 40 raw lines, so
 **refused** if present in a file it is asked to check (spec D10). `check`
 writes the file back with, per citation, `state: VERIFIED | FAILED(<why>)`,
 the stamped `oid` and the redacted `snippet`; per finding, `id =
-sha256(path \0 class \0 redact(normalise(snippet)) \0 first line)` (spec D5),
-so no published hash has a secret in its preimage. Nothing is write-once:
+sha256(path \0 class \0 redact(normalise(snippet)) \0 first line of that
+redacted normalised snippet)` (spec D5) — the fourth component is not a
+line number, it is redundant with the third by construction, on purpose:
+the id is location-independent, so the same sink pattern re-found at
+shifted lines after a rebase still hashes to the same id. So no published
+hash has a secret in its preimage. Nothing is write-once:
 `check` re-runs freely on its own output (the `check_stamp` matches), but a
 stamped file edited by hand is `REFUSED agent-written key id` — a `FAILED`
 citation is fixed in the reviewer's unstamped `findings.json` (or with

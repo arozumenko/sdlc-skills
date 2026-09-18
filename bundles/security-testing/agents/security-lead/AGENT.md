@@ -136,7 +136,7 @@ Write `reports/security/<date>-assessment.md` from
 delta, limitations — then:
 
 ```
-node ../secure-code-review/scripts/cite.mjs redact reports/security/<date>-assessment.md
+node <skills>/secure-code-review/scripts/cite.mjs redact reports/security/<date>-assessment.md
 ```
 `REDACTED <file> hits=<n>`.
 

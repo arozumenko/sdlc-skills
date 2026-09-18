@@ -87,6 +87,28 @@ test("factory install on claude: three agents, five skills, briefings, splice; n
   const testFixtureEval = installed.filter(isTestFixtureEval);
   assert.ok(runtime.length <= 75, `installed runtime files ${runtime.length} > 75 — the bundle is growing again`);
   assert.ok(testFixtureEval.length <= 70, `installed test+fixture+eval files ${testFixtureEval.length} > 70 — the bundle is growing again`);
+
+  // I3: the lead's procedure names every command root-relative
+  // (`node .claude/skills/<skill>/scripts/<script>` from the repository
+  // root, repository-relative file arguments) — prove that spelling, not
+  // just the absolute join(root, …) paths used above, actually runs.
+  mkdirSync(join(root, ".agents/security-testing/cases"), { recursive: true });
+  writeFileSync(
+    join(root, ".agents/security-testing/engagement.md"),
+    "```json engagement\n" + JSON.stringify({ engagement_id: "c-2026", slug: "c", scope_paths: ["src/"] }) + "\n```\n"
+  );
+  writeFileSync(
+    join(root, ".agents/security-testing/cases/TC-001_c.md"),
+    "---\nid: TC-001\ntitle: Check base_url reachable\npriority: high\ntype: functional\nmodule: smoke\ntags: [security, passive]\n---\n\n" +
+      "# TC-001: Check base_url reachable\n\n## Steps\n\n| # | Action | Expected |\n|---|--------|----------|\n| 1 | Navigate to `{{base_url}}/login` | Login page loads |\n"
+  );
+  let r2 = sh(root, process.execPath, [".claude/skills/security-test-planning/scripts/cases.mjs", "admit", ".agents/security-testing/cases/TC-001_c.md"]);
+  assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+  assert.match(r2.stdout, /^ADMITTED tasks\/security-c-admitted\/TC-001_c\.md/);
+  r2 = sh(root, process.execPath, [".claude/skills/security-test-planning/scripts/cases.mjs", "verify-suite"]);
+  assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+  assert.match(r2.stdout, /SUITE ok=1/);
+  assert.match(r2.stdout, /Run as the active agent/);
 });
 
 test("standalone one-skill path: init → review → check → register → verify", () => {

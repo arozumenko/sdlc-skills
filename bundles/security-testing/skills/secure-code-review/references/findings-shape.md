@@ -95,6 +95,12 @@ in place (strings pass through the redaction rules).
 }
 ```
 
+The `id` is location-independent (spec D5: path, class and the redacted
+normalised snippet, twice over — never a line number), so the same sink
+pattern at two locations is one finding with two citations, not two
+findings; a re-review that finds the same defect after the lines shifted
+gets the same `id` and `register add` correctly refuses it as a duplicate.
+
 A citation that did not verify carries `state: "FAILED(<why>)"` and no
 `snippet_redacted`, and its finding carries no `id`; `check` printed
 `FAILED <finding-index>.<citation-index> <why>` with `why` one of
@@ -148,8 +154,12 @@ paragraph citing lines, no secrets; `by` names the session or agent. A
 `mitigation-review` writes the same shape to `second-M-nnn.json` in the
 review directory (`.agents/security-testing/reviews/<dir>/second-M-nnn.json`)
 with `finding_id` = the mitigation id, `oid` = its first citation's `oid`
-and `findings_sha256` = the sha256 of the stamped `threat-model.json`; no
-script validates that file — the lead reads it.
+and `findings_sha256` = the sha256 of the stamped `threat-model.json`;
+`cite.mjs check <st>/threat-model.json --reviews <dir>` validates every
+`second-M-nnn.json` there the same way (`SECOND M-nnn <assertion>` or
+`STALE-REVIEW M-nnn`) — the flag is omitted for a plain `check` with no
+mitigation review to validate yet, which prints `SECOND: no review
+directory given` instead.
 
 ## `fix-review.json` — the fix-review assertion, and `verify.json` as read
 

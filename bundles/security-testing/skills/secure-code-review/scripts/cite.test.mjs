@@ -372,6 +372,15 @@ test("second-<id>.json is validated; a stale one is STALE-REVIEW", () => {
   assert.ok(r.out.includes(`STALE-REVIEW ${"f".repeat(64)}`), "an unknown finding_id is reported by that id");
 });
 
+test("a second-M-nnn.json beside findings.json is not this mode's shape: no STALE-REVIEW, exit 0 (C1)", () => {
+  const { root, oid2, dir, rel } = review("findings-ok.json");
+  writeFileSync(join(dir, "second-M-001.json"), fill("second-ok.json", { ID: "M-001", HEAD: oid2, SHA: "0".repeat(64) }));
+  const r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(!r.out.some((l) => l.startsWith("STALE-REVIEW")), r.out.join("\n"));
+  assert.ok(!r.out.some((l) => l.startsWith("SECOND ")), "a mitigation review is not a finding's second opinion");
+});
+
 test("citation paths are canonicalised; examined paths must already be canonical", () => {
   const { root, oid2, file, rel } = review(agentDoc(undefined, { findings: [{ ...agentDoc().findings[0], citations: [{ path: "./src/app.js", lines: [3, 5], snippet: SNIPPET_3_5 }] }] }));
   let r = run(root, "check", rel);
@@ -482,7 +491,7 @@ test("check on a threat model verifies element and mitigation citations, lints, 
   const { root, oid2, file, rel } = model("threat-model-ok.json");
   let r = run(root, "check", rel);
   assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
-  assert.deepEqual(r.out, ["MODEL elements=1 threats=4 open=1", "CHECK verified=2 failed=0"]);
+  assert.deepEqual(r.out, ["SECOND: no review directory given", "MODEL elements=1 threats=4 open=1", "CHECK verified=2 failed=0"]);
   const m = readDoc(file);
   assert.equal(m.elements[0].id, "E-001", "the agent's ids stay");
   assert.equal(m.elements[0].citations[0].state, "VERIFIED");
@@ -572,7 +581,7 @@ test("threat-model mode: a FAILED citation, a structural defect and a dirty scop
   writeDoc(file, doc);
   let r = run(root, "check", rel);
   assert.equal(r.code, 4, r.out.join("\n"));
-  assert.deepEqual(r.out, ["FAILED E-001.0 snippet-not-found", "TM-INVALID T-001: element E-009 is not in the model", "MODEL elements=1 threats=4 open=1", "CHECK verified=1 failed=1"]);
+  assert.deepEqual(r.out, ["FAILED E-001.0 snippet-not-found", "TM-INVALID T-001: element E-009 is not in the model", "SECOND: no review directory given", "MODEL elements=1 threats=4 open=1", "CHECK verified=1 failed=1"]);
   assert.equal(readDoc(file).elements[0].citations[0].state, "FAILED(snippet-not-found)");
   // A mitigation citation fails under its own locus.
   const fixed = readDoc(file);
@@ -629,7 +638,30 @@ test("threat-model mode: D10 — state/verdict anywhere and id outside E/T/M pos
 test("an empty model is valid", () => {
   const { root, rel } = model({ elements: [], threats: [] });
   const r = run(root, "check", rel);
-  assert.deepEqual([r.code, r.out], [0, ["MODEL elements=0 threats=0 open=0", "CHECK verified=0 failed=0"]]);
+  assert.deepEqual([r.code, r.out], [0, ["SECOND: no review directory given", "MODEL elements=0 threats=0 open=0", "CHECK verified=0 failed=0"]]);
+});
+
+test("threat-model check --reviews <dir> validates second-M-nnn.json there: one good, one stale (C1)", () => {
+  const { root, oid2, dir, file, rel } = model("threat-model-ok.json");
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes("SECOND: no review directory given"), r.out.join("\n"));
+  const reviewDir = join(dir, "reviews", "r1");
+  mkdirSync(reviewDir, { recursive: true });
+  const goodSha = sha256(readFileSync(file));
+  writeFileSync(join(reviewDir, "second-M-001.json"), fill("second-ok.json", { ID: "M-001", HEAD: oid2, SHA: goodSha }));
+  writeFileSync(join(reviewDir, "second-M-999.json"), fill("second-ok.json", { ID: "M-999", HEAD: oid2, SHA: goodSha }));
+  r = run(root, "check", rel, "--reviews", ".agents/security-testing/reviews/r1");
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes("SECOND M-001 confirmed"), r.out.join("\n"));
+  assert.ok(r.out.includes("STALE-REVIEW M-999"), r.out.join("\n"));
+  assert.ok(!r.out.some((l) => l.startsWith("SECOND: no review")), "a given --reviews dir does not print the fallback line");
+  // A --reviews dir that does not exist is a usage error, nothing written.
+  const before = readFileSync(file, "utf8");
+  r = run(root, "check", rel, "--reviews", ".agents/security-testing/reviews/nope");
+  assert.equal(r.code, 2, r.out.join("\n"));
+  assert.equal(r.out[0], "USAGE(check: .agents/security-testing/reviews/nope not found)");
+  assert.equal(readFileSync(file, "utf8"), before, "nothing written on a usage error");
 });
 
 // ---------------------------------------------------------------- --md and redact

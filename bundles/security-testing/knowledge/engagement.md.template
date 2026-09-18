@@ -21,5 +21,8 @@ Edit the block below, then re-run `cite.mjs init`. Every script reads only this 
 - `scope_paths` — what the reviewer and modeler may cite; citations elsewhere are `FAILED(path-not-in-scope)`.
 - `product_paths` — read-only posture check at sign-off (`git status --porcelain -- <scope_paths> <product_paths>` must be empty).
 - `targets.browser` — hosts a passive case may name; `{{base_url}}` is always allowed.
-- `base_url` — optional; substituted for `{{base_url}}` in the hand-off prompts.
+- `base_url` — optional; `cases.mjs verify-suite`'s manual-qa hand-off prompt
+  states it as `base_url=<value>` (or the literal `<base_url>` placeholder
+  when unset) for whoever runs the suite to substitute into each admitted
+  case's own `{{base_url}}` steps.
 - `execute_project_tests.argv` — the ONLY source of a test command; omit it and `verify.mjs` reports `UNVERIFIED-NO-TEST-SURFACE`.

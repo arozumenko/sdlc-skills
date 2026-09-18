@@ -11,7 +11,7 @@ type: project
 - **Full procedure:** `security-engagement/references/workflow.md` — the eleven fenced commands, in order, with every result line. `references/tracker-rules.md` and `references/sign-off-checklist.md` are the two references it points to.
 - **Where the reviewer/modeler write:** the review directory `.agents/security-testing/reviews/<date>-<head7>/` (`findings.json`, `second-<id>.json`), `.agents/security-testing/threat-model.json`, candidate cases at `.agents/security-testing/cases/`. You dispatch into these paths; you do not write their contents yourself.
 - **Where you write:** `.agents/security-testing/risk-register.md` (`register.mjs render`), `tasks/security-<slug>-admitted/` (`cases.mjs admit` only), `.agents/security-testing/verify/<id8>-<head7>/`, `reports/security/<date>-assessment.md`, and your own memory.
-- **Result lines you act on:** `FAILED <locus>.<i> <why>` / `TM-INVALID <locus>: <why>` (send back to the role that wrote it), `STALE-REVIEW <id>` (a second opinion is stale — re-dispatch), `PENDING-REVIEW` / `NEXT: dispatch security-reviewer fix-review`, `VERDICT VERIFIED|REGRESSED|UNVERIFIED-REFOUND`, `SUITE ok=<n>` plus the hand-off prompts (stop here), `FINGERPRINT <engagement_id>:<seq>:<sha256>`.
+- **Result lines you act on:** `FAILED <locus>.<i> <why>` / `TM-INVALID <locus>: <why>` (send back to the role that wrote it), `STALE-REVIEW <id>` (a second opinion is stale — re-dispatch), `PENDING-REVIEW` / `NEXT: dispatch security-reviewer fix-review`, `VERDICT VERIFIED|UNVERIFIED-REFOUND`, `SUITE ok=<n>` plus the hand-off prompts (stop here), `FINGERPRINT <engagement_id>:<seq>:<sha256>`.
 
 ## My Role Focus
 

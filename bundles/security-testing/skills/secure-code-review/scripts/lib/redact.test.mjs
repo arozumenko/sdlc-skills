@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,11 +32,28 @@ test("plain code is untouched", () => {
   assert.deepEqual(redactString(s), { text: s, hits: 0 });
 });
 
-test("the secrets fixture leaves no raw secret behind and keeps plain lines", () => {
-  const raw = readFileSync(join(FIXTURES, "secrets.txt"), "utf8");
+test("a synthetic sample per rule class leaves no raw secret behind and keeps plain lines", () => {
+  // I5: no file in the bundle may contain a scanner-shaped secret (a
+  // consumer's own gitleaks/trufflehog/push-protection would flag the
+  // *security-testing* bundle itself). So every sample here is assembled at
+  // runtime from concatenated fragments — never a contiguous
+  // AKIA[A-Z0-9]{16}, `-----BEGIN ... PRIVATE KEY-----` or `eyJ…\.` in the
+  // file's own bytes — same values `secrets.txt` used to carry as one file.
+  const raw = [
+    "aws_access_key_id = " + "AKIA" + "IOSFODNN7EXAMPLE",
+    "Authorization: Bearer " + "eyJhbGciOiJIUzI1NiJ9" + "." + "eyJzdWIiOiIxIn0" + "." + "c2lnbmF0dXJlc2lnbmF0dXJl",
+    "-----BEGIN " + "RSA PRIVATE KEY-----",
+    "MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu",
+    "-----END " + "RSA PRIVATE KEY-----",
+    "Authorization: Bearer " + "abcdefghijklmnop.qrs",
+    "password = " + "hunter22x",
+    "sha=" + "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5",
+    "const x = require('fs'); // path=/usr/bin",
+    "export function q(db, id) { return db.query('SELECT * FROM t WHERE id = ?', [id]); }",
+  ].join("\n");
   const r = redactString(raw);
   assert.ok(r.hits >= 6, `expected at least one hit per class, got ${r.hits}`);
-  for (const secret of ["AKIAIOSFODNN7EXAMPLE", "eyJhbGciOiJIUzI1NiJ9", "MIIBOgIBAAJBAKj34", "abcdefghijklmnop.qrs", "hunter22x", "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5"]) {
+  for (const secret of ["AKIA" + "IOSFODNN7EXAMPLE", "eyJhbGciOiJIUzI1NiJ9", "MIIBOgIBAAJBAKj34", "abcdefghijklmnop.qrs", "hunter22x", "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5"]) {
     assert.ok(!r.text.includes(secret), `${secret} survived redaction`);
   }
   assert.ok(r.text.includes("const x = require('fs'); // path=/usr/bin"));

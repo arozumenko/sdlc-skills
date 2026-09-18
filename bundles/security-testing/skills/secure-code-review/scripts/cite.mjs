@@ -17,9 +17,15 @@
 //   check  REFUSED agent-written key <key> (2) · DIRTY-SCOPE <path> (2)
 //          FAILED <locus>.<citation-index> <why> (4) — locus is the finding
 //            index, or the element / mitigation id of a threat model
-//          findings:  SECOND <id> <assertion> · STALE-REVIEW <id> (4)
+//          findings:  SECOND <id> <assertion> · STALE-REVIEW <id> (4) — from
+//                     second-<64-hex-id>.json beside the file only;
+//                     second-M-nnn.json there is not this mode's shape and
+//                     is ignored
 //                     COVERAGE examined=<n> partial=<n> unexamined=<n>
 //          model:     TM-INVALID <locus>: <why> (4) · CORRUPT <record> (5)
+//                     --reviews <dir>: SECOND M-nnn <assertion> ·
+//                     STALE-REVIEW M-nnn (4) — from second-M-nnn.json in
+//                     <dir>; omitted ⇒ SECOND: no review directory given
 //                     MODEL elements=<n> threats=<n> open=<n>
 //          CHECK verified=<n> failed=<n>   (exit 4 on any FAILED/STALE/TM-INVALID)
 //          --md: the tables, then TABLES sha256=<hex> (last)
@@ -260,7 +266,10 @@ const D10_KEYS = new Set(["id", "state", "verdict"]);
 const HEX_KEYS = new Set(["head", "oid", "id", "check_stamp", "finding_id", "findings_sha256"]);
 const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const ASSERTIONS = new Set(["confirmed", "refuted", "indeterminate"]);
-const SECOND_FILE = /^second-(.+)\.json$/;
+/** Findings mode: only `second-<64-hex finding id>.json`; `second-M-nnn.json` is not this mode's shape and is ignored. */
+const SECOND_FINDING_FILE = /^second-([0-9a-f]{64})\.json$/;
+/** Threat-model mode (`--reviews <dir>`): only `second-M-nnn.json`. */
+const SECOND_MITIGATION_FILE = /^second-(M-\d{3})\.json$/;
 
 const sha256Hex = (input) => createHash("sha256").update(input).digest("hex");
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -428,32 +437,47 @@ function rawLineCount(root, oid, path) {
   return bytes[bytes.length - 1] === 0x0a ? n : n + 1;
 }
 
+/** Findings by their (already-stamped) `id`, for `secondOpinions`. */
+const findingsById = (findings) => new Map(findings.filter((f) => typeof f.id === "string").map((f) => [f.id, f]));
+
+/** Mitigations by their agent-written `M-nnn` id, across every threat, for `secondOpinions`. */
+function mitigationsById(doc) {
+  const byId = new Map();
+  for (const t of doc.threats) {
+    if (!isObject(t) || !Array.isArray(t.mitigations)) continue;
+    for (const m of t.mitigations) if (isObject(m) && typeof m.id === "string") byId.set(m.id, m);
+  }
+  return byId;
+}
+
 /**
- * Every `second-<id>.json` beside the findings file, validated against the
- * findings as read (`findings_sha256` is the hash of the file bytes BEFORE
- * this run's write-back — the lead runs `check` before dispatching the second
- * opinion, so the reviewer hashes a stamped file, and a re-run of check on
- * its own output leaves those bytes unchanged).
+ * Every `fileRe`-matching file in `dir`, validated against `byId` (id -> the
+ * item whose `citations[0].oid` it must match) and `fileSha` (the record's
+ * bytes hash BEFORE this run's write-back — the lead runs `check` before
+ * dispatching the second opinion, so the reviewer hashes a stamped file, and
+ * a re-run of check on its own output leaves those bytes unchanged). `fileRe`
+ * is the filename shape for this mode (findings: `second-<64-hex>.json`;
+ * threat model: `second-M-nnn.json`) — a file that does not match is not
+ * this mode's second opinion and is not looked at.
  * @returns {{lines: string[], stale: number, valid: Map<string, {assertion: string, by: string}>}}
  */
-function secondOpinions(dir, findings, fileSha) {
-  const byId = new Map(findings.filter((f) => typeof f.id === "string").map((f) => [f.id, f]));
+function secondOpinions(dir, fileRe, byId, fileSha) {
   const lines = [];
   const valid = new Map();
   let stale = 0;
-  for (const name of readdirSync(dir).filter((n) => SECOND_FILE.test(n)).sort()) {
+  for (const name of readdirSync(dir).filter((n) => fileRe.test(n)).sort()) {
     let s = null;
     try {
       s = parseStrict(readFileSync(join(dir, name)), name);
     } catch {
       s = null;
     }
-    const id = s !== null && typeof s.finding_id === "string" ? s.finding_id : name.match(SECOND_FILE)[1];
-    const f = byId.get(id);
+    const id = s !== null && typeof s.finding_id === "string" ? s.finding_id : name.match(fileRe)[1];
+    const item = byId.get(id);
     const ok =
       s !== null &&
-      f !== undefined &&
-      s.oid === f.citations[0].oid &&
+      item !== undefined &&
+      s.oid === item.citations?.[0]?.oid &&
       s.findings_sha256 === fileSha &&
       typeof s.assertion === "string" &&
       ASSERTIONS.has(s.assertion) &&
@@ -510,7 +534,7 @@ function checkFindings(doc, { root, bytes, abs }, ctx) {
     throw e;
   }
   doc.coverage = coverage;
-  const seconds = secondOpinions(dirname(abs), doc.findings, sha256Hex(bytes));
+  const seconds = secondOpinions(dirname(abs), SECOND_FINDING_FILE, findingsById(doc.findings), sha256Hex(bytes));
   const written = writeBack(abs, doc, mode);
   for (const line of failed) say(ctx, line);
   for (const line of seconds.lines) ctx.out(line); // already token-redacted; the ids must survive
@@ -580,7 +604,7 @@ function admittedCases(root, slug) {
 }
 
 /** Threat-model mode; same return shape as `checkFindings` (no `seconds`). */
-function checkThreatModel(doc, { root, abs }, ctx) {
+function checkThreatModel(doc, { root, abs, bytes, reviews }, ctx) {
   const mode = MODES["threat-model"];
   if (!Array.isArray(doc.elements)) throw new UsageError("elements must be an array");
   if (!Array.isArray(doc.threats)) throw new UsageError("threats must be an array");
@@ -606,12 +630,19 @@ function checkThreatModel(doc, { root, abs }, ctx) {
     });
   });
   const { errors } = lintThreatModel(doc, refs);
+  let seconds = { lines: ["SECOND: no review directory given"], stale: 0 };
+  if (reviews !== undefined) {
+    const dir = resolve(ctx.cwd, reviews);
+    if (!existsSync(dir)) throw new UsageError(`${reviews} not found`);
+    seconds = secondOpinions(dir, SECOND_MITIGATION_FILE, mitigationsById(doc), sha256Hex(bytes));
+  }
   const written = writeBack(abs, doc, mode);
   for (const line of failed) say(ctx, line);
   for (const { locus, why } of errors) say(ctx, `TM-INVALID ${locus}: ${why}`);
+  for (const line of seconds.lines) ctx.out(line); // already token-redacted; the ids must survive
   say(ctx, `MODEL elements=${doc.elements.length} threats=${doc.threats.length} open=${countOpen(doc)}`);
   say(ctx, `CHECK verified=${verified} failed=${failed.length}`);
-  return { code: failed.length > 0 || errors.length > 0 ? 4 : 0, written };
+  return { code: failed.length > 0 || errors.length > 0 || seconds.stale > 0 ? 4 : 0, written };
 }
 
 /**
@@ -629,10 +660,11 @@ function printTables({ mode, written, seconds }, { noSnippets }, ctx) {
 
 function check(args, ctx) {
   const [file] = args._;
-  if (file === undefined) throw new UsageError("usage: check <findings.json | threat-model.json> [--md [--no-snippets]]");
+  if (file === undefined) throw new UsageError("usage: check <findings.json | threat-model.json> [--md [--no-snippets]] [--reviews <dir>]");
   const md = args.md === true;
   const noSnippets = args["no-snippets"] === true;
   if (noSnippets && !md) throw new UsageError("--no-snippets needs --md");
+  const reviews = typeof args.reviews === "string" ? args.reviews : undefined;
   const abs = resolve(ctx.cwd, file);
   let bytes;
   try {
@@ -643,7 +675,7 @@ function check(args, ctx) {
   const doc = parseStrict(bytes, file);
   const mode = "findings" in doc ? "findings" : "elements" in doc || "threats" in doc ? "threat-model" : null;
   if (mode === null) throw new UsageError("neither a findings nor a threat-model document (no findings, elements or threats key)");
-  const result = mode === "findings" ? checkFindings(doc, { root: ctx.root, bytes, abs }, ctx) : checkThreatModel(doc, { root: ctx.root, abs }, ctx);
+  const result = mode === "findings" ? checkFindings(doc, { root: ctx.root, bytes, abs }, ctx) : checkThreatModel(doc, { root: ctx.root, abs, bytes, reviews }, ctx);
   if (result.code !== 2 && md) printTables({ ...result, mode }, { noSnippets }, ctx);
   return result.code;
 }

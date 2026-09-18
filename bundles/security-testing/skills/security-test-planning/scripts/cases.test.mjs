@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -174,6 +174,34 @@ test("verify-suite: a tampered admitted file is UNADMITTED; no index ⇒ SUITE o
   r = run(bare, "verify-suite");
   assert.equal(r.code, 2);
   assert.equal(r.out[0], "ENGAGEMENT-INVALID(block)");
+});
+
+test("verify-suite: notes.md, a wrong-case TC file and a subdirectory are each UNADMITTED", () => {
+  const root = withCandidate("TC-001_login-headers.md", "TC-001_acme.md", { ...BROWSER, base_url: "https://staging.example.com" });
+  assert.equal(run(root, "admit", `${CANDIDATES}/TC-001_acme.md`).code, 0);
+  writeFileSync(join(root, SUITE, "notes.md"), "# just notes\n");
+  writeFileSync(join(root, SUITE, "tc-002_x.md"), "---\nid: TC-002\n---\n# TC-002: x\n");
+  mkdirSync(join(root, SUITE, "TC-003_subdir.md"), { recursive: true });
+  const r = run(root, "verify-suite");
+  assert.equal(r.code, 4, r.out.join("\n") + r.err);
+  assert.ok(r.out.includes("UNADMITTED: tasks/security-acme-admitted/notes.md"), r.out.join("\n"));
+  assert.ok(r.out.includes("UNADMITTED: tasks/security-acme-admitted/tc-002_x.md"), r.out.join("\n"));
+  assert.ok(r.out.includes("UNADMITTED: tasks/security-acme-admitted/TC-003_subdir.md"), r.out.join("\n"));
+  assert.ok(!r.out.some((l) => l.startsWith("SUITE ok=")), "no SUITE line while unadmitted entries exist");
+  assert.ok(!r.out.some((l) => l.startsWith("Run as the active agent")), "no prompts while unadmitted entries exist");
+});
+
+test("main runs when cases.mjs is reached through a symlinked directory (I1)", () => {
+  // Review 1's fix (cite.mjs, verify.mjs, register.mjs) realpath'd both
+  // sides of the entry-script check; cases.mjs did not, so a symlinked cwd
+  // (every macOS tmpdir is one: /var/… -> /private/var/…) made main()
+  // silently never run: exit 0, no output.
+  const root = tmpRepoWithEngagement(BROWSER);
+  const link = join(root, "cases-link.mjs");
+  symlinkSync(CASES, link);
+  const r = spawnSync(process.execPath, [link, "nope"], { cwd: root, encoding: "utf8" });
+  assert.equal(r.status, 2, `stdout=${r.stdout} stderr=${r.stderr}`);
+  assert.equal(r.stdout.trim(), "USAGE(cases: unknown command nope)");
 });
 
 test("verify-suite: a corrupt index is exit 5 and no bytes of it print", () => {

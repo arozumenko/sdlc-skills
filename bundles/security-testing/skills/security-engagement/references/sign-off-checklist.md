@@ -7,19 +7,19 @@ before you tell anyone the engagement is closed out.
 ## The four checks
 
 1. **`cite.mjs check` exits 0 on every findings file.** Re-run
-   `node ../secure-code-review/scripts/cite.mjs check <st>/reviews/<date>-<head7>/findings.json`
+   `node <skills>/secure-code-review/scripts/cite.mjs check <st>/reviews/<date>-<head7>/findings.json`
    for the review (and every second opinion beside it) — `CHECK
    verified=<n> failed=<n>` with `failed=0`. A stale `STALE-REVIEW <id>`
    or any `FAILED` line means the citations no longer match the tree,
    or an opinion outran a re-check: re-run rather than sign off over it.
 
 2. **`cite.mjs check` exits 0 on the threat model.**
-   `node ../secure-code-review/scripts/cite.mjs check <st>/threat-model.json`
+   `node <skills>/secure-code-review/scripts/cite.mjs check <st>/threat-model.json`
    — `MODEL elements=<n> threats=<n> open=<n>` then `CHECK verified=<n>
    failed=<n>` with `failed=0`, no `TM-INVALID` lines.
 
 3. **`cases.mjs verify-suite` exits 0.**
-   `node ../security-test-planning/scripts/cases.mjs verify-suite` —
+   `node <skills>/security-test-planning/scripts/cases.mjs verify-suite` —
    `SUITE ok=<n>` with no `UNADMITTED:` lines. A file in the suite
    directory that is not what `admit` wrote (a hand-placed copy, a
    stale draft) blocks the manual-qa and test-automation hand-offs; fix
@@ -28,8 +28,8 @@ before you tell anyone the engagement is closed out.
 4. **`register.mjs status` is read, and the tree is clean.**
 
 ```
-node ../risk-register/scripts/register.mjs check
-node ../risk-register/scripts/register.mjs status
+node <skills>/risk-register/scripts/register.mjs check
+node <skills>/risk-register/scripts/register.mjs status
 git status --porcelain -- <scope_paths> <product_paths>
 ```
 
@@ -64,7 +64,7 @@ fine now."
 
 `register.mjs status`'s `FINGERPRINT <engagement_id>:<seq>:<sha256>`
 line, the rendered `risk-register.md`
-(`node ../risk-register/scripts/register.mjs render`), and the report
+(`node <skills>/risk-register/scripts/register.mjs render`), and the report
 from `references/workflow.md` step 8, together. Give the next reader
 the `FINGERPRINT` line to paste as `--expect` on their own
 `register.mjs status --expect <line>` — `MATCH` says nothing moved

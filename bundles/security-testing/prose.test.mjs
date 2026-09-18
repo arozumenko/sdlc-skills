@@ -276,6 +276,7 @@ test("no 'Placeholder' / 'replaced in Task' text remains under threat-modeling o
 // ---------------------------------------------------------------- Task 11
 
 import { TRANSITIONS } from "./skills/risk-register/scripts/lib/transitions.mjs";
+import { VERDICTS } from "./skills/secure-code-review/scripts/verify.mjs";
 
 const SKILL_PLAN = "skills/security-test-planning";
 const SKILL_REG = "skills/risk-register";
@@ -560,4 +561,56 @@ test("feature-development code-review routes security findings to secure-code-re
   const t = readFileSync(join(ROOT, "bundles/feature-development/skills/code-review/SKILL.md"), "utf8");
   assert.ok(t.includes("secure-code-review"), "points at secure-code-review");
   assert.ok(t.includes("verify.mjs --finding"), "points at the fix-verification command");
+});
+
+// ---------------------------------------------------------------- final-review fixes (I3, M1)
+
+test("no 'node ../' command spelling survives in the lead's procedure docs or AGENT.md (I3)", () => {
+  for (const rel of [`${SKILL_ENG}/references/workflow.md`, `${SKILL_ENG}/references/sign-off-checklist.md`, `${SKILL_ENG}/references/tracker-rules.md`, `${AGENT12}/AGENT.md`]) {
+    const t = read(rel);
+    assert.ok(!t.includes("node ../"), `${rel}: a "node ../" command spelling remains`);
+  }
+  const w = read(`${SKILL_ENG}/references/workflow.md`);
+  assert.match(w, /`<skills>` is the host's installed skills directory/, "workflow.md names <skills>");
+});
+
+test("no scanner-shaped secret (PEM header, AWS key, JWT) survives anywhere but *.test.mjs (I5)", () => {
+  // The bundle is installed into a consumer's tree; a secret-shaped literal
+  // outside a *.test.mjs file would trip that consumer's own gitleaks /
+  // trufflehog / GitHub push protection on the first commit of `.claude/`.
+  // redact.test.mjs is allowed to name these patterns — it builds every
+  // sample at runtime from concatenated fragments, so even there no
+  // contiguous match sits in the file's own bytes (this grep would catch it
+  // if that ever regressed).
+  const patterns = ["BEGIN RSA PRIVATE KEY", "AKIA[A-Z0-9]{16}", "eyJ[A-Za-z0-9_-]{8,}\\."];
+  for (const pattern of patterns) {
+    let status;
+    try {
+      execFileSync("grep", ["-rlE", "--exclude=*.test.mjs", pattern, B], { encoding: "utf8" });
+      status = 0;
+    } catch (err) {
+      status = err.status;
+    }
+    assert.equal(status, 1, `grep -rlE "${pattern}" should find nothing outside *.test.mjs (exit 1)`);
+  }
+});
+
+test("every `VERDICT <token>` named in prose is a real verify.mjs verdict (M1)", () => {
+  const valid = new Set(Object.values(VERDICTS));
+  function walkAll(dir, out = []) {
+    for (const name of readdirSync(dir).sort()) {
+      const abs = join(dir, name);
+      if (name === "node_modules") continue;
+      const st = statSync(abs);
+      if (st.isDirectory()) walkAll(abs, out);
+      else if (/\.md$/.test(name)) out.push(abs);
+    }
+    return out;
+  }
+  for (const abs of walkAll(B)) {
+    const t = readFileSync(abs, "utf8");
+    for (const m of t.matchAll(/\bVERDICT ([A-Z][A-Z0-9_|-]*)/g)) {
+      for (const tok of m[1].split("|")) assert.ok(valid.has(tok), `${abs}: "${m[0]}" names unknown verdict ${tok}`);
+    }
+  }
 });
