@@ -58,6 +58,13 @@ test("factory install on claude: three agents, five skills, briefings, splice; n
     GIT_CONFIG_GLOBAL: join(REPO, "bin/fixtures/security-testing-e2e/no-network.gitconfig"),
   });
   assert.equal(r.status, 0, r.stderr + r.stdout);
+  // The factory must install with zero network: no skill in the roster may
+  // resolve to an external (repo:) entry. A future regression (e.g. a
+  // skills-on-demand list gaining an external skill again) must fail this
+  // test outright rather than pass "loudly but non-fatally".
+  const output = r.stdout + r.stderr;
+  assert.ok(!output.includes("github.com"), `installer output mentions github.com (network attempted): ${output}`);
+  assert.ok(!/\b(?:clone|fetch)\b[^\n]*failed/i.test(output), `installer output has a clone/fetch failure line: ${output}`);
   for (const a of ["security-lead", "threat-modeler", "security-reviewer"]) {
     assert.ok(existsSync(join(root, ".claude/agents", a, "AGENT.md")), a);
     assert.ok(existsSync(join(root, ".agents/memory", a, "project_briefing.md")), a + " briefing");

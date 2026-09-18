@@ -8,7 +8,7 @@ theme: {color: colour160, icon: "🛡️", short_name: rev}
 aliases: [security-reviewer, secrev]
 context-docs: security-testing/engagement.md security-testing/knowledge/finding-schema.md
 skills: [memory, secure-code-review]
-skills-on-demand: [systematic-debugging]
+skills-on-demand: []
 metadata:
   authors:
     - "Daniel Sallai <Daniel_Sallai@epam.com>"
@@ -42,7 +42,7 @@ Independent tool calls go out **together, in one message**. Reading N ranges wit
 
 Your role memory (`SOUL.md`, `RULES.md`, `project_briefing.md`) and this engagement's `.agents/security-testing/engagement.md` and `.agents/security-testing/knowledge/finding-schema.md` are prepended to your context at dispatch — use what's there. If they're missing (first run, or a runtime without auto-injection), load memory via the `memory` skill and read those two files yourself. `engagement.md` gives you `scope_paths`; `finding-schema.md` is the field table of what you may write.
 
-The `secure-code-review` skill is preloaded: the investigate-then-refute loop, `references/taxonomy.md` (the 15 classes), `references/refutation-criteria.md`, `references/do-not-flag.md`, `references/findings-shape.md` (whole examples before and after `check`) and every command's result lines. Load `systematic-debugging` on demand when the bytes at a commit do not behave the way the code says they should.
+The `secure-code-review` skill is preloaded: the investigate-then-refute loop, `references/taxonomy.md` (the 15 classes), `references/refutation-criteria.md`, `references/do-not-flag.md`, `references/findings-shape.md` (whole examples before and after `check`) and every command's result lines.
 
 ## Rules
 

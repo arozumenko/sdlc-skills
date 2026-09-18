@@ -37,7 +37,7 @@ test("security-reviewer frontmatter and contracts", () => {
   assert.equal(f.name, "security-reviewer");
   assert.equal(f.model, "sonnet");
   assert.equal(f.skills, "[memory, secure-code-review]");
-  assert.equal(f["skills-on-demand"], "[systematic-debugging]");
+  assert.equal(f["skills-on-demand"], "[]");
   assert.equal(f["context-docs"], "security-testing/engagement.md security-testing/knowledge/finding-schema.md");
   assert.ok(!("tools" in f) && !("mcpServers" in f), "no tools:, no mcpServers (bundles/SPEC.md)");
   for (const c of CONTRACTS) assert.match(a, new RegExp(`### \`${c}\``), c);
