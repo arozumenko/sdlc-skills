@@ -1,0 +1,18 @@
+{
+  "head": "$HEAD",
+  "scope_paths": ["src/"],
+  "examined": [{ "path": "src/app.js" }, { "path": "src/util.js", "lines": [1, 1] }],
+  "findings": [
+    {
+      "title": "Hard-coded credential",
+      "class": "hardcoded-secret",
+      "priority": "p1",
+      "confidence": "high",
+      "citations": [
+        { "path": "src/app.js", "lines": [3, 5], "snippet": "nope" }
+      ],
+      "rationale": "The password is a literal in source.",
+      "fix": "Read it from the environment."
+    }
+  ]
+}

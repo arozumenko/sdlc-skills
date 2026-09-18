@@ -329,3 +329,4 @@ order. Three conventions keep it that way:
 | `manual-qa` | manual QA for web | 7 local agents: `app-profiler`, `test-sizer`, `test-author`, `test-run-lead`, `test-runner`, `test-reporter`, `qa-auditor` |
 | `test-automation` | TMS-driven automation pipeline | `test-automation-lead` orchestrates `qa-engineer` + `test-automation-engineer` |
 | `product-management` | PO discovery pipeline | 2 local agents: `product-owner`, `discovery-researcher`; 10 discovery skills; seeds `docs/discovery/` |
+| `security-testing` | threat-led, read-only security testing | 3 local agents: `security-lead`, `threat-modeler`, `security-reviewer`; 5 local skills: `secure-code-review`, `threat-modeling`, `security-test-planning`, `risk-register`, `security-engagement`; seeds `.agents/security-testing/knowledge/`; no hooks |

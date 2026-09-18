@@ -46,6 +46,7 @@ Check in this priority order. Stop at each category — don't rush to the next.
 - SQL injection, XSS, command injection risks?
 - Secrets in code or logs?
 - Permissions and authorization checked?
+- Security-class finding? Don't call it from the diff — hand it to the security-testing bundle's `secure-code-review` skill (`--skills security-testing/secure-code-review`) and verify the fix with `verify.mjs --finding <id> --review <dir> --head <oid>`.
 
 ### 3. Concurrency & State
 - Race conditions in shared state?

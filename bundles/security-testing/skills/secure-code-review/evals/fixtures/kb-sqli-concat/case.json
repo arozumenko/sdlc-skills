@@ -1,0 +1,11 @@
+{
+  "id": "kb-sqli-concat",
+  "kind": "known-bad",
+  "contract": "review",
+  "description": "Request parameter concatenated into a SQL string that reaches db.query. The limit is coerced to a number; q is not. One finding of class injection over the concatenation and the query call, with typed source and sink citations.",
+  "packet": {
+    "files": [
+      { "path": "src/search.js", "side": "head", "ranges": [[1, 8]] }
+    ]
+  }
+}

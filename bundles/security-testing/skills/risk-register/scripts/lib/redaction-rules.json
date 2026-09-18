@@ -1,0 +1,11 @@
+{
+  "redaction_version": 2,
+  "rules": [
+    { "class": "aws-key", "pattern": "(?<![A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])", "flags": "g", "replacement": "<REDACTED:aws-key>" },
+    { "class": "jwt", "pattern": "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "flags": "g", "replacement": "<REDACTED:jwt>" },
+    { "class": "pem-block", "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----", "flags": "g", "replacement": "<REDACTED:pem-block>" },
+    { "class": "bearer", "pattern": "(?<=\\bBearer\\s)[A-Za-z0-9._~+/=-]{16,}", "flags": "gi", "replacement": "<REDACTED:bearer>" },
+    { "class": "key-value", "pattern": "(?<=\\b(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|client[_-]?secret)\\s*[:=]\\s*[\"']?)[^\\s\"']{6,}", "flags": "gi", "replacement": "<REDACTED:key-value>" },
+    { "class": "high-entropy", "pattern": "(?<![A-Za-z0-9+/])(?![0-9a-f]{40}(?![A-Za-z0-9+/]))(?![0-9a-f]{64}(?![A-Za-z0-9+/]))[A-Za-z0-9+/]{40,}={0,2}(?![A-Za-z0-9+/=])", "flags": "g", "replacement": "<REDACTED:high-entropy>" }
+  ]
+}

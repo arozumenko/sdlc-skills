@@ -1,0 +1,23 @@
+{
+  "head": "$HEAD",
+  "scope_paths": ["src/"],
+  "examined": [{ "path": "src/app.js" }],
+  "findings": [
+    {
+      "id": "x",
+      "title": "Hard-coded credential",
+      "class": "hardcoded-secret",
+      "priority": "p1",
+      "confidence": "high",
+      "citations": [
+        {
+          "path": "src/app.js",
+          "lines": [3, 5],
+          "snippet": "\nconst PORT = Number(process.env.PORT ?? 8080);\nconst password = \"hunter22x\";"
+        }
+      ],
+      "rationale": "The password is a literal in source.",
+      "fix": "Read it from the environment."
+    }
+  ]
+}
