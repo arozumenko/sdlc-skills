@@ -356,3 +356,115 @@ test("passive-admission.md carries the corrected observe/tooling vocabulary", ()
   assert.ok(!/\|\s*zap\s*,/i.test(p) && !/,\s*zap\s*,/i.test(p) && !/,\s*zap\s*\|/i.test(p), "bare zap is not listed as its own tooling token");
   for (const t of ["msfconsole", "ncat", "rm -<flags>"]) assert.ok(p.includes(t), t);
 });
+
+// ---------------------------------------------------------------- Task 12: security-lead / README / CHANGELOG
+
+const AGENT12 = "agents/security-lead";
+const PHASES12 = "Init · Review · Register · Model · Cases · Hand-off (stop) · Report · Fix · Acceptances · Sign-off";
+
+test("security-lead frontmatter", () => {
+  const a = read(`${AGENT12}/AGENT.md`);
+  const f = fm(a);
+  assert.equal(f.name, "security-lead");
+  assert.equal(f.model, "sonnet");
+  assert.equal(f.color, "blue");
+  assert.equal(f.group, "security");
+  assert.equal(f.theme, '{color: colour27, icon: "🔐", short_name: lead}');
+  assert.equal(f.aliases, "[security-lead, seclead]");
+  assert.equal(
+    f["context-docs"],
+    "security-testing/engagement.md security-testing/knowledge/finding-schema.md security-testing/risk-register.md",
+  );
+  assert.equal(f.skills, "[memory, security-engagement]");
+  assert.equal(
+    f["skills-on-demand"],
+    "[secure-code-review, risk-register, security-test-planning, issue-tracking, verifying-outcomes]",
+  );
+  assert.ok(!("tools" in f) && !("mcpServers" in f), "no tools:, no mcpServers (bundles/SPEC.md)");
+});
+
+test("security-lead body names the ten phases, links the procedure, proposes rather than approves, and stays within budget", () => {
+  const a = read(`${AGENT12}/AGENT.md`);
+  assert.ok(a.includes(PHASES12), "the ten phases, in order, with the stop marked");
+  assert.ok(a.includes("references/workflow.md"), "links the full procedure");
+  assert.ok(a.includes("proposes"), "proposes");
+  assert.ok(!/lead approves/i.test(a), "never says the lead approves");
+  for (const line of [
+    "REVIEW_WRITTEN findings=<n>",
+    "SECOND_WRITTEN <id> <assertion>",
+    "FIX_REVIEW_WRITTEN <id> <not-refound|refound>",
+    "MODEL_WRITTEN elements=<n> threats=<n> open=<n>",
+  ]) {
+    assert.ok(a.includes(line), line);
+  }
+  assert.ok(a.split("\n").length <= 250, "AGENT.md stays within 250 lines");
+});
+
+test("security-lead SOUL.md, RULES.md and briefing carry no dropped-pipeline vocabulary", () => {
+  const soul = read(`${AGENT12}/SOUL.md`);
+  const rules = read(`${AGENT12}/RULES.md`);
+  const brief = read("briefings/security-lead.md");
+  assert.match(soul, /^# Soul/m);
+  assert.match(rules, /^# Rules/m);
+  assert.ok(rules.split("\n").filter((l) => /^\d+\. \*\*/.test(l)).length >= 4, "RULES.md lists the four roster rules as numbered bullets");
+  const bf = fm(brief);
+  assert.equal(bf.name, "Project briefing");
+  assert.equal(bf.type, "project");
+  assert.match(brief, /^## Project Knowledge/m);
+  assert.match(brief, /^## My Role Focus/m);
+  for (const [name, text] of [["SOUL.md", soul], ["RULES.md", rules], ["briefing", brief]]) {
+    for (const banned of [/packet/i, /receipt/i, /security-evidence/i, /\bgate\b/i, /normalised line/i, /worktree/i]) assert.ok(!banned.test(text), `${name}: ${banned}`);
+  }
+});
+
+test("README names the roster and skills, the Guarantees / Not guaranteed table, and the install smoke block", () => {
+  const r = read("README.md");
+  const guaranteeRows = [
+    "Every citation carries a commit oid and a ≤40-line range",
+    "Every scoped range is accounted for exactly once",
+    "Nothing a script writes contains bytes matching a redaction rule",
+    "is written only by `cases.mjs admit`",
+    "A `VERIFIED` verdict means the project's tests exited 0",
+    "Every approval-like record is stored `authenticated: false`",
+  ];
+  for (const row of guaranteeRows) assert.ok(r.includes(row), row);
+  const scriptRows = (r.match(/^\|.*\bscript\b.*\|$/gim) || []).length;
+  assert.ok(scriptRows >= 6, `at least six script-tagged Guarantees rows (got ${scriptRows})`);
+  assert.ok(r.includes("Not guaranteed"), "Not guaranteed section");
+  assert.ok(!r.toLowerCase().includes("exact checkout"), "never 'exact checkout'");
+  assert.match(r, /GIT-ERROR/, "GIT-ERROR is named");
+  assert.match(r, /\.gitignore/, "the one unredacted write is named");
+  const smoke = [
+    "npx github:arozumenko/sdlc-skills init --factory security-testing --target claude --yes",
+    "node .claude/skills/secure-code-review/scripts/cite.mjs init",
+    "node .claude/skills/secure-code-review/scripts/cite.mjs check .agents/security-testing/reviews/<dir>/findings.json",
+    "node .claude/skills/risk-register/scripts/register.mjs status",
+  ];
+  const bashBlocks = [...r.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1].trimEnd());
+  assert.ok(bashBlocks.some((b) => b === smoke.join("\n")), "an exact four-line smoke block");
+  assert.ok(r.split("\n").length <= 300, "README stays within 300 lines");
+});
+
+test("CHANGELOG.md ships one 1.0.0 entry naming the four scripts", () => {
+  const c = read("CHANGELOG.md");
+  assert.match(c, /^## 1\.0\.0$/m);
+  for (const script of ["cite.mjs", "verify.mjs", "cases.mjs", "register.mjs"]) assert.ok(c.includes(script), script);
+});
+
+test("no 'Placeholder' / 'replaced in Task' text remains anywhere under the bundle", () => {
+  function walkAll(dir, out = []) {
+    for (const name of readdirSync(dir).sort()) {
+      const abs = join(dir, name);
+      if (name === "node_modules") continue;
+      const st = statSync(abs);
+      if (st.isDirectory()) walkAll(abs, out);
+      else out.push(abs);
+    }
+    return out;
+  }
+  for (const abs of walkAll(B)) {
+    if (!/\.(md|json|template)$/.test(abs)) continue;
+    const t = readFileSync(abs, "utf8");
+    for (const re of STUB) assert.ok(!re.test(t), `${abs}: ${re}`);
+  }
+});
