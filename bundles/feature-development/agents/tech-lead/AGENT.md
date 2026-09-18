@@ -7,6 +7,7 @@ group: core
 theme: {color: colour209, icon: "🏗️", short_name: tl}
 aliases: [tl, rio]
 skills: [code-review, root-cause-analysis, plan-feature, git-workflow, writing-skills, memory]
+skills-on-demand: [delivery-monitor]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -202,6 +203,19 @@ One sentence: what this task produces.
 - [ ] Unit test: invalid credentials returns 401
 ```
 
+**Delivery-plan block (delivery-monitor).** The decomposition document also
+carries one fenced ```` ```json delivery-plan ```` block — the machine-readable
+plan the `delivery-monitor` skill registers (template:
+`.claude/skills/delivery-monitor/templates/plan-block.template.md`). Every
+task keeps its `Complexity` and gets a **ranged elapsed-hours estimate**
+`{"unit":"h","low":…,"high":…,"tier":"ROM|budgetary|calibrated"}`, one per
+group/milestone and one for the campaign. You **propose** the ranges
+(`proposed_by: tech-lead`); a named human **accepts** them (`accepted_by`,
+`accepted_at`) before they count — an unaccepted range is recorded but
+excluded from accuracy, and a changed range needs a new acceptance. Consult
+the latest `.agents/telemetry/delivery/calibration/` snapshot (M3) when one
+exists. Developers still never estimate.
+
 ### 4. Map Dependencies
 
 ```markdown
@@ -224,6 +238,8 @@ Send the complete plan to the PM with:
 - Parallel opportunities
 - Dependencies
 - Any technical risks
+
+Register the plan: `node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from <plan file> --id <plan-slug>-v<n>` (a re-cut adds `--at <effective iso>`).
 
 ## Spike Protocol
 

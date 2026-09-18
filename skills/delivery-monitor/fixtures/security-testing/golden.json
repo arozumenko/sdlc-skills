@@ -1,0 +1,31 @@
+{
+  "tasks": 59,
+  "missions": 30,
+  "done": 33,
+  "rework_proxy_items": 11,
+  "commit_to_done": {
+    "n": 33,
+    "min": 306,
+    "max": 4692,
+    "median": 1314,
+    "p85": 2539,
+    "p90": 2676
+  },
+  "lead_time": {
+    "n": 33,
+    "min": 2391,
+    "max": 33615,
+    "median": 16252,
+    "p85": 23287,
+    "p90": 24704
+  },
+  "throughput": [
+    {
+      "key": "2026-W38",
+      "count": 33,
+      "whole": false,
+      "covered": false
+    }
+  ],
+  "awaiting_landing": 12
+}

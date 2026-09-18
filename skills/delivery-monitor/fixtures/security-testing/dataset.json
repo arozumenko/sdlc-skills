@@ -1,0 +1,769 @@
+{
+  "source": {
+    "ref": "feat/security-testing-bundle-spec",
+    "head": "b1f70d2bb2f681496f9f9c7c1b177e87511b4eeb",
+    "plan_path": "docs/superpowers/plans/2026-09-15-security-testing-bundle-tasks-v2.md",
+    "plan_sha256": "08e177c84119956a6948d674bc064205e69a02cdd2a55e421458581a8e54369c"
+  },
+  "plan_commit_at": "2026-09-16T05:43:42.000Z",
+  "groups": [
+    {
+      "ref": "G0",
+      "tasks": [
+        "TASK-001",
+        "TASK-055"
+      ]
+    },
+    {
+      "ref": "G1",
+      "tasks": [
+        "TASK-003",
+        "TASK-004",
+        "TASK-005",
+        "TASK-056"
+      ]
+    },
+    {
+      "ref": "G2",
+      "tasks": [
+        "TASK-002"
+      ]
+    },
+    {
+      "ref": "G3",
+      "tasks": [
+        "TASK-006",
+        "TASK-007",
+        "TASK-026"
+      ]
+    },
+    {
+      "ref": "G4",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-028"
+      ]
+    },
+    {
+      "ref": "G5",
+      "tasks": [
+        "TASK-010",
+        "TASK-012",
+        "TASK-029"
+      ]
+    },
+    {
+      "ref": "G6",
+      "tasks": [
+        "TASK-008",
+        "TASK-013",
+        "TASK-015",
+        "TASK-030",
+        "TASK-032",
+        "TASK-058",
+        "TASK-059"
+      ]
+    },
+    {
+      "ref": "G7",
+      "tasks": [
+        "TASK-014",
+        "TASK-017",
+        "TASK-018",
+        "TASK-020",
+        "TASK-057"
+      ]
+    },
+    {
+      "ref": "G8",
+      "tasks": [
+        "TASK-016"
+      ]
+    },
+    {
+      "ref": "G9",
+      "tasks": [
+        "TASK-019"
+      ]
+    },
+    {
+      "ref": "G10",
+      "tasks": [
+        "TASK-021"
+      ]
+    },
+    {
+      "ref": "G11",
+      "tasks": [
+        "TASK-022"
+      ]
+    },
+    {
+      "ref": "G12",
+      "tasks": [
+        "TASK-023",
+        "TASK-034"
+      ]
+    },
+    {
+      "ref": "G13",
+      "tasks": [
+        "TASK-027",
+        "TASK-031",
+        "TASK-036"
+      ]
+    },
+    {
+      "ref": "G14",
+      "tasks": [
+        "TASK-024"
+      ]
+    },
+    {
+      "ref": "G15",
+      "tasks": [
+        "TASK-025"
+      ]
+    },
+    {
+      "ref": "G16",
+      "tasks": [
+        "TASK-033"
+      ]
+    },
+    {
+      "ref": "G17",
+      "tasks": [
+        "TASK-035"
+      ]
+    },
+    {
+      "ref": "G18",
+      "tasks": [
+        "TASK-037"
+      ]
+    },
+    {
+      "ref": "G19",
+      "tasks": [
+        "TASK-038"
+      ]
+    },
+    {
+      "ref": "G20",
+      "tasks": [
+        "TASK-039",
+        "TASK-045",
+        "TASK-046"
+      ]
+    },
+    {
+      "ref": "G21",
+      "tasks": [
+        "TASK-040",
+        "TASK-041"
+      ]
+    },
+    {
+      "ref": "G22",
+      "tasks": [
+        "TASK-042"
+      ]
+    },
+    {
+      "ref": "G23",
+      "tasks": [
+        "TASK-043",
+        "TASK-051"
+      ]
+    },
+    {
+      "ref": "G24",
+      "tasks": [
+        "TASK-044"
+      ]
+    },
+    {
+      "ref": "G25",
+      "tasks": [
+        "TASK-047"
+      ]
+    },
+    {
+      "ref": "G26",
+      "tasks": [
+        "TASK-048"
+      ]
+    },
+    {
+      "ref": "G27",
+      "tasks": [
+        "TASK-049",
+        "TASK-050",
+        "TASK-052"
+      ]
+    },
+    {
+      "ref": "G28",
+      "tasks": [
+        "TASK-053"
+      ]
+    },
+    {
+      "ref": "G29",
+      "tasks": [
+        "TASK-054"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "ref": "TASK-001",
+      "story": "US-001",
+      "class": "S",
+      "first_commit_at": "2026-09-16T05:48:54.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T06:23:33.000Z"
+    },
+    {
+      "ref": "TASK-055",
+      "story": "US-049",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-003",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T05:49:38.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T06:23:33.000Z"
+    },
+    {
+      "ref": "TASK-004",
+      "story": "US-003",
+      "class": "M",
+      "first_commit_at": "2026-09-16T05:54:47.000Z",
+      "rework": [
+        {
+          "round": null,
+          "at": "2026-09-16T06:17:27.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T07:12:59.000Z"
+    },
+    {
+      "ref": "TASK-005",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T05:59:14.000Z",
+      "rework": [
+        {
+          "round": null,
+          "at": "2026-09-16T06:07:50.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T06:23:33.000Z"
+    },
+    {
+      "ref": "TASK-056",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T05:49:42.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T06:23:33.000Z"
+    },
+    {
+      "ref": "TASK-002",
+      "story": "US-002",
+      "class": "M",
+      "first_commit_at": "2026-09-16T07:07:53.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T07:12:59.000Z"
+    },
+    {
+      "ref": "TASK-006",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T07:33:42.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T07:47:07.000Z"
+        },
+        {
+          "round": 2,
+          "at": "2026-09-16T07:59:02.000Z"
+        },
+        {
+          "round": 3,
+          "at": "2026-09-16T08:21:47.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T08:25:11.000Z"
+    },
+    {
+      "ref": "TASK-007",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T07:23:18.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T07:30:45.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T08:07:54.000Z"
+    },
+    {
+      "ref": "TASK-026",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T07:25:35.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T08:07:54.000Z"
+    },
+    {
+      "ref": "TASK-009",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T08:33:21.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T08:39:41.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T08:49:36.000Z"
+    },
+    {
+      "ref": "TASK-011",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T08:29:34.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T08:49:00.000Z"
+    },
+    {
+      "ref": "TASK-028",
+      "story": "US-020",
+      "class": "L",
+      "first_commit_at": "2026-09-16T08:43:27.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T08:50:19.000Z"
+    },
+    {
+      "ref": "TASK-010",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T09:01:47.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T09:10:15.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T09:33:20.000Z"
+    },
+    {
+      "ref": "TASK-012",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T09:05:29.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T09:16:33.000Z"
+        },
+        {
+          "round": 2,
+          "at": "2026-09-16T09:25:55.000Z"
+        },
+        {
+          "round": 3,
+          "at": "2026-09-16T09:39:39.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T09:42:54.000Z"
+    },
+    {
+      "ref": "TASK-029",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T09:12:14.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T09:20:37.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T09:34:08.000Z"
+    },
+    {
+      "ref": "TASK-008",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T10:00:57.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:13:58.000Z"
+    },
+    {
+      "ref": "TASK-013",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T09:56:03.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:14:34.000Z"
+    },
+    {
+      "ref": "TASK-015",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T09:58:48.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:14:41.000Z"
+    },
+    {
+      "ref": "TASK-030",
+      "story": "US-022",
+      "class": "S",
+      "first_commit_at": "2026-09-16T09:52:20.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:14:42.000Z"
+    },
+    {
+      "ref": "TASK-032",
+      "story": "US-024",
+      "class": "S",
+      "first_commit_at": "2026-09-16T09:51:50.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T10:04:31.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T10:16:22.000Z"
+    },
+    {
+      "ref": "TASK-058",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T09:56:18.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:16:22.000Z"
+    },
+    {
+      "ref": "TASK-059",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T09:50:58.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T10:01:55.000Z"
+        },
+        {
+          "round": 2,
+          "at": "2026-09-16T10:09:20.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T10:16:22.000Z"
+    },
+    {
+      "ref": "TASK-014",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T10:33:55.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:59:09.000Z"
+    },
+    {
+      "ref": "TASK-017",
+      "story": "US-011",
+      "class": "M",
+      "first_commit_at": "2026-09-16T10:38:21.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T10:59:10.000Z"
+    },
+    {
+      "ref": "TASK-018",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T10:41:45.000Z",
+      "rework": [
+        {
+          "round": 1,
+          "at": "2026-09-16T10:53:33.000Z"
+        }
+      ],
+      "merged_at": "2026-09-16T10:59:10.000Z"
+    },
+    {
+      "ref": "TASK-020",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T11:53:49.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T12:11:49.000Z"
+    },
+    {
+      "ref": "TASK-057",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T11:16:28.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T11:37:38.000Z"
+    },
+    {
+      "ref": "TASK-016",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T11:31:25.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T11:37:37.000Z"
+    },
+    {
+      "ref": "TASK-019",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T12:02:45.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T12:11:49.000Z"
+    },
+    {
+      "ref": "TASK-021",
+      "story": null,
+      "class": "S",
+      "first_commit_at": "2026-09-16T12:28:36.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T12:35:26.000Z"
+    },
+    {
+      "ref": "TASK-022",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T12:54:50.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T14:00:52.000Z"
+    },
+    {
+      "ref": "TASK-023",
+      "story": null,
+      "class": "L",
+      "first_commit_at": "2026-09-16T14:55:16.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T15:03:54.000Z"
+    },
+    {
+      "ref": "TASK-034",
+      "story": null,
+      "class": "M",
+      "first_commit_at": "2026-09-16T14:39:52.000Z",
+      "rework": [],
+      "merged_at": "2026-09-16T15:03:57.000Z"
+    },
+    {
+      "ref": "TASK-027",
+      "story": "US-018",
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-031",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-036",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-024",
+      "story": null,
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-025",
+      "story": null,
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-033",
+      "story": null,
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-035",
+      "story": null,
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-037",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-038",
+      "story": null,
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-039",
+      "story": "US-031",
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-045",
+      "story": null,
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-046",
+      "story": "US-040",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-040",
+      "story": "US-032",
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-041",
+      "story": "US-033",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-042",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-043",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-051",
+      "story": "US-045",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-044",
+      "story": null,
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-047",
+      "story": "US-041",
+      "class": "L",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-048",
+      "story": null,
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-049",
+      "story": "US-043",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-050",
+      "story": "US-044",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-052",
+      "story": "US-046",
+      "class": "S",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-053",
+      "story": "US-047",
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    },
+    {
+      "ref": "TASK-054",
+      "story": "US-048",
+      "class": "M",
+      "first_commit_at": null,
+      "rework": [],
+      "merged_at": null
+    }
+  ]
+}

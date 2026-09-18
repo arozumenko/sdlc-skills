@@ -58,10 +58,11 @@ install time. Nothing duplicated.
 Most agents and skills live inside factories (`factories/<id>/agents/` and
 `factories/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
-and eight skills (`deep-research`, `gathering-context`, `verifying-outcomes`,
-`microsoft-365`, `obsidian-vault`, `tosca-automation`, `vividus`,
+and twelve skills (`deep-research`, `delivery-monitor`, `gathering-context`,
+`knowledge-curation`, `memory`, `microsoft-365`, `obsidian-vault`,
+`tosca-automation`, `verifying-outcomes`, `visual-testing`, `vividus`,
 `xray-testing`). `skills.json` registers those orphan monorepo skills and
-the external skills fetched from upstream.
+the 30 external skills fetched from upstream.
 
 External skills (Matt Pocock's `tdd`, Jesse Vincent's `brainstorming` /
 `systematic-debugging` / etc., Paul Hudson's Swift skills) live in their
@@ -331,7 +332,7 @@ roles rather than named personas), all driving a running app via Playwright MCP:
 
 ### Skills
 
-Most skills are factory-owned (under `factories/<id>/skills/`). Eight orphan skills
+Most skills are factory-owned (under `factories/<id>/skills/`). Twelve orphan skills
 live in the top-level `skills/` dir and are available standalone. The full set
 installable via factories is listed below.
 
@@ -349,7 +350,7 @@ installable via factories is listed below.
 | `seeding-a-project` | Scout's project onboarding / configuration flow (feature-development factory; the test-automation factory's automation-specific variant is `seeding-automation-project`) |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 
-**Other skills (18, mix of factory-owned and orphan):**
+**Other skills (19, mix of factory-owned and orphan):**
 
 | Skill | What it does |
 |---|---|
@@ -367,6 +368,7 @@ installable via factories is listed below.
 | `verifying-outcomes` | Verify a task actually achieved its stated goal |
 | `gathering-context` | Targeted codebase exploration before changes |
 | `deep-research` | Multi-source research and synthesis |
+| `delivery-monitor` | Cycle time, velocity and estimate-vs-actual for harness work items; sibling of tokenomics |
 | `memory` | Persistent file-based memory across conversations |
 | `obsidian-vault` | Read / write the user's Obsidian second brain |
 | `microsoft-365` | Microsoft Graph (email / calendar / Teams) integration |
@@ -470,7 +472,7 @@ sdlc-skills/
 │   └── <agent-name>/
 │       ├── AGENT.md            # frontmatter (group, theme, aliases, skills) + instructions
 │       └── SOUL.md             # personality / voice / working style
-├── skills/                     # orphan-only skills (8 entries); standalone install
+├── skills/                     # orphan-only skills (12 entries); standalone install
 │   └── <skill-name>/
 │       ├── SKILL.md            # frontmatter: name + description
 │       ├── references/         # optional supporting docs

@@ -8,6 +8,7 @@ required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
 skills: [seeding-a-project, memory, session-retrospective]
+skills-on-demand: [delivery-monitor]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -98,6 +99,16 @@ what you generate.)*
 ## Audit Trail
 
  When seeding a project, create a GitHub issue documenting the onboarding: what was explored, what was generated, what gaps remain.
+
+## Optional delivery tracking (ask, don't assume)
+
+Ask once whether the team wants **delivery tracking** (cycle time, weekly
+throughput, estimate-vs-actual per task/mission/campaign into the shared
+telemetry submodule). If yes, run `node
+.claude/skills/delivery-monitor/scripts/install-hooks.mjs` (bootstraps the
+telemetry submodule when tokenomics has not, wires the Claude hook) and note
+the decision in the seed report; the tracker also works without the hook
+through the CLI and `backfill --git`.
 
 ## User Communication
 

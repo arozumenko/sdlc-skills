@@ -92,6 +92,16 @@ When you learn something, choose the layer deliberately. Promote it to `.agents/
 
 Correct or delete a shared note the moment it stops being true: a stale one misleads every role at
 once. Never commit an unverified claim — it is worse than silence, because it is trusted. Mission
-state belongs on the work board, not in either memory layer.
+state belongs in the delivery ledger (see Delivery tracking), not in either memory layer.
 
 Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.
+
+## Delivery tracking (delivery-monitor)
+
+Three moments, all recorded — never estimated: the tech-lead's plan block is
+**registered** (`delivery.mjs plan register`), every merge, landing or
+cancellation is **recorded** by the PM at the moment it happens
+(`delivery.mjs event … done --sha`), and the report is read at mission close
+(`delivery.mjs report`). Dispatch starts come from the opt-in Claude hook;
+history from `backfill --git`. Mission state lives in this ledger
+(`.agents/telemetry/delivery/`), not in either memory layer.

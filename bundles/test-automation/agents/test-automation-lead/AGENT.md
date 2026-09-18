@@ -7,7 +7,7 @@ group: qa
 theme: {color: colour51, icon: "🎯", short_name: tal}
 aliases: [tal, ta-lead, automation-lead]
 skills: [test-automation-workflow, memory]
-skills-on-demand: [code-review, subagent-driven-development, dispatching-parallel-agents, issue-tracking, verification-before-completion, completing-a-task, git-workflow]
+skills-on-demand: [code-review, subagent-driven-development, dispatching-parallel-agents, issue-tracking, verification-before-completion, completing-a-task, git-workflow, delivery-monitor]
 metadata:
   authors:
     - Alexander Bychinskiy <alexander_bychinskiy@epam.com>
