@@ -52,7 +52,8 @@ the hash-chained register log, projection, alias log and anchor.
 | D7 | Register = one append-only `events.jsonl`; every command folds the whole log; `status` prints `FINGERPRINT <engagement>:<seq>:<sha256(events.jsonl)>`. No `confirm` verb. |
 | D8 | Stdlib ESM Node ≥ 18; `spawn(argv, {shell:false})`; no network; no hooks; no shell scripts; no schema files (shapes are validated in code with one error per line). |
 | D9 | The managed `.gitignore` block (`reviews/`, `verify/`, `register/`, `proposals/` under `.agents/security-testing/`) is written by `cite.mjs init`, which fails closed if any of those paths is tracked. |
-| D10 | Agents write assertions (findings, threats, second opinions), never `id`, `state` or `verdict` — `check` refuses files carrying them. |
+| D10 | Agents write assertions (findings, threats, second opinions), never `state`, `oid`, `snippet_redacted` or `check_stamp` — `check` refuses files carrying them unstamped. Finding `id`s are script-derived; the modeler assigns its own `E-nnn`/`T-nnn`/`M-nnn`. |
+| D11 | A factory install fetches nothing: every skill an agent lists resolves from this repo (`memory`, `knowledge-curation`, `gathering-context`, `verifying-outcomes` from `skills/`; `issue-tracking` from the feature-development bundle). No external (`repo:`) skill is on any roster. |
 
 ## 4. Roster
 
@@ -60,7 +61,7 @@ the hash-chained register log, projection, alias log and anchor.
 |---|---|---|---|---|
 | `security-lead` | sonnet | Orchestrator; the only human-facing role. Runs `init`, dispatches, `check`s, `admit`s, writes the report, prints hand-off prompts and stops, proposes acceptances. | `memory`, `security-engagement` | `secure-code-review`, `risk-register`, `security-test-planning`, `issue-tracking`, `verifying-outcomes` |
 | `threat-modeler` | opus | Code-derived DFD with a citation per element, STRIDE, mitigations as claims, dispositions; drafts candidate passive cases. Returns `MODEL_WRITTEN` only after `cite.mjs check` exits 0. | `memory`, `threat-modeling` | `secure-code-review`, `gathering-context` |
-| `security-reviewer` | sonnet | Four contracts, each a fresh dispatch: `review` (findings over scope), `vulnerability-review` / `mitigation-review` (a second opinion on one finding or mitigation), `fix-review` (`not-refound` / `refound` at a fix commit). | `memory`, `secure-code-review` | `systematic-debugging` |
+| `security-reviewer` | sonnet | Four contracts, each a fresh dispatch: `review` (findings over scope), `vulnerability-review` / `mitigation-review` (a second opinion on one finding or mitigation), `fix-review` (`not-refound` / `refound` at a fix commit). | `memory`, `secure-code-review` | — |
 
 Body rules for all three: external text proposes, only scope- and
 target-validated references act; writable paths are `.agents/security-testing/**`,
@@ -168,7 +169,7 @@ reference implementation.
 3. `cite.mjs check` it; send `FAILED` lines back, re-run until clean.
 4. Per finding worth a second opinion: fresh `vulnerability-review` dispatch → `second-<id>.json`; `check` again.
 5. `register.mjs add` per verified finding; `register.mjs render`.
-6. Dispatch `threat-modeler` → `<st>/threat-model.json` + candidate cases in `<st>/cases/`; `cite.mjs check` the model (a `mitigated` claim may get a `mitigation-review`, recorded as in step 4).
+6. Dispatch `threat-modeler` → `<st>/threat-model.json` + candidate cases in `<st>/cases/`; `cite.mjs check` the model (a `mitigated` claim may get a `mitigation-review`, recorded as in step 4 as `second-M-nnn.json` in the same review directory).
 7. `cases.mjs admit` each candidate; `cases.mjs verify-suite`; paste the hand-off prompts to the user; **stop**.
 8. Report: `reports/security/<date>-assessment.md` from `knowledge/report-template.md` — identity (repo, head, engagement id, `FINGERPRINT`, `TABLES sha256`), coverage, findings, threat model, register delta, limitations (§2 right column verbatim); `cite.mjs redact` it.
 9. Fix: developer names a commit; lead checks it out; `verify.mjs` → fresh `fix-review` → `verify.mjs --assertion` → `VERDICT`.
@@ -193,7 +194,7 @@ v6.2 §10; no catalog text says "exact checkout". Target: ~75 files.
 ## 10. Tests
 One `<script>.test.mjs` per script beside it, fixtures under
 `scripts/fixtures/` (never a directory named `test`), fixture repos built by
-code into temp dirs; ~15 fixtures, ≤ 2,000 test lines, seconds to run. One
+code into temp dirs; ~15 fixtures, ≤ 3,500 test lines (prose contract tests included), seconds to run. One
 installed end-to-end test in `bin/` (not in the skill) covering `--factory`
 on Claude and the one-skill standalone path, offline. The `secure-code-review`
 eval harness stays. `npm run validate` green.
