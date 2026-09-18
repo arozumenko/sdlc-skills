@@ -21,7 +21,7 @@ own their `agents/` and `skills/` as real directories. Five factories ship:
 - **`product-management`** — Product Owner discovery pipeline: product-owner
   (Priya), discovery-researcher (Sam); 10 discovery skills seeding
   `docs/discovery/`.
-- **`security-testing`** — threat-led, read-only security testing team: security-lead (Noor), threat-modeler (Ilse), security-reviewer (Vera) run a code-derived STRIDE threat model, evidence-gated secure code review, passive security cases handed to manual-qa/test-automation, fix verification, and a residual-risk register. See `bundles/security-testing/README.md`.
+- **`security-testing`** — threat-led, read-only security testing team: security-lead (Rasmus), threat-modeler (Ilse), security-reviewer (Vera) run a code-derived STRIDE threat model, evidence-gated secure code review, passive security cases handed to manual-qa/test-automation, fix verification, and a residual-risk register. See `bundles/security-testing/README.md`.
 
 The top-level `agents/` and `skills/` hold only standalone-only **"orphan"**
 content: one agent (`personal-assistant`) and eight skills (`deep-research`,

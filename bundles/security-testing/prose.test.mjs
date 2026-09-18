@@ -507,6 +507,21 @@ test("README.md, AGENTS.md and bundles/SPEC.md each name the security-testing ro
   }
 });
 
+test("AGENTS.md and .claude-plugin/marketplace.json name the shipped SOUL.md personas, not a stale one", () => {
+  const personaOf = (agent) => {
+    const soul = readFileSync(join(B, "agents", agent, "SOUL.md"), "utf8");
+    const m = soul.match(/You are \*\*([^*]+)\*\*/);
+    assert.ok(m, `agents/${agent}/SOUL.md: no "You are **Name**" persona line`);
+    return m[1];
+  };
+  const personas = ["security-lead", "threat-modeler", "security-reviewer"].map(personaOf);
+  for (const relPath of ["AGENTS.md", ".claude-plugin/marketplace.json"]) {
+    const text = readFileSync(join(ROOT, relPath), "utf8");
+    for (const persona of personas) assert.ok(text.includes(persona), `${relPath}: missing persona "${persona}"`);
+    assert.ok(!text.includes("Noor"), `${relPath}: stale persona name "Noor"`);
+  }
+});
+
 test("no stale 'exact checkout' phrase anywhere in the catalog docs, the marketplaces, or the bundle", () => {
   const targets = [
     "README.md",

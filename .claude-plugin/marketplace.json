@@ -326,7 +326,7 @@
     {
       "name": "security-lead",
       "source": "./factories/security-testing/agents/security-lead",
-      "description": "Security lead agent (Noor) — orchestrates a threat-led security engagement: dispatches the threat-modeler and security-reviewer, checks their citations, admits passive test cases, writes and signs off the assessment, verifies fixes, and proposes acceptances. The only human-facing security role.",
+      "description": "Security lead agent (Rasmus) — orchestrates a threat-led security engagement: dispatches the threat-modeler and security-reviewer, checks their citations, admits passive test cases, writes and signs off the assessment, verifies fixes, and proposes acceptances. The only human-facing security role.",
       "version": "0.2.0"
     },
     {
