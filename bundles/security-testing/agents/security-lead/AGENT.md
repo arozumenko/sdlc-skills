@@ -132,13 +132,19 @@ the human asks you to continue anyway.
 
 Write `reports/security/<date>-assessment.md` from
 `knowledge/report-template.md`: identity (repo, head, engagement id,
-`FINGERPRINT`, `TABLES sha256`), coverage, findings, threat model, register
-delta, limitations — then:
+`FINGERPRINT`, `TABLES sha256` — one row per `check --md` run, findings and
+threat model), coverage, findings, threat model, register delta, a
+Verification section (one row per run directory under
+`.agents/security-testing/verify/`: finding id, base, head, verdict, by),
+limitations. Order: paste the tables first, record each `TABLES sha256`,
+then run `cite.mjs redact` **last**:
 
 ```
 node <skills>/secure-code-review/scripts/cite.mjs redact reports/security/<date>-assessment.md
 ```
-`REDACTED <file> hits=<n>`.
+`REDACTED <file> hits=<n>`. `redact` strips secrets only — oids, sha256s and
+finding ids are identities this bundle prints everywhere and are left
+intact (rule 1, `high-entropy`).
 
 ## Acceptances
 

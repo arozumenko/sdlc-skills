@@ -1,8 +1,11 @@
 # Security assessment — <engagement_id>
 
-<!-- Copy to reports/security/<date>-assessment.md, fill every <placeholder>,
-     paste the tables `cite.mjs check --md` and `register.mjs status` print,
-     then run `cite.mjs redact reports/security/<date>-assessment.md`. -->
+<!-- Copy to reports/security/<date>-assessment.md, fill every <placeholder>.
+     Order: paste the tables `cite.mjs check --md` and `register.mjs status`
+     print, record each run's `TABLES sha256` in Identity, fill Verification
+     from `.agents/security-testing/verify/` — then, LAST, run
+     `cite.mjs redact reports/security/<date>-assessment.md`. redact leaves
+     identities (oids, sha256s, finding ids) intact; it only strips secrets. -->
 
 ## Identity
 
@@ -12,7 +15,8 @@
 | Head | <head oid> |
 | Engagement id | <engagement_id> |
 | Register | `FINGERPRINT <engagement>:<seq>:<sha256>` (from `register.mjs status`) |
-| Tables | `TABLES sha256=<h>` (from `cite.mjs check --md`) |
+| Tables (findings) | `TABLES sha256=<h>` (from `cite.mjs check findings.json --md`) |
+| Tables (threat model) | `TABLES sha256=<h>` (from `cite.mjs check threat-model.json --md`) |
 
 ## Coverage
 
@@ -29,6 +33,15 @@
 ## Register delta
 
 <paste `register.mjs status`: counts, open exposure per priority, unauthenticated approvals>
+
+## Verification
+
+One row per run directory under `.agents/security-testing/verify/` (each
+`verify.json`'s `finding_id`, `base`, `head`, `verdict`, `assertion.by`):
+
+| Finding | Base | Head | Verdict | By |
+|---|---|---|---|---|
+| <id7> | <base7> | <head7> | <verdict> | <by> |
 
 ## Limitations
 

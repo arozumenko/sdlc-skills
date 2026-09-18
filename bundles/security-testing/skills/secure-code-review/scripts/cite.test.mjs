@@ -752,3 +752,30 @@ test("redact rewrites a Markdown file in place and reports hits", () => {
   assert.equal(r.code, 2);
   assert.match(r.out[0], /^USAGE\(redact: usage: redact <file\.md>\)$/);
 });
+
+test("redact leaves the report's own identities (oids, sha256s, finding ids) intact", () => {
+  const { root, oid2 } = buildRepo();
+  ENG(root);
+  mkdirSync(join(root, "reports"), { recursive: true });
+  const report = join(root, "reports", "identities.md");
+  const digest = sha256("findings-table");
+  const findingId = sha256("finding-1");
+  writeFileSync(
+    report,
+    [
+      `Head: ${oid2}`,
+      "FINGERPRINT x:3:" + digest,
+      "TABLES sha256=" + digest,
+      `SECOND ${findingId} confirmed`,
+      "",
+    ].join("\n"),
+  );
+  const r = run(root, "redact", "reports/identities.md");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.deepEqual(r.out, ["REDACTED reports/identities.md hits=0"]);
+  const after = readFileSync(report, "utf8");
+  assert.ok(!after.includes("REDACTED"), after);
+  assert.ok(after.includes(oid2));
+  assert.ok(after.includes(digest));
+  assert.ok(after.includes(findingId));
+});

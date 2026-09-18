@@ -32,6 +32,34 @@ test("plain code is untouched", () => {
   assert.deepEqual(redactString(s), { text: s, hits: 0 });
 });
 
+test("a bare 40-hex oid and a 64-hex sha256 are untouched by high-entropy", () => {
+  const hex40 = "abcdef0123456789abcdef0123456789abcdef01"; // git-oid-shaped, 40 lowercase hex
+  const hex64 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".slice(0, 64); // sha256-shaped, 64 lowercase hex
+  assert.equal(hex40.length, 40);
+  assert.equal(hex64.length, 64);
+  assert.deepEqual(redactString(`oid ${hex40} end`), { text: `oid ${hex40} end`, hits: 0 });
+  assert.deepEqual(redactString(`sha ${hex64} end`), { text: `sha ${hex64} end`, hits: 0 });
+  // a mixed-case 40+ hex-ish string is not a plain git oid/sha256 and still counts as high-entropy
+  assert.equal(redactString(`oid ${hex40.toUpperCase()} end`).hits, 1);
+  // one hex digit longer than 40 is no longer exactly oid-shaped and still redacts
+  assert.equal(redactString(`oid ${hex40}a end`).hits, 1);
+});
+
+test("token=<64hex> is still redacted by key-value, ahead of high-entropy", () => {
+  const hex64 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".slice(0, 64);
+  const r = redactString(`token=${hex64}`);
+  assert.equal(r.hits, 1);
+  assert.equal(r.text, "token=<REDACTED:key-value>");
+});
+
+test("a 44-char base64 blob is still redacted as high-entropy", () => {
+  const b64 = "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIGxh";
+  assert.equal(b64.length, 44);
+  const r = redactString(`blob=${b64}`);
+  assert.equal(r.hits, 1);
+  assert.equal(r.text, "blob=<REDACTED:high-entropy>");
+});
+
 test("a synthetic sample per rule class leaves no raw secret behind and keeps plain lines", () => {
   // I5: no file in the bundle may contain a scanner-shaped secret (a
   // consumer's own gitleaks/trufflehog/push-protection would flag the

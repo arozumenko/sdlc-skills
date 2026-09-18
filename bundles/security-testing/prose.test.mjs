@@ -614,3 +614,30 @@ test("every `VERDICT <token>` named in prose is a real verify.mjs verdict (M1)",
     }
   }
 });
+
+// ---------------------------------------------------------------- dogfood fixes (Report step)
+
+test("report-template.md has one Tables row per check --md run and a Verification section", () => {
+  const t = read("knowledge/report-template.md");
+  assert.ok(!/\| Tables \|/.test(t), "the old singular Tables row is gone");
+  assert.ok(t.includes("| Tables (findings) | `TABLES sha256=<h>`"), "a findings TABLES row");
+  assert.ok(t.includes("| Tables (threat model) | `TABLES sha256=<h>`"), "a threat-model TABLES row");
+  assert.match(t, /^## Verification$/m, "a Verification section");
+  assert.ok(t.includes(".agents/security-testing/verify/"), "names the verify run-directory location");
+  for (const col of ["Finding", "Base", "Head", "Verdict", "By"]) assert.ok(t.includes(col), `Verification table names ${col}`);
+});
+
+test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Verification section and the paste-then-redact-last order", () => {
+  const w = read(`${SKILL_ENG}/references/workflow.md`);
+  const a = read(`${AGENT12}/AGENT.md`);
+  // Scope to the detailed Report section itself, not the one-line roster
+  // mentions elsewhere (the rules summary, the Phases one-liner).
+  const wStep8 = w.slice(w.indexOf("## 8. Report"), w.indexOf("## 9. Fix and verify"));
+  const aReport = a.slice(a.indexOf("## Report"), a.indexOf("## Acceptances"));
+  for (const [name, t] of [["workflow.md step 8", wStep8], ["AGENT.md § Report", aReport]]) {
+    assert.ok(/Verification section/.test(t), `${name}: names the Verification section`);
+    assert.ok(t.includes(".agents/security-testing/verify/"), `${name}: names the verify run-directory location`);
+    assert.ok(/last/i.test(t) && t.indexOf("cite.mjs redact") > t.indexOf("Verification"), `${name}: redact comes after Verification, last`);
+    assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
+  }
+});
