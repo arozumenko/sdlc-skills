@@ -251,19 +251,6 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
-svg.trend{width:100%;height:auto;display:block;margin:.3rem 0 .2rem}
-.trend .grid{stroke:var(--gridline);stroke-width:1}
-.trend .ref{stroke:var(--text-muted);stroke-width:1.5;stroke-dasharray:4 3}
-.trend .roll{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:round}
-.trend .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
-.trend .pt.rework{fill:var(--warn)}
-.trend text{font:11px -apple-system,"Segoe UI",sans-serif;fill:var(--text-muted)}
-.trend text.lbl{fill:var(--text-primary);font-weight:600}
-.legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--series-1);vertical-align:middle;margin-right:.4rem}
-.legend-dot.rework{background:var(--warn)}
-.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.82rem;color:var(--text-secondary)}
-.legend-swatch{display:inline-block;width:18px;height:0;border-top:2px solid var(--series-1);vertical-align:middle;margin-right:.4rem}
-.legend-swatch.scope{border-top:2px dashed var(--text-muted)}
 @media(max-width:640px){.row{grid-template-columns:110px 1fr}.row .num{grid-column:1/-1}}
 `;
 const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
@@ -379,31 +366,6 @@ const bandText = (sv) => {
 };
 const stateChip = (state) => `<span class="oc oc-${escHtml(state)}">${escHtml(state.replace('_', ' '))}</span>`;
 
-// "Are we getting faster?" — one dot per merged task in completion order (y = observed cycle time),
-// a rolling median through them and the overall median as a dashed reference. Inline SVG, no
-// assets; native <title> tooltips. The y unit is picked from the largest value so the axis reads.
-const unitFor = (maxS) => (maxS < 120 ? ['s', 1] : maxS < 7200 ? ['min', 60] : maxS < 172800 ? ['h', 3600] : ['d', 86400]);
-const rollingMedian = (vals, w = 5) => vals.map((_, i) => { if (i + 1 < w) return null; const win = [...vals.slice(i + 1 - w, i + 1)].sort((a, b) => a - b); return win[Math.floor((w - 1) / 2)]; });
-const trendSvg = (trend) => {
-  const pts = trend?.series ?? []; if (pts.length < 2) return '';
-  const W = 640, H = 170, L = 40, R = 84, T = 14, B = 24, pw = W - L - R, ph = H - T - B;
-  const maxS = Math.max(...pts.map((p) => p.cycle_s)), [unit, div] = unitFor(maxS);
-  const yMax = Math.max(maxS / div, 1e-9);
-  const X = (i) => L + (pts.length === 1 ? pw / 2 : (i / (pts.length - 1)) * pw), Y = (v) => T + ph - (v / yMax) * ph;
-  const sorted = [...pts.map((p) => p.cycle_s)].sort((a, b) => a - b); const overall = pts.length >= 5 ? sorted[Math.floor((sorted.length - 1) / 2)] : null;
-  const roll = rollingMedian(pts.map((p) => p.cycle_s));
-  const rollPath = roll.map((v, i) => (v == null ? null : `${X(i).toFixed(1)},${Y(v / div).toFixed(1)}`)).filter(Boolean);
-  const fmtV = (v) => `${Math.round((v / div) * 10) / 10} ${unit}`;
-  const gridV = [0, yMax / 2, yMax];
-  return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cycle time per merged task in completion order">
-${gridV.map((v) => `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${Math.round(v * 10) / 10}</text>`).join('')}
-<text x="${L - 6}" y="${T - 4}" text-anchor="end">${unit}</text>
-${overall != null ? `<line class="ref" x1="${L}" x2="${L + pw}" y1="${Y(overall / div).toFixed(1)}" y2="${Y(overall / div).toFixed(1)}"/><text x="${L + pw + 6}" y="${(Y(overall / div) + 4).toFixed(1)}">median ${fmtV(overall)}</text>` : ''}
-${rollPath.length >= 2 ? `<path class="roll" d="M${rollPath.join(' L')}"/><text class="lbl" x="${L + pw + 6}" y="${(Y(roll[roll.length - 1] / div) + (overall != null && Math.abs(Y(roll[roll.length - 1] / div) - Y(overall / div)) < 12 ? 16 : 4)).toFixed(1)}">rolling median</text>` : ''}
-${pts.map((p, i) => `<circle class="pt${p.rework_count ? ' rework' : ''}" cx="${X(i).toFixed(1)}" cy="${Y(p.cycle_s / div).toFixed(1)}" r="4.5"><title>${escHtml(p.ref)} · ${fmtV(p.cycle_s)}${p.rework_count ? ` · ${p.rework_count} fix round(s)` : ''} · merged ${escHtml(fmtTs(p.done_at))}</title></circle>`).join('')}
-<text x="${L}" y="${H - 6}">first merged ${escHtml(fmtTs(pts[0].done_at))}</text><text x="${L + pw}" y="${H - 6}" text-anchor="end">last merged ${escHtml(fmtTs(pts[pts.length - 1].done_at))}</text>
-</svg><div class="legend"><span><span class="legend-dot"></span>merged task (cycle time)</span><span><span class="legend-dot rework"></span>had a fix round</span><span><span class="legend-swatch"></span>rolling median (5 tasks)</span><span><span class="legend-swatch scope"></span>overall median</span></div>`;
-};
 const trendText = (t) => {
   if (!t) return null;
   if (t.ratio == null) return `needs ≥${t.floor} finished tasks <span class="stat-sub">(has ${t.n})</span>`;
@@ -477,8 +439,7 @@ export function renderHtml(doc) {
       'Only accepted estimates count; "within range" means the actual fell inside [low, high]; "work vs estimate" divides the actual by the midpoint of the range. Typical error = median of |estimate − actual| ÷ actual (MdMRE); PRED(25) and MAE are in the export.'),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
-    const trendChart = trendSvg(m.flow.task?.trend);
-    if (trendChart) parts.push(`<section class="panel"><h2>Are we getting faster?</h2><p class="panel-sub">Each dot is a merged task in completion order; height is its cycle time. The line is the rolling median of the last five tasks — sloping down means faster, up means slower; a dot far above it is the task to ask about. Hover a dot for the task.</p>${trendChart}</section>`);
+
 
     // Per mission — elapsed from first child dispatch to landing, against the mission's own range.
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));

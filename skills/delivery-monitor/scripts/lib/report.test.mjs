@@ -384,8 +384,8 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.ok(html.includes('<span class="stat-label">Not started</span><span class="stat-value">2 <span class="stat-sub">tasks</span></span>'), 'planned tasks on the Progress card');
   assert.ok(!html.includes('<h3>Pace'), 'no Pace card below the whole-weeks floor');
   assert.match(html, /Pace per week appears once the run spans 3 whole ISO weeks \(has [0-2]\)/, 'the missing pace is explained in one line, not an empty card');
-  // One finished task: no trend chart (needs ≥2 points) and the trend stat spells out its floor.
-  assert.ok(!html.includes('<svg class="trend"'), 'no run chart with a single point');
+  // The trend stat spells out its floor; the run chart itself is deferred to the next iteration.
+  assert.ok(!html.includes('<svg'), 'no chart on the page in this iteration');
   assert.ok(html.includes('needs ≥10 finished tasks <span class="stat-sub">(has 1)</span>'), 'trend floor explained');
   assert.ok(html.includes('<span class="stat-label">Fix rounds <span class="stat-sub">before merge</span></span><span class="stat-value">0 of 1'), 'fix-round share on the Quality card');
   // KPI cards: one bold value per stat, natural-unit durations, floors spelled out.
@@ -473,11 +473,7 @@ test('renderHtml + metrics: run chart, trend halves, agent time / review wait fr
   assert.ok(md.includes('| task agent_span | all | n=12 |') && md.includes('| task review_wait | all | n=12 |'), 'split rows in the Markdown flow table');
   const html = renderHtml(doc);
   assert.ok(html.includes('<span class="stat-label">Trend <span class="stat-sub">latest half vs earlier</span></span><span class="stat-value">-50% <span class="stat-sub">faster — latest 6 vs earlier 6</span>'), 'trend stat on the Cycle time card');
-  assert.match(html, /<h2>Are we getting faster\?<\/h2>/);
-  assert.match(html, /<svg class="trend"[^>]*role="img"/);
-  assert.equal((html.match(/<circle class="pt"/g) ?? []).length, 12, 'one dot per merged task');
-  assert.match(html, /<path class="roll" d="M[^"]+"\/>/, 'rolling median line');
-  assert.match(html, /<title>TASK-12 · 2 h · merged 13 Sep 2026 10:00 UTC<\/title>/);
+  assert.ok(!html.includes('Are we getting faster'), 'run chart deferred to the next iteration');
   assert.ok(html.includes('<span class="stat-label">Review turnaround <span class="stat-sub">agent done → merged</span></span><span class="stat-value">30 min</span>'), 'review turnaround on the Quality card');
   assert.match(html, /TASK-1<span class="oc oc-done">done<\/span>.*?review 1 h/, 'per-task row shows the review wait');
 });
