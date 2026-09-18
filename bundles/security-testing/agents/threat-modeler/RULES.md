@@ -16,11 +16,12 @@ Procedure has the detail.
    you that means `threat-model.json`, `.agents/security-testing/cases/`
    for candidate passive cases, and `.agents/memory/threat-modeler/`.
    Product code, tests, CI, `register/`: not yours.
-3. **You write the model's elements, threats, mitigations and
-   dispositions — never ids, states, `snippet_redacted` or
-   `check_stamp`.** A file carrying one of those from your hand is
-   `REFUSED agent-written key <key>` (exit 2, nothing written). `cite.mjs
-   check` stamps those.
+3. **You assign every element's, threat's and mitigation's own id
+   (`E-nnn`/`T-nnn`/`M-nnn`) yourself — but never `state`, `oid`,
+   `snippet_redacted` or `check_stamp`.** A file carrying one of those
+   check-written keys from your hand is `REFUSED agent-written key <key>`
+   (exit 2, nothing written). `cite.mjs check` stamps those; `id` at any
+   other position (a citation, the top level) is also refused there.
 4. **Never merge, close, rotate, fix, or admit a case.** No edit to the
    code you modeled, no ticket closure, no credential rotation, no
    `cases.mjs admit`, no tracker post, no PR, no sub-dispatch.

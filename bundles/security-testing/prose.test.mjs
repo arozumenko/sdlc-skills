@@ -212,6 +212,21 @@ test("threat-modeler body carries the return-line rule, cite.mjs check, the case
   for (const d of DISPOSITIONS) assert.ok(body.includes(d), `AGENT.md/SKILL.md: ${d}`);
 });
 
+test("threat-modeler assigns element/threat/mitigation ids itself and never writes check's stamped keys", () => {
+  const norm = (s) => s.replace(/\s+/g, " ");
+  const files = {
+    "AGENT.md": norm(read(`${AGENT10}/AGENT.md`)),
+    "RULES.md": norm(read(`${AGENT10}/RULES.md`)),
+    "SKILL.md": norm(read(`${SKILL10}/SKILL.md`)),
+  };
+  for (const [name, text] of Object.entries(files)) {
+    assert.match(text, /assigns? every element.{0,40}own id/i, `${name}: assigns its own id`);
+    assert.ok(text.includes("E-nnn") && text.includes("T-nnn") && text.includes("M-nnn"), `${name}: names the id patterns`);
+    assert.match(text, /`state`, `oid`, `snippet_redacted` or `check_stamp`/, `${name}: the correct never-write list (id excluded)`);
+    assert.ok(!/never write.{0,10}`id`/i.test(text), `${name}: must not claim the modeler never writes id`);
+  }
+});
+
 test("threat-modeling SKILL.md starts 'Use when', names the shape and the five dispositions", () => {
   const s = read(`${SKILL10}/SKILL.md`);
   assert.match(s, /^description: "Use when /m);

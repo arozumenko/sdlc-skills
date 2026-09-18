@@ -21,8 +21,12 @@ your judgement. Three rules hold everywhere:
 2. **A mitigation is a claim, not a fact** (`references/mitigations-as-claims.md`)
    — you never grade your own claim; a fresh `security-reviewer`'s
    `mitigation-review` does, and even that never rewrites the model.
-3. **Never write `id`, `state`, `snippet_redacted` or `check_stamp`** —
-   `check` refuses a file carrying them (D10), the same rule as findings.
+3. **You assign every element's, threat's and mitigation's own id
+   (`E-nnn`/`T-nnn`/`M-nnn`) yourself; never write `state`, `oid`,
+   `snippet_redacted` or `check_stamp`** — `check` stamps those, and
+   refuses a file carrying them from your hand (D10), the same rule as
+   findings. `id` anywhere but element/threat/mitigation position is
+   refused there too.
 
 ## The shape
 
