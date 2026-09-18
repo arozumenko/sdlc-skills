@@ -47,7 +47,7 @@ the hash-chained register log, projection, alias log and anchor.
 | D2 | Nothing is write-once. `check` is re-runnable; a `FAILED` citation is fixed in place and re-checked. |
 | D3 | Citations use **raw** line numbers as `git show` prints them; snippet compare is whitespace-insensitive and ignores blank lines. |
 | D4 | `verify.mjs` runs in the project's own checkout (the doctrine of `test-automation`'s `gate-case.mjs`): it refuses unless `HEAD` is the fix commit and the cited paths are clean; unrelated dirt is recorded as `carried_dirt`, never cleaned. No worktree, no install step. |
-| D5 | Identity = `sha256(path \0 class \0 redact(normalise(snippet)) \0 first line)`. Redaction runs before any write. |
+| D5 | Identity = `sha256(path \0 class \0 redact(normalise(snippet)) \0 <first normalised snippet line>)` — no line numbers, so an id survives a move; the fourth component is the snippet's own first line. Redaction runs before any write. |
 | D6 | JSON is the model of record; the report is Markdown the lead writes from a template, pasting `cite.mjs check --md` tables. |
 | D7 | Register = one append-only `events.jsonl`; every command folds the whole log; `status` prints `FINGERPRINT <engagement>:<seq>:<sha256(events.jsonl)>`. No `confirm` verb. |
 | D8 | Stdlib ESM Node ≥ 18; `spawn(argv, {shell:false})`; no network; no hooks; no shell scripts; no schema files (shapes are validated in code with one error per line). |
