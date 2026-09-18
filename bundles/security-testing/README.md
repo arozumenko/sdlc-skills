@@ -32,10 +32,13 @@ prose — the lead's judgement, written down so a script can re-check it.
 
 ## Install
 
-Factory install (all three agents, all five skills):
+Factory install (all three agents, all five skills), then a smoke test:
 
 ```bash
 npx github:arozumenko/sdlc-skills init --factory security-testing --target claude --yes
+node .claude/skills/secure-code-review/scripts/cite.mjs init
+node .claude/skills/secure-code-review/scripts/cite.mjs check .agents/security-testing/reviews/<dir>/findings.json
+node .claude/skills/risk-register/scripts/register.mjs status
 ```
 
 Standalone, one skill (no lead, no `knowledge/` seed — the human runs the
@@ -49,15 +52,6 @@ npx github:arozumenko/sdlc-skills init --skills security-testing/secure-code-rev
 `references/engagement.md.template`, so a standalone install still gets a
 filled-in starting point — edit the fenced ` ```json engagement ` block, then
 re-run `init`.
-
-### Smoke test
-
-```bash
-npx github:arozumenko/sdlc-skills init --factory security-testing --target claude --yes
-node .claude/skills/secure-code-review/scripts/cite.mjs init
-node .claude/skills/secure-code-review/scripts/cite.mjs check .agents/security-testing/reviews/<dir>/findings.json
-node .claude/skills/risk-register/scripts/register.mjs status
-```
 
 ## How an assessment runs
 
