@@ -272,3 +272,56 @@ test("no 'Placeholder' / 'replaced in Task' text remains under threat-modeling o
     for (const re of STUB) assert.ok(!re.test(t), `${abs}: ${re}`);
   }
 });
+
+// ---------------------------------------------------------------- Task 11
+
+import { TRANSITIONS } from "./skills/risk-register/scripts/lib/transitions.mjs";
+
+const SKILL_PLAN = "skills/security-test-planning";
+const SKILL_REG = "skills/risk-register";
+const SKILL_ENG = "skills/security-engagement";
+
+test("risk-register SKILL.md names every TRANSITIONS event, the approval shape and render", () => {
+  const s = read(`${SKILL_REG}/SKILL.md`);
+  assert.match(s, /^name: risk-register$/m);
+  assert.match(s, /^description: "Use when /m);
+  for (const event of Object.keys(TRANSITIONS)) assert.ok(s.includes(event), `event ${event}`);
+  assert.ok(s.includes("authenticated: false"), "authenticated: false");
+  assert.ok(s.includes("there is no confirmed state"), "there is no confirmed state");
+  assert.ok(s.includes("register.mjs render"), "register.mjs render");
+  assert.ok(s.split("\n").length <= 150, "SKILL.md stays within 150 lines");
+});
+
+test("security-test-planning SKILL.md mandates the case path/filename, names admit/verify-suite, admitted by lint, and never claims safe", () => {
+  const s = read(`${SKILL_PLAN}/SKILL.md`);
+  assert.match(s, /^name: security-test-planning$/m);
+  assert.match(s, /^description: "Use when /m);
+  assert.ok(s.includes(".agents/security-testing/cases/"), "candidate case location");
+  assert.ok(s.includes("TC-NNN_<slug>.md"), "case filename pattern");
+  assert.ok(s.includes("cases.mjs admit"), "cases.mjs admit");
+  assert.ok(s.includes("verify-suite"), "verify-suite");
+  assert.ok(s.includes("admitted by lint"), "admitted by lint");
+  const withoutPhrase = s.replace(/never says ["']?safe["']?/gi, "");
+  assert.ok(!/\bsafe\b/i.test(withoutPhrase), "never claims safe as a fact");
+  assert.ok(s.split("\n").length <= 150, "SKILL.md stays within 150 lines");
+});
+
+test("security-engagement SKILL.md frontmatter and line budget", () => {
+  const s = read(`${SKILL_ENG}/SKILL.md`);
+  assert.match(s, /^name: security-engagement$/m);
+  assert.match(s, /^description: "Use when /m);
+  assert.ok(s.split("\n").length <= 100, "SKILL.md stays within 100 lines");
+});
+
+test("security-engagement/references/workflow.md lists the spec §7 commands in increasing order and carries no dropped-pipeline vocabulary", () => {
+  const w = read(`${SKILL_ENG}/references/workflow.md`);
+  const commands = ["cite.mjs init", "cite.mjs check", "register.mjs add", "cases.mjs admit", "cases.mjs verify-suite", "verify.mjs", "register.mjs accept", "register.mjs status"];
+  let last = -1;
+  for (const c of commands) {
+    const i = w.indexOf(c);
+    assert.ok(i >= 0, c);
+    assert.ok(i > last, `${c} out of order (index ${i} <= ${last})`);
+    last = i;
+  }
+  for (const banned of ["evidence.mjs", "run init", "packet", "publish", "COMMITTED", "M2", "M3"]) assert.ok(!w.includes(banned), banned);
+});
