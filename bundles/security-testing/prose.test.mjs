@@ -451,6 +451,24 @@ test("CHANGELOG.md ships one 1.0.0 entry naming the four scripts", () => {
   for (const script of ["cite.mjs", "verify.mjs", "cases.mjs", "register.mjs"]) assert.ok(c.includes(script), script);
 });
 
+test("no file under the bundle still spells the flat second-opinion path (second-M-nnn.json lives in the review directory)", () => {
+  function walkAll(dir, out = []) {
+    for (const name of readdirSync(dir).sort()) {
+      const abs = join(dir, name);
+      if (name === "node_modules") continue;
+      const st = statSync(abs);
+      if (st.isDirectory()) walkAll(abs, out);
+      else out.push(abs);
+    }
+    return out;
+  }
+  for (const abs of walkAll(B)) {
+    if (!/\.(md|json|template)$/.test(abs)) continue;
+    const t = readFileSync(abs, "utf8");
+    assert.ok(!/security-testing\/second-/.test(t), `${abs}: security-testing/second-`);
+  }
+});
+
 test("no 'Placeholder' / 'replaced in Task' text remains anywhere under the bundle", () => {
   function walkAll(dir, out = []) {
     for (const name of readdirSync(dir).sort()) {

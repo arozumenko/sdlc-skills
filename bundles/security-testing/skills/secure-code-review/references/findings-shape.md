@@ -145,11 +145,11 @@ unchanged, so the hash is stable). `check` printed
 
 `assertion` ∈ `confirmed | refuted | indeterminate`; `note` is one
 paragraph citing lines, no secrets; `by` names the session or agent. A
-`mitigation-review` writes the same shape beside `threat-model.json`
-(`.agents/security-testing/second-M-nnn.json`) with `finding_id` = the
-mitigation id, `oid` = its first citation's `oid` and `findings_sha256` =
-the sha256 of the stamped `threat-model.json`; no script validates that
-file — the lead reads it.
+`mitigation-review` writes the same shape to `second-M-nnn.json` in the
+review directory (`.agents/security-testing/reviews/<dir>/second-M-nnn.json`)
+with `finding_id` = the mitigation id, `oid` = its first citation's `oid`
+and `findings_sha256` = the sha256 of the stamped `threat-model.json`; no
+script validates that file — the lead reads it.
 
 ## `fix-review.json` — the fix-review assertion, and `verify.json` as read
 
