@@ -6,7 +6,7 @@
 **Skill:** `skills/delivery-metrics/` (new, orphan top-level; installed through factory `skills[]`)
 **Branch:** feat/delivery-metrics-spec (worktree off `main`; spec only)
 **Status:** v5 — proportionality pass: guarantees capped at tokenomics' own; 13 mechanisms replaced by explicit limitations; ready for round 5. **v5.1:** §13 re-cut to Slice 1 (M1 = cycle time, velocity, estimate delta per task/mission/campaign) on the user's decision, 2026-09-17; no other section changed. **v5.2 (2026-09-17):** research 09 (polyrepo indicators) applied — D24–D27 added (translatability rules, window rule, churn, polyrepo roll-up), §6.2 reserves `cancelled --reason`, `meta.round`, `--fixes`, `blocked --reason`; §6.10 records the human-readable report shape shipped in M1; §13 M2 re-scoped to the surviving indicators.
-**Inputs:** research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`, `docs/superpowers/notes/2026-09-17-delivery-monitor-research-09-polyrepo-indicators.md`; reviews `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v[1-4]-adversarial-review-codex.md`. House style: `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md`, read from `feat/security-testing-bundle-spec` (absent in this worktree).
+**Inputs:** research notes kept in this repo — `docs/superpowers/notes/2026-09-16-delivery-metrics-research-05-dm-kb-ai-maturity-delivery-performance.md`, `…-06-industry-delivery-metrics.md`, `…-07-how-tools-track-delivery.md`, `docs/superpowers/notes/2026-09-17-delivery-monitor-research-09-polyrepo-indicators.md`. The repo-internal research notes (01–04, 08), the five spec and three plan adversarial-review notes (Codex `gpt-6-astra`; verdicts summarised in §19) and the executed M1 plan were working material and were removed from the branch before merge (2026-09-18). research `docs/superpowers/notes/2026-09-16-delivery-metrics-research-0[1-8]-*.md`, `docs/superpowers/notes/2026-09-17-delivery-monitor-research-09-polyrepo-indicators.md`; reviews `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-v[1-4]-adversarial-review-codex.md`. House style: `docs/superpowers/specs/2026-09-14-security-testing-bundle-design.md`, read from `feat/security-testing-bundle-spec` (absent in this worktree).
 **Source aliases:** `TOK` = `bundles/test-automation/skills/tokenomics`; `TAW` = `bundles/test-automation/skills/test-automation-workflow`; `AS` = `bundles/test-automation/skills/automation-scoping`. All delivery schemas below are proposed requirements; §16 anchors existing-repository claims.
 
 ## 1. Purpose
@@ -372,7 +372,7 @@ DORA, flow efficiency, benefit ROI, per-person/per-agent productivity, dashboard
 
 ## 19. Review rounds
 
-Artifacts: `docs/superpowers/notes/2026-09-16-delivery-metrics-spec-vN-adversarial-review-codex.md`. Verdicts: resolved / resolved by contract / resolved by narrowing / rejected (reason).
+Artifacts: the per-round Codex review notes were working material (removed from the branch 2026-09-18); each round's findings and resolutions are recorded in the tables below. Verdicts: resolved / resolved by contract / resolved by narrowing / rejected (reason).
 
 ### 19.1 v1 findings → v2
 
