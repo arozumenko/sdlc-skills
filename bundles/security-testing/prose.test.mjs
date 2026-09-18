@@ -178,3 +178,82 @@ test("no 'Placeholder' / 'replaced in Task' text remains in the files Task 9 own
     for (const re of STUB) assert.ok(!re.test(t), `${abs}: ${re}`);
   }
 });
+
+// ---------------------------------------------------------------- Task 10: threat-modeler / threat-modeling
+
+const SKILL10 = "skills/threat-modeling";
+const AGENT10 = "agents/threat-modeler";
+const DISPOSITIONS = ["open", "accepted(R-nnnn)", "mitigated(M-nnn)", "planned(TC-nnn)", "out-of-scope(<reason>)"];
+const BANNED10 = ["tm-lint", "packet", "receipt", "dispositions.json"];
+
+test("threat-modeler frontmatter", () => {
+  const a = read(`${AGENT10}/AGENT.md`);
+  const f = fm(a);
+  assert.equal(f.name, "threat-modeler");
+  assert.equal(f.model, "opus");
+  assert.equal(f.color, "purple");
+  assert.equal(f.group, "security");
+  assert.equal(f.theme, '{color: colour93, icon: "🕸️", short_name: tm}');
+  assert.equal(f.aliases, "[threat-modeler, tm]");
+  assert.equal(f["context-docs"], "security-testing/engagement.md security-testing/knowledge/finding-schema.md");
+  assert.equal(f.skills, "[memory, threat-modeling]");
+  assert.equal(f["skills-on-demand"], "[secure-code-review, gathering-context]");
+  assert.ok(!("tools" in f) && !("mcpServers" in f), "no tools:, no mcpServers (bundles/SPEC.md)");
+  assert.ok(a.split("\n").length <= 180, "AGENT.md stays within 180 lines");
+});
+
+test("threat-modeler body carries the return-line rule, cite.mjs check, the cases path and the five dispositions", () => {
+  const a = read(`${AGENT10}/AGENT.md`);
+  assert.match(a, /MODEL_WRITTEN elements=<n> threats=<n> open=<n>/, "return line on a clean check");
+  assert.match(a, /TM-INVALID/, "the failure return line is named");
+  assert.ok(a.includes("cite.mjs check"), "cite.mjs check");
+  assert.ok(a.includes(".agents/security-testing/cases/"), "candidate case location");
+  const body = a + read(`${SKILL10}/SKILL.md`);
+  for (const d of DISPOSITIONS) assert.ok(body.includes(d), `AGENT.md/SKILL.md: ${d}`);
+});
+
+test("threat-modeling SKILL.md starts 'Use when', names the shape and the five dispositions", () => {
+  const s = read(`${SKILL10}/SKILL.md`);
+  assert.match(s, /^description: "Use when /m);
+  assert.match(s, /^name: threat-modeling$/m);
+  assert.ok(s.includes("cite.mjs check"), "cite.mjs check");
+  assert.ok(s.includes(".agents/security-testing/cases/"), "candidate case location");
+  for (const d of DISPOSITIONS) assert.ok(s.includes(d), `SKILL.md: ${d}`);
+  for (const t of ["MODEL_WRITTEN", "TM-INVALID", "MODEL elements=", "CHECK verified="]) assert.ok(s.includes(t), t);
+  assert.ok(s.split("\n").length <= 200, "SKILL.md stays within 200 lines");
+});
+
+test("threat-modeler SOUL.md, RULES.md and briefing carry none of the dropped vocabulary", () => {
+  const soul = read(`${AGENT10}/SOUL.md`);
+  const rules = read(`${AGENT10}/RULES.md`);
+  const brief = read("briefings/threat-modeler.md");
+  assert.match(soul, /^# Soul/m);
+  assert.match(rules, /^# Rules/m);
+  assert.ok(rules.split("\n").filter((l) => /^\d+\. \*\*/.test(l)).length >= 4, "RULES.md lists the four roster rules as numbered bullets");
+  const bf = fm(brief);
+  assert.equal(bf.name, "Project briefing");
+  assert.equal(bf.type, "project");
+  assert.match(brief, /^## Project Knowledge/m);
+  assert.match(brief, /^## My Role Focus/m);
+  for (const [name, text] of [["SOUL.md", soul], ["RULES.md", rules], ["briefing", brief]]) {
+    for (const b of BANNED10) assert.ok(!text.toLowerCase().includes(b), `${name}: ${b}`);
+  }
+});
+
+test("no dropped-pipeline vocabulary anywhere in the threat-modeling skill or the threat-modeler agent", () => {
+  for (const abs of [...walk(join(B, SKILL10)), ...walk(join(B, AGENT10))]) {
+    const t = readFileSync(abs, "utf8").toLowerCase();
+    for (const b of BANNED10) assert.ok(!t.includes(b), `${abs}: ${b}`);
+    assert.ok(!t.includes("resolved_via"), `${abs}: resolved_via`);
+  }
+});
+
+test("no 'Placeholder' / 'replaced in Task' text remains under threat-modeling or threat-modeler", () => {
+  for (const rel of [`${AGENT10}/AGENT.md`, `${AGENT10}/SOUL.md`, `${AGENT10}/RULES.md`, "briefings/threat-modeler.md", `${SKILL10}/SKILL.md`]) {
+    assert.ok(existsSync(join(B, rel)), `${rel} exists`);
+  }
+  for (const abs of [...walk(join(B, SKILL10)), ...walk(join(B, AGENT10)), join(B, "briefings/threat-modeler.md")]) {
+    const t = readFileSync(abs, "utf8");
+    for (const re of STUB) assert.ok(!re.test(t), `${abs}: ${re}`);
+  }
+});
