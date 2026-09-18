@@ -30,31 +30,39 @@ payload:
   so on every record — `authenticated: false` — rather than pretending.
 
 An acceptance adds `until` (`--until <YYYY-MM-DD>`, a real UTC calendar
-day): the date after which the acceptance no longer stands.
+day) to the payload; `accept` also copies it onto the row's own
+`accepted_until` field.
 
 ## Where the record lives, and when it counts
 
-The row carries the record as `acceptance` while its status is
-`accepted`, and as `false_positive` while its status is
-`false-positive`. Every transition out of those statuses strips it:
-`revoke`, `acceptance-expired` and `fixed` remove `acceptance`;
-`reopen` removes `false_positive`.
+Every row keeps two things: an append-only `approvals` array — one
+entry per `accept`, `revoke` or `close-false-positive` event, in order,
+never removed — and a separate `accepted_until` field that holds only
+the current acceptance's expiry (or `""`). `accepted_until` is cleared
+on every transition that leaves `accepted`: `revoke`,
+`acceptance-expired`, `fixed` and `supersede` all clear it.
 
-The one exception is a `superseded` row: the record left on it is
-history on a dead row, not an approval of anything. So the approval
-state is read from `status`, never from the record's presence — a row
-is under an acceptance iff `status` is `accepted`, closed as a false
-positive iff `status` is `false-positive`.
+The approval state is read from `status`, never from `approvals`'
+presence — a row is under an acceptance iff `status` is `accepted`,
+closed as a false positive iff `status` is `false-positive`. The
+rendered view (`register.mjs render`) derives its "acceptance" /
+"false-positive" table cell the same way: from the *last* entry of
+`approvals` whose event matches the row's current status, not from a
+dedicated field. A `superseded` row's `approvals` history is left in
+place — it is history on a dead row, not an approval of anything.
 
 ## Expiry
 
-`register.mjs check` compares every accepted row's `until` with today's
-UTC date. An acceptance whose `until` is strictly before today lapses:
-the script appends `acceptance-expired {until}`, the row returns to
-`open`, and `check` prints one `EXPIRED <id>` line per lapsed row. On
-the `until` day itself the acceptance still stands; it expires the UTC
-day after `--until`. Run `check` before rendering the view for a
-stakeholder — an expired acceptance is exposure with no record at all.
+`register.mjs check` compares every accepted row's `accepted_until`
+with today's UTC date. An acceptance whose `accepted_until` is strictly
+before today lapses: the script appends an `acceptance-expired {until}`
+log event, clears the row's `accepted_until` and moves it back to
+`open` — `acceptance-expired` is not an approval-like event and does
+not touch `approvals`. `check` prints one `EXPIRED <id>` line per
+lapsed row. On the `until` day itself the acceptance still stands; it
+expires the UTC day after `accepted_until`. Run `check` before
+rendering the view for a stakeholder — an expired acceptance is
+exposure with no record at all.
 
 ## The one bucket
 

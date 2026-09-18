@@ -38,7 +38,7 @@ confirmed|refuted|indeterminate` per opinion, `STALE-REVIEW <id>` (exit
 ## 5. Register the verified findings
 
 ```
-node ../risk-register/scripts/register.mjs add --subject <finding_id> --priority <p> --title "<t>" --run <run_id>
+node ../risk-register/scripts/register.mjs add --finding <64-hex sha256> --priority <p0..p3> --title "<t>" [--owner <o>]
 node ../risk-register/scripts/register.mjs render
 ```
 `ROW <id> open` per finding, then `RENDERED
@@ -90,8 +90,9 @@ The developer names a commit; check it out, then:
 ```
 node ../secure-code-review/scripts/verify.mjs --finding <id> --review <dir> --head <oid>
 ```
-`PENDING-REVIEW` and `NEXT: dispatch security-reviewer fix-review`. A
-fresh `fix-review` dispatch writes `fix-review.json`, then:
+`NEXT: dispatch security-reviewer fix-review` — `verify.json`'s
+`verdict` field is written `PENDING-REVIEW` (not printed as its own
+line). A fresh `fix-review` dispatch writes `fix-review.json`, then:
 
 ```
 node ../secure-code-review/scripts/verify.mjs --finding <id> --review <dir> --head <oid> --assertion not-refound|refound --by <session>

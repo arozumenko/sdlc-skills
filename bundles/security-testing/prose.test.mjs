@@ -325,3 +325,34 @@ test("security-engagement/references/workflow.md lists the spec §7 commands in 
   }
   for (const banned of ["evidence.mjs", "run init", "packet", "publish", "COMMITTED", "M2", "M3"]) assert.ok(!w.includes(banned), banned);
 });
+
+// ---------------------------------------------------------------- Task 11 fix round 1 (Rio)
+
+test("workflow.md uses the real register.mjs add verb and does not claim verify.mjs prints PENDING-REVIEW", () => {
+  const w = read(`${SKILL_ENG}/references/workflow.md`);
+  assert.ok(w.includes("register.mjs add --finding"), "register.mjs add --finding");
+  for (const banned of ["--subject", "subject_kind", "first_seen_run", "--run <run_id>"]) assert.ok(!w.includes(banned), banned);
+  assert.match(w, /NEXT: dispatch security-reviewer fix-review/);
+  assert.ok(!/prints?[^.\n]{0,40}PENDING-REVIEW/i.test(w), "does not claim verify.mjs prints PENDING-REVIEW as an output line");
+});
+
+test("risk-register docs use the real add verb, row fields and append-only approvals (no subject/subject_kind/first_seen_run/--run, no per-status acceptance/false_positive sub-object)", () => {
+  const files = [`${SKILL_REG}/SKILL.md`, `${SKILL_REG}/references/transitions.md`, `${SKILL_REG}/references/approvals.md`];
+  for (const rel of files) {
+    const t = read(rel);
+    for (const banned of ["--subject", "subject_kind", "first_seen_run", "--run <run_id>", '"acceptance":', '"false_positive"']) assert.ok(!t.includes(banned), `${rel}: ${banned}`);
+  }
+  const s = read(`${SKILL_REG}/SKILL.md`);
+  assert.ok(s.includes("finding_id"), "finding_id field");
+  assert.ok(s.includes("approvals"), "approvals array");
+  assert.ok(s.includes("accepted_until"), "accepted_until field");
+  assert.ok(s.includes("--finding <64-hex sha256>") || s.includes("--finding <64-hex"), "the real --finding flag");
+});
+
+test("passive-admission.md carries the corrected observe/tooling vocabulary", () => {
+  const p = read(`${SKILL_PLAN}/references/passive-admission.md`);
+  assert.match(p, /\bscreenshot\b/, "bare screenshot verb");
+  assert.ok(p.includes("owasp zap") || p.includes("zaproxy"), "zap only matches as owasp zap / zaproxy");
+  assert.ok(!/\|\s*zap\s*,/i.test(p) && !/,\s*zap\s*,/i.test(p) && !/,\s*zap\s*\|/i.test(p), "bare zap is not listed as its own tooling token");
+  for (const t of ["msfconsole", "ncat", "rm -<flags>"]) assert.ok(p.includes(t), t);
+});

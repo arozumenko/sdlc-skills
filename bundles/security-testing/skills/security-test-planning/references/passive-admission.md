@@ -19,7 +19,7 @@ grammar.
 |---|---|
 | `navigate` | `navigate to`, `go to`, `browse to`, `return to`, `open`, `visit`, `load` |
 | `reload` | `reload`, `refresh` |
-| `observe` | `inspect`, `observe`, `read`, `view`, `check`, `verify`, `confirm`, `note`, `record`, `look at`, `examine`, `review`, `compare`, `count`, `list`, `find`, `locate`, `hover`, `expand`, `collapse`, `select`, `switch to`, `scroll`, `wait`, `capture`, `take a screenshot`, `close`, `ensure`, `assert` |
+| `observe` | `inspect`, `observe`, `read`, `view`, `check`, `verify`, `confirm`, `note`, `record`, `look at`, `examine`, `review`, `compare`, `count`, `list`, `find`, `locate`, `hover`, `expand`, `collapse`, `select`, `switch to`, `scroll`, `wait`, `capture`, `take a screenshot`, `screenshot`, `close`, `ensure`, `assert` |
 
 A step whose Action starts with any other verb — `fill`, `type`, `click`,
 `press`, `sign in`, `log in`, `enter`, … — is an **`unknown-operation`**
@@ -35,7 +35,7 @@ Any match is a hit under the rule; a step with a forbidden hit gets no
 |---|---|---|
 | `mutating-verb` | a state-changing verb **at the start of the Action or of a clause after `and` / `then` / `or` / `;` / `,`** (so `Navigate to … then submit the form` is a hit; `Inspect the delete button` is not): `submit`, `send`, `post`, `put`, `patch`, `delete`, `remove`, `drop`, `upload`, `create`, `register`, `sign up`, `modify`, `update`, `edit`, `change`, `alter`, `inject`, `exploit`, `brute force`, `fuzz`, `scan`, `spray`, `bypass`, `escalate`, `tamper`, `intercept`, `replay`, `forge`, `overwrite`, `execute`, `run`, `install`, `deploy`, `reset`, `disable`, `enable`, `grant`, `revoke`, `transfer`, `pay`, `purchase`, `check out`, `approve`, `reject`, `cancel`, `order`, `book`, `import`, `export`, `migrate`, `truncate`, `wipe`, `kill`, `restart`, `shut down` | `Submit the login form`, `Delete the test user` |
 | `injection-payload` | anywhere in the Action: `<script`, `javascript:`, an `onload=` / `onerror=` / `onclick=` handler, a quoted `' OR 1` / `" AND x=` tautology, `UNION SELECT`, `; DROP` / `; DELETE` / `; EXEC`, `../` or `..\` traversal, `%2e%2e`, `%00`, `%0d%0a`, a `{{7*7}}` template probe, `${…}` expression, a shell chain (`;`, `&&`, `||`, a pipe) into cat, ls, id, whoami, curl, wget, nc, bash, sh, rm or powershell | `Navigate to {{base_url}}/search?q=<script>alert(1)</script>` |
-| `tooling` | a security or transfer tool named anywhere (plain words, any case): sqlmap, nmap, nikto, burp, zap, metasploit, hydra, dirb, gobuster, ffuf, wfuzz, masscan, nuclei, curl, wget, httpie, netcat | `Run sqlmap against {{base_url}}/login` |
+| `tooling` | a security or transfer tool named anywhere (plain words, any case): sqlmap, nmap, nikto, burp, owasp zap, zaproxy, metasploit, msfconsole, hydra, dirb, gobuster, ffuf, wfuzz, masscan, nuclei, curl, wget, httpie, netcat, ncat, `rm -<flags>` | `Run sqlmap against {{base_url}}/login` |
 | `volume` | `repeat`, `repeatedly`, `loop`, `flood`, `spam`, `hammer`, `concurrently`, `in parallel`, or `<two or more digits> times / requests / attempts / logins / tries / users / sessions` | `Reload the page 500 times` |
 | `host-not-allowed` | a literal `http(s)://` URL whose host (`host[:port]`, lower-cased, the default port dropped) is not in `engagement.md` `targets.browser`; `{{base_url}}` is the runner's placeholder and always fine | `Open https://evil.example.net/probe` against `browser: ["staging.example.com"]` |
 

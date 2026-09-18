@@ -8,18 +8,21 @@ not in the table is refused with `4 TRANSITION-REJECTED(<event>:
 <from>)` and nothing is appended.
 
 Statuses: `open`, `fixed`, `regressed`, `accepted`, `false-positive`,
-`superseded`. "no row" means the subject has no row yet; "same" means
-the event leaves the status as it found it.
+`superseded`. "no row" means the finding has no row yet; "same" means
+the event leaves the status as it found it. A row's `approvals` array
+is append-only: `accept`, `revoke` and `close-false-positive` each push
+one record onto it and nothing is ever removed from it; `accepted_until`
+is a separate field, cleared on every transition that leaves `accepted`.
 
 ## Row verbs (you run these)
 
 ### `add`
 
 - no row → `open`
-- Flags: `--subject <finding_id|threat_id>`, `--priority p0|p1|p2|p3`,
-  `--title <t>`, `--run <run_id>`; optional `--owner <o>`.
-- Sets `subject`, `subject_kind`, `title`, `priority`, `owner`,
-  `first_seen_run`; the id `R-nnnn` is allocated by the script.
+- Flags: `--finding <64-hex sha256>` (from `cite.mjs check`),
+  `--priority p0|p1|p2|p3`, `--title <t>`; optional `--owner <o>`.
+- Sets `finding_id`, `title`, `priority`, `owner`; the id `R-nnnn` is
+  allocated by the script.
 
 ### `accept`
 
@@ -28,24 +31,23 @@ the event leaves the status as it found it.
 - Flags: `--until <YYYY-MM-DD>`, `--approved-by <who>`, `--approval-ref
   <ref>` — all three mandatory, exit 2 without any of them.
 - Payload is the approval record `{recorded_by, approved_by,
-  approval_ref, until, authenticated: false}`; the row carries it as
-  `acceptance` while the status is `accepted`. See
+  approval_ref, until, authenticated: false}`, pushed onto
+  `approvals`; `accepted_until` is set to `until`. See
   [approvals.md](approvals.md).
 
 ### `revoke`
 
 - `accepted` → `open`
 - Flags: `--approved-by <who>`, `--approval-ref <ref>`.
-- Payload is an approval record; the `acceptance` record is removed
-  from the row.
+- Payload is an approval record, pushed onto `approvals`;
+  `accepted_until` is cleared (the row is leaving `accepted`).
 
 ### `close-false-positive`
 
 - `open` → `false-positive`
 - `regressed` → `false-positive`
 - Flags: `--approved-by <who>`, `--approval-ref <ref>`.
-- Payload is an approval record; the row carries it as
-  `false_positive` while the status is `false-positive`. An `accepted`
+- Payload is an approval record, pushed onto `approvals`. An `accepted`
   row cannot be closed as a false positive: revoke it first.
 
 ### `reopen`
@@ -53,8 +55,10 @@ the event leaves the status as it found it.
 - `fixed` → `open`
 - `false-positive` → `open`
 - Flags: `--reason <r>`.
-- The `false_positive` record is removed; `rationale` is set to the
-  reason.
+- Status only — `approvals` is untouched, so the prior
+  `close-false-positive` record stays in the row's history even though
+  the rendered view stops showing it once `status` is no longer
+  `false-positive`.
 
 ### `supersede`
 
@@ -62,7 +66,8 @@ the event leaves the status as it found it.
 - `fixed` → `superseded`
 - `regressed` → `superseded`
 - `accepted` → `superseded`
-- Flags: `--by <R-id>`. Payload `{by}`.
+- Flags: `--by <R-id>`. Payload `{by}`, sets `superseded_by`;
+  `accepted_until` is cleared if the row was `accepted`.
 
 ### `ticket`
 
@@ -79,20 +84,21 @@ the event leaves the status as it found it.
 ### `acceptance-expired`
 
 - `accepted` → `open`
-- Payload `{until}` — the row's own acceptance date.
+- Payload `{until}` — the row's own `accepted_until`.
 - Emitter: `register.mjs check`. Fires for every `accepted` row whose
-  `until` (a UTC calendar day) is strictly before today: on the `until`
-  day itself the acceptance still stands; it lapses at 00:00 UTC of the
-  day after. The `acceptance` record is removed. `check` prints one
-  `EXPIRED <id>` per row.
+  `accepted_until` (a UTC calendar day) is strictly before today: on
+  that day itself the acceptance still stands; it lapses at 00:00 UTC
+  of the day after. `accepted_until` is cleared (`approvals` is
+  untouched). `check` prints one `EXPIRED <id>` per row.
 
 ### `fixed`
 
 - `open` → `fixed`
 - `regressed` → `fixed`
 - `accepted` → `fixed`
-- Emitter: `verify.mjs` on a `VERIFIED` verdict. Any acceptance is
-  removed — a verified fix ends the acceptance.
+- Emitter: `verify.mjs` on a `VERIFIED` verdict. `accepted_until` is
+  cleared if the row was `accepted` — a verified fix ends the
+  acceptance.
 
 ### `regressed`
 

@@ -18,39 +18,47 @@ rows `R-nnnn`. Every command re-folds the whole log through
 ## A row
 
 ```json
-{"id": "R-0001", "subject": "<finding_id|threat_id>", "subject_kind": "finding|threat",
- "status": "open", "priority": "p1", "title": "…", "owner": "…",
- "first_seen_run": "<run_id>", "acceptance": {"...": "..."}}
+{"id": "R-0001", "finding_id": "<64-hex sha256>", "title": "…",
+ "priority": "p1", "status": "open", "owner": "…", "ticket_url": "",
+ "accepted_until": "", "approvals": [], "superseded_by": ""}
 ```
 
 `status` is one of `open`, `fixed`, `regressed`, `accepted`,
-`false-positive`, `superseded`.
+`false-positive`, `superseded`. `approvals` is append-only — every
+`accept`, `revoke` and `close-false-positive` event pushes one record
+onto it; nothing is ever removed from it. `accepted_until` is cleared
+on every transition that leaves `accepted` (including `supersede`).
 
 ## The ten events, `from → to`
 
-- `add`: no row → `open` — allocates the id, sets `subject`, `title`,
+- `add`: no row → `open` — `--finding <64-hex sha256> --priority
+  <p0..p3> --title "<t>" [--owner <o>]`; sets `finding_id`, `title`,
   `priority`, `owner`. You run it.
 - `accept`: `open` → `accepted`, `regressed` → `accepted` — appends an
-  approval record plus `until`. You run it.
-- `revoke`: `accepted` → `open` — removes the acceptance record. You run
-  it.
+  approval record to `approvals` and sets `accepted_until`. You run it.
+- `revoke`: `accepted` → `open` — appends an approval record;
+  `accepted_until` is cleared. You run it.
 - `acceptance-expired`: `accepted` → `open` — fired by `register.mjs
-  check` for every accepted row whose `until` is strictly before today
-  (UTC); the acceptance still stands on the `until` day itself and
-  lapses at 00:00 UTC the next day. Emitter-only.
+  check` for every accepted row whose `accepted_until` is strictly
+  before today (UTC); the acceptance still stands on that day itself
+  and lapses at 00:00 UTC the next day. `accepted_until` is cleared.
+  Emitter-only.
 - `fixed`: `open` → `fixed`, `regressed` → `fixed`, `accepted` → `fixed`
-  — fired by `verify.mjs`'s `VERIFIED` verdict; any acceptance is
-  removed. Emitter-only.
+  — fired by `verify.mjs`'s `VERIFIED` verdict; `accepted_until` is
+  cleared if the row was `accepted`. Emitter-only.
 - `regressed`: `fixed` → `regressed` — fired by `verify.mjs`'s
   `REGRESSED` verdict; only a `fixed` row can regress. Emitter-only.
 - `close-false-positive`: `open` → `false-positive`, `regressed` →
   `false-positive` — appends an approval record. You run it.
-- `reopen`: `fixed` → `open`, `false-positive` → `open` — clears the
-  false-positive record. You run it.
+- `reopen`: `fixed` → `open`, `false-positive` → `open` — status only;
+  the prior `close-false-positive` record stays in `approvals`'
+  history, it is not erased. You run it.
 - `supersede`: `open` → `superseded`, `fixed` → `superseded`,
-  `regressed` → `superseded`, `accepted` → `superseded` — you run it.
+  `regressed` → `superseded`, `accepted` → `superseded` — sets
+  `superseded_by`; `accepted_until` is cleared if the row was
+  `accepted`. You run it.
 - `ticket`: `open` → same, `fixed` → same, `regressed` → same,
-  `accepted` → same (status unchanged) — records `ticket_url`. You run
+  `accepted` → same (status unchanged) — sets `ticket_url`. You run
   it. Threats are not ticketed in v1: `ticket` is for finding rows.
 
 ## Approvals — one shape, unauthenticated everywhere
