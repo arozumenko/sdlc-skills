@@ -396,16 +396,16 @@ test('renderHtml: human sections — campaign header, KPI cards, per-task bar ro
   assert.doesNotMatch(html, /\d\.\d\dh\b/, 'no two-decimal-hours anywhere on the page');
   // Per-task bar row: ref + state chip + bar + duration + estimate verdict.
   // Task row in the grouped table: ref + class chip, status chip, bar + natural-unit time, estimate range, verdict chip, fix rounds, span.
-  assert.match(html, /<tr class="task"><td class="ref" title="sec\/run-1\/task-a">TASK-A <span class="chip">S<\/span><\/td><td><span class="oc oc-done">done<\/span><\/td><td><div class="cell-bar"><div class="track"><div class="bar" style="width:100%"><\/div><\/div><span class="num">2 h<\/span><\/div><\/td><td>1 h–3 h<\/td><td><span class="oc oc-done">within range<\/span><\/td><td><span class="sub">—<\/span><\/td><td class="span">10 Sep 00:00 → 02:00 UTC<\/td><\/tr>/);
+  assert.match(html, /<div class="mrow task"><div class="c ref"><span title="sec\/run-1\/task-a">TASK-A<\/span> <span class="chip">S<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div><div class="c "><div class="cell-bar"><div class="track"><div class="bar" style="width:100%"><\/div><\/div><span class="num">2 h<\/span><\/div><\/div><div class="c ">1 h–3 h<\/div><div class="c "><span class="oc oc-done">within range<\/span><\/div><div class="c "><span class="sub">—<\/span><\/div><div class="c span">10 Sep 00:00 → 02:00 UTC<\/div><\/div>/);
   // Per-mission row carries the schedule-variance verdict in words.
-  assert.match(html, /<tr class="mission"><td class="ref" title="sec\/run-1\/mission-g1">G1<\/td><td><span class="oc oc-done">done<\/span><\/td><td><div class="cell-bar">.*?<td>2 h–4 h<\/td><td><span class="oc oc-done">within the estimate<\/span><\/td><td>1\/1<\/td>/, 'mission header row carries k\/N, estimate and verdict');
+  assert.match(html, /<details class="mission" open><summary><div class="mrow mission"><div class="c ref"><span title="sec\/run-1\/mission-g1">G1<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div>.*?<div class="c ">2 h–4 h<\/div><div class="c "><span class="oc oc-done">within the estimate<\/span><\/div><div class="c ">1\/1<\/div>/, 'mission header (summary) carries k\/N, estimate and verdict; small plans start expanded');
   assert.ok(html.includes('of estimated time'), 'work vs estimate reads as a percentage of the estimate');
   // Research-09 defect: an OPEN mission must render k/N from current scope, never 0/0 (first_completion is null until it lands).
   o('mission-g2', 'G2', 'mission', 'created', '2026-09-09T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'created', '2026-09-09T00:00:00Z'); o('task-c', 'TASK-C', 'task', 'created', '2026-09-09T00:00:00Z');
   o('task-b', 'TASK-B', 'task', 'dispatched', '2026-09-11T00:00:00Z'); o('task-b', 'TASK-B', 'task', 'done', '2026-09-11T01:00:00Z');
   const html2 = renderHtml(assemble(repo, { now: NOW }));
-  assert.match(html2, /<tr class="mission"><td class="ref" title="sec\/run-1\/mission-g2">G2<\/td><td><span class="oc oc-in_progress">in progress<\/span><\/td>.*?<td>1\/2<\/td>/, 'open mission shows done/in-scope from current_scope.child_summary');
-  assert.ok(html2.indexOf('title="sec/run-1/mission-g2">G2<') < html2.indexOf('title="sec/run-1/task-c">TASK-C') && html2.includes('<td class="ref" title="sec/run-1/task-c">TASK-C <span class="chip">M</span></td><td><span class="oc oc-planned">planned</span></td>'), 'a never-dispatched task sits under its mission (parent link, not first_completion)');
+  assert.match(html2, /<details class="mission" open><summary><div class="mrow mission"><div class="c ref"><span title="sec\/run-1\/mission-g2">G2<\/span><\/div><div class="c "><span class="oc oc-in_progress">in progress<\/span><\/div>.*?<div class="c ">1\/2<\/div>/, 'open mission shows done/in-scope from current_scope.child_summary');
+  assert.ok(html2.indexOf('title="sec/run-1/mission-g2">G2<') < html2.indexOf('title="sec/run-1/task-c">TASK-C') && html2.includes('<span title="sec/run-1/task-c">TASK-C</span> <span class="chip">M</span></div><div class="c "><span class="oc oc-planned">planned</span></div>'), 'a never-dispatched task sits under its mission (parent link, not first_completion)');
   assert.ok(!html.includes('<details>'), 'no collapsed assessor blocks on the human page');
   assert.ok(html.indexOf('title="sec/run-1/mission-g1">G1<') < html.indexOf('title="sec/run-1/task-a">TASK-A'), 'mission header precedes its tasks');
   // Human open-items rows use natural units, never raw ISO stamps; the assessor copy keeps ISO.
@@ -446,7 +446,7 @@ test('renderHtml: per-task rows escape a hostile ref (the estimate verdict path)
   mutated.plans[0].items.find((i) => i.ref === 'TASK-A').ref = evil; mutated.plans[0].metrics.estimate_rows[0].ref = evil;
   const html = renderHtml(mutated);
   assert.ok(!html.includes('<b>TASK-9</b>'), 'raw markup must not appear');
-  assert.ok(html.includes(`<td class="ref" title="sec/run-1/task-a">${escHtml(evil)} <span class="chip">S</span></td>`), 'escaped ref in the task row');
+  assert.ok(html.includes(`<span title="sec/run-1/task-a">${escHtml(evil)}</span> <span class="chip">S</span>`), 'escaped ref in the task row');
   assert.ok(html.includes('within range'), 'verdict still rendered for the row');
 });
 
@@ -476,5 +476,21 @@ test('renderHtml + metrics: run chart, trend halves, agent time / review wait fr
   assert.ok(html.includes('<span class="stat-label">Trend <span class="stat-sub">latest half vs earlier</span></span><span class="stat-value">-50% <span class="stat-sub">faster — latest 6 vs earlier 6</span>'), 'trend stat on the Cycle time card');
   assert.ok(!html.includes('Are we getting faster'), 'run chart deferred to the next iteration');
   assert.ok(html.includes('<span class="stat-label">Review turnaround <span class="stat-sub">agent done → merged</span></span><span class="stat-value">30 min</span>'), 'review turnaround on the Quality card');
-  assert.match(html, /<td class="ref" title="sec\/run-1\/task-1">TASK-1 <span class="chip">S<\/span><\/td><td><span class="oc oc-done">done<\/span><\/td>/, 'task rows present in the grouped table');
+  assert.match(html, /<span title="sec\/run-1\/task-1">TASK-1<\/span> <span class="chip">S<\/span><\/div><div class="c "><span class="oc oc-done">done<\/span><\/div>/, 'task rows present in the grouped table');
+  // 12 tasks in one finished mission → above the collapse threshold? no: threshold is >12, so it still starts expanded.
+  assert.ok(html.includes('<details class="mission" open>'), 'at exactly 12 tasks the mission is still expanded');
+});
+
+test('renderHtml: above 12 tasks, finished missions start collapsed and open ones expanded (native details, no script)', () => {
+  const repo = tmp();
+  const items = [{ item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 }, { item_id: `${R}/mission-g2`, ref: 'G2', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 2 }];
+  for (let k = 1; k <= 14; k++) items.push({ item_id: `${R}/task-${k}`, ref: `TASK-${k}`, level: 'task', parent_item_id: k <= 12 ? `${R}/mission-g1` : `${R}/mission-g2`, class: 'S' });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', canonical_sha256: 'c'.repeat(64), items });
+  const o = (id, ref, level, event, at) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event, at, transition_id: `${R}/${id}/${event}/episode-1`, source: 'cli', source_record_id: `${event}-${id}`, meta: { version: 1 } }, { now: 0 }), { slug: 'u', now: 0 });
+  for (let k = 1; k <= 14; k++) { o(`task-${k}`, `TASK-${k}`, 'task', 'created', '2026-09-01T00:00:00Z'); if (k <= 12) { o(`task-${k}`, `TASK-${k}`, 'task', 'dispatched', `2026-09-0${1 + (k % 5)}T08:00:00Z`); o(`task-${k}`, `TASK-${k}`, 'task', 'done', `2026-09-0${1 + (k % 5)}T10:00:00Z`); } }
+  o('mission-g1', 'G1', 'mission', 'done', '2026-09-06T10:00:00Z'); o('task-13', 'TASK-13', 'task', 'dispatched', '2026-09-07T08:00:00Z');
+  const html = renderHtml(assemble(repo, { now: NOW }));
+  assert.ok(html.includes('<details class="mission"><summary><div class="mrow mission"><div class="c ref"><span title="sec/run-1/mission-g1">G1</span>'), 'finished G1 starts collapsed');
+  assert.ok(html.includes('<details class="mission" open><summary><div class="mrow mission"><div class="c ref"><span title="sec/run-1/mission-g2">G2</span>'), 'open G2 starts expanded');
+  assert.ok(!html.includes('<script'), 'still no script');
 });

@@ -246,11 +246,17 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
-table.items td{vertical-align:middle;white-space:nowrap}
-table.items tr.mission td{background:var(--page);font-weight:600;border-top:2px solid var(--gridline)}
-table.items tr.task td.ref{padding-left:1.4rem;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.82rem}
-table.items tr.mission td.ref{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.85rem}
-table.items td.span{color:var(--text-secondary);font-size:.82rem}
+.items{font-size:.87rem;min-width:860px}
+.mrow{display:grid;grid-template-columns:minmax(150px,1.3fr) 110px minmax(180px,1.6fr) minmax(120px,1fr) minmax(130px,1.1fr) 120px minmax(190px,1.3fr);gap:.6rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid var(--gridline);white-space:nowrap}
+.mrow.head .c{color:var(--text-muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+.mrow.mission{background:var(--page);font-weight:600;border-top:2px solid var(--gridline)}
+.mrow.mission .c.ref,.mrow.task .c.ref{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.84rem}
+.mrow.task .c.ref{padding-left:1.4rem}
+.mrow .c.span{color:var(--text-secondary);font-size:.82rem}
+details.mission>summary{list-style:none;cursor:pointer}
+details.mission>summary::-webkit-details-marker{display:none}
+details.mission>summary .c.ref::before{content:'▸';display:inline-block;width:1em;color:var(--text-muted);transition:transform .15s}
+details.mission[open]>summary .c.ref::before{transform:rotate(90deg)}
 .cell-bar{display:flex;align-items:center;gap:.5rem;min-width:160px}
 .cell-bar .track{flex:1;background:var(--gridline);border-radius:4px;height:11px}
 .cell-bar .bar{background:var(--series-1);height:11px;border-radius:4px}
@@ -452,26 +458,32 @@ export function renderHtml(doc) {
     const cycleOf = new Map(tasks.map((t, i) => [t.item_id, cycles[i]]));
     const verdictChip = (v) => (v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : '');
     const bar = (sec, max) => (sec == null ? '<span class="sub">—</span>' : `<div class="cell-bar"><div class="track"><div class="bar" style="width:${Math.max(1, (sec / max) * 100)}%"></div></div><span class="num">${fmtDur(sec)}</span></div>`);
+    const cell = (cls, inner) => `<div class="c ${cls}">${inner}</div>`;
     const taskRow = (t) => {
       const c = cycleOf.get(t.item_id); const r = estRow.get(t.item_id); const v = verdictOf(r) ?? (t.estimate ? null : (t.estimate_status === 'unaccepted' ? { text: 'not accepted', cls: '' } : (t.state === 'done' ? { text: 'no estimate', cls: '' } : null)));
       const start = t.started_at ? '' : (t.state === 'planned' || t.state === 'cancelled' ? '' : ' <span class="sub">(no observed start)</span>');
-      return `<tr class="task"><td class="ref" title="${esc(t.item_id)}">${esc(t.ref)}${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}</td><td>${stateChip(t.state)}</td><td>${bar(c, maxCycle)}${start}</td><td>${t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>'}</td><td>${verdictChip(v)}</td><td>${t.rework_count ? t.rework_count : '<span class="sub">—</span>'}</td><td class="span">${fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtTs(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>')}</td></tr>`;
+      return `<div class="mrow task">${cell('ref', `<span title="${esc(t.item_id)}">${esc(t.ref)}</span>${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}`)}${cell('', stateChip(t.state))}${cell('', `${bar(c, maxCycle)}${start}`)}${cell('', t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>')}${cell('', verdictChip(v))}${cell('', t.rework_count ? String(t.rework_count) : '<span class="sub">—</span>')}${cell('span', fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtTs(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
     };
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
     const maxMission = Math.max(1, ...missionElapsed.filter((c) => c != null));
+    // Accordion per mission (native <details>, no script — same pattern as screen-specs' build-story):
+    // on a plan with more than COLLAPSE_ABOVE tasks, finished missions start collapsed and open ones
+    // expanded; smaller plans start fully expanded. The header keeps every mission figure visible.
+    const COLLAPSE_ABOVE = 12;
     const missionBlock = (g, idx) => {
       const cs = g.current_scope?.child_summary ?? { done: 0, cancelled: 0, open: 0, unknown: 0 };
       const inScope = cs.done + cs.open + cs.unknown; const el = missionElapsed[idx]; const sv = svRow.get(g.ref);
       const v = sv ? { text: bandText(sv), cls: sv.band.vs_low_s < 0 ? '' : sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done' } : null;
       const kids = tasks.filter((t) => t.parent_item_id === g.item_id);
-      const header = `<tr class="mission"><td class="ref" title="${esc(g.item_id)}">${esc(g.ref)}</td><td>${stateChip(g.state)}</td><td>${bar(el, maxMission)}</td><td>${g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>'}</td><td>${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}</td><td>${cs.done}/${inScope}${cs.cancelled ? ` <span class="sub">+${cs.cancelled} cancelled</span>` : ''}</td><td class="span">${fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtTs(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>')}</td></tr>`;
-      return header + kids.map(taskRow).join('');
+      const expanded = tasks.length <= COLLAPSE_ABOVE || g.state !== 'done';
+      const header = `<div class="mrow mission">${cell('ref', `<span title="${esc(g.item_id)}">${esc(g.ref)}</span>`)}${cell('', stateChip(g.state))}${cell('', bar(el, maxMission))}${cell('', g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>')}${cell('', `${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}`)}${cell('', `${cs.done}/${inScope}${cs.cancelled ? ` <span class="sub">+${cs.cancelled} cancelled</span>` : ''}`)}${cell('span', fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtTs(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
+      return `<details class="mission"${expanded ? ' open' : ''}><summary>${header}</summary>${kids.map(taskRow).join('') || '<div class="mrow task"><div class="c ref sub">no tasks</div></div>'}</details>`;
     };
     const orphanTasks = tasks.filter((t) => !t.parent_item_id || !missions.some((g) => g.item_id === t.parent_item_id));
-    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<tr class="mission"><td class="ref">no mission</td><td></td><td></td><td></td><td></td><td>${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}</td><td></td></tr>${orphanTasks.map(taskRow).join('')}` : '');
+    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<details class="mission" open><summary><div class="mrow mission">${cell('ref', 'no mission')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', `${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}`)}${cell('span', '')}</div></summary>${orphanTasks.map(taskRow).join('')}</details>` : '');
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
     parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks. Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; "fix rounds" counts times a task was sent back before it merged.</p>
-<table class="items"><tr><th>item</th><th>status</th><th>time</th><th>estimate</th><th>verdict</th><th>tasks done / fix rounds</th><th>started → finished</th></tr>${tableBody || '<tr><td colspan="7" class="sub">No items in this plan.</td></tr>'}</table>${campaignLine}</section>`);
+<div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">tasks done / fix rounds</div><div class="c">started → finished</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     const open = p.items.filter((i) => i.state === 'in_progress');
