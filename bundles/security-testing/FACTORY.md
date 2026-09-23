@@ -3,7 +3,7 @@ name: Security Testing Team
 description: "Threat-led, read-only security testing team: code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register."
 owner: Applied AI
 authors:
-  - "Daniel Sallai <zh8wnmn8x7@privaterelay.appleid.com>"
+  - "Daniel Sallai <Daniel_Sallai@epam.com>"
 install_script: "npx github:arozumenko/sdlc-skills init --factory security-testing"
 install_script_unix: "npx github:arozumenko/sdlc-skills init --factory security-testing"
 sdlc_phase: Security Testing
