@@ -98,13 +98,13 @@
     {
       "name": "security-lead",
       "source": "./bundles/security-testing/agents/security-lead",
-      "description": "Use when starting or running a security engagement: initialises the engagement, dispatches the reviewer and modeler, checks their citations, admits passive cases, prints the hand-off prompts and stops, writes the report, verifies fixes and proposes acceptances. The only human-facing security role.",
+      "description": "Use when starting or running a security engagement: initialises the engagement, dispatches the reviewer and modeler, checks their citations, admits passive cases, prints the hand-off prompts and stops, writes the report, verifies fixes and proposes acceptances. The only human-facing security role. Rasmus — security lead who runs the engagement like a checklist and never goes past a stop.",
       "version": "0.2.0"
     },
     {
       "name": "security-reviewer",
       "source": "./bundles/security-testing/agents/security-reviewer",
-      "description": "Use when a security-lead dispatches a review over the scope paths at HEAD, or a vulnerability-review, mitigation-review or fix-review on one finding or mitigation; writes findings.json or second-<id>.json, never ids, states or verdicts.",
+      "description": "Use when a security-lead dispatches a review over the scope paths at HEAD, or a vulnerability-review, mitigation-review or fix-review on one finding or mitigation; writes findings.json or second-<id>.json, never ids, states or verdicts. Vera — security reviewer who cites every claim so a script can re-check it.",
       "version": "0.2.0"
     },
     {
@@ -158,7 +158,7 @@
     {
       "name": "threat-modeler",
       "source": "./bundles/security-testing/agents/threat-modeler",
-      "description": "Use when a security-lead dispatches a threat-model run over scope_paths at HEAD, or asks for a second look at a mitigation's claim; writes threat-model.json — assigning its own E-nnn/T-nnn/M-nnn ids — and drafts candidate passive cases, never state, oid, snippet_redacted, check_stamp or a mitigation's confirmed/refuted verdict.",
+      "description": "Use when a security-lead dispatches a threat-model run over scope_paths at HEAD, or asks for a second look at a mitigation's claim; writes threat-model.json — assigning its own E-nnn/T-nnn/M-nnn ids — and drafts candidate passive cases, never state, oid, snippet_redacted, check_stamp or a mitigation's confirmed/refuted verdict. Ilse — threat modeler who derives the system from the code, not from the docs.",
       "version": "0.2.0"
     },
     {

@@ -123,9 +123,12 @@ want to be happy).
 > [manual-qa](docs/onboarding/manual-qa.md) (manual-QA team),
 > [test-automation](docs/onboarding/test-automation.md) (TMS → merged-test
 > pipeline: install → MCP inventory → scout seed →
-> `.agents/test-automation.yaml` → single-case pilot → scale-up), or
+> `.agents/test-automation.yaml` → single-case pilot → scale-up),
 > [product-management](docs/onboarding/product-management.md) (PO discovery team:
-> raw ask → verified, prioritized hypothesis → engineering handoff).
+> raw ask → verified, prioritized hypothesis → engineering handoff), or
+> [security-testing](docs/onboarding/security-testing.md) (Rasmus's threat-led,
+> read-only assessment: engagement → review + threat model → passive cases
+> handed to QA → fix verification → sign-off).
 
 > **Why the split?** The native IDE plugin systems (Claude Code, Cursor,
 > Gemini CLI, Copilot CLI) only see skills present locally in this repo —
@@ -150,7 +153,7 @@ npx github:arozumenko/sdlc-skills init --factory feature-development   # cross-p
 npx github:arozumenko/sdlc-skills init --factory manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
 npx github:arozumenko/sdlc-skills init --factory product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
-npx github:arozumenko/sdlc-skills init --factory security-testing  # threat-led, read-only security testing team (security-lead, threat-modeler, security-reviewer)
+npx github:arozumenko/sdlc-skills init --factory security-testing  # threat-led, read-only security testing team (led by Rasmus; threat-modeler Ilse, security-reviewer Vera)
 
 # Full catalog, all detected IDEs
 npx github:arozumenko/sdlc-skills init --all
@@ -182,7 +185,7 @@ ship today:
 | `manual-qa` | 7 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter, qa-auditor) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Also ships a specialist audit mode: `qa-auditor` runs security/accessibility/privacy/performance/responsive/UX/SEO passes via Playwright MCP, writes a findings report, and codifies notable findings into regression TC cases. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
-| `security-testing` | 3 factory-local agents (`security-lead`, `threat-modeler`, `security-reviewer`) + 5 factory-local skills (`secure-code-review`, `threat-modeling`, `security-test-planning`, `risk-register`, `security-engagement`) | Threat-led, read-only security testing team: code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register. See [`bundles/security-testing/README.md`](bundles/security-testing/README.md). |
+| `security-testing` | 3 factory-local agents (`security-lead` (Rasmus), `threat-modeler` (Ilse), `security-reviewer` (Vera)) + 5 factory-local skills (`secure-code-review`, `threat-modeling`, `security-test-planning`, `risk-register`, `security-engagement`) | Threat-led, read-only security testing team — Rasmus runs the engagement and is the only role you talk to, dispatching Ilse for the threat model and Vera for code review. Code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register. See [`bundles/security-testing/README.md`](bundles/security-testing/README.md). |
 
 See [`factories/SPEC.md`](factories/SPEC.md) and each factory's `README.md` to
 author your own. (`--bundle` still works as a silent back-compat alias for
@@ -315,6 +318,9 @@ point directly at a `SKILL.md` directory.
 | `test-automation-lead` | Tal | Runs the analyst → implementer → reviewer pipeline, owns the automation merge gate and test-framework architecture (`test-automation` factory) |
 | `product-owner` | Priya | Runs the discovery loop end to end — intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate (`product-management` factory) |
 | `discovery-researcher` | Sam | Gathers and stress-tests evidence — stakeholder interviews, market/desk research, adversarial verification; dispatched by `product-owner` (`product-management` factory) |
+| `security-lead` | Rasmus | Runs the security engagement end to end — dispatches the modeler and reviewer, checks their citations, writes the report, verifies fixes, proposes acceptances; the only human-facing security role (`security-testing` factory) |
+| `threat-modeler` | Ilse | Code-derived data-flow diagram and STRIDE threats with a citation per element; dispatched by `security-lead` (`security-testing` factory) |
+| `security-reviewer` | Vera | Evidence-gated secure code review with re-checkable citations; dispatched by `security-lead` (`security-testing` factory) |
 | `personal-assistant` | Octo | Conversational assistant: vault, email, calendar, daily brief (standalone orphan) |
 
 The **`manual-qa`** factory ships a separate live-browser manual-QA team (functional
@@ -388,6 +394,16 @@ installable via factories is listed below.
 | `grill-decision` | Socratic one-question-at-a-time stress-test of a decision or hypothesis, capturing outcomes inline (DEC records, edits) |
 | `capture-learning` | Record a problem → outcome → lesson when a hypothesis closes or an experiment concludes |
 | `discovery-status` | Read-only pipeline dashboard — gate state, what's blocked and on whom, the exact next action per item |
+
+**Security testing (5, factory-owned by `security-testing`):**
+
+| Skill | What it does |
+|---|---|
+| `security-engagement` | Rasmus's engagement playbook — init, review, register, model, cases, hand-off, report, fix, acceptances, sign-off; points at the other four skills |
+| `threat-modeling` | Code-derived data-flow diagram and STRIDE threats with a citation per element; mitigations recorded as claims a fresh reviewer can confirm or refute |
+| `secure-code-review` | Security review with citations anyone can re-check, second opinions on one finding, fix verification at a commit (`cite.mjs`, `verify.mjs`) |
+| `security-test-planning` | Turn candidate cases into passive security test cases in manual-qa format, admitted by lint against the allowed-operation grammar (`cases.mjs`) |
+| `risk-register` | Append-only residual-risk register — record, accept, expire, close, supersede, ticket (`register.mjs`) |
 
 ### External skills (fetched by the installer)
 
@@ -484,7 +500,7 @@ sdlc-skills/
 │   └── validate-factories.mjs    # factory manifest validator (CI + npm run validate:factories)
 ├── factories/                    # team presets — one command installs a whole team
 │   ├── SPEC.md                 # factory manifest spec
-│   └── <factory-id>/            # feature-development, manual-qa, test-automation, product-management
+│   └── <factory-id>/            # feature-development, manual-qa, test-automation, product-management, security-testing
 │       ├── factory.json         # roster, briefings, skillOverlays, seed, instructions
 │       ├── README.md           # roster + install
 │       ├── instructions.md     # spliced into AGENTS.md / CLAUDE.md
