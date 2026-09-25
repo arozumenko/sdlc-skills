@@ -43,6 +43,12 @@ inside the factory that owns it (`factories/<id>/agents/<name>/`); only
 - `product-owner` (Priya) — Runs the discovery loop end to end: intake triage, persona/outcome framing, opportunity-tree mapping, prioritization; guards the promotion gate
 - `discovery-researcher` (Sam) — Gathers and stress-tests evidence: stakeholder interviews, market/desk research, adversarial verification; dispatched by the product-owner
 
+**Security testing (`security-testing` factory):**
+
+- `security-lead` (Rasmus) — Runs the security engagement end to end: dispatches the modeler and reviewer, checks their citations, writes the report, verifies fixes, proposes acceptances; the only human-facing security role
+- `threat-modeler` (Ilse) — Code-derived data-flow diagram and STRIDE threats with a citation per element; dispatched by the security-lead
+- `security-reviewer` (Vera) — Evidence-gated secure code review with re-checkable citations; dispatched by the security-lead
+
 **Standalone:**
 
 - `personal-assistant` — Second-brain, inbox triage, calendar, Teams, notes
@@ -73,6 +79,11 @@ are capability definitions, not always-on context.
 | `grill-decision` | Socratically stress-testing a decision or hypothesis one question at a time (`product-management`) |
 | `capture-learning` | Recording a problem → outcome → lesson when a hypothesis closes (`product-management`) |
 | `discovery-status` | A read-only dashboard of where everything in the discovery pipeline stands (`product-management`) |
+| `security-engagement` | Running a security engagement end to end as the lead (`security-testing`) |
+| `threat-modeling` | Deriving a data-flow diagram and STRIDE threats from code, with a citation per element (`security-testing`) |
+| `secure-code-review` | Reviewing code for security defects with re-checkable citations, or verifying a fix at a commit (`security-testing`) |
+| `security-test-planning` | Turning candidate cases into passive security test cases in manual-qa format (`security-testing`) |
+| `risk-register` | Recording, accepting, expiring or closing residual security risks in the append-only register (`security-testing`) |
 | `code-review` | Reviewing a PR or diff |
 | `completing-a-task` | Finishing routed work — commit, push, PR, comment, notify |
 | `git-workflow` | Branching, commits, PRs, rebasing |

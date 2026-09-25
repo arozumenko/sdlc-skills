@@ -16,9 +16,9 @@ prose — the lead's judgement, written down so a script can re-check it.
 
 | Agent | Model | Role |
 |---|---|---|
-| `security-lead` | sonnet | Orchestrator; the only human-facing role. Runs `init`, dispatches, `check`s, `admit`s, writes the report, prints hand-off prompts and stops, proposes acceptances. |
-| `threat-modeler` | opus | Code-derived DFD with a citation per element, STRIDE, mitigations as claims, dispositions; drafts candidate passive cases. |
-| `security-reviewer` | sonnet | Four contracts, each a fresh dispatch: `review`, `vulnerability-review` / `mitigation-review`, `fix-review`. |
+| `security-lead` (Rasmus) | sonnet | Orchestrator; the only human-facing role. Runs `init`, dispatches, `check`s, `admit`s, writes the report, prints hand-off prompts and stops, proposes acceptances. |
+| `threat-modeler` (Ilse) | opus | Code-derived DFD with a citation per element, STRIDE, mitigations as claims, dispositions; drafts candidate passive cases. |
+| `security-reviewer` (Vera) | sonnet | Four contracts, each a fresh dispatch: `review`, `vulnerability-review` / `mitigation-review`, `fix-review`. |
 
 ## Skills
 

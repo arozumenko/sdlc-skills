@@ -14,6 +14,7 @@ yours below. For the catalog, install paths, and architecture, see the root
 | [**manual-qa**](manual-qa.md) | `--factory manual-qa` | A standalone manual-QA team that authors Markdown cases and runs them **live** against a web or mobile app (Playwright / Appium / Mobitru), plus specialist web audits (security/a11y/privacy/perf/UX/SEO). No test code generated. |
 | [**test-automation**](test-automation.md) | `--factory test-automation` | A TMS-driven automation pipeline — a lead (Tal) runs analyst → implementer → reviewer to turn TMS cases into merged, honest automated tests. |
 | [**product-management**](product-management.md) | `--factory product-management` | A Product Owner discovery team — Priya runs raw ask → problem → hypothesis → ratified outcome → prioritized bet, dispatching Sam for evidence, then hands off to engineering. Upstream of delivery; writes no code. |
+| [**security-testing**](security-testing.md) | `--factory security-testing` | A threat-led, read-only security testing team — Rasmus runs the engagement and is the only role you talk to, dispatching Ilse for the threat model and Vera for code review; passive security cases hand off to manual-qa / test-automation. Writes no product code. |
 
 Not sure between the two testing factories? **manual-qa** runs cases live and writes no code;
 **test-automation** generates and merges real test code in your framework. Many
