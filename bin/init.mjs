@@ -587,6 +587,50 @@ function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   return "appended";
 }
 
+// Factory ids of the managed blocks already in a root context file, in file
+// order, deduped — both the old `BUNDLE:<id>` and current `FACTORY:<id>` form.
+export function managedFactoryIds(text) {
+  const ids = [];
+  for (const m of text.matchAll(/<!-- (?:BUNDLE|FACTORY):([A-Za-z0-9._-]+) START -->/g)) {
+    if (!ids.includes(m[1])) ids.push(m[1]);
+  }
+  return ids;
+}
+
+// `--update` refreshes every factory block a project already carries, not
+// just the one named by `--factory`. Without this, `init --all --update`
+// refreshed agents and skills while AGENTS.md/CLAUDE.md kept the team rules
+// from the original install (e.g. a feature-development block missing the
+// delivery-monitor section its refreshed agents rely on). Only existing
+// blocks are touched — nothing is appended, no file is created, and text
+// outside the markers is preserved. `skip` is the factory `--factory`
+// already spliced this run.
+export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, skip = null } = {}) {
+  const results = [];
+  for (const file of ["AGENTS.md", "CLAUDE.md"]) {
+    const filePath = join(cwd, file);
+    if (!existsSync(filePath)) continue;
+    for (const id of managedFactoryIds(readFileSync(filePath, "utf8"))) {
+      if (id === skip) continue;
+      const dir = join(pkgRoot, FACTORIES_DIR, id);
+      let manifest;
+      try {
+        manifest = JSON.parse(readFileSync(join(dir, "factory.json"), "utf8"));
+      } catch {
+        results.push({ file, id, status: "unknown factory; left as-is" });
+        continue;
+      }
+      const src = manifest.instructions && join(dir, manifest.instructions);
+      if (!src || !existsSync(src)) {
+        results.push({ file, id, status: "no instructions in factory; left as-is" });
+        continue;
+      }
+      results.push({ file, id, status: spliceFactoryBlock(filePath, id, readFileSync(src, "utf8"), false) });
+    }
+  }
+  return results;
+}
+
 // Merge a factory's hooks into each Claude target's settings.json. v1 is
 // Claude-only — Cursor/Windsurf/Copilot hook formats differ, so they're
 // skipped with a notice. hooks.json is a Claude hooks object (event →
@@ -2863,6 +2907,18 @@ async function main() {
   if (factory && factory.instructions) {
     console.log(`\n  → project root (team instructions)`);
     installInstructions(factory);
+  }
+
+  // --update also refreshes the other factory blocks already in the project.
+  if (args.update) {
+    const refreshed = refreshInstalledFactoryBlocks({ skip: factory ? factory.id : null });
+    if (refreshed.length) {
+      console.log(`\n  → project root (installed factory instructions)`);
+      for (const r of refreshed) {
+        const mark = r.status === "refreshed" ? "✓" : "!";
+        console.log(`      ${mark} instructions ${r.file} ${r.id} (${r.status})`);
+      }
+    }
   }
 
   // Seed reference files into the project (idempotent; IDE-neutral).
