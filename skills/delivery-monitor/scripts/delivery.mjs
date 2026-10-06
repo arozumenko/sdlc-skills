@@ -4,7 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, factKey, makeObservation, resolveObservations } from './lib/events.mjs';
+import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
@@ -414,15 +414,34 @@ function cmdBackfill(repo, p, io, now) {
   }
   const { records, notes, skippedOutsideEpoch } = derived;
   for (const n of notes) out(io, `NOTE ${n}`);
-  let events = 0, skipped = 0, conflicts = 0;
-  for (const r of records) {
+  // D4: PR backfill reconciles its own prior output — an active `git` `pr:*` observation of this run that the current derivation no longer
+  // yields (a re-cut moved the first landing, or an association disappeared) is retracted at revision+1, never left to collide on its
+  // transition. Only a full derivation may retract: --since/--cutoff see a partial window. cli/hook/automation-sync and commit-based git
+  // observations are never candidates.
+  let events = 0, skipped = 0, conflicts = 0, retracted = 0;
+  const top = new Map(); for (const { rec } of readRaw(repo).lines) { const c = top.get(rec.observation_id); if (!c || rec.revision > c.revision) top.set(rec.observation_id, rec); }
+  if (f.pr) {
+    if (f.since != null || f.cutoff != null) out(io, 'NOTE reconciliation skipped: --since/--cutoff derive a partial window, so nothing is retracted');
+    else {
+      const keep = new Set(records.map((r) => r.observation_id));
+      for (const o of resolveObservations(repo).active) {
+        if (o.plan !== run.run || o.source !== 'git' || !String(o.source_record_id).startsWith('pr:') || keep.has(o.observation_id)) continue;
+        if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.at}`); continue; }
+        const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+        out(io, `RETRACT ${o.observation_id} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++; else conflicts++;
+      }
+    }
+  }
+  for (const r0 of records) {
+    // A derived observation whose id was previously retracted is revived at the next revision rather than SKIPped against the old rev 0.
+    const prev = top.get(r0.observation_id), r = prev && prev.status === 'retracted' ? { ...r0, revision: prev.revision + 1 } : r0;
     if (f['dry-run']) { out(io, `WOULD ${r.observation_id} ${r.at}`); continue; }
     const res = appendObservation(repo, r, { now });
     out(io, `${res.result} ${res.observation_id} ${r.at}`);
     if (res.result === 'EVENT') events++; else if (res.result === 'SKIP') skipped++; else conflicts++;
   }
   if (!f['dry-run']) { run.backfill = f.pr ? { mode: 'pr', at: nowIso(now) } : { head, at: nowIso(now) }; saveRun(repo, run); }
-  out(io, `BACKFILL events=${events} skipped=${skipped} conflicts=${conflicts} outside_epoch=${skippedOutsideEpoch}${head ? ` head=${head}` : ' mode=pr'}`);
+  out(io, `BACKFILL events=${events} skipped=${skipped} conflicts=${conflicts} outside_epoch=${skippedOutsideEpoch}${f.pr ? ` retracted=${retracted}` : ''}${head ? ` head=${head}` : ' mode=pr'}`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} ${f.pr ? 'PR' : 'git'} observation(s) conflict`);
   return 0;
 }

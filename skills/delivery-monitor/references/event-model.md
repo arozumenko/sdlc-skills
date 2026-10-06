@@ -141,3 +141,11 @@ PR's merge commit as `git_sha`, and `meta` `{pr (its own), stacked_into, landing
 top-down (top PR merged into its base first). A chain that never reaches `integration_ref`, is merged out of order, or cycles
 emits nothing and a `NOTE`. If several PRs onward qualify (a `-r2` redo), the earliest after the merge is used.
 
+**Reconciliation.** A full `backfill --pr` (no `--since`/`--cutoff`, not `--dry-run`) retracts every active `source: 'git'`
+observation of the run whose `source_record_id` starts `pr:` and which the current derivation no longer yields — the append is
+the same observation at `revision + 1` with `status: 'retracted'`. This is what keeps a plan re-cut (new `branch_map` /
+`branch_prefix`) from leaving an earlier derivation beside the new one on the same transition (`equal-rank-disagreement`).
+`cli`, `hook`, `automation-sync` and commit-sha `git` observations are never touched. `--dry-run` prints `WOULD-RETRACT`
+lines; the `BACKFILL` line carries `retracted=<n>`. A retracted id that is derived again is revived at the next revision.
+With `--since`/`--cutoff` the window is partial, so reconciliation is skipped with a `NOTE`.
+

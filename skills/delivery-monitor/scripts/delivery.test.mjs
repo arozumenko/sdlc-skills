@@ -657,3 +657,46 @@ test('backfill --pr --from-json: task PRs into the mission branch give task done
   assert.deepEqual(done.map((o) => o.ref).sort(), ['M1', 'T1.3', 'T1.4']); assert.ok(done.every((o) => o.source === 'git' && /^pr:\d$/.test(o.source_record_id)));
   assert.match(run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z']).stdout, /BACKFILL events=0 skipped=3 conflicts=0/);
 });
+
+// D4: `backfill --pr` reconciles its own prior output (a re-cut can change which PR is the first landing).
+const prRec = (number, head, base, mergedAt, title = `PR ${number}`) => ({ number, title, headRefName: head, baseRefName: base, createdAt: '2026-09-17T00:00:00Z', mergedAt, mergeCommit: { oid: `sha${number}` }, url: `u${number}` });
+const prSetup = (extra = {}) => {
+  const repo = initRepo(); const p = plan(1, [{ ref: 'T1.1' }]); p.missions[0].ref = 'M1'; Object.assign(p, { branch_map: [{ pattern: 'new-era-m(?<m>\\d+)$', ref: 'M{m}' }] }, extra);
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, p), '--id', 'reg-1']).code, 0);
+  return { repo, p };
+};
+let recutN = 0;
+const recut = (repo, p, patch) => { const v2 = { ...p, version: 2, ...patch }; const r = run(repo, ['plan', 'register', '--from', writePlan(repo, v2, `p${++recutN}.md`), '--id', `reg-r${recutN}`, '--at', `2026-09-2${recutN}T00:00:00Z`]); assert.equal(r.code, 0, r.stderr); };
+const pr$ = (repo, prs, extra = []) => { const f = join(repo, 'prs.json'); writeFileSync(f, JSON.stringify(prs)); return run(repo, ['backfill', '--pr', '--from-json', f, ...extra]); };
+const activePr = (repo) => resolveObservations(repo).active.filter((o) => o.source === 'git' && o.source_record_id.startsWith('pr:'));
+
+test('D4: re-cut derives an earlier first landing (#267) than the one already recorded (#644) → the old one is retracted, zero conflicts, idempotent after', () => {
+  const { repo, p } = prSetup();
+  const late = prRec(644, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'), early = prRec(267, 'feat/old-era-m1', 'main', '2026-09-18T00:00:00Z');
+  const a = pr$(repo, [late, early]); assert.match(a.stdout, /BACKFILL events=1 .*retracted=0/); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:644']);
+  recut(repo, p, { branch_map: [{ pattern: '(?:new|old)-era-m(?<m>\\d+)$', ref: 'M{m}' }] });
+  const dry = pr$(repo, [late, early], ['--dry-run']); assert.match(dry.stdout, /^WOULD-RETRACT .*pr%3A644/m); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:644'], 'dry-run writes nothing');
+  const b = pr$(repo, [late, early]); assert.equal(b.code, 0, b.stderr); assert.match(b.stdout, /BACKFILL events=1 .*conflicts=0.*retracted=1/);
+  const res = resolveObservations(repo); assert.equal(res.conflicts.length, 0); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:267']);
+  assert.match(pr$(repo, [late, early]).stdout, /BACKFILL events=0 skipped=1 conflicts=0.*retracted=0/, 'second run retracts nothing');
+});
+test('D4: an association that disappears (title-matched before a branch_prefix re-cut) is retracted; cli observations are never touched', () => {
+  const { repo, p } = prSetup({ branch_map: [] });
+  assert.equal(run(repo, ['event', 'T1.1', 'dispatched', '--id', 'd1', '--at', '2026-09-17T00:00:00Z']).code, 0);
+  const cliBefore = resolveObservations(repo).active.filter((o) => o.source === 'cli').map((o) => o.observation_id).sort();
+  const stray = prRec(476, 'chore/board-replay-a-buffering-carry', 'main', '2026-09-25T00:00:00Z', 'board: M1 carry');
+  pr$(repo, [stray]); assert.deepEqual(activePr(repo).map((o) => o.ref), ['M1']);
+  recut(repo, p, { branch_prefix: ['lm-deferred'] });
+  const r = pr$(repo, [stray]); assert.match(r.stdout, /BACKFILL events=0 .*retracted=1/); assert.deepEqual(activePr(repo), []);
+  assert.deepEqual(resolveObservations(repo).active.filter((o) => o.source === 'cli').map((o) => o.observation_id).sort(), cliBefore);
+});
+test('D4: with --since or --cutoff reconciliation is skipped with a NOTE; a retracted observation whose PR associates again is revived', () => {
+  const { repo, p } = prSetup();
+  const pr1 = prRec(5, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'); pr$(repo, [pr1]);
+  recut(repo, p, { branch_map: [] });
+  for (const flag of [['--since', '2026-09-01T00:00:00Z'], ['--cutoff', '2026-12-31T00:00:00Z']]) { const s = pr$(repo, [pr1], flag); assert.match(s.stdout, /NOTE .*reconciliation skipped/); assert.match(s.stdout, /retracted=0/); assert.equal(activePr(repo).length, 1); }
+  assert.match(pr$(repo, [pr1]).stdout, /retracted=1/); assert.equal(activePr(repo).length, 0);
+  recut(repo, { ...p, version: 2 }, { version: 3, branch_map: [{ pattern: 'new-era-m(?<m>\\d+)$', ref: 'M{m}' }] });
+  const back = pr$(repo, [pr1]); assert.match(back.stdout, /BACKFILL events=1 /); assert.equal(activePr(repo).length, 1, 'revived at a higher revision');
+  assert.equal(resolveObservations(repo).conflicts.length, 0);
+});
