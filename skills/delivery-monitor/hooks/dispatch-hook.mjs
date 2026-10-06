@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // STDLIB ONLY. Claude SubagentStop → dispatched / dispatch_ended (+ rework_observed) observations (spec §6.6).
 // Never prints to stdout, always exits 0. Admission: open run, session→run association, role in the run's roster snapshot.
-import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, nowIso, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
+import { deliveryDir, nowIso, sessionPath, sessionsDir, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
+import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
@@ -96,7 +97,6 @@ export function parseTranscript(path) {
 }
 // Case-insensitive (review minor b): a lowercase `task-023` in a description/message must match
 // `TASK-023` the same way the branch alias comparison already lowercases both sides.
-const wordHit = (text, ref) => new RegExp(`(^|[^A-Za-z0-9-])${ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-])`, 'i').test(text ?? '');
 const matchLevel = (items, { description, firstUserText, branch }) => {
   const inDesc = items.filter((i) => wordHit(description, i.ref)); if (inDesc.length === 1) return { items: inDesc, how: 'description' }; if (inDesc.length > 1) return { items: [], how: 'ambiguous' };
   const inMsg = items.filter((i) => wordHit(firstUserText, i.ref)); if (inMsg.length === 1) return { items: inMsg, how: 'message' }; if (inMsg.length > 1) return { items: [], how: 'ambiguous' };
@@ -117,8 +117,35 @@ export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k
 // fixed vocabulary the report reader (Task 8) recognises — unbound-session | unknown-role |
 // no-transcript | incomplete-transcript | invalid-roster. Any other shape/kind folds into that
 // reader's `malformed` bucket, so this writer never emits one.
-function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); appendFileSync(join(deliveryDir(repo), `diagnostics-${slug}.jsonl`), `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
+const DIAG_TAIL = 1024 * 1024;
+/** Bounded read: only the last 1 MiB of the diagnostics file is scanned (files can reach MBs), so "once" holds per (session, kind)
+ * within that window — an entry older than the tail may be written again, never unboundedly. */
+function alreadyDiagnosed(file, kind, session) {
+  let fd; try { fd = openSync(file, 'r'); } catch { return false; }
+  try {
+    const { size } = fstatSync(fd), len = Math.min(size, DIAG_TAIL), buf = Buffer.alloc(len); readSync(fd, buf, 0, len, size - len);
+    const lines = buf.toString('utf8').split('\n'); if (size > len) lines.shift(); // first line of a mid-file tail is partial
+    return lines.some((l) => { try { const d = JSON.parse(l); return d.kind === kind && d.session === session; } catch { return false; } });
+  } catch { return false; } finally { closeSync(fd); }
+}
+// `once` kinds (unbound-session, invalid-roster) describe the session, not the agent — one line per (session, kind), else a 100-subagent run floods the log.
+const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster']);
+function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`); if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null; appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
 const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts); } catch { return false; } };
+
+/** F3: an unbound session binds itself when its working branch associates (lib/associate.mjs) to exactly one item of exactly one
+ * OPEN run. Zero or several candidates → null (the caller writes the unbound diagnostic); ambiguity is never guessed across. The
+ * binding file has the shape `session set` writes, plus `bound_by: 'branch'`, so later stops skip the git call. */
+function bindByBranch(repo, payload, now) {
+  try {
+    const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null; if (!branch) return null;
+    const hits = listRuns(repo).filter((r) => r.status === 'open' && associate(r, { head: branch }).items.length === 1);
+    if (hits.length !== 1) return null;
+    mkdirSync(sessionsDir(repo), { recursive: true });
+    writeFileSync(sessionPath(repo, 'claude', payload.session_id), `${JSON.stringify({ host: 'claude', session: payload.session_id, plan: hits[0].run, at: nowIso(now), bound_by: 'branch' })}\n`);
+    return hits[0];
+  } catch { return null; }
+}
 
 export function handleStop(payload, { repo, now = Date.now() } = {}) {
   repo = resolveOwnerRepo(repo);
@@ -126,7 +153,7 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   if (!payload?.session_id || !payload?.agent_id) return none;
   if (!listRuns(repo).some((r) => r.status === 'open')) return none;
   const { slug } = whoAmI(repo);
-  const run = sessionRun(repo, 'claude', payload.session_id);
+  const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now);
   if (!run) return { wrote: [], diagnostic: diagnose(repo, slug, 'unbound-session', payload, 'run: delivery.mjs session set --host claude --session <id> --plan <run>', now) };
   const child = findChildTranscript(payload);
   let meta = {}; if (child) { try { meta = JSON.parse(readFileSync(child.metaPath, 'utf8')); } catch { meta = {}; } }
