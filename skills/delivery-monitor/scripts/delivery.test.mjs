@@ -584,11 +584,14 @@ test('F20: backfill --git input guards all exit 2 (USAGE) — --pr, missing/bare
   git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', 'init'); // initRepo() itself makes no commit — need a resolvable HEAD
   const head = git(repo, 'rev-parse', 'HEAD');
 
-  const noGit = run(repo, ['backfill', '--pr']);
-  assert.equal(noGit.code, 2, noGit.stderr); assert.match(noGit.stderr, /^USAGE\(/);
+  const neither = run(repo, ['backfill']);
+  assert.equal(neither.code, 2, neither.stderr); assert.match(neither.stderr, /^USAGE\(backfill --git /);
 
-  const pr = run(repo, ['backfill', '--git', '--pr']);
-  assert.equal(pr.code, 2, pr.stderr); assert.match(pr.stderr, /^USAGE\(--pr is not in M1/);
+  const both = run(repo, ['backfill', '--git', '--pr']);
+  assert.equal(both.code, 2, both.stderr); assert.match(both.stderr, /^USAGE\(--git and --pr are exclusive/);
+
+  const badJson = run(repo, ['backfill', '--pr', '--from-json', join(repo, 'nope.json')]);
+  assert.equal(badJson.code, 2, badJson.stderr); assert.match(badJson.stderr, /^USAGE\(no such file/);
 
   const noHead = run(repo, ['backfill', '--git']);
   assert.equal(noHead.code, 2, noHead.stderr); assert.match(noHead.stderr, /^USAGE\(backfill needs --head/);
@@ -634,4 +637,23 @@ test('minor: backfill --git --dry-run prints WOULD lines and never writes run.ba
   const rec = JSON.parse(readFileSync(runPath(fx.repo, 'sec/run-1'), 'utf8'));
   assert.equal(rec.backfill, undefined, 'dry-run never writes run.backfill');
   assert.equal(resolveObservations(fx.repo).active.length, registeredCount, 'dry-run leaves the ledger exactly as registration left it');
+});
+
+// F4: PR-mode backfill through the CLI — both shapes (task PR into a mission branch, mission PR into main), offline via --from-json.
+test('backfill --pr --from-json: task PRs into the mission branch give task done, the mission PR gives landing; idempotent; --dry-run writes nothing; plan carries branch_map', () => {
+  const repo = initRepo();
+  const p = plan(1, [{ ref: 'T1.3' }, { ref: 'T1.4' }]); p.missions[0].ref = 'M1';
+  p.branch_prefix = 'bookmark-polish'; p.branch_map = [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'T{m}.{t}' }, { pattern: '-m(?<m>\\d+)(?:-r\\d+)?$', ref: 'M{m}' }];
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, p), '--id', 'reg-1']).code, 0);
+  const rec = JSON.parse(readFileSync(runPath(repo, 'sec/run-1'), 'utf8')); assert.equal(rec.branch_prefix, 'bookmark-polish'); assert.equal(rec.branch_map.length, 2);
+  const mk = (number, head, base, mergedAt) => ({ number, title: `PR ${number}`, headRefName: head, baseRefName: base, createdAt: '2026-09-17T00:00:00Z', mergedAt, mergeCommit: { oid: `sha${number}` }, url: `u${number}` });
+  const f = join(repo, 'prs.json'); writeFileSync(f, JSON.stringify([mk(1, 'feat/bookmark-polish-m1-t3', 'feat/bookmark-polish-m1', '2026-09-18T10:00:00Z'), mk(2, 'feat/bookmark-polish-m1-t4', 'feat/bookmark-polish-m1', '2026-09-19T10:00:00Z'), mk(3, 'feat/bookmark-polish-m1', 'main', '2026-09-20T10:00:00Z'), mk(4, 'feat/unrelated', 'main', '2026-09-20T11:00:00Z')]));
+  const before = resolveObservations(repo).active.length;
+  const dry = run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z', '--dry-run']);
+  assert.equal(dry.code, 0, dry.stderr); assert.equal((dry.stdout.match(/^WOULD /gm) ?? []).length, 3); assert.match(dry.stdout, /NOTE PR #4/); assert.equal(resolveObservations(repo).active.length, before);
+  const a = run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z']);
+  assert.equal(a.code, 0, a.stderr); assert.match(a.stdout, /BACKFILL events=3 skipped=0 conflicts=0/);
+  const done = resolveObservations(repo).active.filter((o) => o.event === 'done');
+  assert.deepEqual(done.map((o) => o.ref).sort(), ['M1', 'T1.3', 'T1.4']); assert.ok(done.every((o) => o.source === 'git' && /^pr:\d$/.test(o.source_record_id)));
+  assert.match(run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z']).stdout, /BACKFILL events=0 skipped=3 conflicts=0/);
 });
