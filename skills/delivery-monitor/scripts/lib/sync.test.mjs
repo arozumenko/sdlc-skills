@@ -60,3 +60,16 @@ test('conflicting shared file: merge aborted, nothing committed as resolved, rea
   assert.equal(r2.synced, false); assert.match(r2.reason, /unresolved merge/);
   assert.notEqual(g(tel, 'ls-files', '-u'), '', 'still unmerged; sync did not touch it');
 });
+
+test('F1: diagnostics-only changes are never committed or pushed; they ride along with a real change', () => {
+  const { a } = world(); const tel = join(a, '.agents', 'telemetry'); const before = g(tel, 'rev-list', '--count', 'HEAD');
+  write(a, 'diagnostics-a.jsonl', '{"kind":"unbound-session"}\n');
+  assert.deepEqual(bestEffortSync(a, { env: {} }), { synced: false, reason: 'diagnostics-only' });
+  assert.equal(g(tel, 'rev-list', '--count', 'HEAD'), before, 'no commit made');
+  write(a, 'diagnostics-a.jsonl', '{"kind":"unbound-session"}\n{"kind":"unbound-session"}\n');
+  assert.equal(bestEffortSync(a, { env: {} }).reason, 'diagnostics-only');
+  write(a, 'events-a.jsonl', '{"a":1}\n');
+  assert.equal(bestEffortSync(a, { env: {} }).synced, true);
+  assert.match(g(tel, 'ls-files'), /diagnostics-a\.jsonl/, 'diagnostics committed with the real change');
+  assert.equal(Number(g(tel, 'rev-list', '--count', 'HEAD')), Number(before) + 1);
+});

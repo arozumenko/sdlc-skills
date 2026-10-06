@@ -433,7 +433,7 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   let code = 1;
   try { code = await fn(repo, p, io, now); }
   catch (e) { if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
-  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
+  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
 // Task 10: `process.exit(c)` right after an async `main()` resolves races Node's own async stdout
