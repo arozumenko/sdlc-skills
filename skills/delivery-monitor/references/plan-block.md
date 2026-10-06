@@ -42,7 +42,7 @@ plan); a file that parses as neither is treated as a markdown import candidate (
 | `campaign` | `{ref (required), item_id?, estimate?}` — the plan's single root item |
 | `missions[]` | `{ref (unique), sequence (unique positive int), item_id?, estimate?, tasks[]}` |
 | `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?}` |
-| `branch_prefix` | optional non-empty string; a head ref must contain it (case-insensitive) for this run to be considered at all by branch/PR association |
+| `branch_prefix` | optional non-empty string **or** non-empty array of non-empty strings; a head ref must contain any of them (case-insensitive) for this run to be considered at all by branch/PR association. Use an array when a campaign spans two branch-naming eras |
 | `branch_map` | optional array of `{pattern, ref}`; `pattern` is a JS regex string (case-insensitive, named groups), `ref` a template (`T{m}.{t}`, `M{m}`) filled from the groups. Invalid regex or a non-string ref → `SCHEMA-INVALID`. Stored on the run and carried by every re-cut |
 | `supersedes` | optional `{run, item_map}` — see *Re-cut* below |
 
@@ -184,4 +184,7 @@ step falls through to the next; the "ambiguous" note survives only if every step
 **Backfill evidence.** `backfill --git` keeps the second-parent `<ref>:` commit-prefix rule for plain `merge <branch>`
 subjects. A GitHub `Merge pull request #N from <owner>/<branch>` commit whose branch matched by exact alias or
 `branch_map` is itself the evidence (conventional-commit repos never prefix commits with the ref).
+
+**Always set `branch_prefix` when refs are short** (`M8`, `T1.2`). The title step is repo-wide: without a prefix, an
+unrelated PR titled "… M8 …" on any branch is associated to this run's `M8`. The prefix is the only thing that scopes it.
 

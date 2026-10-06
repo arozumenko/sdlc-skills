@@ -1,6 +1,6 @@
 // STDLIB ONLY. Branch/PR-title → plan item association, shared by hook auto-binding and git/PR backfill (spec §6.7, §20 P-3).
 // Order, first unambiguous step wins: (a) exact item.branch alias, (b) ref as a whole token in the title, (c) plan.branch_map.
-// Ambiguity at any step → no association and a note; never a guess. `branch_prefix` (when set) gates the whole run.
+// Ambiguity at any step → no association and a note; never a guess. `branch_prefix` (string or array of strings; when set, the head must contain ANY) gates the whole run.
 export const wordHit = (text, ref) => new RegExp(`(^|[^A-Za-z0-9-])${String(ref).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-])`, 'i').test(text ?? '');
 export const expandRef = (tpl, groups) => { let ok = true; const s = String(tpl).replace(/\{(\w+)\}/g, (_, k) => { if (groups?.[k] == null) { ok = false; return ''; } return groups[k]; }); return ok ? s : null; };
 const none = (how, note) => ({ items: [], how, note });
@@ -8,7 +8,8 @@ const pick = (list, how) => (list.length === 1 ? { items: list, how, note: null 
 
 export function associate(run, { head = null, title = null, levels = ['task', 'mission'] } = {}) {
   const cand = (run.items ?? []).filter((i) => levels.includes(i.level) && !i.cancelled);
-  if (run.branch_prefix && !(head ?? '').toLowerCase().includes(String(run.branch_prefix).toLowerCase())) return none(null, `head ${head} does not contain branch_prefix ${run.branch_prefix}`);
+  const prefixes = [run.branch_prefix].flat().filter((x) => typeof x === 'string' && x);
+  if (prefixes.length && !prefixes.some((x) => (head ?? '').toLowerCase().includes(x.toLowerCase()))) return none(null, `head ${head} does not contain branch_prefix ${prefixes.join('|')}`);
   // Order (D1): alias → branch_map → title token. An empty or ambiguous step falls through to the next; the ambiguity note survives
   // only if every step fails. The branch is the stronger signal: a title routinely names neighbouring items ("M2 … follows M1").
   const notes = [], step = (list, how) => { const r = pick(list, how); if (r && r.items.length) return r; if (r) notes.push(r.note); return null; };

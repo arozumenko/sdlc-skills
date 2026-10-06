@@ -74,7 +74,7 @@ export function validatePlan(p) {
       if (t.estimate) errs.push(...validateEstimate(t.estimate, `task ${t.ref}.estimate`));
     }
   }
-  if (p.branch_prefix != null && (typeof p.branch_prefix !== 'string' || !p.branch_prefix)) errs.push('branch_prefix must be a non-empty string');
+  if (p.branch_prefix != null && !(typeof p.branch_prefix === 'string' ? p.branch_prefix : Array.isArray(p.branch_prefix) && p.branch_prefix.length && p.branch_prefix.every((x) => typeof x === 'string' && x))) errs.push('branch_prefix must be a non-empty string or a non-empty array of non-empty strings');
   if (p.branch_map != null) {
     if (!Array.isArray(p.branch_map)) errs.push('branch_map must be an array');
     else p.branch_map.forEach((e, i) => {

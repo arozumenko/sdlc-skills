@@ -51,3 +51,19 @@ test('associate D1: alias beats branch_map; ambiguity falls through; the note sa
   const amb = associate({ ...run, branch_map: [] }, { head: 'feat/bookmark-polish-x', title: 'T1.4 and T1.5' }); assert.equal(amb.items.length, 0); assert.match(amb.note, /ambiguous title match/);
   assert.equal(associate({ ...run, branch_map: [] }, { head: 'feat/bookmark-polish-x', title: 'nothing' }).note, null);
 });
+
+test('associate D3: branch_prefix may be an array — a head matching ANY entry (case-insensitive) is considered', () => {
+  const two = { ...run, branch_prefix: ['coach-android-c6', 'Live-Monitor-Deferred'], branch_map: [{ pattern: '-m(?<m>\\d+)(?:-[a-z][\\w-]*)?$', ref: 'M{m}' }] };
+  assert.deepEqual(associate(two, { head: 'feat/coach-android-c6-m1' }).items.map((i) => i.ref), ['M1']);
+  assert.deepEqual(associate(two, { head: 'feat/live-monitor-deferred-defects-m2' }).items.map((i) => i.ref), ['M2']);
+});
+test('associate D3: with a prefix set, the repo-wide title step cannot claim an unrelated PR (#476 shape)', () => {
+  const pre = { ...run, branch_prefix: ['lm-deferred'], branch_map: [] };
+  assert.equal(associate(pre, { head: 'chore/board-replay-a-buffering-carry', title: 'board: M1 carry' }).items.length, 0);
+  assert.equal(associate({ ...pre, branch_prefix: null }, { head: 'chore/board-replay-a-buffering-carry', title: 'board: M1 carry' }).items[0].ref, 'M1', 'no prefix: title is repo-wide');
+});
+test('validatePlan D3: branch_prefix is a non-empty string or a non-empty array of non-empty strings', () => {
+  const base = { campaign_id: 'c', run_id: 'r', version: 1, factory: 'feature-development', observation_start: '2026-01-01T00:00:00Z', source_epoch: { from: '2026-01-01T00:00:00Z', until: null, integration_ref: 'main' }, mission_kind: 'group', campaign: { ref: 'c' }, missions: [] };
+  for (const ok of ['x', ['x'], ['x', 'y']]) assert.deepEqual(validatePlan({ ...base, branch_prefix: ok }), [], JSON.stringify(ok));
+  for (const bad of ['', [], [''], ['x', 3], 3, {}]) assert.ok(validatePlan({ ...base, branch_prefix: bad }).some((e) => /branch_prefix/.test(e)), JSON.stringify(bad));
+});
