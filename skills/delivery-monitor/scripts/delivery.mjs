@@ -171,7 +171,7 @@ function cmdPlanRegister(repo, f, io, now) {
   for (const i of mergedItems) if (removedDeliveredIds.has(i.item_id)) { i.cancelled = false; i.removed_delivered = true; }
   const rec = {
     run: runId, campaign_id: full.campaign_id, run_id: full.run_id, version: full.version, factory: full.factory, status: 'open',
-    registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind,
+    registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind, branch_map: full.branch_map ?? null, branch_prefix: full.branch_prefix ?? null,
     source: { path: file, rel, sha256: sha256(text), head: sourceHead }, canonical_sha256: canonicalHash(full), roster,
     import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergedItems,
     versions: [...(prev?.versions ?? []), { version: full.version, at, keep_missing: keepMissing, canonical_sha256: canonicalHash(full), items: next }],
