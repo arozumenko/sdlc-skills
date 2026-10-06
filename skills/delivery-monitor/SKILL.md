@@ -6,7 +6,7 @@ compatibility: "Requires Node 18+ and git. Automatic dispatch capture on Claude 
 metadata:
   authors:
     - Daniel Sallai <daniel_sallai@epam.com>
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # delivery-monitor — cycle time, cadence, estimate vs actual
@@ -20,12 +20,15 @@ defaults a missing number, and labels every proxy as a proxy.
 ```bash
 # 1. Register the plan (the tech-lead's plan file carries a ```json delivery-plan block)
 node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
-# 2. Bind this session (lets the hook attribute dispatches) and record transitions as they happen
-node .claude/skills/delivery-monitor/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1
+# 2. Record transitions as they happen. The hook binds a session to a run by itself when the working branch maps to exactly one
+#    item of exactly one open run (alias, title token or plan `branch_map`); `session set` is the manual override for ambiguity.
+node .claude/skills/delivery-monitor/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1   # optional
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 # 3. Fill in history that predates the ledger
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
+#    GitHub-merged work (squash/merge-commit PRs, task PRs into a mission branch): read merged PRs via gh, or offline from JSON
+node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --pr --plan sec/run-1 [--from-json prs.json] [--since <iso>] [--dry-run]
 # 4. Optional: automatic dispatch start/end on Claude Code (+ shared telemetry submodule)
 node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
 # 5. Read
@@ -34,5 +37,9 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--htm
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 ```
 
+Plans may carry `branch_prefix` and `branch_map` (`[{pattern, ref}]`, regex with named groups → ref template, e.g.
+`{"pattern": "-m(?<m>\\d+)-t(?<t>\\d+)$", "ref": "T{m}.{t}"}`) so branches like `feat/x-m1-t4` map to items without per-task aliases
+(`references/plan-block.md`). Use **one** backfill mode per run: `--git` and `--pr` stamp the same merge with different clocks.
+
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.
-Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-monitor-design.md`.
+Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.

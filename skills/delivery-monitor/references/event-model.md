@@ -21,7 +21,7 @@ read-time resolution order and source precedence.
 | `event` | one of the 18 below |
 | `transition_id` | stable occurrence token. CLI: `<item_id>/<event>/episode-1` for `done`/`cancelled`/`reopened` (one occurrence per episode), else `<item_id>/<event>/<token>` (`--id`); the hook uses `<item_id-or-'unattributed'>/<event>/<agent_id>`; `plan register` uses `<item_id>/created/0` and `<item_id>/estimated/rev-<n>` |
 | `source` | `cli \| automation-sync \| hook \| git` — who produced this observation (see precedence below) |
-| `source_record_id` | the producer's own retry/request token — `--id` on the CLI, `claude:<session>:<agent_id>` for the hook, the commit sha's own token for `backfill --git` |
+| `source_record_id` | the producer's own retry/request token — `--id` on the CLI, `claude:<session>:<agent_id>` for the hook, the merge commit sha's own token for `backfill --git`, `pr:<number>` for `backfill --pr` (the PR number; `meta` carries `pr`, `git_sha` = the PR's merge commit, `head_ref`, `base_ref`, `landing`) |
 | `observation_id` | `<source>:<source_record_id>:<item_id \| 'unattributed'>:<event>`, percent-encoded per segment (`observationId()`) — the identity a retry is checked against |
 | `revision` | integer ≥ 0; a correction is the same `observation_id` at a strictly higher revision, full replacement payload (never a diff) |
 | `status` | `active \| retracted` — retraction is simply the next revision with `status: retracted` |
@@ -120,3 +120,15 @@ The two CONFLICT kinds, both excluded from the report with no fallback:
 Both kinds are printed in the report's `## Coverage & caveats` / `Envelope` sections
 (`e.coverage.conflict_list`), one line per conflicting occurrence, with every `observation_id` that
 disputed it.
+
+## PR backfill and the one-mode rule
+
+`backfill --pr` and `backfill --git` both write `source: 'git'` observations for a merge, but with different
+clocks (PR `mergedAt` vs merge-commit time) and different `observation_id`s (`pr:<n>` vs the sha). Two same-rank
+observations that disagree on `at` for one occurrence are an `equal-rank-disagreement` CONFLICT and are
+quarantined — so backfill a given run with **one** mode. `--pr` is the right one for GitHub-merged work.
+
+PR mode emits only `done`: starts are never inferred, and PR creation is `time_to_merge`'s clock, not a
+`first_commit`. A PR is accepted when its base is the plan's `integration_ref` (a mission PR then carries
+`meta.landing: true` — the only landing evidence), or when its base associates to a plan mission and its head to a
+task of that mission (a task PR into a mission branch → task `done`, `landing: false`).
