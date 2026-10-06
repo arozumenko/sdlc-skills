@@ -21,6 +21,8 @@ acceptance semantics, re-cut mechanics, and the markdown importer's limits. A fi
      "estimate": {"unit": "h", "low": 1, "high": 3, "tier": "budgetary", "proposed_by": "tech-lead",
                   "proposed_at": "2026-09-16T08:00:00Z", "accepted_by": null, "accepted_at": null}}
   ]}],
+  "branch_prefix": "bookmark-polish",
+  "branch_map": [{"pattern": "-m(?<m>\\d+)-t(?<t>\\d+)$", "ref": "T{m}.{t}"}, {"pattern": "-m(?<m>\\d+)(?:-r\\d+)?$", "ref": "M{m}"}],
   "supersedes": {"run": "sec/run-0", "item_map": {"sec/run-0/task-task-021": "sec/run-1/task-task-023"}}
 }
 ```
@@ -40,6 +42,8 @@ plan); a file that parses as neither is treated as a markdown import candidate (
 | `campaign` | `{ref (required), item_id?, estimate?}` — the plan's single root item |
 | `missions[]` | `{ref (unique), sequence (unique positive int), item_id?, estimate?, tasks[]}` |
 | `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?}` |
+| `branch_prefix` | optional non-empty string **or** non-empty array of non-empty strings; a head ref must contain any of them (case-insensitive) for this run to be considered at all by branch/PR association. Use an array when a campaign spans two branch-naming eras |
+| `branch_map` | optional array of `{pattern, ref}`; `pattern` is a JS regex string (case-insensitive, named groups), `ref` a template (`T{m}.{t}`, `M{m}`) filled from the groups. Invalid regex or a non-string ref → `SCHEMA-INVALID`. Stored on the run and carried by every re-cut |
 | `supersedes` | optional `{run, item_map}` — see *Re-cut* below |
 
 Every `ref` (campaign, mission and task refs together) must be globally unique within one plan
@@ -160,3 +164,27 @@ register`); nothing is written until you pass `--yes`.
 - **`import` provenance**: `{basis: "markdown-import", task_count, group_count, source_sha256}` is
   attached to the produced block so a later report/audit can tell a markdown-imported plan from a
   hand-authored one.
+
+## Branch / PR association (`scripts/lib/associate.mjs`)
+
+Used by the hook's auto-binding and by `backfill --git` / `--pr`. Candidates are non-cancelled items; first
+**unambiguous** step wins, and ambiguity at any step is "no association" plus a note — never a guess:
+
+1. exact `branch` alias == head ref (case-insensitive);
+2. `branch_map`: the first entry whose pattern matches the head ref *and* whose expanded ref is an item of the plan;
+3. an item `ref` appears as a whole token in the PR title (task level before mission level).
+
+The branch outranks the title because titles routinely name neighbours ("M2 … follows M1"). An empty or ambiguous
+step falls through to the next; the "ambiguous" note survives only if every step fails.
+
+`branch_prefix`, when set, is checked first and gates all three steps. Example: with the map above and prefix
+`bookmark-polish`, `feat/bookmark-polish-m1-t4` → `T1.4`, `feat/bookmark-polish-m1` → `M1`,
+`feat/bookmark-polish-m2-r2` → `M2` (the `-r2` re-do suffix is ignorable by the pattern author, as here).
+
+**Backfill evidence.** `backfill --git` keeps the second-parent `<ref>:` commit-prefix rule for plain `merge <branch>`
+subjects. A GitHub `Merge pull request #N from <owner>/<branch>` commit whose branch matched by exact alias or
+`branch_map` is itself the evidence (conventional-commit repos never prefix commits with the ref).
+
+**Always set `branch_prefix` when refs are short** (`M8`, `T1.2`). The title step is repo-wide: without a prefix, an
+unrelated PR titled "… M8 …" on any branch is associated to this run's `M8`. The prefix is the only thing that scopes it.
+

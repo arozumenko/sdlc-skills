@@ -4,11 +4,12 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, factKey, makeObservation, resolveObservations } from './lib/events.mjs';
+import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
+import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
@@ -171,7 +172,7 @@ function cmdPlanRegister(repo, f, io, now) {
   for (const i of mergedItems) if (removedDeliveredIds.has(i.item_id)) { i.cancelled = false; i.removed_delivered = true; }
   const rec = {
     run: runId, campaign_id: full.campaign_id, run_id: full.run_id, version: full.version, factory: full.factory, status: 'open',
-    registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind,
+    registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind, branch_map: full.branch_map ?? null, branch_prefix: full.branch_prefix ?? null,
     source: { path: file, rel, sha256: sha256(text), head: sourceHead }, canonical_sha256: canonicalHash(full), roster,
     import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergedItems,
     versions: [...(prev?.versions ?? []), { version: full.version, at, keep_missing: keepMissing, canonical_sha256: canonicalHash(full), items: next }],
@@ -391,28 +392,58 @@ function cmdStatus(repo, p, io, now) {
  * cliError → exit 2. */
 function cmdBackfill(repo, p, io, now) {
   const f = p.flags;
-  if (!f.git) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run]');
-  if (f.pr) throw cliError('USAGE', '--pr is not in M1');
+  if (f.git && f.pr) throw cliError('USAGE', '--git and --pr are exclusive');
+  if (!f.git && !f.pr) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run] | backfill --pr --plan <run> [--from-json <file>] [--since] [--cutoff] [--dry-run]');
   const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
   const run = resolveRun(repo, planFlag);
-  const headFlag = f.head != null ? requireValue(f, 'head') : null;
-  if (!headFlag) throw cliError('USAGE', 'backfill needs --head <sha> on the integration ref');
-  const head = git(repo, ['rev-parse', '--verify', `${headFlag}^{commit}`]);
-  if (!head) throw cliError('USAGE', `head ${headFlag} not found`);
   const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
   const cutoff = f.cutoff != null ? isoOrThrow(requireValue(f, 'cutoff'), '--cutoff') : nowIso(now);
-  const { records, notes, skippedOutsideEpoch } = deriveGitObservations({ repo, run, head, since, cutoff, now });
+  let derived, head = null, truncated = false;
+  if (f.pr) {
+    // PR mode (spec §6.7): merged PRs from `gh` (or --from-json offline); nothing is pinned to a head sha.
+    let prs;
+    if (f['from-json'] != null) { const file = resolve(repo, requireValue(f, 'from-json')); requireFile(file); try { prs = JSON.parse(readFileSync(file, 'utf8')); } catch { throw cliError('USAGE', `${file}: invalid json`); } if (!Array.isArray(prs)) throw cliError('USAGE', `${file}: expected a JSON array of PRs`); }
+    else { prs = readMergedPrs(repo, io.gh ? { exec: io.gh } : {}); truncated = prs.length >= PR_LIMIT; }
+    derived = derivePrObservations({ run, prs, since, cutoff, now });
+  } else {
+    const headFlag = f.head != null ? requireValue(f, 'head') : null;
+    if (!headFlag) throw cliError('USAGE', 'backfill needs --head <sha> on the integration ref');
+    head = git(repo, ['rev-parse', '--verify', `${headFlag}^{commit}`]);
+    if (!head) throw cliError('USAGE', `head ${headFlag} not found`);
+    derived = deriveGitObservations({ repo, run, head, since, cutoff, now });
+  }
+  const { records, notes, skippedOutsideEpoch } = derived;
   for (const n of notes) out(io, `NOTE ${n}`);
-  let events = 0, skipped = 0, conflicts = 0;
-  for (const r of records) {
+  // D4: PR backfill reconciles its own prior output — an active `git` `pr:*` observation of this run that the current derivation no longer
+  // yields (a re-cut moved the first landing, or an association disappeared) is retracted at revision+1, never left to collide on its
+  // transition. Only a full derivation may retract: --since/--cutoff see a partial window. cli/hook/automation-sync and commit-based git
+  // observations are never candidates.
+  let events = 0, skipped = 0, conflicts = 0, retracted = 0;
+  const top = new Map(); for (const { rec } of readRaw(repo).lines) { const c = top.get(rec.observation_id); if (!c || rec.revision > c.revision) top.set(rec.observation_id, rec); }
+  if (f.pr) {
+    if (f.since != null || f.cutoff != null) out(io, 'NOTE reconciliation skipped: --since/--cutoff derive a partial window, so nothing is retracted');
+    else if (truncated) out(io, `NOTE reconciliation skipped: gh returned ${PR_LIMIT} PRs (its --limit), so the list may be truncated and nothing is retracted; pass a complete list with --from-json to reconcile`);
+    else {
+      const keep = new Set(records.map((r) => r.observation_id));
+      for (const o of resolveObservations(repo).active) {
+        if (o.plan !== run.run || o.source !== 'git' || !String(o.source_record_id).startsWith('pr:') || keep.has(o.observation_id)) continue;
+        if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.at}`); continue; }
+        const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+        out(io, `RETRACT ${o.observation_id} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++; else conflicts++;
+      }
+    }
+  }
+  for (const r0 of records) {
+    // A derived observation whose id was previously retracted is revived at the next revision rather than SKIPped against the old rev 0.
+    const prev = top.get(r0.observation_id), r = prev && prev.status === 'retracted' ? { ...r0, revision: prev.revision + 1 } : r0;
     if (f['dry-run']) { out(io, `WOULD ${r.observation_id} ${r.at}`); continue; }
     const res = appendObservation(repo, r, { now });
     out(io, `${res.result} ${res.observation_id} ${r.at}`);
     if (res.result === 'EVENT') events++; else if (res.result === 'SKIP') skipped++; else conflicts++;
   }
-  if (!f['dry-run']) { run.backfill = { head, at: nowIso(now) }; saveRun(repo, run); }
-  out(io, `BACKFILL events=${events} skipped=${skipped} conflicts=${conflicts} outside_epoch=${skippedOutsideEpoch} head=${head}`);
-  if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} git observation(s) conflict`);
+  if (!f['dry-run']) { run.backfill = f.pr ? { mode: 'pr', at: nowIso(now) } : { head, at: nowIso(now) }; saveRun(repo, run); }
+  out(io, `BACKFILL events=${events} skipped=${skipped} conflicts=${conflicts} outside_epoch=${skippedOutsideEpoch}${f.pr ? ` retracted=${retracted}` : ''}${head ? ` head=${head}` : ' mode=pr'}`);
+  if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} ${f.pr ? 'PR' : 'git'} observation(s) conflict`);
   return 0;
 }
 
@@ -427,13 +458,13 @@ function cmdDoctor(repo, p, io) {
 export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
 
-export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
-  const io = { stdout, stderr }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];
+export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env, gh = null } = {}) {
+  const io = { stdout, stderr, gh }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];
   if (!fn) { stderr.write(`USAGE(unknown command ${p.cmd ?? ''}; expected ${Object.keys(COMMANDS).join('|')})\n`); return 2; }
   let code = 1;
   try { code = await fn(repo, p, io, now); }
   catch (e) { if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
-  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
+  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
 // Task 10: `process.exit(c)` right after an async `main()` resolves races Node's own async stdout

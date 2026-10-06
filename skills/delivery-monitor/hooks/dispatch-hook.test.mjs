@@ -216,3 +216,61 @@ test('script: malformed stdin / missing fields → exit 0, no stdout, no files',
   assert.deepEqual(after, before);
   assert.deepEqual(after.filter((f) => f.startsWith('events-') || f.startsWith('diagnostics-')), []);
 });
+
+const diagLines = (repo) => readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')).flatMap((f) => readFileSync(join(deliveryDir(repo), f), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)));
+const gitRepoOnBranch = (branch) => { const d = tmp(); const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' }; execFileSync('git', ['init', '-q', '-b', branch], { cwd: d }); execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'x'], { cwd: d, env }); return d; };
+
+test('F2: unbound-session / invalid-roster diagnostics are written once per (session, kind), not once per subagent', () => {
+  const repo = setup({ bind: false });
+  for (const n of [1, 2, 3]) handleStop(payload(transcripts({ agentId: `agent-${n}` }), { agent_id: `agent-${n}` }), { repo, now: NOW });
+  assert.deepEqual(diagLines(repo).map((d) => [d.kind, d.session]), [['unbound-session', 'sess-1']]);
+  handleStop(payload(transcripts({ session: 'sess-2' }), { session_id: 'sess-2' }), { repo, now: NOW });
+  assert.equal(diagLines(repo).length, 2, 'a different session is a new (session, kind)');
+  const bad = setup(); const r = loadRun(bad, R); saveRun(bad, { ...r, roster: { agents: 'broken' } });
+  for (const n of [1, 2]) handleStop(payload(transcripts({ agentId: `agent-${n}` }), { agent_id: `agent-${n}` }), { repo: bad, now: NOW });
+  assert.deepEqual(diagLines(bad).map((d) => d.kind), ['invalid-roster']);
+});
+test('F2: other diagnostic kinds keep per-agent behaviour', () => {
+  const repo = setup();
+  for (const n of [1, 2]) handleStop(payload(transcripts({ agentId: `agent-${n}`, agentType: null }), { agent_id: `agent-${n}` }), { repo, now: NOW });
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'unknown-role').length, 2);
+});
+test('F2: dedupe scans only a bounded tail of a huge diagnostics file and still finds a recent entry', () => {
+  const repo = setup({ bind: false }); mkdirSync(deliveryDir(repo), { recursive: true });
+  const filler = `${JSON.stringify({ at: 'x', kind: 'no-transcript', session: 'other', agent_id: 'a', detail: 'd' })}\n`.repeat(40000);
+  const slug = readdirSync(deliveryDir(repo)).length; void slug;
+  handleStop(payload(transcripts()), { repo, now: NOW });
+  const file = join(deliveryDir(repo), readdirSync(deliveryDir(repo)).find((f) => f.startsWith('diagnostics-')));
+  writeFileSync(file, `${readFileSync(file, 'utf8')}${filler}`);
+  handleStop(payload(transcripts({ agentId: 'agent-9' }), { agent_id: 'agent-9' }), { repo, now: NOW });
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'unbound-session').length, 2, 'the first entry rolled out of the bounded tail, so a fresh one is written once — bounded, never unbounded');
+  handleStop(payload(transcripts({ agentId: 'agent-10' }), { agent_id: 'agent-10' }), { repo, now: NOW });
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'unbound-session').length, 2, 'and then deduped again');
+});
+
+test('F3: an unbound session auto-binds when the working branch maps to exactly one item of exactly one open run', () => {
+  const repo = setup({ bind: false }); const cwd = gitRepoOnBranch('task/task-023');
+  const res = handleStop(payload(transcripts(), { cwd }), { repo, now: NOW });
+  assert.equal(res.diagnostic, null); assert.equal(res.wrote.length, 2);
+  const bound = JSON.parse(readFileSync(sessionPath(repo, 'claude', 'sess-1'), 'utf8'));
+  assert.deepEqual({ host: bound.host, session: bound.session, plan: bound.plan, bound_by: bound.bound_by }, { host: 'claude', session: 'sess-1', plan: R, bound_by: 'branch' }); assert.ok(bound.at);
+  assert.equal(diagLines(repo).length, 0);
+  // the binding persists: a later stop with a cwd that maps to nothing still uses it
+  assert.equal(handleStop(payload(transcripts({ agentId: 'agent-2' }), { agent_id: 'agent-2', cwd: tmp() }), { repo, now: NOW }).wrote.length, 2);
+});
+test('F3: no branch match, an ambiguous match across runs, or no cwd → no binding, deduped unbound diagnostic', () => {
+  const none = setup({ bind: false }); handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('feat/unrelated') }), { repo: none, now: NOW });
+  assert.equal(existsSync(sessionPath(none, 'claude', 'sess-1')), false); assert.deepEqual(diagLines(none).map((d) => d.kind), ['unbound-session']);
+  const two = setup({ bind: false }); const r1 = loadRun(two, R); saveRun(two, { ...r1, run: 'sec/run-2', run_id: 'run-2', items: r1.items.map((i) => ({ ...i, item_id: i.item_id.replace(R, 'sec/run-2') })) });
+  handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('task/task-023') }), { repo: two, now: NOW });
+  assert.equal(existsSync(sessionPath(two, 'claude', 'sess-1')), false, 'two open runs claim the branch — never guess'); assert.equal(diagLines(two).length, 1);
+  const nocwd = setup({ bind: false }); handleStop(payload(transcripts()), { repo: nocwd, now: NOW }); assert.equal(existsSync(sessionPath(nocwd, 'claude', 'sess-1')), false);
+});
+test('F3: branch_map binding works for a run with a prefix; a closed run is never a binding candidate', () => {
+  const repo = setup({ bind: false }); const r = loadRun(repo, R);
+  saveRun(repo, { ...r, branch_prefix: 'bp', branch_map: [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'TASK-0{m}{t}' }] });
+  handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('feat/bp-m2-t3') }), { repo, now: NOW });
+  assert.equal(JSON.parse(readFileSync(sessionPath(repo, 'claude', 'sess-1'), 'utf8')).plan, R);
+  const closed = setup({ bind: false }); saveRun(closed, { ...loadRun(closed, R), status: 'closed' });
+  assert.equal(handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('task/task-023') }), { repo: closed, now: NOW }).diagnostic, null, 'no open run → nothing at all');
+});

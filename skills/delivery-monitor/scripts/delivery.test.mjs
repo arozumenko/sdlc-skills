@@ -9,6 +9,7 @@ import { main, parseArgs, validateTransition } from './delivery.mjs';
 import { deliveryDir, runPath } from './lib/paths.mjs';
 import { resolveObservations } from './lib/events.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
+import { PR_LIMIT } from './lib/pr-backfill.mjs';
 import { buildFixtureRepo } from './lib/git-fixtures.mjs';
 
 const CLI = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
@@ -584,11 +585,14 @@ test('F20: backfill --git input guards all exit 2 (USAGE) — --pr, missing/bare
   git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', 'init'); // initRepo() itself makes no commit — need a resolvable HEAD
   const head = git(repo, 'rev-parse', 'HEAD');
 
-  const noGit = run(repo, ['backfill', '--pr']);
-  assert.equal(noGit.code, 2, noGit.stderr); assert.match(noGit.stderr, /^USAGE\(/);
+  const neither = run(repo, ['backfill']);
+  assert.equal(neither.code, 2, neither.stderr); assert.match(neither.stderr, /^USAGE\(backfill --git /);
 
-  const pr = run(repo, ['backfill', '--git', '--pr']);
-  assert.equal(pr.code, 2, pr.stderr); assert.match(pr.stderr, /^USAGE\(--pr is not in M1/);
+  const both = run(repo, ['backfill', '--git', '--pr']);
+  assert.equal(both.code, 2, both.stderr); assert.match(both.stderr, /^USAGE\(--git and --pr are exclusive/);
+
+  const badJson = run(repo, ['backfill', '--pr', '--from-json', join(repo, 'nope.json')]);
+  assert.equal(badJson.code, 2, badJson.stderr); assert.match(badJson.stderr, /^USAGE\(no such file/);
 
   const noHead = run(repo, ['backfill', '--git']);
   assert.equal(noHead.code, 2, noHead.stderr); assert.match(noHead.stderr, /^USAGE\(backfill needs --head/);
@@ -634,4 +638,75 @@ test('minor: backfill --git --dry-run prints WOULD lines and never writes run.ba
   const rec = JSON.parse(readFileSync(runPath(fx.repo, 'sec/run-1'), 'utf8'));
   assert.equal(rec.backfill, undefined, 'dry-run never writes run.backfill');
   assert.equal(resolveObservations(fx.repo).active.length, registeredCount, 'dry-run leaves the ledger exactly as registration left it');
+});
+
+// F4: PR-mode backfill through the CLI — both shapes (task PR into a mission branch, mission PR into main), offline via --from-json.
+test('backfill --pr --from-json: task PRs into the mission branch give task done, the mission PR gives landing; idempotent; --dry-run writes nothing; plan carries branch_map', () => {
+  const repo = initRepo();
+  const p = plan(1, [{ ref: 'T1.3' }, { ref: 'T1.4' }]); p.missions[0].ref = 'M1';
+  p.branch_prefix = 'bookmark-polish'; p.branch_map = [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'T{m}.{t}' }, { pattern: '-m(?<m>\\d+)(?:-r\\d+)?$', ref: 'M{m}' }];
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, p), '--id', 'reg-1']).code, 0);
+  const rec = JSON.parse(readFileSync(runPath(repo, 'sec/run-1'), 'utf8')); assert.equal(rec.branch_prefix, 'bookmark-polish'); assert.equal(rec.branch_map.length, 2);
+  const mk = (number, head, base, mergedAt) => ({ number, title: `PR ${number}`, headRefName: head, baseRefName: base, createdAt: '2026-09-17T00:00:00Z', mergedAt, mergeCommit: { oid: `sha${number}` }, url: `u${number}` });
+  const f = join(repo, 'prs.json'); writeFileSync(f, JSON.stringify([mk(1, 'feat/bookmark-polish-m1-t3', 'feat/bookmark-polish-m1', '2026-09-18T10:00:00Z'), mk(2, 'feat/bookmark-polish-m1-t4', 'feat/bookmark-polish-m1', '2026-09-19T10:00:00Z'), mk(3, 'feat/bookmark-polish-m1', 'main', '2026-09-20T10:00:00Z'), mk(4, 'feat/unrelated', 'main', '2026-09-20T11:00:00Z')]));
+  const before = resolveObservations(repo).active.length;
+  const dry = run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z', '--dry-run']);
+  assert.equal(dry.code, 0, dry.stderr); assert.equal((dry.stdout.match(/^WOULD /gm) ?? []).length, 3); assert.match(dry.stdout, /NOTE PR #4/); assert.equal(resolveObservations(repo).active.length, before);
+  const a = run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z']);
+  assert.equal(a.code, 0, a.stderr); assert.match(a.stdout, /BACKFILL events=3 skipped=0 conflicts=0/);
+  const done = resolveObservations(repo).active.filter((o) => o.event === 'done');
+  assert.deepEqual(done.map((o) => o.ref).sort(), ['M1', 'T1.3', 'T1.4']); assert.ok(done.every((o) => o.source === 'git' && /^pr:\d$/.test(o.source_record_id)));
+  assert.match(run(repo, ['backfill', '--pr', '--from-json', f, '--cutoff', '2026-12-31T00:00:00Z']).stdout, /BACKFILL events=0 skipped=3 conflicts=0/);
+});
+
+// D4: `backfill --pr` reconciles its own prior output (a re-cut can change which PR is the first landing).
+const prRec = (number, head, base, mergedAt, title = `PR ${number}`) => ({ number, title, headRefName: head, baseRefName: base, createdAt: '2026-09-17T00:00:00Z', mergedAt, mergeCommit: { oid: `sha${number}` }, url: `u${number}` });
+const prSetup = (extra = {}) => {
+  const repo = initRepo(); const p = plan(1, [{ ref: 'T1.1' }]); p.missions[0].ref = 'M1'; Object.assign(p, { branch_map: [{ pattern: 'new-era-m(?<m>\\d+)$', ref: 'M{m}' }] }, extra);
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, p), '--id', 'reg-1']).code, 0);
+  return { repo, p };
+};
+let recutN = 0;
+const recut = (repo, p, patch) => { const v2 = { ...p, version: 2, ...patch }; const r = run(repo, ['plan', 'register', '--from', writePlan(repo, v2, `p${++recutN}.md`), '--id', `reg-r${recutN}`, '--at', `2026-09-2${recutN}T00:00:00Z`]); assert.equal(r.code, 0, r.stderr); };
+const pr$ = (repo, prs, extra = []) => { const f = join(repo, 'prs.json'); writeFileSync(f, JSON.stringify(prs)); return run(repo, ['backfill', '--pr', '--from-json', f, ...extra]); };
+const activePr = (repo) => resolveObservations(repo).active.filter((o) => o.source === 'git' && o.source_record_id.startsWith('pr:'));
+
+test('D4: re-cut derives an earlier first landing (#267) than the one already recorded (#644) → the old one is retracted, zero conflicts, idempotent after', () => {
+  const { repo, p } = prSetup();
+  const late = prRec(644, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'), early = prRec(267, 'feat/old-era-m1', 'main', '2026-09-18T00:00:00Z');
+  const a = pr$(repo, [late, early]); assert.match(a.stdout, /BACKFILL events=1 .*retracted=0/); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:644']);
+  recut(repo, p, { branch_map: [{ pattern: '(?:new|old)-era-m(?<m>\\d+)$', ref: 'M{m}' }] });
+  const dry = pr$(repo, [late, early], ['--dry-run']); assert.match(dry.stdout, /^WOULD-RETRACT .*pr%3A644/m); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:644'], 'dry-run writes nothing');
+  const b = pr$(repo, [late, early]); assert.equal(b.code, 0, b.stderr); assert.match(b.stdout, /BACKFILL events=1 .*conflicts=0.*retracted=1/);
+  const res = resolveObservations(repo); assert.equal(res.conflicts.length, 0); assert.deepEqual(activePr(repo).map((o) => o.source_record_id), ['pr:267']);
+  assert.match(pr$(repo, [late, early]).stdout, /BACKFILL events=0 skipped=1 conflicts=0.*retracted=0/, 'second run retracts nothing');
+});
+test('D4: an association that disappears (title-matched before a branch_prefix re-cut) is retracted; cli observations are never touched', () => {
+  const { repo, p } = prSetup({ branch_map: [] });
+  assert.equal(run(repo, ['event', 'T1.1', 'dispatched', '--id', 'd1', '--at', '2026-09-17T00:00:00Z']).code, 0);
+  const cliBefore = resolveObservations(repo).active.filter((o) => o.source === 'cli').map((o) => o.observation_id).sort();
+  const stray = prRec(476, 'chore/board-replay-a-buffering-carry', 'main', '2026-09-25T00:00:00Z', 'board: M1 carry');
+  pr$(repo, [stray]); assert.deepEqual(activePr(repo).map((o) => o.ref), ['M1']);
+  recut(repo, p, { branch_prefix: ['lm-deferred'] });
+  const r = pr$(repo, [stray]); assert.match(r.stdout, /BACKFILL events=0 .*retracted=1/); assert.deepEqual(activePr(repo), []);
+  assert.deepEqual(resolveObservations(repo).active.filter((o) => o.source === 'cli').map((o) => o.observation_id).sort(), cliBefore);
+});
+test('D4: with --since or --cutoff reconciliation is skipped with a NOTE; a retracted observation whose PR associates again is revived', () => {
+  const { repo, p } = prSetup();
+  const pr1 = prRec(5, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'); pr$(repo, [pr1]);
+  recut(repo, p, { branch_map: [] });
+  for (const flag of [['--since', '2026-09-01T00:00:00Z'], ['--cutoff', '2026-12-31T00:00:00Z']]) { const s = pr$(repo, [pr1], flag); assert.match(s.stdout, /NOTE .*reconciliation skipped/); assert.match(s.stdout, /retracted=0/); assert.equal(activePr(repo).length, 1); }
+  assert.match(pr$(repo, [pr1]).stdout, /retracted=1/); assert.equal(activePr(repo).length, 0);
+  recut(repo, { ...p, version: 2 }, { version: 3, branch_map: [{ pattern: 'new-era-m(?<m>\\d+)$', ref: 'M{m}' }] });
+  const back = pr$(repo, [pr1]); assert.match(back.stdout, /BACKFILL events=1 /); assert.equal(activePr(repo).length, 1, 'revived at a higher revision');
+  assert.equal(resolveObservations(repo).conflicts.length, 0);
+});
+test('D4: a gh PR list that reaches the --limit cap may be truncated, so reconciliation is skipped rather than retracting valid observations', async () => {
+  const { repo, p } = prSetup();
+  const pr1 = prRec(5, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'); pr$(repo, [pr1]);
+  recut(repo, p, { branch_map: [] });
+  const filler = Array.from({ length: PR_LIMIT }, (_, i) => prRec(10000 + i, `feat/unrelated-${i}`, 'main', '2026-09-26T00:00:00Z'));
+  let buf = ''; const sink = { write: (s) => { buf += s; } };
+  const code = await main(['backfill', '--pr'], { repo, stdout: sink, stderr: sink, env: { ...process.env, DELIVERY_NO_SYNC: '1' }, gh: () => JSON.stringify(filler) });
+  assert.equal(code, 0); assert.match(buf, /NOTE reconciliation skipped: .*limit/); assert.match(buf, /retracted=0/); assert.equal(activePr(repo).length, 1, 'the earlier observation survives');
 });

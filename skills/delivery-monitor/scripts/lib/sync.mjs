@@ -14,6 +14,10 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
   const state = gitState(tel);
   if (state.unmerged.length || state.merging) return { synced: false, reason: `unresolved merge in ${tel} — fix manually (delivery.mjs doctor)` };
   try {
+    // Diagnostics are capture noise: a tree whose only changes are delivery/diagnostics-*.jsonl is never committed or pushed
+    // (they ride along with the next real change). `-uall` lists untracked files individually, not as a collapsed directory.
+    const changed = g('status', '--porcelain', '-uall').split('\n').filter(Boolean).map((l) => { const p = l.replace(/^\s*\S+\s+/, ''); return p.includes(' -> ') ? p.split(' -> ')[1] : p; });
+    if (changed.length && changed.every((p) => /(^|\/)delivery\/diagnostics-[^/]*\.jsonl$/.test(p.replace(/^"|"$/g, '')))) return { synced: false, reason: 'diagnostics-only' };
     g('add', '-A');
     if (g('status', '--porcelain')) g('commit', '-q', '-m', `delivery-monitor: ${new Date().toISOString()}`);
     if (!g('remote')) return { synced: true, reason: 'no remote (local telemetry branch only)' };

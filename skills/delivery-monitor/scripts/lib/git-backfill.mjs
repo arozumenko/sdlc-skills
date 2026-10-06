@@ -1,7 +1,8 @@
-// STDLIB ONLY. Derive observations from a pinned integration head (spec §6.7, local-branch mode). PR mode is M2.
+// STDLIB ONLY. Derive observations from a pinned integration head (spec §6.7, local-branch mode). PR mode lives in pr-backfill.mjs.
 import { makeObservation } from './events.mjs';
 import { firstCommitContaining, git, isAncestor } from './git.mjs';
 import { cliError } from './paths.mjs';
+import { associate } from './associate.mjs';
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -14,15 +15,21 @@ export function gitLog(repo, args) {
   });
 }
 
-export function matchMergeSubject(subject, run) {
+/** `{item, direct}` for a merge-commit subject. `direct` = a GitHub "Merge pull request #N from owner/branch" whose branch
+ * associated by exact alias or plan branch_map (lib/associate.mjs) — the PR merge itself is then the done evidence, so the
+ * second-parent `<ref>:` commit-prefix check is waived (conventional-commit repos never use that prefix). */
+export function matchMerge(subject, run) {
+  const pr = /^merge pull request #\d+ from ([^\s/]+)\/(\S+)/i.exec(subject);
+  if (pr) { const a = associate(run, { head: pr[2], levels: ['task'] }); return { item: a.items[0] ?? null, direct: a.items.length === 1 && ['alias', 'branch_map'].includes(a.how) }; }
   const m = /^merge\s+(\S+)/i.exec(subject);
-  if (!m) return null;
+  if (!m) return { item: null, direct: false };
   const branch = m[1].toLowerCase();
   const byAlias = run.items.find((i) => i.branch && i.branch.toLowerCase() === branch);
-  if (byAlias) return byAlias;
+  if (byAlias) return { item: byAlias, direct: false };
   const t = /^task\/task-(\d+)$/.exec(branch);
-  return t ? run.items.find((i) => i.ref === `TASK-${t[1]}`) ?? null : null;
+  return { item: t ? run.items.find((i) => i.ref === `TASK-${t[1]}`) ?? null : null, direct: false };
 }
+export const matchMergeSubject = (subject, run) => matchMerge(subject, run).item;
 
 /**
  * Local-branch backfill (spec §6.7). Two independent gates, deliberately never conflated (obligation
@@ -94,12 +101,12 @@ export function deriveGitObservations({ repo, run, head, since = null, cutoff = 
 
   const done = new Set();
   for (const c of gitLog(repo, ['--first-parent', '--merges', '--reverse', head])) {
-    const it = matchMergeSubject(c.subject, run);
+    const { item: it, direct } = matchMerge(c.subject, run);
     if (!it || !eligibleIds.has(it.item_id) || c.parents.length < 2) continue;
     // F14: eligibility (episode-1 selection) uses the epoch/cutoff gate only — `--since` is applied
     // below, after the done set has already decided who is episode-1.
     if (!inEpoch(c.at)) continue;
-    const evidence = (git(repo, ['log', '--no-merges', '--format=%s', c.parents[1], `^${c.parents[0]}`]) ?? '').split('\n').some((s) => s.startsWith(`${it.ref}:`));
+    const evidence = direct || (git(repo, ['log', '--no-merges', '--format=%s', c.parents[1], `^${c.parents[0]}`]) ?? '').split('\n').some((s) => s.startsWith(`${it.ref}:`));
     if (!evidence) { notes.push(`merge ${c.sha.slice(0, 7)} for ${it.ref} lacks second-parent evidence; skipped`); continue; }
     if (done.has(it.item_id)) { notes.push(`later merge ${c.sha.slice(0, 7)} for ${it.ref} needs explicit reopen evidence (M2); skipped`); continue; }
     done.add(it.item_id);

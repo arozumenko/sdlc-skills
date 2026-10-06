@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { deriveGitObservations, matchMergeSubject } from './git-backfill.mjs';
-import { buildFixtureRepo, buildNoEvidenceRepo } from './git-fixtures.mjs';
+import { buildFixtureRepo, buildNoEvidenceRepo, mkGit } from './git-fixtures.mjs';
 
 const run = (repo, from = '2026-09-15T00:00:00Z', integrationRef = 'main') => ({ run: 'sec/run-1', version: 1, source: { path: join(repo, 'plan.md'), rel: 'plan.md' }, source_epoch: { from, until: null, integration_ref: integrationRef }, items: [
   { item_id: 'sec/run-1/task-task-001', ref: 'TASK-001', level: 'task', branch: 'task/task-001' }, { item_id: 'sec/run-1/task-task-002', ref: 'TASK-002', level: 'task', branch: 'task/task-002' },
@@ -89,4 +91,32 @@ test('review fix: a cancelled task whose branch is still merged yields no record
   cancelledRun.items.find((i) => i.ref === 'TASK-002').cancelled = true;
   const { records } = deriveGitObservations({ repo, run: cancelledRun, head, cutoff: '2026-12-31T00:00:00Z' });
   assert.equal(records.filter((r) => r.ref === 'TASK-002').length, 0, 'a cancelled item is ineligible for every git-derived event, including done, even though its branch was merged');
+});
+
+test('matchMergeSubject: GitHub "Merge pull request #N from owner/branch" parses the branch, not "pull"', () => {
+  const r = run('/x');
+  assert.equal(matchMergeSubject('Merge pull request #661 from aquanautica/task/task-001', r).ref, 'TASK-001');
+  assert.equal(matchMergeSubject('Merge pull request #661 from aquanautica/feat/unrelated', r), null);
+  const mapped = { ...run('/x'), branch_prefix: 'bp', branch_map: [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'TASK-00{t}' }] };
+  assert.equal(matchMergeSubject('Merge pull request #7 from org/feat/bp-m1-t2', mapped).ref, 'TASK-002');
+});
+
+test('deriveGitObservations: GitHub PR merge commits with conventional-commit history; the PR merge is the evidence when branch alias/map matched', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'dm-gh-')); const git = mkGit('2026-09-15T08:00:00Z');
+  git(repo, ['init', '-q', '-b', 'main'], 0); writeFileSync(join(repo, 'plan.md'), '#### TASK-001: a\n#### TASK-002: b\n#### TASK-003: c\n'); git(repo, ['add', 'plan.md']); git(repo, ['commit', '-q', '-m', 'plan'], 0);
+  const land = (branch, n, file) => { git(repo, ['checkout', '-q', '-b', branch, 'main'], 0); writeFileSync(join(repo, file), file); git(repo, ['add', file]); git(repo, ['commit', '-q', '-m', 'feat: conventional commit, no ref prefix'], 30); git(repo, ['checkout', '-q', 'main'], 0); git(repo, ['merge', '--no-ff', '-q', '-m', `Merge pull request #${n} from org/${branch}`, branch], 20); };
+  land('feat/bp-m1-t1', 11, 'a.txt'); land('task/task-002', 12, 'b.txt'); land('feat/unrelated', 13, 'c.txt');
+  const head = git(repo, ['rev-parse', 'HEAD'], 0);
+  const r = { ...run(repo), branch_prefix: 'bp', branch_map: [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'TASK-00{t}' }] };
+  const { records } = deriveGitObservations({ repo, run: r, head, cutoff: '2026-12-31T00:00:00Z' });
+  const done = records.filter((x) => x.event === 'done');
+  assert.deepEqual(done.map((x) => x.ref).sort(), ['TASK-001']);
+  // task/task-002 lacks the branch_prefix gate → not associated (run is gated), so it is not done either
+  const open = deriveGitObservations({ repo, run: run(repo), head, cutoff: '2026-12-31T00:00:00Z' }).records.filter((x) => x.event === 'done');
+  assert.deepEqual(open.map((x) => x.ref), ['TASK-002'], 'exact alias + PR merge subject is its own evidence');
+});
+
+test('deriveGitObservations: a plain `merge <alias>` subject still needs second-parent evidence even with an exact alias', () => {
+  const { repo, head } = buildNoEvidenceRepo();
+  assert.equal(deriveGitObservations({ repo, run: run(repo), head, cutoff: '2026-12-31T00:00:00Z' }).records.filter((x) => x.event === 'done').length, 0);
 });

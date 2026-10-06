@@ -74,6 +74,15 @@ export function validatePlan(p) {
       if (t.estimate) errs.push(...validateEstimate(t.estimate, `task ${t.ref}.estimate`));
     }
   }
+  if (p.branch_prefix != null && !(typeof p.branch_prefix === 'string' ? p.branch_prefix : Array.isArray(p.branch_prefix) && p.branch_prefix.length && p.branch_prefix.every((x) => typeof x === 'string' && x))) errs.push('branch_prefix must be a non-empty string or a non-empty array of non-empty strings');
+  if (p.branch_map != null) {
+    if (!Array.isArray(p.branch_map)) errs.push('branch_map must be an array');
+    else p.branch_map.forEach((e, i) => {
+      if (!isPlainObject(e)) { errs.push(`branch_map[${i}] must be an object`); return; }
+      if (typeof e.pattern !== 'string' || !e.pattern) errs.push(`branch_map[${i}].pattern required (regex string)`); else { try { new RegExp(e.pattern, 'i'); } catch { errs.push(`branch_map[${i}].pattern is not a valid regex`); } }
+      if (typeof e.ref !== 'string' || !e.ref) errs.push(`branch_map[${i}].ref required (template like T{m}.{t})`);
+    });
+  }
   if (p.supersedes != null) {
     const sp = isPlainObject(p.supersedes) ? p.supersedes : {};
     if (!isPlainObject(p.supersedes)) errs.push('supersedes must be an object');
