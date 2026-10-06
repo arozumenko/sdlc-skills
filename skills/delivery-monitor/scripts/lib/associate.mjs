@@ -9,18 +9,19 @@ const pick = (list, how) => (list.length === 1 ? { items: list, how, note: null 
 export function associate(run, { head = null, title = null, levels = ['task', 'mission'] } = {}) {
   const cand = (run.items ?? []).filter((i) => levels.includes(i.level) && !i.cancelled);
   if (run.branch_prefix && !(head ?? '').toLowerCase().includes(String(run.branch_prefix).toLowerCase())) return none(null, `head ${head} does not contain branch_prefix ${run.branch_prefix}`);
+  // Order (D1): alias → branch_map → title token. An empty or ambiguous step falls through to the next; the ambiguity note survives
+  // only if every step fails. The branch is the stronger signal: a title routinely names neighbouring items ("M2 … follows M1").
+  const notes = [], step = (list, how) => { const r = pick(list, how); if (r && r.items.length) return r; if (r) notes.push(r.note); return null; };
   const h = (head ?? '').toLowerCase();
-  if (h) { const r = pick(cand.filter((i) => i.branch && i.branch.toLowerCase() === h), 'alias'); if (r) return r; }
-  if (title) {
-    for (const lv of levels) { const r = pick(cand.filter((i) => i.level === lv && wordHit(title, i.ref)), 'title'); if (r) return r; }
-  }
+  if (h) { const r = step(cand.filter((i) => i.branch && i.branch.toLowerCase() === h), 'alias'); if (r) return r; }
   if (head && Array.isArray(run.branch_map)) {
     for (const e of run.branch_map) {
       let m; try { m = new RegExp(e.pattern, 'i').exec(head); } catch { continue; }
       if (!m) continue;
       const ref = expandRef(e.ref, m.groups); if (!ref) continue;
-      const r = pick(cand.filter((i) => i.ref.toLowerCase() === ref.toLowerCase()), 'branch_map'); if (r) return r;
+      const r = step(cand.filter((i) => i.ref.toLowerCase() === ref.toLowerCase()), 'branch_map'); if (r) return r;
     }
   }
-  return none(null, null);
+  if (title) for (const lv of levels) { const r = step(cand.filter((i) => i.level === lv && wordHit(title, i.ref)), 'title'); if (r) return r; }
+  return notes.length ? none('ambiguous', notes.join('; ')) : none(null, null);
 }

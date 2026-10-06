@@ -39,3 +39,15 @@ test('validatePlan: branch_map / branch_prefix shape', () => {
   assert.ok(validatePlan({ ...base, branch_map: [{ pattern: 'a' }] }).some((e) => /branch_map\[0\]\.ref/.test(e)));
   assert.ok(validatePlan({ ...base, branch_prefix: 3 }).some((e) => /branch_prefix/.test(e)));
 });
+
+test('associate D1: order is alias, branch_map, title; an ambiguous title never beats an unambiguous branch_map hit (PR #331 shape)', () => {
+  const rp = { run: 'ra/run-1', branch_map: [{ pattern: '-m(?<m>\\d+)(?:-[a-z][\\w-]*)?$', ref: 'M{m}' }], items: [it('ra', 'campaign'), it('M1', 'mission'), it('M2', 'mission')] };
+  const r = associate(rp, { head: 'feat/replay-a-m2-live-tail-source', title: 'M2: live tail source (follows M1)' });
+  assert.deepEqual(r.items.map((i) => i.ref), ['M2']); assert.equal(r.how, 'branch_map');
+});
+test('associate D1: alias beats branch_map; ambiguity falls through; the note says "ambiguous title" only when nothing earlier matched', () => {
+  const two = { ...run, items: [...run.items, it('T1.9', 'task', { branch: 'feat/bookmark-polish-m1-t4' })] };
+  assert.deepEqual(associate(two, { head: 'feat/bookmark-polish-m1-t4' }).items.map((i) => i.ref), ['T1.9'], 'alias wins over the map');
+  const amb = associate({ ...run, branch_map: [] }, { head: 'feat/bookmark-polish-x', title: 'T1.4 and T1.5' }); assert.equal(amb.items.length, 0); assert.match(amb.note, /ambiguous title match/);
+  assert.equal(associate({ ...run, branch_map: [] }, { head: 'feat/bookmark-polish-x', title: 'nothing' }).note, null);
+});
