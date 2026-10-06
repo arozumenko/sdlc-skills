@@ -171,8 +171,11 @@ Used by the hook's auto-binding and by `backfill --git` / `--pr`. Candidates are
 **unambiguous** step wins, and ambiguity at any step is "no association" plus a note — never a guess:
 
 1. exact `branch` alias == head ref (case-insensitive);
-2. an item `ref` appears as a whole token in the PR title (task level before mission level);
-3. `branch_map`: the first entry whose pattern matches the head ref *and* whose expanded ref is an item of the plan.
+2. `branch_map`: the first entry whose pattern matches the head ref *and* whose expanded ref is an item of the plan;
+3. an item `ref` appears as a whole token in the PR title (task level before mission level).
+
+The branch outranks the title because titles routinely name neighbours ("M2 … follows M1"). An empty or ambiguous
+step falls through to the next; the "ambiguous" note survives only if every step fails.
 
 `branch_prefix`, when set, is checked first and gates all three steps. Example: with the map above and prefix
 `bookmark-polish`, `feat/bookmark-polish-m1-t4` → `T1.4`, `feat/bookmark-polish-m1` → `M1`,

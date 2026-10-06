@@ -132,3 +132,12 @@ PR mode emits only `done`: starts are never inferred, and PR creation is `time_t
 `first_commit`. A PR is accepted when its base is the plan's `integration_ref` (a mission PR then carries
 `meta.landing: true` — the only landing evidence), or when its base associates to a plan mission and its head to a
 task of that mission (a task PR into a mission branch → task `done`, `landing: false`).
+
+**Stacked missions.** When missions are stacked (`m4` → `m3`'s branch, `m3` → `main`), a PR whose head is a mission and
+whose base is another mission's branch is a *stacked mission merge*. It lands transitively: follow the first onward PR of
+the base mission merged **after** it (a PR merged into a branch that had already moved on never rode along), and so on to a
+PR into `integration_ref`. The stacked mission's `done` is stamped at the latest `mergedAt` on that chain, with the main-bound
+PR's merge commit as `git_sha`, and `meta` `{pr (its own), stacked_into, landing_pr, landing: true}`. Stacks therefore land
+top-down (top PR merged into its base first). A chain that never reaches `integration_ref`, is merged out of order, or cycles
+emits nothing and a `NOTE`. If several PRs onward qualify (a `-r2` redo), the earliest after the merge is used.
+
