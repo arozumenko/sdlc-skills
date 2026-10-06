@@ -8,10 +8,12 @@ import { associate } from './associate.mjs';
 import { cliError } from './paths.mjs';
 
 const FIELDS = 'number,title,headRefName,baseRefName,createdAt,mergedAt,mergeCommit,url';
+/** gh's --limit; a list this long may be truncated, so the CLI must not reconcile (retract) against it. */
+export const PR_LIMIT = 1000;
 const ghExec = (cmd, args, repo) => execFileSync(cmd, args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024, timeout: 60000 });
 /** Not filtered by --base: task PRs merge into mission branches, so base is judged per PR in acceptPr. `exec` is injectable for tests. */
 export function readMergedPrs(repo, { exec = ghExec } = {}) {
-  let out; try { out = exec('gh', ['pr', 'list', '--state', 'merged', '--limit', '1000', '--json', FIELDS], repo); } catch (e) { throw cliError('USAGE', `gh pr list failed (${String(e.message).split('\n')[0]}); use --from-json <file> offline`); }
+  let out; try { out = exec('gh', ['pr', 'list', '--state', 'merged', '--limit', String(PR_LIMIT), '--json', FIELDS], repo); } catch (e) { throw cliError('USAGE', `gh pr list failed (${String(e.message).split('\n')[0]}); use --from-json <file> offline`); }
   let prs; try { prs = JSON.parse(out); } catch { throw cliError('USAGE', 'gh pr list did not return JSON'); }
   if (!Array.isArray(prs)) throw cliError('USAGE', 'PR list must be a JSON array');
   return prs;

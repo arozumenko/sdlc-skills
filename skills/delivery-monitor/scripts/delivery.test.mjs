@@ -9,6 +9,7 @@ import { main, parseArgs, validateTransition } from './delivery.mjs';
 import { deliveryDir, runPath } from './lib/paths.mjs';
 import { resolveObservations } from './lib/events.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
+import { PR_LIMIT } from './lib/pr-backfill.mjs';
 import { buildFixtureRepo } from './lib/git-fixtures.mjs';
 
 const CLI = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
@@ -699,4 +700,13 @@ test('D4: with --since or --cutoff reconciliation is skipped with a NOTE; a retr
   recut(repo, { ...p, version: 2 }, { version: 3, branch_map: [{ pattern: 'new-era-m(?<m>\\d+)$', ref: 'M{m}' }] });
   const back = pr$(repo, [pr1]); assert.match(back.stdout, /BACKFILL events=1 /); assert.equal(activePr(repo).length, 1, 'revived at a higher revision');
   assert.equal(resolveObservations(repo).conflicts.length, 0);
+});
+test('D4: a gh PR list that reaches the --limit cap may be truncated, so reconciliation is skipped rather than retracting valid observations', async () => {
+  const { repo, p } = prSetup();
+  const pr1 = prRec(5, 'feat/new-era-m1', 'main', '2026-09-25T00:00:00Z'); pr$(repo, [pr1]);
+  recut(repo, p, { branch_map: [] });
+  const filler = Array.from({ length: PR_LIMIT }, (_, i) => prRec(10000 + i, `feat/unrelated-${i}`, 'main', '2026-09-26T00:00:00Z'));
+  let buf = ''; const sink = { write: (s) => { buf += s; } };
+  const code = await main(['backfill', '--pr'], { repo, stdout: sink, stderr: sink, env: { ...process.env, DELIVERY_NO_SYNC: '1' }, gh: () => JSON.stringify(filler) });
+  assert.equal(code, 0); assert.match(buf, /NOTE reconciliation skipped: .*limit/); assert.match(buf, /retracted=0/); assert.equal(activePr(repo).length, 1, 'the earlier observation survives');
 });

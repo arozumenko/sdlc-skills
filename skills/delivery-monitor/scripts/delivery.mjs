@@ -9,7 +9,7 @@ import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, l
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
-import { derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
+import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
@@ -398,12 +398,12 @@ function cmdBackfill(repo, p, io, now) {
   const run = resolveRun(repo, planFlag);
   const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
   const cutoff = f.cutoff != null ? isoOrThrow(requireValue(f, 'cutoff'), '--cutoff') : nowIso(now);
-  let derived, head = null;
+  let derived, head = null, truncated = false;
   if (f.pr) {
     // PR mode (spec §6.7): merged PRs from `gh` (or --from-json offline); nothing is pinned to a head sha.
     let prs;
     if (f['from-json'] != null) { const file = resolve(repo, requireValue(f, 'from-json')); requireFile(file); try { prs = JSON.parse(readFileSync(file, 'utf8')); } catch { throw cliError('USAGE', `${file}: invalid json`); } if (!Array.isArray(prs)) throw cliError('USAGE', `${file}: expected a JSON array of PRs`); }
-    else prs = readMergedPrs(repo, io.gh ? { exec: io.gh } : {});
+    else { prs = readMergedPrs(repo, io.gh ? { exec: io.gh } : {}); truncated = prs.length >= PR_LIMIT; }
     derived = derivePrObservations({ run, prs, since, cutoff, now });
   } else {
     const headFlag = f.head != null ? requireValue(f, 'head') : null;
@@ -422,6 +422,7 @@ function cmdBackfill(repo, p, io, now) {
   const top = new Map(); for (const { rec } of readRaw(repo).lines) { const c = top.get(rec.observation_id); if (!c || rec.revision > c.revision) top.set(rec.observation_id, rec); }
   if (f.pr) {
     if (f.since != null || f.cutoff != null) out(io, 'NOTE reconciliation skipped: --since/--cutoff derive a partial window, so nothing is retracted');
+    else if (truncated) out(io, `NOTE reconciliation skipped: gh returned ${PR_LIMIT} PRs (its --limit), so the list may be truncated and nothing is retracted; pass a complete list with --from-json to reconcile`);
     else {
       const keep = new Set(records.map((r) => r.observation_id));
       for (const o of resolveObservations(repo).active) {

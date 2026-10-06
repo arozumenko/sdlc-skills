@@ -147,5 +147,5 @@ the same observation at `revision + 1` with `status: 'retracted'`. This is what 
 `branch_prefix`) from leaving an earlier derivation beside the new one on the same transition (`equal-rank-disagreement`).
 `cli`, `hook`, `automation-sync` and commit-sha `git` observations are never touched. `--dry-run` prints `WOULD-RETRACT`
 lines; the `BACKFILL` line carries `retracted=<n>`. A retracted id that is derived again is revived at the next revision.
-With `--since`/`--cutoff` the window is partial, so reconciliation is skipped with a `NOTE`.
+With `--since`/`--cutoff` the window is partial, so reconciliation is skipped with a `NOTE`. Likewise when `gh` returns exactly its `--limit` (`PR_LIMIT`, 1000) PRs: the list may be truncated, so nothing is retracted; reconcile from a complete list with `--from-json`.
 
