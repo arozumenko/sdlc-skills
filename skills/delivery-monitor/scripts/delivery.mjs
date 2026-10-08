@@ -261,6 +261,14 @@ function cmdEvent(repo, p, io, now) {
   const one = (ref, ev, f, token) => {
     const item = resolveRef(run, ref, { allowCancelled: Boolean(f['allow-cancelled']) });
     const rec = buildEvent(repo, run, item, ev, f, token, now);
+    // coach-android 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
+    // merge's time — before its own dispatch. A sha-derived `done` earlier than the item's first observed dispatch (this
+    // episode) is not this item's merge; an explicit --at correction (meta.clock 'corrected') is the caller's decision.
+    if (ev === 'done' && rec.status === 'active' && rec.meta.git_sha && rec.meta.clock !== 'corrected') {
+      const reopenedAt = historyFor(item).filter((h) => h.event === 'reopened').map((h) => h.at).pop() ?? '';
+      const first = seenActive.filter((o) => o.item_id === item.item_id && o.event === 'dispatched' && o.basis === 'observed' && o.at >= reopenedAt).map((o) => o.at).sort()[0];
+      if (first && rec.at < first) throw cliError('USAGE', `${ref} done: commit ${rec.meta.git_sha.slice(0, 12)} (${rec.at}) predates its first dispatch (${first}), so it is not this item's merge. Work that landed no commit: omit --sha (done is stamped now). Otherwise pass the item's own merge commit.`);
+    }
     if (rec.status === 'active') {
       // F10.2: corrections (--revision >= 1) still run validateTransition — a correction that merely
       // re-affirms the same event is "the same occurrence" and passes; a correction that would smuggle

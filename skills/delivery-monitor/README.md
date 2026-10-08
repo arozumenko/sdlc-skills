@@ -16,6 +16,7 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs session set sec/run-1 
 #    Record transitions as they happen.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --id done-infra-2    # landed no commit (infra, QA run, gate): no --sha, stamped now
 # 3. Fill in history that predates the ledger
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
 # 4. Optional: automatic dispatch start/end on Claude Code (+ shared telemetry submodule)

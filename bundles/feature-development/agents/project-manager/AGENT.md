@@ -267,7 +267,8 @@ This matters because:
    "PR #<M> merged — <one-line summary>. <dev-name> is free for the
    next task." Record it: `node .claude/skills/delivery-monitor/scripts/delivery.mjs
    event <TASK-NNN> done --sha <merge sha> --id done-<NNN>` (PR mode: `--at
-   <mergedAt>`); when a group/milestone has landed to base: `event <Gn> done
+   <mergedAt>`; a task that landed no commit — infra, a QA run — omits
+   `--sha` and is stamped now); when a group/milestone has landed to base: `event <Gn> done
    --sha <landing sha> --id land-<Gn>`; a task dropped from scope: `event
    <TASK-NNN> cancelled --raw "<why>" --id cancel-<NNN>`.
 

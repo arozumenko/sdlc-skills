@@ -745,3 +745,24 @@ test('plan close/show accept the run positionally; status/report flag an open pl
   assert.equal(closed.code, 0, closed.stderr); assert.match(closed.stdout, /PLAN sec\/run-1 status=closed/);
   assert.doesNotMatch(run(repo, ['status', '--plan', 'sec/run-1']).stdout, /plan close/);
 });
+
+// coach-android 2026-10-08: an infra task landed no commit; `done --sha <main HEAD>` took an unrelated earlier merge's time,
+// four minutes before the task's own dispatch.
+test('event done: a sha that predates the item\'s first dispatch is rejected; no --sha stamps now; an --at correction is allowed', () => {
+  const repo = initRepo();
+  const old = commitAt(repo, 'unrelated earlier merge', '2026-09-16T09:00:00Z');
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  assert.equal(run(repo, ['event', 'TASK-001', 'dispatched', '--at', '2026-09-16T10:00:00Z', '--id', 'd1']).code, 0);
+  const bad = run(repo, ['event', 'TASK-001', 'done', '--sha', old, '--id', 'f1']);
+  assert.equal(bad.code, 2); assert.match(bad.stderr, /TASK-001 done: commit [0-9a-f]{12} \(2026-09-16T09:00:00\.000Z\) predates its first dispatch \(2026-09-16T10:00:00\.000Z\).*omit --sha/);
+  const corrected = run(repo, ['event', 'TASK-001', 'done', '--sha', old, '--at', '2026-09-16T11:00:00Z', '--revision', '1', '--id', 'f1']);
+  assert.equal(corrected.code, 0, corrected.stderr);
+  const noSha = run(repo, ['event', 'TASK-002', 'dispatched', '--at', '2026-09-16T10:00:00Z', '--id', 'd2']);
+  assert.equal(noSha.code, 0);
+  const done2 = run(repo, ['event', 'TASK-002', 'done', '--id', 'f2']);
+  assert.equal(done2.code, 0, done2.stderr); assert.match(done2.stdout, /^EVENT \S+ 20\d\d-/m);
+  const fresh = commitAt(repo, 'TASK-002 merge', '2026-09-16T12:00:00Z'); // a sha after the dispatch still passes
+  run(repo, ['plan', 'register', '--from', writePlan(repo, { ...plan(), run_id: 'run-2' }, 'p2.md'), '--id', 'reg-2']);
+  run(repo, ['event', 'TASK-001', 'dispatched', '--plan', 'sec/run-2', '--at', '2026-09-16T11:00:00Z', '--id', 'd3']);
+  assert.equal(run(repo, ['event', 'TASK-001', 'done', '--plan', 'sec/run-2', '--sha', fresh, '--id', 'f3']).code, 0);
+});

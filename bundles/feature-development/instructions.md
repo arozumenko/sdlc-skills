@@ -110,8 +110,10 @@ Four moments, all recorded — never estimated:
    opt-in Claude hook records dispatch starts only for a bound session, and a
    start that was not recorded is lost — backfill cannot recover it.
 2. **Record** every merge, landing or cancellation at the moment it happens
-   (`delivery.mjs event … done --sha`) — the PM, or the orchestrator when no
-   PM runs.
+   (`delivery.mjs event … done --sha <merge sha>`) — the PM, or the
+   orchestrator when no PM runs. Work that landed no commit (infra, a QA
+   run, a gate) is recorded without `--sha` and stamped now — never with
+   some other commit's sha.
 3. **Read** the report at mission close (`delivery.mjs report`).
 4. **Close** the plan at campaign close, after the last landing
    (`delivery.mjs plan close <run>`). `status` flags an open plan whose
