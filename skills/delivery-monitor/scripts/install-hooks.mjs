@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
+import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
 import { validRoster } from './lib/roster.mjs';
@@ -161,7 +161,7 @@ function stagingLeaks(tel) {
   finally { try { rmSync(idx, { force: true }); } catch { /* disposable */ } }
 }
 
-export function doctorReport(repo, rel) {
+export function doctorReport(repo, rel, { env = process.env } = {}) {
   repo = resolveOwnerRepo(repo);
   const lines = []; let ok = true;
   const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
@@ -169,6 +169,14 @@ export function doctorReport(repo, rel) {
   lines.push(`hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`); if (!wired) ok = false;
   const runs = listRuns(repo); lines.push(`plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   lines.push(`sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
+  // The count alone hid that the orchestrating session was never bound (coach-android 2026-10-08) — say so for THIS session.
+  const me = currentSession(env);
+  if (me) {
+    let mine = null; try { mine = JSON.parse(readFileSync(sessionPath(repo, me.host, me.session), 'utf8')).plan; } catch { /* unbound */ }
+    const open = runs.filter((r) => r.status === 'open').map((r) => r.run);
+    if (mine) lines.push(`this session: ${me.host}:${me.session} -> ${mine}${open.includes(mine) ? '' : ' (not open — the hook records nothing for it)'}`);
+    else lines.push(`this session: ${me.host}:${me.session} unbound${open.length ? ` — the hook records this session's dispatches only once bound (or when its branch maps to one open run): delivery.mjs session set --plan <${open.join('|')}>` : ''}`);
+  }
   const rootRes = checkPatterns(repo, ROOT_PATTERNS, (p) => p.replace(/\*$/, 'x').replace(/\/$/, '/x'));
   lines.push(renderIgnoreLine('root', rootRes)); if (rootRes.undetermined || rootRes.okCount !== rootRes.total) ok = false;
   const tel = join(repo, '.agents', 'telemetry'); const mode = telemetryMode(repo); lines.push(`telemetry: ${mode}${mode === 'plain-dir' ? ' (records ride the main tree until install-hooks.mjs bootstraps the shared submodule)' : ''}`);
@@ -203,7 +211,8 @@ export function doctorReport(repo, rel) {
       if (!sess || typeof sess !== 'object') { lines.push(`session: ${f} malformed`); ok = false; continue; }
       const owner = runs.find((r) => r.run === sess.plan);
       const status = !owner ? 'missing' : owner.status === 'closed' ? 'closed' : 'ok';
-      lines.push(`session: ${sess.host}:${sess.session} -> ${sess.plan} ${status}`); if (status !== 'ok') ok = false;
+      // A binding to a closed plan is history (plans are meant to be closed), not something to fix.
+      lines.push(`session: ${sess.host}:${sess.session} -> ${sess.plan} ${status}`); if (status === 'missing') ok = false;
     }
   }
   for (const c of UNCONDITIONAL_CAVEATS) lines.push(`caveat: ${c}`);
@@ -218,7 +227,7 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   const rel = posix(relative(repo, skillRootOf()));
   // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, printed as the
   // final `doctor: ok`/`doctor: attention` line (doctorReport), never mapped to a nonzero exit.
-  if (has('--doctor')) { const d = doctorReport(repo, rel); for (const l of d.lines) console.log(l); return 0; }
+  if (has('--doctor')) { const d = doctorReport(repo, rel, { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });

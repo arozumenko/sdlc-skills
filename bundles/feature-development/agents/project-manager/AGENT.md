@@ -61,10 +61,11 @@ project's issue tracker is Jira or KB is Confluence (see
 GitLab-only projects, stay with `issue-tracking`.
 
 If `.agents/telemetry/delivery/plans/` has an open run, bind this session
-once: `node .claude/skills/delivery-monitor/scripts/delivery.mjs session set
---host claude --session <session id> --plan <run>` (the id is in the
-tokenomics announce line when that is on; otherwise the newest `.jsonl`
-under `~/.claude/projects/<project>/`).
+before your first dispatch: `node .claude/skills/delivery-monitor/scripts/delivery.mjs
+session set <run>` (the session id comes from `CLAUDE_CODE_SESSION_ID`).
+Dispatches made before the binding get no recorded start. When the last
+mission of a campaign has landed, close its plan: `delivery.mjs plan close
+<run>`.
 
 ## How you communicate with the team
 

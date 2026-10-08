@@ -3,7 +3,7 @@
 import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cliError, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
+import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
 import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
@@ -119,6 +119,7 @@ function cmdPlanRegister(repo, f, io, now) {
     const conflicts = emitRegistration(repo, io, { run: prev, delta, token, at: req.at, createdAtOf: (i) => req.created[i.item_id] ?? null, now, active, records: req.observations });
     out(io, `PLAN ${runId} v${req.version} (retry) items=${prev.items.length}`);
     if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict`);
+    bindCaller(repo, runId, f, io, now);
     return 0;
   }
   if (req) throw cliError('ID-CONFLICT', `registration token ${token} reused with different input`);
@@ -188,7 +189,23 @@ function cmdPlanRegister(repo, f, io, now) {
   const st = next.map((i) => estimateStatus(i.estimate));
   out(io, `PLAN ${runId} v${full.version} items=${next.length} created=${delta.created.length} estimated=${delta.estimated.length} stale-acceptance=${delta.estimated.filter((e) => e.stale).length} cancelled=${delta.cancelled.length} reopened=${delta.reopened.length} accepted=${st.filter((s) => s === 'accepted').length} unaccepted=${st.filter((s) => s === 'unaccepted').length} unestimated=${st.filter((s) => s === 'none').length} scope_removed_delivered=${scopeRemovedDelivered.length}`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
+  bindCaller(repo, runId, f, io, now);
   return 0;
+}
+
+function writeBinding(repo, host, session, plan, now) {
+  mkdirSync(sessionsDir(repo), { recursive: true });
+  writeFileSync(sessionPath(repo, host, session), `${JSON.stringify({ host, session, plan, at: nowIso(now) })}\n`);
+}
+/** coach-android 2026-10-08: no orchestrator ever ran `session set`, so the hook recorded nothing for 8 of 9 plans. Registering a plan
+ * from inside Claude Code binds the calling session (subagents share the parent's CLAUDE_CODE_SESSION_ID) — the session that registers
+ * the plan is the one about to dispatch it. `--no-bind` opts out; outside Claude Code there is nothing to bind and a NOTE says so. */
+function bindCaller(repo, runId, f, io, now) {
+  if (f['no-bind']) return;
+  const me = currentSession(io.env);
+  if (!me) { out(io, `NOTE session not bound (no CLAUDE_CODE_SESSION_ID) — the orchestrating Claude session runs: delivery.mjs session set --plan ${runId}`); return; }
+  writeBinding(repo, me.host, me.session, runId, now);
+  out(io, `SESSION ${me.host}:${me.session} -> ${runId}`);
 }
 
 function buildEvent(repo, run, item, ev, f, token, now) {
@@ -294,7 +311,8 @@ function cmdPlan(repo, p, io, now) {
   const f = p.flags;
   if (p.sub === 'register') return cmdPlanRegister(repo, f, io, now);
   if (p.sub === 'list') { for (const r of listRuns(repo)) out(io, `PLAN ${r.run} v${r.version} status=${r.status} items=${r.items.length}`); return 0; }
-  const run = resolveRun(repo, f.plan);
+  // The run may be given positionally (`plan close sec/run-1`) as well as with --plan.
+  const run = resolveRun(repo, f.plan ?? p.positional[0]);
   if (p.sub === 'show') { out(io, JSON.stringify(run, null, 2)); return 0; }
   if (p.sub === 'close') { run.status = 'closed'; run.updated_at = nowIso(now); saveRun(repo, run); out(io, `PLAN ${run.run} status=closed`); return 0; }
   if (p.sub === 'roster') {
@@ -309,10 +327,11 @@ function cmdPlan(repo, p, io, now) {
 }
 function cmdSession(repo, p, io, now) {
   const f = p.flags;
-  if (p.sub !== 'set' || !f.host || !f.session || !f.plan) throw cliError('USAGE', 'session set --host <h> --session <s> --plan <run>');
-  resolveRun(repo, f.plan); mkdirSync(sessionsDir(repo), { recursive: true });
-  writeFileSync(sessionPath(repo, f.host, f.session), `${JSON.stringify({ host: f.host, session: f.session, plan: f.plan, at: nowIso(now) })}\n`);
-  out(io, `SESSION ${f.host}:${f.session} -> ${f.plan}`); return 0;
+  // --host/--session default to the calling Claude Code session; the run may be positional.
+  const me = currentSession(io.env), host = f.host ?? (f.session ? null : me?.host), session = f.session ?? me?.session, plan = f.plan ?? p.positional[0];
+  if (p.sub !== 'set' || !host || !session || !plan) throw cliError('USAGE', 'session set --plan <run> [--host <h> --session <s>] (host/session default to CLAUDE_CODE_SESSION_ID inside Claude Code)');
+  resolveRun(repo, plan); writeBinding(repo, host, session, plan, now);
+  out(io, `SESSION ${host}:${session} -> ${plan}`); return 0;
 }
 
 /** F20: real type/range validation, not just key-name membership — a below-floor profile value
@@ -450,7 +469,7 @@ function cmdBackfill(repo, p, io, now) {
 // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, surfaced as the
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io) {
-  const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)));
+  const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)), { env: io.env });
   for (const l of d.lines) out(io, l);
   return 0;
 }
@@ -459,7 +478,7 @@ export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, p
 const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env, gh = null } = {}) {
-  const io = { stdout, stderr, gh }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];
+  const io = { stdout, stderr, gh, env }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];
   if (!fn) { stderr.write(`USAGE(unknown command ${p.cmd ?? ''}; expected ${Object.keys(COMMANDS).join('|')})\n`); return 2; }
   let code = 1;
   try { code = await fn(repo, p, io, now); }

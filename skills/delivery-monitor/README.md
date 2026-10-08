@@ -7,10 +7,13 @@ defaults a missing number, and labels every proxy as a proxy.
 ## Quick start
 
 ```bash
-# 1. Register the plan (the tech-lead's plan file carries a ```json delivery-plan block)
+# 1. Register the plan BEFORE the first dispatch (the tech-lead's plan file carries a ```json delivery-plan block). Inside Claude
+#    Code this also binds the calling session (subagents included) to the run — prints `SESSION claude:<id> -> <run>`.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
-# 2. Bind this session (lets the hook attribute dispatches) and record transitions as they happen
-node .claude/skills/delivery-monitor/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1
+# 2. The orchestrating session must be bound before it dispatches: the hook records dispatches only for a bound session (or one
+#    whose branch maps to exactly one item of exactly one open run). A session that did not register the plan binds itself:
+node .claude/skills/delivery-monitor/scripts/delivery.mjs session set sec/run-1     # host/session default to CLAUDE_CODE_SESSION_ID
+#    Record transitions as they happen.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 # 3. Fill in history that predates the ledger

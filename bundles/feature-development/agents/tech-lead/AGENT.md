@@ -239,7 +239,7 @@ Send the complete plan to the PM with:
 - Dependencies
 - Any technical risks
 
-Register the plan: `node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from <plan file> --id <plan-slug>-v<n>` (a re-cut adds `--at <effective iso>`).
+Register the plan before any of its tasks is dispatched: `node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from <plan file> --id <plan-slug>-v<n>` (a re-cut adds `--at <effective iso>`). In Claude Code this binds the orchestrating session to the run (`SESSION … -> <run>` in the output).
 
 ## Spike Protocol
 
