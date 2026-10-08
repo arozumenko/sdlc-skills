@@ -12,13 +12,13 @@ Two layers, one rule each:
 
 | Layer | Scope | Tracked |
 |---|---|---|
-| `.agents/memory/<role>/` | one role's working notes + daily log | **no** — gitignored, local to one machine |
+| `.agents/memory/<role>/` | one role's working notes + daily log | **project's choice**, never reviewed — `git check-ignore` says whether it stays on this machine |
 | `.agents/knowledge/` | distilled facts every role can use | **yes** — committed and reviewed |
 
 This skill owns the **second** layer and the path between them. The `memory` skill owns the first.
 
-**Why the second layer exists.** Per-role memory is local and role-scoped, so a fact one role paid
-for is invisible to everyone else — including the same role on another machine. Teams routinely
+**Why the second layer exists.** Per-role memory is unreviewed and role-scoped, so a fact one role paid
+for is invisible to every other role — and, where memory is gitignored, to the same role on another machine. Teams routinely
 rediscover, at great cost, something a teammate already diagnosed correctly weeks earlier. The
 memory was not missing and not wrong; it was unreachable. Promotion is the fix.
 

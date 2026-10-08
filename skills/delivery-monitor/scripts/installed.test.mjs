@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
+// Source-repo only: it drives bin/init.mjs and reads skills.json, neither of which ships with an installed copy of this skill.
+const inSourceRepo = existsSync(join(root, 'skills.json')) && existsSync(join(root, 'bin', 'init.mjs'));
+if (!inSourceRepo) test('installed CLI (source repo only)', { skip: 'not in the sdlc-skills source repo' }, () => {});
+else {
 const sandbox = mkdtempSync(join(tmpdir(), 'dm-installed-'));
 const config = join(sandbox, 'gitconfig'); writeFileSync(config, '');
 const env = { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', GIT_ALLOW_PROTOCOL: 'file', SDLC_SKILLS_CACHE_DIR: join(sandbox, 'cache'), DELIVERY_NO_SYNC: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
@@ -48,4 +52,5 @@ for (const factory of ['feature-development', 'test-automation']) for (const [ta
     assert.equal(report.plans[0].metrics.flow.task.strata.all.cycle_time.min, 7200);
     assert.match(cli('doctor'), /plans: 1 open/);
   });
+}
 }

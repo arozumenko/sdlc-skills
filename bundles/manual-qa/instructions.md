@@ -65,8 +65,10 @@ suite run is in progress.
 **`.agents/knowledge/`** — distilled, cross-role, **verified** facts about this project. Committed
 and reviewed. Read its `README.md` before starting, plus the folder covering what you are touching.
 
-**`.agents/memory/<role>/`** — your own working notes and daily log. **Local only** (gitignored,
-never shared between machines), so anything another role needs is invisible there.
+**`.agents/memory/<role>/`** — your own working notes and daily log. Unreviewed and per-role, so
+anything another role needs does not belong there. Whether it is committed is the project's choice,
+not this block's: if `git check-ignore -q .agents/memory/<role>/MEMORY.md` succeeds it stays on this
+machine; otherwise it is tracked and committed with your work.
 
 When you learn something, choose the layer deliberately. Promote it to `.agents/knowledge/` only if
 **all four** hold — otherwise keep it in your role directory:
