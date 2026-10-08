@@ -274,3 +274,23 @@ test('F3: branch_map binding works for a run with a prefix; a closed run is neve
   const closed = setup({ bind: false }); saveRun(closed, { ...loadRun(closed, R), status: 'closed' });
   assert.equal(handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('task/task-023') }), { repo: closed, now: NOW }).diagnostic, null, 'no open run → nothing at all');
 });
+
+// coach-android 2026-10-08 (replay-identity-1008): tasks impl/review/qa owned by android-dev/tech-lead/qa-engineer. The android-dev
+// prompt said "closes it after QA" and named branch `…-impl` (no word hit) → credited to qa. The role's own task must win.
+test('resolveRefs: a task owned by the dispatched role wins over a word hit on another role\'s task', () => {
+  const t = (ref, role) => ({ item_id: `p/task-${ref}`, ref, level: 'task', role });
+  const roleRun = { items: [{ item_id: 'p/m', ref: 'FIX', level: 'mission' }, t('impl', 'android-dev'), t('review', 'tech-lead'), t('qa', 'qa-engineer')] };
+  const msg = 'Implement one bug fix on branch `fix/replay-identity-1008-impl`; the orchestrator closes it after QA on device.';
+  assert.deepEqual(resolveRefs(roleRun, { description: 'Fix closed Replay track identity', firstUserText: msg, role: 'android-dev' }).items.map((i) => i.ref), ['impl']);
+  assert.equal(resolveRefs(roleRun, { description: '', firstUserText: msg, role: 'android-dev' }).how, 'role');
+  assert.deepEqual(resolveRefs(roleRun, { description: 'QA on device', firstUserText: '', role: 'qa-engineer' }).items.map((i) => i.ref), ['qa']);
+  // Without a role, the old text matching still applies.
+  assert.deepEqual(resolveRefs(roleRun, { description: '', firstUserText: msg }).items.map((i) => i.ref), ['qa']);
+  // Several tasks of the role: text picks among them; no hit → unattributed, never another role's task.
+  const two = { items: [...roleRun.items, t('impl2', 'android-dev')] };
+  assert.deepEqual(resolveRefs(two, { description: 'impl2 build', firstUserText: msg, role: 'android-dev' }).items.map((i) => i.ref), ['impl2']);
+  assert.equal(resolveRefs(two, { description: 'build', firstUserText: msg, role: 'android-dev' }).items.length, 0);
+  // A role owning no task (tech-lead reviewing a js-dev task in the PM flow) keeps plain text matching.
+  const pm = { items: [t('TASK-023', 'js-dev')] };
+  assert.deepEqual(resolveRefs(pm, { description: 'Review TASK-023', firstUserText: '', role: 'tech-lead' }).items.map((i) => i.ref), ['TASK-023']);
+});
