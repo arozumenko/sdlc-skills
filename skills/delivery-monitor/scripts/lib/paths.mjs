@@ -37,6 +37,9 @@ export const decodeSegment = (s) => String(s).replace(/%3A/g, ':').replace(/%2F/
 export const runPath = (repo, runId) => join(plansDir(repo), `${encodeSegment(runId)}.json`);
 export const eventsPath = (repo, slug) => join(deliveryDir(repo), `events-${slug}.jsonl`);
 export const sessionPath = (repo, host, session) => join(sessionsDir(repo), `${encodeSegment(`${host}:${session}`)}.json`);
+/** The Claude Code session this process runs in (Claude Code exports CLAUDE_CODE_SESSION_ID to Bash, subagents included — it is
+ * the parent session, the same id the SubagentStop hook receives). null outside Claude Code or when blank. */
+export const currentSession = (env = process.env) => (env.CLAUDE_CODE_SESSION_ID?.trim() ? { host: 'claude', session: env.CLAUDE_CODE_SESSION_ID.trim() } : null);
 
 export const nowIso = (now = Date.now()) => new Date(now).toISOString();
 export const sha256 = (data) => createHash('sha256').update(data).digest('hex');

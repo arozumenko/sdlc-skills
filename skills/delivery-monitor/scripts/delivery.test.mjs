@@ -15,7 +15,7 @@ import { buildFixtureRepo } from './lib/git-fixtures.mjs';
 const CLI = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-cli-'));
 export const run = (repo, args, { input, env = {} } = {}) => {
-  try { return { code: 0, stdout: execFileSync('node', [CLI, ...args], { cwd: repo, encoding: 'utf8', input, env: { ...process.env, DELIVERY_NO_SYNC: '1', ...env }, stdio: ['pipe', 'pipe', 'pipe'] }), stderr: '' }; }
+  try { return { code: 0, stdout: execFileSync('node', [CLI, ...args], { cwd: repo, encoding: 'utf8', input, env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '', ...env }, stdio: ['pipe', 'pipe', 'pipe'] }), stderr: '' }; }
   catch (e) { return { code: e.status, stdout: e.stdout ?? '', stderr: e.stderr ?? '' }; }
 };
 const git = (repo, ...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
@@ -709,4 +709,39 @@ test('D4: a gh PR list that reaches the --limit cap may be truncated, so reconci
   let buf = ''; const sink = { write: (s) => { buf += s; } };
   const code = await main(['backfill', '--pr'], { repo, stdout: sink, stderr: sink, env: { ...process.env, DELIVERY_NO_SYNC: '1' }, gh: () => JSON.stringify(filler) });
   assert.equal(code, 0); assert.match(buf, /NOTE reconciliation skipped: .*limit/); assert.match(buf, /retracted=0/); assert.equal(activePr(repo).length, 1, 'the earlier observation survives');
+});
+
+// coach-android 2026-10-08: no orchestrator ever ran `session set`, so 8 of 9 plans captured no dispatch. Registering from inside
+// Claude Code now binds the calling session; outside it, a NOTE names the command.
+test('plan register binds the calling Claude session (--no-bind opts out; no session → NOTE); session set defaults to it', () => {
+  const repo = initRepo(), sess = (id) => join(deliveryDir(repo), 'sessions', `claude%3A${id}.json`);
+  const bound = run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1'], { env: { CLAUDE_CODE_SESSION_ID: 'orch-1' } });
+  assert.equal(bound.code, 0, bound.stderr); assert.match(bound.stdout, /^SESSION claude:orch-1 -> sec\/run-1$/m);
+  assert.equal(JSON.parse(readFileSync(sess('orch-1'), 'utf8')).plan, 'sec/run-1');
+  const retry = run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1'], { env: { CLAUDE_CODE_SESSION_ID: 'orch-2' } });
+  assert.match(retry.stdout, /\(retry\)/); assert.match(retry.stdout, /^SESSION claude:orch-2 -> sec\/run-1$/m);
+  const optOut = run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1', '--no-bind'], { env: { CLAUDE_CODE_SESSION_ID: 'orch-3' } });
+  assert.equal(optOut.code, 0); assert.ok(!existsSync(sess('orch-3'))); assert.doesNotMatch(optOut.stdout, /SESSION|NOTE/);
+  const outside = run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  assert.match(outside.stdout, /^NOTE session not bound .*session set --plan sec\/run-1$/m);
+  // session set: host/session from the env, run positional.
+  const set = run(repo, ['session', 'set', 'sec/run-1'], { env: { CLAUDE_CODE_SESSION_ID: 'orch-4' } });
+  assert.equal(set.code, 0, set.stderr); assert.match(set.stdout, /^SESSION claude:orch-4 -> sec\/run-1$/m);
+  assert.equal(run(repo, ['session', 'set', '--plan', 'sec/run-1']).code, 2); // no session anywhere → USAGE
+});
+
+test('plan close/show accept the run positionally; status/report flag an open plan whose items are all finished', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  run(repo, ['plan', 'register', '--from', writePlan(repo, { ...plan(), run_id: 'run-2' }, 'p2.md'), '--id', 'reg-2']);
+  assert.equal(run(repo, ['plan', 'close']).code, 2); // two open plans, none named → AMBIGUOUS-PLAN
+  assert.equal(JSON.parse(run(repo, ['plan', 'show', 'sec/run-2']).stdout).run, 'sec/run-2');
+  for (const [ref, id] of [['TASK-001', 'd1'], ['TASK-002', 'd2']]) assert.equal(run(repo, ['event', ref, 'done', '--plan', 'sec/run-1', '--at', '2026-09-16T10:00:00Z', '--id', id]).code, 0);
+  const st = run(repo, ['status', '--plan', 'sec/run-1']).stdout;
+  assert.match(st, /still open — once it has landed, close it: delivery\.mjs plan close sec\/run-1/);
+  assert.doesNotMatch(run(repo, ['status', '--plan', 'sec/run-2']).stdout, /plan close/);
+  assert.match(run(repo, ['report', '--plan', 'sec/run-1']).stdout, /plan close sec\/run-1/);
+  const closed = run(repo, ['plan', 'close', 'sec/run-1']);
+  assert.equal(closed.code, 0, closed.stderr); assert.match(closed.stdout, /PLAN sec\/run-1 status=closed/);
+  assert.doesNotMatch(run(repo, ['status', '--plan', 'sec/run-1']).stdout, /plan close/);
 });

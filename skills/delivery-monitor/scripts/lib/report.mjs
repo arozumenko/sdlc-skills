@@ -104,6 +104,13 @@ const compact = (i, occ) => ({ first_completion: i.first_completion, current_sco
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
 
+/** An open plan whose every task (or, task-less, every mission) is done or cancelled — nobody closed it (coach-android 2026-10-08:
+ * finished plans sat open and kept admitting hook dispatches). */
+const isFinished = (status, items) => {
+  const tasks = items.filter((i) => i.level === 'task'), pool = tasks.length ? tasks : items.filter((i) => i.level === 'mission');
+  return status === 'open' && pool.length > 0 && pool.every((i) => i.state === 'done' || i.state === 'cancelled');
+};
+const closeHint = (run) => `every item is done or cancelled but the plan is still open — once it has landed, close it: delivery.mjs plan close ${run}`;
 export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
   repo = resolveOwnerRepo(repo);
   // F20: an unrecognised --level is user input, not a crash — reject it before anything else runs.
@@ -168,7 +175,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     const cancelledInCohort = createdCohort.filter((i) => i.state === 'cancelled').length;
     metrics.quality = { cancelled_share: { numerator: cancelledInCohort, denominator: createdCohort.length, ratio: createdCohort.length ? Math.round((cancelledInCohort / createdCohort.length) * 10000) / 10000 : null } };
 
-    docs.push({ run: r.run, version: r.version, status: r.status, observations: occ.length, registration_gaps: g, metrics, counts, items: [...items.values()].map((i) => compact(i, occ)) });
+    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, metrics, counts, items: [...items.values()].map((i) => compact(i, occ)) });
   }
   const pending = docs.flatMap((d) => d.items).filter((i) => i.first_completion && i.current_scope?.pending).length;
   const derived = docs.flatMap((d) => d.metrics.caveats.map((c) => `${d.run}: ${c}`));
@@ -329,6 +336,7 @@ export function renderMarkdown(doc) {
     // metrics.mjs's per-level coverage object, nothing invented here.
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${JSON.stringify(c.sources)}`);
     L.push(`- registration_gaps=${p.registration_gaps}`);
+    if (p.finished) L.push(`- ${closeHint(p.run)}`);
     L.push('', '## Open items', '', '| ref | level | state | started | age |', '|---|---|---|---|---|');
     for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
     L.push('');
@@ -514,6 +522,7 @@ export function renderStatus(doc) {
     for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
     for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}`);
     if (p.registration_gaps) L.push(`  registration_gaps=${p.registration_gaps} (items without a created observation)`);
+    if (p.finished) L.push(`  ${closeHint(p.run)}`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
   L.push(`  ledger: occurrence_conflicts=${e.coverage.occurrence_conflicts} ledger_conflicts=${e.coverage.ledger_conflicts} unregistered=${e.coverage.unregistered} malformed=${e.coverage.malformed_lines} malformed_runs=${e.coverage.malformed_runs}`);

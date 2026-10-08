@@ -6,7 +6,7 @@ compatibility: "Requires Node 18+ and git. Automatic dispatch capture on Claude 
 metadata:
   authors:
     - Daniel Sallai <daniel_sallai@epam.com>
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # delivery-monitor — cycle time, cadence, estimate vs actual
@@ -18,11 +18,13 @@ defaults a missing number, and labels every proxy as a proxy.
 ## Quick start
 
 ```bash
-# 1. Register the plan (the tech-lead's plan file carries a ```json delivery-plan block)
+# 1. Register the plan BEFORE the first dispatch (the tech-lead's plan file carries a ```json delivery-plan block). Inside Claude
+#    Code this also binds the calling session (subagents included) to the run — prints `SESSION claude:<id> -> <run>`.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
-# 2. Record transitions as they happen. The hook binds a session to a run by itself when the working branch maps to exactly one
-#    item of exactly one open run (alias, title token or plan `branch_map`); `session set` is the manual override for ambiguity.
-node .claude/skills/delivery-monitor/scripts/delivery.mjs session set --host claude --session <id> --plan sec/run-1   # optional
+# 2. The orchestrating session must be bound before it dispatches: the hook records dispatches only for a bound session (or one
+#    whose branch maps to exactly one item of exactly one open run). A session that did not register the plan binds itself:
+node .claude/skills/delivery-monitor/scripts/delivery.mjs session set sec/run-1     # host/session default to CLAUDE_CODE_SESSION_ID
+#    Record transitions as they happen.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 # 3. Fill in history that predates the ledger
@@ -36,6 +38,12 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs status
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 ```
+
+**Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work
+ran has no cycle time for it — backfill gives created/first-commit/done only. At campaign close, after the last landing, run
+`delivery.mjs plan close <run>`; an open plan keeps admitting hook dispatches and makes every unpinned command ambiguous.
+`status`/`report` say so when every item of an open plan is done or cancelled. `install-hooks.mjs --doctor` prints
+`this session: … unbound` when the session you are in will record nothing.
 
 Plans may carry `branch_prefix` and `branch_map` (`[{pattern, ref}]`, regex with named groups → ref template, e.g.
 `{"pattern": "-m(?<m>\\d+)-t(?<t>\\d+)$", "ref": "T{m}.{t}"}`) so branches like `feat/x-m1-t4` map to items without per-task aliases

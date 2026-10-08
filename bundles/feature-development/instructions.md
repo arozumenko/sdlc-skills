@@ -98,10 +98,23 @@ Use the `memory` skill for the per-role layer and `knowledge-curation` for the s
 
 ## Delivery tracking (delivery-monitor)
 
-Three moments, all recorded — never estimated: the tech-lead's plan block is
-**registered** (`delivery.mjs plan register`), every merge, landing or
-cancellation is **recorded** by the PM at the moment it happens
-(`delivery.mjs event … done --sha`), and the report is read at mission close
-(`delivery.mjs report`). Dispatch starts come from the opt-in Claude hook;
-history from `backfill --git`. Mission state lives in this ledger
-(`.agents/telemetry/delivery/`), not in either memory layer.
+Four moments, all recorded — never estimated:
+
+1. **Register before the first dispatch.** The tech-lead's plan block is
+   registered (`delivery.mjs plan register`) before any task of it is
+   dispatched. Inside Claude Code that also binds the calling session to the
+   run. Whichever session orchestrates the dispatches must be bound: if it did
+   not register the plan, it runs `delivery.mjs session set <run>` first. The
+   opt-in Claude hook records dispatch starts only for a bound session, and a
+   start that was not recorded is lost — backfill cannot recover it.
+2. **Record** every merge, landing or cancellation at the moment it happens
+   (`delivery.mjs event … done --sha`) — the PM, or the orchestrator when no
+   PM runs.
+3. **Read** the report at mission close (`delivery.mjs report`).
+4. **Close** the plan at campaign close, after the last landing
+   (`delivery.mjs plan close <run>`). `status` flags an open plan whose
+   items are all finished.
+
+History that predates the ledger comes from `backfill --git`/`--pr`. Mission
+state lives in this ledger (`.agents/telemetry/delivery/`), not in either
+memory layer.

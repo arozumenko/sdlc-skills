@@ -204,3 +204,19 @@ test('script: --host copilot exits 2 UNSUPPORTED-HOST; default installs and prin
   const out = execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
   assert.match(out, /INSTALLED .*settings\.json/); assert.match(out, /telemetry: plain-dir/); assert.ok(existsSync(join(repo, '.claude', 'settings.json')));
 });
+
+test('doctor: says whether THIS session is bound; a binding to a closed plan is history, not attention', () => {
+  const repo = tmp();
+  const cli = (...args) => execFileSync('node', [DELIVERY, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' } });
+  const block = (runId) => ({ campaign_id: 'sec', run_id: runId, version: 1, factory: 'feature-development', observation_start: '2026-09-14T00:00:00Z', source_epoch: { from: '2026-09-14T00:00:00Z', until: null, integration_ref: 'main' }, campaign: { ref: 'sec' }, mission_kind: 'group', missions: [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'TASK-001' }] }] });
+  for (const r of ['run-1', 'run-2']) { writeFileSync(join(repo, `${r}.md`), `\`\`\`json delivery-plan\n${JSON.stringify(block(r))}\n\`\`\`\n`); cli('plan', 'register', '--from', `${r}.md`, '--id', r, '--created-at', '2026-09-14T00:00:00Z'); }
+  const unbound = doctorReport(repo, REL, { env: { CLAUDE_CODE_SESSION_ID: 'me' } }).lines;
+  assert.ok(unbound.includes('this session: claude:me unbound — the hook records this session\'s dispatches only once bound (or when its branch maps to one open run): delivery.mjs session set --plan <sec/run-1|sec/run-2>'), unbound.join('\n'));
+  assert.ok(!doctorReport(repo, REL, { env: {} }).lines.some((l) => l.startsWith('this session:')));
+  cli('session', 'set', '--host', 'claude', '--session', 'me', '--plan', 'sec/run-2');
+  cli('plan', 'close', 'sec/run-2');
+  const d = doctorReport(repo, REL, { env: { CLAUDE_CODE_SESSION_ID: 'me' } });
+  assert.ok(d.lines.includes('this session: claude:me -> sec/run-2 (not open — the hook records nothing for it)'), d.lines.join('\n'));
+  assert.ok(d.lines.includes('session: claude:me -> sec/run-2 closed'));
+  assert.ok(!d.lines.some((l) => /^session: .* (missing|malformed)$/.test(l)));
+});
