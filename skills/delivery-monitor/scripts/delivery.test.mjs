@@ -766,3 +766,22 @@ test('event done: a sha that predates the item\'s first dispatch is rejected; no
   run(repo, ['event', 'TASK-001', 'dispatched', '--plan', 'sec/run-2', '--at', '2026-09-16T11:00:00Z', '--id', 'd3']);
   assert.equal(run(repo, ['event', 'TASK-001', 'done', '--plan', 'sec/run-2', '--sha', fresh, '--id', 'f3']).code, 0);
 });
+
+test('retract --agent withdraws every observation of a misattributed hook dispatch; --observation one; --dry-run writes nothing', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const id = (ev) => `hook:claude%3As1%3Aag-1:sec%2Frun-1%2Ftask-task-002:${ev}`;
+  const hookRec = (event, at) => ({ v: 2, at, recorded_at: at, user: 't', host: 'claude', plan: 'sec/run-1', item_id: 'sec/run-1/task-task-002', ref: 'TASK-002', level: 'task', event, transition_id: `sec/run-1/task-task-002/${event}/ag-1`, source: 'hook', source_record_id: 'claude:s1:ag-1', observation_id: id(event), revision: 0, status: 'active', basis: 'observed', session: 's1', agentId: 'ag-1', role: 'js-dev', label: 'TASK-002 build', raw: null, meta: { stage: 'build', version: 1 } });
+  writeFileSync(join(deliveryDir(repo), 'events-hookfixture.jsonl'), `${JSON.stringify(hookRec('dispatched', '2026-09-16T09:00:00.000Z'))}\n${JSON.stringify(hookRec('dispatch_ended', '2026-09-16T09:30:00.000Z'))}\n`);
+  const status = () => run(repo, ['status']).stdout;
+  assert.match(status(), /open TASK-002/);
+  assert.equal(run(repo, ['retract']).code, 2);
+  assert.equal(run(repo, ['retract', '--agent', 'nobody']).code, 2);
+  const dry = run(repo, ['retract', '--agent', 'ag-1', '--dry-run']);
+  assert.match(dry.stdout, /WOULD-RETRACT .*dispatched/); assert.match(dry.stdout, /RETRACTED 0 \(dry-run\)/); assert.match(status(), /open TASK-002/);
+  const one = run(repo, ['retract', '--observation', id('dispatch_ended')]);
+  assert.equal(one.code, 0, one.stderr); assert.match(one.stdout, /RETRACTED 1/);
+  const all = run(repo, ['retract', '--agent', 'ag-1']);
+  assert.equal(all.code, 0, all.stderr); assert.match(all.stdout, /RETRACT \S+ TASK-002 dispatched rev=1/); assert.match(all.stdout, /RETRACTED 1/);
+  assert.doesNotMatch(status(), /open TASK-002/);
+});

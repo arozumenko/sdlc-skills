@@ -106,8 +106,18 @@ const matchLevel = (items, { description, firstUserText, branch }) => {
 // Controller ruling (review round): task-level items take precedence over mission-level items. Only
 // when no task-level match is found (and the task-level result isn't itself ambiguous — that stays
 // ambiguous rather than falling through to a mission-level guess) do we consider mission-level items.
+//
+// Role ruling (coach-android 2026-10-08): when the dispatched role owns tasks in the plan (`tasks[].role`), only those tasks are
+// matched — a ref that is also an ordinary word ("qa", "review") in another role's prompt must not win over the role's own task.
+// The role's only task takes the dispatch even with no textual hit; several unmatched → unattributed, never another role's task.
+// A role that owns no task (a tech-lead reviewing a js-dev task) keeps the plain text matching below.
 export function resolveRefs(run, opts) {
   const candidates = run.items.filter((i) => i.level !== 'campaign' && !i.cancelled);
+  const owned = opts.role ? candidates.filter((i) => i.level === 'task' && i.role === opts.role) : [];
+  if (owned.length) {
+    const r = matchLevel(owned, opts);
+    return r.items.length || r.how === 'ambiguous' || owned.length > 1 ? r : { items: owned, how: 'role' };
+  }
   const taskResult = matchLevel(candidates.filter((i) => i.level === 'task'), opts);
   if (taskResult.items.length || taskResult.how === 'ambiguous') return taskResult;
   return matchLevel(candidates.filter((i) => i.level === 'mission'), opts);
@@ -174,7 +184,7 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   const description = meta.description ?? '';
   const stage = classifyStage(description) !== 'other' ? classifyStage(description) : classifyStage(tr.firstUserText);
   const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null;
-  const { items } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch });
+  const { items } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch, role });
   const common = { user: null, host: 'claude', plan: run.run, source: 'hook', source_record_id: `claude:${payload.session_id}:${payload.agent_id}`, session: payload.session_id, agentId: payload.agent_id, role };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {

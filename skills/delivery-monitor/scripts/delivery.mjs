@@ -482,8 +482,27 @@ function cmdDoctor(repo, p, io) {
   return 0;
 }
 
-export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
-const MUTATING = new Set(['plan', 'session', 'event', 'profile', 'backfill']);
+/** Withdraw a wrong claim — chiefly a hook dispatch credited to the wrong item — by appending the same observation at
+ * revision + 1 with status 'retracted' (event-model.md). `--agent <id>` takes every active observation that subagent produced in
+ * the run (dispatched, dispatch_ended, rework_observed); `--observation <id>` takes exactly one. Re-record the right item with
+ * `event <ref> dispatched --at <iso>`. */
+function cmdRetract(repo, p, io, now) {
+  const f = p.flags, agent = f.agent != null ? String(requireValue(f, 'agent')) : null, oid = f.observation != null ? String(requireValue(f, 'observation')) : null;
+  if (!agent === !oid) throw cliError('USAGE', 'retract (--agent <agent id> | --observation <observation id>) [--plan <run>] [--dry-run]');
+  const run = resolveRun(repo, f.plan);
+  const hits = resolveObservations(repo).active.filter((o) => o.plan === run.run && (oid ? o.observation_id === oid : o.agentId === agent));
+  if (!hits.length) throw cliError('USAGE', `no active observation ${oid ? oid : `from agent ${agent}`} in ${run.run}`);
+  let retracted = 0;
+  for (const o of hits) {
+    if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} ${o.at}`); continue; }
+    const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+    out(io, `RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++;
+  }
+  out(io, `RETRACTED ${retracted}${f['dry-run'] ? ' (dry-run)' : ''}`); return 0;
+}
+
+export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, retract: cmdRetract, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
+const MUTATING = new Set(['plan', 'session', 'event', 'retract', 'profile', 'backfill']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env, gh = null } = {}) {
   const io = { stdout, stderr, gh, env }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];
