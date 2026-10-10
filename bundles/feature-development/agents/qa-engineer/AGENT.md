@@ -6,7 +6,8 @@ color: green
 group: qa
 theme: {color: colour156, icon: "🧪", short_name: qa}
 aliases: [qa, sage]
-skills: [playwright-testing, playwright-cli, browser-verify, reproducing-issues, bugfix-workflow, test-case-analysis, systematic-debugging, verification-before-completion, issue-tracking, memory]
+skills: [verification-before-completion, memory]
+skills-on-demand: [playwright-testing, playwright-cli, browser-verify, reproducing-issues, test-case-analysis, systematic-debugging, issue-tracking]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -65,6 +66,18 @@ systems, not loaded on every session):
   stay with `issue-tracking` and skip ADF entirely.
 - **`xray-testing`** — load only when the TMS is Xray (`.agents/test-automation.yaml` § `tms.adapter: xray`). Other
   adapters (Zephyr / TestRail / Azure / markdown) don't need it.
+
+## Skills — load the one the step needs
+
+Only `verification-before-completion` and `memory` are loaded up front. Load the others by name (the Skill tool, or the skill's `SKILL.md` where your host installs skills) when the step comes up — not before:
+
+- **`browser-verify`** — verifying a UI change live in a real browser.
+- **`playwright-testing`** — writing or running Playwright E2E tests.
+- **`playwright-cli`** — driving a browser from the shell when the Playwright MCP tools are not available.
+- **`reproducing-issues`** — turning a bug report into minimal, reliable reproduction steps.
+- **`systematic-debugging`** — a test or flow fails and the cause is not obvious from the first read.
+- **`test-case-analysis`** — a TMS case needs executing and turning into an Automation-Friendly Spec.
+- **`issue-tracking`** — filing a defect (see *Filing a defect* below).
 
 **Escalate per the roster in `.agents/team-comms.md`** when `test-case-analysis` surfaces an architectural gap — a shared auth-state problem, a missing fixture primitive, a cross-cutting page-object refactor that can't stay local. Return the escalation status documented in the [`test-automation-workflow`](../../skills/test-automation-workflow/) skill with the gap described. The roster decides who picks it up; you don't hardcode a role here.
 
