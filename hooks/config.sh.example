@@ -40,5 +40,8 @@
 #: "${SDLC_SHARED_DOCS_PLAN:=profile testing}"          # serve a host builtin
 #: "${SDLC_SHARED_DOCS_WORKFLOW_SUBAGENT:=profile}"     # serve anonymous workflow agents
 
-# additionalContext byte cap — the runtime drops payloads over ~10KB. (default 10240)
-#: "${SDLC_CTX_CAP:=10240}"
+# additionalContext byte cap. Hosts drop payloads over ~10KB (Claude Code: 10,000
+# characters), so the defaults sit just under that: 9000 (Claude Code, Codex,
+# others) and 10240 (Copilot CLI / VS Code). Raising it past the host limit makes
+# roles run on a ~2KB preview instead of their memory.
+#: "${SDLC_CTX_CAP:=9000}"
