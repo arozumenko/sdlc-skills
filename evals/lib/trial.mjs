@@ -175,7 +175,7 @@ export async function runTrial(caseDir, spec, trialDir, opts) {
   const judge = spec.judge && opts.judge ? runJudge(caseDir, spec, ws, trialDir, metrics.finalText, opts) : null;
   const pass = grade.pass && (judge ? judge.pass : true);
   if (opts.keep) cpSync(ws.work, join(trialDir, "workspace"), { recursive: true, filter: (p) => !p.includes("node_modules") });
-  const record = { case: spec.id, pass, grade, judge, metrics: { ...metrics, wallMs: proc.wallMs }, proc: { code: proc.code, timedOut: proc.timedOut, stderr: proc.stderr }, workspace: ws.root };
+  const record = { case: spec.id, pass, grade, judge, metrics: { ...metrics, wallMs: proc.wallMs }, proc: { code: proc.code, timedOut: proc.timedOut, stderr: proc.stderr }, workspace: ws.root, baseSha: ws.baseSha };
   writeFileSync(join(trialDir, "trial.json"), JSON.stringify(record, null, 2));
   return record;
 }

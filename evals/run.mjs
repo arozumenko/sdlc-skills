@@ -2,7 +2,7 @@
 // Run feature-development eval cases against the real installed factory.
 //
 //   node evals/run.mjs [--case E02,E01] [--trials 3] [--model sonnet] [--mode subagent|main]
-//                      [--judge] [--judge-model gpt-6-astra] [--judge-effort xhigh]
+//                      [--judge] [--judge-model gpt-6-astra] [--judge-effort high]
 //                      [--label baseline] [--keep] [--max-budget-usd 5] [--repo <checkout>]
 //
 // --repo installs the factory from another sdlc-skills checkout (e.g. a fix
@@ -22,7 +22,7 @@ import { summarize, formatSummary } from "./lib/summary.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const o = { trials: 3, suite: "feature-development", judge: false, judgeModel: "gpt-6-astra", judgeEffort: "xhigh", label: "run", keep: false };
+  const o = { trials: 3, suite: "feature-development", judge: false, judgeModel: "gpt-6-astra", judgeEffort: "high", label: "run", keep: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], v = () => argv[++i];
     if (a === "--case") o.cases = v().split(",");

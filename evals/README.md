@@ -15,6 +15,8 @@ or text is included.
 node evals/run.mjs --case E02,E02c --trials 3 --label baseline
 node evals/run.mjs --trials 3 --judge                 # all cases, with the Codex judge
 node evals/run.mjs --case H01 --trials 1 --mode main  # role as session agent instead of subagent
+node evals/run.mjs --repo ../other-checkout --label fix  # measure another branch with this harness
+node evals/rejudge.mjs evals/results/<run> --judge-effort xhigh  # re-grade saved trials, report agreement
 ```
 
 Needs `claude` (Claude Code) and, for `--judge`, `codex`. Trials run one at a
@@ -39,8 +41,11 @@ every case's `selftest.mjs` feeds simulated outcomes to its grader.
 4. `grade.mjs <workspace> <trialDir>` prints `{pass, checks[]}`. Checks marked
    `required: false` are reported but do not decide pass/fail.
 5. With `--judge`, `codex exec` (read-only, default `gpt-6-astra`, effort
-   `xhigh`) grades the case's `judge.md` rubric. A trial passes only if the
-   grader and the judge both pass.
+   `high`) grades the case's `judge.md` rubric. A trial passes only if the
+   grader and the judge both pass. Calibration on the first 9 judged trials:
+   `high` and `xhigh` gave identical verdicts and scores (9/9), and `xhigh`
+   reproduced itself 9/9; `high` is ~20% faster. Re-check with `rejudge.mjs`
+   when a rubric changes.
 
 ## Metrics per trial
 
