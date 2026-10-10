@@ -35,3 +35,6 @@ docs/superpowers/
 .superpowers/
 .playwright-mcp/
 .playwright-mcp.config.json
+
+# Eval run output (transcripts, workspaces), local only
+evals/results/
