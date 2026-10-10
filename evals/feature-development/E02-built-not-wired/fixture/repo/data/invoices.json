@@ -1,0 +1,6 @@
+[
+  { "id": "INV-1001", "customer": "Northwind", "amount": 1250.0, "issued": "2026-09-02" },
+  { "id": "INV-1002", "customer": "Contoso", "amount": 310.5, "issued": "2026-09-05" },
+  { "id": "INV-1003", "customer": "Northwind", "amount": 89.99, "issued": "2026-09-11" },
+  { "id": "INV-1004", "customer": "Fabrikam, Ltd", "amount": 4200.0, "issued": "2026-09-19" }
+]

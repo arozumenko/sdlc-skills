@@ -1,0 +1,14 @@
+{
+  "id": "H01-context-delivery",
+  "title": "Harness: qa-engineer receives its RULES and project briefing at dispatch",
+  "role": "qa-engineer",
+  "factory": "feature-development",
+  "prompt": "prompt.md",
+  "postInstall": "post-install.sh",
+  "postInstallArgs": ["qa-engineer"],
+  "timeoutSec": 300,
+  "maxBudgetUsd": 1,
+  "kind": "harness",
+  "failureClass": "context_delivery",
+  "source": "FD improvement research R1: hooks/lib.sh caps hook context at 32,768 bytes; Claude Code's documented limit is 10,000 characters, above which only a 2,000-character preview is delivered."
+}
