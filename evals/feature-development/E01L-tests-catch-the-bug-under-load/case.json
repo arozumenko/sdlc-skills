@@ -1,0 +1,14 @@
+{
+  "id": "E01L-tests-catch-the-bug-under-load",
+  "title": "E01 under production load: large memory, a project rule only in RULES.md, newest lesson last in the index",
+  "role": "js-dev",
+  "factory": "feature-development",
+  "prompt": "../E01-tests-catch-the-bug/prompt.md",
+  "fixture": "../E01-tests-catch-the-bug/fixture",
+  "postInstall": "post-install.sh",
+  "timeoutSec": 900,
+  "maxBudgetUsd": 4,
+  "kind": "outcome+delivery",
+  "failureClass": "context_delivery",
+  "source": "Production roles run with 25-40 KB of accumulated memory; rules and lessons that never reach the role cannot be followed. Memory content is synthetic."
+}
