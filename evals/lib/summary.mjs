@@ -13,8 +13,10 @@ function range(xs) {
   return v.length ? [Math.min(...v), Math.max(...v)] : null;
 }
 
+// Turns are the dispatched role's assistant messages; the orchestrator's own
+// turns are a constant 2 and say nothing about the role.
 const METRICS = {
-  turns: (r) => r.metrics.turns,
+  turns: (r) => r.metrics.subagent?.messages ?? r.metrics.turns,
   toolCalls: (r) => r.metrics.toolCallTotal,
   totalTokens: (r) => r.metrics.totalTokens,
   outputTokens: (r) => r.metrics.usage?.output_tokens,

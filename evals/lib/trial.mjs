@@ -50,14 +50,16 @@ export function graderPath(caseDir, spec) {
 }
 
 // Build the workspace: fixture first, then the factory install committed on top
-// so the agent (and the grader) start from a clean tree.
-export function prepareWorkspace(caseDir, spec, { install = true } = {}) {
+// so the agent (and the grader) start from a clean tree. `repo` is the
+// sdlc-skills checkout to install from (default: the one holding this runner),
+// so a candidate branch can be measured with an unchanged harness.
+export function prepareWorkspace(caseDir, spec, { install = true, repo = REPO } = {}) {
   const root = mkdtempSync(join(tmpdir(), `fd-eval-${spec.id}-`));
   const work = join(root, "work");
   mkdirSync(work);
   sh("bash", [join(fixtureDir(caseDir, spec), "setup.sh"), work, ...(spec.fixtureArgs ?? [])], { cwd: root, env: cleanEnv() });
   if (install) {
-    sh(process.execPath, [join(REPO, "bin", "init.mjs"), "init", "--factory", spec.factory, "--target", "claude", "--yes"], {
+    sh(process.execPath, [join(repo, "bin", "init.mjs"), "init", "--factory", spec.factory, "--target", "claude", "--yes"], {
       cwd: work, env: cleanEnv(),
     });
     // Optional: adjust the installed files (e.g. plant sentinels in role memory).
@@ -164,7 +166,7 @@ export function runJudge(caseDir, spec, ws, trialDir, finalText, opts) {
 
 export async function runTrial(caseDir, spec, trialDir, opts) {
   mkdirSync(trialDir, { recursive: true });
-  const ws = prepareWorkspace(caseDir, spec);
+  const ws = prepareWorkspace(caseDir, spec, { repo: opts.repo ? resolve(opts.repo) : REPO });
   const prompt = readFileSync(join(caseDir, spec.prompt), "utf8");
   const transcriptPath = join(trialDir, "transcript.jsonl");
   const proc = await runClaude(ws.work, claudeArgs(spec, prompt, opts), opts.timeoutSec ?? spec.timeoutSec ?? 900, transcriptPath);

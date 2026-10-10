@@ -3,7 +3,10 @@
 //
 //   node evals/run.mjs [--case E02,E01] [--trials 3] [--model sonnet] [--mode subagent|main]
 //                      [--judge] [--judge-model gpt-6-astra] [--judge-effort xhigh]
-//                      [--label baseline] [--keep] [--max-budget-usd 5]
+//                      [--label baseline] [--keep] [--max-budget-usd 5] [--repo <checkout>]
+//
+// --repo installs the factory from another sdlc-skills checkout (e.g. a fix
+// branch's worktree), so a change is measured with this exact harness.
 //
 // Trials run one at a time on purpose: each is a full `claude -p` session plus
 // an optional `codex exec` judge, and the point is a clean cost measurement,
@@ -12,7 +15,8 @@
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runTrial } from "./lib/trial.mjs";
+import { spawnSync } from "node:child_process";
+import { runTrial, REPO } from "./lib/trial.mjs";
 import { summarize, formatSummary } from "./lib/summary.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +37,7 @@ function parseArgs(argv) {
     else if (a === "--keep") o.keep = true;
     else if (a === "--max-budget-usd") o.maxBudgetUsd = Number(v());
     else if (a === "--timeout-sec") o.timeoutSec = Number(v());
+    else if (a === "--repo") o.repo = resolve(v());
     else if (a === "-h" || a === "--help") { console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 11).join("\n")); process.exit(0); }
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -54,7 +59,12 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outDir = resolve(HERE, "results", `${opts.label}-${stamp}`);
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, "run.json"), JSON.stringify({ opts, cases: cases.map((c) => c.spec.id), startedAt: stamp }, null, 2));
+  // Record exactly what was installed, so results can be tied to a commit.
+  const repo = opts.repo ?? REPO;
+  const head = spawnSync("git", ["-C", repo, "log", "-1", "--format=%H %s"], { encoding: "utf8" }).stdout.trim();
+  const dirty = spawnSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim() !== "";
+  console.log(`installing from ${repo} @ ${head}${dirty ? " (+ uncommitted changes)" : ""}`);
+  writeFileSync(join(outDir, "run.json"), JSON.stringify({ opts, repo, head, dirty, cases: cases.map((c) => c.spec.id), startedAt: stamp }, null, 2));
 
   const records = [];
   for (const c of cases) {
@@ -63,7 +73,7 @@ async function main() {
       const rec = await runTrial(c.dir, c.spec, join(outDir, c.spec.id, `trial-${t}`), opts);
       records.push(rec);
       const m = rec.metrics;
-      console.log(`${rec.pass ? "PASS" : "FAIL"}  turns=${m.turns} tools=${m.toolCallTotal} tokens=${m.totalTokens} cost=$${m.costUsd ?? "?"} wall=${Math.round(m.wallMs / 1000)}s` +
+      console.log(`${rec.pass ? "PASS" : "FAIL"}  role-turns=${m.subagent?.messages ?? m.turns} tools=${m.toolCallTotal} tokens=${m.totalTokens} cost=$${m.costUsd ?? "?"} wall=${Math.round(m.wallMs / 1000)}s` +
         (rec.grade.checks || []).filter((k) => !k.pass).map((k) => `\n    ✗ ${k.id}: ${k.detail ?? ""}`).join(""));
     }
   }
