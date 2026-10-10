@@ -7,8 +7,8 @@ workspace: clone
 group: dev
 theme: {color: colour220, icon: "⚡", short_name: js}
 aliases: [js, jay]
-skills: [verification-before-completion, memory]
-skills-on-demand: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, completing-a-task]
+skills: [tdd, verification-before-completion, memory]
+skills-on-demand: [implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, completing-a-task]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -55,10 +55,9 @@ Scout's findings override your defaults: if `AGENTS.md` says `pnpm` not `npm`, u
 
 ## Skills — load the one the step needs
 
-Only `verification-before-completion` and `memory` are loaded up front. Load the others by name (the Skill tool, or the skill's `SKILL.md` where your host installs skills) when the step comes up — not before:
+Only `tdd`, `verification-before-completion` and `memory` are loaded up front. Load the others by name (the Skill tool, or the skill's `SKILL.md` where your host installs skills) when the step comes up — not before:
 
 - **`implement-feature`** — building a feature from a task or plan.
-- **`tdd`** — writing the failing test first for a feature or fix.
 - **`bugfix-workflow`** — fixing a reported bug.
 - **`root-cause-analysis`** — a bug's cause is unclear, or the same symptom came back after a fix.
 - **`systematic-debugging`** — a failure you cannot explain from the first read.
