@@ -109,3 +109,10 @@ answer cannot pass both.
 | E02-built-not-wired | qa-engineer | QA fails a feature that is built and unit-tested but never wired into the CLI |
 | E02c-built-and-wired | qa-engineer | control: same task, wired correctly, QA must pass it |
 | E10-same-class-findings | js-dev | fourth review round on one defect class: fix the class (incl. an unreported path), not just the fourth path |
+| E01L / E02L | js-dev / qa-engineer | E01 / E02 under production load: ~30 KB memory, a rule only in RULES.md, the newest lesson last in the index |
+| E13-untraced-claims | qa-engineer | QA does not repeat a handoff's false coverage claim, and every verdict claim is backed by evidence (Codex judge) |
+
+E13 is strict on purpose: one contradicted claim fails the trial. On `main`
+it passes about 3 in 10, and two persona-wording attempts did not move it
+(see the PR that added it), so treat it as a capability case, not a
+regression gate.
