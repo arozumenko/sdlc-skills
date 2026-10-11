@@ -336,28 +336,41 @@ build_read_directive() {
   printf '%s' "$out"
 }
 
-# Build the additionalContext injection so it NEVER overflows the ~10KB cap (an
-# over-cap payload is dropped IN FULL by the runtime — verified). Two channels, no
-# overlap: shared docs ride the instruction-file shelf (see refresh_shared_
-# instructions); additionalContext carries the ROLE MEMORY (role-specific → can't go
-# on the global shelf), plus a read-list pointing at the shared docs only when this
-# agent won't have the shelf. Specifically:
+# Build the additionalContext injection so it NEVER overflows the host's cap (an
+# over-cap payload is not delivered — the host substitutes a ~2KB preview). Two
+# channels, no overlap: shared docs ride the instruction-file shelf (see
+# refresh_shared_instructions); additionalContext carries the ROLE MEMORY
+# (role-specific → can't go on the global shelf), plus a read-list pointing at the
+# shared docs only when this agent won't have the shelf. Specifically:
 #   - Each role-memory file is inlined while it still fits the cap; one too big to
 #     fit becomes a self-read pointer (read its own .agents/memory/<role>/ file).
 #   - A shared-doc read-list is appended ONLY when cli_sub is set (CLI sub-agents
 #     never inherit instruction files) OR instr_present is empty (cold first run);
 #     otherwise the shared docs are already in the system prompt — no note needed.
-# The cap is Copilot-specific; other runtimes (Claude/Codex/Cursor) inline as-is.
 # Sizes are measured AFTER JSON escaping (esc_byte_len). $1=project dir, $2=role,
-# $3=instr_present (1/empty), $4=cli_sub (1/empty). SDLC_CTX_CAP overrides (def 10240).
+# $3=instr_present (1/empty), $4=cli_sub (1/empty). SDLC_CTX_CAP overrides
+# default_ctx_cap.
 # The per-host injection budget, in BYTES. Exposed because the caller must be
 # able to subtract whatever IT appends after this function returns — anything
 # added afterwards is outside the cap, and the runtime drops an over-cap payload
 # WHOLE. (Measured: two small trailing blocks pushed a 32,768-byte budget to
-# 32,993 escaped bytes. Harmless against the 48KB rejection floor, but the
-# accounting was wrong, and a bigger tail would not have been.)
+# 32,993 escaped bytes; the accounting was wrong, and a bigger tail would not
+# have been harmless.)
+#
+# Claude Code: additionalContext is limited to 10,000 CHARACTERS, with no
+# setting to raise it; above that the agent gets a ~2,000-character preview and
+# a file path it is never told to read (code.claude.com/docs/en/hooks). This
+# default used to be 32768 on the belief that the rejection floor was ~48KB —
+# but that floor came from a campaign whose payloads were all >= 48KB, so it
+# could not show where the real limit sat. Measured since (evals/ H01): a
+# 12.4K-character qa-engineer payload on a fresh install reached the agent as
+# nothing at all, 3 of 3 times, while a 3.2K js-dev payload arrived whole.
+# 9000 escaped bytes keeps a margin under 10,000 characters: escaped bytes are
+# never fewer than characters (multi-byte UTF-8 and JSON escapes only add).
+# Codex and the other hosts take the same conservative budget; over-budget
+# files degrade to the read-list, which is safe. Copilot keeps its ~10KB.
 default_ctx_cap() {
-  if [ -n "${COPILOT_CLI:-}" ] || [ -n "${SDLC_VSCODE:-}" ]; then printf '10240'; else printf '32768'; fi
+  if [ -n "${COPILOT_CLI:-}" ] || [ -n "${SDLC_VSCODE:-}" ]; then printf '10240'; else printf '9000'; fi
 }
 
 build_capped_context() {
@@ -368,15 +381,13 @@ build_capped_context() {
   # memory + all shared"), on the assumption that only Copilot enforces a limit.
   # Field measurement (2026-07-24) says otherwise: across one 13-hour campaign,
   # 302 of 302 SubagentStart payloads on Claude Code were REJECTED for inlining
-  # (smallest rejection 48KB, largest 126.7KB) and replaced with a ~2KB preview
-  # plus a file path. Every worker ran on a fraction of its memory and had no way
-  # to know. Uncapped does not mean "everything gets through" — it means the
+  # (smallest 48KB, largest 126.7KB) and replaced with a ~2KB preview plus a
+  # file path. Every worker ran on a fraction of its memory and had no way to
+  # know. Uncapped does not mean "everything gets through" — it means the
   # runtime truncates instead of us, silently and without a read-list.
   #
-  # Default caps are per-host because the ceilings differ: Copilot's
-  # additionalContext limit is ~10KB; Claude Code's observed rejection floor is
-  # 48KB, so 32KB leaves headroom (the same number the archived octobots
-  # memory.py chose for snapshot.md, independently, for the same reason).
+  # The per-host defaults (and why Claude Code's is 9000, not the 32768 it was)
+  # are documented on default_ctx_cap above.
   # NOTE on units: this budget is BYTES. Dense technical prose runs ~2.2
   # bytes/token, not the usual ~4 — do not "convert" this cap to tokens with the
   # wrong ratio and double it.
@@ -663,9 +674,14 @@ emit_session_context() {
 # reason to distrust. That happened 302 times out of 302 in one campaign and went
 # unnoticed for 13 hours. The cap in build_capped_context should make it
 # impossible; this is the tripwire for when it doesn't (a caller that bypassed the
-# cap, or a host with a lower ceiling than we assumed). stderr only — it must warn
+# cap, or a host with a lower ceiling than we assumed). The default sits at
+# Claude Code's documented 10,000-character limit (anything above it is already
+# being dropped there), or at the host's own cap when that is higher (Copilot's
+# 10240), so a correctly capped payload never warns. stderr only — it must warn
 # the operator without corrupting the JSON on stdout.
-SDLC_EMIT_WARN_BYTES="${SDLC_EMIT_WARN_BYTES:-40960}"
+_sdlc_cap="$(default_ctx_cap)"
+SDLC_EMIT_WARN_BYTES="${SDLC_EMIT_WARN_BYTES:-$(( _sdlc_cap > 10000 ? _sdlc_cap : 10000 ))}"
+unset _sdlc_cap
 warn_if_oversized() {
   local n; n="$(esc_byte_len "$1")"
   [ "$n" -le "$SDLC_EMIT_WARN_BYTES" ] && return 0

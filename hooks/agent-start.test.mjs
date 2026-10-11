@@ -80,7 +80,41 @@ test('an over-budget index still delivers its first entries plus a pointer', () 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('Copilot keeps its own 10KB default — unchanged by the Claude-side raise', () => {
+// The decoded additionalContext string — what the host measures against its limit.
+const injected = (out) => JSON.parse(out).hookSpecificOutput.additionalContext;
+
+// Claude Code delivers at most 10,000 characters of additionalContext; above
+// that the agent gets a ~2,000-character preview and nothing else. The default
+// must stay under it with no SDLC_CTX_CAP override (it used to be 32768).
+test('Claude Code default payload stays under the 10,000-character limit', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(4000) } }); // ~200KB
+  try {
+    const ctx = injected(run(dir, 'qa-engineer', { CLAUDECODE: '1' }));
+    assert.ok(ctx.length < 10000, `additionalContext is ${ctx.length} characters`);
+    assert.match(ctx, /REQUIRED READING/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The shape that failed in practice: a fresh install's qa-engineer payload is
+// SOUL + RULES + a ~9KB project briefing. Under the default cap, persona and
+// rules must arrive inline and the briefing must degrade to a read-list entry,
+// not take the whole payload down with it.
+test('rules stay inline and an oversized briefing becomes required reading', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(3), 'project_briefing.md': `# Briefing\n\n${'Long briefing prose. '.repeat(450)}\nBRIEFING-END\n` } });
+  const agentDir = join(dir, '.claude', 'agents', 'qa-engineer');
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(join(agentDir, 'SOUL.md'), `# Soul\n\n${'Persona text. '.repeat(150)}\n`);
+  writeFileSync(join(agentDir, 'RULES.md'), '# Rules\n\nRULE-SENTINEL: never skip the evidence step.\n');
+  try {
+    const ctx = injected(run(dir, 'qa-engineer', { CLAUDECODE: '1' }));
+    assert.ok(ctx.length < 10000, `additionalContext is ${ctx.length} characters`);
+    assert.match(ctx, /RULE-SENTINEL/);
+    assert.doesNotMatch(ctx, /BRIEFING-END/);
+    assert.match(ctx, /REQUIRED READING[\s\S]*\.agents\/memory\/qa-engineer\/project_briefing\.md/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Copilot keeps its own 10KB default', () => {
   const dir = project({ memory: { 'MEMORY.md': index(4000) } });
   try {
     const out = run(dir, 'qa-engineer', { COPILOT_CLI: '1' });

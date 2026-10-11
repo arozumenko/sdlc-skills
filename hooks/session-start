@@ -66,9 +66,9 @@ fi
 # The trailing blocks are assembled FIRST so their size can be subtracted from
 # the injection budget. Anything appended AFTER build_capped_context is outside
 # the cap it enforced, and the runtime drops an over-cap payload WHOLE — measured,
-# two small blocks took a 32,768-byte budget to 32,993 escaped bytes. Harmless
-# against the 48KB rejection floor that day; a longer roster or more over-budget
-# roles would not have been.
+# two small blocks took a 32,768-byte budget to 32,993 escaped bytes. With the
+# cap now just under the host limit (default_ctx_cap), any such overshoot would
+# lose the whole payload.
 tail_blocks=""
 
 # Per-role memory: runtimes whose per-agent start hook can inject context
@@ -125,8 +125,8 @@ fi
 # Measured on disk (the cause), not on the payload (one symptom): one index
 # reached 124 KB and 302 of 302 dispatches silently ran on a 2 KB preview.
 mem_over=""
-# Host-aware threshold: Copilot's effective budget is ~10KB, not 32KB — a flat
-# 32768 default meant Copilot roles capping at 10KB were never flagged.
+# Host-aware threshold: the same budget agent-start injects under (see
+# default_ctx_cap) — an index bigger than that cannot reach a dispatched role whole.
 mem_warn="${SDLC_MEM_WARN_BYTES:-$(default_ctx_cap)}"
 if [ -d "${AGENTS_DIR}/memory" ]; then
   for mfile in "${AGENTS_DIR}"/memory/*/MEMORY.md; do
