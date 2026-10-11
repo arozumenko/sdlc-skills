@@ -1,0 +1,14 @@
+{
+  "id": "E10-same-class-findings",
+  "title": "Fourth review round, same defect class: fix the class, not the fourth path",
+  "role": "js-dev",
+  "factory": "feature-development",
+  "prompt": "prompt.md",
+  "judge": "judge.md",
+  "timeoutSec": 900,
+  "maxBudgetUsd": 4,
+  "kind": "outcome+cost",
+  "failureClass": "incomplete_class_fix",
+  "source": "Cost driver seen in production use of the factory: review loops on one defect class, each finding point-fixed, round after round. Fixture is synthetic.",
+  "note": "The factory has no rule for this today (no 'same class' guidance in bundles/feature-development), so a red baseline is expected."
+}

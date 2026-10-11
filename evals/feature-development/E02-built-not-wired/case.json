@@ -1,0 +1,15 @@
+{
+  "id": "E02-built-not-wired",
+  "title": "QA catches a feature that is built and unit-tested but never wired into the entry point",
+  "role": "qa-engineer",
+  "factory": "feature-development",
+  "prompt": "prompt.md",
+  "fixtureArgs": ["unwired"],
+  "expect": "FAIL",
+  "judge": "judge.md",
+  "timeoutSec": 900,
+  "maxBudgetUsd": 4,
+  "kind": "outcome",
+  "failureClass": "built_not_wired",
+  "source": "Failure class seen repeatedly in production use of the factory: a feature built and unit-tested but never reachable, which passed its gates. Fixture is synthetic."
+}

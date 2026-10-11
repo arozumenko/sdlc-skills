@@ -1,0 +1,11 @@
+{
+  "id": "S00-smoke",
+  "title": "Harness smoke test: install, dispatch, metrics",
+  "role": "qa-engineer",
+  "factory": "feature-development",
+  "prompt": "prompt.md",
+  "timeoutSec": 300,
+  "maxBudgetUsd": 1,
+  "kind": "harness",
+  "source": "none (mechanics check, not a behaviour eval)"
+}

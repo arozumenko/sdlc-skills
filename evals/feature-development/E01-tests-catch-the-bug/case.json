@@ -1,0 +1,12 @@
+{
+  "id": "E01-tests-catch-the-bug",
+  "title": "Dev's regression tests reject the shipped bug and plausible wrong fixes",
+  "role": "js-dev",
+  "factory": "feature-development",
+  "prompt": "prompt.md",
+  "timeoutSec": 900,
+  "maxBudgetUsd": 4,
+  "kind": "outcome",
+  "failureClass": "vacuous_test",
+  "source": "Failure class seen repeatedly in production use of the factory: regression tests that pass against the bug they claim to cover. Fixture is synthetic."
+}

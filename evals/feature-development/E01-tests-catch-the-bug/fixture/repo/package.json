@@ -1,0 +1,10 @@
+{
+  "name": "checkout-pricing",
+  "version": "1.4.2",
+  "private": true,
+  "type": "module",
+  "description": "Order pricing rules for the checkout service",
+  "scripts": {
+    "test": "node --test"
+  }
+}

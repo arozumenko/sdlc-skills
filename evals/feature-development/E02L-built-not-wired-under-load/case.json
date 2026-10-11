@@ -1,0 +1,17 @@
+{
+  "id": "E02L-built-not-wired-under-load",
+  "title": "E02 under production load: large memory, a project rule only in RULES.md, newest lesson last in the index",
+  "role": "qa-engineer",
+  "factory": "feature-development",
+  "prompt": "../E02-built-not-wired/prompt.md",
+  "fixture": "../E02-built-not-wired/fixture",
+  "fixtureArgs": ["unwired"],
+  "postInstall": "post-install.sh",
+  "judge": "../E02-built-not-wired/judge.md",
+  "expect": "FAIL",
+  "timeoutSec": 900,
+  "maxBudgetUsd": 4,
+  "kind": "outcome+delivery",
+  "failureClass": "context_delivery",
+  "source": "Production roles run with 25-40 KB of accumulated memory; rules and lessons that never reach the role cannot be followed. Memory content is synthetic."
+}
