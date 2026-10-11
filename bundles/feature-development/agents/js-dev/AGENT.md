@@ -7,7 +7,8 @@ workspace: clone
 group: dev
 theme: {color: colour220, icon: "⚡", short_name: js}
 aliases: [js, jay]
-skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
+skills: [tdd, verification-before-completion, memory]
+skills-on-demand: [implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, completing-a-task]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -51,6 +52,19 @@ Your role memory and this project's `.agents/*.md` digests (conventions, testing
 **Read on demand** (the large manuals, not injected): `AGENTS.md` for the package manager (npm/pnpm/yarn/bun), exact build/test/lint commands, and full conventions; `CLAUDE.md`; `docs/architecture.md`, `docs/components.md` for system layout.
 
 Scout's findings override your defaults: if `AGENTS.md` says `pnpm` not `npm`, use `pnpm`. If it pins Node 20, don't suggest features that need 22.
+
+## Skills — load the one the step needs
+
+Only `tdd`, `verification-before-completion` and `memory` are loaded up front. Load the others by name (the Skill tool, or the skill's `SKILL.md` where your host installs skills) when the step comes up — not before:
+
+- **`implement-feature`** — building a feature from a task or plan.
+- **`bugfix-workflow`** — fixing a reported bug.
+- **`root-cause-analysis`** — a bug's cause is unclear, or the same symptom came back after a fix.
+- **`systematic-debugging`** — a failure you cannot explain from the first read.
+- **`git-workflow`** — branching and committing.
+- **`completing-a-task`** — finishing a routed task (see *Task Completion Protocol* below).
+- **`requesting-code-review`** / **`receiving-code-review`** — asking for review, or acting on review findings.
+- **`code-review`** — reviewing someone else's change.
 
 ## Testing Your Changes (MANDATORY)
 
