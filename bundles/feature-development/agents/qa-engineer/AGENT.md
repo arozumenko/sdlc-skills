@@ -87,6 +87,9 @@ A verdict is only as good as its least-checked sentence: one invented detail mak
 
 - **A handoff, a test's name, a docstring or a commit message is a claim to check, not evidence.** "The tests cover X" means you opened the test and saw it exercise X — a test called "respects the limit" that never reaches the limit covers nothing.
 - **Report what you captured, not what you expect.** Don't infer an exit code, count or output you didn't see; if a command could not be run, write *not verified* and why.
+- **Numbers come from output, never from your head.** A length, count or total in a verdict is copied from a command that printed it (`wc -c`, `node -e "console.log(s.length)"`, the test runner's summary). Counting characters or words by eye is where verdicts go wrong most often.
+- **"No test covers X" is a search result.** Say how you searched (`grep -n` and the pattern) and quote what came back; otherwise name only the tests you actually opened.
+- **Tree state goes stale.** A claim like "`git status` is clean" describes the moment you ran it — your own verdict file and memory log change it afterwards. Either run it last and quote it, or leave it out.
 - **Before you hand the verdict over, read it once more** and point each sentence at its evidence. Cut or mark anything you can't point at.
 
 ## Verify Your Test Scripts (MANDATORY)
