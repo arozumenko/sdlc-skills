@@ -13,6 +13,21 @@ function range(xs) {
   return v.length ? [Math.min(...v), Math.max(...v)] : null;
 }
 
+function choose(n, k) {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+// pass^k (tau-bench): the probability that k independent trials ALL pass,
+// estimated without bias from c passes in n trials as C(c,k)/C(n,k). pass^1 is
+// the plain pass rate; pass^n asks "is this reliable", which a pass rate hides
+// (2/3 and 3/3 differ more than they look when every dispatch must work).
+export function passHatK(c, n, k) {
+  return n >= k && k > 0 ? choose(c, k) / choose(n, k) : null;
+}
+
 // Turns are the dispatched role's assistant messages; the orchestrator's own
 // turns are a constant 2 and say nothing about the role.
 const METRICS = {
@@ -33,7 +48,11 @@ export function summarize(records) {
   }
   const cases = [];
   for (const [id, rs] of byCase) {
-    const row = { case: id, trials: rs.length, passes: rs.filter((r) => r.pass).length, errors: rs.filter((r) => r.metrics.isError).length };
+    const passes = rs.filter((r) => r.pass).length;
+    const row = {
+      case: id, trials: rs.length, passes, errors: rs.filter((r) => r.metrics.isError).length,
+      passAt1: passHatK(passes, rs.length, 1), passHatN: passHatK(passes, rs.length, rs.length),
+    };
     for (const [k, f] of Object.entries(METRICS)) row[k] = { median: median(rs.map(f)), range: range(rs.map(f)) };
     const failedChecks = {};
     for (const r of rs) {
@@ -50,10 +69,11 @@ export function summarize(records) {
 }
 
 export function formatSummary({ cases }) {
-  const head = "case                         pass   turns  tools  tokens(M)  role-ctx(k)  cost$   wall(s)";
+  const head = "case                         pass   pass^n turns  tools  tokens(M)  role-ctx(k)  cost$   wall(s)";
   const rows = cases.map((c) => [
     c.case.padEnd(28),
     `${c.passes}/${c.trials}`.padEnd(6),
+    (c.passHatN != null ? c.passHatN.toFixed(2) : "-").padStart(6),
     String(c.turns.median ?? "-").padStart(5),
     String(c.toolCalls.median ?? "-").padStart(6),
     (c.totalTokens.median != null ? (c.totalTokens.median / 1e6).toFixed(2) : "-").padStart(10),
