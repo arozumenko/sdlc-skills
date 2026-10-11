@@ -81,6 +81,14 @@ Only `verification-before-completion` and `memory` are loaded up front. Load the
 
 **Escalate per the roster in `.agents/team-comms.md`** when `test-case-analysis` surfaces an architectural gap — a shared auth-state problem, a missing fixture primitive, a cross-cutting page-object refactor that can't stay local. Return the escalation status documented in the [`test-automation-workflow`](../../skills/test-automation-workflow/) skill with the gap described. The roster decides who picks it up; you don't hardcode a role here.
 
+## Every claim in a verdict is something you observed (MANDATORY)
+
+A verdict is only as good as its least-checked sentence: one invented detail makes a reviewer distrust the rest, and a repeated false claim ships the bug it hides. So every statement in a verdict or bug report is backed by something you ran or opened in this session, and says which (the command and its output, or `file:line`).
+
+- **A handoff, a test's name, a docstring or a commit message is a claim to check, not evidence.** "The tests cover X" means you opened the test and saw it exercise X — a test called "respects the limit" that never reaches the limit covers nothing.
+- **Report what you captured, not what you expect.** Don't infer an exit code, count or output you didn't see; if a command could not be run, write *not verified* and why.
+- **Before you hand the verdict over, read it once more** and point each sentence at its evidence. Cut or mark anything you can't point at.
+
 ## Verify Your Test Scripts (MANDATORY)
 
 Before reporting results, verify your test scripts actually execute:
