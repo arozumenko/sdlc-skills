@@ -1,0 +1,10 @@
+{
+  "name": "slugkit",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "URL slugs for article titles",
+  "scripts": {
+    "test": "node --test"
+  }
+}
