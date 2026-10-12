@@ -38,6 +38,7 @@ function parseArgs(argv) {
     else if (a === "--max-budget-usd") o.maxBudgetUsd = Number(v());
     else if (a === "--timeout-sec") o.timeoutSec = Number(v());
     else if (a === "--repo") o.repo = resolve(v());
+    else if (a === "--suite-dir") o.suiteDir = resolve(v());
     else if (a === "-h" || a === "--help") { console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 11).join("\n")); process.exit(0); }
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -54,7 +55,11 @@ export function loadCases(suiteDir, only) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  const cases = loadCases(join(HERE, opts.suite), opts.cases);
+  // --suite-dir runs cases kept outside this public repo: a private held-out
+  // set whose graders must not be published. Graders import ../../lib/*, so
+  // lay it out as <private>/<suite>/<case>/ with <private>/lib symlinked to
+  // this evals/lib.
+  const cases = loadCases(opts.suiteDir ?? join(HERE, opts.suite), opts.cases);
   if (!cases.length) throw new Error("no matching cases");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outDir = resolve(HERE, "results", `${opts.label}-${stamp}`);
@@ -63,8 +68,12 @@ async function main() {
   const repo = opts.repo ?? REPO;
   const head = spawnSync("git", ["-C", repo, "log", "-1", "--format=%H %s"], { encoding: "utf8" }).stdout.trim();
   const dirty = spawnSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim() !== "";
-  console.log(`installing from ${repo} @ ${head}${dirty ? " (+ uncommitted changes)" : ""}`);
-  writeFileSync(join(outDir, "run.json"), JSON.stringify({ opts, repo, head, dirty, cases: cases.map((c) => c.spec.id), startedAt: stamp }, null, 2));
+  // Pin the tool versions too: a CLI or model rollout must not be read as a
+  // regression in the factory.
+  const version = (cmd) => spawnSync(cmd, ["--version"], { encoding: "utf8" }).stdout?.trim() || null;
+  const tools = { claude: version("claude"), codex: opts.judge ? version("codex") : null, node: process.version };
+  console.log(`installing from ${repo} @ ${head}${dirty ? " (+ uncommitted changes)" : ""}; claude ${tools.claude}`);
+  writeFileSync(join(outDir, "run.json"), JSON.stringify({ opts, repo, head, dirty, tools, cases: cases.map((c) => c.spec.id), startedAt: stamp }, null, 2));
 
   const records = [];
   for (const c of cases) {

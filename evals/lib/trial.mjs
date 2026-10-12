@@ -95,8 +95,15 @@ export function claudeArgs(spec, brief, opts) {
     "--no-session-persistence",
     "--permission-mode", "acceptEdits",
     // Bash runs inside Claude Code's OS sandbox (writes confined to the
-    // workspace), so it needs no prompt and cannot touch the host.
-    "--settings", JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true } }),
+    // workspace), so it needs no prompt and cannot touch the host. It is also
+    // allowed outright: sandbox auto-allow does not cover compound commands
+    // that expand a variable (`node x; echo "exit=$?"` → "contains multiple
+    // operations … require approval"), and a headless run cannot approve, so
+    // whether a trial got Bash depended on how the role phrased a command
+    // (9 of 35 trials on 2026-10-11 lost Bash that way).
+    // allowUnsandboxedCommands:false keeps that allow from extending to a
+    // command that asks to run outside the sandbox.
+    "--settings", JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false }, permissions: { allow: ["Bash"] } }),
     "--max-budget-usd", String(opts.maxBudgetUsd ?? spec.maxBudgetUsd ?? 5),
   ];
   if (opts.model) args.push("--model", opts.model);
