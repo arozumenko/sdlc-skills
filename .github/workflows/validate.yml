@@ -27,12 +27,25 @@ jobs:
         run: pip install "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref"
       - name: Validate skills against the Agent Skills spec
         run: |
+          # Factories live under bundles/<id>/skills/. Each tree must contribute
+          # at least one skill: a pattern that silently matches nothing (as
+          # factories/*/skills/*/ did after the rename) would report green
+          # while validating none of them.
           status=0
-          for dir in skills/*/ factories/*/skills/*/; do
-            if [ -f "$dir/SKILL.md" ]; then
-              echo "::group::$dir"
-              skills-ref validate "$dir" || status=1
-              echo "::endgroup::"
+          for tree in "skills" "bundles/*/skills"; do
+            n=0
+            for dir in $tree/*/; do
+              if [ -f "$dir/SKILL.md" ]; then
+                n=$((n + 1))
+                echo "::group::$dir"
+                skills-ref validate "$dir" || status=1
+                echo "::endgroup::"
+              fi
+            done
+            echo "$tree: $n skill(s) validated"
+            if [ "$n" -eq 0 ]; then
+              echo "::error::no SKILL.md found under $tree/*/ — check the path"
+              status=1
             fi
           done
           exit $status
