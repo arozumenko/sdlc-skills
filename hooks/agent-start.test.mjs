@@ -68,15 +68,29 @@ test('an oversized index is capped on Claude Code, not emitted whole', () => {
 });
 
 // Whole-file spill would leave the agent with no map at all. MEMORY.md is
-// line-oriented, so a head-slice is N complete hooks rather than a severed page.
-test('an over-budget index still delivers its first entries plus a pointer', () => {
+// line-oriented, so a slice is N complete hooks rather than a severed page —
+// and it must be the NEWEST N: the memory skill appends at the end, and roles
+// do not open the read-list, so a head-slice silently loses every recent lesson.
+test('an over-budget index delivers its newest entries plus a pointer', () => {
   const dir = project({ memory: { 'MEMORY.md': index(4000) } });
   try {
     const out = run(dir, 'qa-engineer', { SDLC_CTX_CAP: '8192' });
-    assert.match(out, /FIRST \d+ ENTRIES/);
-    assert.match(out, /Entry 0/);            // usable content survived
-    assert.doesNotMatch(out, /Entry 3999/);  // but not all of it
-    assert.match(out, /REQUIRED READING/);          // and the rest is named
+    assert.match(out, /LAST \d+ ENTRIES, newest/);
+    assert.match(out, /Entry 3999/);         // the most recent lesson survived
+    assert.doesNotMatch(out, /Entry 0\]/);   // the oldest did not
+    assert.match(out, /REQUIRED READING/);   // and the rest is named
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the kept index slice stays in file order', () => {
+  const dir = project({ memory: { 'MEMORY.md': index(4000) } });
+  try {
+    const ctx = JSON.parse(run(dir, 'qa-engineer', { SDLC_CTX_CAP: '8192', CLAUDECODE: '1' })).hookSpecificOutput.additionalContext;
+    const kept = [...ctx.matchAll(/\[Entry (\d+)\]/g)].map((m) => Number(m[1]));
+    assert.ok(kept.length > 5, `expected several entries, got ${kept.length}`);
+    assert.deepEqual(kept, [...kept].sort((a, b) => a - b), 'entries out of order');
+    assert.equal(kept.at(-1), 3999);
+    assert.equal(kept.at(-1) - kept[0] + 1, kept.length, 'kept entries must be one contiguous tail');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -425,10 +425,18 @@ $(list_shared_files "$agents_dir" "$role")"
       else
         # Whole-file spill loses everything in that file. MEMORY.md is the one
         # file where a partial view is still useful: it is line-oriented (one
-        # entry per line), so the first N lines are N complete, usable hooks —
-        # not a sentence cut in half. A legacy index can be many times the cap
+        # entry per line), so N lines are N complete, usable hooks — not a
+        # sentence cut in half. A legacy index can be many times the cap
         # (measured: 124KB against a 32KB budget), and all-or-nothing there means
         # the agent gets no map at all.
+        #
+        # Which N: the NEWEST. The memory skill appends index lines at the end,
+        # so the tail is the most recent lessons. Keeping the head (as this
+        # used to) delivered the oldest entries and silently dropped every
+        # recent lesson, and the read-list does not rescue them: measured in
+        # evals/ E01L/E02L, roles under load never opened MEMORY.md from the
+        # read-list (0 of 15 runs) and followed a newest-last lesson 0 of 12
+        # times. Lines are kept in file order, so the agent reads them as written.
         if [ "$mf" = "MEMORY.md" ]; then
           # Incremental accounting. esc_byte_len is per-character additive
           # (raw bytes + one per escaped char), so measuring the fixed parts
@@ -439,18 +447,22 @@ $(list_shared_files "$agents_dir" "$role")"
           # seconds of synchronous latency per dispatch on a field-sized index.
           # The wrapper is measured with a 5-digit N placeholder (upper bound),
           # so the annotation can never push the final payload over the cap.
-          local head_doc="" line n=0 used lineln wrapper
-          wrapper=$'\n\n'"${header} (FIRST 99999 ENTRIES — the file is over the injection budget)"$'\n\n'
+          local tail_doc="" line n=0 used lineln wrapper
+          wrapper=$'\n\n'"${header} (LAST 99999 ENTRIES, newest — the file is over the injection budget)"$'\n\n'
           used=$(( $(esc_byte_len "$context") + $(esc_byte_len "$wrapper") ))
+          # Walk the index newest-first (awk reverse: portable, unlike tac /
+          # tail -r), skipping blank lines, and prepend each kept line so the
+          # slice comes out in file order.
           while IFS= read -r line; do
+            [ -n "$line" ] || continue
             lineln=$(( $(esc_byte_len "$line") + 2 ))
             [ $(( used + lineln )) -gt "$budget" ] && break
             used=$(( used + lineln ))
-            head_doc="${head_doc}${line}"$'\n'
+            tail_doc="${line}"$'\n'"${tail_doc}"
             n=$((n + 1))
-          done < "$f"
+          done < <(awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }' "$f")
           if [ "$n" -gt 0 ]; then
-            context="${context}"$'\n\n'"${header} (FIRST ${n} ENTRIES — the file is over the injection budget)"$'\n\n'"${head_doc}"
+            context="${context}"$'\n\n'"${header} (LAST ${n} ENTRIES, newest — the file is over the injection budget)"$'\n\n'"${tail_doc}"
           fi
         fi
         overflow="${overflow}${rel}"$'\n'                        # too big → self-read

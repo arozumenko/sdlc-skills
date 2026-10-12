@@ -125,9 +125,13 @@ Two habits keep the pass cheap, and both cost nothing at write time:
 
 Field evidence for the budget: one role's index reached **124 KB across 171
 entries** — a mean of 723 characters per "one-line" entry — because every
-recurrence was appended to its description. Past ~48 KB the launch hook can no
-longer inject it, so **302 of 302 dispatches in one campaign silently ran on a
-2 KB preview** of their own memory. Dense technical text runs ~2.2 bytes/token,
+recurrence was appended to its description, and **302 of 302 dispatches in one
+campaign silently ran on a 2 KB preview** of their own memory. The launch hook
+now injects at most ~9 KB per dispatch (Claude Code's limit is 10,000
+characters), shared with the persona and rules: in practice room for a few
+dozen index lines. When the index is longer, only its **newest** lines are
+injected and the rest is named as required reading, which roles rarely open —
+so an older line that still matters must be kept short, or it falls out of view. Dense technical text runs ~2.2 bytes/token,
 not the usual ~4, so a "small" 147 KB entry is ~67,000 tokens.
 
 ### Where does this go?
