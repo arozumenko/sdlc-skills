@@ -1,0 +1,131 @@
+{
+  "generatedFrom": "89c09e3e181e",
+  "versions": [
+    {
+      "commit": "7a73f7de680c",
+      "date": "2026-10-12",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "577594476fffb2b3c0e652db381465f55a97a9b480d542e9cda4a883e5b08b86",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "8cfd2935781e1042e6438c0f3437b9b91e8ab7abaac0b2dff12c442507a2916d"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 9000
+      }
+    },
+    {
+      "commit": "ba2c1532b57e",
+      "date": "2026-10-10",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "577594476fffb2b3c0e652db381465f55a97a9b480d542e9cda4a883e5b08b86",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "dad8f6487e98036bd45aa73311633a7a02534f792fda09364758cd570cc20cdc"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 9000
+      }
+    },
+    {
+      "commit": "fa0a6fbad9a0",
+      "date": "2026-08-21",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "80047196b364e90c634f105f4ce75e3821e20607081e64d38a9fd33ffd87d4b6",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "ccf98699746def2a8cc1554871efd1e0169a274ee82ea03379077e0ab8c49660"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 32768
+      }
+    },
+    {
+      "commit": "7270f5bdf970",
+      "date": "2026-08-16",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "80047196b364e90c634f105f4ce75e3821e20607081e64d38a9fd33ffd87d4b6",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "6153c866ccfba7d46db26850e10b3c4a44376e0058e3cc7439f62e1f75b784d6"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 32768
+      }
+    },
+    {
+      "commit": "d9eac08323a2",
+      "date": "2026-08-10",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "80047196b364e90c634f105f4ce75e3821e20607081e64d38a9fd33ffd87d4b6",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "6518d1643b0f1d16e73d535be30c5c47686e476279ec5289cfcb9f5514425cd5"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 32768
+      }
+    },
+    {
+      "commit": "e78c56fe9cbc",
+      "date": "2026-08-06",
+      "files": {
+        "run-hook.cmd": "a3fdcc54365c107d15322f6c0f7a5bd9aee2a146661a75e5b6c58ef6ea794cb2",
+        "session-start": "81e096ffde0ab25580977a7cc6a5d29a6d33bc4cfcdfdc192e4bfaaf3d95e68d",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "5baa28875232e5654902564213baca45d0144f21fe8bf8c0d958b75938a2c1a2"
+      },
+      "defaultBudget": {
+        "claude": null,
+        "copilot": null
+      }
+    },
+    {
+      "commit": "edc4bc8925e3",
+      "date": "2026-07-13",
+      "files": {
+        "run-hook.cmd": "a3fdcc54365c107d15322f6c0f7a5bd9aee2a146661a75e5b6c58ef6ea794cb2",
+        "session-start": "e192fdbc284254342dc206b664cf7fbf440a1500468f5f6cdec5c752720277e7",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "5baa28875232e5654902564213baca45d0144f21fe8bf8c0d958b75938a2c1a2"
+      },
+      "defaultBudget": {
+        "claude": null,
+        "copilot": null
+      }
+    },
+    {
+      "commit": "994aef00dbcb",
+      "date": "2026-06-10",
+      "files": {
+        "run-hook.cmd": "a3fdcc54365c107d15322f6c0f7a5bd9aee2a146661a75e5b6c58ef6ea794cb2",
+        "session-start": "b6e4f92be0bf55c94d42cf6b60aa45c4dcc49e175180c7c18fda70753f0911b9",
+        "agent-start": "1345b4fe7cd0ce175618052b5746173210d7076c9f21672dad8c79f129389ac1",
+        "lib.sh": "6f1953afb0f631c0d6eae8f91d4b08b458144a97f7644f7964c280725d7aed63"
+      },
+      "defaultBudget": {
+        "claude": null,
+        "copilot": null
+      }
+    },
+    {
+      "commit": "2fa1975e8f69",
+      "date": "2026-05-27",
+      "files": {
+        "run-hook.cmd": "a3fdcc54365c107d15322f6c0f7a5bd9aee2a146661a75e5b6c58ef6ea794cb2",
+        "session-start": "83dfda34f12998b291ceccbe7c4455e2bb99f689172cd23e4ae7345cd9b2ed0c",
+        "agent-start": "187b969c5d6a055f5173c84d372223ff3926331ae303f8888debc3289c9cc874",
+        "lib.sh": "10e9cb4ae7601782b58c9ed036b6ba5a853f649467b567644635fafddff1f8a4"
+      },
+      "defaultBudget": {
+        "claude": null,
+        "copilot": null
+      }
+    }
+  ]
+}
