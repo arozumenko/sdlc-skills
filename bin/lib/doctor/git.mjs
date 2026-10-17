@@ -37,11 +37,12 @@ export function createGitRunner({ cwd, versionText = null, timeoutMs = 10000 }) 
     run: exec,
     showFile(rev, relPath) {
       if (!objectReadsAllowed) return { status: 'undetermined' };
+      // `rev:./path` is cwd-relative for HEAD and the index alike (project dir may be a repo subdirectory).
       // Does the path exist at that rev? ls-tree / ls-files are object-store metadata, no blob read.
       const listed = rev === '' ? exec(['ls-files', '--', relPath]) : exec(['ls-tree', '--name-only', rev, '--', relPath]);
       if (!listed.ok) return { status: 'undetermined' };
       if (!listed.stdout.trim()) return { status: 'missing' };
-      const r = exec(['show', `${rev}:${relPath}`]);
+      const r = exec(['show', `${rev}:./${relPath}`]);
       return r.ok ? { status: 'ok', content: r.stdout } : { status: 'undetermined' };
     },
   };

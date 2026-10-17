@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -89,4 +89,17 @@ test('partial clone: a missing promisor blob is reported undetermined and never 
     assert.equal(r.showFile('HEAD', 'a.txt').status, 'undetermined');
     assert.equal(execFileSync('git', ['-C', clone, 'count-objects', '-v'], { encoding: 'utf8' }), packsBefore, 'object store unchanged');
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); }
+});
+
+test('showFile resolves paths relative to cwd when it is a repo subdirectory', () => {
+  const d = repo();
+  try {
+    mkdirSync(join(d, 'pkg'));
+    writeFileSync(join(d, 'pkg', 'b.txt'), 'sub\n'); g(d, 'add', 'pkg/b.txt'); g(d, 'commit', '-qm', 'sub');
+    writeFileSync(join(d, 'pkg', 'b.txt'), 'staged\n'); g(d, 'add', 'pkg/b.txt');
+    const r = createGitRunner({ cwd: join(d, 'pkg') });
+    assert.deepEqual(r.showFile('HEAD', 'b.txt'), { status: 'ok', content: 'sub\n' });
+    assert.deepEqual(r.showFile('', 'b.txt'), { status: 'ok', content: 'staged\n' });
+    assert.equal(r.showFile('HEAD', 'a.txt').status, 'missing');
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
