@@ -15,15 +15,32 @@ export function activePlatforms(devRoles, selected) {
 }
 
 /** Decide how dev roles get chosen, without doing any I/O.
- *  explicit: string[]|null (from --agents); devRoleNames: the factory's dev roles. */
+ *  explicit: string[]|null (from --agents); devRoleNames: the factory's dev roles.
+ *  `all` in an explicit list selects every dev role. `implicit` marks the
+ *  non-interactive default (no nonempty --agents), which installs every role. */
 export function resolveSelection({ explicit, devRoleNames, yes, isTTY }) {
   if (explicit && explicit.length) {
+    if (explicit.includes("all")) return { mode: "explicit", roles: [...devRoleNames], unknown: [], implicit: false };
     const roles = explicit.filter((r) => devRoleNames.includes(r));
     const unknown = explicit.filter((r) => !devRoleNames.includes(r));
-    return { mode: "explicit", roles, unknown };
+    return { mode: "explicit", roles, unknown, implicit: false };
   }
-  if (yes || !isTTY) return { mode: "all", roles: [...devRoleNames], unknown: [] };
-  return { mode: "picker", roles: null, unknown: [] };
+  if (yes || !isTTY) return { mode: "all", roles: [...devRoleNames], unknown: [], implicit: true };
+  return { mode: "picker", roles: null, unknown: [], implicit: false };
+}
+
+/** The warning printed when a non-interactive install selected every dev role implicitly. */
+export function implicitSelectionWarning(factory, roles) {
+  const labels = activePlatforms(factory.devRoles, roles).map((p) => factory.platforms?.[p]?.label || p);
+  const list = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels[0] || "no";
+  const example = roles.slice(0, 2).join(",");
+  return [
+    `  ! No --agents given in non-interactive mode, so all ${roles.length} developer roles were selected`,
+    `    (${list} overlays applied to the core roles they target).`,
+    `    To select only what this project uses next time:`,
+    `      init --factory ${factory.id} --agents ${example} --update`,
+    `    Roles and skills already installed stay on disk.`,
+  ].join("\n");
 }
 
 /** Merge one core role's skillOverlay across the active platforms.
