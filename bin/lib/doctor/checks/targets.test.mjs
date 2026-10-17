@@ -34,6 +34,14 @@ test('scripts or a marker entry (even broken) are evidence', () => {
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
+test('any core hook script is evidence, not only run-hook.cmd', () => {
+  const d = project({ '.claude/hooks/sdlc-skills/session-start': '#', '.claude/hooks/sdlc-skills/lib.sh': '#' });
+  try {
+    const t = detectTargets(ctxFor(d)).find((x) => x.target === 'claude');
+    assert.equal(t.evidence, true); assert.equal(t.scriptsPresent, true);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
 test('facts and out-of-scope note', () => {
   const d = project({ '.claude/hooks/sdlc-skills/run-hook.cmd': '#', '.windsurf/x': 'y' });
   try {

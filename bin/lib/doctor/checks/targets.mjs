@@ -1,4 +1,4 @@
-import { expectedCoreHookSpec } from '../../core-hook-spec.mjs';
+import { CORE_HOOK_FILES, expectedCoreHookSpec } from '../../core-hook-spec.mjs';
 import { finding } from '../finding.mjs';
 import { readJson, hookEntries } from './common.mjs';
 
@@ -11,7 +11,7 @@ export function detectTargets(ctx) {
     const spec = expectedCoreHookSpec(target);
     const dirExists = ctx.fs.list(dir).status === 'ok';
     if (!spec) return { target, dirExists, evidence: false, scriptsPresent: false, markerIn: [], examined: false };
-    const scriptsPresent = ctx.fs.exists(`${spec.scriptsDir}/run-hook.cmd`);
+    const scriptsPresent = CORE_HOOK_FILES.some((f) => ctx.fs.exists(`${spec.scriptsDir}/${f}`));
     const markerIn = spec.configFiles.filter((f) => { const j = readJson(ctx.fs, f); return j.status === 'ok' && hookEntries(j.value).length > 0; });
     return { target, dirExists, evidence: scriptsPresent || markerIn.length > 0, scriptsPresent, markerIn, examined: true };
   });
