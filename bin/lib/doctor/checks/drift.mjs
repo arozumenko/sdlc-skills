@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { finding } from '../finding.mjs';
 
-const SKILL_DIRS = { claude: '.claude/skills', cursor: '.cursor/skills', windsurf: '.windsurf/skills' };
+// Where init copies skills, per target (`<target dir>/skills/<id>`, a straight copy for every target).
+const SKILL_DIRS = { claude: '.claude/skills', cursor: '.cursor/skills', windsurf: '.windsurf/skills', copilot: '.github/skills', codex: '.codex/skills' };
 
 export function skillSources(pkgRoot) {
   const map = new Map();

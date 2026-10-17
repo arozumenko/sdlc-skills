@@ -37,3 +37,14 @@ test('drift: straight copies compared; externals, symlinks and ambiguous origins
     assert.ok(f.some((x) => x.severity === 'skipped' && /agents \(rewritten by overlays\)/.test(x.message)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('drift: copilot and codex skill directories are compared too', () => {
+  const { root, pkg, proj } = setup();
+  try {
+    tree(proj, { '.github/skills/memory/SKILL.md': 'm1', '.github/skills/memory/ref.md': 'r', '.codex/skills/memory/SKILL.md': 'edited', '.codex/skills/memory/ref.md': 'r' });
+    const detected = ['copilot', 'codex'].map((target) => ({ target, evidence: true, examined: true }));
+    const f = driftCheck.run({ projectDir: proj, pkgRoot: pkg, fs: createSafeFs(proj), facts: {}, detected });
+    assert.ok(f.some((x) => x.target === 'copilot' && x.severity === 'ok' && /1 skill match/.test(x.message)));
+    assert.ok(f.some((x) => x.target === 'codex' && x.severity === 'warning' && /memory: differs/.test(x.message)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
