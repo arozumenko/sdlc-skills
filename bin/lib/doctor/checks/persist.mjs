@@ -27,6 +27,7 @@ export const persistCheck = {
     for (const t of targets) {
       const spec = expectedCoreHookSpec(t.target);
       const before = out.length;
+      let headWiring = false; // does HEAD itself carry our wiring entries?
       for (const file of t.markerIn) {
         const state = fileState(ctx.git, file);
         if (state === 'ignored') { add(t, 'warning', `wiring is in ${file}, which is ignored (other clones get no hooks)`, `commit ${file} (remove it from .gitignore), or re-run init in every clone`); continue; }
@@ -41,26 +42,37 @@ export const persistCheck = {
         const W = wt.status === 'ok' ? canon(wt.value) : '[]';
         const I = parse(idx);
         const H = parse(head);
+        if (H !== '[]' && H !== 'malformed') headWiring = true;
         if (W === H) continue;
         if (W === I) add(t, 'warning', `wiring in ${file} is staged but not committed`, 'commit it');
         else add(t, 'warning', `wiring in ${file} has uncommitted changes`, `git add ${file} and commit`);
       }
+      // One finding per script state, not one per script; the files are in data.files.
+      const byState = { untracked: [], ignored: [], uncommitted: [], staged: [], undetermined: [] };
       for (const f of [...CORE_HOOK_FILES, 'config.sh', 'config-defaults.sh']) {
         const rel = `${spec.scriptsDir}/${f}`;
         if (!ctx.fs.exists(rel)) continue; // missing scripts are the wiring check's error
         const st = fileState(ctx.git, rel);
-        if (st === 'untracked' || st === 'ignored') { add(t, 'warning', `committed wiring references ${st} script ${rel}; other clones will not have it`, `git add ${spec.scriptsDir} and commit`); continue; }
-        if (st === 'undetermined') { add(t, 'unknown', `${rel}: Git state undetermined`); continue; }
+        if (st === 'untracked' || st === 'ignored' || st === 'undetermined') { byState[st].push(rel); continue; }
         // Bytes compared as utf8 text on both sides (showFile returns utf8); a lossless-decoding difference cannot hide an edit.
         const wt = ctx.fs.read(rel);
         const idx = ctx.git.showFile('', rel);
         const head = ctx.git.showFile('HEAD', rel);
-        if (wt.status !== 'ok' || [idx, head].some((r) => r.status === 'undetermined')) { add(t, 'unknown', `${rel}: persistence undetermined (Git < 2.45 or object unavailable)`); continue; }
+        if (wt.status !== 'ok' || [idx, head].some((r) => r.status === 'undetermined')) { byState.undetermined.push(rel); continue; }
         const W = wt.content.toString('utf8');
         if (head.status === 'ok' && W === head.content) continue;
-        if (idx.status === 'ok' && W === idx.content) add(t, 'warning', `${rel} is staged but not committed`, 'commit it');
-        else add(t, 'warning', `${rel} has uncommitted changes`, `git add ${rel} and commit`);
+        byState[idx.status === 'ok' && W === idx.content ? 'staged' : 'uncommitted'].push(rel);
       }
+      const count = (files, adj = '') => `${files.length} ${adj}${files.length === 1 ? 'script' : 'scripts'}`;
+      const one = (files, single, many) => (files.length === 1 ? single : many);
+      const wiring = headWiring ? 'committed wiring' : 'wiring';
+      const scripts = (severity, files, message, fix = null) => { if (files.length) out.push(finding({ check: 'persist', target: t.target, severity, message, fix, data: { files } })); };
+      const { untracked, ignored, uncommitted, staged, undetermined } = byState;
+      scripts('warning', untracked, `${wiring} references ${count(untracked, 'untracked ')} in ${spec.scriptsDir}; other clones will not have ${one(untracked, 'it', 'them')}`, `git add ${spec.scriptsDir} and commit`);
+      scripts('warning', ignored, `${wiring} references ${count(ignored, 'ignored ')} in ${spec.scriptsDir}; other clones will not have ${one(ignored, 'it', 'them')}`, `commit ${spec.scriptsDir} (remove it from .gitignore), or re-run init in every clone`);
+      scripts('warning', uncommitted, `${count(uncommitted, 'hook ')} in ${spec.scriptsDir} ${one(uncommitted, 'has', 'have')} uncommitted changes`, `git add ${spec.scriptsDir} and commit`);
+      scripts('warning', staged, `${count(staged, 'hook ')} in ${spec.scriptsDir} ${one(staged, 'is', 'are')} staged but not committed`, 'commit it');
+      scripts('unknown', undetermined, `${count(undetermined, 'hook ')} in ${spec.scriptsDir}: persistence undetermined (Git < 2.45, an unavailable object, or an unclassified Git state)`);
       if (out.length === before) add(t, 'ok', 'wiring and hook scripts are committed');
     }
     return out;

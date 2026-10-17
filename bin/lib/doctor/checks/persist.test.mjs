@@ -78,11 +78,29 @@ test('ignored settings file is a warning naming the consequence', () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('committed wiring referencing untracked scripts is a warning', () => {
+const scriptFindings = (f) => f.filter((x) => x.data && Array.isArray(x.data.files));
+
+test('committed wiring referencing untracked scripts is one warning listing the files', () => {
   const { root, d } = project();
   try {
     writeFileSync(join(d, '.claude/settings.json'), settings(s.events)); g(root, 'add', '.claude/settings.json'); g(root, 'commit', '-qm', 'c');
-    assert.ok(run(d).some((f) => f.severity === 'warning' && /untracked/.test(f.message) && /run-hook\.cmd/.test(f.message)));
+    const sf = scriptFindings(run(d));
+    assert.equal(sf.length, 1, JSON.stringify(sf));
+    assert.equal(sf[0].severity, 'warning'); assert.match(sf[0].message, /^committed wiring references 4 untracked scripts in \.claude\/hooks\/sdlc-skills/);
+    assert.deepEqual(sf[0].data.files, ['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh'].map((f) => `${s.scriptsDir}/${f}`));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('first run before any commit: no "committed wiring" wording, one script warning', () => {
+  const { root, d } = project();
+  try {
+    writeFileSync(join(d, '.claude/settings.json'), settings(s.events));
+    const f = run(d);
+    assert.ok(!f.some((x) => /committed wiring/.test(x.message)), JSON.stringify(f));
+    assert.ok(f.some((x) => x.severity === 'warning' && /settings\.json, which is untracked/.test(x.message)));
+    const sf = scriptFindings(f);
+    assert.equal(sf.length, 1, JSON.stringify(sf));
+    assert.match(sf[0].message, /^wiring references 4 untracked scripts/); assert.equal(sf[0].data.files.length, 4);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -103,7 +121,7 @@ test('modified tracked script is an uncommitted-changes warning, not ok', () => 
     commitAll(root, d);
     writeFileSync(join(d, s.scriptsDir, 'lib.sh'), '# edited');
     const f = run(d);
-    assert.ok(f.some((x) => x.severity === 'warning' && /lib\.sh has uncommitted/.test(x.message)));
+    assert.ok(f.some((x) => x.severity === 'warning' && /1 hook script in \.claude\/hooks\/sdlc-skills has uncommitted changes/.test(x.message) && x.data.files.join() === `${s.scriptsDir}/lib.sh`));
     assert.ok(!f.some((x) => x.severity === 'ok'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -113,7 +131,7 @@ test('staged-only script edit is a staged warning', () => {
   try {
     commitAll(root, d);
     writeFileSync(join(d, s.scriptsDir, 'session-start'), '# edited'); g(root, 'add', '-A');
-    assert.ok(run(d).some((x) => x.severity === 'warning' && /session-start is staged but not committed/.test(x.message)));
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /1 hook script in \.claude\/hooks\/sdlc-skills is staged but not committed/.test(x.message) && x.data.files.join() === `${s.scriptsDir}/session-start`));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -122,7 +140,7 @@ test('untracked config.sh behind committed wiring is a warning', () => {
   try {
     commitAll(root, d);
     writeFileSync(join(d, s.scriptsDir, 'config.sh'), '#');
-    assert.ok(run(d).some((x) => x.severity === 'warning' && /untracked/.test(x.message) && /config\.sh/.test(x.message)));
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /^committed wiring references 1 untracked script in/.test(x.message) && x.data.files.join() === `${s.scriptsDir}/config.sh`));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -132,7 +150,7 @@ test('modified tracked config-defaults.sh is an uncommitted warning', () => {
     writeFileSync(join(d, s.scriptsDir, 'config-defaults.sh'), '#');
     commitAll(root, d);
     writeFileSync(join(d, s.scriptsDir, 'config-defaults.sh'), '# edited');
-    assert.ok(run(d).some((x) => x.severity === 'warning' && /config-defaults\.sh has uncommitted/.test(x.message)));
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /has uncommitted changes/.test(x.message) && x.data.files.join() === `${s.scriptsDir}/config-defaults.sh`));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
