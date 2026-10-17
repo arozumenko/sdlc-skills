@@ -8,9 +8,10 @@ import { hookversionCheck } from './checks/hookversion.mjs';
 import { payloadCheck } from './checks/payload.mjs';
 import { driftCheck } from './checks/drift.mjs';
 import { rolesCheck } from './checks/roles.mjs';
+import { deliveryMonitorCheck, preloadDeliveryMonitor } from './checks/delivery-monitor.mjs';
 
 // Later tasks add their checks here, in this order.
-export const DEFAULT_CHECKS = [targetsCheck, wiringCheck, persistCheck, hookversionCheck, payloadCheck, driftCheck, rolesCheck];
+export const DEFAULT_CHECKS = [targetsCheck, wiringCheck, persistCheck, hookversionCheck, payloadCheck, driftCheck, rolesCheck, deliveryMonitorCheck];
 
 export function parseDoctorArgs(argv) {
   const out = { json: false, strict: false, targets: null, unknown: [] };
@@ -28,8 +29,9 @@ export function makeContext({ projectDir, pkgRoot, targets = null, git = null, f
   return { projectDir, pkgRoot, targets, git: git ?? createGitRunner({ cwd: projectDir }), fs: fs ?? createSafeFs(projectDir), facts: {} };
 }
 
-// Later tasks add async preparation steps here (Task 12).
-export const DEFAULT_PREPARE = [];
+// If the delivery-monitor preload throws, its check reports one `unknown` finding instead of failing the run.
+const safe = (fn) => async (ctx) => { try { await fn(ctx); } catch { ctx.deliveryMonitorFindings = [finding({ check: 'delivery-monitor', target: 'claude', severity: 'unknown', message: 'delivery-monitor check failed to run' })]; } };
+export const DEFAULT_PREPARE = [safe(preloadDeliveryMonitor)];
 
 export function runDoctor({ projectDir, pkgRoot, targets = null, checks = DEFAULT_CHECKS, git = null, fs = null, prepared = {} }) {
   const ctx = { ...makeContext({ projectDir, pkgRoot, targets, git, fs }), ...prepared };

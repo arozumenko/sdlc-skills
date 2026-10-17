@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { finding } from './finding.mjs';
-import { runDoctor, exitCodeFor, formatText, parseDoctorArgs, doctorMain } from './index.mjs';
+import { runDoctor, exitCodeFor, formatText, parseDoctorArgs, doctorMain, makeContext, DEFAULT_CHECKS, DEFAULT_PREPARE } from './index.mjs';
+import { deliveryMonitorCheck } from './checks/delivery-monitor.mjs';
 
 const fake = (findings) => [{ name: 'fake', run: () => findings }];
 
@@ -54,4 +55,16 @@ test('nothing installed: one clear finding, exit 0, no healthy verdict (Review F
     assert.match(text, /no sdlc-skills installation found in /);
     assert.doesNotMatch(text, /0 errors, 0 warnings/);
   } finally { console.log = log; rmSync(d, { recursive: true, force: true }); }
+});
+
+test('delivery-monitor runs last; a failing preload is one unknown finding, not a doctor failure', async () => {
+  assert.equal(DEFAULT_CHECKS.at(-1), deliveryMonitorCheck);
+  const d = mkdtempSync(join(tmpdir(), 'dprep-')), pkg = mkdtempSync(join(tmpdir(), 'dprep-pkg-'));
+  try {
+    mkdirSync(join(d, '.claude/skills/delivery-monitor'), { recursive: true });
+    const ctx = makeContext({ projectDir: d, pkgRoot: pkg });
+    for (const step of DEFAULT_PREPARE) await step(ctx); // pkg has no install-hooks.mjs: the import throws
+    const f = deliveryMonitorCheck.run({ ...ctx, detected: [{ target: 'claude', evidence: true, examined: true }] });
+    assert.deepEqual(f.map((x) => [x.severity, x.message]), [['unknown', 'delivery-monitor check failed to run']]);
+  } finally { rmSync(d, { recursive: true, force: true }); rmSync(pkg, { recursive: true, force: true }); }
 });
