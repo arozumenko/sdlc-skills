@@ -4,13 +4,17 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createSafeFs } from '../fsx.mjs';
 import { createGitRunner } from '../git.mjs';
 import { expectedCoreHookSpec } from '../../core-hook-spec.mjs';
 import { targetsCheck } from './targets.mjs';
 import { persistCheck } from './persist.mjs';
 
-const g = (d, ...a) => execFileSync('git', ['-C', d, ...a], { encoding: 'utf8' });
+const NO_NETWORK = fileURLToPath(new URL('../../../fixtures/security-testing-e2e/no-network.gitconfig', import.meta.url));
+// Fixture git calls never read the developer's global or system config.
+const gitEnv = () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NO_NETWORK });
+const g = (d, ...a) => execFileSync('git', ['-C', d, ...a], { encoding: 'utf8', env: gitEnv() });
 const s = expectedCoreHookSpec('claude');
 const settings = (events) => JSON.stringify({ hooks: Object.fromEntries(Object.entries(events).map(([e, gs]) => [e, gs.map((x) => ({ ...x, _factory: 'sdlc-core' }))])) });
 // `sub`: the installed project lives in this subdirectory of the repo.

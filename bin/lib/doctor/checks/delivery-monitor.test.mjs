@@ -10,6 +10,9 @@ import { createGitRunner } from '../git.mjs';
 import { deliveryMonitorCheck, preloadDeliveryMonitor } from './delivery-monitor.mjs';
 
 const PKG = fileURLToPath(new URL('../../../../', import.meta.url));
+const NO_NETWORK = fileURLToPath(new URL('../../../fixtures/security-testing-e2e/no-network.gitconfig', import.meta.url));
+// Fixture git calls never read the developer's global or system config.
+const gitEnv = () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NO_NETWORK });
 const ctxFor = (d) => ({ projectDir: d, pkgRoot: PKG, fs: createSafeFs(d), git: createGitRunner({ cwd: d }), facts: {}, detected: [{ target: 'claude', evidence: true, examined: true }] });
 
 test('skipped entirely when the skill and marker are absent', () => {
@@ -20,7 +23,7 @@ test('skipped entirely when the skill and marker are absent', () => {
 test('installed but unwired: warning; uses the package code, never the project copy', async () => {
   const d = mkdtempSync(join(tmpdir(), 'ddm-'));
   try {
-    execFileSync('git', ['init', '-q'], { cwd: d });
+    execFileSync('git', ['init', '-q'], { cwd: d, env: gitEnv() });
     mkdirSync(join(d, '.claude/skills/delivery-monitor/scripts'), { recursive: true });
     const sentinel = join(d, 'PROJECT_CODE_RAN');
     writeFileSync(join(d, '.claude/skills/delivery-monitor/scripts/install-hooks.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(sentinel)}, 'x'); export function doctorFindings() { return []; }`);

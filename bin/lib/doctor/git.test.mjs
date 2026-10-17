@@ -4,9 +4,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createGitRunner, parseGitVersion } from './git.mjs';
 
-const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8' });
+const NO_NETWORK = fileURLToPath(new URL('../../fixtures/security-testing-e2e/no-network.gitconfig', import.meta.url));
+// Fixture git calls never read the developer's global or system config.
+const gitEnv = () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NO_NETWORK });
+const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8', env: gitEnv() });
 function repo() {
   const d = mkdtempSync(join(tmpdir(), 'dgit-'));
   g(d, 'init', '-q'); g(d, 'config', 'user.email', 't@t'); g(d, 'config', 'user.name', 't');
@@ -82,12 +86,12 @@ test('partial clone: a missing promisor blob is reported undetermined and never 
   const clone = mkdtempSync(join(tmpdir(), 'dgit-pc-'));
   try {
     g(src, 'config', 'uploadpack.allowFilter', 'true');
-    execFileSync('git', ['clone', '-q', '--no-checkout', '--filter=blob:none', `file://${src}`, clone]);
-    const packsBefore = execFileSync('git', ['-C', clone, 'count-objects', '-v'], { encoding: 'utf8' });
+    execFileSync('git', ['clone', '-q', '--no-checkout', '--filter=blob:none', `file://${src}`, clone], { env: gitEnv() });
+    const packsBefore = execFileSync('git', ['-C', clone, 'count-objects', '-v'], { encoding: 'utf8', env: gitEnv() });
     const r = createGitRunner({ cwd: clone });
     if (!r.objectReadsAllowed) return; // older git: covered by the gate test
     assert.equal(r.showFile('HEAD', 'a.txt').status, 'undetermined');
-    assert.equal(execFileSync('git', ['-C', clone, 'count-objects', '-v'], { encoding: 'utf8' }), packsBefore, 'object store unchanged');
+    assert.equal(execFileSync('git', ['-C', clone, 'count-objects', '-v'], { encoding: 'utf8', env: gitEnv() }), packsBefore, 'object store unchanged');
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); }
 });
 

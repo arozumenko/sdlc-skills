@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 const INIT = fileURLToPath(new URL('../../init.mjs', import.meta.url));
 const NO_NETWORK = fileURLToPath(new URL('../../fixtures/security-testing-e2e/no-network.gitconfig', import.meta.url));
 const envFor = (root) => ({ ...process.env, HOME: root, SDLC_SKILLS_CACHE_DIR: join(root, '.cache'), GIT_CONFIG_GLOBAL: NO_NETWORK });
-const g = (d, ...a) => execFileSync('git', ['-C', d, ...a], { encoding: 'utf8' });
+// Fixture git calls never read the developer's global or system config.
+const g = (d, ...a) => execFileSync('git', ['-C', d, ...a], { encoding: 'utf8', env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NO_NETWORK } });
 function treeHash(dir) {
   const h = createHash('sha256');
   const walk = (p) => { for (const n of readdirSync(p).sort()) { const f = join(p, n); const s = statSync(f); h.update(f); if (s.isDirectory()) walk(f); else h.update(readFileSync(f)); } };
