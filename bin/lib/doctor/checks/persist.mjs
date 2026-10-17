@@ -45,11 +45,21 @@ export const persistCheck = {
         if (W === I) add(t, 'warning', `wiring in ${file} is staged but not committed`, 'commit it');
         else add(t, 'warning', `wiring in ${file} has uncommitted changes`, `git add ${file} and commit`);
       }
-      for (const f of CORE_HOOK_FILES) {
+      for (const f of [...CORE_HOOK_FILES, 'config.sh', 'config-defaults.sh']) {
         const rel = `${spec.scriptsDir}/${f}`;
         if (!ctx.fs.exists(rel)) continue; // missing scripts are the wiring check's error
         const st = fileState(ctx.git, rel);
-        if (st === 'untracked' || st === 'ignored') add(t, 'warning', `committed wiring references ${st} script ${rel}; other clones will not have it`, `git add ${spec.scriptsDir} and commit`);
+        if (st === 'untracked' || st === 'ignored') { add(t, 'warning', `committed wiring references ${st} script ${rel}; other clones will not have it`, `git add ${spec.scriptsDir} and commit`); continue; }
+        if (st === 'undetermined') { add(t, 'unknown', `${rel}: Git state undetermined`); continue; }
+        // Bytes compared as utf8 text on both sides (showFile returns utf8); a lossless-decoding difference cannot hide an edit.
+        const wt = ctx.fs.read(rel);
+        const idx = ctx.git.showFile('', rel);
+        const head = ctx.git.showFile('HEAD', rel);
+        if (wt.status !== 'ok' || [idx, head].some((r) => r.status === 'undetermined')) { add(t, 'unknown', `${rel}: persistence undetermined (Git < 2.45 or object unavailable)`); continue; }
+        const W = wt.content.toString('utf8');
+        if (head.status === 'ok' && W === head.content) continue;
+        if (idx.status === 'ok' && W === idx.content) add(t, 'warning', `${rel} is staged but not committed`, 'commit it');
+        else add(t, 'warning', `${rel} has uncommitted changes`, `git add ${rel} and commit`);
       }
       if (out.length === before) add(t, 'ok', 'wiring and hook scripts are committed');
     }

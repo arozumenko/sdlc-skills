@@ -94,3 +94,55 @@ test('not a git repository: unknown, never a crash (Review Focus 1)', () => {
     assert.deepEqual(f.map((x) => x.severity), ['unknown']); assert.match(f[0].message, /not a Git repository/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+const commitAll = (root, d) => { writeFileSync(join(d, '.claude/settings.json'), settings(s.events)); g(root, 'add', '-A'); g(root, 'commit', '-qm', 'c'); };
+
+test('modified tracked script is an uncommitted-changes warning, not ok', () => {
+  const { root, d } = project();
+  try {
+    commitAll(root, d);
+    writeFileSync(join(d, s.scriptsDir, 'lib.sh'), '# edited');
+    const f = run(d);
+    assert.ok(f.some((x) => x.severity === 'warning' && /lib\.sh has uncommitted/.test(x.message)));
+    assert.ok(!f.some((x) => x.severity === 'ok'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('staged-only script edit is a staged warning', () => {
+  const { root, d } = project();
+  try {
+    commitAll(root, d);
+    writeFileSync(join(d, s.scriptsDir, 'session-start'), '# edited'); g(root, 'add', '-A');
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /session-start is staged but not committed/.test(x.message)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('untracked config.sh behind committed wiring is a warning', () => {
+  const { root, d } = project();
+  try {
+    commitAll(root, d);
+    writeFileSync(join(d, s.scriptsDir, 'config.sh'), '#');
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /untracked/.test(x.message) && /config\.sh/.test(x.message)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('modified tracked config-defaults.sh is an uncommitted warning', () => {
+  const { root, d } = project();
+  try {
+    writeFileSync(join(d, s.scriptsDir, 'config-defaults.sh'), '#');
+    commitAll(root, d);
+    writeFileSync(join(d, s.scriptsDir, 'config-defaults.sh'), '# edited');
+    assert.ok(run(d).some((x) => x.severity === 'warning' && /config-defaults\.sh has uncommitted/.test(x.message)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('undetermined script state is unknown, never ok', () => {
+  const { root, d } = project();
+  try {
+    commitAll(root, d);
+    const ctx = { projectDir: d, fs: createSafeFs(d), git: createGitRunner({ cwd: d, versionText: 'git version 2.44.0' }), targets: ['claude'], facts: {} };
+    targetsCheck.run(ctx);
+    const f = persistCheck.run(ctx);
+    assert.ok(f.some((x) => x.severity === 'unknown') && !f.some((x) => x.severity === 'ok'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
