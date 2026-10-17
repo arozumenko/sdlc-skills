@@ -52,7 +52,13 @@ test('never executes project code and leaves tree and index unchanged', () => {
     writeFileSync(join(d, '.claude/skills/delivery-monitor/scripts/install-hooks.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'x');`);
     const hook = join(root, 'fsmon.sh'); writeFileSync(hook, evil); chmodSync(hook, 0o755); g(d, 'config', 'core.fsmonitor', hook);
     const before = treeHash(d);
-    doctor(root, d); doctor(root, d, '--json', '--strict');
+    const text = doctor(root, d), json = doctor(root, d, '--json', '--strict');
+    for (const r of [text, json]) assert.ok([0, 1].includes(r.status), `doctor ran to completion (status ${r.status}): ${r.stderr}`);
+    // Positive controls: the checks that touch the hostile files actually ran.
+    const j = JSON.parse(json.stdout);
+    assert.ok(j.findings.some((f) => f.check === 'hookversion' && f.severity !== 'ok'), 'hostile hook files are not recognised');
+    assert.ok(j.findings.some((f) => f.check === 'persist' && f.severity !== 'unknown'), 'the Git path ran');
+    assert.ok(j.findings.some((f) => f.check === 'delivery-monitor'), 'the delivery-monitor preload ran');
     assert.equal(existsSync(marker), false, 'no project code ran');
     assert.equal(treeHash(d), before, 'project tree (including .git) unchanged');
   } finally { rmSync(root, { recursive: true, force: true }); }
