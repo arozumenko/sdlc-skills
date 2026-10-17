@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   activePlatforms,
   resolveSelection,
+  implicitSelectionWarning,
   mergeCoreOverlay,
   buildOverlays,
   buildBriefingPlan,
@@ -50,7 +51,7 @@ test("activePlatforms is unique and order-preserving", () => {
 
 test("resolveSelection: explicit splits known/unknown", () => {
   const r = resolveSelection({ explicit: ["ios-dev", "nope"], devRoleNames: Object.keys(FACTORY.devRoles), yes: false, isTTY: true });
-  assert.deepEqual(r, { mode: "explicit", roles: ["ios-dev"], unknown: ["nope"] });
+  assert.deepEqual(r, { mode: "explicit", roles: ["ios-dev"], unknown: ["nope"], implicit: false });
 });
 
 test("resolveSelection: --yes or no TTY => all", () => {
@@ -136,4 +137,34 @@ test("briefingDescription: first frontmatter description wins", () => {
     "web focus"
   );
   assert.equal(briefingDescription([{ label: "Web", content: "no fm" }]), "Project overview and this role's focus");
+});
+
+test('resolveSelection: --agents all selects every dev role explicitly, no implicit flag', () => {
+  const r = resolveSelection({ explicit: ['all'], devRoleNames: ['js-dev', 'ios-dev'], yes: true, isTTY: false });
+  assert.deepEqual(r, { mode: 'explicit', roles: ['js-dev', 'ios-dev'], unknown: [], implicit: false });
+});
+
+test('resolveSelection: non-interactive with no --agents is still all roles, flagged implicit', () => {
+  const r = resolveSelection({ explicit: null, devRoleNames: ['js-dev', 'ios-dev'], yes: false, isTTY: false });
+  assert.deepEqual(r, { mode: 'all', roles: ['js-dev', 'ios-dev'], unknown: [], implicit: true });
+  const y = resolveSelection({ explicit: [], devRoleNames: ['js-dev'], yes: true, isTTY: true });
+  assert.equal(y.implicit, true);
+});
+
+test('resolveSelection: a nonempty explicit list wins over --yes and is never implicit', () => {
+  const r = resolveSelection({ explicit: ['js-dev', 'nope'], devRoleNames: ['js-dev', 'ios-dev'], yes: true, isTTY: false });
+  assert.deepEqual(r, { mode: 'explicit', roles: ['js-dev'], unknown: ['nope'], implicit: false });
+});
+
+test('implicitSelectionWarning names platforms, the narrowing command, and that installed files stay', () => {
+  const factory = {
+    id: 'feature-development',
+    devRoles: { 'python-dev': { platform: 'web' }, 'ios-dev': { platform: 'ios' }, 'android-dev': { platform: 'android' } },
+    platforms: { web: { label: 'Web' }, ios: { label: 'iOS' }, android: { label: 'Android' } },
+  };
+  const text = implicitSelectionWarning(factory, ['python-dev', 'ios-dev', 'android-dev']);
+  assert.match(text, /^  ! No --agents given in non-interactive mode, so all 3 developer roles were selected/);
+  assert.match(text, /\(Web, iOS and Android overlays applied to the core roles they target\)/);
+  assert.match(text, /init --factory feature-development --agents python-dev,ios-dev --update/);
+  assert.match(text, /Roles and skills already installed stay on disk\./);
 });
