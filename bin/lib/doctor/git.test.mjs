@@ -58,12 +58,23 @@ test('a configured fsmonitor hook is never run and the index is not rewritten', 
 
 test('routing env vars from the caller are ignored', () => {
   const d = repo(); const other = repo();
-  const saved = process.env.GIT_DIR;
+  const names = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'];
+  const saved = Object.fromEntries(names.map((k) => [k, process.env[k]]));
   try {
+    writeFileSync(join(other, 'only-in-other.txt'), 'x\n'); g(other, 'add', 'only-in-other.txt');
     process.env.GIT_DIR = join(other, '.git');
+    process.env.GIT_WORK_TREE = other;
+    process.env.GIT_INDEX_FILE = join(other, '.git', 'index');
     const r = createGitRunner({ cwd: d });
+    assert.equal(realpathSync(r.run(['rev-parse', '--absolute-git-dir']).stdout.trim()), realpathSync(join(d, '.git')));
     assert.equal(realpathSync(r.run(['rev-parse', '--show-toplevel']).stdout.trim()), realpathSync(d));
-  } finally { if (saved === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = saved; rmSync(d, { recursive: true, force: true }); rmSync(other, { recursive: true, force: true }); }
+    const listed = r.run(['ls-files']).stdout;
+    assert.ok(listed.includes('a.txt'));
+    assert.ok(!listed.includes('only-in-other.txt'), 'must list the cwd repo, not the routed one');
+  } finally {
+    for (const k of names) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+    rmSync(d, { recursive: true, force: true }); rmSync(other, { recursive: true, force: true });
+  }
 });
 
 test('partial clone: a missing promisor blob is reported undetermined and never fetched', () => {
