@@ -29,8 +29,54 @@ test('summary and exit codes; --strict changes the exit only', () => {
 });
 
 test('parseDoctorArgs', () => {
-  assert.deepEqual(parseDoctorArgs(['--json', '--strict', '--target', 'claude,codex']), { json: true, strict: true, targets: ['claude', 'codex'], unknown: [] });
+  assert.deepEqual(parseDoctorArgs(['--json', '--strict', '--target', 'claude,codex']), { json: true, strict: true, help: false, targets: ['claude', 'codex'], unknown: [] });
   assert.deepEqual(parseDoctorArgs(['--bogus']).unknown, ['--bogus']);
+  assert.equal(parseDoctorArgs(['--help']).help, true); assert.equal(parseDoctorArgs(['-h']).help, true);
+});
+
+test('parseDoctorArgs: a missing --target value never swallows the next flag', () => {
+  const a = parseDoctorArgs(['--target', '--json']);
+  assert.equal(a.json, true); assert.equal(a.unknown.length, 1); assert.match(a.unknown[0], /--target needs a value/);
+  assert.match(parseDoctorArgs(['--target']).unknown[0], /--target needs a value/);
+});
+
+test('parseDoctorArgs: unknown target ids are reported', () => {
+  const a = parseDoctorArgs(['--target', 'claud,cursor', '--strict']);
+  assert.equal(a.unknown.length, 1); assert.match(a.unknown[0], /unknown target "claud".*claude, cursor, copilot, codex, windsurf/);
+});
+
+const capture = async (fn) => {
+  const out = [], err = []; const log = console.log, error = console.error;
+  console.log = (s) => out.push(String(s)); console.error = (s) => err.push(String(s));
+  try { return { code: await fn(), out: out.join('\n'), err: err.join('\n') }; } finally { console.log = log; console.error = error; }
+};
+
+test('doctorMain: bad --target is exit 2 with a clear message, even with --strict', async () => {
+  const r = await capture(() => doctorMain(['--target', 'claud', '--strict'], { cwd: '/tmp', pkgRoot: '/tmp' }));
+  assert.equal(r.code, 2); assert.match(r.err, /unknown target "claud"/); assert.doesNotMatch(r.out, /no sdlc-skills installation/);
+  assert.equal((await capture(() => doctorMain(['--target', '--json'], { cwd: '/tmp', pkgRoot: '/tmp' }))).code, 2);
+});
+
+test('doctorMain: --help and -h print usage and exit 0', async () => {
+  for (const flag of ['--help', '-h']) {
+    const r = await capture(() => doctorMain([flag], { cwd: '/tmp', pkgRoot: '/tmp' }));
+    assert.equal(r.code, 0); assert.match(r.out, /init doctor \[--json\] \[--strict\] \[--target <list>\]/); assert.equal(r.err, '');
+  }
+});
+
+test('doctorMain: a formatting failure is exit 2, not 1', async () => {
+  const bad = fake([finding({ check: 'a', severity: 'error', message: 'e' })]);
+  const r = await capture(() => doctorMain([], { cwd: '/tmp', pkgRoot: '/tmp', checks: bad, prepare: [], format: () => { throw new Error('fmt'); } }));
+  assert.equal(r.code, 2); assert.match(r.err, /doctor failed: fmt/);
+});
+
+test('formatText: spec Label: facts, no internal installed fact, ignore notes folded', () => {
+  const text = formatText({ facts: { installed: true, targets: 'claude (installed)', roles: 'scout', memory: '1 role, 0 with a memory directory', 'ignore:.claude/settings.json': 'tracked but matches an ignore rule' }, findings: [], summary: { errors: 0, warnings: 0, unknown: 0 } });
+  assert.match(text, /^  Targets:  claude \(installed\)$/m);
+  assert.match(text, /^  Roles:    scout$/m);
+  assert.match(text, /^  Memory:   1 role, 0 with a memory directory$/m);
+  assert.match(text, /^  Notes:    \.claude\/settings\.json is tracked but matches an ignore rule$/m);
+  assert.doesNotMatch(text, /installed  *true|ignore:/);
 });
 
 test('doctorMain: a crashing check is exit 2; JSON shape', async () => {

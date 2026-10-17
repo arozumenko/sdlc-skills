@@ -3,6 +3,7 @@ import { finding } from '../finding.mjs';
 import { readJson, hookEntries } from './common.mjs';
 
 const ALL = [['claude', '.claude'], ['cursor', '.cursor'], ['copilot', '.github'], ['codex', '.codex'], ['windsurf', '.windsurf']];
+export const KNOWN_TARGETS = ALL.map(([id]) => id);
 
 export function detectTargets(ctx) {
   const wanted = ctx.targets;
