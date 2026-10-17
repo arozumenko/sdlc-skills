@@ -17,3 +17,8 @@ test('literalDefaultCap reads the printf literals', () => {
   assert.deepEqual(literalDefaultCap(lib), { claude: 9000, copilot: 10240 });
   assert.deepEqual(literalDefaultCap('nothing here'), { claude: null, copilot: null });
 });
+
+test('literalDefaultCap falls back to the ${SDLC_CTX_CAP:-N} default for both hosts', () => {
+  const lib = 'build_ctx() {\n  local cap="${SDLC_CTX_CAP:-10240}" budget maxlist\n}\n';
+  assert.deepEqual(literalDefaultCap(lib), { claude: 10240, copilot: 10240 });
+});

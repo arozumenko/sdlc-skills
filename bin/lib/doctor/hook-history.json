@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "89c09e3e181e",
+  "generatedFrom": "8b66c8157ff6",
   "versions": [
     {
       "commit": "7a73f7de680c",
@@ -81,8 +81,8 @@
         "lib.sh": "5baa28875232e5654902564213baca45d0144f21fe8bf8c0d958b75938a2c1a2"
       },
       "defaultBudget": {
-        "claude": null,
-        "copilot": null
+        "claude": 10240,
+        "copilot": 10240
       }
     },
     {
@@ -95,8 +95,8 @@
         "lib.sh": "5baa28875232e5654902564213baca45d0144f21fe8bf8c0d958b75938a2c1a2"
       },
       "defaultBudget": {
-        "claude": null,
-        "copilot": null
+        "claude": 10240,
+        "copilot": 10240
       }
     },
     {
@@ -109,8 +109,8 @@
         "lib.sh": "6f1953afb0f631c0d6eae8f91d4b08b458144a97f7644f7964c280725d7aed63"
       },
       "defaultBudget": {
-        "claude": null,
-        "copilot": null
+        "claude": 10240,
+        "copilot": 10240
       }
     },
     {

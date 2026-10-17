@@ -21,7 +21,11 @@ export function parseShellLiterals(text) {
 
 export function literalDefaultCap(libSh) {
   const body = /default_ctx_cap\(\)\s*\{([\s\S]*?)\n\}/.exec(String(libSh));
-  if (!body) return { claude: null, copilot: null };
+  if (!body) {
+    // Older lib.sh: one host-independent default, `local cap="${SDLC_CTX_CAP:-N}"`.
+    const old = /\$\{SDLC_CTX_CAP:-(\d+)\}/.exec(String(libSh));
+    return old ? { claude: Number(old[1]), copilot: Number(old[1]) } : { claude: null, copilot: null };
+  }
   const m = /then\s+printf\s+'(\d+)';\s*else\s+printf\s+'(\d+)'/.exec(body[1]);
   return m ? { copilot: Number(m[1]), claude: Number(m[2]) } : { claude: null, copilot: null };
 }
