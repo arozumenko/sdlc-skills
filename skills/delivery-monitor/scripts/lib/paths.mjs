@@ -5,23 +5,32 @@ import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 
-// Memoized per process (keyed by the resolved candidate path) so repeated calls in the
-// same run don't each spawn `git`. Non-git temp dirs pass through unchanged, and that
+// Memoized per process (keyed by the resolved candidate path and the runner kind) so repeated
+// calls in the same run don't each spawn `git`. Non-git temp dirs pass through unchanged, and that
 // result is memoized too — it's still just `resolve(repo)`, so it stays correct even if
 // the directory later becomes a git repo within the same process.
+// `run(cwd, args) → string|null` (same contract as lib/git.mjs `git`) replaces the direct spawn —
+// doctor injects its hardened runner here.
 const ownerCache = new Map();
-export function resolveOwnerRepo(repo) {
+export function resolveOwnerRepo(repo, run = null) {
   const candidate = resolve(repo);
-  if (ownerCache.has(candidate)) return ownerCache.get(candidate);
-  const g = (...args) => { try { return execFileSync('git', ['-C', candidate, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
+  const key = `${candidate}|${run ? 'h' : 'd'}`;
+  if (ownerCache.has(key)) return ownerCache.get(key);
+  const g = run ? (...args) => run(candidate, args) : (...args) => { try { return execFileSync('git', ['-C', candidate, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
   const top = g('rev-parse', '--show-toplevel')?.trim();
-  if (!top) { ownerCache.set(candidate, candidate); return candidate; }
-  // Git lists the main checkout first, even with --separate-git-dir; never guess from path spelling.
-  const listing = g('worktree', 'list', '--porcelain', '-z');
-  const first = listing?.split('\0').find((v) => v.startsWith('worktree '))?.slice(9);
-  if (!first || !isAbsolute(first)) throw cliError('USAGE', 'cannot resolve telemetry owner from git worktree list');
-  const owner = resolve(first);
-  ownerCache.set(candidate, owner);
+  let owner = candidate;
+  if (top) {
+    // Git lists the main checkout first, even with --separate-git-dir; never guess from path spelling.
+    const listing = g('worktree', 'list', '--porcelain', '-z');
+    const first = listing?.split('\0').find((v) => v.startsWith('worktree '))?.slice(9);
+    if (!first || !isAbsolute(first)) throw cliError('USAGE', 'cannot resolve telemetry owner from git worktree list');
+    owner = resolve(first);
+  }
+  ownerCache.set(key, owner);
+  // The owner is a fixed point (it resolves to itself), so an injected runner's answer also covers
+  // the path helpers below, which re-resolve the owner without a runner — otherwise they would
+  // spawn git directly and bypass the injected one.
+  if (run && !ownerCache.has(`${owner}|d`)) ownerCache.set(`${owner}|d`, owner);
   return owner;
 }
 export const ownerRepo = (payload = {}, env = {}) => resolveOwnerRepo(payload.cwd ?? env.CLAUDE_PROJECT_DIR ?? process.cwd());

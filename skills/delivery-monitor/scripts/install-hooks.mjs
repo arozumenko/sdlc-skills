@@ -3,7 +3,6 @@
 import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
@@ -115,23 +114,27 @@ export function telemetryMode(repo) { return existsSync(join(repo, '.agents', 't
 // tree). If check-ignore refuses for some other reason, `checkIgnoreOne` returns `hit: null` rather
 // than guessing, and the fallback in `checkPatterns` reads the owner's actual `.gitignore` and looks
 // for the pattern as a literal line, in any block — never a probe compared against itself.
-function checkIgnoreOne(cwd, probe) {
-  try { execFileSync('git', ['check-ignore', '-q', '--no-index', '--', probe], { cwd, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] }); return { hit: true }; }
-  catch (e) {
-    if (e.status === 1) return { hit: false };
-    const reason = (e.stderr ? String(e.stderr) : String(e.message)).trim().split('\n')[0] || `exit ${e.status}`;
-    return { hit: null, reason };
-  }
+// Default `gitExec(cwd, args) → { ok, status, reason? }`: the direct spawn, with git's first stderr
+// line as `reason`; doctor injects its hardened runner (no `reason`, so the exit status stands in).
+function gitExecq(cwd, args) {
+  try { execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] }); return { ok: true, status: 0 }; }
+  catch (e) { return { ok: false, status: typeof e.status === 'number' ? e.status : null, reason: (e.stderr ? String(e.stderr) : String(e.message)).trim().split('\n')[0] || null }; }
+}
+function checkIgnoreOne(cwd, probe, gitExec) {
+  const r = gitExec(cwd, ['check-ignore', '-q', '--no-index', '--', probe]);
+  if (r.ok) return { hit: true };
+  if (r.status === 1) return { hit: false };
+  return { hit: null, reason: r.reason || `exit ${r.status}` };
 }
 function gitignoreLines(cwd) {
   const file = join(cwd, '.gitignore');
   if (!existsSync(file)) return null;
   try { return readFileSync(file, 'utf8').split('\n').map((l) => l.trim()); } catch { return null; }
 }
-function checkPatterns(cwd, patterns, probeOf) {
+function checkPatterns(cwd, patterns, probeOf, gitExec) {
   let fellBack = false, undetermined = null;
   const okCount = patterns.reduce((n, p) => {
-    const r = checkIgnoreOne(cwd, probeOf(p));
+    const r = checkIgnoreOne(cwd, probeOf(p), gitExec);
     let hit = r.hit;
     if (hit === null) {
       fellBack = true;
@@ -149,37 +152,39 @@ function renderIgnoreLine(label, res) {
 
 // F6: check-ignore only proves the PATTERN matches a probe path; it never proves git would actually
 // skip these paths on a real `git add -A` inside the telemetry repo (e.g. a typo'd pattern can still
-// look right to the eye). GIT_INDEX_FILE points at a throwaway, never-created path so this reads a
-// disposable index only — it never touches the telemetry repo's real index or working tree, and the
-// throwaway file is removed in `finally` regardless of outcome.
-function stagingLeaks(tel) {
-  const idx = join(tmpdir(), `dm-doctor-index-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  try {
-    const out = execFileSync('git', ['add', '-A', '--dry-run'], { cwd: tel, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_INDEX_FILE: idx } });
-    return out.split('\n').filter(Boolean).map((l) => l.replace(/^add '(.*)'$/, '$1')).filter((p) => /^delivery\/(reports\/|\.lock\/|\.pending-)/.test(p));
-  } catch { return null; }
-  finally { try { rmSync(idx, { force: true }); } catch { /* disposable */ } }
+// look right to the eye). Untracked, unignored transients are exactly what `git add -A` would stage;
+// `ls-files --others --exclude-standard` lists them read-only, with no index of any kind written.
+const TRANSIENT = ['delivery/reports', 'delivery/.lock', 'delivery/.pending-*'];
+function stagingLeaks(tel, git) {
+  const out = git(tel, ['ls-files', '--others', '--exclude-standard', '--', ...TRANSIENT]);
+  return out == null ? null : out.split('\n').filter(Boolean);
 }
 
-export function doctorReport(repo, rel, { env = process.env } = {}) {
-  repo = resolveOwnerRepo(repo);
-  const lines = []; let ok = true;
+/** One structured finding per doctor line. `git(cwd, args) → string|null` (lib/git.mjs `git` contract) and
+ * `gitExec(cwd, args) → { ok, status, reason? }` default to direct spawns; doctor injects its hardened runner. */
+export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitExec = gitExecq } = {}) {
+  const physical = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  const asked = physical(repo);
+  repo = resolveOwnerRepo(repo, git);
+  const checkout = asked === physical(repo) ? 'main' : 'linked';
+  const findings = [];
+  const add = (severity, line, fix = null) => findings.push({ severity, message: line, fix, checkout, line });
   const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
   const wired = [...(settings.hooks?.SubagentStop ?? []), ...(local.hooks?.SubagentStop ?? [])].some((e) => e && e[MARKER]);
-  lines.push(`hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`); if (!wired) ok = false;
-  const runs = listRuns(repo); lines.push(`plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
-  lines.push(`sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
-  // The count alone hid that the orchestrating session was never bound (coach-android 2026-10-08) — say so for THIS session.
+  add(wired ? 'ok' : 'warning', `hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`, wired ? null : `node ${rel}/scripts/install-hooks.mjs`);
+  const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
+  add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
+  // The count alone hid that the orchestrating session was never bound — say so for THIS session.
   const me = currentSession(env);
   if (me) {
     let mine = null; try { mine = JSON.parse(readFileSync(sessionPath(repo, me.host, me.session), 'utf8')).plan; } catch { /* unbound */ }
     const open = runs.filter((r) => r.status === 'open').map((r) => r.run);
-    if (mine) lines.push(`this session: ${me.host}:${me.session} -> ${mine}${open.includes(mine) ? '' : ' (not open — the hook records nothing for it)'}`);
-    else lines.push(`this session: ${me.host}:${me.session} unbound${open.length ? ` — the hook records this session's dispatches only once bound (or when its branch maps to one open run): delivery.mjs session set --plan <${open.join('|')}>` : ''}`);
+    if (mine) add('info', `this session: ${me.host}:${me.session} -> ${mine}${open.includes(mine) ? '' : ' (not open — the hook records nothing for it)'}`);
+    else add('info', `this session: ${me.host}:${me.session} unbound${open.length ? ` — the hook records this session's dispatches only once bound (or when its branch maps to one open run): delivery.mjs session set --plan <${open.join('|')}>` : ''}`);
   }
-  const rootRes = checkPatterns(repo, ROOT_PATTERNS, (p) => p.replace(/\*$/, 'x').replace(/\/$/, '/x'));
-  lines.push(renderIgnoreLine('root', rootRes)); if (rootRes.undetermined || rootRes.okCount !== rootRes.total) ok = false;
-  const tel = join(repo, '.agents', 'telemetry'); const mode = telemetryMode(repo); lines.push(`telemetry: ${mode}${mode === 'plain-dir' ? ' (records ride the main tree until install-hooks.mjs bootstraps the shared submodule)' : ''}`);
+  const rootRes = checkPatterns(repo, ROOT_PATTERNS, (p) => p.replace(/\*$/, 'x').replace(/\/$/, '/x'), gitExec);
+  add(rootRes.undetermined || rootRes.okCount !== rootRes.total ? 'warning' : 'ok', renderIgnoreLine('root', rootRes));
+  const tel = join(repo, '.agents', 'telemetry'); const mode = telemetryMode(repo); add('info', `telemetry: ${mode}${mode === 'plain-dir' ? ' (records ride the main tree until install-hooks.mjs bootstraps the shared submodule)' : ''}`);
   // F6/restore(): a bootstrap that found a same-named file already checked out on the telemetry
   // branch leaves that interim file stranded in the sibling stash dir instead of silently dropping
   // it — surfaced here (regardless of submodule/plain-dir mode) rather than only promised in a code
@@ -187,35 +192,42 @@ export function doctorReport(repo, rel, { env = process.env } = {}) {
   const stash = `${tel}.pre-submodule`;
   if (existsSync(stash)) {
     const stranded = readdirSync(stash);
-    lines.push(`stranded interim files: ${stranded.length} in .agents/telemetry.pre-submodule (${stranded.join(', ')}) — move the files back by hand, then rm -r .agents/telemetry.pre-submodule`);
-    ok = false;
+    add('warning', `stranded interim files: ${stranded.length} in .agents/telemetry.pre-submodule (${stranded.join(', ')}) — move the files back by hand, then rm -r .agents/telemetry.pre-submodule`);
   }
   if (mode === 'submodule') {
-    const innerRes = checkPatterns(tel, INNER_PATTERNS, (p) => p.replace(/^\//, '').replace(/\*$/, 'x').replace(/\/$/, '/x'));
-    lines.push(renderIgnoreLine('inner', innerRes)); if (innerRes.undetermined || innerRes.okCount !== innerRes.total) ok = false;
-    const tracked = (gitq(tel, ['ls-files', 'delivery/reports', 'delivery/.lock']) ?? '').split('\n').filter(Boolean); lines.push(`tracked transients: ${tracked.length}${tracked.length ? ` — ${tracked.join(', ')} (git -C .agents/telemetry rm --cached <path>)` : ''}`); if (tracked.length) ok = false;
-    const leaked = stagingLeaks(tel);
-    if (leaked === null) lines.push('staging: undetermined (disposable-index git add -A failed)');
-    else { lines.push(`staging: ${leaked.length ? 'LEAKING' : 'ok'} (disposable-index git add -A${leaked.length ? ` would stage: ${leaked.join(', ')}` : ' stages no transient path'})`); if (leaked.length) ok = false; }
-    const s = gitState(tel); lines.push(`telemetry git: unmerged=${s.unmerged.length} merging=${s.merging} dirty=${s.dirty} unpushed=${s.unpushed ?? 'no upstream'}`); if (s.unmerged.length || s.merging) ok = false;
+    const innerRes = checkPatterns(tel, INNER_PATTERNS, (p) => p.replace(/^\//, '').replace(/\*$/, 'x').replace(/\/$/, '/x'), gitExec);
+    add(innerRes.undetermined || innerRes.okCount !== innerRes.total ? 'warning' : 'ok', renderIgnoreLine('inner', innerRes));
+    const tracked = (git(tel, ['ls-files', '--', ...TRANSIENT]) ?? '').split('\n').filter(Boolean);
+    add(tracked.length ? 'warning' : 'ok', `tracked transients: ${tracked.length}${tracked.length ? ` — ${tracked.join(', ')} (git -C .agents/telemetry rm --cached <path>)` : ''}`);
+    const leaked = stagingLeaks(tel, git);
+    if (leaked === null) add('warning', 'staging: undetermined (ls-files failed)');
+    else add(leaked.length ? 'warning' : 'ok', `staging: ${leaked.length ? 'LEAKING' : 'ok'} (ls-files: ${leaked.length ? `would stage ${leaked.join(', ')}` : 'no untracked transient path'})`);
+    const s = gitState(tel, git); add(s.unmerged.length || s.merging ? 'warning' : 'ok', `telemetry git: unmerged=${s.unmerged.length} merging=${s.merging} dirty=${s.dirty} unpushed=${s.unpushed ?? 'no upstream'}`);
   }
   const diag = existsSync(deliveryDir(repo)) ? readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')) : [];
-  lines.push(`diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)`);
+  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)`);
   for (const r of runs.filter((r) => r.status === 'open')) {
     const rosterOk = validRoster(r.roster);
-    lines.push(`roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`); if (!rosterOk) ok = false;
+    add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`);
   }
   if (existsSync(sessionsDir(repo))) {
     for (const f of readdirSync(sessionsDir(repo)).filter((n) => n.endsWith('.json')).sort()) {
       let sess = null; try { sess = JSON.parse(readFileSync(join(sessionsDir(repo), f), 'utf8')); } catch { /* surfaced generically below */ }
-      if (!sess || typeof sess !== 'object') { lines.push(`session: ${f} malformed`); ok = false; continue; }
+      if (!sess || typeof sess !== 'object') { add('warning', `session: ${f} malformed`); continue; }
       const owner = runs.find((r) => r.run === sess.plan);
       const status = !owner ? 'missing' : owner.status === 'closed' ? 'closed' : 'ok';
       // A binding to a closed plan is history (plans are meant to be closed), not something to fix.
-      lines.push(`session: ${sess.host}:${sess.session} -> ${sess.plan} ${status}`); if (status === 'missing') ok = false;
+      add(status === 'missing' ? 'warning' : 'ok', `session: ${sess.host}:${sess.session} -> ${sess.plan} ${status}`);
     }
   }
+  return findings;
+}
+
+export function doctorReport(repo, rel, opts = {}) {
+  const f = doctorFindings(repo, rel, opts);
+  const lines = f.map((x) => x.line);
   for (const c of UNCONDITIONAL_CAVEATS) lines.push(`caveat: ${c}`);
+  const ok = !f.some((x) => x.severity === 'warning');
   lines.push(`doctor: ${ok ? 'ok' : 'attention'}`);
   return { lines, ok };
 }
