@@ -49,7 +49,8 @@ export const hookversionCheck = {
       else if (i.budget == null) out.push(finding({ check: 'hookversion', target: t.target, severity: 'unknown', message: 'context budget unknown for this hook version' }));
       else if (budgetRisk) {
         const where = i.budgetSource === 'lib.sh' && i.match === 'historical' ? `match an earlier sdlc-skills version (${i.version.commit}, ${i.version.date}) whose default Claude budget was ${fmt(i.budget)} bytes` : `budget is ${fmt(i.budget)} bytes (from ${i.budgetSource})`;
-        out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks ${where}, which exceeds Claude's 10,000-character limit: truncation risk`, fix: i.budgetSource === 'lib.sh' ? 'npx github:arozumenko/sdlc-skills init <your usual flags> --update' : `lower SDLC_CTX_CAP in .claude/hooks/sdlc-skills/${i.budgetSource} to 9000 or less` }));
+        const limit = t.target === 'claude' ? "Claude's 10,000-character limit" : '10,000 bytes';
+        out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks ${where}, which exceeds ${limit}: truncation risk`, fix: i.budgetSource === 'lib.sh' ? 'npx github:arozumenko/sdlc-skills init <your usual flags> --update' : `lower SDLC_CTX_CAP in ${expectedCoreHookSpec(t.target).scriptsDir}/${i.budgetSource} to 9000 or less` }));
       }
       if (!out.some((f) => f.target === t.target)) out.push(finding({ check: 'hookversion', target: t.target, severity: 'ok', message: `core hooks match the running package; budget ${fmt(i.budget)} bytes` }));
     }

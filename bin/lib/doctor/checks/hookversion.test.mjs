@@ -57,3 +57,17 @@ test('hook-history.json is current: the package hook set is a recorded complete-
   assert.ok(history.versions.some((v) => CORE_HOOK_FILES.every((f) => v.files[f] === current[f])),
     'hooks/ changed but bin/lib/doctor/hook-history.json was not regenerated: run `npm run gen:hook-history` and commit the JSON (after committing the hooks/ change)');
 });
+
+test('budget risk wording is target-appropriate', () => {
+  const d = mkdtempSync(join(tmpdir(), 'dhv-'));
+  try {
+    for (const f of CORE_HOOK_FILES) { mkdirSync(join(d, '.cursor/hooks/sdlc-skills'), { recursive: true }); writeFileSync(join(d, '.cursor/hooks/sdlc-skills', f), pkgFile(f)); }
+    writeFileSync(join(d, '.cursor/hooks/sdlc-skills/config.sh'), 'SDLC_CTX_CAP=32768\n');
+    const ctx = { projectDir: d, pkgRoot: PKG, fs: createSafeFs(d), targets: ['cursor'], facts: {} }; targetsCheck.run(ctx);
+    const w = hookversionCheck.run(ctx).find((f) => f.severity === 'warning');
+    assert.match(w.message, /32,768 bytes.*exceeds 10,000 bytes: truncation risk/); assert.doesNotMatch(w.message, /Claude/);
+    assert.match(w.fix, /\.cursor\/hooks\/sdlc-skills\/config\.sh/);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+  const c = project({ '.claude/hooks/sdlc-skills/config.sh': 'SDLC_CTX_CAP=32768\n' });
+  try { assert.match(run(c).find((f) => f.severity === 'warning').message, /exceeds Claude's 10,000-character limit/); } finally { rmSync(c, { recursive: true, force: true }); }
+});
