@@ -1375,6 +1375,10 @@ function printHelp() {
 
   Usage:
     npx github:arozumenko/sdlc-skills init [options]
+    npx github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
+                               Read-only health check of this project's install
+                               (hook wiring, persistence, hook version, context
+                               budget, skill drift). Never runs project code.
 
   Options:
     --factory <id>             Install a team factory (a curated set of agents,
@@ -2610,6 +2614,13 @@ async function main() {
   // Subcommand routing — default is install.
   if (argv[0] === "fix-copilot") {
     return runFixCopilot(argv.slice(1));
+  }
+
+  if (argv[0] === "doctor" || (argv[0] === "init" && argv[1] === "doctor")) {
+    const rest = argv[0] === "doctor" ? argv.slice(1) : argv.slice(2);
+    const { doctorMain } = await import("./lib/doctor/index.mjs");
+    process.exitCode = await doctorMain(rest, { cwd: CWD, pkgRoot: PKG_ROOT });
+    return;
   }
 
   const args = parseArgs(argv);
