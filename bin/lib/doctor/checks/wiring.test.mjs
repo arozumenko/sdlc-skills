@@ -83,3 +83,53 @@ test('Cursor needs only sessionStart; Copilot env is part of canonical', () => {
     assert.ok(f.some((x) => x.target === 'copilot' && x.severity === 'warning' && /subagentStart.*unrecognized/.test(x.message)));
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
+
+test('malformed sole config file with scripts present: warning and unknown, never an unwired error', () => {
+  const s = expectedCoreHookSpec('claude');
+  const d = project({ ...SCRIPTS(s.scriptsDir), '.claude/settings.json': '{"hooks": {},}' });
+  try {
+    const f = run(d);
+    assert.ok(f.some((x) => x.severity === 'warning' && /malformed/.test(x.message)));
+    assert.ok(!f.some((x) => x.severity === 'error'), JSON.stringify(f));
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('malformed Copilot config gives no unwired error', () => {
+  const p = expectedCoreHookSpec('copilot');
+  const d = project({ ...SCRIPTS(p.scriptsDir), '.github/hooks/sdlc-skills.json': '{' });
+  try { assert.ok(!run(d).some((x) => x.severity === 'error')); } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('settings.json = null does not crash and is malformed', () => {
+  const s = expectedCoreHookSpec('claude');
+  const d = project({ ...SCRIPTS(s.scriptsDir), '.claude/settings.json': 'null' });
+  try {
+    const f = run(d);
+    assert.ok(f.some((x) => x.severity === 'warning' && /malformed/.test(x.message)));
+    assert.ok(!f.some((x) => x.severity === 'error'));
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('a directory at settings.json warns (not-regular), not silent', () => {
+  const s = expectedCoreHookSpec('claude');
+  const d = project({ ...SCRIPTS(s.scriptsDir), '.claude/settings.json/x': '#' });
+  try {
+    const f = run(d);
+    assert.ok(f.some((x) => x.severity === 'warning' && /settings\.json is not-regular/.test(x.message)), JSON.stringify(f));
+    assert.ok(!f.some((x) => x.severity === 'error'));
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('Copilot canonical wiring with a missing script is an error', () => {
+  const p = expectedCoreHookSpec('copilot');
+  const files = SCRIPTS(p.scriptsDir); delete files[`${p.scriptsDir}/agent-start`];
+  const d = project({ ...files, '.github/hooks/sdlc-skills.json': p.writeSpec });
+  try { assert.ok(run(d).some((x) => x.severity === 'error' && /missing .*agent-start/.test(x.message))); } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('Cursor canonical wiring with a missing script is an error', () => {
+  const c = expectedCoreHookSpec('cursor');
+  const files = SCRIPTS(c.scriptsDir); delete files[`${c.scriptsDir}/session-start`];
+  const d = project({ ...files, '.cursor/hooks.json': { version: 1, hooks: c.events } });
+  try { assert.ok(run(d).some((x) => x.severity === 'error' && /missing .*session-start/.test(x.message))); } finally { rmSync(d, { recursive: true, force: true }); }
+});

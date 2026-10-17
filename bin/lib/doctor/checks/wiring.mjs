@@ -21,16 +21,19 @@ export const wiringCheck = {
       const before = out.length;
       const parsed = spec.configFiles.map((file) => ({ file, j: readJson(ctx.fs, file) }));
       for (const { file, j } of parsed) {
-        if (['unreadable', 'malformed', 'symlink', 'escapes'].includes(j.status))
+        if (j.status !== 'ok' && j.status !== 'absent')
           out.push(finding({ check: 'wiring', target: t.target, severity: 'warning', message: `${file} is ${j.status}${j.reason ? ` (${j.reason})` : ''}; it was not examined` }));
         if (t.target === 'claude' && j.status === 'ok' && j.value.disableAllHooks === true)
           out.push(finding({ check: 'wiring', target: t.target, severity: 'error', message: `hooks disabled by disableAllHooks in ${file}`, fix: `remove "disableAllHooks": true from ${file}` }));
       }
+      const unexamined = parsed.some((p) => p.j.status !== 'ok' && p.j.status !== 'absent');
       const entries = parsed.filter((p) => p.j.status === 'ok').flatMap((p) => hookEntries(p.j.value).map((e) => ({ ...e, file: p.file })));
       for (const [event, expected] of Object.entries(spec.events)) {
         const here = entries.filter((e) => e.event === event);
         if (!here.length) {
-          out.push(finding({ check: 'wiring', target: t.target, severity: 'error', message: `${event} not wired in ${spec.configFiles[0]}`, fix: fixCommand(t.target) }));
+          // A file we could not read may hold the wiring: unknown, never a false "not wired".
+          if (unexamined) out.push(finding({ check: 'wiring', target: t.target, severity: 'unknown', message: `${event}: cannot tell whether it is wired (a config file was not examined)` }));
+          else out.push(finding({ check: 'wiring', target: t.target, severity: 'error', message: `${event} not wired in ${spec.configFiles[0]}`, fix: fixCommand(t.target) }));
           continue;
         }
         const canonical = here.some((e) => expected.some((x) => isDeepStrictEqual(strip(e.entry), x)));
