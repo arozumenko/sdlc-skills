@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSafeFs } from '../fsx.mjs';
 import { sha256 } from '../shell-literals.mjs';
+import { CORE_HOOK_FILES } from '../../core-hook-spec.mjs';
 import { targetsCheck } from './targets.mjs';
 import { hookversionCheck } from './hookversion.mjs';
 
@@ -48,4 +49,11 @@ test('unknown config syntax: budget unknown', () => {
 test('unrecognized hook set: warning', () => {
   const d = project({ '.claude/hooks/sdlc-skills/agent-start': '#!/bin/sh\necho patched\n' });
   try { assert.ok(run(d, { versions: [] }).some((f) => f.severity === 'warning' && /unrecognized hook version/.test(f.message))); } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('hook-history.json is current: the package hook set is a recorded complete-set version', () => {
+  const history = JSON.parse(readFileSync(new URL('../hook-history.json', import.meta.url), 'utf8'));
+  const current = Object.fromEntries(CORE_HOOK_FILES.map((f) => [f, sha256(pkgFile(f))]));
+  assert.ok(history.versions.some((v) => CORE_HOOK_FILES.every((f) => v.files[f] === current[f])),
+    'hooks/ changed but bin/lib/doctor/hook-history.json was not regenerated: run `npm run gen:hook-history` and commit the JSON (after committing the hooks/ change)');
 });
