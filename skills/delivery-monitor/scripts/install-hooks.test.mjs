@@ -130,10 +130,12 @@ test('doctorFindings: injected git/gitExec carry every git call (linked worktree
   const git = (cwd, args) => { calls.push(args[0]); try { return execFileSync(realGit, ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
   const gitExec = (cwd, args) => { calls.push(args[0]); try { execFileSync(realGit, ['-C', cwd, ...args], { stdio: 'ignore' }); return { ok: true, status: 0 }; } catch (e) { return { ok: false, status: e.status ?? null }; } };
   const snap = (dir) => { const out = []; const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else { const s = statSync(p); out.push(`${p} ${s.size} ${s.mtimeMs}`); } } }; walk(dir); return out.sort(); };
-  const expected = doctorFindings(repo, REL, { env: {} });
+  // The injected call runs first, on fresh fixture paths no other call has resolved: a default-runner
+  // call before it would fill the owner cache and hide a direct spawn from the path helpers.
   const before = snap(repo);
   const path = process.env.PATH; process.env.PATH = `${bin}:${path}`;
   let f; try { f = doctorFindings(wt, REL, { env: {}, git, gitExec }); } finally { process.env.PATH = path; }
+  const expected = doctorFindings(repo, REL, { env: {} });
   assert.equal(existsSync(sentinel), false, 'a direct git spawn bypassed the injected runner');
   assert.deepEqual(snap(repo), before, 'doctorFindings wrote into the project');
   assert.ok(calls.includes('check-ignore') && calls.includes('ls-files') && calls.includes('worktree'), calls.join(','));
