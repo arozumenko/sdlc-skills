@@ -6,9 +6,11 @@ import { wiringCheck } from './checks/wiring.mjs';
 import { persistCheck } from './checks/persist.mjs';
 import { hookversionCheck } from './checks/hookversion.mjs';
 import { payloadCheck } from './checks/payload.mjs';
+import { driftCheck } from './checks/drift.mjs';
+import { rolesCheck } from './checks/roles.mjs';
 
 // Later tasks add their checks here, in this order.
-export const DEFAULT_CHECKS = [targetsCheck, wiringCheck, persistCheck, hookversionCheck, payloadCheck];
+export const DEFAULT_CHECKS = [targetsCheck, wiringCheck, persistCheck, hookversionCheck, payloadCheck, driftCheck, rolesCheck];
 
 export function parseDoctorArgs(argv) {
   const out = { json: false, strict: false, targets: null, unknown: [] };
