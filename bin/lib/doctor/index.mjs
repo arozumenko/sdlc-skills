@@ -2,9 +2,10 @@ import { createGitRunner } from './git.mjs';
 import { createSafeFs } from './fsx.mjs';
 import { finding } from './finding.mjs';
 import { targetsCheck } from './checks/targets.mjs';
+import { wiringCheck } from './checks/wiring.mjs';
 
 // Later tasks add their checks here, in this order.
-export const DEFAULT_CHECKS = [targetsCheck];
+export const DEFAULT_CHECKS = [targetsCheck, wiringCheck];
 
 export function parseDoctorArgs(argv) {
   const out = { json: false, strict: false, targets: null, unknown: [] };
