@@ -66,6 +66,7 @@ import { join, dirname, basename, resolve } from "path";
 import { fileURLToPath } from "url";
 import {
   resolveSelection as resolveDevRoleSelection,
+  implicitSelectionWarning,
   buildOverlays,
   buildBriefingPlan,
   composeBriefing,
@@ -290,6 +291,7 @@ async function applyFactory(factory, args, catalog) {
       }
     } else {
       selected = sel.roles;
+      if (sel.implicit) console.log(implicitSelectionWarning(factory, selected));
     }
     // Dev roles install ONLY as factory-local agents — clear them from the global
     // --agents path so they aren't also resolved against the global catalog. For
