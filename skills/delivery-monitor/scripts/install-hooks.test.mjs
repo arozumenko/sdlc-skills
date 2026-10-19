@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { installClaude, installIgnoreBlocks, doctorReport, bootstrapTelemetry, MARKER } from './install-hooks.mjs';
+import { installClaude, installIgnoreBlocks, doctorReport, doctorFindings, bootstrapTelemetry, MARKER } from './install-hooks.mjs';
 import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
 import { runPath, sessionPath, sessionsDir } from './lib/paths.mjs';
 
@@ -86,7 +86,7 @@ test('doctorReport: wiring, plans, every ignore pattern in its owner, tracked tr
   assert.ok(d.lines.some((l) => /hook: wired/.test(l))); assert.ok(d.lines.some((l) => /ignore root: ok \(3\/3\)/.test(l))); assert.ok(d.lines.some((l) => /ignore inner: ok \(3\/3\)/.test(l))); assert.ok(d.lines.some((l) => /telemetry: submodule/.test(l))); assert.ok(d.lines.some((l) => /caveat: concurrency: best-effort/.test(l)));
   // F6: disposable-index staging check — proves git would actually skip these paths on a real
   // `add -A` in the telemetry repo (not just that a pattern string matches).
-  assert.ok(d.lines.some((l) => /^staging: ok/.test(l)));
+  assert.ok(d.lines.some((l) => /^staging: ok \(ls-files/.test(l)));
   // F6: git-state inspection, diagnostic only — never modifies the telemetry repo.
   assert.ok(d.lines.some((l) => /^telemetry git: unmerged=0 merging=false dirty=false/.test(l)));
   // F19: every unconditional caveat from the shared list is printed, not a hand-picked subset.
@@ -94,6 +94,53 @@ test('doctorReport: wiring, plans, every ignore pattern in its owner, tracked tr
   mkdirSync(join(repo, '.agents', 'telemetry', 'delivery', 'reports'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'reports', 'x.html'), 'x');
   g(join(repo, '.agents', 'telemetry'), 'add', '-f', 'delivery/reports/x.html');
   d = doctorReport(repo, REL); assert.ok(d.lines.some((l) => /tracked transients: 1/.test(l))); assert.equal(d.ok, false);
+});
+
+test('doctorFindings: structured, severity per finding, unwired hook is a warning with the install command', () => {
+  const repo = tmp();
+  const f = doctorFindings(repo, REL);
+  const hook = f.find((x) => /^hook:/.test(x.line));
+  assert.equal(hook.severity, 'warning'); assert.match(hook.fix, /install-hooks\.mjs/);
+  assert.deepEqual(doctorReport(repo, REL).lines.slice(0, f.length), f.map((x) => x.line));
+});
+
+test('staging check uses ls-files: untracked and tracked transients both detected, nothing staged', () => {
+  const repo = tmp(); bootstrapTelemetry(repo); const tel = join(repo, '.agents', 'telemetry');
+  mkdirSync(join(tel, 'delivery'), { recursive: true });
+  writeFileSync(join(tel, 'delivery', '.pending-x'), 'p');               // untracked, would be staged if ignore broke
+  const ignore = join(tel, '.gitignore'); writeFileSync(ignore, readFileSync(ignore, 'utf8').replace('/delivery/.pending-*', ''));
+  let d = doctorReport(repo, REL);
+  assert.ok(d.lines.some((l) => /^staging: LEAKING \(ls-files: .*delivery\/\.pending-x/.test(l)), d.lines.join('\n'));
+  assert.equal(g(tel, 'diff', '--cached', '--name-only'), '', 'doctor stages nothing');
+  execFileSync('git', ['-C', tel, 'add', '-f', 'delivery/.pending-x']);
+  d = doctorReport(repo, REL);
+  assert.ok(d.lines.some((l) => /tracked transients: 1 — delivery\/\.pending-x/.test(l)), d.lines.join('\n'));
+});
+
+// Every git call on the doctorFindings path goes through the injected runner: a `git` first on PATH that
+// leaves a sentinel proves no direct spawn remains, and a tree snapshot proves nothing is written.
+test('doctorFindings: injected git/gitExec carry every git call (linked worktree included), and nothing is written', { skip: process.platform === 'win32' }, () => {
+  const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
+  bootstrapTelemetry(repo); installClaude(repo, REL, {}); installIgnoreBlocks(repo, {});
+  const wt = join(mkdtempSync(join(tmpdir(), 'dm-linked-')), 'linked'); g(repo, 'worktree', 'add', '-q', '-b', 'linked', wt);
+  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  const bin = mkdtempSync(join(tmpdir(), 'dm-fakebin-')), sentinel = join(bin, 'DIRECT_GIT_RAN');
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\ntouch '${sentinel}'\nexit 1\n`, { mode: 0o755 });
+  const calls = [];
+  const git = (cwd, args) => { calls.push(args[0]); try { return execFileSync(realGit, ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
+  const gitExec = (cwd, args) => { calls.push(args[0]); try { execFileSync(realGit, ['-C', cwd, ...args], { stdio: 'ignore' }); return { ok: true, status: 0 }; } catch (e) { return { ok: false, status: e.status ?? null }; } };
+  const snap = (dir) => { const out = []; const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else { const s = statSync(p); out.push(`${p} ${s.size} ${s.mtimeMs}`); } } }; walk(dir); return out.sort(); };
+  // The injected call runs first, on fresh fixture paths no other call has resolved: a default-runner
+  // call before it would fill the owner cache and hide a direct spawn from the path helpers.
+  const before = snap(repo);
+  const path = process.env.PATH; process.env.PATH = `${bin}:${path}`;
+  let f; try { f = doctorFindings(wt, REL, { env: {}, git, gitExec }); } finally { process.env.PATH = path; }
+  const expected = doctorFindings(repo, REL, { env: {} });
+  assert.equal(existsSync(sentinel), false, 'a direct git spawn bypassed the injected runner');
+  assert.deepEqual(snap(repo), before, 'doctorFindings wrote into the project');
+  assert.ok(calls.includes('check-ignore') && calls.includes('ls-files') && calls.includes('worktree'), calls.join(','));
+  assert.deepEqual(f.map((x) => x.line), expected.map((x) => x.line));
+  assert.ok(f.every((x) => x.checkout === 'linked') && expected.every((x) => x.checkout === 'main'));
 });
 
 test('F6 fallback: when check-ignore refuses, the fallback reads the real .gitignore (present vs absent pattern), not a tautological probe-vs-itself check', () => {

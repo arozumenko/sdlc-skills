@@ -16,6 +16,7 @@
     "validate:externals": "node bin/validate-factories.mjs --check-externals",
     "validate": "npm run validate:factories && npm run validate:marketplaces && npm run validate:externals && npm run validate:dupes",
     "gen:marketplaces": "node bin/gen-marketplaces.mjs",
+    "gen:hook-history": "node bin/gen-hook-history.mjs",
     "validate:dupes": "node bin/check-skill-dupes.mjs"
   },
   "repository": {

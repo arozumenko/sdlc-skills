@@ -231,6 +231,30 @@ handles symlinks and you'd rather not duplicate the content.
 
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
+### Check an install — `init doctor`
+
+```bash
+npx github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
+```
+
+A read-only health check of the current project. It never runs project code,
+writes nothing (including `.git`) and needs no network. It reports, per IDE
+target:
+
+- **wiring**: the core hooks are wired as `init` writes them: missing events, a
+  missing hook script or disabled hooks are errors; a noncanonical entry is a warning;
+- **persist**: the wiring and hook scripts are committed, not untracked or ignored;
+- **hookversion**: the installed hooks match this package, a known earlier version, or
+  nothing known; a context budget above Claude Code's 10,000-character limit is a risk;
+- **payload**: an estimate of each role's memory and docs against that budget;
+- **drift**: copied skills that differ from this package;
+- **delivery-monitor**: its opt-in hook and telemetry state, when installed.
+
+The delivery-monitor telemetry reads are not yet symlink-hardened the way the
+other checks' file reads are (planned for a later iteration).
+
+Exit codes: `0` no errors, `1` errors (or warnings with `--strict`), `2` doctor failed.
+
 ### Repairing an existing Copilot CLI install — `fix-copilot`
 
 If a project already has agents installed as directories under
