@@ -173,3 +173,21 @@ Keep a separate private holdout outside this repository and run it through
 changes. These paired controls are public controls, not a private holdout.
 Production finding identifiers, revisions and raw evidence belong in the
 private research source map, not in the published fixtures.
+
+## Execution failures and stopping a batch
+
+Each trial now records `status` and `scored`. Quota/authentication failures,
+other process errors, grader crashes and judge execution failures are unscored;
+the runner saves the partial summary and stops with exit code 2 before starting
+another trial. This avoids spending the rest of a batch on an unavailable
+account or treating an unexecuted task as a capability failure. Subject timeout
+and configured cost-budget exhaustion remain scored failures.
+
+Summary `trials` counts all attempts; `scoredTrials` is the capability denominator.
+`infrastructureErrors` exposes the excluded attempts, and `observedCostUsd`
+retains their reported subject cost. Capability rates and the usual cost/time
+medians use scored trials only. An entirely blocked batch has null capability
+rates, not a zero-percent score. The existing `errors` field still counts raw
+Claude error flags; the new classification also checks process exit status,
+which catches quota replies labeled `success` by the CLI. Old result files are
+not rewritten; reclassify them explicitly before combining them with new runs.

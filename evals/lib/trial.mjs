@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStream } from "./stream.mjs";
+import { classifyExecution, trialOutcome } from "./outcome.mjs";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -117,12 +118,17 @@ function runClaude(work, args, timeoutSec, transcriptPath) {
     let out = "", err = "";
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { err += d; });
-    const timer = setTimeout(() => child.kill("SIGTERM"), timeoutSec * 1000);
-    child.on("close", (code, signal) => {
+    let finished = false, timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, timeoutSec * 1000);
+    const finish = (code, signal) => {
+      if (finished) return;
+      finished = true;
       clearTimeout(timer);
       writeFileSync(transcriptPath, out);
-      resolveRun({ code, signal, stderr: err.slice(-4000), wallMs: Date.now() - started, timedOut: signal === "SIGTERM" });
-    });
+      resolveRun({ code, signal, stderr: err.slice(-4000), wallMs: Date.now() - started, timedOut });
+    };
+    child.on("error", (error) => { err += `\n${error.message}`; finish(null, null); });
+    child.on("close", finish);
   });
 }
 
@@ -133,9 +139,12 @@ export function runGrader(caseDir, spec, ws, trialDir) {
     maxBuffer: 16 * 1024 * 1024, timeout: 300_000,
   });
   try {
-    return JSON.parse(r.stdout);
-  } catch {
-    return { pass: false, checks: [{ id: "grader-crashed", pass: false, detail: (r.stderr || r.stdout || "").slice(-1500) }] };
+    if (r.status !== 0 || r.error || r.signal) throw new Error(`grader process failed (${r.status}): ${r.error?.message ?? r.stderr ?? ""}`);
+    const grade = JSON.parse(r.stdout);
+    if (!grade || typeof grade.pass !== "boolean" || !Array.isArray(grade.checks)) throw new Error("invalid grader result");
+    return grade;
+  } catch (error) {
+    return { pass: false, checks: [{ id: "grader-crashed", pass: false, detail: `${error.message}: ${r.stderr || r.stdout || ""}`.slice(-1500) }] };
   }
 }
 
@@ -165,7 +174,10 @@ export function runJudge(caseDir, spec, ws, trialDir, finalText, opts) {
     "--output-schema", schemaPath, "-o", outPath, prompt,
   ], { encoding: "utf8", env: cleanEnv(), timeout: 900_000, maxBuffer: 64 * 1024 * 1024 });
   try {
-    return { model: opts.judgeModel, effort: opts.judgeEffort, ...JSON.parse(readFileSync(outPath, "utf8")) };
+    if (r.status !== 0 || r.error || r.signal) throw new Error("judge process failed");
+    const verdict = JSON.parse(readFileSync(outPath, "utf8"));
+    if (!verdict || typeof verdict.pass !== "boolean") throw new Error("invalid judge result");
+    return { model: opts.judgeModel, effort: opts.judgeEffort, ...verdict };
   } catch {
     return { model: opts.judgeModel, effort: opts.judgeEffort, pass: false, score: 0, reasons: `judge failed (${r.status}): ${(r.stderr || "").slice(-800)}`, error: true };
   }
@@ -178,11 +190,15 @@ export async function runTrial(caseDir, spec, trialDir, opts) {
   const transcriptPath = join(trialDir, "transcript.jsonl");
   const proc = await runClaude(ws.work, claudeArgs(spec, prompt, opts), opts.timeoutSec ?? spec.timeoutSec ?? 900, transcriptPath);
   const metrics = parseStream(readFileSync(transcriptPath, "utf8"));
-  const grade = runGrader(caseDir, spec, ws, trialDir);
-  const judge = spec.judge && opts.judge ? runJudge(caseDir, spec, ws, trialDir, metrics.finalText, opts) : null;
-  const pass = grade.pass && (judge ? judge.pass : true);
+  const execution = classifyExecution(proc, metrics);
+  // Do not manufacture failed task checks or spend on judging a task that
+  // never ran. Timeout/budget artifacts can still be inspected, but fail.
+  const grade = execution?.scored === false ? { pass: false, checks: [], skipped: true } : runGrader(caseDir, spec, ws, trialDir);
+  const graderFailed = grade.checks?.some(c => c.id === "grader-crashed");
+  const judge = !execution && !graderFailed && spec.judge && opts.judge ? runJudge(caseDir, spec, ws, trialDir, metrics.finalText, opts) : null;
+  const outcome = trialOutcome(proc, metrics, grade, judge);
   if (opts.keep) cpSync(ws.work, join(trialDir, "workspace"), { recursive: true, filter: (p) => !p.includes("node_modules") });
-  const record = { case: spec.id, pass, grade, judge, metrics: { ...metrics, wallMs: proc.wallMs }, proc: { code: proc.code, timedOut: proc.timedOut, stderr: proc.stderr }, workspace: ws.root, baseSha: ws.baseSha };
+  const record = { case: spec.id, ...outcome, grade, judge, metrics: { ...metrics, wallMs: proc.wallMs }, proc: { code: proc.code, timedOut: proc.timedOut, stderr: proc.stderr }, workspace: ws.root, baseSha: ws.baseSha };
   writeFileSync(join(trialDir, "trial.json"), JSON.stringify(record, null, 2));
   return record;
 }
