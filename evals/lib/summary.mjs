@@ -48,14 +48,17 @@ export function summarize(records) {
   }
   const cases = [];
   for (const [id, rs] of byCase) {
-    const passes = rs.filter((r) => r.pass).length;
+    const scored = rs.filter((r) => r.scored !== false);
+    const passes = scored.filter((r) => r.pass).length;
     const row = {
       case: id, trials: rs.length, passes, errors: rs.filter((r) => r.metrics.isError).length,
-      passAt1: passHatK(passes, rs.length, 1), passHatN: passHatK(passes, rs.length, rs.length),
+      scoredTrials: scored.length, infrastructureErrors: rs.length - scored.length,
+      observedCostUsd: rs.reduce((sum, r) => sum + (r.metrics.costUsd ?? 0), 0),
+      passAt1: passHatK(passes, scored.length, 1), passHatN: passHatK(passes, scored.length, scored.length),
     };
-    for (const [k, f] of Object.entries(METRICS)) row[k] = { median: median(rs.map(f)), range: range(rs.map(f)) };
+    for (const [k, f] of Object.entries(METRICS)) row[k] = { median: median(scored.map(f)), range: range(scored.map(f)) };
     const failedChecks = {};
-    for (const r of rs) {
+    for (const r of scored) {
       for (const c of r.grade.checks || []) {
         if (c.pass) continue;
         const key = c.required === false ? `${c.id} (info)` : c.id;
@@ -69,10 +72,11 @@ export function summarize(records) {
 }
 
 export function formatSummary({ cases }) {
-  const head = "case                         pass   pass^n turns  tools  tokens(M)  role-ctx(k)  cost$   wall(s)";
+  const head = "case                         pass   infra  pass^n turns  tools  tokens(M)  role-ctx(k)  cost$   wall(s)";
   const rows = cases.map((c) => [
     c.case.padEnd(28),
-    `${c.passes}/${c.trials}`.padEnd(6),
+    `${c.passes}/${c.scoredTrials ?? c.trials}`.padEnd(6),
+    String(c.infrastructureErrors ?? 0).padStart(5),
     (c.passHatN != null ? c.passHatN.toFixed(2) : "-").padStart(6),
     String(c.turns.median ?? "-").padStart(5),
     String(c.toolCalls.median ?? "-").padStart(6),

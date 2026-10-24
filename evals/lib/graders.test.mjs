@@ -24,6 +24,7 @@ for (const { dir, spec } of loadCases(SUITE)) {
       const trialDir = mkdtempSync(join(tmpdir(), "fd-eval-selftest-"));
       sc.act(ws.work, trialDir);
       const g = runGrader(dir, s, ws, trialDir);
+      assert.ok(!(g.checks || []).some((c) => c.id === "grader-crashed"), `grader crashed: ${JSON.stringify(g)}`);
       const failed = (g.checks || []).filter((c) => !c.pass).map((c) => `${c.id}: ${c.detail}`);
       assert.equal(g.pass, sc.shouldPass, `grader ${g.pass ? "passed" : "failed"}; failing checks: ${failed.join(" | ") || "none"}`);
     });

@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { runTrial, REPO } from "./lib/trial.mjs";
 import { summarize, formatSummary } from "./lib/summary.mjs";
+import { shouldStopRun } from "./lib/outcome.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -76,17 +77,29 @@ async function main() {
   writeFileSync(join(outDir, "run.json"), JSON.stringify({ opts, repo, head, dirty, tools, cases: cases.map((c) => c.spec.id), startedAt: stamp }, null, 2));
 
   const records = [];
-  for (const c of cases) {
+  let stopped = null;
+  trials: for (const c of cases) {
     for (let t = 1; t <= opts.trials; t++) {
       process.stdout.write(`${c.spec.id} trial ${t}/${opts.trials} ... `);
       const rec = await runTrial(c.dir, c.spec, join(outDir, c.spec.id, `trial-${t}`), opts);
       records.push(rec);
       const m = rec.metrics;
-      console.log(`${rec.pass ? "PASS" : "FAIL"}  role-turns=${m.subagent?.messages ?? m.turns} tools=${m.toolCallTotal} tokens=${m.totalTokens} cost=$${m.costUsd ?? "?"} wall=${Math.round(m.wallMs / 1000)}s` +
+      console.log(`${rec.status ?? (rec.pass ? "PASS" : "FAIL")}  role-turns=${m.subagent?.messages ?? m.turns} tools=${m.toolCallTotal} tokens=${m.totalTokens} cost=$${m.costUsd ?? "?"} wall=${Math.round(m.wallMs / 1000)}s` +
         (rec.grade.checks || []).filter((k) => !k.pass).map((k) => `\n    ✗ ${k.id}: ${k.detail ?? ""}`).join(""));
+      // Account/tooling failures are not improved by launching the remaining
+      // paid trials. Persist the partial batch and let the operator repair it.
+      if (shouldStopRun(rec)) {
+        stopped = { case: rec.case, trial: t, status: rec.status };
+        break trials;
+      }
     }
   }
   const summary = summarize(records);
+  if (stopped) {
+    summary.stopped = stopped;
+    process.exitCode = 2;
+    console.error(`Stopped after ${stopped.status}; no remaining trials launched.`);
+  }
   writeFileSync(join(outDir, "summary.json"), JSON.stringify(summary, null, 2));
   console.log(`\n${formatSummary(summary)}\n\nresults: ${outDir}`);
 }

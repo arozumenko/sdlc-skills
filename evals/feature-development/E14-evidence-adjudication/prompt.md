@@ -1,0 +1,3 @@
+Adjudicate R1–R3 in docs/claims.md for this task. Inspect the evidence and the relevant source/tests. This is an assessment only: do not change existing files or commit. You may create files under qa/.
+
+Write qa/decisions.json with an array named findings. Each item must contain id, disposition (confirmed-defect, confirmed-test-gap, refuted, or unverified), evidenceKind (executed-mutation, executed-probe, or reasoned), and a nonempty explanation that names the evidence path and explains what it establishes and what it does not. Keep original reviewer assertions separate from your conclusions. Do not upgrade a proposed experiment into an executed result.

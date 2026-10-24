@@ -1,0 +1,5 @@
+# Ratified service contract
+
+C1: Revision labels are immutable for the lifetime of their identifiers. Reload may reuse labels cached by revision identifier.
+C2: Every create supplies an operation key. Replaying the same request with the same key returns the original result without another write; the client may retry with that same key after a timeout. A fresh key is a new operation.
+C3: The server can take 45 seconds. Transport timeout is not evidence of rollback.
