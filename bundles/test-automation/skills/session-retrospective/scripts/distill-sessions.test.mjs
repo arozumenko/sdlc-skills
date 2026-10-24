@@ -121,6 +121,57 @@ test('extractSignals: corrections are ranked, capped, de-duplicated; interrupts 
   assert.equal(s.interrupts.length, 2);
 });
 
+
+// Long working directories must not turn different commands/files into retries.
+for (const [tool, field, suffixes] of [
+  ['Bash', 'command', ['cat first.txt', 'cat second.txt', 'git status']],
+  ['Read', 'file_path', ['first.txt', 'second.txt', 'third.txt']],
+]) {
+  test(`extractSignals: distinct ${tool} targets sharing a long prefix are not retries`, () => {
+    const prefix = '/synthetic/workspace/'.repeat(8);
+    const records = suffixes.map((suffix, i) => ({
+      type: 'assistant', message: { content: [{
+        type: 'tool_use', id: `call-${i}`, name: tool,
+        input: { [field]: prefix + suffix },
+      }] },
+    }));
+    assert.deepEqual(extractSignals(records).retries, []);
+  });
+}
+
+test('extractSignals: repeated long commands remain separate despite their shared prefix', () => {
+  const prefix = 'cd /synthetic/workspace/'.padEnd(180, 'x') + '; ';
+  // Whitespace inside quotes is meaningful; do not normalize it away.
+  const a = prefix + 'printf "a  b"';
+  const b = prefix + 'printf "a b"';
+  const records = [a, b, a, b].map((command, i) => ({
+    type: 'assistant', message: { content: [{
+      type: 'tool_use', id: `call-${i}`, name: 'Bash', input: { command },
+    }] },
+  }));
+  assert.deepEqual(extractSignals(records).retries, [
+    [`Bash on ${a}`, 1], [`Bash on ${b}`, 1],
+  ]);
+});
+
+test('renderDigest: long retry identity stays intact while its displayed label is bounded', () => {
+  const command = 'cd /synthetic/workspace/'.padEnd(10_000, 'x') + '; npm test';
+  const records = [1, 2].map(i => ({
+    type: 'assistant', message: { content: [{
+      type: 'tool_use', id: `call-${i}`, name: 'Bash', input: { command },
+    }] },
+  }));
+  const signals = extractSignals(records);
+  assert.deepEqual(signals.retries, [[`Bash on ${command}`, 1]]);
+  const digest = renderDigest([{
+    id: 'synthetic', date: '2026-01-01', branch: 'test', durationMin: 1,
+    skills: [], ...signals,
+  }]);
+  const line = digest.split('\n').find(line => line.startsWith('- Retry/loop:'));
+  assert.ok(line.length < 240, 'one long command must not consume the digest budget');
+  assert.match(line, /npm test.*×1$/, 'show the distinguishing command tail');
+});
+
 test('detectRetries flags a repeated tool+target', () => {
   const calls = [
     { turn: 1, tool: 'Bash', target: 'npm test' },

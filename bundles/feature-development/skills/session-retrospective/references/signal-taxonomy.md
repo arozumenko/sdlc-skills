@@ -20,3 +20,8 @@ What the parser extracts (thresholds in `distill-sessions.mjs` constants):
 
 Signals are evidence, not findings. Promote a signal to a finding only when it
 recurs or clearly generalizes, and always keep its session id as evidence.
+
+Retry matching uses the complete target string (command or path), without
+whitespace normalization. Only the displayed label is shortened. A repeated
+target is a candidate signal, not proof of wasted work: polling or reading a
+changed file can be legitimate.

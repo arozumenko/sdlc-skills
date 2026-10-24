@@ -67,3 +67,8 @@ recurs or clearly generalizes, and always keep its session id as evidence. When
 a finding recurs across sessions *and* a previous retrospective already wrote it
 down, see `finding-to-target.md` — that is the point where more prose stops
 being the answer.
+
+Retry matching uses the complete target string (command or path), without
+whitespace normalization. Only the displayed label is shortened. A repeated
+target is a candidate signal, not proof of wasted work: polling or reading a
+changed file can be legitimate.
