@@ -97,7 +97,8 @@ export function extractSignals(records) {
         if (b?.type !== 'tool_use') continue;
         if (b.id) idToName[b.id] = b.name;
         const target = b.input?.file_path || b.input?.path || b.input?.command || '';
-        toolCalls.push({ turn, tool: b.name, target: String(target).slice(0, 80) });
+        // Compare complete targets; a shared long cwd/path is not a retry.
+        toolCalls.push({ turn, tool: b.name, target: String(target) });
         if (EDIT_TOOLS.includes(b.name) && b.input?.file_path) {
           fileChurn[b.input.file_path] = (fileChurn[b.input.file_path] || 0) + 1;
         }
@@ -190,7 +191,11 @@ export function renderDigest(sessions) {
     out.push('### Signals');
     const te = Object.entries(s.toolErrors).sort((a, b) => b[1] - a[1]);
     for (const [k, n] of te) out.push(`- Tool errors: ${k} ×${n}`);
-    for (const [k, n] of s.retries) out.push(`- Retry/loop: ${k} ×${n}`);
+    for (const [k, n] of s.retries) {
+      // Bound presentation only; keep the tail where long commands often differ.
+      const label = k.length > 160 ? `${k.slice(0, 100)}…${k.slice(-59)}` : k;
+      out.push(`- Retry/loop: ${label} ×${n}`);
+    }
     for (const [p, n] of s.fileChurn) out.push(`- File churn: ${p} edited ×${n}`);
     if (s.corrections.length) {
       out.push('- Candidate corrections:');
