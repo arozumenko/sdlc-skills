@@ -62,6 +62,23 @@ Testable definition of done, in Given/When/Then format. Every AC must be
 pass/fail — no "should be intuitive." Cover happy path, error cases, and
 edge cases. Include performance criteria when relevant.
 
+**Lifecycle ACs for async or non-idempotent work.** When a task performs a
+write that is not safe to repeat, or shows async status to the user, its ACs
+cover each of these explicitly, even when the answer is "not applicable":
+
+- the user dismisses or closes the surface mid-call
+- the user navigates away, or the owning scope ends, mid-call
+- a lock or permission change arrives mid-call
+- the surface is reopened while a call is unsettled
+- a double tap or repeated submit
+- an uncertain outcome (timeout, lost reply): never re-send blindly; how is it reconciled?
+- replies arriving out of order
+- a cancellation is not reported as a failure
+
+**Premise check.** Before the plan is handed off, confirm that every file,
+contract section and artifact a task presumes exists, and is at the
+signed-off version. Quote the path; don't trust memory or an earlier plan.
+
 ### 6. Implementation plan
 
 Ordered list of tasks with dependencies, grouped into phases. For each task

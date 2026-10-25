@@ -3,8 +3,13 @@
 # found the same class of defect (a session-ending path that leaves the cache
 # stale) and each was point-fixed on that one path. Round 4 reports the fourth
 # path. rotateToken is a fifth path nobody has reported yet.
+#
+# $2 (optional) stops the history early, with that round's review left open and
+# unresolved, for the project-manager variants: `round1` (one blocker, no fix
+# round yet) or `round3` (the same class again after two point-fix rounds).
 set -euo pipefail
 WORK="$1"
+STOP="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 G=(git -c user.name=dev -c user.email=dev@example.invalid)
 # Fixture test files are stored as *.tpl so the repo's own `node --test` run
@@ -37,8 +42,19 @@ EOF
   "${G[@]}" commit -q -m "R$2-1: invalidate live view on $1"
 }
 
+# Leave round $1's review open (no resolution, no fix) and end the history there.
+open_round() {
+  mkdir -p docs/reviews
+  cp "$HERE/steps/round-$1-open.md" "docs/reviews/round-$1.md"
+  "${G[@]}" add -A
+  "${G[@]}" commit -q -m "review round $1 findings"
+  exit 0
+}
+
+[ "$STOP" = round1 ] && open_round 1
 point_fix endSession 1
 point_fix expireSession 2
+[ "$STOP" = round3 ] && open_round 3
 point_fix logout 3
 
 cp "$HERE/steps/round-4.md" docs/reviews/

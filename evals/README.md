@@ -118,6 +118,8 @@ answer cannot pass both.
 | E02-built-not-wired | qa-engineer | QA fails a feature that is built and unit-tested but never wired into the CLI |
 | E02c-built-and-wired | qa-engineer | control: same task, wired correctly, QA must pass it |
 | E10-same-class-findings | js-dev | fourth review round on one defect class: fix the class (incl. an unreported path), not just the fourth path |
+| E10R-round-cap | project-manager | E10's fixture stopped at round 3 (same class after two point-fix rounds): decide RESTRUCTURE or ESCALATE, not a third FIX-ROUND; no dispatch |
+| E10Rc-first-round | project-manager | control: round 1, no fix round yet, so FIX-ROUND is right; guards against always stopping |
 | E01L / E02L | js-dev / qa-engineer | E01 / E02 under production load: ~30 KB memory, a rule only in RULES.md, the newest lesson last in the index |
 | E13-untraced-claims | qa-engineer | QA does not repeat a handoff's false coverage claim, and every verdict claim is backed by evidence (Codex judge) |
 
