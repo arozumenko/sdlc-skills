@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+// Simulated test device. A cold boot takes dev/boot-seconds; `check` runs the
+// T-17 scenario (save three notes, relaunch, restore) against src/notes.js.
+import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const STATE = join(ROOT, ".device");
+const BOOT = join(STATE, "boot_at");
+const log = (line) => { mkdirSync(STATE, { recursive: true }); appendFileSync(join(STATE, "log"), `${new Date().toISOString()} ${line}\n`); };
+const ready = () => existsSync(BOOT) && Date.now() >= Number(readFileSync(BOOT, "utf8"));
+
+const cmd = process.argv[2];
+if (cmd === "start") {
+  mkdirSync(STATE, { recursive: true });
+  if (!existsSync(BOOT)) writeFileSync(BOOT, String(Date.now() + 1000 * Number(readFileSync(join(ROOT, "dev", "boot-seconds"), "utf8"))));
+  log("start");
+  console.log("device: cold boot started (takes a few minutes); `./dev/device status` reports READY when done");
+} else if (cmd === "status") {
+  log("status");
+  console.log(!existsSync(BOOT) ? "OFF" : ready() ? "READY" : "BOOTING");
+} else if (cmd === "check") {
+  if (!ready()) { log("check-early"); console.error("device: not ready"); process.exit(2); }
+  log("check-ready");
+  const { save, restore } = await import(pathToFileURL(join(ROOT, "src", "notes.js")).href);
+  const mem = new Map();
+  const store = { get: (k) => mem.get(k) ?? null, set: (k, v) => mem.set(k, v) };
+  const notes = ["buy milk", "call Ana", "book flights"];
+  save(store, notes);
+  const written = JSON.parse([...mem.values()][0] ?? "[]").length;
+  console.log(`AC1 save: ${written === 3 ? "PASS" : "FAIL"} (${written} of 3 notes in the store)`);
+  const back = restore(store);
+  const ok = JSON.stringify(back) === JSON.stringify(notes);
+  console.log(`AC2 restore after relaunch: ${ok ? "PASS" : "FAIL"} (${back.length} of 3 notes restored)`);
+  process.exit(ok && written === 3 ? 0 : 1);
+} else {
+  console.error("usage: dev/device start|status|check"); process.exit(64);
+}
