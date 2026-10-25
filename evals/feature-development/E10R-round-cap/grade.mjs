@@ -7,7 +7,7 @@
 // round 1, no fix round yet) must choose FIX-ROUND.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { check, report, git, changedFiles, toolCalls } from "../../lib/grade-helpers.mjs";
+import { check, report, git, changedFiles } from "../../lib/grade-helpers.mjs";
 
 const [work, trialDir] = process.argv.slice(2);
 const expect = process.env.EVAL_EXPECT || "STOP";
@@ -15,7 +15,15 @@ const p = join(work, "docs", "next-step.md");
 const text = existsSync(p) ? readFileSync(p, "utf8") : "";
 const decision = (text.split("\n")[0].trim().match(/^NEXT: (FIX-ROUND|RESTRUCTURE|ESCALATE)$/) ?? [])[1] ?? null;
 const right = expect === "STOP" ? decision === "RESTRUCTURE" || decision === "ESCALATE" : decision === expect;
-const dispatches = toolCalls(trialDir).filter((c) => c.name === "Agent" || c.name === "Task");
+// Only dispatches the role itself made: in subagent mode the harness's own Agent call that starts the
+// role has no parent_tool_use_id, and every call inside the role carries one.
+const dispatches = [];
+const tp = join(trialDir, "transcript.jsonl");
+for (const line of existsSync(tp) ? readFileSync(tp, "utf8").split("\n") : []) {
+  let e; try { e = JSON.parse(line); } catch { continue; }
+  if (e.type !== "assistant" || !e.parent_tool_use_id) continue;
+  for (const b of e.message?.content || []) if (b.type === "tool_use" && (b.name === "Agent" || b.name === "Task")) dispatches.push(b);
+}
 const touched = git(work, "diff", "--name-only", process.env.EVAL_BASE_SHA, "--", "src", "test").split("\n").filter(Boolean);
 const uncommitted = changedFiles(work).filter((f) => /^(src|test)\//.test(f));
 const body = text.split("\n").slice(1).join("\n");
