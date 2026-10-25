@@ -495,3 +495,18 @@ test('renderHtml: above 12 tasks, finished missions start collapsed and open one
   assert.ok(html.includes('<details class="mission" open><summary><div class="mrow mission"><div class="c ref"><span title="sec/run-1/mission-g2">G2</span>'), 'open G2 starts expanded');
   assert.ok(!html.includes('<script'), 'still no script');
 });
+
+test('dispatch_agents: per-agent context profile from dispatch_ended meta.agent — resumed/compacted counts and the >500k turn share; one entry per agent', () => {
+  const repo = tmp(); seed(repo);
+  const ended = (id, ref, agentId, at, agent) => appendObservation(repo, makeObservation({ user: 'u', host: 'claude', plan: R, item_id: `${R}/${id}`, ref, level: 'task', event: 'dispatch_ended', at, transition_id: `${R}/${id}/dispatch_ended/${agentId}`, source: 'hook', source_record_id: `claude:s:${agentId}:${id}`, agentId, meta: { version: 1, stage: 'build', agent } }, { now: 0 }), { slug: 'u', now: 0 });
+  const long = { turns: 1500, turns_over_500k: 900, max_context: 960_000, compactions: 2, follow_ups: 12 };
+  ended('task-a', 'TASK-A', 'agent-1', '2026-09-09T10:00:00Z', long);
+  ended('task-z', 'TASK-Z', 'agent-1', '2026-09-09T10:00:00Z', long); // same agent attributed to two items → counted once
+  ended('task-b', 'TASK-B', 'agent-2', '2026-09-10T10:00:00Z', { turns: 500, turns_over_500k: 0, max_context: 140_000, compactions: 0, follow_ups: 0 });
+  const doc = assemble(repo, { plans: [R], now: NOW });
+  assert.deepEqual(doc.envelope.coverage.dispatch_agents, { agents: 2, resumed: 1, compacted: 1, max_follow_ups: 12, turns: 2000, turns_over_500k: 900, over_500k_share: 0.45 });
+  assert.match(renderMarkdown(doc), /- agents: n=2 resumed=1 compacted=1 max_follow_ups=12 turns=2000 over_500k=45%/);
+  assert.match(renderMarkdown(doc), /task-crossing=0/);
+  const empty = tmp(); seed(empty);
+  assert.deepEqual(assemble(empty, { plans: [R], now: NOW }).envelope.coverage.dispatch_agents, { agents: 0, resumed: 0, compacted: 0, max_follow_ups: null, turns: 0, turns_over_500k: 0, over_500k_share: null });
+});

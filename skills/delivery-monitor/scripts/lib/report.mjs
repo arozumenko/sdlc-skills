@@ -55,7 +55,7 @@ function readAllRunFiles(repo) {
   });
 }
 
-const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'malformed'];
+const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'malformed'];
 /** F19: hook capture-loss diagnostics — `.agents/telemetry/delivery/diagnostics-*.jsonl`, one JSON
  * object per line, `{at, kind, session, agent_id, detail}`. Never landed as a writer in this task; this
  * is a read-only, best-effort reader — a missing directory/file is zero counts, not an error, and any
@@ -155,6 +155,14 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const attributedDispatches = dispatches.length - unattributedDispatches;
   const unattributedShare = attributedDispatches + unattributedDispatches ? Math.round((unattributedDispatches / (attributedDispatches + unattributedDispatches)) * 10000) / 10000 : null;
 
+  // Per-agent context profile from the hook's `dispatch_ended.meta.agent` (one entry per agent — an agent attributed to several
+  // items carries the same stats on each): how many agents were resumed or compacted, and the share of their API turns that ran
+  // above 500k context. This is what the one-task-per-subagent rule moves; the hook writes it on Claude Code only.
+  const agentStats = new Map();
+  for (const o of res.active) if (o.event === 'dispatch_ended' && inScope(o) && o.meta?.agent && o.agentId) agentStats.set(o.agentId, o.meta.agent);
+  const st = [...agentStats.values()], turns = st.reduce((n, a) => n + (a.turns ?? 0), 0), heavy = st.reduce((n, a) => n + (a.turns_over_500k ?? 0), 0);
+  const dispatchAgents = { agents: st.length, resumed: st.filter((a) => a.follow_ups > 0).length, compacted: st.filter((a) => a.compactions > 0).length, max_follow_ups: st.length ? Math.max(...st.map((a) => a.follow_ups ?? 0)) : null, turns, turns_over_500k: heavy, over_500k_share: turns ? Math.round((heavy / turns) * 10000) / 10000 : null };
+
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
@@ -200,7 +208,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
       // itself is not computed until M2 (PR-mode backfill), but the label travels with the policy
       // now so both metrics carry the same honest caveat wherever they're read.
       labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time' } },
-    coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, ...cov },
+    coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
   return { envelope, plans: docs };
@@ -348,6 +356,8 @@ export function renderMarkdown(doc) {
   // registered run files that failed to parse.
   L.push(`- plans: malformed_runs=${e.coverage.malformed_runs}`);
   L.push(`- capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}`);
+  const da = e.coverage.dispatch_agents;
+  L.push(`- agents: n=${da.agents} resumed=${da.resumed} compacted=${da.compacted} max_follow_ups=${da.max_follow_ups ?? '—'} turns=${da.turns} over_500k=${pct(da.over_500k_share)}`);
   L.push(`- diagnostics: ${DIAG_KINDS.map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
   L.push(`- baselines: ${Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', ')}`);
   for (const c of e.caveats) L.push(`- caveat: ${c}`);

@@ -294,3 +294,48 @@ test('resolveRefs: a task owned by the dispatched role wins over a word hit on a
   const pm = { items: [t('TASK-023', 'js-dev')] };
   assert.deepEqual(resolveRefs(pm, { description: 'Review TASK-023', firstUserText: '', role: 'tech-lead' }).items.map((i) => i.ref), ['TASK-023']);
 });
+
+// Production case: a dev dispatched for its first task was messaged five more in the same transcript. Its first brief names only
+// that task, so every later task stayed on it; the follow-ups show the crossing, and the usage rows show the context it ran at.
+const resumedTranscript = ({ agentId = 'agent-40', followUps = ['The coordinator sent a message while you were working: #533 (TASK-023) merged. Next: **TASK-034**, the save path.'] } = {}) => {
+  const t = transcripts({ agentId, complete: false }); const at = (m) => `2026-09-16T09:${String(m).padStart(2, '0')}:00.000Z`;
+  const usage = (ctx) => ({ input_tokens: 10, cache_read_input_tokens: ctx - 10, cache_creation_input_tokens: 0 });
+  const rows = [
+    { type: 'user', timestamp: at(0), message: { role: 'user', content: [{ type: 'text', text: 'You are js-dev. Implement TASK-023.' }] } },
+    { type: 'user', timestamp: at(0), message: { role: 'user', content: [{ type: 'text', text: '<command-message>tdd</command-message> TASK-034 is mentioned in a skill body' }] } },
+    // one API turn streamed as two records with the same message id → counted once
+    { type: 'assistant', timestamp: at(1), message: { id: 'm1', role: 'assistant', content: [{ type: 'tool_use', id: 'x' }], usage: usage(120_000) } },
+    { type: 'assistant', timestamp: at(1), message: { id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'working' }], usage: usage(120_000) } },
+    { type: 'user', timestamp: at(2), message: { role: 'user', content: [{ type: 'text', text: '[SYSTEM NOTIFICATION - NOT USER INPUT] background task done; TASK-034 unrelated' }] } },
+    // the host's shape for a message sent to a running subagent: isMeta with origin.kind 'coordinator'
+    ...followUps.map((text, k) => ({ type: 'user', timestamp: at(3 + k), isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: text } })),
+    { type: 'user', timestamp: at(9), isMeta: true, origin: { kind: 'task-notification' }, message: { role: 'user', content: 'TASK-034 background build finished' } },
+    { type: 'user', timestamp: at(9), isMeta: true, origin: { kind: 'peer' }, message: { role: 'user', content: 'Another Claude session mentions TASK-034' } },
+    { type: 'user', timestamp: at(20), isCompactSummary: true, message: { role: 'user', content: 'This session is being continued from a previous conversation. TASK-034 …' } },
+    { type: 'assistant', timestamp: at(30), message: { id: 'm2', role: 'assistant', content: [{ type: 'text', text: 'done' }], usage: usage(640_000) } },
+  ];
+  writeFileSync(t.child, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+  return t;
+};
+test('parseTranscript: follow-ups exclude host notifications, skill preloads and compaction summaries; turns dedupe by message id', () => {
+  const tr = parseTranscript(resumedTranscript().child);
+  assert.equal(tr.firstUserText, 'You are js-dev. Implement TASK-023.');
+  assert.equal(tr.followUps.length, 1); assert.match(tr.followUps[0].text, /Next: \*\*TASK-034\*\*/);
+  assert.deepEqual(tr.stats, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1 });
+});
+test('handleStop: a resumed agent sent another task → task-crossing diagnostic once per agent; attribution unchanged; stats on dispatch_ended', () => {
+  const repo = setup(); const t = resumedTranscript(); const p = payload(t, { agent_id: 'agent-40' });
+  const r = handleStop(p, { repo, now: NOW });
+  assert.equal(r.diagnostic, 'task-crossing');
+  const obs = resolveObservations(repo).active.filter((o) => o.agentId === 'agent-40');
+  assert.deepEqual([...new Set(obs.map((o) => o.ref))], ['TASK-023'], 'the hook flags, it does not split one transcript across tasks');
+  assert.deepEqual(obs.find((o) => o.event === 'dispatch_ended').meta.agent, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1, follow_ups: 1 });
+  const lines = () => diagLines(repo).filter((d) => d.kind === 'task-crossing');
+  assert.equal(lines().length, 1); assert.match(lines()[0].detail, /TASK-034 after its first task \(TASK-023\)/);
+  handleStop(p, { repo, now: NOW + 1000 }); assert.equal(lines().length, 1, 'a later stop of the same agent adds no second line');
+});
+test('handleStop: follow-ups on the same task (review comments, CI) are not a crossing', () => {
+  const repo = setup(); const t = resumedTranscript({ agentId: 'agent-41', followUps: ['Rio left two comments on TASK-023; fix them on the same PR.', 'CI is red on the lint step.'] });
+  assert.equal(handleStop(payload(t, { agent_id: 'agent-41' }), { repo, now: NOW }).diagnostic, null);
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'task-crossing').length, 0);
+});
