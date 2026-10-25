@@ -171,7 +171,25 @@ binding contract requirements from compatible optional design choices and
 requires an ordered timeout / initially empty reconciliation / late completion
 acceptance scenario. These prompt/rubric changes define a new result series;
 do not compare it to older scores as an agent improvement or silently regrade
-historical runs. Freeze new validation inputs before subjects see them.
+historical runs. Freeze new validation inputs before subjects see them. Dispositions address the
+underlying proposition: an invalid reviewer justification alone does not refute
+it. UI deadline checks are independent of timeout timing; rubrics must not add
+unwritten event-order requirements.
+
+Before freezing a new semantic case, check prompt/rubric/grader alignment:
+
+- Define what each disposition classifies: the underlying proposition or the
+  validity of its justification. Do not switch targets in the hidden rubric.
+- State nested output types explicitly. Accept accurate supplemental source
+  citations while still requiring the binding clauses; fabricated quotes fail.
+- Enforce only contractual event dependencies. A UI deadline measured from
+  operation start need not occur after timeout or cancellation.
+- Include real scratch-execution positives with paired calls/results, plus
+  negative interpretations of the same artifacts. Separately test each valid
+  timing/design alternative rather than only one preferred answer.
+- Calibration agreement alone does not establish validity. Independently
+  adjudicate unexpected live failures, preserve original scores, and use new
+  cases after substantive protocol changes.
 
 For an initial calibration run, choose explicit installed model identifiers and
 keep model, tools, mode and judge configuration fixed between comparisons:
