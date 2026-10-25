@@ -62,9 +62,17 @@ export function parseStream(text) {
     }
   }
 
-  // Summing per-message usage covers subagents too; the result event's usage
-  // can be main-loop only, so it is kept separately for cross-checking.
-  const usage = usageFromMessages;
+  // Streamed messages can contain provisional output counts (e.g. 4 tokens
+  // for a completed 339-token answer). modelUsage covers every model in the
+  // session; result.usage can be main-loop only and is not a safe substitute.
+  const modelUsage = result?.modelUsage ?? null;
+  const modelRows = modelUsage && typeof modelUsage === 'object' && !Array.isArray(modelUsage) ? Object.values(modelUsage) : [];
+  const reportedKeys = ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens'];
+  const completeModelUsage = modelRows.length > 0 && modelRows.every(u => u && reportedKeys.every(k => Number.isFinite(u[k]) && u[k] >= 0));
+  const usage = completeModelUsage ? modelRows.reduce((acc, u) => addUsage(acc, {
+    input_tokens: u.inputTokens, output_tokens: u.outputTokens,
+    cache_read_input_tokens: u.cacheReadInputTokens, cache_creation_input_tokens: u.cacheCreationInputTokens,
+  }), zeroUsage()) : usageFromMessages;
   return {
     sessionId: init?.session_id ?? result?.session_id ?? null,
     model: init?.model ?? null,
@@ -78,6 +86,9 @@ export function parseStream(text) {
     durationMs: result?.duration_ms ?? null,
     costUsd: result?.total_cost_usd ?? null,
     usage,
+    usageSource: completeModelUsage ? 'model-usage' : 'messages',
+    messageUsage: usageFromMessages,
+    modelUsage,
     totalTokens: TOKEN_KEYS.reduce((s, k) => s + usage[k], 0),
     resultUsage: result?.usage ?? null,
     firstTurnContext,
