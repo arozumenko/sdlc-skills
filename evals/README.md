@@ -162,6 +162,17 @@ Local verification (no model calls):
 node --test evals/lib/graders.test.mjs evals/lib/canary.test.mjs
 ```
 
+Protocol clarification (2026-10-25): E14 findings assess **originally supplied
+evidence**; optional fresh investigations are reported separately and cannot
+retroactively strengthen an inconclusive supplied run. Isolated copies and
+scripts under `qa/` are permitted, while originals and HEAD stay unchanged.
+A runner crash is not an assertion-based mutation kill. E15 distinguishes
+binding contract requirements from compatible optional design choices and
+requires an ordered timeout / initially empty reconciliation / late completion
+acceptance scenario. These prompt/rubric changes define a new result series;
+do not compare it to older scores as an agent improvement or silently regrade
+historical runs. Freeze new validation inputs before subjects see them.
+
 For an initial calibration run, choose explicit installed model identifiers and
 keep model, tools, mode and judge configuration fixed between comparisons:
 
