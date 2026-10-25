@@ -19,7 +19,8 @@ node evals/run.mjs --repo ../other-checkout --label fix  # measure another branc
 node evals/rejudge.mjs evals/results/<run> --judge-effort xhigh  # re-grade saved trials, report agreement
 ```
 
-Needs `claude` (Claude Code) and, for `--judge`, `codex`. Trials run one at a
+Needs `claude` (Claude Code, supporting `--forward-subagent-text`; tested with
+2.1.310) and, for `--judge`, `codex`. Trials run one at a
 time: each is a full `claude -p` session, and the point is a clean cost
 measurement, not throughput. Output goes to `evals/results/<label>-<stamp>/`
 (gitignored): per trial `transcript.jsonl` and `trial.json`, plus `summary.json`.
@@ -41,7 +42,10 @@ every case's `selftest.mjs` feeds simulated outcomes to its grader.
 4. `grade.mjs <workspace> <trialDir>` prints `{pass, checks[]}`. Checks marked
    `required: false` are reported but do not decide pass/fail.
 5. With `--judge`, `codex exec` (read-only, default `gpt-6-astra`, effort
-   `high`) grades the case's `judge.md` rubric. A trial passes only if the
+   `high`) grades the case's `judge.md` rubric. The judge also receives the
+   retained transcript path to check execution claims against tool results;
+   rejudging uses that same evidence without overwriting the original verdict.
+   A trial passes only if the
    grader and the judge both pass. Calibration on the first 9 judged trials:
    `high` and `xhigh` gave identical verdicts and scores (9/9), and `xhigh`
    reproduced itself 9/9; `high` is ~20% faster. Re-check with `rejudge.mjs`
@@ -68,7 +72,8 @@ out as `<private>/<suite>/<case>/` with `<private>/lib` symlinked to
 ## Metrics per trial
 
 From the stream-json transcript: turns, tool calls by name, input/output/cache
-tokens (summed per message, so subagent usage is included), the role's
+tokens (completed per-model totals, including subagents; per-message fallback
+when those totals are absent), the role's
 **first-turn context** (its standing context size at dispatch), cost, and wall
 time. `summary.json` gives the median and range per case, so a change can be
 judged on "same pass rate, fewer tokens and turns". Each case also reports
@@ -77,6 +82,10 @@ pass, estimated as C(c,n)/C(n,n)), because a role that passes 2 of 3 times is
 not reliable when every dispatch has to work. `run.json` pins the installed
 commit and the `claude`/`codex`/`node` versions, so a CLI or model rollout is
 not mistaken for a regression in the factory.
+
+`usageSource`, raw `messageUsage`, and `modelUsage` record how totals were
+derived. Streamed output counts can be provisional; role `subagent.usage`
+remains a per-message diagnostic, not the authoritative session total.
 
 ## Case layout
 
@@ -152,6 +161,35 @@ Local verification (no model calls):
 ```bash
 node --test evals/lib/graders.test.mjs evals/lib/canary.test.mjs
 ```
+
+Protocol clarification (2026-10-25): E14 findings assess **originally supplied
+evidence**; optional fresh investigations are reported separately and cannot
+retroactively strengthen an inconclusive supplied run. Isolated copies and
+scripts under `qa/` are permitted, while originals and HEAD stay unchanged.
+A runner crash is not an assertion-based mutation kill. E15 distinguishes
+binding contract requirements from compatible optional design choices and
+requires an ordered timeout / initially empty reconciliation / late completion
+acceptance scenario. These prompt/rubric changes define a new result series;
+do not compare it to older scores as an agent improvement or silently regrade
+historical runs. Freeze new validation inputs before subjects see them. Dispositions address the
+underlying proposition: an invalid reviewer justification alone does not refute
+it. UI deadline checks are independent of timeout timing; rubrics must not add
+unwritten event-order requirements.
+
+Before freezing a new semantic case, check prompt/rubric/grader alignment:
+
+- Define what each disposition classifies: the underlying proposition or the
+  validity of its justification. Do not switch targets in the hidden rubric.
+- State nested output types explicitly. Accept accurate supplemental source
+  citations while still requiring the binding clauses; fabricated quotes fail.
+- Enforce only contractual event dependencies. A UI deadline measured from
+  operation start need not occur after timeout or cancellation.
+- Include real scratch-execution positives with paired calls/results, plus
+  negative interpretations of the same artifacts. Separately test each valid
+  timing/design alternative rather than only one preferred answer.
+- Calibration agreement alone does not establish validity. Independently
+  adjudicate unexpected live failures, preserve original scores, and use new
+  cases after substantive protocol changes.
 
 For an initial calibration run, choose explicit installed model identifiers and
 keep model, tools, mode and judge configuration fixed between comparisons:

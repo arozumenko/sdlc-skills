@@ -47,3 +47,26 @@ test("separates subagent usage and its first-turn context", () => {
   assert.equal(m.subagent.firstTurnContext, 60001);
   assert.equal(m.subagent.usage.output_tokens, 25);
 });
+
+test("completed per-model totals supersede provisional streamed output counts", () => {
+  const ev = [
+    { type: 'assistant', message: { id: 'm', usage: { input_tokens: 2, output_tokens: 4 }, content: [] } },
+    { type: 'result', subtype: 'success', modelUsage: {
+      coordinator: { inputTokens: 4, outputTokens: 600, cacheReadInputTokens: 41000, cacheCreationInputTokens: 19000 },
+      role: { inputTokens: 2, outputTokens: 339, cacheReadInputTokens: 7300, cacheCreationInputTokens: 29000 },
+    } },
+  ];
+  const m = parseStream(ev.map(JSON.stringify).join('\n'));
+  assert.equal(m.usage.output_tokens, 939);
+  assert.equal(m.totalTokens, 97245);
+  assert.equal(m.usageSource, 'model-usage');
+  assert.equal(m.messageUsage.output_tokens, 4, 'retain raw message counts for audit');
+});
+
+test("empty or incomplete per-model usage cannot replace message evidence", () => {
+  for (const modelUsage of [{}, { role: { outputTokens: 9 } }]) {
+    const m = parseStream([...lines, { type: 'result', modelUsage }].map(JSON.stringify).join('\n'));
+    assert.equal(m.usage.output_tokens, 150);
+    assert.equal(m.usageSource, 'messages');
+  }
+});
