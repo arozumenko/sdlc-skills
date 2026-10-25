@@ -19,7 +19,8 @@ node evals/run.mjs --repo ../other-checkout --label fix  # measure another branc
 node evals/rejudge.mjs evals/results/<run> --judge-effort xhigh  # re-grade saved trials, report agreement
 ```
 
-Needs `claude` (Claude Code) and, for `--judge`, `codex`. Trials run one at a
+Needs `claude` (Claude Code, supporting `--forward-subagent-text`; tested with
+2.1.310) and, for `--judge`, `codex`. Trials run one at a
 time: each is a full `claude -p` session, and the point is a clean cost
 measurement, not throughput. Output goes to `evals/results/<label>-<stamp>/`
 (gitignored): per trial `transcript.jsonl` and `trial.json`, plus `summary.json`.
@@ -41,7 +42,10 @@ every case's `selftest.mjs` feeds simulated outcomes to its grader.
 4. `grade.mjs <workspace> <trialDir>` prints `{pass, checks[]}`. Checks marked
    `required: false` are reported but do not decide pass/fail.
 5. With `--judge`, `codex exec` (read-only, default `gpt-6-astra`, effort
-   `high`) grades the case's `judge.md` rubric. A trial passes only if the
+   `high`) grades the case's `judge.md` rubric. The judge also receives the
+   retained transcript path to check execution claims against tool results;
+   rejudging uses that same evidence without overwriting the original verdict.
+   A trial passes only if the
    grader and the judge both pass. Calibration on the first 9 judged trials:
    `high` and `xhigh` gave identical verdicts and scores (9/9), and `xhigh`
    reproduced itself 9/9; `high` is ~20% faster. Re-check with `rejudge.mjs`

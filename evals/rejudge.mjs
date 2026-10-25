@@ -54,7 +54,8 @@ for (const caseId of readdirSync(opts.dir).filter((d) => cases.has(d))) {
     const outDir = join(trialDir, `rejudge-${opts.judgeModel}-${opts.judgeEffort}`);
     mkdirSync(outDir, { recursive: true });
     const started = Date.now();
-    const v = runJudge(caseDir, spec, { work, baseSha: baseSha(work, rec) }, outDir, rec.metrics.finalText, opts);
+    const v = runJudge(caseDir, spec, { work, baseSha: baseSha(work, rec) }, outDir, rec.metrics.finalText,
+      { ...opts, transcriptPath: join(trialDir, "transcript.jsonl") });
     const row = {
       case: caseId, trial: t,
       original: { pass: rec.judge.pass, score: rec.judge.score, effort: rec.judge.effort },
