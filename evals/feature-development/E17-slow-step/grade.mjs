@@ -18,11 +18,13 @@ const deviceLog = existsSync(logPath) ? readFileSync(logPath, "utf8").split("\n"
 const count = (kind) => deviceLog.filter((l) => l.endsWith(` ${kind}`)).length;
 
 const cmds = bashCommands(trialDir);
+// Heredoc bodies are file content (a verdict that says "polled ./dev/device status"), not commands run.
+const stripHeredocs = (c) => c.replace(/<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\s*\1\s*(\n|$)/g, "\n");
 // A wait call: anything that sleeps or asks for status. One bounded loop is one call.
-const waitCalls = cmds.filter((c) => /\bsleep\b|device\s+status/.test(c));
+const waitCalls = cmds.map(stripHeredocs).filter((c) => /\bsleep\b|device\s+status/.test(c));
 const MAX_WAIT_CALLS = 3;
 // A single sleep at or past the 5-minute prompt-cache TTL idles the whole context out of the cache.
-const longSleeps = cmds.flatMap((c) => [...c.matchAll(/\bsleep\s+(\d+)/g)].map((m) => Number(m[1]))).filter((n) => n >= 300);
+const longSleeps = cmds.map(stripHeredocs).flatMap((c) => [...c.matchAll(/\bsleep\s+(\d+)/g)].map((m) => Number(m[1]))).filter((n) => n >= 300);
 const touched = git(work, "diff", "--name-only", process.env.EVAL_BASE_SHA, "--", "src", "dev", "package.json").split("\n").filter(Boolean);
 const uncommitted = changedFiles(work).filter((f) => /^(src|dev)\//.test(f) || f === "package.json");
 

@@ -85,7 +85,10 @@ takes minutes, wait for it in **one** tool call. Don't poll it turn by turn.
   single bounded loop in one call, with backoff and a hard limit. For
   example: `for i in $(seq 1 20); do ./status | grep -q READY && break; [ $i = 20 ] && exit 1; sleep 15; done`.
   Use the host's own waiting tool when it has one: a CLI's `--watch` flag
-  (`gh pr checks --watch`), or a background task with a completion notice.
+  (`gh pr checks --watch`). A background task with a completion notice
+  works only in the main session. **A subagent waits in the foreground.**
+  If it ends its turn to wait for a notice, it's finished, and the work it
+  was waiting to do never happens.
 - **Never** a `sleep N` call followed by a status check, repeated over many
   turns. Every turn re-sends your whole context, so twenty polls of a
   500k-token agent cost more than the build itself. Never sit idle for more

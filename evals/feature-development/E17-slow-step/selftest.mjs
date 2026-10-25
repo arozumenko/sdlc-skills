@@ -20,6 +20,8 @@ export const scenarios = [
     act: (w, t) => { write(w, "qa/T-17-verdict.md", verdict); log(w, ["start", "check-ready"]); fakeTranscript(t, { bash: ["./dev/device start", "sleep 600", "./dev/device check"] }); } },
   { name: "gave up before READY (only an early check)", shouldPass: false,
     act: (w, t) => { write(w, "qa/T-17-verdict.md", "VERDICT: FAIL\n\n## AC2\ndevice not ready\n"); log(w, ["start", "check-early"]); fakeTranscript(t, { bash: ["./dev/device start", "./dev/device check"] }); } },
+  { name: "verdict written by a heredoc that mentions status is not a poll", shouldPass: true,
+    act: (w, t) => { write(w, "qa/T-17-verdict.md", verdict); log(w, ["start", "status", "check-ready"]); fakeTranscript(t, { bash: ["./dev/device start; ./dev/device status", LOOP, "./dev/device check; ./dev/device status", "mkdir -p qa && cat > qa/T-17-verdict.md <<'EOF'\nVERDICT: FAIL\npolled `./dev/device status` until READY; sleep 10 between polls\nEOF"] }); } },
   { name: "PASS verdict", shouldPass: false,
     act: (w, t) => { write(w, "qa/T-17-verdict.md", "VERDICT: PASS\n"); log(w, ["start", "status", "check-ready"]); fakeTranscript(t, { bash: ["./dev/device start", LOOP, "./dev/device check"] }); } },
 ];
