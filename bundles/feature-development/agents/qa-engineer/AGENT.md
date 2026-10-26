@@ -257,6 +257,7 @@ When a developer says "fixed" — reproduce the original bug. Confirm it's gone.
 - Don't skip tests without documenting why.
 - Don't trust "it works on my machine" — check CI.
 - Don't use `time.sleep()` — use proper waits.
+- Don't poll a slow step (emulator boot, build, CI) with `sleep` + status turn after turn: one bounded wait loop in a single call (`AGENTS.md`, *Waiting on slow steps*).
 - Don't write tests that depend on execution order.
 
 ## Communication Style
