@@ -66,8 +66,18 @@ function isCompletionEvidence(r) {
  * yet" (no activity — the child transcript proves nothing, so `handleStop` emits nothing at all) from
  * one that shows real work in flight but no proof it finished (some activity — `dispatched` is
  * emitted, `dispatch_ended` withheld, diagnostic `incomplete-transcript`). */
+// Resumed agents (seen in production): an orchestrator that messages a running subagent with its next task leaves one
+// transcript whose first user record names only the first task. `followUps` are the later messages from the orchestrator —
+// `origin.kind: 'coordinator'` (flagged isMeta by the host), or any other non-meta user text; host notifications, skill preloads
+// and compaction summaries are not — so the caller can see the agent crossing into another task.
+// `stats` is the per-agent context profile: API turns (deduplicated by message id), turns above 500k context, the peak, and
+// compactions — what the fresh-dispatch rule is measured by.
+export const CONTEXT_HEAVY = 500_000;
+const NOT_AUTHORED = [/^<command-/, /^\[SYSTEM NOTIFICATION/, /^<task-notification>/];
+const isFollowUp = (r, text) => (r.origin?.kind === 'coordinator' && text.trim().length > 0) || !r.isMeta && !r.isCompactSummary && !r.isVisibleInTranscriptOnly && text.trim() && !NOT_AUTHORED.some((re) => re.test(text.trimStart()));
+const contextOf = (u) => (u ? (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) : 0);
 export function parseTranscript(path) {
-  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false };
+  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false, followUps: [], stats: { turns: 0, turns_over_500k: 0, max_context: 0, compactions: 0 } };
   let text; try { text = readFileSync(path, 'utf8'); } catch { return out; }
   const lines = text.split('\n');
   // F13 (review round): a torn/truncated FINAL line means the write is mid-flight, and the
@@ -78,7 +88,7 @@ export function parseTranscript(path) {
   for (let i = lines.length - 1; i >= 0; i--) { if (lines[i].trim()) { lastNonBlank = i; break; } }
   let tornTail = false;
   if (lastNonBlank >= 0) { try { JSON.parse(lines[lastNonBlank]); } catch { tornTail = true; } }
-  let sawUser = false, lastRecord = null, lastRecordTs = null;
+  let sawUser = false, lastRecord = null, lastRecordTs = null; const seen = new Set();
   for (const line of lines) {
     if (!line.trim()) continue;
     let r; try { r = JSON.parse(line); } catch { continue; } // malformed/torn lines contribute no evidence to lastRecord
@@ -86,7 +96,15 @@ export function parseTranscript(path) {
     const t = r.timestamp ? Date.parse(r.timestamp) : NaN;
     if (!Number.isNaN(t)) { const iso = new Date(t).toISOString(); if (!out.firstTs || iso < out.firstTs) out.firstTs = iso; lastRecord = r; lastRecordTs = iso; }
     if (r.type === 'user') sawUser = true; else if (sawUser) out.hasActivity = true;
-    if (!out.firstUserText && r.type === 'user') out.firstUserText = textOf(r.message?.content);
+    if (r.type === 'user') {
+      const ut = textOf(r.message?.content);
+      if (!out.firstUserText) out.firstUserText = ut;
+      else if (isFollowUp(r, ut)) out.followUps.push({ at: r.timestamp ?? null, text: ut });
+      if (r.isCompactSummary) out.stats.compactions++;
+    } else if (r.type === 'assistant' && r.message?.usage) {
+      const id = r.message.id ?? r.requestId; if (id && seen.has(id)) continue; if (id) seen.add(id);
+      const ctx = contextOf(r.message.usage); out.stats.turns++; if (ctx > CONTEXT_HEAVY) out.stats.turns_over_500k++; if (ctx > out.stats.max_context) out.stats.max_context = ctx;
+    }
   }
   // Completion requires the LAST timestamped (well-formed) record — not merely some earlier non-user
   // record — to be real completion evidence, AND the file's actual last line must itself have parsed
@@ -122,25 +140,36 @@ export function resolveRefs(run, opts) {
   if (taskResult.items.length || taskResult.how === 'ambiguous') return taskResult;
   return matchLevel(candidates.filter((i) => i.level === 'mission'), opts);
 }
+/** Tasks a resumed agent was sent after its first brief: refs named in its follow-up messages that are not the item(s) it is
+ * attributed to. A role that owns tasks is only checked against its own (the resolveRefs role ruling). Its later work stays
+ * on the first item — the hook cannot split one transcript — so this flags it rather than re-attributing. */
+export function crossedRefs(run, { followUps, role, attributed }) {
+  const tasks = run.items.filter((i) => i.level === 'task' && !i.cancelled && !attributed.has(i.item_id));
+  const owned = role ? tasks.filter((i) => i.role === role) : [];
+  const pool = owned.length ? owned : tasks;
+  return pool.filter((i) => followUps.some((f) => wordHit(f.text, i.ref))).map((i) => i.ref);
+}
 export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k < 10; k++) { const res = appendObservation(repo, r, opts); if (res.result !== 'ID-CONFLICT') return res; r = { ...r, revision: r.revision + 1 }; } return { result: 'ID-CONFLICT', observation_id: rec.observation_id, revision: rec.revision }; }
 // F19: diagnostics lines are exactly {at, kind, session, agent_id, detail} with `kind` drawn from the
 // fixed vocabulary the report reader (Task 8) recognises — unbound-session | unknown-role |
-// no-transcript | incomplete-transcript | invalid-roster. Any other shape/kind folds into that
+// no-transcript | incomplete-transcript | invalid-roster | task-crossing. Any other shape/kind folds into that
 // reader's `malformed` bucket, so this writer never emits one.
 const DIAG_TAIL = 1024 * 1024;
 /** Bounded read: only the last 1 MiB of the diagnostics file is scanned (files can reach MBs), so "once" holds per (session, kind)
  * within that window — an entry older than the tail may be written again, never unboundedly. */
-function alreadyDiagnosed(file, kind, session) {
+function alreadyDiagnosed(file, kind, session, agentId) {
   let fd; try { fd = openSync(file, 'r'); } catch { return false; }
   try {
     const { size } = fstatSync(fd), len = Math.min(size, DIAG_TAIL), buf = Buffer.alloc(len); readSync(fd, buf, 0, len, size - len);
     const lines = buf.toString('utf8').split('\n'); if (size > len) lines.shift(); // first line of a mid-file tail is partial
-    return lines.some((l) => { try { const d = JSON.parse(l); return d.kind === kind && d.session === session; } catch { return false; } });
+    return lines.some((l) => { try { const d = JSON.parse(l); return d.kind === kind && d.session === session && (agentId === undefined || d.agent_id === agentId); } catch { return false; } });
   } catch { return false; } finally { closeSync(fd); }
 }
 // `once` kinds (unbound-session, invalid-roster) describe the session, not the agent — one line per (session, kind), else a 100-subagent run floods the log.
+// `task-crossing` describes one agent and is re-checked on every stop of a resumed agent — one line per (session, agent).
 const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster']);
-function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`); if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null; appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
+const ONCE_PER_AGENT = new Set(['task-crossing']);
+function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`); if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null; if (ONCE_PER_AGENT.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null, payload.agent_id ?? null)) return kind; appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
 const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts); } catch { return false; } };
 
 /** F3: an unbound session binds itself when its working branch associates (lib/associate.mjs) to exactly one item of exactly one
@@ -185,6 +214,11 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   const stage = classifyStage(description) !== 'other' ? classifyStage(description) : classifyStage(tr.firstUserText);
   const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null;
   const { items } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch, role });
+  const crossed = crossedRefs(run, { followUps: tr.followUps, role, attributed: new Set(items.map((i) => i.item_id)) });
+  if (crossed.length) {
+    const kind = diagnose(repo, slug, 'task-crossing', payload, `resumed agent sent ${crossed.join(', ')} after its first task (${items.map((i) => i.ref).join(', ') || 'unattributed'}); that work stays on the first item — dispatch a fresh subagent per task`, now);
+    diagnostic = diagnostic ?? kind;
+  }
   const common = { user: null, host: 'claude', plan: run.run, source: 'hook', source_record_id: `claude:${payload.session_id}:${payload.agent_id}`, session: payload.session_id, agentId: payload.agent_id, role };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
@@ -193,7 +227,7 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
     const key = it ? it.item_id : 'unattributed';
     const mk = (event, at, extra = {}) => makeObservation({ ...common, ...base, label, event, at, transition_id: `${key}/${event}/${payload.agent_id}`, meta: { ...base.meta, ...extra } }, { now });
     wrote.push(appendOrRevise(repo, mk('dispatched', tr.firstTs), { slug, now }));
-    if (tr.complete) wrote.push(appendOrRevise(repo, mk('dispatch_ended', tr.lastTs), { slug, now }));
+    if (tr.complete) wrote.push(appendOrRevise(repo, mk('dispatch_ended', tr.lastTs, { agent: { ...tr.stats, follow_ups: tr.followUps.length } }), { slug, now }));
     if (it && stage === 'fix') wrote.push(appendOrRevise(repo, mk('rework_observed', tr.firstTs, { round: null }), { slug, now }));
   }
   return { wrote, diagnostic };

@@ -6,7 +6,7 @@ compatibility: "Requires Node 18+ and git. Automatic dispatch capture on Claude 
 metadata:
   authors:
     - Daniel Sallai <daniel_sallai@epam.com>
-  version: "0.3.2"
+  version: "0.4.0"
 ---
 
 # delivery-monitor — cycle time, cadence, estimate vs actual
@@ -46,6 +46,11 @@ ran has no cycle time for it — backfill gives created/first-commit/done only. 
 `delivery.mjs plan close <run>`; an open plan keeps admitting hook dispatches and makes every unpinned command ambiguous.
 `status`/`report` say so when every item of an open plan is done or cancelled. `install-hooks.mjs --doctor` prints
 `this session: … unbound` when the session you are in will record nothing.
+
+**One task per subagent.** The hook attributes a subagent to the task named in its first brief. An agent that is messaged its
+next task keeps billing that task's time to the first one; the hook flags it as a `task-crossing` diagnostic and does not
+re-attribute it. The report's `agents:` line (`coverage.dispatch_agents`) shows how many agents were resumed or compacted and the
+share of their turns above 500k context.
 
 Plans may carry `branch_prefix` and `branch_map` (`[{pattern, ref}]`, regex with named groups → ref template, e.g.
 `{"pattern": "-m(?<m>\\d+)-t(?<t>\\d+)$", "ref": "T{m}.{t}"}`) so branches like `feat/x-m1-t4` map to items without per-task aliases

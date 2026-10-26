@@ -153,6 +153,25 @@ systematic errors — spot-check before you trust a batch.
 stage word (implement / review / fix round) so the delivery hook can
 attribute it.
 
+**One task per subagent: a new task gets a fresh dispatch.** Resuming or
+messaging a running subagent is fine *within* its task: a review comment,
+a CI failure, a follow-up on the same PR. When that task is done (merged,
+cancelled, or handed on), don't send the next task to the same agent.
+Start a fresh subagent with a written brief: the `TASK-NNN`, the plan
+excerpt, the branch, and what the previous task left behind, such as the
+merge sha and any open follow-ups. This holds even when "it already
+knows the codebase". In production, a dev reused across six tasks and a
+QA agent kept alive for 31 hours ran 65% of their turns above 500k
+tokens of context, against ~100k for a fresh dispatch, and every turn
+pays for that context again. The delivery hook also attributes an agent
+to the task in its first brief, so later tasks sent to it are recorded
+against the wrong item.
+
+Hard stop even inside one task: once a subagent has been compacted
+twice, or its context is past ~400k tokens, ask it for a handoff note
+(state, open threads, next step), end it, and continue with a fresh
+dispatch that carries the note. A long fix loop is the usual cause.
+
 ## Critical Rules
 
 1. **Act, don't ask.** When a task comes in, route it. Don't ask "want me to route this?" — that's your job. Just do it.
