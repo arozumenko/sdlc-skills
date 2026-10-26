@@ -122,7 +122,7 @@ When the PM routes a PR to you for review, this is a **blocking gate** — do no
 - [ ] Does error handling cover all failure modes?
 - [ ] Are database queries correct — wrong filters, missing joins, N+1 problems?
 - [ ] Is state mutation safe — race conditions, missing transactions?
-- [ ] **Lifecycle & cleanup paths**: does code touching session/turn/call/connection/subscription lifecycle have a test for the **interrupted / cancelled / error-mid-cleanup** path — not just the happy path? Are resources released on every exit, and is uniqueness **race-safe** (a DB constraint as the backstop, not a check-then-insert TOCTOU)? *(This class — orphaned handles, stale error state, double-dispatch, skipped teardown — is the most common blocking-review finding; require a test for the failure path before approving.)*
+- [ ] **Lifecycle & cleanup paths**: does code touching session/turn/call/connection/subscription lifecycle have a test for the **interrupted / cancelled / error-mid-cleanup** path — not just the happy path? Are resources released on every exit, and is uniqueness **race-safe** (a DB constraint as the backstop, not a check-then-insert TOCTOU)? *(This class — orphaned handles, stale error state, double-dispatch, skipped teardown — is the most common blocking-review finding; require a test for the failure path before approving.)* For UI, does the visible status stay honest on every exit path (pending never drawn as done; no state without a way out)?
 
 **Interface contract:**
 - [ ] Does the implementation match the interface contract defined in the task?
@@ -138,6 +138,78 @@ When the PM routes a PR to you for review, this is a **blocking gate** — do no
 - [ ] Does the code follow existing project patterns?
 - [ ] Does it introduce new dependencies that weren't in the plan?
 - [ ] Are there layer violations (UI touching DB, business logic in routes)?
+
+### Blocking call
+
+A finding blocks when any of these holds:
+
+1. An acceptance criterion is unmet.
+2. A defect is reproduced against running code or a test.
+3. A security issue has a proof of concept.
+4. **A concrete scenario breaks a stated project invariant.** Invariants include
+   honest status (pending never shown as saved), no lost or duplicated
+   non-idempotent writes, no stuck state without an exit, and no PII in logs.
+   Write the scenario as steps from a reachable state. If you can't write the
+   steps, the finding does not block.
+5. **An AC's own test cannot fail.** The AC is then unverified. Show it: a
+   mutant of the code under test (a removed ORDER BY, a dropped re-check, an
+   inverted guard) that the suite still passes, or a fixture that can't tell
+   the right answer from the wrong one. A weak test on code that no AC
+   asserts stays a nit.
+
+"Breaks no AC" is not a reason to downgrade. If the ACs say nothing about a
+path (dismissal, navigation away, lock or permission change mid-call, reopen,
+double tap, out-of-order replies), judge the path against the invariants.
+
+Rate the worst reachable outcome, not how likely you think it is.
+
+**Disagreement on severity resolves upward.** When another reviewer rates a
+finding higher than you do, either refute it with evidence (a test, a run,
+a mutant that is shown to be equivalent) or take the higher rating. "Other
+tests cover it" and "the mutant looks equivalent" are reasoning, not
+evidence.
+
+**A blocking fix carries its own proof.** A fix for a blocking finding
+includes a test, or names a mutant, that is shown failing on the pre-fix
+code. "Test added with the fix" with no red run does not confirm that the
+defect was fixed.
+
+### What you check that the toolkit doesn't
+
+Specialist agents read the diff. You read the diff against the plan, the
+contract and the sign-off record:
+- Does the contract or spec doc in this PR still say what was signed off? A
+  normative change after sign-off blocks until it is re-signed.
+- Do the AC wording, the contract and the code agree with each other, not
+  just the code with the AC?
+- Does every file, section or artifact the task presumes actually exist?
+
+### Re-reviewing a fix round
+
+A fix diff is new code and gets reviewed as new code. In practice fix rounds
+introduce about as many blockers as the first review finds.
+
+- Review the fix diff together with the fix brief. Check each prescribed
+  behaviour against the invariants, not just against your earlier findings.
+- Look for new state carriers the fix adds (flags, caches, step-scoped
+  holders, "remembered" drafts). Each one needs its own lifecycle check
+  (create, clear, reopen, cancel, out-of-order completion).
+- If the fix adds a second carrier for a fact another carrier already holds,
+  say so. A single derived predicate usually beats another patch.
+
+### Findings that outlive the PR
+
+Some findings are about a pattern, not just a line: "re-check state gates
+inside the write transaction", "lock parent before child", "this suite's
+guard tests must run before push". The next task will repeat the pattern
+unless it learns of the rule. For each finding like that:
+
+- write it as a one-line rule, citing the review it came from, into the brief
+  or plan of every dependent task that hasn't started yet (or into your role
+  memory, if no task exists yet);
+- say in the review comment where you put it.
+
+A rule that lives only in a merged PR's comments is lost.
 
 ### When You Find a Bug
 
@@ -230,6 +302,23 @@ exists. Developers still never estimate.
 
 ### Critical Path: TASK-001 → TASK-003 → TASK-005
 ```
+
+### Plan review (blocking, before any build): M, L and XL missions only
+
+Record the mission's size (XS, S, M, L or XL) in the plan before you decide.
+**XS and S missions skip this review**: the decomposition goes straight to
+build, so a small mission doesn't pay for an extra dispatch. An unsized
+mission is reviewed. For an M, L or XL mission, before a task, a contract
+amendment or a re-plan goes to a developer, review it the way you review
+code, and have the `ba` review its ACs:
+- Can each AC fail? Name the observation that would make it red.
+- Does each AC assert only fields, codes and states the contract defines?
+- Is each AC reachable in the target environment (mode, data, ports)?
+- Do the presumed files, routes, fixtures and data exist (premise check)?
+  Run it: query the target data, EXPLAIN the query, list the files. Paste the
+  output as evidence; reading the plan is not a premise check.
+
+A plan finding blocks the build like a code finding blocks a merge.
 
 ### 5. Handoff to PM
 

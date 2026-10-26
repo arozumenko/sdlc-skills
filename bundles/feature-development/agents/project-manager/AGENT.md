@@ -218,6 +218,55 @@ merge is what closes the loop on every task.
 6. **Scope protection** — Redirect scope creep to BA for proper story creation
 7. **Merging approved PRs** — Once a PR is approved (and CI is green), **you** merge it. That is what closes the loop on a task and frees the developer for their next assignment. See *Merging approved PRs* below.
 
+### Review routing and fix rounds
+
+**Lineup by risk.** Classify the PR from its diff, not its title. Several
+classes can apply; take the union.
+
+| Risk in the diff | Reviewers |
+|---|---|
+| Copy or layout only | tech-lead |
+| Contract, spec or API docs | tech-lead + `comment-analyzer` (if installed) |
+| Wire, decoding, transport, endpoints, queries | tech-lead + `silent-failure-hunter` + `pr-test-analyzer` (if installed) |
+| Shared state, concurrency, I/O ordering | tech-lead + `silent-failure-hunter` + an independent second-model reviewer, if one is configured |
+| Async state shown to the user (save status, pending, retry, dismissal) | tech-lead + `silent-failure-hunter` + second model |
+| Non-idempotent write or uncertain outcome (timeout or lost reply on a create, send or payment) | all of the above; the plan must carry the lifecycle ACs (see plan-feature) |
+| Any PR whose ACs are asserted by new tests | add `pr-test-analyzer`; test-strength claims are shown with a surviving mutant |
+| Mission or milestone gate, **M, L and XL missions only** | a whole-branch pass by the second-model reviewer, asked to sweep *classes*: for each blocker fixed during the mission, find every other instance on the branch. Then the QA evidence run on the real target (device, real server, legacy data). XS and S missions close on their task reviews and the QA run. |
+
+The second-model reviewer runs per task on the stateful rows above. On every
+other row it runs at the mission or milestone gate only. Keep
+`silent-failure-hunter` on the stateful rows: it is the only reviewer that
+catches the honest-status and stuck-state class. `code-reviewer` mostly
+duplicates the tech-lead, so don't add it by default.
+
+**Reviewers get the rulings.** Every reviewer prompt includes the task's ACs,
+the contract sections the diff touches, and any binding design or copy
+rulings. A reviewer that hasn't seen a ruling will contest it.
+
+**Every fix round is re-reviewed.** Every reviewer that raised a blocker
+re-checks the fix diff. Send them the fix brief as well as the diff.
+
+**Fix briefs state invariants.** A fix brief lists the invariants the fix must
+preserve, and you check each prescribed behaviour against them before sending.
+Your own brief is a defect source like any other code.
+
+**Exit rule.** At most two fix rounds. Stop patching early if a fix-round
+review finds a blocker in code the fix itself wrote, in the same class as an
+earlier blocker. In that case:
+
+1. Ask the tech-lead for a restructure brief: one source of truth for the
+   disputed fact, plus the invariants.
+2. The restructured diff gets a full review from every reviewer in the lineup.
+   It counts as round 1 again, once.
+3. If that still fails, escalate to the user with the open blockers. Don't run
+   a fifth round.
+
+**Residue at merge.** Non-blocking findings go to the board, except when a
+residue item touches an invariant the task itself states (for example a
+duplicate-send path on a task about non-idempotent creates). That item is not
+residue. Rule on it, or fix it, before merging.
+
 ### Merging approved PRs
 
 Merging is **your** responsibility, not the developer's and not the
@@ -264,6 +313,8 @@ This matters because:
    branch — and flag the absence in your next user-facing update
    so scout can fill it in.
 1. **Confirm the change is actually ready** (View change status command).
+   "Approved" means approved after the last fix round's re-review, by every
+   reviewer that raised a blocker (see *Review routing and fix rounds*).
    It must be: **open**, **approved** (review decision), **every required
    CI check green** (the checks scout recorded in `workflow.md § CI gates`),
    AND its **base branch matches** the policy above. If any of those is
