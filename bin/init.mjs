@@ -74,6 +74,7 @@ import {
 } from "./lib/factory-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
+import { CORE_HOOK_FILES, CORE_HOOK_EXE, expectedCoreHookSpec } from "./lib/core-hook-spec.mjs";
 import { execSync, execFileSync } from "child_process";
 import { homedir } from "os";
 
@@ -761,9 +762,6 @@ export function checkSiblingBundleHooks(targets, cwd = CWD, pkgRoot = PKG_ROOT) 
 // at the shipped hooks/hooks-codex.json / hooks-kiro.json templates instead.
 // ---------------------------------------------------------------------------
 
-const CORE_HOOK_FILES = ["run-hook.cmd", "session-start", "agent-start", "lib.sh"];
-const CORE_HOOK_EXE = ["run-hook.cmd", "session-start", "agent-start"];
-
 // ---- per-role hook defaults (config-defaults.sh) ---------------------------
 // The shared hooks fire for EVERY dispatched agent in the repo. The generated
 // defaults file is the roster that decides who receives context: one pair of
@@ -1038,40 +1036,24 @@ function installCoreHooks(targets) {
 
   for (const t of targets) {
     if (t.id === "claude") {
-      const rel = ".claude/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
-      const cmd = `"\${CLAUDE_PROJECT_DIR}/${rel}/run-hook.cmd"`;
-      const spec = {
-        SessionStart: [
-          {
-            matcher: "startup|clear|compact|resume",
-            hooks: [{ type: "command", command: `${cmd} session-start`, async: false }],
-          },
-        ],
-        SubagentStart: [
-          {
-            matcher: "*",
-            hooks: [{ type: "command", command: `${cmd} agent-start`, async: false }],
-          },
-        ],
-      };
-      if (mergeClaudeSettingsHooks(join(CWD, ".claude", "settings.json"), spec, "sdlc-core"))
+      const s = expectedCoreHookSpec("claude");
+      copyHookScripts(join(CWD, s.scriptsDir), join(CWD, t.dir, "agents"));
+      if (mergeClaudeSettingsHooks(join(CWD, s.configFiles[0]), s.writeSpec, "sdlc-core"))
         console.log(`      ✓ hooks Claude Code (.claude/settings.json)`);
     } else if (t.id === "cursor") {
-      const rel = ".cursor/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
+      const s = expectedCoreHookSpec("cursor");
+      copyHookScripts(join(CWD, s.scriptsDir), join(CWD, t.dir, "agents"));
       // Cursor's subagentStart is permission-only (no context injection) — wire
       // sessionStart only; per-role memory falls back to the `memory` skill.
       // For a CLI (non-plugin) project install CURSOR_PLUGIN_ROOT isn't set, so
       // the command sets CURSOR_HOOK=1 to select the Cursor emit shape (Unix sh
       // env-prefix form — doesn't work under cmd.exe, so Windows Cursor is
       // unserved; same pattern and limitation as CODEX_HOOK below).
-      const spec = { sessionStart: [{ command: `CURSOR_HOOK=1 ./${rel}/run-hook.cmd session-start` }] };
-      if (mergeVersionedHooks(join(CWD, ".cursor", "hooks.json"), spec, rel))
+      if (mergeVersionedHooks(join(CWD, s.configFiles[0]), s.writeSpec, s.scriptsDir))
         console.log(`      ✓ hooks Cursor (.cursor/hooks.json)`);
     } else if (t.id === "copilot") {
-      const rel = ".github/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
+      const s = expectedCoreHookSpec("copilot");
+      copyHookScripts(join(CWD, s.scriptsDir), join(CWD, t.dir, "agents"));
       // Workspace event casing is event-specific in VS Code (verified live):
       //   - sessionStart fires as camelCase (both CLI and VS Code) → camelCase entry.
       //   - SubagentStart fires as PascalCase in VS Code, but camelCase in the CLI →
@@ -1081,58 +1063,22 @@ function installCoreHooks(targets) {
       //     PascalCase SubagentStart, dispatched workers get NO memory in VS Code.
       // Each entry's env flag selects the emit shape in lib.sh (COPILOT_CLI → top-level
       // additionalContext; SDLC_VSCODE → hookSpecificOutput).
-      const cli = (verb) => ({
-        type: "command",
-        bash: `"./${rel}/run-hook.cmd" ${verb}`,
-        powershell: `& "./${rel}/run-hook.cmd" ${verb}`,
-        env: { COPILOT_CLI: "1" },
-        timeoutSec: 10,
-      });
-      const vscode = (verb) => ({
-        type: "command",
-        command: `"./${rel}/run-hook.cmd" ${verb}`,
-        env: { SDLC_VSCODE: "1" },
-        timeout: 10,
-      });
       // .github/hooks/<name>.json is an sdlc-owned file — write it wholesale.
-      const spec = {
-        version: 1,
-        hooks: {
-          sessionStart: [cli("session-start")],
-          subagentStart: [cli("agent-start")],
-          SubagentStart: [vscode("agent-start")],
-        },
-      };
       mkdirSync(join(CWD, ".github", "hooks"), { recursive: true });
-      writeFileSync(
-        join(CWD, ".github", "hooks", "sdlc-skills.json"),
-        JSON.stringify(spec, null, 2) + "\n"
-      );
+      writeFileSync(join(CWD, s.configFiles[0]), JSON.stringify(s.writeSpec, null, 2) + "\n");
       console.log(`      ✓ hooks GitHub Copilot (.github/hooks/sdlc-skills.json)`);
       // .github/instructions/*.instructions.md is generated/refreshed per machine by
       // the session-start hook. We deliberately do NOT modify the project's .gitignore
       // — whether to track or ignore those files is the user's call. Just inform.
       console.log(`      ℹ .github/instructions/*.instructions.md is generated per session — add to .gitignore yourself if you don't want it tracked`);
     } else if (t.id === "codex") {
-      const rel = ".codex/hooks/sdlc-skills";
-      copyHookScripts(join(CWD, rel), join(CWD, t.dir, "agents"));
+      const s = expectedCoreHookSpec("codex");
+      copyHookScripts(join(CWD, s.scriptsDir), join(CWD, t.dir, "agents"));
       // Codex uses Claude's nested SessionStart/SubagentStart shape. For a CLI
       // (non-plugin) project install PLUGIN_ROOT isn't set, so the command sets
       // CODEX_HOOK=1 to select the hookSpecificOutput emit shape. (Unix sh form;
       // Codex hooks run via shell.)
-      const cmd = `CODEX_HOOK=1 "./${rel}/run-hook.cmd"`;
-      const spec = {
-        SessionStart: [
-          {
-            matcher: "startup|clear|compact|resume",
-            hooks: [{ type: "command", command: `${cmd} session-start` }],
-          },
-        ],
-        SubagentStart: [
-          { matcher: "*", hooks: [{ type: "command", command: `${cmd} agent-start` }] },
-        ],
-      };
-      if (mergeClaudeSettingsHooks(join(CWD, ".codex", "hooks.json"), spec, "sdlc-core"))
+      if (mergeClaudeSettingsHooks(join(CWD, s.configFiles[0]), s.writeSpec, "sdlc-core"))
         console.log(`      ✓ hooks Codex (.codex/hooks.json)`);
       // Enable sub-agent dispatch so CLI orchestrators can spawn ICs (Codex
       // disables it unless [agents] has max_threads >= 1 and max_depth >= 2).
@@ -1429,6 +1375,10 @@ function printHelp() {
 
   Usage:
     npx github:arozumenko/sdlc-skills init [options]
+    npx github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
+                               Read-only health check of this project's install
+                               (hook wiring, persistence, hook version, context
+                               budget, skill drift). Never runs project code.
 
   Options:
     --factory <id>             Install a team factory (a curated set of agents,
@@ -2664,6 +2614,13 @@ async function main() {
   // Subcommand routing — default is install.
   if (argv[0] === "fix-copilot") {
     return runFixCopilot(argv.slice(1));
+  }
+
+  if (argv[0] === "doctor" || (argv[0] === "init" && argv[1] === "doctor")) {
+    const rest = argv[0] === "doctor" ? argv.slice(1) : argv.slice(2);
+    const { doctorMain } = await import("./lib/doctor/index.mjs");
+    process.exitCode = await doctorMain(rest, { cwd: CWD, pkgRoot: PKG_ROOT });
+    return;
   }
 
   const args = parseArgs(argv);
