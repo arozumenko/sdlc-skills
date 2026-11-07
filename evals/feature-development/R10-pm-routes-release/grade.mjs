@@ -42,5 +42,7 @@ if (expect === "ROUTE") {
     check("no-deploy", events.length === 0 || events.every((e) => e === "status"), "no deploy for a README fix"),
   );
 }
-checks.push(check("no-commit", git(work, "rev-parse", "HEAD") === process.env.EVAL_BASE_SHA, "HEAD unchanged", { required: expect !== "ROUTE" }));
+// A release record may be committed on its own release-record branch; the base branch must not move.
+const base = process.env.EVAL_BASE_BRANCH || "main";
+checks.push(check("base-branch-unchanged", git(work, "rev-parse", base) === process.env.EVAL_BASE_SHA, `${base} unchanged (release records belong on their own branch)`, { required: expect !== "ROUTE" }));
 report(checks);
