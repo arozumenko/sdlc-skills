@@ -53,16 +53,31 @@ actions and any time/stage limits.
 Carry this record across skills and resumed sessions. Proceed without asking
 again while approval covers the action; re-open only for materially different
 risks or changed scope. Keep gate status **waived**, never passed.
+A destructive action always needs a specific human confirmation for the current
+situation, even when a runbook preauthorizes it.
 
 Distinguish gate waiver from deployment/remediation authority; the same chat
 message can grant both. Approval cannot bypass credentials, enforced access
-controls or technical impossibility. If writing the durable record is unavailable,
-capture it in the chat handoff and mark persistence pending; do not erase approval
-or require the human to repeat it solely because the record store is unavailable.
+controls or technical impossibility.
+When the record cannot be written to the repo, carry it in chat marked
+"persistence pending", keep it visibly unfinished, and write it to the repo at
+the first opportunity. A release cannot be closed while the record is still
+pending persistence. Do not erase approval or require the human to repeat it
+solely because the record store is unavailable.
+
+## Record checkpoints
+
+Create append-only checkpoints on a dedicated release-record branch, committed
+and pushed, recording approvals, run/lock state and the next observation owner.
+Handoffs cite the branch and exact commit so a resumed session can continue
+before merge. Tech Lead reviews and PM merges through the normal gate.
+An unmerged checkpoint never counts as completion.
 
 ## Completion
 
 Return record path, artifact/target, strategy, gate and recovery readiness,
 authority/exception references, unresolved decisions and next owner. Keep merged,
-deployed, verified healthy and closed with accepted risk distinct. Waived closure
-checks permit an explicit accepted-risk closure, not a fabricated health verdict.
+deployed, verified healthy and closed with accepted risk distinct.
+Closed with accepted risk requires a named human's explicit waiver of the
+remaining observation. Never report it as verified healthy. The record must list
+the evidence gaps and the follow-up owner.

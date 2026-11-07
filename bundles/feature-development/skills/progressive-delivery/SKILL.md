@@ -42,13 +42,27 @@ install those skills too if those branches are required and unavailable.
    lacking recovery authority, hold and present the specific action for approval.
    Record results honestly, including any waiver.
 
+## Record checkpoints
+
+Create append-only checkpoints on a dedicated release-record branch, committed
+and pushed, recording approvals, run/lock state and the next observation owner.
+Handoffs cite the branch and exact commit so a resumed session can continue
+before merge. Tech Lead reviews and PM merges through the normal gate.
+An unmerged checkpoint never counts as completion.
+When the record cannot be written to the repo, carry it in chat marked
+"persistence pending", keep it visibly unfinished, and write it to the repo at
+the first opportunity. A release cannot be closed while the record is still
+pending persistence.
+
 ## Finish or hand off
 
 At full exposure, complete the agreed observation window and identify the
 monitoring owner before declaring **verified healthy**. Record deployed
 artifact/config, health evidence, recovery availability, residual risks and
-follow-up ownership. An explicit waiver of remaining closure gates yields
-**closed with accepted risk**, preserving the outstanding checks.
+follow-up ownership.
+Closed with accepted risk requires a named human's explicit waiver of the
+remaining observation. Never report it as verified healthy. The record must list
+the evidence gaps and the follow-up owner.
 
 If observation exceeds the session, report **deployed; verification pending**,
 run/controller status, lock owner, completed steps, pending checks, next check

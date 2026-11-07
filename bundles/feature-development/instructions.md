@@ -72,7 +72,10 @@ release-planning skill for the authoritative exception contract.
 
 Merged, deployed and verified healthy are separate states. An observation window
 that outlasts a session needs a named continuation owner and a verification-pending
-handoff. An explicit closure exception is closed with accepted risk, not healthy.
+handoff. Closed with accepted risk requires a named human's explicit waiver of
+remaining observation, recorded evidence gaps and a follow-up owner; never report
+it as verified healthy. Pending persistence or an unmerged release-record
+checkpoint prevents completion.
 External monitoring runs continuously; Dora acts when invoked, with project-specific
 scheduling or alert dispatch configured separately.
 

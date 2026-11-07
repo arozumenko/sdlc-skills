@@ -41,7 +41,9 @@ observed facts or explicit unknowns; retain approval and execution history.
 - Backup/restore rehearsal evidence where required:
 - Recovery route and exact pipeline/runbook actions:
 - Expected recovery duration and potential data loss:
-- Preauthorized triggers/actions; separate authority for destructive recovery:
+- Preauthorized non-destructive triggers/actions:
+- Specific named human confirmation for each destructive action in the current
+  situation, even when a runbook preauthorizes it; scope and consequences:
 - Recovery verification queries, flows and observation window:
 
 ## Approvals and exceptions (append; preserve history)
@@ -53,7 +55,8 @@ observed facts or explicit unknowns; retain approval and execution history.
 - Failed/missing gate(s) and disclosed risks:
 - Authorized actions; stage/time limits; revoked/superseded decisions:
 - Gate status remains waived; evidence still outstanding:
-- Persistence pending, if captured in chat before durable storage is available:
+- Persistence pending (visibly unfinished; blocks closure); write to the repo
+  at the first opportunity:
 
 ## Execution and handoff
 
@@ -63,8 +66,13 @@ observed facts or explicit unknowns; retain approval and execution history.
 - Resume checkpoint: actual deployed state, migration ledger, active run/lock:
 - Completed versus pending actions; supported resume/retry procedure:
 - User impact and final health/recovery evidence:
-- Residual risks; explicit accepted-risk closure if applicable:
+- Residual risks; named human's explicit waiver of remaining observation for
+  accepted-risk closure; evidence gaps and follow-up owner (never verified healthy):
 - Follow-up owners; continuation owner and next check time:
 
-Store this record in version control through the project's normal workflow.
+Create append-only checkpoints on a dedicated release-record branch, committed
+and pushed, recording approvals, run/lock state and the next observation owner.
+Handoffs cite the branch and exact commit so a resumed session can continue
+before merge. Tech Lead reviews and PM merges through the normal gate.
+An unmerged checkpoint never counts as completion.
 Keep secrets and production personal data out; link to access-controlled evidence.

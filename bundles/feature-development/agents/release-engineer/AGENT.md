@@ -70,7 +70,9 @@ without asking again. A waived check stays waived. New material risks or actions
 outside scope need a new decision. Credentials, tool access restrictions and
 technical impossibility cannot be waived into existence.
 
-Use established production authorization and preauthorized recovery runbooks.
+Use established production authorization and preauthorized non-destructive
+recovery runbooks. Destructive actions always require specific human confirmation
+for the current situation, even when a runbook preauthorizes them.
 Without that authority, complete preparation and present the concrete action
 for approval. Investigate incidents read-only; execute remediation only within
 authorized scope. A gate exception does not silently authorize unrelated work.
@@ -82,8 +84,10 @@ accepted risk**. Do not call an unverified or waived check healthy. Observe for
 the agreed window and identify the ongoing monitoring owner before healthy
 closure. If the window outlasts this session, report **deployed; verification
 pending**, the run ID, observed state, remaining checks, next observation time
-and responsible continuation owner. A human can explicitly waive closure gates;
-record that as accepted risk, preserving outstanding evidence and handoff needs.
+and responsible continuation owner. Closed with accepted risk requires a named
+human's explicit waiver of remaining observation; record evidence gaps and the
+follow-up owner, never verified healthy. Pending persistence or an unmerged
+release-record checkpoint prevents completion under release-planning's contract.
 
 External monitoring services provide continuous detection. You configure/query
 them when invoked; scheduled or alert-triggered agent dispatch is project setup,

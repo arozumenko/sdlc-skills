@@ -23,10 +23,14 @@ only when the service outcome is verified, not when a rollback command exits.
    coordinate data/infrastructure restoration. Helm rollback or redeploying an
    older container does not restore data or undo external effects. Route required
    application/migration work to developers and architecture decisions to Tech Lead.
-4. Execute a compatible, preauthorized runbook without repeated approval. For a
-   different or destructive action, first present exact scope, consequences and
-   recovery evidence; explicit chat approval can authorize it. An incompatible
-   container rollback cannot be made viable by waiving a readiness check.
+4. Execute a compatible, preauthorized non-destructive runbook without repeated
+   approval. A destructive action always needs a specific human confirmation for
+   the current situation, even when a runbook preauthorizes it. First present
+   exact scope, consequences and recovery evidence, then obtain and record that
+   confirmation from a named human under release-planning's record contract.
+   For a different non-destructive action outside existing authority, present
+   the same evidence and obtain scoped approval. An incompatible container
+   rollback cannot be made viable by waiving a readiness check.
 5. Use the existing controller/pipeline recovery path and concurrency mechanism.
    Reconcile declarative desired state so reconciliation does not undo recovery.
    Record command/run identity and results. If interrupted, inspect actual state

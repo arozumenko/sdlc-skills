@@ -27,10 +27,16 @@ development throughput tracking.
    readiness/restarts, OOMs, pending scheduling, node health, quotas and storage;
    adapt to the actual non-Kubernetes runtime when applicable. Record timestamps,
    affected services, hypotheses, evidence and confidence without leaking secrets.
-4. Investigate read-only by default. Apply remediation only within an authorized
-   runbook or explicit scoped chat approval; an unrelated CPU alert does not
-   authorize resizing, restarts or network changes. Use `release-recovery` for
-   release rollback/roll-forward. Escalate other actions with concrete options.
+4. Investigate read-only by default. Incident remediation outside authorized
+   runbooks escalates. Explicit chat approval scoped to the specific action,
+   recorded with a named approver under the release-planning record contract,
+   authorizes it. An unrelated CPU alert does not authorize resizing, restarts or
+   network changes. A destructive action always needs a specific human confirmation
+   for the current situation, even when a runbook preauthorizes it. First present
+   exact scope, consequences and recovery evidence, then obtain and record that
+   confirmation from a named human under release-planning's record contract.
+   Load `release-planning` for this confirmation even for non-release incidents
+   within authorized runbooks. Use `release-recovery` for release rollback/roll-forward.
 
 ## Improve and hand off
 

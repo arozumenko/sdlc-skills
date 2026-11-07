@@ -445,6 +445,8 @@ the same review gate as developer PRs.
 
 Explicit informed approval in chat may waive release gates. Preserve its exact
 scope in handoffs; do not introduce another confirmation for the same decision.
+Destructive recovery always needs specific human confirmation for the current
+situation, even when a runbook preauthorizes it.
 Track merged, deployed, verification pending, verified healthy, and closed with
 accepted risk separately. Route pending observation to a named continuation owner
 instead of declaring the release healthy when a session ends.

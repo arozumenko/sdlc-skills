@@ -13,10 +13,57 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const factoryRoot = join(root, 'bundles/feature-development');
 const workflows = ['release-planning', 'pre-production-checks', 'progressive-delivery', 'release-recovery', 'infrastructure-monitoring'];
 
+const normalize = text => text.replace(/\s+/g, ' ');
+function assertClosure(text) {
+  assert.match(text, /Closed with accepted risk requires a named human's explicit waiver of the remaining observation/);
+  assert.match(text, /Never report it as verified healthy/);
+  assert.match(text, /record must list the evidence gaps and the follow-up owner/);
+}
+function assertPersistence(text) {
+  assert.match(text, /carry it in chat marked "persistence pending", keep it visibly unfinished/);
+  assert.match(text, /write it to the repo at the first opportunity/);
+  assert.match(text, /release cannot be closed while the record is still pending persistence/);
+}
+function assertCheckpoints(text) {
+  assert.match(text, /append-only checkpoints on a dedicated release-record branch, committed and pushed/);
+  assert.match(text, /recording approvals, run\/lock state and the next observation owner/);
+  assert.match(text, /Handoffs cite the branch and exact commit so a resumed session can continue before merge/);
+  assert.match(text, /Tech Lead reviews and PM merges through the normal gate/);
+  assert.match(text, /An unmerged checkpoint never counts as completion/);
+}
+function assertDestructiveConfirmation(text) {
+  assert.match(text, /destructive action always needs a specific human confirmation for the current situation, even when a runbook preauthorizes it/);
+}
+function assertIncidentApproval(text) {
+  assert.match(text, /Incident remediation outside authorized runbooks escalates/);
+  assert.match(text, /Explicit chat approval scoped to the specific action, recorded with a named approver under the release-planning record contract, authorizes it/);
+}
+
+test('the spec and record template capture the five owner rulings', () => {
+  const spec = normalize(readFileSync(join(root, 'docs/superpowers/specs/2026-11-06-dora-release-engineer-design.md'), 'utf8'));
+  assert.match(spec, /Owner ruled on .* on 2026-11-07/);
+  for (const check of [assertClosure, assertPersistence, assertCheckpoints, assertDestructiveConfirmation, assertIncidentApproval]) check(spec);
+  const record = normalize(readFileSync(join(factoryRoot, 'skills/release-planning/templates/release-record.md'), 'utf8'));
+  assertCheckpoints(record);
+  assert.match(record, /Specific named human confirmation for each destructive action in the current situation, even when a runbook preauthorizes it/);
+  assert.match(record, /Persistence pending .*blocks closure/);
+  assert.match(record, /named human's explicit waiver of remaining observation for accepted-risk closure; evidence gaps and follow-up owner/);
+});
+
 // Check workflow bodies, including installed copies, independently of agent routing.
 function assertReleaseContracts(readSkill) {
   const text = Object.fromEntries(workflows.map(id => [id, readSkill(id).replace(/\s+/g, ' ')]));
   const planning = text['release-planning'];
+  for (const id of ['release-planning', 'progressive-delivery']) {
+    assertClosure(text[id]);
+    assertPersistence(text[id]);
+    assertCheckpoints(text[id]);
+  }
+  assertDestructiveConfirmation(planning);
+  assertDestructiveConfirmation(text['release-recovery']);
+  assertDestructiveConfirmation(text['infrastructure-monitoring']);
+  assert.match(text['release-recovery'], /preauthorized non-destructive runbook without repeated approval/);
+  assertIncidentApproval(text['infrastructure-monitoring']);
   for (const contract of [
     /Where authority is absent, finish preparation and ask for the specific production action/,
     /missing, stale, failed or inconclusive required gate holds promotion by default/,
