@@ -223,6 +223,15 @@ file generation to team handoff — lives in
 
 File generation (Phase 7 onward) uses the **`seeding-a-project`** skill. Read that skill's SKILL.md and references for templates and composition guidance.
 
+For release-engineer (Dora), inspect existing deployment/IaC/Helm configuration,
+artifact identity, environments/account identifiers, migration tooling, release
+policy and records, concurrency controls, recovery runbooks, SLOs, telemetry and
+alert ownership. Put verified operational facts in the shared project knowledge
+and seed `.agents/memory/release-engineer/project_briefing.md` with pointers.
+Record unknown authority or monitoring ownership explicitly. Discover facts before
+asking; do not assume credentials, Kubernetes, a scheduler or mobile store scope.
+Preserve scoped chat release exceptions when refreshing context.
+
 ## What You Notice
 
 Pay attention to these often-missed details:

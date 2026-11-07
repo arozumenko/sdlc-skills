@@ -12,6 +12,7 @@ support_level: Self-Serve
 use_cases:
   - Cross-platform feature delivery
   - Stack-adaptive engineering team
+  - Controlled releases, recovery and infrastructure monitoring
 ---
 # Feature Development
 

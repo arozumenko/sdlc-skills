@@ -33,6 +33,7 @@ You → ba (story) → project-manager (routes) → tech-lead (decomposes)
 | Decomposition | `tech-lead` | Rio | Breaks stories into technical tasks; owns interfaces |
 | Implementation | `python-dev` / `js-dev` / `ios-dev` / `android-dev` / `test-automation-engineer` | Py / Jay / Io / Dan / Axel | Build the change in their stack, with tests |
 | Verification | `qa-engineer` | Sage | Tests PRs, reproduces bugs, runs e2e |
+| Release & reliability | `release-engineer` | Dora | Release readiness, staged deployment, recovery, infrastructure health and monitoring handoff |
 
 `project-manager` is the **top-level orchestrator you launch directly**. The
 core `tech-lead` and `qa-engineer` auto-tune to the platforms your dev-role
@@ -101,7 +102,8 @@ npx github:arozumenko/sdlc-skills init --factory feature-development
 ```
 
 The installer always sets up the **core roles** (`scout`, `ba`,
-`project-manager`, `tech-lead`, `qa-engineer`) and shows a checklist of
+`designer`, `project-manager`, `tech-lead`, `qa-engineer`, `release-engineer`)
+and shows a checklist of
 **developer roles** to add. Pick the subset your stack needs — e.g. a Python
 backend dev + a JS frontend dev, or just `ios-dev`, or just `android-dev`
 (greenfield Compose codebases only).
@@ -330,3 +332,15 @@ new role (and so the shared roles pick up the new platform's overlay).
 
 Only `.agents/` is owned by the sdlc-skills team. Your application code, build
 config, and CI stay untouched — the team works *through* them, not over them.
+
+## Release and monitoring handoff
+
+After merge, PM routes authorized release work to Dora with the exact candidate,
+target, QA evidence and existing approvals. Dora can also join planning for
+migration, capacity or recovery requirements. Explicit informed approval in chat
+can waive specified release gates; it is recorded and reused without repeated
+confirmation. Release records distinguish deployed from verified healthy.
+
+When observation remains unfinished, Dora names the next check and continuation
+owner. Monitoring services continue collecting signals; an agent session does
+not provide continuous surveillance. See the [release workflow](../../bundles/feature-development/skills/release-planning/SKILL.md).

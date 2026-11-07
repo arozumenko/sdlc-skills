@@ -179,6 +179,7 @@ js-dev           [Name]   [what this role actually does here]
 ba               [Name]   [what this role actually does here]
 tech-lead        Rio      [Godot / Rust / web context]
 qa-engineer      Sage     [test framework and approach for this stack]
+release-engineer Dora     [release, recovery and monitoring for this stack]
 scout            Kit      Codebase exploration (this session)
 ```
 

@@ -97,6 +97,9 @@ export function buildBriefingPlan(factory, selected) {
       if (rel) entries.push({ label: pf.label || p, path: rel });
     }
     if (entries.length) plan[role] = entries;
+    else if (factory.briefings?.[role]) {
+      plan[role] = [{ label: role, path: factory.briefings[role] }];
+    }
   }
   return plan;
 }
