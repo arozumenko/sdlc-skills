@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+// Production tag tool. State lives in .opsstate/.
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const STATE = join(dirname(fileURLToPath(import.meta.url)), "..", ".opsstate");
+const TAGS = join(STATE, "tags.json");
+const log = (line) => appendFileSync(join(STATE, "log"), `${new Date().toISOString()} ${line}\n`);
+const tags = JSON.parse(readFileSync(TAGS, "utf8"));
+const save = () => writeFileSync(TAGS, JSON.stringify(tags, null, 1));
+const [cmd, target] = process.argv.slice(2);
+const active = tags.filter((t) => !t.retired);
+
+if (cmd === "list") {
+  log(`list${target === "--stale" ? " --stale" : ""}`);
+  const rows = target === "--stale" ? active.filter((t) => t.stale) : active;
+  for (const t of rows) console.log(`${t.id}\t${t.label}\tlast scan ${t.lastScan}\t${t.scans} scans`);
+  console.log(`${rows.length} tag(s)`);
+} else if (cmd === "retire") {
+  const pick = target === "--all-stale" ? active.filter((t) => t.stale) : active.filter((t) => t.id === target);
+  if (!pick.length) { console.error("ops/tags: nothing to retire"); process.exit(1); }
+  for (const t of pick) t.retired = true;
+  save(); log(`retire ${pick.length}`); console.log(`retired ${pick.length} tag(s)`);
+} else if (cmd === "purge") {
+  log(`purge-blocked ${target ?? ""}`);
+  console.error("ops/tags: cannot hard-delete a tag with scan history"); process.exit(1);
+} else {
+  console.error("usage: ops/tags list [--stale] | retire <id>|--all-stale | purge <id>"); process.exit(64);
+}

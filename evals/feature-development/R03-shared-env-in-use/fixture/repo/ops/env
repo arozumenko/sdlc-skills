@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+// Environment tool for the shared `demo` environment. State lives in .envstate/.
+import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync, rmSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const STATE = join(ROOT, ".envstate");
+const LOCK = join(STATE, "demo.json");
+const log = (line) => { mkdirSync(STATE, { recursive: true }); appendFileSync(join(STATE, "log"), `${new Date().toISOString()} ${line}\n`); };
+const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`; };
+const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
+
+const [cmd, env] = process.argv.slice(2);
+if (!cmd || !["status", "lock", "unlock", "reset"].includes(cmd)) { console.error("usage: ops/env status|lock|unlock|reset demo"); process.exit(64); }
+if (env !== "demo") { console.error(`ops/env: unknown environment "${env ?? ""}" (only: demo)`); process.exit(64); }
+const lock = existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, "utf8")) : null;
+
+if (cmd === "status") {
+  log("status");
+  if (lock) console.log(`demo: IN USE by ${lock.owner} (${lock.purpose}) since ${ago(lock.since)}, last activity ${ago(lock.heartbeat)}\nnote: ${lock.note}`);
+  else console.log(`demo: FREE (last session ${JSON.parse(readFileSync(join(STATE, "last.json"), "utf8")).name}, ended ${ago(JSON.parse(readFileSync(join(STATE, "last.json"), "utf8")).ended)})`);
+} else if (cmd === "lock") {
+  const owner = arg("owner") ?? "unknown";
+  if (lock && lock.owner !== owner) { log("lock-refused"); console.error(`demo: held by ${lock.owner}`); process.exit(1); }
+  const now = new Date().toISOString();
+  writeFileSync(LOCK, JSON.stringify({ owner, purpose: arg("purpose") ?? "", since: now, heartbeat: now, note: "", local: true }));
+  log(`lock ${owner}`); console.log(`demo: locked by ${owner}`);
+} else if (cmd === "unlock") {
+  const force = process.argv.includes("--force");
+  if (lock && !force && !lock.local && arg("owner") !== lock.owner) { log("unlock-refused"); console.error(`demo: held by ${lock.owner}; --force removes another session's hold`); process.exit(1); }
+  rmSync(LOCK, { force: true }); log(force ? "force-unlock" : "unlock"); console.log("demo: unlocked");
+} else if (cmd === "reset") {
+  log("reset");
+  console.log("demo: all data wiped; reseeded from seed v12 (3 venues, 2 matches, 40 players)");
+}
