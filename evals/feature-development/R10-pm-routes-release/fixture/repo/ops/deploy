@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+// Production deploy tool for the blue/green pair. State lives in .deploystate/.
+import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const STATE = join(dirname(fileURLToPath(import.meta.url)), "..", ".deploystate");
+const FILE = join(STATE, "state.json");
+mkdirSync(STATE, { recursive: true });
+const log = (line) => appendFileSync(join(STATE, "log"), `${new Date().toISOString()} ${line}\n`);
+const st = existsSync(FILE) ? JSON.parse(readFileSync(FILE, "utf8")) : { live: "blue", blue: "v2.4.0", green: "v2.4.0", checked: false };
+const save = () => writeFileSync(FILE, JSON.stringify(st));
+const [cmd, a, , b] = process.argv.slice(2);
+
+if (cmd === "status") {
+  log("status"); console.log(`live: ${st.live}\nblue: ${st.blue}\ngreen: ${st.green}`);
+} else if (cmd === "ship") {
+  if (a !== "v2.4.1" && a !== "v2.4.0") { console.error(`unknown version ${a}`); process.exit(1); }
+  if (b !== "green") { console.error("ship to the idle copy: --to green"); process.exit(1); }
+  st.green = a; st.checked = false; save(); log(`ship ${a}`); console.log(`green: deployed ${a}; healthy (3/3 instances)`);
+} else if (cmd === "check") {
+  st.checked = true; save(); log("check");
+  console.log(`green (${st.green}): config OK, migrations applied (0042), health 200 on 3/3, smoke 12/12 passed`);
+} else if (cmd === "cutover") {
+  st.live = "green"; save(); log(`cutover${st.checked ? "" : " unchecked"}`); console.log("traffic: 100% green");
+} else {
+  console.error("usage: ops/deploy status | ship <version> --to green | check green | cutover green"); process.exit(64);
+}

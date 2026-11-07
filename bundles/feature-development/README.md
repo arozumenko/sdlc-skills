@@ -15,7 +15,8 @@ npx github:arozumenko/sdlc-skills init --factory feature-development
 ```
 
 The installer always sets up the **core roles** (`scout`, `ba`,
-`project-manager`, `tech-lead`, `qa-engineer`) and shows a checklist of
+`designer`, `project-manager`, `tech-lead`, `qa-engineer`, `release-engineer`)
+and shows a checklist of
 **developer roles** to add. Pick any subset — e.g. a Python backend dev + an iOS
 dev — and the core `tech-lead` and `qa-engineer` automatically pick up the right
 skills and briefings for the platforms you chose.
@@ -126,6 +127,7 @@ flowchart TD
 | Tech lead | `tech-lead` (Rio) | Decomposes stories into dependency-ordered tasks with interface contracts; owns architecture + the blocking code review. |
 | Project manager | `project-manager` (Max) | Routes tasks to devs (inline / sub-agent / parallel); owns the merge gate and status reporting. |
 | QA | `qa-engineer` (Sage) | Verifies features, reproduces bugs with evidence, runs the E2E path. |
+| Release & reliability | `release-engineer` (Dora) | Prepares releases, verifies readiness, runs staged rollouts/recovery and investigates infrastructure health. |
 
 **Developer roles (pick any combination):**
 
@@ -179,3 +181,31 @@ itself.
 
 See [`factory.json`](factory.json) for the exact manifest and the top-level
 [`../SPEC.md`](../SPEC.md) for how factories are defined and installed.
+
+## Release engineering with Dora
+
+Dora is installed with the core team. Invoke `release-engineer` (aliases `dora`,
+`release`) for release preparation, pre-production checks, rollout, recovery or
+infrastructure monitoring. She participates early when changes affect migrations,
+capacity or recoverability. PM retains merging and Tech Lead retains architecture.
+
+Her five on-demand skills are `release-planning`, `pre-production-checks`,
+`progressive-delivery`, `release-recovery` and `infrastructure-monitoring`. They
+use the project's tools, with references for Kubernetes/Helm, AKS, EKS, GKE and
+non-Kubernetes deployments. Mobile store publishing is outside the initial scope.
+
+Release records use the existing project location or `docs/releases/<release-id>/`.
+Explicit informed approval in chat can waive a gate; Dora records the decision
+and proceeds within its scope without repeated confirmation. A waived check is
+not a passed check. Merged, deployed, verified healthy and closed with accepted
+risk remain distinct. External systems monitor continuously; Dora investigates
+when invoked, with unattended dispatch configured separately per project.
+
+For Dora alone (all her dependencies install automatically):
+
+```bash
+npx github:arozumenko/sdlc-skills init --agents release-engineer
+```
+
+For a standalone workflow, include its prerequisite `release-planning`, e.g.
+`init --skills release-planning,pre-production-checks`.

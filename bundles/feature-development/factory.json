@@ -9,7 +9,8 @@
     "designer",
     "project-manager",
     "tech-lead",
-    "qa-engineer"
+    "qa-engineer",
+    "release-engineer"
   ],
   "devRoles": {
     "python-dev": {
@@ -144,7 +145,12 @@
     "session-retrospective",
     "test-automation-workflow",
     "test-case-analysis",
-    "user-flow-maps"
+    "user-flow-maps",
+    "release-planning",
+    "pre-production-checks",
+    "progressive-delivery",
+    "release-recovery",
+    "infrastructure-monitoring"
   ],
   "localAgents": [
     "scout",
@@ -157,7 +163,8 @@
     "js-dev",
     "test-automation-engineer",
     "ios-dev",
-    "android-dev"
+    "android-dev",
+    "release-engineer"
   ],
   "instructions": "instructions.md",
   "targets": [
@@ -167,5 +174,8 @@
     "memory",
     "knowledge-curation",
     "delivery-monitor"
-  ]
+  ],
+  "briefings": {
+    "release-engineer": "briefings/release-engineer.md"
+  }
 }

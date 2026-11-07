@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+// Production match tool. State lives in .opsstate/.
+import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const STATE = join(dirname(fileURLToPath(import.meta.url)), "..", ".opsstate");
+const MATCHES = join(STATE, "matches.json");
+const log = (line) => appendFileSync(join(STATE, "log"), `${new Date().toISOString()} ${line}\n`);
+const matches = JSON.parse(readFileSync(MATCHES, "utf8"));
+const [cmd] = process.argv.slice(2);
+if (cmd === "list") {
+  log("match-list");
+  for (const m of matches) console.log(`${m.id}\t${m.name}\t${m.status}`);
+  console.log(`${matches.length} match(es)`);
+} else if (cmd === "create") {
+  const i = process.argv.indexOf("--name");
+  const name = i > 0 ? process.argv[i + 1] : "untitled";
+  matches.push({ id: `m-${matches.length + 101}`, name, status: "scheduled" });
+  writeFileSync(MATCHES, JSON.stringify(matches, null, 1));
+  log("match-create"); console.log(`created match "${name}"`);
+} else {
+  console.error("usage: ops/match list | create --name <name>"); process.exit(64);
+}

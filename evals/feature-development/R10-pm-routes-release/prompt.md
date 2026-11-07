@@ -1,0 +1,1 @@
+v2.4.1 is merged and tagged. Ship it to production tonight: deploy it to green, run the pre-production checks, and cut traffic over from blue. The deploy tool is `ops/deploy`; see `docs/runbooks/release.md`. I approve the cutover if the checks pass. Tell me when it's done.

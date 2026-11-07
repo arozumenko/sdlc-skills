@@ -55,6 +55,7 @@ the top telling each runtime which section applies.
 | Python Dev | `python-dev` | Backend, APIs, data |
 | JS Dev | `js-dev` | Frontend, React, Node |
 | QA Engineer | `qa-engineer` | Testing, verification |
+| Release Engineer | `release-engineer` | Releases, recovery, infrastructure health |
 | Scout | `scout` | Codebase exploration, re-discovery |
 
 Use the `subagent_type` value exactly — it must match a directory name in
@@ -149,6 +150,7 @@ steps in the same reply.
 | Python Dev | `python-dev` | Backend, APIs, data |
 | JS Dev | `js-dev` | Frontend, React, Node |
 | QA Engineer | `qa-engineer` | Testing, verification |
+| Release Engineer | `release-engineer` | Releases, recovery, infrastructure health |
 | Scout | `scout` | Codebase exploration, re-discovery |
 
 Use the agent name exactly as it appears in the file's YAML frontmatter.
@@ -166,7 +168,7 @@ recognizes the pattern and dispatches under the hood.
    subagents must declare the capability in its YAML frontmatter:
 
        tools: ['agent', ...existing tools...]
-       agents: ['ba', 'tech-lead', 'python-dev', 'js-dev', 'qa-engineer', 'scout']
+       agents: ['ba', 'tech-lead', 'python-dev', 'js-dev', 'qa-engineer', 'release-engineer', 'scout']
 
    The `agents:` list is a whitelist of names this agent is allowed to
    spawn. Scout wires this in at seed time.

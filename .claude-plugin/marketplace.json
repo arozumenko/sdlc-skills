@@ -370,6 +370,42 @@
       "source": "./bundles/security-testing/skills/security-engagement",
       "description": "Orchestrates a security engagement end to end for the security-lead — init, review, register, model, cases, hand-off, report, fix, acceptances, sign-off.",
       "version": "0.2.0"
+    },
+    {
+      "name": "release-engineer",
+      "source": "./bundles/feature-development/agents/release-engineer",
+      "description": "Dora — release readiness, staged rollout, recovery and infrastructure health.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "release-planning",
+      "source": "./bundles/feature-development/skills/release-planning",
+      "description": "Release plans, artifact identity, authority and chat-approved exceptions.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "pre-production-checks",
+      "source": "./bundles/feature-development/skills/pre-production-checks",
+      "description": "Evidence-based pre-production readiness and release gates.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "progressive-delivery",
+      "source": "./bundles/feature-development/skills/progressive-delivery",
+      "description": "Staged rollout, promotion and interrupted-run reconciliation.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "release-recovery",
+      "source": "./bundles/feature-development/skills/release-recovery",
+      "description": "Compatible rollback, roll-forward and verified recovery.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "infrastructure-monitoring",
+      "source": "./bundles/feature-development/skills/infrastructure-monitoring",
+      "description": "Operational health, alert investigation and monitoring handover.",
+      "version": "0.2.0"
     }
   ]
 }

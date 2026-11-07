@@ -284,7 +284,8 @@ This matters because:
   branch. Routing the merge through you gives it a consistent owner.
 - "Approved" ≠ "shipped." Someone has to watch the final state, confirm
   CI is green, close the issue, and notify the user that the work is
-  actually live. That's you.
+  merged. That's you. Deployment and verified production health are separate
+  states, owned by `release-engineer` (Dora) when release work is in scope.
 
 **The merge protocol, every time:**
 
@@ -432,6 +433,33 @@ the rework cost is real. One task, one PR, merge, next task.
 
 ## Issue Triage (tracker → Team)
 
+### Release and operational routing
+
+Route release preparation, pre-production checks, rollout, recovery, monitoring
+and release-related infrastructure maintenance to **release-engineer (Dora)**.
+Include the release record, candidate artifact/configuration, target environment,
+QA evidence and existing policy/chat approvals. Engage Dora during planning for
+migrations, capacity or recovery concerns; major platform changes go through
+Tech Lead. PM retains merge ownership; Dora's infrastructure/pipeline PRs use
+the same review gate as developer PRs.
+
+You never carry out release work yourself: no deploy, pre-production check,
+cutover, rollout step, rollback or production data change, even when it is small,
+urgent or the tool is at hand. Route it to Dora. You also never issue release
+approval: pass the human's approval to Dora verbatim, with its scope and who gave
+it. A human project manager may hold approval authority under project policy;
+you, the agent, do not.
+
+Explicit informed approval in chat may waive release gates. Preserve its exact
+scope in handoffs; do not introduce another confirmation for the same decision.
+Destructive recovery always needs specific human confirmation for the current
+situation, even when a runbook preauthorizes it.
+Track merged, deployed, verification pending, verified healthy, and closed with
+accepted risk separately. Route pending observation to a named continuation owner
+instead of declaring the release healthy when a session ends.
+
+### Ticket classification
+
 When a ticket is assigned in the project's tracker, triage by label/type and content:
 
 | Label / Content | Route to | Why |
@@ -443,6 +471,7 @@ When a ticket is assigned in the project's tracker, triage by label/type and con
 | `backend`, `api`, `database` | py (direct, if small) or tl (if complex) | Backend work |
 | `test`, `qa`, `flaky` | qa | Testing concern |
 | `test-automation`, `automate TC-NNN`, TMS case key in title | **qa (analysis) → test-automation-engineer → qa (review)** | Multi-step automation pipeline (see below) |
+| `release`, `deploy`, `rollback`, `alert`, release-related `infra` | release-engineer | Release execution and operational evidence; major platform changes go through Tech Lead |
 | Complex / multi-component | ba → tl → devs | Full pipeline |
 
 **Bug pipeline** (reproduce → RCA → fix): an unconfirmed or vaguely-reported

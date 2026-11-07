@@ -181,7 +181,7 @@ ship today:
 
 | Factory | Roster | What it's for |
 |---|---|---|
-| `feature-development` | core roles (scout, ba, project-manager, tech-lead, qa-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI), `android-dev` (greenfield Kotlin/Compose); core roles auto-tune per picked platforms. |
+| `feature-development` | core roles (scout, ba, designer, project-manager, tech-lead, qa-engineer, release-engineer) + picked dev roles | Cross-platform delivery team — interactive picker selects any of `python-dev` (FastAPI/FastMCP backend), `js-dev` (JS/TS frontend), `test-automation-engineer` (web automation), `ios-dev` (Swift/SwiftUI), `android-dev` (greenfield Kotlin/Compose); core roles auto-tune per picked platforms. |
 | `manual-qa` | 7 factory-local agents (app-profiler, test-sizer, test-author, test-run-lead, test-runner, test-reporter, qa-auditor) | Manual-QA team — `app-profiler` onboards the app, then `test-run-lead` orchestrates a run: authoring (`test-author`) and sizing (`test-sizer`) cases when needed, running them live via Playwright MCP (`test-runner`), and reporting (`test-reporter`). Also ships a specialist audit mode: `qa-auditor` runs security/accessibility/privacy/performance/responsive/UX/SEO passes via Playwright MCP, writes a findings report, and codifies notable findings into regression TC cases. Ships its own agents and seeds the test-case/report-format reference docs into `.agents/manual-qa/knowledge/`. |
 | `test-automation` | shared core (scout) + test-automation-engineer + qa-engineer + factory-local `test-automation-lead` (Tal) | Automation-focused team — Tal orchestrates the analyst → implementer → reviewer pipeline, owns test-framework architecture and the automation merge gate. Pins `test-automation-workflow` + `test-case-analysis`; TMS-agnostic. |
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
@@ -331,6 +331,7 @@ point directly at a `SKILL.md` directory.
 |---|---|---|
 | `ba` | Alex | Business analyst — turns requirements into user stories with acceptance criteria |
 | `tech-lead` | Rio | Decomposes user stories into technical tasks with dependencies; owns framework-scale decisions for test automation |
+| `release-engineer` | Dora | Release preparation, pre-production checks, staged rollout, recovery and infrastructure health; supports scoped chat-approved gate exceptions |
 | `project-manager` | Max | Distributes tasks, tracks team state, escalates blockers, owns the merge gate |
 | `python-dev` | Py | Python implementation — owns its own repo clone and branch |
 | `js-dev` | Jay | JavaScript / TypeScript implementation — owns its own repo clone and branch |
@@ -377,6 +378,11 @@ installable via factories is listed below.
 | `root-cause-analysis` | Trace a confirmed bug to its exact cause — execution-path tracing, classification, impact/regression (investigation only) |
 | `test-case-analysis` | Execute a TMS case, capture stable selectors, flag defects, emit an Automation-Friendly Spec (AFS). Used by qa-engineer |
 | `test-automation-workflow` | End-to-end test automation — explore → specify (AFS) → implement → review. Pluggable TMS adapters (Zephyr / TestRail / Xray / Azure / markdown) over HTTP or MCP |
+| `release-planning` | Release plans, artifact identity, authority and chat-approved exceptions. |
+| `pre-production-checks` | Evidence-based pre-production readiness and release gates. |
+| `progressive-delivery` | Staged rollout, promotion and interrupted-run reconciliation. |
+| `release-recovery` | Compatible rollback, roll-forward and verified recovery. |
+| `infrastructure-monitoring` | Operational health, alert investigation and monitoring handover. |
 | `seeding-a-project` | Scout's project onboarding / configuration flow (feature-development factory; the test-automation factory's automation-specific variant is `seeding-automation-project`) |
 | `completing-a-task` | Five-step task completion protocol: verify → commit → PR → comment → notify |
 

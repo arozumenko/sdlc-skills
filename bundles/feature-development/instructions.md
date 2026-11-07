@@ -55,6 +55,30 @@ for the stacks actually in play apply.
   and lint, and does not write `androidTest` sources while no CI runner is
   configured for them.
 
+## Release and operational work (`release-engineer`, Dora)
+
+Dora is a shared core role. Engage her during planning for deployment, data
+migrations, capacity and recovery; PM routes release/monitoring work to her.
+She implements assigned pipeline, Helm, release-related IaC and observability
+changes through Tech Lead review and PM merge ownership. Existing project tools
+and deployment paths take precedence; mobile store publishing is outside scope.
+
+Use `release-planning` for release records and authority, then
+`pre-production-checks`, `progressive-delivery`, `release-recovery` or
+`infrastructure-monitoring` for the relevant action. Explicit informed human
+approval in chat can waive release gates; record scope and risks and proceed
+without repeated confirmation. Waived checks remain waived. See the
+release-planning skill for the authoritative exception contract.
+
+Merged, deployed and verified healthy are separate states. An observation window
+that outlasts a session needs a named continuation owner and a verification-pending
+handoff. Closed with accepted risk requires a named human's explicit waiver of
+remaining observation, recorded evidence gaps and a follow-up owner; never report
+it as verified healthy. Pending persistence or an unmerged release-record
+checkpoint prevents completion.
+External monitoring runs continuously; Dora acts when invoked, with project-specific
+scheduling or alert dispatch configured separately.
+
 ## Definition of done (team-wide)
 
 A change is done when it builds, its tests pass, and — for the web stack — the

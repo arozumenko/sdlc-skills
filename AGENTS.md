@@ -11,7 +11,8 @@ Content lives in **factories** (`factories/<id>/`) — team presets that physica
 own their `agents/` and `skills/` as real directories. Five factories ship:
 
 - **`feature-development`** — cross-platform delivery team: BA, Tech Lead, PM,
-  Python / JS / iOS / Android devs, QA, Scout, test-automation-engineer.
+  Python / JS / iOS / Android devs, QA, Scout, test-automation-engineer,
+  release-engineer (Dora — releases, recovery and infrastructure monitoring).
 - **`test-automation`** — TMS-driven automation pipeline: test-automation-lead,
   qa-engineer, test-automation-engineer, Scout.
 - **`manual-qa`** — live-browser manual-QA team: test-run-lead, test-author,

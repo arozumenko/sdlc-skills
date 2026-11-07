@@ -90,6 +90,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "release-engineer",
+      "source": "./bundles/feature-development/agents/release-engineer",
+      "description": "Use when a release needs preparation, pre-production checks, staged rollout, recovery, or infrastructure health investigation. Dora — senior release and reliability engineer for cloud applications and infrastructure.",
+      "version": "0.2.0"
+    },
+    {
       "name": "scout",
       "source": "./bundles/feature-development/agents/scout",
       "description": "Use when an unfamiliar codebase needs to be onboarded — generating CLAUDE.md, AGENTS.md, `.agents/` content docs, and per-role memory briefings from exploration so the rest of the team can hit the ground running. Kit — maps repositories, surfaces patterns, flags risks.",
@@ -264,6 +270,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "infrastructure-monitoring",
+      "source": "./bundles/feature-development/skills/infrastructure-monitoring",
+      "description": "Use when reviewing infrastructure health, investigating alerts or operational degradation, configuring dashboards and alerts, or handing off post-release monitoring.",
+      "version": "0.2.0"
+    },
+    {
       "name": "intake-triage",
       "source": "./bundles/product-management/skills/intake-triage",
       "description": "Use when a raw ask arrives — a feature request, stakeholder ask, support theme, or 'someone wants X' — before anything becomes a Problem or Hypothesis. Verdicts every item Act Now / Plan Next / Collect More Signal / Decline-or-Defer, writes one batch record, and mints accepted in-scope items as Problems carrying discovered_from provenance; out-of-scope asks are declined against the scope line, and raw material naming a person stays in the confidential inbox with records referring by role. Trigger phrases — 'triage these requests', 'here are the asks from the sales call', 'someone wants X, what do we do with it', 'sort these into the pipeline'. NOT for interview synthesis (stakeholder-interview), NOT for bug or support-ticket triage, and NOT for meeting minutes.",
@@ -330,15 +342,39 @@
       "version": "0.2.0"
     },
     {
+      "name": "pre-production-checks",
+      "source": "./bundles/feature-development/skills/pre-production-checks",
+      "description": "Use when assessing release readiness, validating staging or pre-production, checking deployment prerequisites, or deciding whether promotion can begin.",
+      "version": "0.2.0"
+    },
+    {
       "name": "prioritize-bets",
       "source": "./bundles/product-management/skills/prioritize-bets",
       "description": "Use when deciding what to build next, when validated hypotheses outnumber the team's appetite, when a ranking feels stale, or when someone asks which bet comes first. Ranks the incubating and promotion-ready bets against the active prioritization framework — RICE by default, with WSJF and ICE as config options — deriving the confidence factor from each hypothesis's evidence-banded confidence block (never free-guessed), persisting scores into hypothesis frontmatter so the ranking survives the session, warning (never blocking) when a bet is ranked on gut-band evidence, and rewriting the derived priority board at docs/discovery/priority.md. Trigger phrases — 'what should we build next', 'rank the backlog', 'prioritize the hypotheses', 'which bet comes first', 'the backlog is stale'. NOT for promotion-gate scoring, NOT for triaging raw incoming asks (intake-triage), and NOT for attacking the assumptions inside one hypothesis.",
       "version": "0.2.0"
     },
     {
+      "name": "progressive-delivery",
+      "source": "./bundles/feature-development/skills/progressive-delivery",
+      "description": "Use when deploying an approved release, evaluating staged promotion, pausing a rollout, or resuming interrupted deployment execution.",
+      "version": "0.2.0"
+    },
+    {
       "name": "quality-evals",
       "source": "./bundles/manual-qa/skills/quality-evals",
       "description": "Use when a team wants to validate test-runner's bug-detection accuracy or test-author's authoring fidelity against their OWN app before trusting the manual-qa bundle on real work — \"how good is this agent, really\", \"benchmark test-author/test-runner\", \"build a gold suite\", \"self-eval the manual QA team\". Ports a held-out-answer-key eval methodology (deterministic Tier A scoring + a judged Tier B rubric) that keeps a self-authored eval honest, generalized to any app.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "release-planning",
+      "source": "./bundles/feature-development/skills/release-planning",
+      "description": "Use when preparing a release or hotfix, changing deployment scope, defining release gates, or recording production authorization and chat-approved exceptions.",
+      "version": "0.2.0"
+    },
+    {
+      "name": "release-recovery",
+      "source": "./bundles/feature-development/skills/release-recovery",
+      "description": "Use when a release fails, a rollback or roll-forward is requested, deployment state is uncertain, or a recovery procedure needs preparation or verification.",
       "version": "0.2.0"
     },
     {

@@ -64,6 +64,11 @@ roles imply:
   where every active platform removes the skill; per-platform briefings for the
   same core role are concatenated under `## <label> stack` headers.
 
+For a core role with no applicable platform briefing, `briefings[role]` supplies
+the shared default once. Platform-specific briefings take precedence over that
+fallback. This lets cross-platform roles such as release-engineer receive a
+briefing regardless of the selected developer roles.
+
 `--yes` / non-interactive installs all dev roles; `--agents <subset>` selects
 non-interactively. Factories without `devRoles` keep the legacy fixed-roster
 behavior.
@@ -318,13 +323,15 @@ order. Three conventions keep it that way:
   `id`, a `README.md` exists, a `FACTORY.md` exists with non-empty
   `name`/`description`/`owner`/`authors`/`sdlc_phase` frontmatter (`sdlc_phase`
   a single scalar, `support_level` one of the three enum values when present,
-  risky unquoted values rejected), `agents[]` is non-empty and every entry exists
-  under `factories/<id>/agents/`, every `briefings` role is in `agents[]` and its file
-  exists, every `skills[]` id resolves in `skills.json`/`factories/<id>/skills/`,
+  risky unquoted values rejected), `agents` is an array when present, at least
+  one of `agents` or `localAgents` is non-empty, and every `agents[]` entry
+  has a top-level `agents/<name>/AGENT.md`. Every `briefings` role is in the
+  combined `agents[]` + `localAgents[]` roster and its file exists. Every
+  `skills[]` id resolves in `skills.json`/`factories/<id>/skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each
   `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
   `SKILL.md`, and every `seed` source path exists.
-- A factory may have an empty `agents` array if it provides `localAgents` —
+- A factory may omit `agents` or leave it empty if `localAgents` is non-empty —
   a fully self-contained team (e.g. `manual-qa`).
 
 ## Current factories
