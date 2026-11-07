@@ -168,3 +168,10 @@ test('standalone Dora installs native agent formats, persona and workflow assets
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('project manager routes release work and relays approval instead of issuing it', () => {
+  const pm = readFileSync(join(factoryRoot, 'agents/project-manager/AGENT.md'), 'utf8').replace(/\s+/g, ' ');
+  assert.match(pm, /You never carry out release work yourself: no deploy, pre-production check, cutover, rollout step, rollback or production data change/);
+  assert.match(pm, /You also never issue release approval: pass the human's approval to Dora verbatim, with its scope and who gave it/);
+  assert.match(pm, /A human project manager may hold approval authority under project policy; you, the agent, do not/);
+});

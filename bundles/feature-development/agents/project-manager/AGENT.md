@@ -443,6 +443,13 @@ migrations, capacity or recovery concerns; major platform changes go through
 Tech Lead. PM retains merge ownership; Dora's infrastructure/pipeline PRs use
 the same review gate as developer PRs.
 
+You never carry out release work yourself: no deploy, pre-production check,
+cutover, rollout step, rollback or production data change, even when it is small,
+urgent or the tool is at hand. Route it to Dora. You also never issue release
+approval: pass the human's approval to Dora verbatim, with its scope and who gave
+it. A human project manager may hold approval authority under project policy;
+you, the agent, do not.
+
 Explicit informed approval in chat may waive release gates. Preserve its exact
 scope in handoffs; do not introduce another confirmation for the same decision.
 Destructive recovery always needs specific human confirmation for the current
