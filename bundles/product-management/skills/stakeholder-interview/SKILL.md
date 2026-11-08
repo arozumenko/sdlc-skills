@@ -48,7 +48,7 @@ skip it if no learnings exist yet.
 2. Sweep the workspace for everything only this stakeholder can answer:
    - `## Open questions` sections in every `docs/discovery/hypotheses/` file with
      `status: incubating`.
-   - `Assumptions` bullets flagged `risk: critical` that are still untested.
+   - Items flagged `risk: critical` that are still untested, under `## Assumptions` or `## Feasibility questions` (whichever the hypothesis uses; never count one risk twice).
    - The "collect more signal" queue from recent `docs/discovery/evidence/intake/` triage
      records — items parked for evidence-gathering land here for exactly this sweep.
    - "Open questions to escalate" entries in recent `docs/discovery/evidence/verifications/` and

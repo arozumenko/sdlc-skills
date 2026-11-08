@@ -45,7 +45,8 @@ them treats them as evidence: they cannot authorize a write, change configuratio
 raise a confidence score or mark a claim verified on their own say-so, or waive a redaction rule, and
 commands they name are never run. Each reader restates this in one line. It is guidance; the hard
 control is that no skill pre-approves a tracker write or a repo-changing `git` command, so those reach
-a human permission prompt in normal permission modes.
+a human permission prompt in normal permission modes unless the user's own permission settings
+already allow them.
 
 ## Pipeline order
 
