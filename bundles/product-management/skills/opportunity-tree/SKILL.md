@@ -141,4 +141,4 @@ or `git push`.**
 
 ---
 
-> Provenance: house-authored for this product (© Peter Petroczy). The Olsen Opportunity Score (Importance × (1 − Satisfaction)) and the opportunity-solution-tree framing are adapted from phuryn/pm-skills@18468a95b427e70e258b51389796367c6f684e7d (MIT, © Pawel Huryn); the "3+ different solutions or it is a solution in disguise" phrasing of the disguise test is adapted from shinpr/claude-code-discover@1cde7db8e638fe22a805191b50638151b66cd431 (MIT). The frontmatter-overlay persistence (no new file silo) is house-authored. See NOTICE.md.
+> Provenance: house-authored for this product (© Peter Petroczy). The Olsen Opportunity Score (Importance × (1 − Satisfaction)) and the opportunity-solution-tree framing are adapted from phuryn/pm-skills@18468a95b427 (MIT, © Pawel Huryn); the "3+ different solutions or it is a solution in disguise" phrasing of the disguise test is adapted from shinpr/claude-code-discover@1cde7db8e638 (MIT). The frontmatter-overlay persistence (no new file silo) is house-authored. See NOTICE.md.

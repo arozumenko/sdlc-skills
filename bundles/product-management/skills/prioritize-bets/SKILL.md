@@ -179,4 +179,4 @@ DEC there before treating the item as satisfied.
 
 ---
 
-> Provenance: house-authored for this product (© Peter Petroczy); released under this product's MIT license. The prioritization-framework craft (RICE/WSJF/ICE selection, the shipped WSJF cost-of-delay model, the four-tier scale discipline) is adapted from phuryn/pm-skills@18468a95b427e70e258b51389796367c6f684e7d (MIT, © Pawel Huryn); the evidence-banded confidence system that the derived confidence factor consumes is adapted from shinpr/claude-code-discover (MIT). See NOTICE.md.
+> Provenance: house-authored for this product (© Peter Petroczy); released under this product's MIT license. The prioritization-framework craft (RICE/WSJF/ICE selection, the shipped WSJF cost-of-delay model, the four-tier scale discipline) is adapted from phuryn/pm-skills@18468a95b427 (MIT, © Pawel Huryn); the evidence-banded confidence system that the derived confidence factor consumes is adapted from shinpr/claude-code-discover (MIT). See NOTICE.md.

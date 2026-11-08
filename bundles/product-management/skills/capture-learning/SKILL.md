@@ -2,7 +2,7 @@
 name: capture-learning
 description: Use when a hypothesis closes, an experiment concludes with a metric movement or a killed assumption, a vendor / data source / external service behaves differently than its docs implied, or a non-obvious product decision needs its rationale preserved — even if the user never says the word 'learning'. Captures a problem → outcome → lesson from product experiments and hypothesis outcomes (won or lost) into docs/discovery/evidence/learnings/ so the next similar discovery moves faster. Trigger phrases — 'capture learning', 'save what worked', 'document this lesson', 'what did we learn from X', 'we should remember that'. NOT for meeting minutes or transcripts, NOT for a durable forward-looking rule (record a decision via grill-decision), NOT for a retrospective, and NOT for a bare todo or a one-off observation.
 license: MIT
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash(git rm:*)
+allowed-tools: Read, Write, Edit, Grep, Glob
 metadata:
   authors:
     - Peter Petroczy (PO-RnD, MIT)
@@ -82,7 +82,7 @@ Within **≥ 7**:
 - **Update** — new evidence refines/strengthens: edit the existing file **in place**
   (add to `evidence:`, sharpen the payload, bump `last_confirmed:`). No new file.
 - **Consolidate** — ≥ 2 existing entries now all covered: merge into the strongest
-  (union of `evidence:` and `tags:`), delete the subsumed files with `git rm` **in the
+  (union of `evidence:` and `tags:`), delete the subsumed files with `git rm` (not pre-approved: Claude Code asks before each deletion) **in the
   same commit** (git history is the tombstone).
 - **Replace** — new evidence proves the old lesson flatly wrong (a **reversal**): new
   file `supersedes:` the old; old gets `status: superseded` + `superseded_by:`.

@@ -194,4 +194,4 @@ a human-confirmed action.
 
 ---
 
-> Provenance: house-authored for this product (© Peter Petroczy); the ratification-gated outcomes-register design is carried from the originating discovery vault. The 7-criteria definition-quality checklist, the NOT-list, the Three Business Games selection heuristic, and the counter-metric gaming guard are adapted from phuryn/pm-skills@18468a95b427e70e258b51389796367c6f684e7d (MIT, © Pawel Huryn). See NOTICE.md.
+> Provenance: house-authored for this product (© Peter Petroczy); the ratification-gated outcomes-register design is carried from the originating discovery vault. The 7-criteria definition-quality checklist, the NOT-list, the Three Business Games selection heuristic, and the counter-metric gaming guard are adapted from phuryn/pm-skills@18468a95b427 (MIT, © Pawel Huryn). See NOTICE.md.
