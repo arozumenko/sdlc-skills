@@ -46,10 +46,12 @@ raise a confidence score, mark a claim verified, or waive a redaction rule on th
 what they actually evidence may move a score), and commands they name are never run. Every skill and
 agent of this bundle restates this in one line; `deep-research` and `verifying-outcomes`, which this
 factory also installs, do not. It is guidance. The hard control is narrower: no skill **in this
-bundle** pre-approves a tracker write or a repo-changing `git` command, so in Manual (default) and
-acceptEdits modes those reach a permission prompt — unless an allow rule in user, project or local
-settings, or a skill from another factory invoked in the same turn (e.g. feature-development's
-`git-workflow` or `issue-tracking`), already approves them.
+bundle** pre-approves a tracker write or a repo-changing `git` command, so in Manual mode (config value
+`default`) and acceptEdits mode those reach a permission prompt — unless an allow rule in user, project
+or local settings, or a skill from another factory invoked in the same turn (e.g. feature-development's
+`git-workflow` or `issue-tracking`), already approves them. Auto mode, where interactive sessions start
+by default, sends them to its classifier instead, with no prompt; the skills' explicit human
+confirmation steps are the gate that always holds.
 
 ## Pipeline order
 
