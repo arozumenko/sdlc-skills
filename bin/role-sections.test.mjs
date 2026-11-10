@@ -76,3 +76,32 @@ test("--update refresh filters by the agents installed on disk", () => {
   assert.match(text, /## Web stack/);
   assert.doesNotMatch(text, /## Android stack/);
 });
+
+test("an unclosed opener followed by a valid section keeps both (fail open)", () => {
+  const body = ["<!-- roles: ios-dev -->", "ios", "<!-- roles: python-dev -->", "py", "<!-- /roles -->", "tail"].join("\n");
+  const out = filterRoleSections(body, ["python-dev"]);
+  assert.match(out, /ios/);
+  assert.match(out, /py/);
+  assert.match(out, /tail/);
+});
+
+test("markers inside a fenced code block are left as literal text", () => {
+  const body = ["```html", "<!-- roles: ios-dev -->", "example", "<!-- /roles -->", "```", "after"].join("\n");
+  const out = filterRoleSections(body, ["python-dev"]);
+  assert.equal(out, body);
+});
+
+test("installing a new role without --update restores its sections in existing blocks", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const INIT = new URL("./init.mjs", import.meta.url).pathname;
+  const cwd = mkdtempSync(join(tmpdir(), "role-add-"));
+  spawnSync("git", ["init", "-q"], { cwd });
+  writeFileSync(join(cwd, "CLAUDE.md"), "# CLAUDE\n");
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  assert.equal(run("--factory", "feature-development", "--agents", "python-dev").status, 0);
+  assert.doesNotMatch(readFileSync(join(cwd, "CLAUDE.md"), "utf8"), /## Android stack/);
+  assert.equal(run("--agents", "feature-development/android-dev").status, 0);
+  const text = readFileSync(join(cwd, "CLAUDE.md"), "utf8");
+  assert.match(text, /## Android stack/);
+  assert.match(text, /Not verified:/);
+});

@@ -81,7 +81,7 @@ When you learn something, choose the layer deliberately. Promote it to `.agents/
 
 Correct or delete a shared note the moment it stops being true: a stale one misleads every role at
 once. Never commit an unverified claim — it is worse than silence, because it is trusted. Mission
-state belongs in the project's tracker (the delivery ledger when delivery-monitor is installed), not in
+state belongs in the project's tracker (the delivery ledger when delivery tracking is enabled), not in
 either memory layer.
 
 Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.

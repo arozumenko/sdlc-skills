@@ -2878,8 +2878,10 @@ async function main() {
     installInstructions(factory);
   }
 
-  // --update also refreshes the other factory blocks already in the project.
-  if (args.update) {
+  // --update also refreshes the other factory blocks already in the project,
+  // and so does any run that installed agents: blocks are filtered by the
+  // installed roster, so a newly added role must get its sections back.
+  if (args.update || (args.agents && args.agents.length)) {
     const refreshed = refreshInstalledFactoryBlocks({ skip: factory ? factory.id : null });
     if (refreshed.length) {
       console.log(`\n  → project root (installed factory instructions)`);

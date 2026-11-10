@@ -121,20 +121,35 @@ export function briefingDescription(entries) {
 
 /** Keep the `<!-- roles: a b -->` … `<!-- /roles -->` sections of a factory's
  *  instructions whose roles intersect `roles`; drop the rest. Markers are
- *  always stripped. A null/empty roster (unknown) keeps everything, and an
- *  unclosed section is kept whole: both fail open, so a rule is never lost. */
+ *  always stripped. Fails open so a rule is never lost: a null/empty roster
+ *  (unknown) keeps everything; an opener with no closer before the next opener
+ *  or EOF is malformed and only its marker is dropped. Lines inside ``` or ~~~
+ *  fences are literal text, never directives. */
 export function filterRoleSections(body, roles) {
   const keepAll = !roles || roles.length === 0;
-  const out = [];
+  const OPEN = /^<!-- roles:\s*(.+?)\s*-->\s*$/, CLOSE = /^<!-- \/roles -->\s*$/, FENCE = /^\s*(```|~~~)/;
   const lines = body.split("\n");
+  // Classify each line once, outside fences only.
+  const kind = []; let fence = null;
+  for (const l of lines) {
+    const f = l.match(FENCE);
+    if (fence) { kind.push("text"); if (f && f[1] === fence) fence = null; continue; }
+    if (f) { fence = f[1]; kind.push("text"); continue; }
+    kind.push(OPEN.test(l) ? "open" : CLOSE.test(l) ? "close" : "text");
+  }
+  const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^<!-- roles:\s*(.+?)\s*-->\s*$/);
-    if (!m) { if (!/^<!-- \/roles -->\s*$/.test(lines[i])) out.push(lines[i]); continue; }
-    const close = lines.findIndex((l, j) => j > i && /^<!-- \/roles -->\s*$/.test(l));
-    if (close === -1) continue; // unclosed: drop only the marker, keep the text
-    const wanted = m[1].split(/[\s,]+/).filter(Boolean);
+    if (kind[i] === "close") continue; // stray closer: drop the marker only
+    if (kind[i] !== "open") { out.push(lines[i]); continue; }
+    let close = -1;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (kind[j] === "open") break;
+      if (kind[j] === "close") { close = j; break; }
+    }
+    if (close === -1) continue; // malformed: drop the marker, keep the text that follows
+    const wanted = lines[i].match(OPEN)[1].split(/[\s,]+/).filter(Boolean);
     if (keepAll || wanted.some((r) => roles.includes(r))) out.push(...lines.slice(i + 1, close));
     i = close;
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+  return out.join("\n").replace(/(\r?\n){3,}/g, "$1$1");
 }
