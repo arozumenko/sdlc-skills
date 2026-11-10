@@ -609,7 +609,7 @@ export function managedFactoryIds(text) {
 // blocks are touched — nothing is appended, no file is created, and text
 // outside the markers is preserved. `skip` is the factory `--factory`
 // already spliced this run.
-export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, skip = null } = {}) {
+export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, skip = null, onlyRoleFiltered = false } = {}) {
   const results = [];
   for (const file of ["AGENTS.md", "CLAUDE.md"]) {
     const filePath = join(cwd, file);
@@ -629,7 +629,9 @@ export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, s
         results.push({ file, id, status: "no instructions in factory; left as-is" });
         continue;
       }
-      const body = filterRoleSections(readFileSync(src, "utf8"), installedRoleNames(cwd));
+      const raw = readFileSync(src, "utf8");
+      if (onlyRoleFiltered && !/^<!-- roles:/m.test(raw)) continue;
+      const body = filterRoleSections(raw, installedRoleNames(cwd));
       results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
     }
   }
@@ -2725,6 +2727,10 @@ async function main() {
     console.log("\n  ! --interactive applies to the quality-architect agent or the test-automation / manual-qa / quality-engineering factories — ignoring.");
   }
 
+  // Roster before this run installs anything: role-filtered factory blocks are
+  // refreshed below only when it changes.
+  const rosterBefore = installedRoleNames(CWD).join(",");
+
   // Resolve where each standalone-selected agent/skill physically lives.
   const agentSrc = {};
   for (const name of agentsSelection || []) agentSrc[name] = resolveItem(catalog.index, "agents", name);
@@ -2878,11 +2884,13 @@ async function main() {
     installInstructions(factory);
   }
 
-  // --update also refreshes the other factory blocks already in the project,
-  // and so does any run that installed agents: blocks are filtered by the
-  // installed roster, so a newly added role must get its sections back.
-  if (args.update || (args.agents && args.agents.length)) {
-    const refreshed = refreshInstalledFactoryBlocks({ skip: factory ? factory.id : null });
+  // --update refreshes every factory block already in the project. A plain run
+  // that changed the installed roster refreshes only the blocks filtered by
+  // roster (instructions with <!-- roles: --> markers), so an added role gets
+  // its sections back without touching any other block.
+  const rosterChanged = installedRoleNames(CWD).join(",") !== rosterBefore;
+  if (args.update || rosterChanged) {
+    const refreshed = refreshInstalledFactoryBlocks({ skip: factory ? factory.id : null, onlyRoleFiltered: !args.update });
     if (refreshed.length) {
       console.log(`\n  → project root (installed factory instructions)`);
       for (const r of refreshed) {

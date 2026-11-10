@@ -105,3 +105,37 @@ test("installing a new role without --update restores its sections in existing b
   assert.match(text, /## Android stack/);
   assert.match(text, /Not verified:/);
 });
+
+test("fences follow CommonMark: longer openers, info-string lines and indented code", () => {
+  const four = ["````md", "```", "<!-- roles: ios-dev -->", "x", "<!-- /roles -->", "```", "````", "after"].join("\n");
+  assert.equal(filterRoleSections(four, ["python-dev"]), four, "``` inside a ```` fence does not close it");
+  const info = ["```", "```js", "<!-- roles: ios-dev -->", "x", "<!-- /roles -->", "```"].join("\n");
+  assert.equal(filterRoleSections(info, ["python-dev"]), info, "a ```js line is not a closer");
+  const indented = ["    ```", "<!-- roles: ios-dev -->", "ios", "<!-- /roles -->", "py"].join("\n");
+  const out = filterRoleSections(indented, ["python-dev"]);
+  assert.doesNotMatch(out, /ios|<!-- roles/, "4-space-indented backticks are code, not a fence");
+});
+
+test("a plain install that changes nothing else leaves other factory blocks alone", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const INIT = new URL("./init.mjs", import.meta.url).pathname;
+  const cwd = mkdtempSync(join(tmpdir(), "role-untouched-"));
+  spawnSync("git", ["init", "-q"], { cwd });
+  const local = "<!-- FACTORY:manual-qa START -->\nlocally adapted\n<!-- FACTORY:manual-qa END -->";
+  writeFileSync(join(cwd, "CLAUDE.md"), `# CLAUDE\n\n${local}\n`);
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  assert.equal(run("--agents", "personal-assistant").status, 0);
+  assert.ok(readFileSync(join(cwd, "CLAUDE.md"), "utf8").includes(local), "manual-qa block has no role markers, so it is not refreshed");
+});
+
+test("--all without --agents also restores sections for newly added roles", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const INIT = new URL("./init.mjs", import.meta.url).pathname;
+  const cwd = mkdtempSync(join(tmpdir(), "role-all-"));
+  spawnSync("git", ["init", "-q"], { cwd });
+  writeFileSync(join(cwd, "CLAUDE.md"), "# CLAUDE\n");
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  assert.equal(run("--factory", "feature-development", "--agents", "python-dev").status, 0);
+  assert.equal(run("--all").status, 0);
+  assert.match(readFileSync(join(cwd, "CLAUDE.md"), "utf8"), /## Android stack/);
+});

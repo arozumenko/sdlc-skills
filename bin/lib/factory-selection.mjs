@@ -127,14 +127,22 @@ export function briefingDescription(entries) {
  *  fences are literal text, never directives. */
 export function filterRoleSections(body, roles) {
   const keepAll = !roles || roles.length === 0;
-  const OPEN = /^<!-- roles:\s*(.+?)\s*-->\s*$/, CLOSE = /^<!-- \/roles -->\s*$/, FENCE = /^\s*(```|~~~)/;
+  const OPEN = /^<!-- roles:\s*(.+?)\s*-->\s*$/, CLOSE = /^<!-- \/roles -->\s*$/;
+  // CommonMark fences: up to 3 spaces of indent, a run of 3+ ` or ~. The closer
+  // uses the same character, is at least as long, and carries nothing else.
+  const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
   const lines = body.split("\n");
-  // Classify each line once, outside fences only.
+  // Classify each line once; markers count only outside fences.
   const kind = []; let fence = null;
   for (const l of lines) {
-    const f = l.match(FENCE);
-    if (fence) { kind.push("text"); if (f && f[1] === fence) fence = null; continue; }
-    if (f) { fence = f[1]; kind.push("text"); continue; }
+    if (fence) {
+      const c = l.match(/^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/);
+      if (c && c[1][0] === fence[0] && c[1].length >= fence.length) fence = null;
+      kind.push("text");
+      continue;
+    }
+    const f = l.match(FENCE_OPEN);
+    if (f && !(f[1][0] === "`" && l.slice(l.indexOf(f[1]) + f[1].length).includes("`"))) { fence = f[1]; kind.push("text"); continue; }
     kind.push(OPEN.test(l) ? "open" : CLOSE.test(l) ? "close" : "text");
   }
   const out = [];
