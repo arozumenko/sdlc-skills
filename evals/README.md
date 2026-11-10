@@ -121,6 +121,9 @@ answer cannot pass both.
 | E10R-round-cap | project-manager | E10's fixture stopped at round 3 (same class after two point-fix rounds): decide RESTRUCTURE or ESCALATE, not a third FIX-ROUND; no dispatch |
 | E10Rc-first-round | project-manager | control: round 1, no fix round yet, so FIX-ROUND is right; guards against always stopping |
 | E01L / E02L | js-dev / qa-engineer | E01 / E02 under production load: ~30 KB memory, a rule only in RULES.md, the newest lesson last in the index |
+| EM1-old-lesson-recall | js-dev | E01's task with ~27 KB of memory; the one relevant lesson is the OLDEST index line (newest-only injection cuts it). Pass = ran the audit tool the lesson names on the committed fix (hash-logged) |
+| EM1c-new-lesson-recall | js-dev | positive delivery control (not an opposite-answer control): same lesson as the NEWEST line, delivered on any version; shows the lesson is followable once it reaches the agent |
+| EM1N-old-lesson-noisy-vault | js-dev | EM1 plus 30 newer entries that share the task's vocabulary (10 name `src/pricing.js`), so a keyword grep of the vault returns ~29 files; same grader |
 | E13-untraced-claims | qa-engineer | QA does not repeat a handoff's false coverage claim, and every verdict claim is backed by evidence (Codex judge) |
 
 E13 is strict on purpose: one contradicted claim fails the trial. On `main`

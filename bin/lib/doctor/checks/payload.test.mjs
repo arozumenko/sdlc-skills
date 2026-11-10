@@ -8,9 +8,10 @@ import { createSafeFs } from '../fsx.mjs';
 import { targetsCheck } from './targets.mjs';
 import { hookversionCheck } from './hookversion.mjs';
 import { payloadCheck } from './payload.mjs';
+import { CORE_HOOK_FILES } from '../../core-hook-spec.mjs';
 
 const PKG = fileURLToPath(new URL('../../../../', import.meta.url));
-const hookFiles = Object.fromEntries(['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh'].map((f) => [`.claude/hooks/sdlc-skills/${f}`, readFileSync(join(PKG, 'hooks', f), 'utf8')]));
+const hookFiles = Object.fromEntries(CORE_HOOK_FILES.map((f) => [`.claude/hooks/sdlc-skills/${f}`, readFileSync(join(PKG, 'hooks', f), 'utf8')]));
 const defaults = (roles) => roles.map((r) => { const s = r.toUpperCase().replace(/[^A-Z0-9]/g, '_'); return `: "\${SDLC_SHARED_DOCS_${s}:=\${SDLC_SHARED_DOCS:-testing profile}}"\n: "\${SDLC_ROLE_MEMORY_FILES_${s}:=\${SDLC_ROLE_MEMORY_FILES:-SOUL.md RULES.md MEMORY.md}}"\n`; }).join('');
 function project(extra) {
   const d = mkdtempSync(join(tmpdir(), 'dpl-'));

@@ -4,11 +4,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createSafeFs } from '../fsx.mjs';
-import { expectedCoreHookSpec } from '../../core-hook-spec.mjs';
+import { expectedCoreHookSpec, CORE_HOOK_FILES } from '../../core-hook-spec.mjs';
 import { targetsCheck } from './targets.mjs';
 import { wiringCheck } from './wiring.mjs';
 
-const SCRIPTS = (dir) => Object.fromEntries(['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh'].map((f) => [`${dir}/${f}`, '#']));
+const SCRIPTS = (dir) => Object.fromEntries(CORE_HOOK_FILES.map((f) => [`${dir}/${f}`, '#']));
 function project(files) {
   const d = mkdtempSync(join(tmpdir(), 'dwr-'));
   for (const [rel, c] of Object.entries(files)) { mkdirSync(dirname(join(d, rel)), { recursive: true }); writeFileSync(join(d, rel), typeof c === 'string' ? c : JSON.stringify(c)); }

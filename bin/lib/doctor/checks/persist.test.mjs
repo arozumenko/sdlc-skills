@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createSafeFs } from '../fsx.mjs';
 import { createGitRunner } from '../git.mjs';
-import { expectedCoreHookSpec } from '../../core-hook-spec.mjs';
+import { expectedCoreHookSpec, CORE_HOOK_FILES } from '../../core-hook-spec.mjs';
 import { targetsCheck } from './targets.mjs';
 import { persistCheck } from './persist.mjs';
 
@@ -22,7 +22,7 @@ function project({ git = true, sub = '' } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'dps-'));
   const d = sub ? join(root, sub) : root;
   mkdirSync(join(d, s.scriptsDir), { recursive: true });
-  for (const f of ['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh']) writeFileSync(join(d, s.scriptsDir, f), '#');
+  for (const f of CORE_HOOK_FILES) writeFileSync(join(d, s.scriptsDir, f), '#');
   mkdirSync(join(d, '.claude'), { recursive: true });
   if (git) { g(root, 'init', '-q'); g(root, 'config', 'user.email', 't@t'); g(root, 'config', 'user.name', 't'); g(root, 'config', 'commit.gpgsign', 'false'); }
   return { root, d };
@@ -90,8 +90,8 @@ test('committed wiring referencing untracked scripts is one warning listing the 
     writeFileSync(join(d, '.claude/settings.json'), settings(s.events)); g(root, 'add', '.claude/settings.json'); g(root, 'commit', '-qm', 'c');
     const sf = scriptFindings(run(d));
     assert.equal(sf.length, 1, JSON.stringify(sf));
-    assert.equal(sf[0].severity, 'warning'); assert.match(sf[0].message, /^committed wiring references 4 untracked scripts in \.claude\/hooks\/sdlc-skills/);
-    assert.deepEqual(sf[0].data.files, ['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh'].map((f) => `${s.scriptsDir}/${f}`));
+    assert.equal(sf[0].severity, 'warning'); assert.match(sf[0].message, new RegExp(`^committed wiring references ${CORE_HOOK_FILES.length} untracked scripts in \\.claude/hooks/sdlc-skills`));
+    assert.deepEqual(sf[0].data.files, CORE_HOOK_FILES.map((f) => `${s.scriptsDir}/${f}`));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -104,7 +104,7 @@ test('first run before any commit: no "committed wiring" wording, one script war
     assert.ok(f.some((x) => x.severity === 'warning' && /settings\.json, which is untracked/.test(x.message)));
     const sf = scriptFindings(f);
     assert.equal(sf.length, 1, JSON.stringify(sf));
-    assert.match(sf[0].message, /^wiring references 4 untracked scripts/); assert.equal(sf[0].data.files.length, 4);
+    assert.match(sf[0].message, new RegExp(`^wiring references ${CORE_HOOK_FILES.length} untracked scripts`)); assert.equal(sf[0].data.files.length, CORE_HOOK_FILES.length);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

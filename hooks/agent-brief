@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# PreToolUse hook on the Agent/Task tool (Claude Code). Saves the dispatch payload
+# — it carries the brief (`tool_input.prompt`) and the role (`subagent_type`) — so
+# that agent-start, which fires a moment later on SubagentStart, can pick the
+# MEMORY.md lines that match this task. SubagentStart's own payload has no brief.
+#
+# Never blocks and never prints: no output means "no decision", so the dispatch
+# proceeds exactly as without this hook. Any failure here just leaves agent-start
+# on its recency-only fallback.
+#
+# Spool: one file per dispatch under ${TMPDIR}/sdlc-skills-briefs-<uid>/<project key>/<session>/
+# (0700, owner-checked; see brief_spool_dir), named <role>.<epoch>.<content hash>. agent-start consumes the OLDEST fresh file for its
+# role, so two same-role dispatches pair up in the order they were made. Outside
+# the repo on purpose: briefs are transient and must never land in a commit.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "${SCRIPT_DIR}/lib.sh"
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+payload="$(read_stdin_payload)"
+role="$(json_string_field "$payload" "subagent_type")"
+is_plain_role "$role" || exit 0                 # nothing to key on, or not a plain role name
+
+dir="$(brief_spool_dir "$PROJECT_DIR" "$(payload_session_key "$payload")")"
+[ -n "$dir" ] || exit 0
+# Bound the brief in memory before any write: piping through `head -c` under
+# pipefail can kill the writer (SIGPIPE) and lose the whole brief.
+LC_ALL=C; export LC_ALL        # byte semantics: the cap below is 20,000 BYTES
+payload="${payload:0:20000}"
+# Published under a private temp name, then hard-linked to its final name: `ln`
+# fails if that name exists, so publication is exclusive and an identical payload
+# in the same second (a PreToolUse wired twice, plugin + settings) yields one file.
+# A duplicate that lands in the NEXT second is published again; it can only change
+# how a later same-role dispatch's lessons are ranked (see hooks/README.md).
+hash="$(printf '%s' "$payload" | cksum | tr -d ' \t')"
+now="${SDLC_TEST_NOW:-$(date +%s)}"
+tmp="$(umask 077; mktemp "${dir}/.tmp.XXXXXX" 2>/dev/null)" || exit 0
+printf '%s' "$payload" > "$tmp" 2>/dev/null && ln "$tmp" "${dir}/${role}.${now}.${hash}" 2>/dev/null
+rm -f "$tmp" 2>/dev/null
+exit 0

@@ -45,6 +45,15 @@ if [ -z "$agent" ]; then
 fi
 [ -n "$agent" ] || exit 0
 
+# The brief agent-brief saved for this dispatch (Claude Code only), used to pick the
+# MEMORY.md lines that match the task when the index is over budget. Consumed even
+# when unused, so a later dispatch of the same role never pairs with a stale brief.
+# Claude Code only: no other host spools briefs, and one must not consume Claude's.
+SDLC_BRIEF=""
+if [ -z "${CODEX_HOOK:-}" ] && is_claude_code; then
+  SDLC_BRIEF="$(take_brief "$PROJECT_DIR" "$agent" "$(payload_session_key "${payload:-}")")"
+fi
+
 # Build this agent's additionalContext: its role memory (inlined, cap-aware) plus a
 # read-list for the shared docs only when it won't get them via instruction files —
 # i.e. a CLI sub-agent (never inherits them) or the files aren't on disk yet (cold
