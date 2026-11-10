@@ -11,10 +11,18 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { managedFactoryIds, refreshInstalledFactoryBlocks } from "./init.mjs";
+import { filterRoleSections } from "./lib/factory-selection.mjs";
 
 const REPO = new URL("..", import.meta.url).pathname;
 const INIT = join(REPO, "bin/init.mjs");
-const instructions = (id) => readFileSync(join(REPO, "bundles", id, "instructions.md"), "utf8").trim();
+// No agents are installed in these temp projects, so every role section is kept (markers stripped).
+// Independent of the filter: with no agents installed, every stack's rules must survive.
+test("refreshed blocks keep every stack section when no agents are installed", () => {
+  const body = instructions("feature-development");
+  for (const h of ["## Web stack", "## iOS stack", "## Android stack", "Not verified:", "## Delivery tracking"]) assert.ok(body.includes(h), h);
+  assert.doesNotMatch(body, /<!-- \/?roles/);
+});
+const instructions = (id) => filterRoleSections(readFileSync(join(REPO, "bundles", id, "instructions.md"), "utf8"), null).trim();
 
 const STALE_AGENTS = [
   "# AGENTS",

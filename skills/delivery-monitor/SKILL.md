@@ -41,6 +41,11 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--htm
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 ```
 
+**Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
+work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the
+orchestrating session when no project manager runs. Work that landed no commit is recorded without `--sha`, never with
+another commit's sha. Read `delivery.mjs report` at mission close, before the next mission is planned.
+
 **Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work
 ran has no cycle time for it — backfill gives created/first-commit/done only. At campaign close, after the last landing, run
 `delivery.mjs plan close <run>`; an open plan keeps admitting hook dispatches and makes every unpinned command ambiguous.

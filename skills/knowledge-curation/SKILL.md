@@ -1,6 +1,6 @@
 ---
 name: knowledge-curation
-description: Use when promoting a hard-won fact from per-role memory into the shared, committed `.agents/knowledge/` layer, auditing that layer for stale or unindexed notes, or retiring a fact that stopped being true. Also use at the end of a substantial session or mission to sweep memory for anything cross-role worth committing. Not for per-role notes or daily logs (that is the `memory` skill), and not for mission state (that belongs on the work board).
+description: Use when promoting a hard-won fact from per-role memory into the shared, committed `.agents/knowledge/` layer, auditing that layer for stale or unindexed notes, or retiring a fact that stopped being true. Also use at the end of a substantial session or mission to sweep memory for anything cross-role worth committing. Not for per-role notes or daily logs (that is the `memory` skill), and not for mission state (that belongs in the project's tracker — the delivery ledger when delivery tracking is enabled).
 license: Apache-2.0
 metadata:
   version: "1.0.0"
@@ -169,4 +169,4 @@ in Obsidian: knowledge by area, notes overdue re-verification, live traps (`type
 ## Related
 
 - `memory` — per-role notes and daily logs; the layer below this one.
-- Mission state belongs on the work board, not in either memory layer.
+- Mission state belongs in the project's tracker (the delivery ledger when delivery tracking is enabled), not in either memory layer.
