@@ -1,21 +1,25 @@
 // What a CLI install wires for the core hooks, per target. Used by init (to write)
 // and doctor (to check), so the two cannot disagree. Pure data; no I/O.
-export const CORE_HOOK_FILES = ['run-hook.cmd', 'session-start', 'agent-start', 'lib.sh'];
-export const CORE_HOOK_EXE = ['run-hook.cmd', 'session-start', 'agent-start'];
+export const CORE_HOOK_FILES = ['run-hook.cmd', 'session-start', 'agent-start', 'agent-brief', 'lib.sh'];
+export const CORE_HOOK_EXE = ['run-hook.cmd', 'session-start', 'agent-start', 'agent-brief'];
 export const CORE_HOOK_MARKER = 'hooks/sdlc-skills/run-hook.cmd';
 
-function claudeShape(cmd, { async }) {
+// `brief` adds the Claude Code PreToolUse hook that saves each dispatch's brief for
+// agent-start (SubagentStart has no brief of its own). Claude only: Codex's
+// PreToolUse payload for agent spawns is not the same shape.
+function claudeShape(cmd, { async, brief = false }) {
   const h = (verb) => (async === undefined ? { type: 'command', command: `${cmd} ${verb}` } : { type: 'command', command: `${cmd} ${verb}`, async });
   return {
     SessionStart: [{ matcher: 'startup|clear|compact|resume', hooks: [h('session-start')] }],
     SubagentStart: [{ matcher: '*', hooks: [h('agent-start')] }],
+    ...(brief ? { PreToolUse: [{ matcher: 'Agent|Task', hooks: [h('agent-brief')] }] } : {}),
   };
 }
 
 export function expectedCoreHookSpec(targetId) {
   if (targetId === 'claude') {
     const scriptsDir = '.claude/hooks/sdlc-skills';
-    const writeSpec = claudeShape(`"\${CLAUDE_PROJECT_DIR}/${scriptsDir}/run-hook.cmd"`, { async: false });
+    const writeSpec = claudeShape(`"\${CLAUDE_PROJECT_DIR}/${scriptsDir}/run-hook.cmd"`, { async: false, brief: true });
     return { target: 'claude', scriptsDir, configFiles: ['.claude/settings.json', '.claude/settings.local.json'], shape: 'claude', writeSpec, events: writeSpec };
   }
   if (targetId === 'cursor') {

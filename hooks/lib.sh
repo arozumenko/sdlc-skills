@@ -120,6 +120,165 @@ json_string_field() {
     | head -n1
 }
 
+# ---- dispatch briefs (agent-brief → agent-start) ----------------------------
+# Measured on two consumer boards (2026-11): when MEMORY.md is over the injection
+# budget, keeping only its NEWEST lines meant ~7% of the injected lessons applied to
+# the task in hand, and the read-list for the rest was opened in ~0 of ~1,500
+# dispatches — older lessons were effectively gone. The brief says what the task is
+# about, so it can pick the lines that matter. Only Claude Code exposes it (on the
+# Agent tool's PreToolUse); everywhere else no brief exists and selection stays
+# newest-first, exactly as before.
+
+# Only plain role names key the spool: they become file names, so anything else
+# (path separators, dots, leading dashes, control characters) is refused.
+is_plain_role() { case "$1" in ""|-*|*[!A-Za-z0-9_-]*) return 1 ;; *) return 0 ;; esac; }
+
+# A session id from a hook payload, reduced to filename-safe characters; "none"
+# when absent. Briefs are queued per session so parallel sessions never pair.
+payload_session_key() {
+  local s; s="$(json_string_field "$1" "session_id" | tr -cd 'A-Za-z0-9_-' | cut -c1-80)"
+  printf '%s' "${s:-none}"
+}
+
+# The spool dir for this user, project and session, created 0700 and verified:
+# owned by us, a real directory (not a symlink) at every level we create. Shared
+# /tmp on Linux is the threat — briefs are prompts and must not be readable by, or
+# redirectable to, another user. Prints nothing (and the caller skips the brief)
+# when any check fails. $1 = project dir, $2 = session key.
+brief_spool_dir() {
+  local root key d
+  root="${TMPDIR:-/tmp}"; root="${root%/}/sdlc-skills-briefs-$(id -u 2>/dev/null || echo u)"
+  key="$(printf '%s' "$1" | cksum | tr -d ' \t')"
+  # Check each level BEFORE creating below it: mkdir -p would follow a planted symlink.
+  for d in "$root" "${root}/${key}" "${root}/${key}/${2}"; do
+    [ -L "$d" ] && return 0
+    [ -e "$d" ] || ( umask 077; mkdir "$d" ) 2>/dev/null   # a concurrent creator may win: check below
+    [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ] || return 0
+  done
+  chmod 700 "$root" "${root}/${key}" "${root}/${key}/${2}" 2>/dev/null
+  printf '%s' "${root}/${key}/${2}"
+}
+
+# Claim and print the brief for this dispatch. Pairing is first in, first out: the
+# oldest unclaimed brief for the role. Payload files are immutable once published;
+# a claim is a separate marker `<payload>.claim` created exclusively (noclobber), so
+# two agent-starts racing for one brief cannot both get it, and nothing a reader
+# globbed is ever renamed away from under it. When several briefs for the role share
+# one second (parallel same-role dispatches) their order is unknown, so EVERY
+# dispatch of that second ranks against all of them instead of guessing which is
+# its own. Payloads and claims older than 600 s are deleted (an aborted dispatch
+# must not pair with a later one). Names: <role>.<epoch>.<content hash>, plus
+# <payload>.claim markers. SDLC_TEST_NOW pins the clock in tests only.
+take_brief() {
+  local base="$1" role="$2" session="$3" dir now f rest e h oldest="" oldest_e="" out=""
+  is_plain_role "$role" || return 0
+  dir="$(brief_spool_dir "$base" "$session")"; [ -n "$dir" ] || return 0
+  now="${SDLC_TEST_NOW:-$(date +%s)}"
+  # Scan, claim the oldest unclaimed; a lost race moves on to the next one (bounded).
+  local tries=0 got=""
+  while [ -z "$got" ] && [ "$tries" -lt 20 ]; do
+    tries=$((tries + 1)); oldest=""; oldest_e=""
+    for f in "$dir/$role".*; do
+      [ -f "$f" ] && [ ! -L "$f" ] || continue
+      rest="${f#"$dir/$role".}"; e="${rest%%.*}"; h="${rest#*.}"
+      case "$e" in ""|*[!0-9]*) continue ;; esac
+      if [ $(( now - e )) -ge 600 ]; then rm -f "$f"; continue; fi
+      case "$h" in ""|*[!0-9]*) continue ;; esac        # a .claim marker, not a payload
+      [ -e "${f}.claim" ] && continue
+      if [ -z "$oldest" ] || [ "$e" -lt "$oldest_e" ]; then oldest="$f"; oldest_e="$e"; fi
+    done
+    [ -n "$oldest" ] || return 0
+    ( set -C; : > "${oldest}.claim" ) 2>/dev/null && got=1   # lost the race: rescan
+  done
+  [ -n "$got" ] || return 0
+  out="$(head -c 20000 "$oldest" 2>/dev/null)"
+  for f in "$dir/$role.$oldest_e".*; do
+    [ "$f" = "$oldest" ] && continue
+    rest="${f#"$dir/$role.$oldest_e".}"
+    case "$rest" in ""|*[!0-9]*) continue ;; esac      # payloads only
+    [ -f "$f" ] && [ ! -L "$f" ] && out="${out}
+$(head -c 20000 "$f" 2>/dev/null)"
+  done
+  printf '%s' "$out"
+}
+
+# Rank MEMORY.md lines against a brief. $1 = brief text, $2 = MEMORY.md path.
+# Prints "<score> <line number>" for each line that matches, best first. A line
+# scores one point per distinct brief word it contains (words of 4+ chars, paths
+# kept whole), ignoring words that occur in more than a fifth of the index lines:
+# those are the vocabulary every lesson shares ("lesson", "check", "tests") and
+# would rank everything equally.
+rank_memory_lines() {
+  local brief="$1" file="$2"
+  [ -n "$brief" ] && [ -f "$file" ] || return 0
+  printf '%s' "$brief" | awk -v F="$file" '
+    function toks(s, out,   n, i, a, t) {
+      s = tolower(s); gsub(/\\[nrt]/, " ", s); gsub(/[^a-z0-9_.\/-]+/, " ", s)
+      n = split(s, a, " ")
+      for (i = 1; i <= n; i++) { t = a[i]; sub(/[.\/-]+$/, "", t); sub(/^[.\/-]+/, "", t)
+        if (length(t) >= 4 && !(t in STOP)) out[t] = 1 }
+    }
+    BEGIN {
+      split("this that with from have when then into your about before after should must will what which their there these those than also only each other more most some such them they were been being does done make need using used please reply short", sw, " ")
+      for (i in sw) STOP[sw[i]] = 1
+    }
+    { brief = brief " " $0 }
+    END {
+      toks(brief, B)
+      n = 0
+      while ((getline line < F) > 0) {
+        n++; L[n] = line
+        if (line !~ /^[[:space:]]*-/) continue      # only index entries, not headings
+        delete T; toks(line, T)
+        for (t in T) if (t in B) DF[t]++
+        E++
+      }
+      if (E == 0) exit
+      lim = E / 5; if (lim < 2) lim = 2
+      for (i = 1; i <= n; i++) {
+        if (L[i] !~ /^[[:space:]]*-/) continue
+        delete T; toks(L[i], T); s = 0
+        for (t in T) if ((t in B) && DF[t] <= lim) s++
+        if (s > 0) print s, i
+      }
+    }' | sort -k1,1nr -k2,2nr
+}
+
+# Choose the MEMORY.md lines to inline within $2 escaped bytes, in ONE awk pass
+# (a per-line subprocess loop cost seconds on a field-sized index). With a brief
+# ($3), lines rank_memory_lines matches go first, up to half of $2; the newest
+# lines fill the rest. Prints "<newest count> <matched count>" and then the kept
+# lines in file order, byte for byte. Sizes match escape_for_json: every byte, plus
+# one per \\ " TAB CR, plus five per other control character (\\u00XX), plus two
+# for the escaped newline. C locale, so length() counts bytes.
+select_memory_lines() {
+  local file="$1" left="$2" brief="${3:-}"
+  { [ -n "$brief" ] && rank_memory_lines "$brief" "$file"; } | LC_ALL=C awk -v F="$file" -v LEFT="$left" '
+    BEGIN {
+      ctl = "["; for (c = 1; c < 32; c++) if (c != 9 && c != 10 && c != 13) ctl = ctl sprintf("%c", c); ctl = ctl "]"
+      n = 0
+      while ((getline line < F) > 0) {
+        n++; L[n] = line; t = line
+        e = gsub(/[\\"\t\r]/, "", t); x = gsub(ctl, "", t)
+        E[n] = length(line) + e + 5 * x + 2
+      }
+      used = 0; half = int(LEFT / 2); m = 0; k = 0
+    }
+    { i = $2 + 0
+      if (i < 1 || i > n || (i in K) || L[i] ~ /^[[:space:]]*$/) next
+      if (used + E[i] > half) next
+      used += E[i]; K[i] = 1; m++ }
+    END {
+      for (i = n; i >= 1; i--) {
+        if ((i in K) || L[i] ~ /^[[:space:]]*$/) continue
+        if (used + E[i] > LEFT) break
+        used += E[i]; K[i] = 1; k++
+      }
+      print k, m
+      for (i = 1; i <= n; i++) if (i in K) print L[i]
+    }'
+}
+
 # Per-role config override: SDLC_<BASE>_<ROLE>, role uppercased with every
 # non-alphanumeric squashed to `_` (qa-engineer → QA_ENGINEER). Echoes the
 # override's value, empty when none is set. These hooks are SHARED — they fire
@@ -447,22 +606,27 @@ $(list_shared_files "$agents_dir" "$role")"
           # seconds of synchronous latency per dispatch on a field-sized index.
           # The wrapper is measured with a 5-digit N placeholder (upper bound),
           # so the annotation can never push the final payload over the cap.
-          local tail_doc="" line n=0 used lineln wrapper
-          wrapper=$'\n\n'"${header} (LAST 99999 ENTRIES, newest — the file is over the injection budget)"$'\n\n'
+          #
+          # With a dispatch brief (SDLC_BRIEF, Claude Code only — see agent-brief),
+          # lines that match the task are taken FIRST, up to half the budget left,
+          # and the newest lines fill the rest. Measured: newest-only delivered a
+          # lesson relevant to the task in ~7% of injected slots, and the read-list
+          # never recovered the older ones (see rank_memory_lines).
+          local used wrapper sel counts n m annot cand
+          wrapper=$'\n\n'"${header} (99999 ENTRIES: 99999 MATCHING THIS TASK + THE NEWEST — the file is over the injection budget)"$'\n\n'
           used=$(( $(esc_byte_len "$context") + $(esc_byte_len "$wrapper") ))
-          # Walk the index newest-first (awk reverse: portable, unlike tac /
-          # tail -r), skipping blank lines, and prepend each kept line so the
-          # slice comes out in file order.
-          while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            lineln=$(( $(esc_byte_len "$line") + 2 ))
-            [ $(( used + lineln )) -gt "$budget" ] && break
-            used=$(( used + lineln ))
-            tail_doc="${line}"$'\n'"${tail_doc}"
-            n=$((n + 1))
-          done < <(awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }' "$f")
-          if [ "$n" -gt 0 ]; then
-            context="${context}"$'\n\n'"${header} (LAST ${n} ENTRIES, newest — the file is over the injection budget)"$'\n\n'"${tail_doc}"
+          sel="$(select_memory_lines "$f" $(( budget - used )) "${SDLC_BRIEF:-}")"
+          counts="${sel%%$'\n'*}"; n="${counts% *}"; m="${counts#* }"
+          if [ -n "$n" ] && [ $(( n + m )) -gt 0 ] 2>/dev/null; then
+            if [ "$m" -gt 0 ]; then
+              annot="$((n + m)) ENTRIES: ${m} MATCHING THIS TASK + THE NEWEST — the file is over the injection budget"
+            else
+              annot="LAST ${n} ENTRIES, newest — the file is over the injection budget"
+            fi
+            cand="${context}"$'\n\n'"${header} (${annot})"$'\n\n'"${sel#*$'\n'}"$'\n'
+            # Belt and braces: the runtime drops an over-cap payload WHOLE, so the
+            # slice ships only if the real escaped size fits.
+            [ "$(esc_byte_len "$cand")" -le "$budget" ] && context="$cand"
           fi
         fi
         overflow="${overflow}${rel}"$'\n'                        # too big → self-read

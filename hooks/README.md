@@ -14,6 +14,7 @@ they re-fire on `clear`/`compact`/`resume`, and they run on every runtime.
 | `.agents/memory/<role>/snapshot.md` | `agent-start` | per agent, every dispatch |
 | Lean shared docs: `role-overrides.md`, `profile.md`, `workflow.md`, `testing.md`, `conventions.md`, `team-comms.md` | `session-start` (parent session) **and** `agent-start` (each subagent) | per session / per dispatch; re-injected on clear/compact |
 | Roster reminder → `memory` skill | `session-start` | only on Cursor & Kiro (no context-injecting per-agent hook) |
+| The dispatch brief (spooled, never injected) | `agent-brief` (Claude Code `PreToolUse` on `Agent\|Task`) | per dispatch; consumed by `agent-start` |
 
 A dispatched subagent gets a fresh context that does **not** inherit the parent's
 `SessionStart` injection, so `agent-start` delivers the shared docs to each
@@ -38,6 +39,30 @@ relied on, so the hooks are safe on an unseeded project.
   rules and playbook. The header comment in the script carries the full
   reasoning.
 - `agent-start` — injects the spawning role's `snapshot.md`.
+- `agent-brief` — Claude Code only. `SubagentStart` carries no brief, so this
+  `PreToolUse` hook on the Agent/Task tool saves the dispatch payload (capped at
+  20 KB) to `$TMPDIR/sdlc-skills-briefs-<uid>/<project key>/<session>/<role>.<epoch>.<hash>`.
+  Every level is created `0700` and checked (owned by the user, not a symlink)
+  before anything is written below it, and files are written to a temp name and
+  hard-linked into place (exclusive: an identical payload in the same second, such
+  as a PreToolUse wired by both the plugin and settings.json, publishes once). The hook prints nothing, so the dispatch is never blocked or altered.
+  Role names other than `[A-Za-z0-9_-]` are ignored.
+  `agent-start` (Claude Code only; other hosts never consume) claims the oldest
+  brief for its role and session from the last 600 s by creating a `<brief>.claim`
+  marker exclusively (noclobber); a starter that loses the race takes the next one.
+  Brief files are never renamed or edited after publication. Briefs
+  sharing one second are ambiguous, so each of those dispatches ranks against all
+  of them. When `MEMORY.md` is over budget, index lines sharing words with the
+  brief go first (up to half the remaining budget, words in more than a fifth of
+  the lines ignored), then the newest lines fill the rest, in file order. Sizes are
+  computed in one awk pass as `escape_for_json` emits them, and the final payload
+  is re-measured before it ships. Without a brief the slice is newest-first, as
+  before. An aborted dispatch can leave a brief that a later same-role dispatch
+  in the same session pairs with inside the 600 s window; that dispatch only gets
+  differently ranked lessons. The same holds for a duplicate PreToolUse that lands
+  in the next second. Measured on two consumer boards: newest-only meant
+  ~7% of injected lessons applied to the task, and the read-list for the rest
+  was opened in ~0 of ~1,500 dispatches.
 - `lib.sh` — shared helpers: JSON escaping, jq-free field extraction, platform
   detection, and the two `emit_*` formatters.
 - `config.sh.example` — seed for `config.sh`, the project's hand-written knobs
