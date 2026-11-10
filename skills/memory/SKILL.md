@@ -138,7 +138,7 @@ not the usual ~4, so a "small" 147 KB entry is ~67,000 tokens.
 
 ```
 Is it mission/ticket state (status, assignee, acceptance criteria)?
-                                          → the work board, NOT memory
+                                          → the tracker / delivery ledger, NOT memory
 Would ANOTHER ROLE need it, and is it verified + durable?
                                           → .agents/knowledge/  (knowledge-curation skill)
 Is it durable for THIS role (>6 months useful)?

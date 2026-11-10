@@ -118,3 +118,23 @@ export function briefingDescription(entries) {
   }
   return "Project overview and this role's focus";
 }
+
+/** Keep the `<!-- roles: a b -->` … `<!-- /roles -->` sections of a factory's
+ *  instructions whose roles intersect `roles`; drop the rest. Markers are
+ *  always stripped. A null/empty roster (unknown) keeps everything, and an
+ *  unclosed section is kept whole: both fail open, so a rule is never lost. */
+export function filterRoleSections(body, roles) {
+  const keepAll = !roles || roles.length === 0;
+  const out = [];
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^<!-- roles:\s*(.+?)\s*-->\s*$/);
+    if (!m) { if (!/^<!-- \/roles -->\s*$/.test(lines[i])) out.push(lines[i]); continue; }
+    const close = lines.findIndex((l, j) => j > i && /^<!-- \/roles -->\s*$/.test(l));
+    if (close === -1) continue; // unclosed: drop only the marker, keep the text
+    const wanted = m[1].split(/[\s,]+/).filter(Boolean);
+    if (keepAll || wanted.some((r) => roles.includes(r))) out.push(...lines.slice(i + 1, close));
+    i = close;
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+}

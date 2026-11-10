@@ -6,6 +6,7 @@ app, or any combination. These are team-wide defaults; scout refines them per
 project in `AGENTS.md`, which always wins over this file. Only the sections
 for the stacks actually in play apply.
 
+<!-- roles: python-dev js-dev test-automation-engineer -->
 ## Web stack (`js-dev`, `python-dev`, `test-automation-engineer`)
 
 - **Frontend** (`js-dev`): JS/TS SPA or SSR app. Owns UI, client state, and
@@ -22,7 +23,9 @@ for the stacks actually in play apply.
   counterpart role. Prefer generated/shared types at the boundary.
 - `test-automation-engineer` covers the end-to-end path through the real stack
   (Playwright). Secrets never land in the frontend bundle.
+<!-- /roles -->
 
+<!-- roles: ios-dev -->
 ## iOS stack (`ios-dev`)
 
 - **App** (`ios-dev`): Swift + SwiftUI. Modern concurrency (async/await,
@@ -36,7 +39,9 @@ for the stacks actually in play apply.
   data races. SwiftUI previews for iteration; Swift Testing / XCTest for
   regression coverage. Releases go through the project's signing/distribution
   flow (fastlane, Xcode Cloud, or manual archive) — note which in `AGENTS.md`.
+<!-- /roles -->
 
+<!-- roles: android-dev -->
 ## Android stack (`android-dev`)
 
 - **App** (`android-dev`): Kotlin + Jetpack Compose (Material 3). Coroutines +
@@ -54,6 +59,7 @@ for the stacks actually in play apply.
   compilation, host-side tests (JUnit, Robolectric, Compose-via-Robolectric),
   and lint, and does not write `androidTest` sources while no CI runner is
   configured for them.
+<!-- /roles -->
 
 ## Release and operational work (`release-engineer`, Dora)
 
@@ -81,22 +87,28 @@ scheduling or alert dispatch configured separately.
 
 ## Definition of done (team-wide)
 
-A change is done when it builds, its tests pass, and — for the web stack — the
-affected side of the API contract is consistent and user-facing flows are green
-e2e; for the iOS stack — UI changes are verified in a simulator or preview and
-concurrency is race-free; for the Android stack — `android-dev` never verifies
-on a device or emulator, so his handoff carries a `Not verified:` line naming
-what needs device coverage. An empty `Not verified:` line means he checked and
-there is nothing to name, not that the question was skipped — `project-manager`
-confirms that rather than assuming it on a UI-affecting Android change. **A
-change touching the Android stack is not done until every gap on that line is
-either closed by `qa-engineer` on an emulator, or explicitly accepted by the
-user with that acceptance recorded on the PR or issue, and, where the line is
-empty on a UI-affecting change, until `project-manager` has confirmed that
-emptiness is a finding rather than an omission.** `project-manager`
-treats an unresolved `Not verified:` line as a routing obligation before merge,
-not as an FYI — the merge gate does not open on "I wrote the code" for Android
-any more than it does for the other stacks.
+A change is done when it builds and its tests pass, plus the rule for each stack it touches:
+
+<!-- roles: python-dev js-dev test-automation-engineer -->
+- **Web:** the affected side of the API contract is consistent and user-facing flows are green e2e.
+<!-- /roles -->
+<!-- roles: ios-dev -->
+- **iOS:** UI changes are verified in a simulator or preview and concurrency is race-free.
+<!-- /roles -->
+<!-- roles: android-dev -->
+- **Android:** `android-dev` never verifies on a device or emulator, so his handoff carries a
+  `Not verified:` line naming what needs device coverage. An empty `Not verified:` line means he checked and
+  there is nothing to name, not that the question was skipped — `project-manager`
+  confirms that rather than assuming it on a UI-affecting Android change. **A
+  change touching the Android stack is not done until every gap on that line is
+  either closed by `qa-engineer` on an emulator, or explicitly accepted by the
+  user with that acceptance recorded on the PR or issue, and, where the line is
+  empty on a UI-affecting change, until `project-manager` has confirmed that
+  emptiness is a finding rather than an omission.** `project-manager`
+  treats an unresolved `Not verified:` line as a routing obligation before merge,
+  not as an FYI — the merge gate does not open on "I wrote the code" for Android
+  any more than it does for the other stacks.
+<!-- /roles -->
 
 ## Waiting on slow steps (all roles)
 
@@ -125,7 +137,8 @@ what you have (`blocked`, with the step's state). Don't spin.
 ## Agent memory — two layers
 
 **`.agents/knowledge/`** — distilled, cross-role, **verified** facts about this project. Committed
-and reviewed. Read its `README.md` before starting, plus the folder covering what you are touching.
+and reviewed. If it exists, read its `README.md` before starting, plus the folder covering what you are
+touching. If it does not exist yet, the layer is empty; the `knowledge-curation` skill bootstraps it.
 
 **`.agents/memory/<role>/`** — your own working notes and daily log. Unreviewed and per-role, so
 anything another role needs does not belong there. Whether it is committed is the project's choice,

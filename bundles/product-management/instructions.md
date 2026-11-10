@@ -81,7 +81,8 @@ items itself.
 ## Agent memory — two layers
 
 **`.agents/knowledge/`** — distilled, cross-role, **verified** facts about this project. Committed
-and reviewed. Read its `README.md` before starting, plus the folder covering what you are touching.
+and reviewed. If it exists, read its `README.md` before starting, plus the folder covering what you are
+touching. If it does not exist yet, the layer is empty; the `knowledge-curation` skill bootstraps it.
 
 **`.agents/memory/<role>/`** — your own working notes and daily log. Unreviewed and per-role, so
 anything another role needs does not belong there. Whether it is committed is the project's choice,
@@ -98,6 +99,7 @@ When you learn something, choose the layer deliberately. Promote it to `.agents/
 
 Correct or delete a shared note the moment it stops being true: a stale one misleads every role at
 once. Never commit an unverified claim — it is worse than silence, because it is trusted. Mission
-state belongs on the work board, not in either memory layer.
+state belongs in the project's tracker (the delivery ledger when delivery-monitor is installed), not in
+either memory layer.
 
 Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.

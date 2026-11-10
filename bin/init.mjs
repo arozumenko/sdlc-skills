@@ -71,6 +71,7 @@ import {
   buildBriefingPlan,
   composeBriefing,
   briefingDescription,
+  filterRoleSections,
 } from "./lib/factory-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
@@ -553,7 +554,7 @@ function installInstructions(factory) {
     console.log(`      ! instructions (missing in factory: ${factory.instructions})`);
     return;
   }
-  const body = readFileSync(src, "utf8");
+  const body = filterRoleSections(readFileSync(src, "utf8"), installedRoleNames(CWD));
   for (const [file, createIfMissing] of [["AGENTS.md", true], ["CLAUDE.md", false]]) {
     const status = spliceFactoryBlock(join(CWD, file), factory.id, body, createIfMissing);
     if (status === "absent") console.log(`      — instructions ${file} (not present; skipped)`);
@@ -628,7 +629,8 @@ export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, s
         results.push({ file, id, status: "no instructions in factory; left as-is" });
         continue;
       }
-      results.push({ file, id, status: spliceFactoryBlock(filePath, id, readFileSync(src, "utf8"), false) });
+      const body = filterRoleSections(readFileSync(src, "utf8"), installedRoleNames(cwd));
+      results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
     }
   }
   return results;
@@ -795,6 +797,14 @@ export function readInstalledAgents(agentsDir) {
     }
   }
   return [...byName.keys()].sort().map((name) => ({ name, file: byName.get(name) }));
+}
+
+// Roles installed in a project, across every host's agents dir. Feeds
+// filterRoleSections; [] (nothing installed yet) keeps every section.
+export function installedRoleNames(cwd = CWD) {
+  const names = new Set();
+  for (const t of TARGETS) for (const n of listInstalledAgentNames(join(cwd, t.dir, "agents"))) names.add(n);
+  return [...names].sort();
 }
 
 export function listInstalledAgentNames(agentsDir) {
