@@ -130,19 +130,17 @@ export function filterRoleSections(body, roles) {
   const OPEN = /^<!-- roles:\s*(.+?)\s*-->\s*$/, CLOSE = /^<!-- \/roles -->\s*$/;
   // CommonMark fences: up to 3 spaces of indent, a run of 3+ ` or ~. The closer
   // uses the same character, is at least as long, and carries nothing else.
-  const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
   const lines = body.split("\n");
   // Classify each line once; markers count only outside fences.
   const kind = []; let fence = null;
   for (const l of lines) {
     if (fence) {
-      const c = l.match(/^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/);
-      if (c && c[1][0] === fence[0] && c[1].length >= fence.length) fence = null;
+      if (closesFence(l, fence)) fence = null;
       kind.push("text");
       continue;
     }
-    const f = l.match(FENCE_OPEN);
-    if (f && !(f[1][0] === "`" && l.slice(l.indexOf(f[1]) + f[1].length).includes("`"))) { fence = f[1]; kind.push("text"); continue; }
+    const f = fenceOpener(l);
+    if (f) { fence = f[1]; kind.push("text"); continue; }
     kind.push(OPEN.test(l) ? "open" : CLOSE.test(l) ? "close" : "text");
   }
   const out = [];
@@ -158,6 +156,57 @@ export function filterRoleSections(body, roles) {
     const wanted = lines[i].match(OPEN)[1].split(/[\s,]+/).filter(Boolean);
     if (keepAll || wanted.some((r) => roles.includes(r))) out.push(...lines.slice(i + 1, close));
     i = close;
+  }
+  return out.join("\n").replace(/(\r?\n){3,}/g, "$1$1");
+}
+
+// CommonMark fence opener (same rule as filterRoleSections): up to 3 spaces,
+// 3+ backticks or tildes; a backtick fence's info string may not contain a backtick.
+export function fenceOpener(l) {
+  const f = l.match(/^ {0,3}(`{3,}|~{3,})/);
+  if (!f || (f[1][0] === "`" && l.slice(l.indexOf(f[1]) + f[1].length).includes("`"))) return null;
+  return f;
+}
+export function closesFence(l, fence) {
+  const c = l.match(/^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/);
+  return !!c && c[1][0] === fence[0] && c[1].length >= fence.length;
+}
+
+// Level-2 headings (`## …`) of a markdown body, outside code fences.
+function sectionHeadings(body) {
+  const out = []; let fence = null;
+  for (const l of body.split("\n")) {
+    const f = fenceOpener(l);
+    if (fence) { if (closesFence(l, fence)) fence = null; continue; }
+    if (f) { fence = f[1]; continue; }
+    const h = l.match(/^## (.+?)\s*$/);
+    if (h) out.push(h[1]);
+  }
+  return out;
+}
+
+// Several factories ship the same team-wide section (e.g. "Agent memory — two
+// layers"). When more than one factory block sits in one file, the first block
+// that carries a heading keeps it and later blocks drop their copy, so a
+// two-factory repo reads it once. `earlierBlocks` is the text of the managed
+// blocks placed BEFORE this one; a block never drops a section because of a
+// block after it, so refreshing blocks in any order gives the same file.
+export function dropSectionsAlreadyIn(body, earlierBlocks) {
+  const seen = new Set(sectionHeadings(earlierBlocks));
+  if (seen.size === 0) return body;
+  const lines = body.split("\n"), out = [];
+  let fence = null, skipping = false;
+  for (const l of lines) {
+    const f = fenceOpener(l);
+    if (fence) {
+      if (closesFence(l, fence)) fence = null;
+    } else if (f) {
+      fence = f[1];
+    } else {
+      const h = l.match(/^(#{1,2}) (.+?)\s*$/);
+      if (h) skipping = h[1] === "##" && seen.has(h[2]);
+    }
+    if (!skipping) out.push(l);
   }
   return out.join("\n").replace(/(\r?\n){3,}/g, "$1$1");
 }
