@@ -72,6 +72,9 @@ import {
   composeBriefing,
   briefingDescription,
   filterRoleSections,
+  dropSectionsAlreadyIn,
+  fenceOpener,
+  closesFence,
 } from "./lib/factory-selection.mjs";
 import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-resolver.mjs";
 import { extractSkillMdName } from "./lib/skill-md.mjs";
@@ -522,7 +525,8 @@ function installSeed(factory, update) {
     }
     const destPath = join(CWD, dest);
     if (existsSync(destPath) && !update) {
-      console.log(`      — seed ${dest} (exists; use --update)`);
+      const added = seedMissingFiles(srcPath, destPath);
+      console.log(`      — seed ${dest} (exists; use --update)${added ? ` — added ${added} new file(s)` : ""}`);
       skipped++;
       continue;
     }
@@ -533,6 +537,24 @@ function installSeed(factory, update) {
     installed++;
   }
   return { installed, skipped };
+}
+
+// Copy files a factory seed ships that the project's copy lacks; never
+// overwrites. A factory can move text out of its instructions into a new seeded
+// doc, and the refreshed instructions point at it, so the doc must arrive even
+// on runs that otherwise leave an existing seed directory alone.
+export function seedMissingFiles(srcPath, destPath) {
+  let added = 0;
+  let st;
+  try { st = statSync(srcPath); } catch { return 0; }
+  if (!st.isDirectory()) {
+    if (existsSync(destPath)) return 0;
+    mkdirSync(dirname(destPath), { recursive: true });
+    copyTreeDereferenced(srcPath, destPath, { force: false });
+    return 1;
+  }
+  for (const name of readdirSync(srcPath)) added += seedMissingFiles(join(srcPath, name), join(destPath, name));
+  return added;
 }
 
 // Splice a factory's instructions.md into the project's root context files
@@ -565,8 +587,8 @@ function installInstructions(factory) {
 function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   const start = `<!-- FACTORY:${id} START -->`;
   const end = `<!-- FACTORY:${id} END -->`;
-  const block = `${start}\n${body.trim()}\n${end}`;
   if (!existsSync(filePath)) {
+    const block = `${start}\n${body.trim()}\n${end}`;
     if (!createIfMissing) return "absent";
     const title = basename(filePath, ".md");
     writeFileSync(filePath, `# ${title}\n\n${block}\n`);
@@ -582,13 +604,51 @@ function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   const startRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} START -->`;
   const endRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} END -->`;
   const re = new RegExp(`${startRe}[\\s\\S]*?${endRe}`);
+  const block = `${start}\n${body.trim()}\n${end}`;
   if (re.test(text)) {
-    const updated = text.replace(re, block);
+    const updated = dedupeFactoryBlocks(text.replace(re, () => block));
     if (updated !== text) writeFileSync(filePath, updated);
     return "refreshed";
   }
-  writeFileSync(filePath, text.replace(/\n*$/, "\n\n") + block + "\n");
+  writeFileSync(filePath, dedupeFactoryBlocks(text.replace(/\n*$/, "\n\n") + block + "\n"));
   return "appended";
+}
+
+// Several factories ship the same team-wide section (e.g. "Agent memory — two
+// layers"). Walk the managed blocks in file order and drop from each block any
+// `## ` section an earlier block already carries, so a multi-factory project
+// reads it once. It runs over the whole file after every splice, so the result
+// depends only on the blocks' current content and order, not on which factory
+// was refreshed first; on an already-deduped file it changes nothing.
+export function dedupeFactoryBlocks(text) {
+  // Line-based so markers inside code fences (documentation examples) are not
+  // treated as managed blocks, and CRLF files are handled like LF ones.
+  const lines = text.split("\n");
+  const START = /^<!-- (?:BUNDLE|FACTORY):([A-Za-z0-9._-]+) START -->\r?$/;
+  const out = [];
+  let earlier = "", fence = null;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (fence) { if (closesFence(l, fence)) fence = null; out.push(l); continue; }
+    const f = fenceOpener(l);
+    if (f) { fence = f[1]; out.push(l); continue; }
+    const m = l.match(START);
+    const endRe = m && new RegExp(`^<!-- (?:BUNDLE|FACTORY):${m[1].replace(/\./g, "\\.")} END -->\\r?$`);
+    let j = -1;
+    for (let k = i + 1, inner = null; m && k < lines.length; k++) {
+      if (inner) { if (closesFence(lines[k], inner)) inner = null; continue; }
+      const g = fenceOpener(lines[k]);
+      if (g) { inner = g[1]; continue; }
+      if (endRe.test(lines[k])) { j = k; break; }
+    }
+    if (j === -1) { out.push(l); continue; }
+    const body = lines.slice(i + 1, j).join("\n");
+    const kept = dropSectionsAlreadyIn(body, earlier).replace(/(\r?\n)+$/, "");
+    earlier += "\n" + kept;
+    out.push(l, ...(kept ? [kept] : []), lines[j]);
+    i = j;
+  }
+  return out.join("\n");
 }
 
 // Factory ids of the managed blocks already in a root context file, in file
@@ -632,6 +692,7 @@ export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, s
       const raw = readFileSync(src, "utf8");
       if (onlyRoleFiltered && !/^<!-- roles:/m.test(raw)) continue;
       const body = filterRoleSections(raw, installedRoleNames(cwd));
+      for (const [src, dest] of Object.entries(manifest.seed || {})) seedMissingFiles(join(dir, src), join(cwd, dest));
       results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
     }
   }

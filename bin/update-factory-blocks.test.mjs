@@ -64,7 +64,7 @@ function assertRefreshed(root) {
   // Old BUNDLE marker migrates to FACTORY with the current body.
   assert.ok(!agents.includes("<!-- BUNDLE:feature-development"), "old marker migrated");
   assert.ok(agents.includes(`<!-- FACTORY:feature-development START -->\n${instructions("feature-development")}\n<!-- FACTORY:feature-development END -->`));
-  assert.match(agents, /Delivery tracking \(delivery-monitor\)/);
+  assert.match(agents, /^## Delivery tracking$/m);
   assert.ok(!agents.includes("stale feature-development rules"));
   // Text outside the markers and unknown factories' blocks are preserved.
   assert.ok(agents.startsWith("# AGENTS\n\nProject text above.\n\n"));

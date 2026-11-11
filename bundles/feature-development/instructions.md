@@ -155,31 +155,12 @@ When you learn something, choose the layer deliberately. Promote it to `.agents/
 
 Correct or delete a shared note the moment it stops being true: a stale one misleads every role at
 once. Never commit an unverified claim — it is worse than silence, because it is trusted. Mission
-state belongs in the delivery ledger (see Delivery tracking), not in either memory layer.
+state belongs in the project's tracker (the delivery ledger when delivery tracking is enabled), not in
+either memory layer.
 
 Use the `memory` skill for the per-role layer and `knowledge-curation` for the shared one.
 
-## Delivery tracking (delivery-monitor)
+## Delivery tracking
 
-Four moments, all recorded — never estimated:
-
-1. **Register before the first dispatch.** The tech-lead's plan block is
-   registered (`delivery.mjs plan register`) before any task of it is
-   dispatched. Inside Claude Code that also binds the calling session to the
-   run. Whichever session orchestrates the dispatches must be bound: if it did
-   not register the plan, it runs `delivery.mjs session set <run>` first. The
-   opt-in Claude hook records dispatch starts only for a bound session, and a
-   start that was not recorded is lost — backfill cannot recover it.
-2. **Record** every merge, landing or cancellation at the moment it happens
-   (`delivery.mjs event … done --sha <merge sha>`) — the PM, or the
-   orchestrator when no PM runs. Work that landed no commit (infra, a QA
-   run, a gate) is recorded without `--sha` and stamped now — never with
-   some other commit's sha.
-3. **Read** the report at mission close (`delivery.mjs report`).
-4. **Close** the plan at campaign close, after the last landing
-   (`delivery.mjs plan close <run>`). `status` flags an open plan whose
-   items are all finished.
-
-History that predates the ledger comes from `backfill --git`/`--pr`. Mission
-state lives in this ledger (`.agents/telemetry/delivery/`), not in either
-memory layer.
+Register the plan (`delivery.mjs plan register`) **before the first dispatch** and record every
+merge or landing at the moment it happens; the full rules are in the `delivery-monitor` skill.
