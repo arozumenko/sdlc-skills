@@ -55,6 +55,29 @@ const excludedItem = (i) => invalidChain(i) || deferredEpisode(i) || proxyComple
 const throughputExcluded = (i) => invalidChain(i) || proxyCompletion(i);
 const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length, unknown: arr.length });
 
+/** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
+ * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
+function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
+  const tier = chosen.tier ?? null;
+  const keys = ['usd:all', ...(i.class ? [`usd:${i.class}`] : []), ...(tier ? [`usd:tier:${tier}`] : []), ...(i.effort_class ? [`usd:effort:${i.effort_class}`] : [])];
+  const bs = keys.map(eb); bs.forEach((b) => b.n++);
+  const mid = (chosen.low + chosen.high) / 2, actual = i.cost_usd;
+  let reason = null;
+  if (excludedItem(i)) reason = 'excluded_item';
+  // Same timeliness rule as hours: a range accepted at or after the task started is not a forecast (a re-cut or a
+  // retrospective registration would otherwise score itself).
+  else if (chosen.accepted_at != null && i.started_at && Date.parse(chosen.accepted_at) >= Date.parse(i.started_at)) reason = 'late_accepted';
+  else if (actual == null || i.cost_incomplete) reason = 'missing_actual';
+  else if (mid === 0) reason = 'zero_midpoint';
+  const row = { item_id: i.item_id, ref: i.ref, level, class: i.class, effort_class: i.effort_class ?? null, tier, base: estimateBase, estimate: { unit: 'usd', low: chosen.low, high: chosen.high }, actual_s: null, actual_basis: null, actual_usd: actual == null ? null : Number(actual.toPrecision(6)), ratio: null, hit: null, reason };
+  if (reason) { bs.forEach((b) => b.excluded[reason]++); data.estimate_rows.push(row); return; }
+  bs.forEach((b) => { b.eligible++; b._aes.push(Math.abs(actual - mid)); b._ratios.push(actual / mid); });
+  if (actual === 0) bs.forEach((b) => b.excluded.zero_actual++); else bs.forEach((b) => b._mres.push(Math.abs(actual - mid) / actual));
+  if (chosen.low === chosen.high) bs.forEach((b) => b.excluded.point++); else { row.hit = actual >= chosen.low && actual <= chosen.high; bs.forEach((b) => { b.hit_rate.ranged++; if (row.hit) b.hit_rate.hits++; }); }
+  row.ratio = Math.round((actual / mid) * 10000) / 10000;
+  data.estimate_rows.push(row);
+}
+
 export function computeMetrics({ items, plan, since, end, profile = {}, estimateBase = 'original', filters = {} }) {
   const zero = profile.zeroDurationSec ?? 60, minWeeks = profile.minWholeWeeks ?? 3;
   const sinceIso = new Date(since).toISOString(), endIso = new Date(end).toISOString();
@@ -134,8 +157,9 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     data.wip[level] = lvAll.filter((i) => i.state === 'in_progress' && !i.cancelled_in_plan).length;
     const est = {}; const eb = (k) => (est[k] ??= emptyEst());
     for (const i of done) {
-      const keys = ['all', ...(i.class ? [i.class] : [])];
       const chosen = estimateBase === 'latest' ? i.estimate_latest : i.estimate_original;
+      if (chosen?.unit === 'usd') { usdAccuracy(i, chosen, level, eb, data, estimateBase); continue; }
+      const keys = ['all', ...(i.class ? [i.class] : [])];
       const tier = chosen?.tier ?? i.estimates[0]?.estimate?.tier ?? null;
       if (tier) keys.push(`tier:${tier}`);
       // F17: joint class|tier stratum in addition to 'all' and the per-class/'tier:' marginals.

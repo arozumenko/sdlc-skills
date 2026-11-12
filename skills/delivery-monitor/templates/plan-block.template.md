@@ -9,10 +9,17 @@ document, next to the task templates from § 3 "Create Technical Tasks". Fill in
   - observation_start          — the first instant evidence for this run should be trusted
   - source_epoch.integration_ref — the branch `backfill --git` is allowed to read
   - campaign.ref / missions[].ref / tasks[].ref — must stay unique within this plan
-  - every "estimate"           — YOU propose {low, high, tier}; leave "accepted_by"/
-                                  "accepted_at" as null — a named human fills those in
-                                  when they accept the range (see references/plan-block.md
-                                  "Acceptance semantics"). Developers never estimate.
+  - tasks[].type / novel / area — classify every task: type feature|bugfix|refactor|test|
+                                  infra|docs; novel true when the team has not worked in
+                                  that area before; area = module/directory (optional).
+                                  These pick the calibration cell the estimate comes from.
+  - task "estimate"            — LEAVE IT OUT when .agents/telemetry/delivery/calibration.json
+                                  exists: plan register fills a calibrated dollar range and
+                                  effort class, already accepted. With no calibration yet,
+                                  propose an hours range {unit "h", low, high, tier} and
+                                  leave "accepted_by"/"accepted_at" null for a named human
+                                  (references/plan-block.md "Acceptance semantics").
+  - mission / campaign "estimate" — hours ranges you propose, as above. Developers never estimate.
   - tasks[].story/class/role/branch — mirror the task template's Story/Complexity/
                                   Assigned-to/branch fields; role must be an installed
                                   agent name (see references/factory-roles.json)
@@ -49,6 +56,8 @@ TASK-003 in G2) — trim or extend the missions[]/tasks[] arrays to match your o
           "story": "US-001",
           "class": "S",
           "role": "js-dev",
+          "type": "feature",
+          "novel": false,
           "branch": "task/task-001",
           "estimate": {"unit": "h", "low": 1, "high": 3, "tier": "budgetary", "proposed_by": "tech-lead", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null}
         },
@@ -57,6 +66,8 @@ TASK-003 in G2) — trim or extend the missions[]/tasks[] arrays to match your o
           "story": "US-001",
           "class": "M",
           "role": "python-dev",
+          "type": "bugfix",
+          "novel": false,
           "branch": "task/task-002",
           "estimate": {"unit": "h", "low": 3, "high": 6, "tier": "budgetary", "proposed_by": "tech-lead", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null}
         }

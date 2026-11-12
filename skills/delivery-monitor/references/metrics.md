@@ -85,7 +85,12 @@ reason that applies and is never double-counted):
 2. `unestimated` — no `estimated` observation at all
 3. `unaccepted` — has an estimate but no `estimate_original` (never had a valid `accepted_by`+`accepted_at` pair)
 4. `no_eligible_latest` — `estimateBase: latest` requested but no accepted estimate qualifies before the item's start/cutoff
-5. `unit_mismatch` — the chosen estimate's unit isn't `h` (e.g. `active_min` — M1 actuals are elapsed time only)
+5. `unit_mismatch` — the chosen estimate's unit isn't `h` (e.g. `active_min` — M1 actuals are elapsed time only).
+   A `usd` estimate is not a mismatch: it is scored against the task's measured cost (`cost_usd`, the sum of its hooked
+   dispatches' priced cost) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
+   `mae_s` is in dollars, rows carry `actual_usd`, and the only reasons are `excluded_item`, `late_accepted` (accepted at or after the task's start), `missing_actual` (no cost, or an
+   unpriced model, an unended hooked dispatch, or — for every task of the run — dispatch cost recorded under an item id the
+   run no longer knows, such as a renamed task's old id), `zero_midpoint`, `zero_actual` and `point`
 6. `clock_skew` — the item's own duration was itself clock-skew-excluded (no reliable actual to compare against)
 7. `missing_actual` — no measured duration at all (item never entered the flow-time population)
 8. `late_accepted` — `accepted_at ≥ started_at` (the estimate was accepted after work began — not a timely commitment)
@@ -103,8 +108,10 @@ estimate's version.
 
 ## Cost
 
-Not computed in M1 — `active_min`/`cost_usd` (spec §6.10 Cost row, §6.12 tokenomics join) are
-parked; `envelope.sources.tokenomics` always reads `"absent"`.
+`cost_usd` per task comes from the Claude dispatch hook itself (not a tokenomics join): each `dispatch_ended` carries the
+dispatch's priced cost, and a task's cost is the sum of its share of every dispatch (fix rounds included). It feeds `usd`
+estimate accuracy (above) and `delivery.mjs calibrate` (`references/plan-block.md` "Calibrated estimates"). Hosts without
+the hook record no cost. `active_min` is still not computed; `envelope.sources.tokenomics` always reads `"absent"`.
 
 ## Outputs
 
@@ -126,7 +133,7 @@ left to apply them to.
 - `work_item_age` / `reopened_age` / `history_age` / `reopen_cycle_time`
 - `scope_to_done` (mission declaration → observed landing, scope-proxy only)
 - `review_rounds` / `first_pass_rate` (needs `review_history` completeness, not derived in M1)
-- `calibration` (`--calibrate`, saved reference snapshots by factory/level/class/episode kind)
-- `active_min` / `cost_usd` (tokenomics join, §6.12)
+- `calibration` by factory/level/episode kind (the `calibrate` command covers task effort in dollars only)
+- `active_min` (tokenomics join, §6.12)
 - the `test-automation` sync adapter (`scope_declared`/`gate_observed`/`outcome_observed` are
   schema-accepted but nothing produces them yet)

@@ -22,7 +22,7 @@ const anyIso = (s) => typeof s === 'string' && !Number.isNaN(Date.parse(s));
 export function validateEstimate(e, at = 'estimate') {
   const errs = [];
   if (!e || typeof e !== 'object') return [`${at}: not an object`];
-  if (!['h', 'active_min'].includes(e.unit)) errs.push(`${at}.unit must be h|active_min`);
+  if (!['h', 'active_min', 'usd'].includes(e.unit)) errs.push(`${at}.unit must be h|active_min|usd`);
   const num = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
   if (!num(e.low)) errs.push(`${at}.low must be a finite number ≥ 0`);
   if (!num(e.high)) errs.push(`${at}.high must be a finite number ≥ 0`);
@@ -84,7 +84,10 @@ const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 
 // identity for an otherwise-unchanged historical observation (obligation F9), so it is deliberately
 // excluded here. `meta.acceptance` IS a fact replay consumes (accepted vs stale-acceptance must never
 // coalesce at the same rank), so it is included (obligation F9).
-const facts = (r) => ({ stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
+// `effort` (hook dispatch_ended only): a re-priced or re-measured dispatch is a different fact, so it revises the record
+// (appendOrRevise) instead of SKIPping against the old cost.
+const effortFact = (a) => (a && 'cost_usd' in a ? { cost_usd: a.cost_usd ?? null, split: a.split ?? null, unpriced: Boolean(a.unpriced_models?.length) } : null);
+const facts = (r) => ({ effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
 export const factKey = (r) => JSON.stringify(sortKeys({ plan: r.plan, item_id: r.item_id, ref: r.ref, level: r.level, event: r.event, transition_id: r.transition_id, basis: r.basis, at: r.at, facts: facts(r) }));
 export const semanticKey = (r) => JSON.stringify(sortKeys({ observation_id: r.observation_id, revision: r.revision, status: r.status, fact: JSON.parse(factKey(r)) }));
 

@@ -65,7 +65,9 @@ before your first dispatch: `node .claude/skills/delivery-monitor/scripts/delive
 session set <run>` (the session id comes from `CLAUDE_CODE_SESSION_ID`).
 Dispatches made before the binding get no recorded start. When the last
 mission of a campaign has landed, close its plan: `delivery.mjs plan close
-<run>`.
+<run>`, then refresh the effort calibration the next plan is estimated from:
+`delivery.mjs calibrate`. Its `OUTLIER` lines name the tasks the estimates
+fit worst; say in the close report why, in one line each.
 
 ## How you communicate with the team
 

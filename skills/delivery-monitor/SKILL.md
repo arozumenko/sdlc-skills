@@ -39,7 +39,18 @@ node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --re
 node .claude/skills/delivery-monitor/scripts/delivery.mjs status
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
+# 6. At plan close: rebuild the effort calibration the next plan is estimated from
+node .claude/skills/delivery-monitor/scripts/delivery.mjs calibrate [--dry-run] [--json] [--half-life 42]
 ```
+
+**Effort calibration (estimate → actual → calibrate).** On Claude Code the dispatch hook prices every finished subagent's tokens
+per model (`references/prices.json`; a project `.agents/telemetry/delivery/prices.json` overrides it) and records the dollar cost
+on `dispatch_ended`. A task's effort is its share of all its dispatches, fix rounds included. `calibrate` turns landed tasks into
+`.agents/telemetry/delivery/calibration.json`: per cell (`role|type|novel`, then coarser, then `all`) the p50/p80 cost, the
+return rate (rework, review returned, reopened) and per-model figures, recency-weighted (half-life 42 days), with effort
+classes E1–E4 learned from the cost quartiles. `plan register` fills every task the plan leaves unestimated with the cell's
+p50–p80 as a `usd` range (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class; `--no-calibrate` skips
+it. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the

@@ -21,6 +21,7 @@ export { validateEstimate };
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const FACTORIES = ['feature-development', 'test-automation', 'manual-qa'];
 const MISSION_KINDS = ['group', 'milestone', 'wave', 'batch', 'run'];
+export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'test', 'infra', 'docs'];
 const iso = (s) => typeof s === 'string' && !Number.isNaN(Date.parse(s));
 const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 const slugify = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -72,6 +73,11 @@ export function validatePlan(p) {
       seeRef(t.ref, `mission ${m.ref} task`); seeId(t, `task ${t.ref}`);
       if (t.story != null && !/^US-\d+$/.test(t.story)) errs.push(`task ${t.ref}: story must match US-<n>`);
       if (t.estimate) errs.push(...validateEstimate(t.estimate, `task ${t.ref}.estimate`));
+      // Calibration features (all optional): what the work is, where, and whether the area is new to the team.
+      if (t.type != null && !TASK_TYPES.includes(t.type)) errs.push(`task ${t.ref}: type must be ${TASK_TYPES.join('|')}`);
+      if (t.area != null && (typeof t.area !== 'string' || !t.area.trim())) errs.push(`task ${t.ref}: area must be a non-empty string`);
+      if (t.novel != null && typeof t.novel !== 'boolean') errs.push(`task ${t.ref}: novel must be true|false`);
+      if (t.effort_class != null && !/^E[1-4]$/.test(t.effort_class)) errs.push(`task ${t.ref}: effort_class must be E1|E2|E3|E4 (set by calibration)`);
     }
   }
   if (p.branch_prefix != null && !(typeof p.branch_prefix === 'string' ? p.branch_prefix : Array.isArray(p.branch_prefix) && p.branch_prefix.length && p.branch_prefix.every((x) => typeof x === 'string' && x))) errs.push('branch_prefix must be a non-empty string or a non-empty array of non-empty strings');
@@ -120,7 +126,8 @@ export function validateIds(p) {
 export function toCatalogue(p, { version }) {
   const rows = [];
   const row = (o, level, parent) => rows.push({ item_id: o.item_id, ref: o.ref, level, parent_item_id: parent, story: o.story ?? null, class: o.class ?? null, role: o.role ?? null,
-    branch: o.branch ?? null, sequence: o.sequence ?? null, estimate: o.estimate ?? null, version_added: version, cancelled: false });
+    branch: o.branch ?? null, sequence: o.sequence ?? null, estimate: o.estimate ?? null, version_added: version, cancelled: false,
+    type: o.type ?? null, area: o.area ?? null, novel: o.novel ?? null, effort_class: o.effort_class ?? null });
   row(p.campaign, 'campaign', null);
   for (const m of p.missions ?? []) { row(m, 'mission', p.campaign.item_id); for (const t of m.tasks ?? []) row(t, 'task', m.item_id); }
   return rows;

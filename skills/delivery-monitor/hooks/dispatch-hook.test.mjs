@@ -329,7 +329,12 @@ test('handleStop: a resumed agent sent another task → task-crossing diagnostic
   assert.equal(r.diagnostic, 'task-crossing');
   const obs = resolveObservations(repo).active.filter((o) => o.agentId === 'agent-40');
   assert.deepEqual([...new Set(obs.map((o) => o.ref))], ['TASK-023'], 'the hook flags, it does not split one transcript across tasks');
-  assert.deepEqual(obs.find((o) => o.event === 'dispatch_ended').meta.agent, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1, follow_ups: 1 });
+  const agent = obs.find((o) => o.event === 'dispatch_ended').meta.agent;
+  const { usage: u, cost_usd, unpriced_models, split, ...profile } = agent;
+  assert.deepEqual(profile, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1, follow_ups: 1 });
+  // Fixture rows carry no model id: usage is still counted (deduplicated by message id), but nothing is priced and that is said.
+  assert.deepEqual(u, { unknown: { input: 20, output: 0, cache_write: 0, cache_write_1h: 0, cache_read: 759_980 } });
+  assert.equal(cost_usd, 0); assert.deepEqual(unpriced_models, ['unknown']); assert.equal(split, 1);
   const lines = () => diagLines(repo).filter((d) => d.kind === 'task-crossing');
   assert.equal(lines().length, 1); assert.match(lines()[0].detail, /TASK-034 after its first task \(TASK-023\)/);
   handleStop(p, { repo, now: NOW + 1000 }); assert.equal(lines().length, 1, 'a later stop of the same agent adds no second line');

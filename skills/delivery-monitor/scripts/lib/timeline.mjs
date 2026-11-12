@@ -66,6 +66,7 @@ export function estimateLatest(es, before) {
 }
 
 const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent_item_id: i.parent_item_id ?? null, class: i.class ?? null, role: i.role ?? null, story: i.story ?? null, sequence: i.sequence ?? null,
+  type: i.type ?? null, area: i.area ?? null, novel: i.novel ?? null, effort_class: i.effort_class ?? null, cost_usd: null, cost_by_model: {}, cost_agents: 0, cost_incomplete: false, last_done_at: null, last_done_basis: null, last_reopen_at: null,
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, created_source: null, estimates: [], estimate_original: null, estimate_latest: null,
   scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, start_source: null, first_commit_at: null,
   first_commit_source: null, done_at: null, done_basis: null, done_sha: null, done_source: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, proxy_dispatches: 0, rework_count: 0,
@@ -105,19 +106,38 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         // F12: `done_basis` reflects the occurrence's own basis (a proxy `done` stays a proxy) —
         // it is never hard-coded to 'observed', so downstream consumers can tell measured
         // completions from proxy evidence instead of every task done being promoted silently.
-        if (!it.done_at) { it.done_at = o.at; it.done_basis = o.basis; it.done_sha = o.meta.git_sha ?? null; it.done_source = o.source; } it.state = 'done'; break;
+        if (!it.done_at) { it.done_at = o.at; it.done_basis = o.basis; it.done_sha = o.meta.git_sha ?? null; it.done_source = o.source; } it.state = 'done'; it.last_done_at = o.at; it.last_done_basis = o.basis; break;
       case 'cancelled':
         if (it.state === 'done' && !it.reopened) { if (!it.flags.includes('invalid-chain')) { it.flags.push('invalid-chain'); counts.invalidChains++; } break; }
         if (!it.cancelled_at) it.cancelled_at = o.at; if (it.state !== 'done') it.state = 'cancelled'; break;
-      case 'reopened': if (!it.reopened) { it.reopened = true; it.flags.push('deferred-episode'); counts.deferredEpisodes++; } break;
+      case 'reopened': it.last_reopen_at = o.at; if (!it.reopened) { it.reopened = true; it.flags.push('deferred-episode'); counts.deferredEpisodes++; } break;
       // Research-09: the hook (fix dispatch) and `backfill --git` ("address review N" commit) both
       // witness the same rework episode. A git rework whose commit falls inside a hook fix-dispatch
       // span (open or closed) for this item is that episode, not a second one — counted once.
       case 'rework_observed': if (!(o.source === 'git' && it.fix_spans.some((sp) => o.at >= sp.from && (sp.to == null || o.at <= sp.to)))) it.rework_count++; break;
-      case 'dispatch_ended': { const sp = it.hook_spans.find((x) => x.to == null && (x.agent == null || x.agent === (o.agentId ?? null))); if (sp) sp.to = o.at; break; }
+      case 'dispatch_ended': {
+        const sp = it.hook_spans.find((x) => x.to == null && (x.agent == null || x.agent === (o.agentId ?? null))); if (sp) sp.to = o.at;
+        // Effort: this item's share of the dispatch's dollar cost (split across the items the dispatch was attributed to).
+        // A dispatch with no cost (recorded before pricing, or by an older hook) or with a malformed one makes the item's total
+        // incomplete: it is kept for display but never trained on or scored, so a rollout never mistakes part of a task for all of it.
+        const ag = o.meta.agent;
+        const valid = ag && Number.isFinite(ag.cost_usd) && ag.cost_usd >= 0 && Number.isInteger(ag.split) && ag.split >= 1;
+        if (!valid) { it.cost_incomplete = true; break; }
+        {
+          const share = ag.cost_usd / ag.split;
+          it.cost_usd = (it.cost_usd ?? 0) + share; it.cost_agents++;
+          if (ag.unpriced_models?.length) it.cost_incomplete = true;
+          // Zero-token host rows (`<synthetic>`) do not make a dispatch multi-model.
+          const models = Object.entries(ag.usage ?? {}).filter(([, u]) => Object.values(u ?? {}).some((v) => v > 0)).map(([m]) => m); if (models.length === 1) it.cost_by_model[models[0]] = (it.cost_by_model[models[0]] ?? 0) + share;
+          else if (models.length) it.cost_by_model.mixed = (it.cost_by_model.mixed ?? 0) + share;
+        }
+        break;
+      }
       default: if (DEFERRED.has(o.event)) { it.deferred_events++; counts.deferredEvents++; }
     }
   }
+  // A hooked dispatch that never ended has an unmeasured share: the item's cost total is incomplete.
+  for (const it of items.values()) if (it.hook_spans.some((sp) => sp.to == null)) it.cost_incomplete = true;
   for (const it of items.values()) { it.estimates.sort((a, b) => a.revision - b.revision); it.estimate_original = estimateOriginal(it.estimates); }
   for (const level of ['mission', 'campaign']) {
     for (const it of items.values()) {
