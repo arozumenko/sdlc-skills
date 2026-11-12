@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { deliveryDir, nowIso, sessionPath, sessionsDir, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
+import { costOf, loadPricesChecked } from '../scripts/lib/cost.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
 import { validRoster } from '../scripts/lib/roster.mjs';
@@ -77,7 +78,7 @@ const NOT_AUTHORED = [/^<command-/, /^\[SYSTEM NOTIFICATION/, /^<task-notificati
 const isFollowUp = (r, text) => (r.origin?.kind === 'coordinator' && text.trim().length > 0) || !r.isMeta && !r.isCompactSummary && !r.isVisibleInTranscriptOnly && text.trim() && !NOT_AUTHORED.some((re) => re.test(text.trimStart()));
 const contextOf = (u) => (u ? (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) : 0);
 export function parseTranscript(path) {
-  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false, followUps: [], stats: { turns: 0, turns_over_500k: 0, max_context: 0, compactions: 0 } };
+  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false, followUps: [], stats: { turns: 0, turns_over_500k: 0, max_context: 0, compactions: 0 }, usage: {} };
   let text; try { text = readFileSync(path, 'utf8'); } catch { return out; }
   const lines = text.split('\n');
   // F13 (review round): a torn/truncated FINAL line means the write is mid-flight, and the
@@ -88,7 +89,7 @@ export function parseTranscript(path) {
   for (let i = lines.length - 1; i >= 0; i--) { if (lines[i].trim()) { lastNonBlank = i; break; } }
   let tornTail = false;
   if (lastNonBlank >= 0) { try { JSON.parse(lines[lastNonBlank]); } catch { tornTail = true; } }
-  let sawUser = false, lastRecord = null, lastRecordTs = null; const seen = new Set();
+  let sawUser = false, lastRecord = null, lastRecordTs = null; const seen = new Set(), msgUsage = new Map();
   for (const line of lines) {
     if (!line.trim()) continue;
     let r; try { r = JSON.parse(line); } catch { continue; } // malformed/torn lines contribute no evidence to lastRecord
@@ -102,10 +103,20 @@ export function parseTranscript(path) {
       else if (isFollowUp(r, ut)) out.followUps.push({ at: r.timestamp ?? null, text: ut });
       if (r.isCompactSummary) out.stats.compactions++;
     } else if (r.type === 'assistant' && r.message?.usage) {
-      const id = r.message.id ?? r.requestId; if (id && seen.has(id)) continue; if (id) seen.add(id);
+      const id = r.message.id ?? r.requestId;
+      // Per-model token usage for pricing. One API message is written as several records while it streams, and its usage
+      // grows (output 1 → 1,000): keep the largest value of each counter per message id, summed after the pass.
+      const u = r.message.usage, m = `${r.message.model ?? 'unknown'}${u.speed === 'fast' ? '#fast' : ''}`;
+      const w1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+      const cur = { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cache_write: Math.max(0, (u.cache_creation_input_tokens ?? 0) - w1h), cache_write_1h: w1h, cache_read: u.cache_read_input_tokens ?? 0 };
+      const key = id ?? `line-${out.records}`, prev = msgUsage.get(key);
+      msgUsage.set(key, { m, u: prev ? Object.fromEntries(Object.keys(cur).map((k) => [k, Math.max(cur[k], prev.u[k])])) : cur });
+      if (id && seen.has(id)) continue; if (id) seen.add(id);
       const ctx = contextOf(r.message.usage); out.stats.turns++; if (ctx > CONTEXT_HEAVY) out.stats.turns_over_500k++; if (ctx > out.stats.max_context) out.stats.max_context = ctx;
     }
   }
+  // 1-hour cache writes are billed at 2× input, 5-minute writes at 1.25×: kept apart so the price is right.
+  for (const { m, u } of msgUsage.values()) { const acc = (out.usage[m] ??= { input: 0, output: 0, cache_write: 0, cache_write_1h: 0, cache_read: 0 }); for (const k of Object.keys(acc)) acc[k] += u[k]; }
   // Completion requires the LAST timestamped (well-formed) record — not merely some earlier non-user
   // record — to be real completion evidence, AND the file's actual last line must itself have parsed
   // (`!tornTail`); a progress row, or a torn trailing line after real evidence, leaves `complete`
@@ -220,6 +231,14 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
     diagnostic = diagnostic ?? kind;
   }
   const common = { user: null, host: 'claude', plan: run.run, source: 'hook', source_record_id: `claude:${payload.session_id}:${payload.agent_id}`, session: payload.session_id, agentId: payload.agent_id, role };
+  // Effort for calibration: per-model usage and its dollar cost. `split` = how many items this one dispatch is attributed to,
+  // so a reader charges each item cost_usd / split and a two-task dispatch is never counted twice.
+  // A broken price table (an unreadable project override) must not quietly price at list: the dispatch is marked unpriced, so
+  // its task is left out of calibration and cost accuracy instead of being trained on the wrong scale.
+  const { prices, problem } = loadPricesChecked(repo);
+  const priced = costOf(tr.usage, prices);
+  const unpriced = [...priced.unpriced, ...(problem ? ['<prices-unreadable>'] : [])];
+  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length) };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
     const label = it ? (capturePrompts(repo) ? description.slice(0, 120) : `${it.ref} ${stage}`) : stage;
@@ -227,7 +246,7 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
     const key = it ? it.item_id : 'unattributed';
     const mk = (event, at, extra = {}) => makeObservation({ ...common, ...base, label, event, at, transition_id: `${key}/${event}/${payload.agent_id}`, meta: { ...base.meta, ...extra } }, { now });
     wrote.push(appendOrRevise(repo, mk('dispatched', tr.firstTs), { slug, now }));
-    if (tr.complete) wrote.push(appendOrRevise(repo, mk('dispatch_ended', tr.lastTs, { agent: { ...tr.stats, follow_ups: tr.followUps.length } }), { slug, now }));
+    if (tr.complete) wrote.push(appendOrRevise(repo, mk('dispatch_ended', tr.lastTs, { agent: { ...tr.stats, follow_ups: tr.followUps.length, ...effort } }), { slug, now }));
     if (it && stage === 'fix') wrote.push(appendOrRevise(repo, mk('rework_observed', tr.firstTs, { round: null }), { slug, now }));
   }
   return { wrote, diagnostic };

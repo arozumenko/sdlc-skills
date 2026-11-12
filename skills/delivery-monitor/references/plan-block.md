@@ -41,7 +41,7 @@ plan); a file that parses as neither is treated as a markdown import candidate (
 | `mission_kind` | `group \| milestone \| wave \| batch \| run` — cosmetic label for what a "mission" means on this plan |
 | `campaign` | `{ref (required), item_id?, estimate?}` — the plan's single root item |
 | `missions[]` | `{ref (unique), sequence (unique positive int), item_id?, estimate?, tasks[]}` |
-| `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?}` — `role` also steers the Claude hook: a dispatch of that agent type is matched only against the tasks that role owns (its only task takes it outright), so a ref that is an ordinary word (`qa`, `review`) cannot pull it onto another role's task |
+| `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?, type?, area?, novel?, effort_class?}` — `type` is `feature\|bugfix\|refactor\|test\|infra\|docs`, `area` a non-empty string, `novel` a boolean: `role`, `type` and `novel` are the calibration features (`area` is recorded per sample, not used for cells yet) (see "Calibrated estimates" below); `effort_class` (`E1`–`E4`) is written by `plan register` from calibration, not by the planner — `role` also steers the Claude hook: a dispatch of that agent type is matched only against the tasks that role owns (its only task takes it outright), so a ref that is an ordinary word (`qa`, `review`) cannot pull it onto another role's task |
 | `branch_prefix` | optional non-empty string **or** non-empty array of non-empty strings; a head ref must contain any of them (case-insensitive) for this run to be considered at all by branch/PR association. Use an array when a campaign spans two branch-naming eras |
 | `branch_map` | optional array of `{pattern, ref}`; `pattern` is a JS regex string (case-insensitive, named groups), `ref` a template (`T{m}.{t}`, `M{m}`) filled from the groups. Invalid regex or a non-string ref → `SCHEMA-INVALID`. Stored on the run and carried by every re-cut |
 | `supersedes` | optional `{run, item_map}` — see *Re-cut* below |
@@ -70,20 +70,56 @@ in the same document.
 `validateEstimate` (`scripts/lib/events.mjs`, shared by the plan schema and every `estimated`
 ledger record):
 
-- `unit` must be `h` or `active_min` — never a working day or a story point.
+- `unit` must be `h`, `active_min` or `usd` — never a working day or a story point. `usd` is effort: the dollar cost of the
+  task's priced tokens (see "Calibrated estimates").
 - `low`/`high` must be finite numbers ≥ 0, `low ≤ high` (equal bounds are a valid **point**
   estimate — flows through as `point: true`-equivalent in the metrics exclusion set, see
   `references/metrics.md`).
 - `tier` must be `ROM \| budgetary \| calibrated \| unknown`.
 - **`tier: "calibrated"` requires `reference: {path, sha256, population}`** — `path` and
   `population` non-empty, `sha256` exactly 64 hex characters. A calibrated tier with no saved
-  reference is rejected at registration (`SCHEMA-INVALID`); M1 has no `--calibrate` writer yet
-  (see `references/metrics.md` M2+ list), so `calibrated` is only reachable by hand-pointing at a
-  reference snapshot you already trust.
+  reference is rejected at registration (`SCHEMA-INVALID`). `delivery.mjs calibrate` writes the reference
+  (`calibration.json`) and `plan register` fills calibrated estimates from it.
 - `proposed_by` required (any non-empty value); `proposed_at` must be a valid ISO timestamp.
 - `accepted_by`/`accepted_at` are independently nullable, but validated when present:
   `accepted_by` a non-empty string, `accepted_at` a valid ISO timestamp.
 - `probability`, if present, must satisfy `0 < p < 1` — declared, never inferred from tier/prose.
+
+## Calibrated estimates
+
+`delivery.mjs calibrate` reads every landed task (task `done` with basis `observed`, not invalid-chain; a reopened task only
+once its latest landing after the reopen is observed, dated by that landing)
+whose hooked dispatches carry a complete priced cost, and writes `.agents/telemetry/delivery/calibration.json`
+(`scripts/lib/calibrate.mjs`):
+
+- **Effort** per task = Σ over its `dispatch_ended` records of `meta.agent.cost_usd / meta.agent.split` — every dispatch,
+  so fix rounds are in. The total is **incomplete**, and the task is left out of calibration and cost accuracy rather than
+  under-counted, when any of its dispatches has no cost (an older hook), a malformed one (cost not a finite number ≥ 0,
+  split not a positive integer), an unpriced model, or never ended.
+- A task renamed through `supersedes.item_map` keeps the dispatches, rework and returns recorded under its old id (the
+  re-cut's own `created`/`cancelled` for the old id are not carried). If a run has dispatch cost under an id it no longer
+  knows (a rename from a version whose map is gone), the whole run is left out of calibration, and `report` withholds cost
+  accuracy for its tasks.
+- A changed cost for the same dispatch (prices corrected, transcript re-read) is a different fact: the hook writes it as the
+  next revision of that observation, and the highest revision is read.
+- **Cells** at decreasing detail: `role=…|type=…|novel=…`, `role=…|type=…`, `role=…`, `type=…`, `all`. A feature the plan
+  leaves out is skipped, never matched as null. Each cell: `n`, recency-weighted `p50_usd`/`p80_usd` (weight halves every
+  `half_life_days`, default 42, relative to the newest sample), `return_rate` (rework observed, `review_returned` or
+  `reopened`; reopened tasks stay in the sample with both episodes' cost), `effort_class`,
+  `by_model {model: {n, p50_usd, return_rate}}`.
+- **Effort classes** `E1`–`E4` are the cost quartiles of all samples (`class_bounds_usd`), learned once there are 12
+  samples; a cell's class is the class of its p50.
+- `outliers`: the three tasks the table fits worst (largest |log(actual / cell p50)|), for the retro.
+
+`plan register` then fills each task that has no `estimate`: the most specific cell with `n ≥ 5` gives
+`{unit: "usd", low: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
+reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
+so they are accepted at registration with no human step. A task that already carried a calibrated estimate in the previous
+version keeps it on a re-cut. The planner's own estimates are never replaced. A task with no cell of `n ≥ 5` stays
+unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read, parsed, or has no
+`cells` object stops registration with `CALIBRATION-INVALID` (exit 2) rather than silently estimating nothing.
+`--no-calibrate` stops new fills only; a re-cut still keeps earlier calibrated estimates. The
+registration retry digest is computed before the fill, so a retry is still recognised.
 
 ## Acceptance semantics
 
@@ -92,6 +128,11 @@ An estimate only counts toward accuracy once **both** `accepted_by` (a named hum
 authentication (`caveats: acceptance: unauthenticated` is unconditional on every report). An
 estimate missing either field is `unaccepted`: recorded in the ledger, excluded from
 `estimate_original`/accuracy.
+
+**Exception: calibrated estimates.** A `tier: calibrated` range filled by `plan register` carries
+`accepted_by: "calibrate (auto)"` and is accepted at registration. Its numbers are the calibration table's (named by
+`reference.sha256`), not a person's judgement, so there is nothing for a human to accept. The timeliness rule still applies:
+accepted at or after the task's start, it is `late_accepted` and excluded from accuracy, like an hours range.
 
 `estimateChange(prev, next)` (`plan.mjs`) classifies what a re-cut's estimate diff means, per
 item, and drives which `estimated` observations get emitted:

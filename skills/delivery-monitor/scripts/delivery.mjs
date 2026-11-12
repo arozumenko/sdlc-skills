@@ -14,6 +14,8 @@ import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
+import { CALIBRATION_FILE, buildCalibration, collectSamples, fillEstimates, readCalibration } from './lib/calibrate.mjs';
+import { loadPricesChecked } from './lib/cost.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -102,8 +104,14 @@ function cmdPlanRegister(repo, f, io, now) {
   }
   let errs = validatePlan(obj); if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
   const full = assignIds(obj); errs = validateIds(full); if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
+  // The retry digest is taken from the plan as written, before calibrated estimates are filled in, so a retry is recognised
+  // even though the fill stamps the current time.
   const runId = runIdOf(full), digest = sha256(`${token}\n${canonicalHash(full)}`);
   const prev = loadRun(repo, runId);
+  // Tasks the planner left unestimated get a calibrated dollar estimate from calibration.json (if one exists), auto-accepted.
+  // --no-calibrate stops new fills only: a re-cut still keeps the calibrated estimates its tasks were planned with.
+  const calib = f['no-calibrate'] ? null : readCalibration(repo);
+  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
   const { active } = resolveObservations(repo);
   const next = toCatalogue(full, { version: full.version });
 
@@ -188,8 +196,40 @@ function cmdPlanRegister(repo, f, io, now) {
   const conflicts = emitRegistration(repo, io, { run: rec, delta, token, at, createdAtOf: (i) => created[i.item_id], now, active, records: observations });
   const st = next.map((i) => estimateStatus(i.estimate));
   out(io, `PLAN ${runId} v${full.version} items=${next.length} created=${delta.created.length} estimated=${delta.estimated.length} stale-acceptance=${delta.estimated.filter((e) => e.stale).length} cancelled=${delta.cancelled.length} reopened=${delta.reopened.length} accepted=${st.filter((s) => s === 'accepted').length} unaccepted=${st.filter((s) => s === 'unaccepted').length} unestimated=${st.filter((s) => s === 'none').length} scope_removed_delivered=${scopeRemovedDelivered.length}`);
+  if (fill && (calib || fill.kept)) out(io, `CALIBRATED filled=${fill.filled} kept=${fill.kept} planner=${fill.planner} no-cell=${fill.no_cell} (${calib ? `${CALIBRATION_FILE} ${calib.sha256.slice(0, 12)}` : 'no calibration table'})`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
   bindCaller(repo, runId, f, io, now);
+  return 0;
+}
+
+/** `calibrate`: rebuild calibration.json from every landed task's measured cost, and print the table. Run it at plan close;
+ * the next `plan register` reads it. `--dry-run` prints without writing; `--json` prints the file; `--half-life <days>`. */
+function cmdCalibrate(repo, p, io, now) {
+  // Display only: cents above $1, two significant digits below (the file keeps full precision).
+  const usd = (x) => (x == null ? "-" : x >= 1 ? x.toFixed(2) : String(Number(x.toPrecision(2))));
+  const f = p.flags;
+  const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
+  if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
+  // The price table the hook used must be readable; a broken override is reported here rather than ignored.
+  const prices = loadPricesChecked(repo);
+  if (prices.problem) throw cliError('PRICES-INVALID', `${prices.problem}; dispatches priced while it was broken are recorded as unpriced and left out`);
+  const samples = collectSamples(repo, { now });
+  if (!samples.length) throw cliError('NO-EVENTS', 'no landed task with a measured cost yet: the Claude dispatch hook records cost on dispatch_ended');
+  const pricesAsOf = prices.asOf;
+  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
+  const text = `${JSON.stringify(cal, null, 2)}\n`;
+  if (f.json) { io.stdout.write(text); }
+  else {
+    const b = cal.class_bounds_usd;
+    out(io, `CALIBRATION samples=${cal.samples} half-life=${cal.half_life_days}d classes=${b ? `E1<=$${usd(b[0])} E2<=$${usd(b[1])} E3<=$${usd(b[2])} E4>$${usd(b[2])}` : 'none (fewer than 12 samples)'}`);
+    out(io, '| cell | n | p50 $ | p80 $ | return rate | class |'); out(io, '|---|---|---|---|---|---|');
+    for (const [k, c] of Object.entries(cal.cells)) out(io, `| ${k} | ${c.n}${c.n < cal.min_n ? ' (too few)' : ''} | ${usd(c.p50_usd)} | ${usd(c.p80_usd)} | ${c.return_rate} | ${c.effort_class ?? '-'} |`);
+    for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);
+  }
+  if (f['dry-run']) { if (!f.json) out(io, 'DRY-RUN not written'); return 0; }
+  mkdirSync(deliveryDir(repo), { recursive: true });
+  writeFileSync(resolve(deliveryDir(repo), CALIBRATION_FILE), text);
+  if (!f.json) out(io, `WROTE ${resolve(deliveryDir(repo), CALIBRATION_FILE)}`);
   return 0;
 }
 
@@ -501,8 +541,8 @@ function cmdRetract(repo, p, io, now) {
   out(io, `RETRACTED ${retracted}${f['dry-run'] ? ' (dry-run)' : ''}`); return 0;
 }
 
-export const COMMANDS = { plan: cmdPlan, session: cmdSession, event: cmdEvent, retract: cmdRetract, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
-const MUTATING = new Set(['plan', 'session', 'event', 'retract', 'profile', 'backfill']);
+export const COMMANDS = { calibrate: cmdCalibrate, plan: cmdPlan, session: cmdSession, event: cmdEvent, retract: cmdRetract, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
+const MUTATING = new Set(['plan', 'session', 'event', 'retract', 'profile', 'backfill', 'calibrate']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env, gh = null } = {}) {
   const io = { stdout, stderr, gh, env }; const p = parseArgs(argv); const fn = COMMANDS[p.cmd];

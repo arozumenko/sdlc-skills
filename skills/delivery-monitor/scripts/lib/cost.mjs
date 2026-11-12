@@ -1,0 +1,61 @@
+// STDLIB ONLY. Dollar cost of a dispatch's token usage, per model (effort unit for calibration).
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { deliveryDir } from './paths.mjs';
+
+const BUILTIN = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'references', 'prices.json');
+const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
+
+const isPriceTable = (j) => j != null && typeof j === 'object' && j.models != null && typeof j.models === 'object' && !Array.isArray(j.models);
+
+/** Built-in list prices with a project's `.agents/telemetry/delivery/prices.json` (same shape) layered on top, plus what went
+ * wrong reading them. A missing override is normal (`problem: null`); an override that exists but does not parse or has no
+ * `models` object is a problem: the caller must not price with the built-in list as if the override had been applied. */
+export function loadPricesChecked(repo) {
+  const builtin = readJson(BUILTIN);
+  const base = isPriceTable(builtin) ? builtin.models : {};
+  const problem = isPriceTable(builtin) ? null : `built-in ${BUILTIN} unreadable`;
+  const path = repo ? join(deliveryDir(repo), 'prices.json') : null;
+  if (!path) return { prices: base, asOf: builtin?.as_of ?? null, problem };
+  // Read directly: only "no such file" means no override. existsSync is false for a permission error too (e.g. a symlink
+  // into a restricted directory), which would silently fall back to list prices.
+  let text;
+  try { text = readFileSync(path, 'utf8'); } catch (e) {
+    if (e.code === 'ENOENT') return { prices: base, asOf: builtin?.as_of ?? null, problem };
+    return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} unreadable (${e.code ?? e.message})` };
+  }
+  let local = null; try { local = JSON.parse(text); } catch { local = null; }
+  if (!isPriceTable(local)) return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} is not valid JSON with a "models" object` };
+  return { prices: { ...base, ...local.models }, asOf: local.as_of ?? builtin?.as_of ?? null, problem };
+}
+/** Prices only (the checked loader without the problem report). */
+export const loadPrices = (repo) => loadPricesChecked(repo).prices;
+
+/** Model ids in transcripts can carry a date or context suffix (`claude-opus-5-5-20260101`, `…[1m]`). */
+export function priceFor(prices, model) {
+  if (!model) return null;
+  // `<model>#fast` marks fast-mode turns: same model, every rate doubled (Opus 5.5 fast is $8 / $40).
+  if (String(model).endsWith('#fast')) { const p = priceFor(prices, String(model).slice(0, -5)); return p && Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v * 2])); }
+  const id = String(model).replace(/\[.*\]$/, '');
+  if (prices[id]) return prices[id];
+  // Only a dated snapshot of a known id (`<id>-YYYYMMDD`) borrows its price; any other unknown id (a new version such as
+  // `claude-opus-5-9`) stays unpriced rather than guessed.
+  const dated = /^(.*)-\d{8}$/.exec(id);
+  return dated && prices[dated[1]] ? prices[dated[1]] : null;
+}
+
+/** usage: {model: {input, output, cache_write, cache_write_1h, cache_read}} → {cost_usd, unpriced: [models]}. A model with no
+ * price contributes nothing and is listed, so a partial cost is never mistaken for a complete one. cost_usd is rounded to
+ * the micro-dollar (6 decimal places). */
+export function costOf(usage, prices) {
+  let total = 0; const unpriced = [];
+  for (const [model, u] of Object.entries(usage ?? {})) {
+    // Host-generated rows (Claude Code's `<synthetic>` model) carry no tokens: nothing to price, and not an unpriced gap.
+    if (!Object.values(u ?? {}).some((v) => v > 0)) continue;
+    const p = priceFor(prices, model);
+    if (!p) { unpriced.push(model); continue; }
+    total += ((u.input ?? 0) * p.input + (u.output ?? 0) * p.output + (u.cache_write ?? 0) * p.cache_write + (u.cache_write_1h ?? 0) * (p.cache_write_1h ?? p.input * 2) + (u.cache_read ?? 0) * p.cache_read) / 1e6;
+  }
+  return { cost_usd: Math.round(total * 1e6) / 1e6, unpriced };
+}

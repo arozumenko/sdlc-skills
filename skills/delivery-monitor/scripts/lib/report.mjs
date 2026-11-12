@@ -168,6 +168,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     const r = f.rec;
     const occ = occurrences.filter((o) => o.plan === r.run && known.get(r.run).has(o.item_id));
     const { items, counts } = buildTimelines({ occurrences: occ, plan: r, end });
+    // Dispatch cost recorded under an id this run no longer knows (a rename in any earlier version) belongs to some task this
+    // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
+    if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) it.cost_incomplete = true;
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
     const metrics = computeMetrics({ items, plan: r, since: sinceIso, end, profile, estimateBase, filters });
@@ -335,9 +338,9 @@ export function renderMarkdown(doc) {
     L.push('', '## Estimates', '', '| level | stratum | n | eligible | work_ratio median | MdMRE | PRED(25) | MAE | hit_rate | excluded |', '|---|---|---|---|---|---|---|---|---|---|');
     for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
       const ex = excludedStr(x.excluded) || '—';
-      L.push(`| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${ex} |`);
+      L.push(`| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : st.startsWith('usd:') ? `$${Math.round(x.mae_s * 100) / 100}` : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${ex} |`);
     }
-    if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? `[${r.estimate.low}, ${r.estimate.high}]` : '—'} | ${h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
+    if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h or $) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? (r.estimate.unit === 'usd' ? `[$${r.estimate.low}, $${r.estimate.high}]` : `[${r.estimate.low}, ${r.estimate.high}]`) : '—'} | ${r.estimate?.unit === 'usd' ? (r.actual_usd == null ? '—' : `$${r.actual_usd}`) : h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
     for (const sv of m.schedule_variance) L.push(`- schedule_variance ${sv.level} ${sv.ref}: actual ${h(sv.actual_s)} vs [${sv.estimate.low}, ${sv.estimate.high}] → [${toHours(sv.band.vs_high_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_high_s)}h, ${toHours(sv.band.vs_low_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_low_s)}h]; scope added ${sv.scope.added}, removed ${sv.scope.removed}`);
     L.push('', '## Coverage & caveats', '');
     // F17: coverage.sources (already present) plus coverage.done_basis — both read straight off
@@ -377,7 +380,8 @@ const fmtDur = (sec) => {
   if (a < 86400) return `${sign}${Math.round((a / 3600) * 10) / 10} h`;
   return `${sign}${Math.round((a / 86400) * 10) / 10} d`;
 };
-const fmtRangeH = (est) => (est ? `${fmtDur(est.low * 3600)}–${fmtDur(est.high * 3600)}` : '—');
+// Unit-aware: an hours range renders as durations, a calibrated `usd` range as dollars.
+const fmtRangeH = (est) => (!est ? '—' : est.unit === 'usd' ? `$${est.low}–$${est.high}` : `${fmtDur(est.low * 3600)}–${fmtDur(est.high * 3600)}`);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fmtTs = (iso) => { if (!iso) return '—'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? escHtml(iso) : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`; };
 const elapsedS = (a, b) => (a && b ? (Date.parse(b) - Date.parse(a)) / 1000 : null);
@@ -431,7 +435,7 @@ export function renderHtml(doc) {
     const missionOf = new Map(); for (const t of tasks) if (t.parent_item_id) { const g = missions.find((x) => x.item_id === t.parent_item_id); if (g) missionOf.set(t.item_id, g.ref); }
     const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
     const rw = m.flow.task?.strata?.all?.review_wait ?? null, ag = m.flow.task?.strata?.all?.agent_span ?? null;
-    const es = m.estimates.task?.strata?.all ?? null;
+    const es = m.estimates.task?.strata?.all ?? null, esUsd = m.estimates.task?.strata?.['usd:all'] ?? null;
     const doneTasks = count(tasks, 'done');
     const weeksTxt = (lv) => { const t = m.throughput[lv]; if (!t?.weeks.length) return '—'; return t.weeks.map((w) => `${esc(w.key)}: ${w.count}${w.whole ? '' : ' <span class="stat-sub">(partial)</span>'}`).join(' · '); };
     const vel = m.throughput.task; const wholeWeeks = vel ? vel.weeks.filter((w) => w.whole).length : 0;
@@ -475,6 +479,13 @@ export function renderHtml(doc) {
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
       'Only accepted estimates count. "Work vs estimate" = actual ÷ midpoint of the range; typical error = median |estimate − actual| ÷ actual (MdMRE).',
       es ? { value: es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} <span class="stat-sub">of ${es.hit_rate.ranged}</span>`, label: 'tasks finished within their estimated range' } : null),
+      // Calibrated dollar estimates (effort unit) are scored against each task's measured cost, separately from hours.
+      ...(esUsd ? [kpiCard('Cost estimates <span class="stat-sub">calibrated, vs measured $</span>', [
+        statCell('Cost vs estimate', esUsd.work_ratio ? (esUsd.work_ratio.median == null ? `${pctOf(esUsd.work_ratio.min)}–${pctOf(esUsd.work_ratio.max)} <span class="stat-sub">of estimate (${esUsd.work_ratio.n}; median from 5)</span>` : `${pctOf(esUsd.work_ratio.median)} <span class="stat-sub">of estimate (median)</span>`) : '—'),
+        statCell('Typical error <span class="stat-sub">MdMRE</span>', esUsd.mdmre == null ? '—' : `${Math.round(esUsd.mdmre * 100)}%`),
+        statCell('Counted', `${esUsd.eligible} of ${esUsd.n}`),
+      ], 'Range = the calibration cell\'s p50–p80 dollar cost; actual = the task\'s share of its hooked dispatches\' priced tokens, fix rounds included.',
+      { value: esUsd.hit_rate.rate == null ? '—' : `${esUsd.hit_rate.hits} <span class="stat-sub">of ${esUsd.hit_rate.ranged}</span>`, label: 'tasks finished within their cost range' })] : []),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
 

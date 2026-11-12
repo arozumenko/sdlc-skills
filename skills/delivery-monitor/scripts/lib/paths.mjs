@@ -53,7 +53,7 @@ export const currentSession = (env = process.env) => (env.CLAUDE_CODE_SESSION_ID
 export const nowIso = (now = Date.now()) => new Date(now).toISOString();
 export const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
-const EXIT = { USAGE: 2, 'SCHEMA-INVALID': 2, 'ID-CONFLICT': 2, 'INVALID-TRANSITION': 2, 'AMBIGUOUS-PLAN': 2, 'MIGRATION-REQUIRED': 2, 'LOCK-BUSY': 2, CONFLICT: 2, 'NO-PLAN': 3, 'NO-EVENTS': 3 };
+const EXIT = { USAGE: 2, 'SCHEMA-INVALID': 2, 'ID-CONFLICT': 2, 'INVALID-TRANSITION': 2, 'AMBIGUOUS-PLAN': 2, 'MIGRATION-REQUIRED': 2, 'LOCK-BUSY': 2, CONFLICT: 2, 'CALIBRATION-INVALID': 2, 'PRICES-INVALID': 2, 'NO-PLAN': 3, 'NO-EVENTS': 3 };
 export function cliError(code, detail) {
   const e = new Error(`${code}(${String(detail).replace(/\s*\n\s*/g, ' ')})`);
   e.code = code; e.exit = EXIT[code] ?? 1; return e;
