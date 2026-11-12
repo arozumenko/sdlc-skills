@@ -15,6 +15,7 @@ import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collectSamples, fillEstimates, readCalibration } from './lib/calibrate.mjs';
+import { loadPricesChecked } from './lib/cost.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -108,9 +109,9 @@ function cmdPlanRegister(repo, f, io, now) {
   const runId = runIdOf(full), digest = sha256(`${token}\n${canonicalHash(full)}`);
   const prev = loadRun(repo, runId);
   // Tasks the planner left unestimated get a calibrated dollar estimate from calibration.json (if one exists), auto-accepted.
+  // --no-calibrate stops new fills only: a re-cut still keeps the calibrated estimates its tasks were planned with.
   const calib = f['no-calibrate'] ? null : readCalibration(repo);
-  // Preserving a previous calibrated estimate on a re-cut does not depend on a table being readable now.
-  const fill = !prev?.requests?.[token] && (calib || prev) && !f['no-calibrate'] ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
+  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
   const { active } = resolveObservations(repo);
   const next = toCatalogue(full, { version: full.version });
 
@@ -209,9 +210,12 @@ function cmdCalibrate(repo, p, io, now) {
   const f = p.flags;
   const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
   if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
+  // The price table the hook used must be readable; a broken override is reported here rather than ignored.
+  const prices = loadPricesChecked(repo);
+  if (prices.problem) throw cliError('PRICES-INVALID', `${prices.problem}; dispatches priced while it was broken are recorded as unpriced and left out`);
   const samples = collectSamples(repo, { now });
   if (!samples.length) throw cliError('NO-EVENTS', 'no landed task with a measured cost yet: the Claude dispatch hook records cost on dispatch_ended');
-  let pricesAsOf = null; try { pricesAsOf = JSON.parse(readFileSync(resolve(SKILL_ROOT, 'references', 'prices.json'), 'utf8')).as_of ?? null; } catch { /* informational */ }
+  const pricesAsOf = prices.asOf;
   const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
   const text = `${JSON.stringify(cal, null, 2)}\n`;
   if (f.json) { io.stdout.write(text); }

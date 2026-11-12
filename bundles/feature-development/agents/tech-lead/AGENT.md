@@ -289,12 +289,15 @@ plan the `delivery-monitor` skill registers (template:
 task keeps its `Complexity` and names its `role`, its `type`
 (`feature|bugfix|refactor|test|infra|docs`) and `novel` (`true` when the team
 has not worked in that area before); add `area` (the module or directory) when
-it helps. You classify; you do not put numbers on tasks. When
+it helps — it is recorded for later, the estimate comes from role, type and
+novel. You classify; you do not put numbers on tasks. When
 `.agents/telemetry/delivery/calibration.json` exists, `plan register` fills
 each unestimated task with a calibrated dollar range (`unit: "usd"`, the
-cell's p50–p80 cost) and an effort class (E1–E4), already accepted — those
-numbers come from measured history, not judgement. Before a calibration
-exists, propose ranged elapsed-hours estimates
+cell's p50–p80 cost) and an effort class (E1–E4, once there are 12 samples),
+already accepted — those numbers come from measured history, not judgement.
+A task with no cell of 5 or more similar landed tasks stays unestimated
+(`CALIBRATED … no-cell=N`); give it an hours range as below. Before a
+calibration exists, propose ranged elapsed-hours estimates
 (`{"unit":"h","low":…,"high":…,"tier":"ROM|budgetary"}`,
 `proposed_by: tech-lead`) for a named human to accept, as before; an
 unaccepted range is recorded but excluded from accuracy. Groups/milestones and

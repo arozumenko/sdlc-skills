@@ -41,7 +41,7 @@ plan); a file that parses as neither is treated as a markdown import candidate (
 | `mission_kind` | `group \| milestone \| wave \| batch \| run` — cosmetic label for what a "mission" means on this plan |
 | `campaign` | `{ref (required), item_id?, estimate?}` — the plan's single root item |
 | `missions[]` | `{ref (unique), sequence (unique positive int), item_id?, estimate?, tasks[]}` |
-| `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?, type?, area?, novel?, effort_class?}` — `type` is `feature\|bugfix\|refactor\|test\|infra\|docs`, `area` a non-empty string, `novel` a boolean: the calibration features (see "Calibrated estimates" below); `effort_class` (`E1`–`E4`) is written by `plan register` from calibration, not by the planner — `role` also steers the Claude hook: a dispatch of that agent type is matched only against the tasks that role owns (its only task takes it outright), so a ref that is an ordinary word (`qa`, `review`) cannot pull it onto another role's task |
+| `missions[].tasks[]` | `{ref (unique across the whole plan), story? (must match `US-\d+` if present), class?, role?, branch?, item_id?, estimate?, type?, area?, novel?, effort_class?}` — `type` is `feature\|bugfix\|refactor\|test\|infra\|docs`, `area` a non-empty string, `novel` a boolean: `role`, `type` and `novel` are the calibration features (`area` is recorded per sample, not used for cells yet) (see "Calibrated estimates" below); `effort_class` (`E1`–`E4`) is written by `plan register` from calibration, not by the planner — `role` also steers the Claude hook: a dispatch of that agent type is matched only against the tasks that role owns (its only task takes it outright), so a ref that is an ordinary word (`qa`, `review`) cannot pull it onto another role's task |
 | `branch_prefix` | optional non-empty string **or** non-empty array of non-empty strings; a head ref must contain any of them (case-insensitive) for this run to be considered at all by branch/PR association. Use an array when a campaign spans two branch-naming eras |
 | `branch_map` | optional array of `{pattern, ref}`; `pattern` is a JS regex string (case-insensitive, named groups), `ref` a template (`T{m}.{t}`, `M{m}`) filled from the groups. Invalid regex or a non-string ref → `SCHEMA-INVALID`. Stored on the run and carried by every re-cut |
 | `supersedes` | optional `{run, item_map}` — see *Re-cut* below |
@@ -115,7 +115,10 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 `{unit: "usd", low: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
 reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
 so they are accepted at registration with no human step. A task that already carried a calibrated estimate in the previous
-version keeps it on a re-cut. The planner's own estimates are never replaced. `--no-calibrate` turns the fill off; the
+version keeps it on a re-cut. The planner's own estimates are never replaced. A task with no cell of `n ≥ 5` stays
+unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read, parsed, or has no
+`cells` object stops registration with `CALIBRATION-INVALID` (exit 2) rather than silently estimating nothing.
+`--no-calibrate` stops new fills only; a re-cut still keeps earlier calibrated estimates. The
 registration retry digest is computed before the fill, so a retry is still recognised.
 
 ## Acceptance semantics

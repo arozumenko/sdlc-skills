@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { deliveryDir, nowIso, sessionPath, sessionsDir, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
-import { costOf, loadPrices } from '../scripts/lib/cost.mjs';
+import { costOf, loadPricesChecked } from '../scripts/lib/cost.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
 import { validRoster } from '../scripts/lib/roster.mjs';
@@ -233,8 +233,12 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   const common = { user: null, host: 'claude', plan: run.run, source: 'hook', source_record_id: `claude:${payload.session_id}:${payload.agent_id}`, session: payload.session_id, agentId: payload.agent_id, role };
   // Effort for calibration: per-model usage and its dollar cost. `split` = how many items this one dispatch is attributed to,
   // so a reader charges each item cost_usd / split and a two-task dispatch is never counted twice.
-  const priced = costOf(tr.usage, loadPrices(repo));
-  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(priced.unpriced.length ? { unpriced_models: priced.unpriced } : {}), split: Math.max(1, items.length) };
+  // A broken price table (an unreadable project override) must not quietly price at list: the dispatch is marked unpriced, so
+  // its task is left out of calibration and cost accuracy instead of being trained on the wrong scale.
+  const { prices, problem } = loadPricesChecked(repo);
+  const priced = costOf(tr.usage, prices);
+  const unpriced = [...priced.unpriced, ...(problem ? ['<prices-unreadable>'] : [])];
+  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length) };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
     const label = it ? (capturePrompts(repo) ? description.slice(0, 120) : `${it.ref} ${stage}`) : stage;

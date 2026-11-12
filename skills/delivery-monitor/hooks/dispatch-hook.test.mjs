@@ -344,3 +344,30 @@ test('handleStop: follow-ups on the same task (review comments, CI) are not a cr
   assert.equal(handleStop(payload(t, { agent_id: 'agent-41' }), { repo, now: NOW }).diagnostic, null);
   assert.equal(diagLines(repo).filter((d) => d.kind === 'task-crossing').length, 0);
 });
+
+// PR #105 review: the writer side of effort — what the hook records for a priced transcript.
+test('handleStop prices the final usage: 1h cache writes apart, fast mode keyed and doubled; a broken price override marks it unpriced', () => {
+  const priced = (repo) => {
+    const t = transcripts();
+    const u = (o) => ({ input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, ...o });
+    const lines = [
+      { type: 'user', timestamp: '2026-09-16T09:00:00.000Z', message: { role: 'user', content: [{ type: 'text', text: 'You are js-dev. Implement TASK-023.' }] } },
+      // m1 streams twice; its final record carries 1,000 cache-write tokens of which 400 are 1-hour writes.
+      { type: 'assistant', timestamp: '2026-09-16T09:10:00.000Z', message: { id: 'm1', model: 'claude-sonnet-5-5', role: 'assistant', content: [{ type: 'tool_use', id: 'x' }], usage: u({ output_tokens: 1 }) } },
+      { type: 'assistant', timestamp: '2026-09-16T09:10:01.000Z', message: { id: 'm1', model: 'claude-sonnet-5-5', role: 'assistant', content: [{ type: 'tool_use', id: 'x' }], usage: u({ output_tokens: 1_000_000, cache_creation_input_tokens: 1_000_000, cache_creation: { ephemeral_5m_input_tokens: 600_000, ephemeral_1h_input_tokens: 400_000 } }) } },
+      { type: 'assistant', timestamp: '2026-09-16T10:00:00.000Z', message: { id: 'm2', model: 'claude-opus-5-5', role: 'assistant', content: [{ type: 'text', text: 'done' }], usage: u({ output_tokens: 1_000_000, speed: 'fast' }) } },
+    ];
+    writeFileSync(t.child, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+    handleStop(payload(t), { repo, now: NOW });
+    return resolveObservations(repo).active.find((o) => o.event === 'dispatch_ended').meta.agent;
+  };
+  const a = priced(setup());
+  assert.deepEqual(a.usage['claude-sonnet-5-5'], { input: 0, output: 1_000_000, cache_write: 600_000, cache_write_1h: 400_000, cache_read: 0 });
+  assert.deepEqual(a.usage['claude-opus-5-5#fast'], { input: 0, output: 1_000_000, cache_write: 0, cache_write_1h: 0, cache_read: 0 });
+  // Sonnet 5.5: $10 output + 0.6 × $2.50 (5m) + 0.4 × $4 (1h = 2 × input) = $13.10; Opus 5.5 fast output: 2 × $20 = $40.
+  assert.equal(a.cost_usd, 53.1); assert.equal(a.split, 1); assert.equal(a.unpriced_models, undefined);
+
+  const broken = setup(); writeFileSync(join(deliveryDir(broken), 'prices.json'), '{ "models": ');
+  const b = priced(broken);
+  assert.deepEqual(b.unpriced_models, ['<prices-unreadable>'], 'a broken override never prices silently at list');
+});

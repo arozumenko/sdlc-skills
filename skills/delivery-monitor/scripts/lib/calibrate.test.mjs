@@ -7,8 +7,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendObservation, makeObservation } from './events.mjs';
 import { deliveryDir, runPath } from './paths.mjs';
+import { mkdirSync } from 'node:fs';
+const deliveryDirOf = (repo) => { const d = deliveryDir(repo); mkdirSync(d, { recursive: true }); return d; };
 import { buildCalibration, cellKeys, classOf, fillEstimates, lookup } from './calibrate.mjs';
-import { costOf, loadPrices, priceFor } from './cost.mjs';
+import { costOf, loadPrices, loadPricesChecked as loadPricesCheckedFor, priceFor } from './cost.mjs';
 
 const NOW = Date.parse('2026-11-12T12:00:00Z');
 // Same shapes as delivery.test.mjs (not imported: importing a test file re-runs its tests).
@@ -348,4 +350,41 @@ test('report: unknown-id cost after the cutoff does not withhold earlier cost ac
   const rowAt = (cutoff) => { const rows = []; const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') { if (v.ref === 'T1' && 'actual_usd' in v) rows.push(v); Object.values(v).forEach(walk); } }; walk(JSON.parse(run(repo, ['report', '--json', '--cutoff', cutoff]).stdout)); return rows[0]; };
   assert.equal(rowAt('2026-11-03T00:00:00Z').reason, null);
   assert.equal(rowAt('2026-11-06T00:00:00Z').reason, 'missing_actual');
+});
+
+// PR #105 review: broken files are reported, never silently ignored; --no-calibrate stops new fills only.
+test('CLI: a broken calibration.json is CALIBRATION-INVALID; a broken price override is PRICES-INVALID; --no-calibrate keeps earlier calibrated estimates', () => {
+  const repo = initRepo();
+  writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), '<<<<<<< HEAD\n{"cells":{}}\n');
+  const bad = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'T1' }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']);
+  assert.equal(bad.code, 2); assert.match(bad.stderr, /^CALIBRATION-INVALID\(.*not valid JSON/);
+  writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), '{"samples": 3}');
+  assert.match(run(repo, ['plan', 'register', '--from', join(repo, 'plan.md'), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).stderr, /^CALIBRATION-INVALID\(.*no "cells" object/);
+  const ok = run(repo, ['plan', 'register', '--from', join(repo, 'plan.md'), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z', '--no-calibrate']);
+  assert.equal(ok.code, 0, ok.stderr);
+
+  writeFileSync(join(deliveryDirOf(repo), 'prices.json'), '{"model": {}}');
+  const pr = run(repo, ['calibrate']); assert.equal(pr.code, 2); assert.match(pr.stderr, /^PRICES-INVALID\(project override/);
+
+  // A re-cut with --no-calibrate keeps the calibrated estimate the task was planned with.
+  const est = { unit: 'usd', low: 3, high: 4, tier: 'calibrated', proposed_by: 'calibrate', proposed_at: '2026-11-01T00:00:00Z', accepted_by: 'calibrate (auto)', accepted_at: '2026-11-01T00:00:00Z', reference: { path: 'x', sha256: 'b'.repeat(64), population: 'all n=9' } };
+  const repo2 = initRepo();
+  assert.equal(run(repo2, ['plan', 'register', '--from', writePlan(repo2, plan(1, [{ ref: 'K1', estimate: est }])), '--id', 'k1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
+  const r2 = run(repo2, ['plan', 'register', '--from', writePlan(repo2, plan(2, [{ ref: 'K1' }]), 'v2.md'), '--id', 'k2', '--at', '2026-11-02T00:00:00Z', '--created-at', '2026-11-01T00:00:00Z', '--no-calibrate']);
+  assert.equal(r2.code, 0, r2.stderr); assert.match(r2.stdout, /CALIBRATED filled=0 kept=1/);
+  assert.deepEqual(JSON.parse(readFileSync(runPath(repo2, 'sec/run-1'), 'utf8')).items.find((i) => i.ref === 'K1').estimate, est);
+});
+
+test('a permission error is not "no file": unreadable calibration.json and price override are reported', { skip: process.getuid?.() === 0 }, () => {
+  const repo = initRepo();
+  const locked = join(repo, 'locked'); mkdirSync(locked); writeFileSync(join(locked, 'calibration.json'), '{"cells":{}}'); writeFileSync(join(locked, 'prices.json'), '{"models":{}}');
+  const d = deliveryDirOf(repo);
+  execFileSync('ln', ['-s', join(locked, 'calibration.json'), join(d, 'calibration.json')]);
+  execFileSync('ln', ['-s', join(locked, 'prices.json'), join(d, 'prices.json')]);
+  execFileSync('chmod', ['000', locked]);
+  try {
+    const reg = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'T1' }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']);
+    assert.equal(reg.code, 2); assert.match(reg.stderr, /^CALIBRATION-INVALID\(.*EACCES/);
+    const p = loadPricesCheckedFor(repo); assert.match(p.problem, /unreadable \(EACCES\)/);
+  } finally { execFileSync('chmod', ['755', locked]); }
 });

@@ -4,10 +4,10 @@
 // dispatches on the same task), whether it came back (rework, review_returned, reopened), and the features the planner gave it
 // (role, type, novel). Cells are those features at decreasing detail; a task is estimated from the most specific cell with
 // enough samples. Effort classes E1–E4 are learned from the cost quartiles, not declared by the planner.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveObservations } from './events.mjs';
-import { deliveryDir, nowIso, sha256 } from './paths.mjs';
+import { cliError, deliveryDir, nowIso, sha256 } from './paths.mjs';
 import { listRuns } from './plan.mjs';
 import { buildTimelines, selectOccurrences } from './timeline.mjs';
 
@@ -119,10 +119,17 @@ export function lookup(cal, task) {
   return null;
 }
 
+/** null when no table exists yet. A table that exists but cannot be read, does not parse, or has no `cells` object is an
+ * error (CALIBRATION-INVALID), never "no table": otherwise a merge conflict in the file would silently stop estimates. */
 export function readCalibration(repo) {
   const path = join(deliveryDir(repo), CALIBRATION_FILE);
-  if (!existsSync(path)) return null;
-  try { const text = readFileSync(path, 'utf8'); return { cal: JSON.parse(text), sha256: sha256(text), path }; } catch { return null; }
+  const bad = (why) => cliError('CALIBRATION-INVALID', `${path}: ${why}. Re-run \`delivery.mjs calibrate\`, fix the file, or pass --no-calibrate`);
+  let text, cal;
+  // Only "no such file" means no table; existsSync would also hide a permission error.
+  try { text = readFileSync(path, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw bad(e.code ?? e.message); }
+  try { cal = JSON.parse(text); } catch (e) { throw bad(`not valid JSON (${e.message})`); }
+  if (!cal || typeof cal !== 'object' || !cal.cells || typeof cal.cells !== 'object' || Array.isArray(cal.cells)) throw bad('no "cells" object');
+  return { cal, sha256: sha256(text), path };
 }
 
 /** Fills a calibrated dollar estimate (and learned effort class) into every task the planner left unestimated. Auto-accepted:

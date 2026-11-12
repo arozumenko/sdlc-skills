@@ -1,6 +1,6 @@
 {
   "as_of": "2026-11-03",
-  "source": "Anthropic first-party API list prices, USD per million tokens. cache_write = 5-minute TTL write (1.25x input); 1-hour writes are priced at cache_write_1h when given, else 2x input. Override per project with .agents/telemetry/delivery/prices.json (same shape; its models win). A model id matches exactly or as <id>-YYYYMMDD; any other id is unpriced, never guessed.",
+  "source": "Anthropic first-party API list prices, USD per million tokens. cache_write = 5-minute TTL write (1.25x input); 1-hour writes are priced at cache_write_1h when given, else 2x input. Override per project with .agents/telemetry/delivery/prices.json (same shape; its models win). A model id matches exactly or as <id>-YYYYMMDD (a trailing [..] context suffix is ignored; <id>#fast doubles every rate); any other id is unpriced, never guessed. An override that does not parse or has no models object marks dispatches unpriced and makes calibrate fail with PRICES-INVALID.",
   "models": {
     "claude-fable-5-2":  { "input": 8,   "output": 40, "cache_write": 10,    "cache_read": 0.2 },
     "claude-fable-5-1":  { "input": 10,  "output": 50, "cache_write": 12.5,  "cache_read": 1 },

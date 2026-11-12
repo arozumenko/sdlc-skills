@@ -12,10 +12,13 @@ document, next to the task templates from § 3 "Create Technical Tasks". Fill in
   - tasks[].type / novel / area — classify every task: type feature|bugfix|refactor|test|
                                   infra|docs; novel true when the team has not worked in
                                   that area before; area = module/directory (optional).
-                                  These pick the calibration cell the estimate comes from.
+                                  role + type + novel pick the calibration cell the estimate
+                                  comes from; area is recorded, not yet used for cells.
   - task "estimate"            — LEAVE IT OUT when .agents/telemetry/delivery/calibration.json
                                   exists: plan register fills a calibrated dollar range and
-                                  effort class, already accepted. With no calibration yet,
+                                  effort class, already accepted. A task with no cell of 5+
+                                  similar tasks stays unestimated (CALIBRATED ... no-cell=N);
+                                  give it an hours range. With no calibration yet,
                                   propose an hours range {unit "h", low, high, tier} and
                                   leave "accepted_by"/"accepted_at" null for a named human
                                   (references/plan-block.md "Acceptance semantics").

@@ -1,5 +1,5 @@
 // STDLIB ONLY. Dollar cost of a dispatch's token usage, per model (effort unit for calibration).
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deliveryDir } from './paths.mjs';
@@ -7,12 +7,30 @@ import { deliveryDir } from './paths.mjs';
 const BUILTIN = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'references', 'prices.json');
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
 
-/** Built-in list prices, with a project's `.agents/telemetry/delivery/prices.json` (same shape) layered on top. */
-export function loadPrices(repo) {
-  const base = readJson(BUILTIN)?.models ?? {};
-  const local = repo && existsSync(join(deliveryDir(repo), 'prices.json')) ? readJson(join(deliveryDir(repo), 'prices.json'))?.models ?? {} : {};
-  return { ...base, ...local };
+const isPriceTable = (j) => j != null && typeof j === 'object' && j.models != null && typeof j.models === 'object' && !Array.isArray(j.models);
+
+/** Built-in list prices with a project's `.agents/telemetry/delivery/prices.json` (same shape) layered on top, plus what went
+ * wrong reading them. A missing override is normal (`problem: null`); an override that exists but does not parse or has no
+ * `models` object is a problem: the caller must not price with the built-in list as if the override had been applied. */
+export function loadPricesChecked(repo) {
+  const builtin = readJson(BUILTIN);
+  const base = isPriceTable(builtin) ? builtin.models : {};
+  const problem = isPriceTable(builtin) ? null : `built-in ${BUILTIN} unreadable`;
+  const path = repo ? join(deliveryDir(repo), 'prices.json') : null;
+  if (!path) return { prices: base, asOf: builtin?.as_of ?? null, problem };
+  // Read directly: only "no such file" means no override. existsSync is false for a permission error too (e.g. a symlink
+  // into a restricted directory), which would silently fall back to list prices.
+  let text;
+  try { text = readFileSync(path, 'utf8'); } catch (e) {
+    if (e.code === 'ENOENT') return { prices: base, asOf: builtin?.as_of ?? null, problem };
+    return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} unreadable (${e.code ?? e.message})` };
+  }
+  let local = null; try { local = JSON.parse(text); } catch { local = null; }
+  if (!isPriceTable(local)) return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} is not valid JSON with a "models" object` };
+  return { prices: { ...base, ...local.models }, asOf: local.as_of ?? builtin?.as_of ?? null, problem };
 }
+/** Prices only (the checked loader without the problem report). */
+export const loadPrices = (repo) => loadPricesChecked(repo).prices;
 
 /** Model ids in transcripts can carry a date or context suffix (`claude-opus-5-5-20260101`, `…[1m]`). */
 export function priceFor(prices, model) {
@@ -27,8 +45,9 @@ export function priceFor(prices, model) {
   return dated && prices[dated[1]] ? prices[dated[1]] : null;
 }
 
-/** usage: {model: {input, output, cache_write, cache_read}} → {cost_usd, priced, unpriced: [models]}. A model with no price
- * contributes nothing and is listed, so a partial cost is never mistaken for a complete one. */
+/** usage: {model: {input, output, cache_write, cache_write_1h, cache_read}} → {cost_usd, unpriced: [models]}. A model with no
+ * price contributes nothing and is listed, so a partial cost is never mistaken for a complete one. cost_usd is rounded to
+ * the micro-dollar (6 decimal places). */
 export function costOf(usage, prices) {
   let total = 0; const unpriced = [];
   for (const [model, u] of Object.entries(usage ?? {})) {
