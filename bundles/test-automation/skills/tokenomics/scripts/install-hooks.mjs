@@ -338,6 +338,23 @@ export function publishAllowed(repo, env = process.env) {
   return !('publish' in p) || p.publish === 'private-remote';
 }
 
+// Learning-loops settings check (same rule as delivery-monitor's installer): bootstrap restores an interim top-level entry
+// only when the telemetry branch lacks that name, so a local policy.json — or a local delivery/ holding profile.json — can
+// be shadowed by the branch's copy. Returns why (stop before any change), or null when local settings stay effective.
+export function settingsConflict(dir, ref, git) {
+  if (!ref) return null;
+  const onBranch = (path) => { try { return git(['show', `${ref}:${path}`]); } catch { return null; } };
+  let top = []; try { top = git(['ls-tree', '--name-only', ref]).split('\n').map((x) => x.trim()).filter(Boolean); } catch { /* unreadable ref */ }
+  const why = [];
+  for (const [path, entry] of [['policy.json', 'policy.json'], ['delivery/profile.json', 'delivery']]) {
+    const local = join(dir, ...path.split('/'));
+    if (!existsSync(local) || !top.includes(entry)) continue;
+    const mine = readFileSync(local, 'utf8').trim(), theirs = onBranch(path);
+    if (theirs == null || theirs.trim() !== mine) why.push(`${path}: the telemetry branch ${theirs == null ? `has ${entry}/ without it` : 'has a different copy'}, so the local one would stop taking effect`);
+  }
+  return why.length ? `settings conflict (${why.join('; ')}); make the local and branch copies match, then re-run` : null;
+}
+
 export function installTelemetrySubmodule(repo, { remove = false, env = process.env } = {}) {
   // The submodule sits at the telemetry ROOT — shared across factories, one
   // branch, one sync. Each factory keeps to its own subfolder (ours:
@@ -353,6 +370,9 @@ export function installTelemetrySubmodule(repo, { remove = false, env = process.
   const mayPush = publishAllowed(repo, env);
   if (!mayPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']).trim(); } catch { /* no origin */ }
     if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
+  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+  const conflict = settingsConflict(dir, branchRef, git);
+  if (conflict) return { status: 'conflict', reason: conflict };
 
   // Interim files (plain-dir phase) move aside before the checkout — and MUST
   // move back on ANY exit. Field lesson from the old-instance dry run: a
@@ -791,6 +811,8 @@ export async function main(argv = process.argv.slice(2)) {
     process.stderr.write(`tokenomics: telemetry submodule setup skipped (${sub.error}) — plain-dir mode, everything still works locally\n`);
   } else if (sub.status === 'skipped') {
     process.stderr.write(`tokenomics: ${sub.reason} — plain-dir mode, everything still works locally\n`);
+  } else if (sub.status === 'conflict') {
+    process.stderr.write(`tokenomics: telemetry submodule NOT set up — ${sub.reason}\n`);
   }
   if (!remove) touched.push(seedConfig(repo));
   process.stderr.write(`tokenomics: ${remove ? 'removed hooks from' : 'wired hooks into'}\n${touched.map((f) => `  ${relative(repo, f)}`).join('\n')}\n`);

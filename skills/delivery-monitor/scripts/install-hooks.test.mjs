@@ -296,3 +296,39 @@ test('bootstrapTelemetry: local-only with no origin still creates the local subm
   const r = bootstrapTelemetry(repo, { env: { DELIVERY_NO_SYNC: '1' } });
   assert.equal(r.status, 'created'); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.git')));
 });
+
+/** Like seedTelemetryBranchFile, but `path` may be one directory deep (dir/name). */
+const seedBranchPath = (repo, path, content) => {
+  const run = (args, input) => execFileSync('git', args, { cwd: repo, input, encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
+  const blob = run(['hash-object', '-w', '--stdin'], content), parts = path.split('/');
+  const tree = parts.length === 1 ? run(['mktree'], `100644 blob ${blob}\t${path}\n`)
+    : run(['mktree'], `040000 tree ${run(['mktree'], `100644 blob ${blob}\t${parts[1]}\n`)}\t${parts[0]}\n`);
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'seed'));
+};
+// Settings check (spec implementation contract item 1): local settings that bootstrap would shadow stop it before any change.
+test('bootstrapTelemetry: a local policy.json or delivery/profile.json the branch would shadow → conflict, nothing changed', () => {
+  for (const [path, local, branch] of [
+    ['policy.json', '{"publish":"local-only"}\n', '{"publish":"private-remote"}\n'],
+    ['delivery/profile.json', '{"storeText":false}\n', '{"storeText":true}\n'],
+    ['delivery/profile.json', '{"calibration":"off"}\n', null], // branch has delivery/ but no profile: local would be stranded
+  ]) {
+    const repo = tmp();
+    seedBranchPath(repo, branch == null ? 'delivery/events-x.jsonl' : path, branch ?? '{"v":2}\n');
+    const file = join(repo, '.agents', 'telemetry', ...path.split('/')); mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, local);
+    const index = g(repo, 'ls-files', '--stage');
+    const r = bootstrapTelemetry(repo, { env: {} });
+    assert.equal(r.status, 'conflict', `${path}: ${JSON.stringify(r)}`); assert.match(r.reason, new RegExp(path.replace('.', '\\.')));
+    assert.equal(readFileSync(file, 'utf8'), local, 'local settings untouched');
+    assert.ok(!existsSync(join(repo, '.agents', 'telemetry', '.git')) && !existsSync(join(repo, '.agents', 'telemetry.pre-submodule')), 'no submodule, no stash');
+    assert.equal(g(repo, 'ls-files', '--stage'), index, 'index unchanged');
+  }
+});
+
+test('bootstrapTelemetry: matching settings on both sides, or settings only on one side, bootstrap normally', () => {
+  let repo = tmp(); seedBranchPath(repo, 'policy.json', '{"publish":"private-remote"}\n');
+  mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{"publish":"private-remote"}\n');
+  assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created');
+  repo = tmp(); mkdirSync(join(repo, '.agents', 'telemetry', 'delivery'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'profile.json'), '{"storeText":false}\n');
+  assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created', 'fresh branch: local settings restored');
+  assert.equal(readFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'profile.json'), 'utf8'), '{"storeText":false}\n');
+});

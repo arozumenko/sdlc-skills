@@ -228,7 +228,7 @@ function cmdCalibrate(repo, p, io, now) {
   const f = p.flags;
   const policies = readPolicies(repo);
   // The persistent off switch: nothing is computed or written, dry-run and --json included.
-  if (policies.calibration === 'off') { out(io, 'CALIBRATION-OFF profile.json sets calibration "off": nothing computed or written'); return 0; }
+  if (policies.calibration === 'off') { io.wroteNothing = true; out(io, 'CALIBRATION-OFF profile.json sets calibration "off": nothing computed or written'); return 0; }
   const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
   if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
   // The price table the hook used must be readable; a broken override is reported here rather than ignored.
@@ -570,7 +570,7 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   let code = 1;
   try { code = await fn(repo, p, io, now); }
   catch (e) { if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
-  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only', 'local-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
+  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && !io.wroteNothing && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only', 'local-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
 // Task 10: `process.exit(c)` right after an async `main()` resolves races Node's own async stdout

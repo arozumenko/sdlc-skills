@@ -48,3 +48,17 @@ test('capture sync: local-only commits inside the submodule but never pushes', (
   assert.equal(g(remote, 'rev-parse', 'refs/heads/telemetry'), before, 'remote untouched');
   assert.equal(g(join(repo, '.agents', 'telemetry'), 'status', '--porcelain'), '', 'committed locally');
 });
+
+test('installer settings check: a local policy the telemetry branch would shadow stops bootstrap with nothing changed', () => {
+  const { repo } = world();
+  const ENVX = { ...ENV };
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: '{"publish":"private-remote"}\n', encoding: 'utf8', env: ENVX }).trim();
+  const tree = execFileSync('git', ['mktree'], { cwd: repo, input: `100644 blob ${blob}\tpolicy.json\n`, encoding: 'utf8', env: ENVX }).trim();
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'seed'));
+  policy(repo, '{"publish":"private-remote","x":1}\n');
+  const index = g(repo, 'ls-files', '--stage');
+  const r = installTelemetrySubmodule(repo);
+  assert.equal(r.status, 'conflict'); assert.match(r.reason, /policy\.json/);
+  assert.equal(g(repo, 'ls-files', '--stage'), index);
+  assert.ok(!existsSync(join(repo, '.agents', 'telemetry', '.git')) && !existsSync(join(repo, '.agents', 'telemetry.pre-submodule')));
+});

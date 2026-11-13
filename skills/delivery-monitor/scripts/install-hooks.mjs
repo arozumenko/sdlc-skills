@@ -68,6 +68,24 @@ export function installIgnoreBlocks(repo, { remove = false } = {}) {
 }
 
 const TELEMETRY_README = '# telemetry\n\nShared durable telemetry submodule (branch `telemetry`), one subfolder per factory or cross-factory concern: `automation/` (tokenomics), `delivery/` (delivery-monitor). Nobody hand-commits here; each capture moment commits and pushes best-effort.\n';
+/** Learning-loops settings check, run before bootstrap changes anything. Bootstrap restores an interim top-level entry only
+ * when the telemetry branch does not already have that name, so a local `policy.json`, or a local `delivery/` holding
+ * `profile.json`, can be shadowed by the branch's copy and stop taking effect. Returns why, or null when the local
+ * settings would still be the effective ones. `ref` is the branch the submodule will check out (null: a fresh, empty one). */
+export function settingsConflict(dir, ref, git) {
+  if (!ref) return null;
+  const onBranch = (path) => { try { return git(['show', `${ref}:${path}`]); } catch { return null; } };
+  let top = []; try { top = git(['ls-tree', '--name-only', ref]).split('\n').filter(Boolean); } catch { /* unreadable ref: nothing to compare */ }
+  const why = [];
+  for (const [path, entry] of [['policy.json', 'policy.json'], ['delivery/profile.json', 'delivery']]) {
+    const local = join(dir, ...path.split('/'));
+    if (!existsSync(local) || !top.includes(entry)) continue;
+    const mine = readFileSync(local, 'utf8').trim(), theirs = onBranch(path);
+    if (theirs == null || theirs.trim() !== mine) why.push(`${path}: the telemetry branch ${theirs == null ? `has ${entry}/ without it` : 'has a different copy'}, so the local one would stop taking effect`);
+  }
+  return why.length ? `settings conflict (${why.join('; ')}); make the local and branch copies match, then re-run` : null;
+}
+
 /** Ported from tokenomics install-hooks.mjs:329-404 — same branch, same layout, so both skills share one submodule. */
 export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   const dir = join(repo, '.agents', 'telemetry');
@@ -82,6 +100,10 @@ export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   // Local-only cannot push it, so the telemetry directory stays plain (sync never pushes a plain directory).
   if (noPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']); } catch { /* no origin */ }
     if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
+  // Settings check before anything is stashed or untracked: the branch bootstrap will check out (local, else origin's).
+  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+  const conflict = settingsConflict(dir, branchRef, git);
+  if (conflict) return { status: 'conflict', reason: conflict };
   const stash = `${dir}.pre-submodule`; let stashed = false;
   const restore = () => { if (!stashed || !existsSync(stash)) return; try { mkdirSync(dir, { recursive: true }); for (const n of readdirSync(stash)) if (!existsSync(join(dir, n))) renameSync(join(stash, n), join(dir, n)); if (!readdirSync(stash).length) rmSync(stash, { recursive: true, force: true }); stashed = false; } catch { /* data preserved in stash; doctor surfaces it */ } };
   try {

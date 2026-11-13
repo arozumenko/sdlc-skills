@@ -158,3 +158,11 @@ test('CLI: profile calibrationSample effective → calibrate builds an effective
   const repo2 = landed(); assert.equal(run(repo2, ['calibrate']).code, 0); profile(repo2, { calibrationSample: 'effective' });
   const r2 = nextPlan(repo2); assert.equal(r2.code, 0, r2.stderr); assert.match(r2.stdout, /CALIBRATED filled=0 .*no-cell=1/); assert.match(r2.stderr, /re-run `delivery.mjs calibrate`/);
 });
+
+test('calibration off: the command does not run the closing sync (pending telemetry is not committed)', () => {
+  const repo = landed(); profile(repo, { calibration: 'off' });
+  // Make the telemetry dir a git repo so a sync would commit; DELIVERY_NO_SYNC is cleared for this run.
+  const tel = join(repo, '.agents', 'telemetry'); execFileSync('git', ['init', '-q'], { cwd: tel }); execFileSync('git', ['-c', 'user.email=t@x', '-c', 'user.name=T', 'commit', '-q', '--allow-empty', '-m', 'root'], { cwd: tel });
+  const r = run(repo, ['calibrate'], { env: { DELIVERY_NO_SYNC: '' } }); assert.equal(r.code, 0, r.stderr);
+  assert.notEqual(execFileSync('git', ['status', '--porcelain'], { cwd: tel, encoding: 'utf8' }).trim(), '', 'pending files left uncommitted');
+});
