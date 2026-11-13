@@ -661,20 +661,47 @@ export function managedFactoryIds(text) {
   return ids;
 }
 
+// True when CLAUDE.md pulls AGENTS.md in with Claude Code's `@path` import, so
+// the blocks in AGENTS.md already reach the main session. An import is an
+// `@AGENTS.md` / `@./AGENTS.md` token with whitespace or a line end on both
+// sides: Claude Code reads `@AGENTS.md.` as a different path, and skips code
+// fences and inline code (checked against Claude Code 2.1.323). When in doubt
+// this answers false: a doubled block costs context, a missing one loses the
+// team rules.
+export function importsAgentsMd(text) {
+  let fence = null;
+  for (const l of text.split("\n")) {
+    if (fence) { if (closesFence(l, fence)) fence = null; continue; }
+    const f = fenceOpener(l);
+    if (f) { fence = f[1]; continue; }
+    if (/(?:^|\s)@(?:\.\/)?AGENTS\.md(?=\s|$)/.test(l.replace(/`[^`]*`/g, ""))) return true;
+  }
+  return false;
+}
+
 // `--update` refreshes every factory block a project already carries, not
 // just the one named by `--factory`. Without this, `init --all --update`
 // refreshed agents and skills while AGENTS.md/CLAUDE.md kept the team rules
 // from the original install (e.g. a feature-development block missing the
-// delivery-monitor section its refreshed agents rely on). Only existing
-// blocks are touched — nothing is appended, no file is created, and text
-// outside the markers is preserved. `skip` is the factory `--factory`
-// already spliced this run.
+// delivery-monitor section its refreshed agents rely on). No file is created
+// and text outside the markers is preserved. `skip` is the factory
+// `--factory` already spliced this run.
+//
+// One block is added: a full `--update` copies a block AGENTS.md carries into
+// an existing CLAUDE.md that lacks it. A project that created CLAUDE.md after
+// its first factory install had the block in AGENTS.md only; Claude Code
+// auto-loads CLAUDE.md and not AGENTS.md, so the main session never got the
+// team rules. A CLAUDE.md that imports AGENTS.md already loads them and is
+// left alone, and so is a plain run that only refreshes role-filtered blocks.
 export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, skip = null, onlyRoleFiltered = false } = {}) {
   const results = [];
+  const inAgents = new Map(); // factory id → block body, for the blocks refreshed in AGENTS.md
   for (const file of ["AGENTS.md", "CLAUDE.md"]) {
     const filePath = join(cwd, file);
     if (!existsSync(filePath)) continue;
-    for (const id of managedFactoryIds(readFileSync(filePath, "utf8"))) {
+    const text = readFileSync(filePath, "utf8");
+    const ids = managedFactoryIds(text);
+    for (const id of ids) {
       if (id === skip) continue;
       const dir = join(pkgRoot, FACTORIES_DIR, id);
       let manifest;
@@ -694,6 +721,11 @@ export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, s
       const body = filterRoleSections(raw, installedRoleNames(cwd));
       for (const [src, dest] of Object.entries(manifest.seed || {})) seedMissingFiles(join(dir, src), join(cwd, dest));
       results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
+      if (file === "AGENTS.md") inAgents.set(id, body);
+    }
+    if (file !== "CLAUDE.md" || onlyRoleFiltered || importsAgentsMd(text)) continue;
+    for (const [id, body] of inAgents) {
+      if (!ids.includes(id)) results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
     }
   }
   return results;
@@ -2955,7 +2987,7 @@ async function main() {
     if (refreshed.length) {
       console.log(`\n  → project root (installed factory instructions)`);
       for (const r of refreshed) {
-        const mark = r.status === "refreshed" ? "✓" : "!";
+        const mark = r.status === "refreshed" || r.status === "appended" ? "✓" : "!";
         console.log(`      ${mark} instructions ${r.file} ${r.id} (${r.status})`);
       }
     }

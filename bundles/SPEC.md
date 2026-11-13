@@ -236,6 +236,11 @@ leaves the item discoverable.
    needed. `AGENTS.md` (the full team reference every agent reads) is created
    if missing; `CLAUDE.md` is auto-loaded and scout-owned (kept lean), so its
    block is only refreshed when the file already exists — never created.
+   `init --update` also refreshes every block already in either file, and
+   copies a block `AGENTS.md` carries into an existing `CLAUDE.md` that lacks
+   it (a `CLAUDE.md` created after the first install; Claude Code auto-loads
+   `CLAUDE.md` only). A `CLAUDE.md` that imports `AGENTS.md` with `@AGENTS.md`
+   already loads the block and is left alone.
    When scout later regenerates `AGENTS.md`/`CLAUDE.md`, the
    `seeding-a-project` / `seeding-automation-project` skills preserve
    `<!-- FACTORY:* -->` blocks (legacy `<!-- BUNDLE:* -->` included) verbatim,
