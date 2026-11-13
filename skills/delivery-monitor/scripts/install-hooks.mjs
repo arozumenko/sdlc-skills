@@ -97,36 +97,56 @@ export function branchPolicyDenies(ref, git) {
   return 'publish' in p && p.publish !== 'private-remote';
 }
 
+/** The branch bootstrap will check out. With an origin, origin is fetched first (best effort): if both branches exist the
+ * local one must equal or be ahead of origin's (its push then fast-forwards origin); behind → origin's is used and the local
+ * ref fast-forwarded; diverged → a problem, and bootstrap stops before changing anything. */
+export function telemetryTarget(git, origin) {
+  const has = (r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } };
+  if (origin) { try { git(['fetch', '-q', 'origin', '+refs/heads/telemetry:refs/remotes/origin/telemetry']); } catch { /* no remote branch yet, or offline */ } }
+  const local = has('refs/heads/telemetry'), remote = origin && has('refs/remotes/origin/telemetry');
+  if (local && remote) {
+    const ancestor = (a, b) => { try { git(['merge-base', '--is-ancestor', a, b]); return true; } catch { return false; } };
+    if (ancestor('refs/remotes/origin/telemetry', 'refs/heads/telemetry')) return { ref: 'refs/heads/telemetry', fastForward: false };
+    if (ancestor('refs/heads/telemetry', 'refs/remotes/origin/telemetry')) return { ref: 'refs/remotes/origin/telemetry', fastForward: true };
+    return { problem: 'the local telemetry branch and origin/telemetry have diverged; merge them, then re-run' };
+  }
+  return { ref: local ? 'refs/heads/telemetry' : remote ? 'refs/remotes/origin/telemetry' : null, fastForward: false };
+}
+
 /** Ported from tokenomics install-hooks.mjs:329-404 — same branch, same layout, so both skills share one submodule. */
 export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   const dir = join(repo, '.agents', 'telemetry');
   const git = (args, cwd = repo) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }).trim();
   try { git(['rev-parse', '--git-dir']); } catch { return { status: 'no-git' }; }
   if (existsSync(join(dir, '.git'))) return { status: 'already' };
-  // Publish policy (learning-loops data boundary): read before the interim files are stashed. local-only or
-  // DELIVERY_NO_SYNC=1 → the branch and the seed commit stay local; nothing is pushed to origin.
-  // The branch bootstrap will check out (local, else origin's): its own policy becomes effective, so it counts too.
-  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+  // Publish policy (learning-loops data boundary), decided before anything is stashed or untracked. The decision and the
+  // settings check read the branch bootstrap will actually check out: with an origin, `submodule add ./` clones origin's
+  // branch, so origin is fetched first and a local branch that is behind or diverged is not trusted.
+  let origin = ''; try { origin = git(['remote', 'get-url', 'origin']); } catch { /* no origin */ }
+  const target = telemetryTarget(git, origin);
+  if (target.problem) return { status: 'conflict', reason: target.problem };
+  const branchRef = target.ref;
   const noPush = !mayPush(repo, env) || branchPolicyDenies(branchRef, git);
-  const push = (args, cwd) => { if (!noPush) { try { git(args, cwd); } catch { /* no remote / offline */ } } };
   // The submodule URL is relative ('./'), so with an origin git resolves it against origin and needs the branch there.
-  // Local-only cannot push it, so the telemetry directory stays plain (sync never pushes a plain directory).
-  if (noPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']); } catch { /* no origin */ }
-    if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
+  // A project that may not push keeps telemetry a plain directory (sync never pushes a plain directory).
+  if (noPush && origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' };
   // Settings check before anything is stashed or untracked.
   const conflict = settingsConflict(dir, branchRef, git);
   if (conflict) return { status: 'conflict', reason: conflict };
   const stash = `${dir}.pre-submodule`; let stashed = false;
   const restore = () => { if (!stashed || !existsSync(stash)) return; try { mkdirSync(dir, { recursive: true }); for (const n of readdirSync(stash)) if (!existsSync(join(dir, n))) renameSync(join(stash, n), join(dir, n)); if (!readdirSync(stash).length) rmSync(stash, { recursive: true, force: true }); stashed = false; } catch { /* data preserved in stash; doctor surfaces it */ } };
   try {
+    if (target.fastForward) git(['update-ref', 'refs/heads/telemetry', 'refs/remotes/origin/telemetry']); // local was behind origin
     try { git(['rev-parse', '--verify', 'refs/heads/telemetry']); } catch {
       try { git(['rev-parse', '--verify', 'refs/remotes/origin/telemetry']); git(['branch', 'telemetry', 'origin/telemetry']); }
       catch { const tree = git(['hash-object', '-t', 'tree', '/dev/null']); const commit = git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit-tree', tree, '-m', 'telemetry: root']); git(['update-ref', 'refs/heads/telemetry', commit]); }
     }
+    // With an origin the branch must reach it before `submodule add ./` clones from there: a failed push stops bootstrap
+    // before anything is stashed or untracked.
+    if (origin && !noPush) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
     if (hadFiles) { renameSync(dir, stash); stashed = true; }
     try { if (git(['ls-files', '.agents/telemetry'])) git(['rm', '-r', '-q', '--cached', '.agents/telemetry']); } catch { /* nothing tracked */ }
-    push(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
     git(['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '-b', 'telemetry', '--', './', '.agents/telemetry']);
     git(['config', '-f', '.gitmodules', 'submodule..agents/telemetry.ignore', 'all']); git(['add', '.gitmodules']);
     restore();
@@ -143,7 +163,8 @@ export function bootstrapTelemetry(repo, { env = process.env } = {}) {
     // no-op when there truly is nothing new.
     git(['add', '-A'], dir);
     try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], dir); } catch { /* nothing to commit */ }
-    push(['push', 'origin', 'HEAD:telemetry'], dir);
+    // Re-read the now-effective policy (the checked-out branch's) before publishing the seed commit.
+    if (origin && !noPush && mayPush(repo, env)) { try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* offline: the next sync retries */ } }
     git(['add', '.agents/telemetry']); // re-stage the gitlink at the commit the seed just moved it to
     return { status: 'created' };
   } catch (e) { restore(); return { status: 'failed', reason: String(e.message).split('\n')[0] }; }

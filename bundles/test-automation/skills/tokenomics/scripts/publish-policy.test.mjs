@@ -102,3 +102,21 @@ test('installer: a local-only policy on the telemetry branch itself stops every 
   const { repo, remote } = world(); seedBranch(repo, 'policy.json', '{"publish":"local-only"}\n');
   assert.equal(installTelemetrySubmodule(repo).status, 'skipped'); assert.equal(remoteHas(remote), false);
 });
+
+test('installer: stale local branch, newer origin carrying local-only → nothing pushed; diverged → conflict, nothing changed', () => {
+  const mk = (cwd, name, content, parent) => {
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd, input: content, encoding: 'utf8', env: ENV }).trim();
+    const tree = execFileSync('git', ['mktree'], { cwd, input: `100644 blob ${blob}\t${name}\n`, encoding: 'utf8', env: ENV }).trim();
+    const c = g(cwd, 'commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', name); g(cwd, 'update-ref', 'refs/heads/telemetry', c); return c;
+  };
+  let { repo, remote } = world();
+  let base = mk(repo, 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  const newer = mk(remote, 'policy.json', '{"publish":"local-only"}\n', base);
+  assert.equal(installTelemetrySubmodule(repo).status, 'skipped'); assert.equal(g(remote, 'rev-parse', 'refs/heads/telemetry'), newer);
+  ({ repo, remote } = world());
+  base = mk(repo, 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  mk(remote, 'a.txt', 'a\n', base); mk(repo, 'b.txt', 'b\n', base);
+  const index = g(repo, 'ls-files', '--stage'); const r = installTelemetrySubmodule(repo);
+  assert.equal(r.status, 'conflict'); assert.match(r.reason, /diverged/); assert.equal(g(repo, 'ls-files', '--stage'), index);
+  assert.match(telemetryPreflight(repo), /diverged/, 'the installer preflight stops before any write');
+});

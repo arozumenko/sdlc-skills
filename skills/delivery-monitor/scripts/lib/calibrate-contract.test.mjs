@@ -207,3 +207,13 @@ test('cell schema: wrong types are rejected; absent optional fields are fine', a
     assert.ok(cellProblem(c), JSON.stringify(bad));
   }
 });
+
+test('effective rule: floating-point error does not reject five equal samples; timestamps must be real ISO instants', async () => {
+  const equal = [...Array.from({ length: 5 }, (_, k) => sample(k, 2)), sample(9, 0, { role: 'qa-engineer' })];
+  const cal = buildCalibration(equal, { now: NOW, sampleRule: 'effective' });
+  assert.equal(lookup(cal, { role: 'python-dev' }, { rule: 'effective', now: NOW })?.key, 'role=python-dev');
+  const { cellProblem } = await import('./calibrate.mjs');
+  const ok = { n: 5, p50_usd: 1, p80_usd: 2, effort_class: null };
+  for (const bad of [null, '2026-02-31T00:00:00Z', '2026-13-01T00:00:00Z', '2026-11-12T25:00:00Z']) assert.ok(cellProblem({ ...ok, newest_at: bad }), String(bad));
+  assert.equal(cellProblem({ ...ok, newest_at: '2024-02-29T23:59:59.123Z' }), null);
+});

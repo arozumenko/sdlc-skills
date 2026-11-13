@@ -373,3 +373,33 @@ test('bootstrapTelemetry: a local-only policy on the telemetry branch itself sto
   const noOrigin = tmp(); seedBranchPath(noOrigin, 'policy.json', '{bad');
   assert.equal(bootstrapTelemetry(noOrigin, { env: {} }).status, 'created', 'no origin: local submodule, nothing to push');
 });
+
+// Code review r2 blocker: check the branch bootstrap will actually clone (origin's), not a stale local one.
+const commitOnBranch = (cwd, branch, name, content, parent) => {
+  const run = (args, input) => execFileSync('git', args, { cwd, input, encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
+  const blob = run(['hash-object', '-w', '--stdin'], content), tree = run(['mktree'], `100644 blob ${blob}\t${name}\n`);
+  const c = run(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', name]); run(['update-ref', `refs/heads/${branch}`, c]); return c;
+};
+test('bootstrapTelemetry: stale local branch, newer origin carrying local-only → nothing pushed (origin is what would be cloned)', () => {
+  const { repo, remote } = withRemote();
+  const base = commitOnBranch(repo, 'telemetry', 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  const newer = commitOnBranch(remote, 'telemetry', 'policy.json', '{"publish":"local-only"}\n', base); // a teammate's push
+  const r = bootstrapTelemetry(repo, { env: {} });
+  assert.equal(r.status, 'skipped', JSON.stringify(r)); assert.equal(g(remote, 'rev-parse', 'refs/heads/telemetry'), newer, 'origin untouched');
+});
+test('bootstrapTelemetry: diverged local and origin branches → conflict, nothing changed', () => {
+  const { repo, remote } = withRemote();
+  const base = commitOnBranch(repo, 'telemetry', 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  commitOnBranch(remote, 'telemetry', 'a.txt', 'a\n', base); commitOnBranch(repo, 'telemetry', 'b.txt', 'b\n', base);
+  const index = g(repo, 'ls-files', '--stage');
+  const r = bootstrapTelemetry(repo, { env: {} });
+  assert.equal(r.status, 'conflict'); assert.match(r.reason, /diverged/); assert.equal(g(repo, 'ls-files', '--stage'), index); assert.ok(!existsSync(join(repo, '.agents', 'telemetry', '.git')));
+});
+test('bootstrapTelemetry: local branch ahead of origin → created, origin fast-forwarded', () => {
+  const { repo, remote } = withRemote();
+  const base = commitOnBranch(repo, 'telemetry', 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  commitOnBranch(repo, 'telemetry', 'b.txt', 'b\n', base);
+  assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created');
+  g(remote, 'merge-base', '--is-ancestor', base, 'refs/heads/telemetry');
+  assert.notEqual(g(remote, 'rev-parse', 'refs/heads/telemetry'), base);
+});

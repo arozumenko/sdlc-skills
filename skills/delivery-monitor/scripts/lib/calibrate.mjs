@@ -130,7 +130,9 @@ export function lookup(cal, task, { rule = 'raw', now = Date.now() } = {}) {
   const minN = cal?.min_n ?? MIN_N;
   const eligible = (cell) => {
     if (rule !== 'effective') return cell.n >= minN;
-    if (cal.sample_rule !== 'effective' || !(typeof cell.n_eff === 'number' && cell.n_eff >= minN) || !cell.newest_at) return false;
+    // A relative tolerance of 1e-9 absorbs floating-point error (5 equal weights can sum to 4.999999999999999) without
+    // admitting a genuinely smaller sample (4.99997 stays out).
+    if (cal.sample_rule !== 'effective' || !(typeof cell.n_eff === 'number' && cell.n_eff >= minN * (1 - 1e-9)) || !cell.newest_at) return false;
     return now - Date.parse(cell.newest_at) <= 2 * (cal.half_life_days ?? HALF_LIFE_DAYS) * DAY;
   };
   for (const key of cellKeys(task)) { const cell = cal?.cells?.[key]; if (cell && eligible(cell)) return { key, cell }; }
@@ -138,6 +140,13 @@ export function lookup(cal, task, { rule = 'raw', now = Date.now() } = {}) {
 }
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+/** A real calendar instant in ISO UTC form: Date.parse alone accepts 2026-02-31 by rolling it over. */
+const isoUtc = (v) => {
+  const m = typeof v === 'string' && /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?Z$/.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && d.getUTCHours() === +m[4] && d.getUTCMinutes() === +m[5] && d.getUTCSeconds() === +m[6];
+};
 /** Why a cell is malformed, or null. Generated v1 tables pass; n_eff/newest_at are optional (tables from before they existed). */
 export function cellProblem(c) {
   if (!c || typeof c !== 'object' || Array.isArray(c)) return 'not an object';
@@ -146,7 +155,7 @@ export function cellProblem(c) {
   if (!finite(c.p80_usd) || c.p80_usd < c.p50_usd) return 'p80_usd must be a finite number >= p50_usd';
   if (!('effort_class' in c) || !(c.effort_class === null || (typeof c.effort_class === 'string' && /^E[1-4]$/.test(c.effort_class)))) return 'effort_class must be null or E1-E4';
   if ('n_eff' in c && (!finite(c.n_eff) || c.n_eff < 0)) return 'n_eff must be a finite number >= 0';
-  if ('newest_at' in c && c.newest_at !== null && !(typeof c.newest_at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(c.newest_at) && !Number.isNaN(Date.parse(c.newest_at)))) return 'newest_at must be an ISO UTC timestamp';
+  if ('newest_at' in c && !isoUtc(c.newest_at)) return 'newest_at must be an ISO UTC timestamp';
   return null;
 }
 
