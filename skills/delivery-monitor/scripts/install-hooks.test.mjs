@@ -267,3 +267,32 @@ test('doctor: says whether THIS session is bound; a binding to a closed plan is 
   assert.ok(d.lines.includes('session: claude:me -> sec/run-2 closed'));
   assert.ok(!d.lines.some((l) => /^session: .* (missing|malformed)$/.test(l)));
 });
+
+// Learning-loops data boundary: the installer honours the same publish policy as the hooks and CLI.
+const withRemote = () => { const repo = tmp(); const remote = mkdtempSync(join(tmpdir(), 'dm-remote-')); g(remote, 'init', '-q', '--bare'); g(repo, 'remote', 'add', 'origin', remote); return { repo, remote }; };
+const remoteHasTelemetry = (remote) => { try { g(remote, 'rev-parse', '--verify', 'refs/heads/telemetry'); return true; } catch { return false; } };
+
+test('bootstrapTelemetry pushes the telemetry branch by default (unchanged behaviour)', () => {
+  const { repo, remote } = withRemote();
+  assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created');
+  assert.equal(remoteHasTelemetry(remote), true);
+});
+
+test('bootstrapTelemetry: publish local-only or DELIVERY_NO_SYNC=1 with an origin → no submodule, nothing pushed, interim files kept', () => {
+  for (const setup of [(repo) => { mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{"publish":"local-only"}\n'); return {}; },
+    () => ({ DELIVERY_NO_SYNC: '1' })]) {
+    const { repo, remote } = withRemote(); const env = setup(repo);
+    const r = bootstrapTelemetry(repo, { env });
+    assert.equal(r.status, 'skipped'); assert.match(r.reason, /local only/);
+    assert.equal(remoteHasTelemetry(remote), false, 'remote has no telemetry branch');
+    assert.ok(!existsSync(join(repo, '.agents', 'telemetry', '.git')), 'stays a plain directory');
+    assert.ok(!existsSync(join(repo, '.gitmodules')));
+    if (!env.DELIVERY_NO_SYNC) assert.ok(existsSync(join(repo, '.agents', 'telemetry', 'policy.json')), 'interim files untouched');
+  }
+});
+
+test('bootstrapTelemetry: local-only with no origin still creates the local submodule (nothing to push to)', () => {
+  const repo = tmp();
+  const r = bootstrapTelemetry(repo, { env: { DELIVERY_NO_SYNC: '1' } });
+  assert.equal(r.status, 'created'); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.git')));
+});

@@ -1461,6 +1461,15 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
  * submodule (plain-dir fallback), no git, no network — silently skip; the
  * next capture moment catches up. TOKENOMICS_NO_SYNC=1 disables.
  */
+// Shared publish policy (.agents/telemetry/policy.json; same rule as scripts/install-hooks.mjs publishAllowed).
+function telemetryPushAllowed(repo) {
+  let p;
+  try { p = JSON.parse(readFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), 'utf8')); }
+  catch (e) { return e.code === 'ENOENT'; }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+  return !('publish' in p) || p.publish === 'private-remote';
+}
+
 export function syncTelemetry(repo, env = process.env) {
   if (env.TOKENOMICS_NO_SYNC === '1') return false;
   // The submodule ROOT — shared across factories; this factory's data lives in
@@ -1478,6 +1487,7 @@ export function syncTelemetry(repo, env = process.env) {
     // are NOW (always safe: the tree is clean right after the commit), then
     // converge with the remote below as usual.
     if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
+    if (!telemetryPushAllowed(repo)) return true; // local-only: committed here, never pushed
     try { git(['push', 'origin', 'HEAD:telemetry'], 20000); } catch {
       // non-fast-forward (a teammate pushed) → converge and retry once.
       // Per-user/per-session files make the merge conflict-free by design.

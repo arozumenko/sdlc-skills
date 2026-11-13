@@ -4,6 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameS
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mayPush } from './lib/profile.mjs';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
@@ -68,11 +69,19 @@ export function installIgnoreBlocks(repo, { remove = false } = {}) {
 
 const TELEMETRY_README = '# telemetry\n\nShared durable telemetry submodule (branch `telemetry`), one subfolder per factory or cross-factory concern: `automation/` (tokenomics), `delivery/` (delivery-monitor). Nobody hand-commits here; each capture moment commits and pushes best-effort.\n';
 /** Ported from tokenomics install-hooks.mjs:329-404 — same branch, same layout, so both skills share one submodule. */
-export function bootstrapTelemetry(repo) {
+export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   const dir = join(repo, '.agents', 'telemetry');
   const git = (args, cwd = repo) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }).trim();
   try { git(['rev-parse', '--git-dir']); } catch { return { status: 'no-git' }; }
   if (existsSync(join(dir, '.git'))) return { status: 'already' };
+  // Publish policy (learning-loops data boundary): read before the interim files are stashed. local-only or
+  // DELIVERY_NO_SYNC=1 → the branch and the seed commit stay local; nothing is pushed to origin.
+  const noPush = !mayPush(repo, env);
+  const push = (args, cwd) => { if (!noPush) { try { git(args, cwd); } catch { /* no remote / offline */ } } };
+  // The submodule URL is relative ('./'), so with an origin git resolves it against origin and needs the branch there.
+  // Local-only cannot push it, so the telemetry directory stays plain (sync never pushes a plain directory).
+  if (noPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']); } catch { /* no origin */ }
+    if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
   const stash = `${dir}.pre-submodule`; let stashed = false;
   const restore = () => { if (!stashed || !existsSync(stash)) return; try { mkdirSync(dir, { recursive: true }); for (const n of readdirSync(stash)) if (!existsSync(join(dir, n))) renameSync(join(stash, n), join(dir, n)); if (!readdirSync(stash).length) rmSync(stash, { recursive: true, force: true }); stashed = false; } catch { /* data preserved in stash; doctor surfaces it */ } };
   try {
@@ -83,7 +92,7 @@ export function bootstrapTelemetry(repo) {
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
     if (hadFiles) { renameSync(dir, stash); stashed = true; }
     try { if (git(['ls-files', '.agents/telemetry'])) git(['rm', '-r', '-q', '--cached', '.agents/telemetry']); } catch { /* nothing tracked */ }
-    try { git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']); } catch { /* no remote / offline */ }
+    push(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
     git(['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '-b', 'telemetry', '--', './', '.agents/telemetry']);
     git(['config', '-f', '.gitmodules', 'submodule..agents/telemetry.ignore', 'all']); git(['add', '.gitmodules']);
     restore();
@@ -100,7 +109,7 @@ export function bootstrapTelemetry(repo) {
     // no-op when there truly is nothing new.
     git(['add', '-A'], dir);
     try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], dir); } catch { /* nothing to commit */ }
-    try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* no remote / offline */ }
+    push(['push', 'origin', 'HEAD:telemetry'], dir);
     git(['add', '.agents/telemetry']); // re-stage the gitlink at the commit the seed just moved it to
     return { status: 'created' };
   } catch (e) { restore(); return { status: 'failed', reason: String(e.message).split('\n')[0] }; }
@@ -241,7 +250,7 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   // final `doctor: ok`/`doctor: attention` line (doctorReport), never mapped to a nonzero exit.
   if (has('--doctor')) { const d = doctorReport(repo, rel, { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
-  let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
+  let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo, { env: process.env });
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);
   return 0;

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { gitState } from './git.mjs';
 import { resolveOwnerRepo } from './paths.mjs';
+import { readPublishPolicy } from './profile.mjs';
 
 export function bestEffortSync(repo, { env = process.env } = {}) {
   if (env.DELIVERY_NO_SYNC === '1') return { synced: false, reason: 'DELIVERY_NO_SYNC' };
@@ -20,6 +21,8 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
     if (changed.length && changed.every((p) => /(^|\/)delivery\/diagnostics-[^/]*\.jsonl$/.test(p.replace(/^"|"$/g, '')))) return { synced: false, reason: 'diagnostics-only' };
     g('add', '-A');
     if (g('status', '--porcelain')) g('commit', '-q', '-m', `delivery-monitor: ${new Date().toISOString()}`);
+    // Publish policy: local-only keeps the commit (history, immutable state) but never pushes.
+    if (readPublishPolicy(repo).publish === 'local-only') return { synced: false, reason: 'local-only' };
     if (!g('remote')) return { synced: true, reason: 'no remote (local telemetry branch only)' };
     try { g('push', '-q'); return { synced: true }; } catch { /* rejected — integrate once */ }
     // Issue 4: fetch and merge fail for different reasons (network/remote down vs a real content
