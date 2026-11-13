@@ -120,3 +120,12 @@ test('installer: stale local branch, newer origin carrying local-only → nothin
   assert.equal(r.status, 'conflict'); assert.match(r.reason, /diverged/); assert.equal(g(repo, 'ls-files', '--stage'), index);
   assert.match(telemetryPreflight(repo), /diverged/, 'the installer preflight stops before any write');
 });
+
+test('installer: origin already has the branch, push not allowed by credentials → still installed', () => {
+  const { repo } = world();
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: 'x\n', encoding: 'utf8', env: ENV }).trim();
+  const tree = execFileSync('git', ['mktree'], { cwd: repo, input: `100644 blob ${blob}\tREADME.md\n`, encoding: 'utf8', env: ENV }).trim();
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'r')); g(repo, 'push', '-q', 'origin', 'telemetry');
+  g(repo, 'remote', 'set-url', '--push', 'origin', join(repo, 'no-push-here.git'));
+  assert.equal(installTelemetrySubmodule(repo).status, 'installed');
+});

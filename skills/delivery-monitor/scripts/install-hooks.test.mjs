@@ -403,3 +403,22 @@ test('bootstrapTelemetry: local branch ahead of origin → created, origin fast-
   g(remote, 'merge-base', '--is-ancestor', base, 'refs/heads/telemetry');
   assert.notEqual(g(remote, 'rev-parse', 'refs/heads/telemetry'), base);
 });
+
+test('bootstrapTelemetry: no origin → the seed commit reaches the parent; a recursive clone checks the submodule out', () => {
+  const repo = tmp(); mkdirSync(join(repo, '.agents', 'telemetry', 'delivery'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'events-u.jsonl'), '{"v":2}\n');
+  assert.equal(bootstrapTelemetry(repo, { env: { DELIVERY_NO_SYNC: '1' } }).status, 'created');
+  g(repo, 'commit', '-q', '-m', 'telemetry submodule');
+  const clone = join(mkdtempSync(join(tmpdir(), 'dm-clone-')), 'c');
+  execFileSync('git', ['-c', 'protocol.file.allow=always', 'clone', '-q', '--recurse-submodules', repo, clone], { env: { ...process.env, ...ENV } });
+  assert.ok(existsSync(join(clone, '.agents', 'telemetry', '.git')), 'the submodule checks out from the parent');
+  // The seed commit is on the parent's telemetry branch (pushed to the submodule's local origin), so it is reachable.
+  assert.equal(g(repo, 'rev-parse', 'refs/heads/telemetry'), g(join(repo, '.agents', 'telemetry'), 'rev-parse', 'HEAD'));
+});
+
+test('bootstrapTelemetry: origin already has the branch and push is not allowed by credentials → still created (no push needed)', () => {
+  const { repo, remote } = withRemote();
+  commitOnBranch(repo, 'telemetry', 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry');
+  g(repo, 'remote', 'set-url', '--push', 'origin', join(repo, 'no-push-here.git'));
+  const r = bootstrapTelemetry(repo, { env: {} });
+  assert.equal(r.status, 'created', JSON.stringify(r)); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.git')));
+});

@@ -143,7 +143,8 @@ export function bootstrapTelemetry(repo, { env = process.env } = {}) {
     }
     // With an origin the branch must reach it before `submodule add ./` clones from there: a failed push stops bootstrap
     // before anything is stashed or untracked.
-    if (origin && !noPush) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
+    // Skipped when the fetch showed origin already has exactly this commit (no push access needed then).
+    if (origin && !noPush && !(() => { try { return git(['rev-parse', 'refs/heads/telemetry']).trim() === git(['rev-parse', 'refs/remotes/origin/telemetry']).trim(); } catch { return false; } })()) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
     if (hadFiles) { renameSync(dir, stash); stashed = true; }
     try { if (git(['ls-files', '.agents/telemetry'])) git(['rm', '-r', '-q', '--cached', '.agents/telemetry']); } catch { /* nothing tracked */ }
@@ -164,7 +165,9 @@ export function bootstrapTelemetry(repo, { env = process.env } = {}) {
     git(['add', '-A'], dir);
     try { git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: seed'], dir); } catch { /* nothing to commit */ }
     // Re-read the now-effective policy (the checked-out branch's) before publishing the seed commit.
-    if (origin && !noPush && mayPush(repo, env)) { try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* offline: the next sync retries */ } }
+    // Without a parent origin the submodule's origin is the parent repository itself: that push stays on this machine and
+    // makes the staged seed commit reachable for a recursive clone, so it always runs.
+    if (!origin || (!noPush && mayPush(repo, env))) { try { git(['push', 'origin', 'HEAD:telemetry'], dir); } catch { /* offline: the next sync retries */ } }
     git(['add', '.agents/telemetry']); // re-stage the gitlink at the commit the seed just moved it to
     return { status: 'created' };
   } catch (e) { restore(); return { status: 'failed', reason: String(e.message).split('\n')[0] }; }

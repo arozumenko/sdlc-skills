@@ -460,7 +460,8 @@ export function installTelemetrySubmodule(repo, { remove = false, env = process.
 
     // With an origin the branch must reach it before `submodule add ./` clones from there: a failed push stops bootstrap
     // before the interim files move or the index changes.
-    if (origin && mayPush) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
+    // Skipped when the fetch showed origin already has exactly this commit (no push access needed then).
+    if (origin && mayPush && !(() => { try { return git(['rev-parse', 'refs/heads/telemetry']).trim() === git(['rev-parse', 'refs/remotes/origin/telemetry']).trim(); } catch { return false; } })()) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
 
     // 2. Move the interim files aside.
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;
@@ -499,7 +500,9 @@ export function installTelemetrySubmodule(repo, { remove = false, env = process.
       // staged. Publish it and re-stage the gitlink, or a teammate's
       // `clone --recurse-submodules` pins an empty (or unpushed) commit.
       // Re-read the now-effective policy (the checked-out branch's) before publishing the seed commit.
-      if (origin && mayPush && publishAllowed(repo, env)) { try { git(['push', 'origin', 'HEAD:telemetry'], { cwd: dir }); } catch { /* offline: next sync retries */ } }
+      // Without a parent origin the submodule's origin is the parent repository itself: that push stays on this machine and
+      // makes the staged seed commit reachable for a recursive clone, so it always runs.
+      if (!origin || (mayPush && publishAllowed(repo, env))) { try { git(['push', 'origin', 'HEAD:telemetry'], { cwd: dir }); } catch { /* offline: next sync retries */ } }
       git(['add', '.agents/telemetry']);
     }
 
