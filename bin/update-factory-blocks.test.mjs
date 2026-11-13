@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { importsAgentsMd, installInstructions, managedFactoryIds, refreshInstalledFactoryBlocks } from "./init.mjs";
+import { dedupeFactoryBlocks, importsAgentsMd, installInstructions, managedFactoryIds, refreshInstalledFactoryBlocks } from "./init.mjs";
 import { filterRoleSections } from "./lib/factory-selection.mjs";
 
 const REPO = new URL("..", import.meta.url).pathname;
@@ -343,4 +343,33 @@ test("install output: added is a success, an import skip is a note, an unclosed 
   };
   assert.match(cli({ "AGENTS.md": STALE_AGENTS, "CLAUDE.md": "# CLAUDE\n\n@AGENTS.md\n" }), /— instructions CLAUDE\.md feature-development \(imports AGENTS\.md; not added\)/);
   assert.match(cli({ "AGENTS.md": "# A\n\n<!-- FACTORY:manual-qa START -->\nno end marker\n" }), /! instructions AGENTS\.md manual-qa \(appended\)/);
+});
+
+// A START marker with no END marker (a hand edit cut the block short). The first run appends a whole block after the
+// project text. Before the fix, the second run matched from the orphan START to the appended END and replaced
+// everything between them, project text included.
+const ORPHAN = `# A\n\n<!-- FACTORY:aa START -->\nno end marker\n\n## Project notes\nkeep me\n`;
+
+test("an unclosed block: the project text after it survives the second run", () => {
+  const root = project({ "AGENTS.md": ORPHAN });
+  const pkg = fakePkg();
+  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "appended" }]);
+  const first = readFileSync(join(root, "AGENTS.md"), "utf8");
+  assert.equal(first, `${ORPHAN}\n${blk("aa", "## A rules\na")}\n`);
+  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "refreshed" }]);
+  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), first);
+});
+
+test("an unclosed block: a --factory install twice keeps the project text", () => {
+  const factory = { id: "aa", dir: join(fakePkg(), "bundles", "aa"), instructions: "instructions.md" };
+  const root = project({ "AGENTS.md": ORPHAN });
+  installInstructions(factory, root);
+  installInstructions(factory, root);
+  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), `${ORPHAN}\n${blk("aa", "## A rules\na")}\n`);
+});
+
+test("an unclosed block: dedupe does not treat the project text up to the next block's END as block content", () => {
+  // bb ships "## Shared". The project's own "## Shared" section sits after an orphan aa START, before the real aa block.
+  const text = `${blk("bb", "## Shared\nb")}\n\n<!-- FACTORY:aa START -->\n\n## Shared\nproject's own\n\n${blk("aa", "## A rules\na")}\n`;
+  assert.equal(dedupeFactoryBlocks(text), text);
 });

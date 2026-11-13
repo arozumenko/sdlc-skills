@@ -613,7 +613,9 @@ function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   // semantics or throw.
   const startRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} START -->`;
   const endRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} END -->`;
-  const re = new RegExp(`${startRe}[\\s\\S]*?${endRe}`);
+  // A block runs from the START nearest its END: an earlier START with no END of its own (a damaged file) is left
+  // as text, so the match never swallows the project text between it and a later block.
+  const re = new RegExp(`${startRe}(?:(?!${startRe})[\\s\\S])*?${endRe}`);
   const block = `${start}\n${body.trim()}\n${end}`;
   if (re.test(text)) {
     const updated = dedupeFactoryBlocks(text.replace(re, () => block));
@@ -650,6 +652,7 @@ export function dedupeFactoryBlocks(text) {
       const g = fenceOpener(lines[k]);
       if (g) { inner = g[1]; continue; }
       if (endRe.test(lines[k])) { j = k; break; }
+      if (lines[k].match(START)?.[1] === m[1]) break; // this START has no END of its own: leave it as text
     }
     if (j === -1) { out.push(l); continue; }
     const body = lines.slice(i + 1, j).join("\n");
