@@ -88,9 +88,12 @@ reason that applies and is never double-counted):
 5. `unit_mismatch` — the chosen estimate's unit isn't `h` (e.g. `active_min` — M1 actuals are elapsed time only).
    A `usd` estimate is not a mismatch: it is scored against the task's measured cost (`cost_usd`, the sum of its hooked
    dispatches' priced cost) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
-   `mae_s` is in dollars, rows carry `actual_usd`, and the only reasons are `excluded_item`, `late_accepted` (accepted at or after the task's start), `missing_actual` (no cost, or an
-   unpriced model, an unended hooked dispatch, or — for every task of the run — dispatch cost recorded under an item id the
-   run no longer knows, such as a renamed task's old id), `zero_midpoint`, `zero_actual` and `point`
+   `mae_s` is in dollars, rows carry `actual_usd`, and the only reasons are `excluded_item`, `unaccepted`, `no_eligible_latest`
+   (both as above; such a task stays in the `usd:` strata and is never counted as hours), `late_accepted` (accepted at or after
+   the task's start; a task with no measured start uses its first hooked dispatch or first commit), `missing_actual` (no cost,
+   or an unpriced model, an unended hooked dispatch, a dispatch that crossed into another task, a first hooked dispatch that
+   is a review or a fix round, or — for every task of the run — dispatch cost recorded under an item id the run no longer
+   knows, such as a renamed task's old id), `zero_midpoint`, `zero_actual` and `point`
 6. `clock_skew` — the item's own duration was itself clock-skew-excluded (no reliable actual to compare against)
 7. `missing_actual` — no measured duration at all (item never entered the flow-time population)
 8. `late_accepted` — `accepted_at ≥ started_at` (the estimate was accepted after work began — not a timely commitment)

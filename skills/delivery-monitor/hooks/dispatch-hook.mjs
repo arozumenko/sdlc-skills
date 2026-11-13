@@ -238,7 +238,9 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   const { prices, problem } = loadPricesChecked(repo);
   const priced = costOf(tr.usage, prices);
   const unpriced = [...priced.unpriced, ...(problem ? ['<prices-unreadable>'] : [])];
-  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length) };
+  // `crossed` names the tasks a resumed agent was sent after its first: their work is in this cost, so the reader trains on
+  // neither this item nor those.
+  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length), ...(crossed.length ? { crossed } : {}) };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
     const label = it ? (capturePrompts(repo) ? description.slice(0, 120) : `${it.ref} ${stage}`) : stage;

@@ -35,7 +35,7 @@ export function collectSamples(repo, { now = Date.now() } = {}) {
     // trusted: the whole run is left out of calibration rather than training on part of a task.
     // Only work evidence moves with a rename: the re-cut's own `created`/`cancelled` for the old id describe the catalogue
     // change itself, and carried over they would cancel the renamed task.
-    const renamed = run.supersedes?.item_map ?? {}, MOVES = new Set(['dispatched', 'dispatch_ended', 'rework_observed', 'review_returned']);
+    const renamed = run.supersedes?.item_map ?? {}, MOVES = new Set(['dispatched', 'dispatch_ended', 'rework_observed', 'review_returned', 'reopened']);
     const mine = occurrences.filter((o) => o.plan === run.run).map((o) => (o.item_id != null && renamed[o.item_id] && MOVES.has(o.event) ? { ...o, item_id: renamed[o.item_id] } : o));
     if (mine.some((o) => o.event === 'dispatch_ended' && o.item_id != null && !known.has(o.item_id))) continue;
     const occ = mine.filter((o) => known.has(o.item_id));
@@ -119,8 +119,20 @@ export function lookup(cal, task) {
   return null;
 }
 
-/** null when no table exists yet. A table that exists but cannot be read, does not parse, or has no `cells` object is an
- * error (CALIBRATION-INVALID), never "no table": otherwise a merge conflict in the file would silently stop estimates. */
+const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+/** Why a cell is malformed, or null. Every cell `calibrate` writes passes. A hand-edited or badly merged one must not reach
+ * `fillEstimates`: a missing p80 would become a NaN range and be reported as a fault in the plan. */
+export function cellProblem(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return 'not an object';
+  if (!Number.isInteger(c.n) || c.n < 0) return 'n must be an integer >= 0';
+  if (!finite(c.p50_usd) || c.p50_usd <= 0) return 'p50_usd must be a number > 0';
+  if (!finite(c.p80_usd) || c.p80_usd < c.p50_usd) return 'p80_usd must be a number >= p50_usd';
+  if (c.effort_class != null && !(typeof c.effort_class === 'string' && /^E[1-4]$/.test(c.effort_class))) return 'effort_class must be null or E1-E4';
+  return null;
+}
+
+/** null when no table exists yet. A table that exists but cannot be read, does not parse, has no `cells` object or has a
+ * malformed cell is an error (CALIBRATION-INVALID), never "no table": otherwise a merge conflict in the file would silently stop estimates. */
 export function readCalibration(repo) {
   const path = join(deliveryDir(repo), CALIBRATION_FILE);
   const bad = (why) => cliError('CALIBRATION-INVALID', `${path}: ${why}. Re-run \`delivery.mjs calibrate\`, fix the file, or pass --no-calibrate`);
@@ -129,6 +141,7 @@ export function readCalibration(repo) {
   try { text = readFileSync(path, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw bad(e.code ?? e.message); }
   try { cal = JSON.parse(text); } catch (e) { throw bad(`not valid JSON (${e.message})`); }
   if (!cal || typeof cal !== 'object' || !cal.cells || typeof cal.cells !== 'object' || Array.isArray(cal.cells)) throw bad('no "cells" object');
+  for (const [key, cell] of Object.entries(cal.cells)) { const why = cellProblem(cell); if (why) throw bad(`cell "${key}": ${why}`); }
   return { cal, sha256: sha256(text), path };
 }
 

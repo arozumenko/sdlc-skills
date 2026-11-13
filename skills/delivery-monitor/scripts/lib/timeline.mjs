@@ -3,6 +3,8 @@ import { SOURCE_RANK, factKey } from './events.mjs';
 import { estimateStatus, mergeCatalogue } from './plan.mjs';
 
 const START_STAGES = new Set([undefined, null, 'build']);
+// Stages that cannot be the first work on a task: something was built before a review, and reviewed before a fix round.
+const UNSTARTED_STAGES = new Set(['review', 'fix']);
 const TERMINAL = new Set(['done', 'cancelled']);
 const DEFERRED = new Set(['blocked', 'unblocked', 'review_requested', 'review_returned', 'review_approved', 'review_history', 'scope_declared', 'gate_observed', 'outcome_observed']);
 const key = (o) => JSON.stringify([o.plan, o.item_id ?? '', o.transition_id, o.basis]);
@@ -77,7 +79,7 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const items = new Map(plan.items.map((i) => [i.item_id, newItem(i)]));
   for (const i of items.values()) if (i.parent_item_id && items.has(i.parent_item_id)) items.get(i.parent_item_id).children.push(i.item_id);
   const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0 };
-  const explicitDone = new Map();
+  const explicitDone = new Map(), crossedRefs = new Set();
   for (const o of occurrences) {
     if (o.at >= endIso) continue;
     const it = items.get(o.item_id); if (!it) { counts.unregistered++; continue; }
@@ -127,6 +129,8 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
           const share = ag.cost_usd / ag.split;
           it.cost_usd = (it.cost_usd ?? 0) + share; it.cost_agents++;
           if (ag.unpriced_models?.length) it.cost_incomplete = true;
+          // The agent was later sent other tasks: this item carries their cost and they miss it (marked after the loop).
+          if (ag.crossed != null) { it.cost_incomplete = true; for (const ref of Array.isArray(ag.crossed) ? ag.crossed : []) crossedRefs.add(ref); }
           // Zero-token host rows (`<synthetic>`) do not make a dispatch multi-model.
           const models = Object.entries(ag.usage ?? {}).filter(([, u]) => Object.values(u ?? {}).some((v) => v > 0)).map(([m]) => m); if (models.length === 1) it.cost_by_model[models[0]] = (it.cost_by_model[models[0]] ?? 0) + share;
           else if (models.length) it.cost_by_model.mixed = (it.cost_by_model.mixed ?? 0) + share;
@@ -138,6 +142,15 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
   }
   // A hooked dispatch that never ended has an unmeasured share: the item's cost total is incomplete.
   for (const it of items.values()) if (it.hook_spans.some((sp) => sp.to == null)) it.cost_incomplete = true;
+  // So is a task another task's agent worked on, and a task whose first hooked dispatch is a review or a fix round: what was
+  // reviewed or fixed was built where the hook did not see it (an unbound session, or a builder outside Claude Code). A gate
+  // or merge dispatch can be a task's own work, so those are not taken as evidence of a gap.
+  for (const it of items.values()) {
+    if (it.level !== 'task') continue;
+    if (crossedRefs.has(it.ref)) it.cost_incomplete = true;
+    const first = it.hook_spans.reduce((a, sp) => (a == null || sp.from < a.from ? sp : a), null);
+    if (first && UNSTARTED_STAGES.has(first.stage)) it.cost_incomplete = true;
+  }
   for (const it of items.values()) { it.estimates.sort((a, b) => a.revision - b.revision); it.estimate_original = estimateOriginal(it.estimates); }
   for (const level of ['mission', 'campaign']) {
     for (const it of items.values()) {
