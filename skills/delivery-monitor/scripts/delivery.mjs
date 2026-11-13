@@ -410,13 +410,13 @@ function cmdSession(repo, p, io, now) {
 function validateProfile(obj, tpl) {
   const errs = [];
   for (const k of Object.keys(obj)) {
+    if (POLICY_KEYS.includes(k)) { errs.push(...validatePolicies({ [k]: obj[k] })); continue; } // optional; unset = shipped behaviour
     if (!(k in tpl)) { errs.push(`profile.${k} is not a known key`); continue; }
     const v = obj[k];
     if (k === 'capturePrompts') { if (typeof v !== 'boolean') errs.push('profile.capturePrompts must be boolean'); }
     else if (k === 'zeroDurationSec') { if (!Number.isInteger(v) || v < 0) errs.push('profile.zeroDurationSec must be an integer >= 0'); }
     else if (k === 'minWholeWeeks') { if (!Number.isInteger(v) || v < 3) errs.push('profile.minWholeWeeks must be an integer >= 3'); }
     else if (k === 'tokenomics') { if (typeof v !== 'string' || !v) errs.push('profile.tokenomics must be a non-empty string'); }
-    else if (POLICY_KEYS.includes(k)) errs.push(...validatePolicies({ [k]: v }));
     else if (k === 'baselines') {
       if (v == null || typeof v !== 'object' || Array.isArray(v)) errs.push('profile.baselines must be an object');
       else for (const [bk, bv] of Object.entries(v)) {
@@ -524,7 +524,7 @@ function cmdBackfill(repo, p, io, now) {
       for (const o of resolveObservations(repo).active) {
         if (o.plan !== run.run || o.source !== 'git' || !String(o.source_record_id).startsWith('pr:') || keep.has(o.observation_id)) continue;
         if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.at}`); continue; }
-        const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+        const res = appendObservation(repo, retraction(o, storeText), { now });
         out(io, `RETRACT ${o.observation_id} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++; else conflicts++;
       }
     }
@@ -561,16 +561,25 @@ function cmdDoctor(repo, p, io) {
  * revision + 1 with status 'retracted' (event-model.md). `--agent <id>` takes every active observation that subagent produced in
  * the run (dispatched, dispatch_ended, rework_observed); `--observation <id>` takes exactly one. Re-record the right item with
  * `event <ref> dispatched --at <iso>`. */
+/** A new retraction revision copies the record it retracts. With storeText false, its free text (raw, label, meta.note) is
+ * not copied forward; the older revision keeps what it was written with. */
+const retraction = (o, storeText) => {
+  const r = { ...o, revision: o.revision + 1, status: 'retracted' };
+  if (storeText) return r;
+  const { note, ...meta } = o.meta ?? {};
+  return { ...r, raw: null, label: null, meta };
+};
+
 function cmdRetract(repo, p, io, now) {
   const f = p.flags, agent = f.agent != null ? String(requireValue(f, 'agent')) : null, oid = f.observation != null ? String(requireValue(f, 'observation')) : null;
   if (!agent === !oid) throw cliError('USAGE', 'retract (--agent <agent id> | --observation <observation id>) [--plan <run>] [--dry-run]');
   const run = resolveRun(repo, f.plan);
   const hits = resolveObservations(repo).active.filter((o) => o.plan === run.run && (oid ? o.observation_id === oid : o.agentId === agent));
   if (!hits.length) throw cliError('USAGE', `no active observation ${oid ? oid : `from agent ${agent}`} in ${run.run}`);
-  let retracted = 0;
+  let retracted = 0; const { storeText } = readPolicies(repo);
   for (const o of hits) {
     if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} ${o.at}`); continue; }
-    const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+    const res = appendObservation(repo, retraction(o, storeText), { now });
     out(io, `RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++;
   }
   out(io, `RETRACTED ${retracted}${f['dry-run'] ? ' (dry-run)' : ''}`); return 0;
@@ -584,7 +593,8 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   if (!fn) { stderr.write(`USAGE(unknown command ${p.cmd ?? ''}; expected ${Object.keys(COMMANDS).join('|')})\n`); return 2; }
   let code = 1;
   try { code = await fn(repo, p, io, now); }
-  catch (e) { if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
+  // CALIBRATION-INVALID rejects a table before anything is written, so the command also writes (and syncs) nothing.
+  catch (e) { if (e.code === 'CALIBRATION-INVALID') io.wroteNothing = true; if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
   finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && !io.wroteNothing && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only', 'local-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }

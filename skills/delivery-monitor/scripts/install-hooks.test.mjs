@@ -341,8 +341,14 @@ test('doctor: prints the publish policy; under local-only flags an installed pub
   const f = doctorFindings(repo, REL);
   assert.ok(f.some((x) => /^publish: local-only$/.test(x.line)));
   const pub = f.find((x) => /^publisher:/.test(x.line)); assert.equal(pub.severity, 'warning'); assert.match(pub.line, /tokenomics\/hooks\/telemetry-capture\.mjs does not honour/);
-  writeFileSync(join(old, 'telemetry-capture.mjs'), "// reads .agents/telemetry/policy.json\n");
+  writeFileSync(join(old, 'telemetry-capture.mjs'), "// mentions .agents/telemetry/policy.json in a comment only\n");
+  assert.ok(doctorFindings(repo, REL).some((x) => /^publisher:/.test(x.line)), 'a file name in a comment is not the marker');
+  writeFileSync(join(old, 'telemetry-capture.mjs'), '// telemetry-publish-policy: v1\n');
   assert.ok(!doctorFindings(repo, REL).some((x) => /^publisher:/.test(x.line)), 'a current publisher is not flagged');
+  // Mixed versions: a current capture hook next to an old installer (the --pull publisher) is flagged.
+  const scripts = join(repo, '.claude', 'skills', 'tokenomics', 'scripts'); mkdirSync(scripts, { recursive: true }); writeFileSync(join(scripts, 'install-hooks.mjs'), '// old\n');
+  assert.match(doctorFindings(repo, REL).find((x) => /^publisher:/.test(x.line)).line, /tokenomics\/scripts\/install-hooks\.mjs/);
+  writeFileSync(join(scripts, 'install-hooks.mjs'), '// telemetry-publish-policy: v1\n');
   writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{bad');
   assert.ok(doctorFindings(repo, REL).some((x) => x.severity === 'warning' && /^publish: local-only — .*treated as local-only/.test(x.line)));
 });

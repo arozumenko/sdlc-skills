@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// telemetry-publish-policy: v1 (honours .agents/telemetry/policy.json; delivery-monitor doctor checks this marker)
 // STDLIB ONLY. Opt-in Claude SubagentStop capture + shared telemetry submodule (spec §6.1, §6.6, D15). Installing the skill never wires this.
 import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -219,10 +220,12 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   const pol = readPublishPolicy(repo);
   add(pol.problem ? 'warning' : 'info', `publish: ${pol.publish === 'legacy' ? 'legacy (unverified: no .agents/telemetry/policy.json)' : pol.publish}${pol.problem ? ` — ${pol.problem}, treated as local-only` : ''}`);
   if (pol.publish === 'local-only') {
-    for (const host of ['.claude', '.cursor', '.github', '.codex', '.windsurf', '.kiro', '.agents']) {
-      const hook = join(repo, host, 'skills', 'tokenomics', 'hooks', 'telemetry-capture.mjs');
-      let text = null; try { text = readFileSync(hook, 'utf8'); } catch { continue; }
-      if (!text.includes('policy.json')) add('warning', `publisher: ${relative(repo, hook)} does not honour policy.json and may push telemetry`, 'update the tokenomics skill (npx sdlc-skills init --update)');
+    // Every entry point that can push the shared tree carries the `telemetry-publish-policy: v1` marker once it honours the policy.
+    const PUBLISHERS = [['tokenomics', 'hooks/telemetry-capture.mjs'], ['tokenomics', 'scripts/install-hooks.mjs'], ['delivery-monitor', 'scripts/lib/sync.mjs'], ['delivery-monitor', 'scripts/install-hooks.mjs']];
+    for (const host of ['.claude', '.cursor', '.github', '.codex', '.windsurf', '.kiro', '.agents']) for (const [skill, file] of PUBLISHERS) {
+      const path = join(repo, host, 'skills', skill, ...file.split('/'));
+      let text = null; try { text = readFileSync(path, 'utf8'); } catch { continue; }
+      if (!text.includes('telemetry-publish-policy: v1')) add('warning', `publisher: ${relative(repo, path)} does not honour policy.json and may push telemetry`, `update the ${skill} skill (npx sdlc-skills init --update)`);
     }
   }
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);

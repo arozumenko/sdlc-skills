@@ -80,3 +80,16 @@ test('default: CLI --note is stored (shipped behaviour)', () => {
   assert.equal(run(repo, ['event', 'T1.1', 'dispatched', '--note', 'hello', '--id', 'e1']).code, 0);
   assert.ok(readRaw(repo).lines.some(({ rec }) => rec.meta?.note === 'hello'));
 });
+
+test('storeText false: new retraction revisions do not copy text forward (reconciliation and retract)', () => {
+  const { repo, prs } = setup();
+  assert.equal(run(repo, ['backfill', '--pr', '--from-json', prs]).code, 0);
+  assert.equal(run(repo, ['event', 'T1.1', 'dispatched', '--note', 'private note', '--id', 'n1']).code, 0);
+  profile(repo, { storeText: false });
+  writeFileSync(prs, '[]'); assert.equal(run(repo, ['backfill', '--pr', '--from-json', prs]).code, 0);
+  const noteObs = readRaw(repo).lines.map((l) => l.rec).find((r) => r.meta?.note === 'private note');
+  assert.equal(run(repo, ['retract', '--observation', noteObs.observation_id]).code, 0);
+  const newest = readRaw(repo).lines.map((l) => l.rec).filter((r) => r.status === 'retracted');
+  assert.equal(newest.length, 2);
+  for (const r of newest) { assert.equal(r.raw ?? null, null); assert.equal(r.meta?.note, undefined); assert.ok(!JSON.stringify(r).includes('Secret customer') && !JSON.stringify(r).includes('private note')); }
+});

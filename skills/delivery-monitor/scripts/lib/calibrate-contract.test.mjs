@@ -163,7 +163,9 @@ test('calibration off: the command does not run the closing sync (pending teleme
   const repo = landed(); profile(repo, { calibration: 'off' });
   // Make the telemetry dir a git repo so a sync would commit; DELIVERY_NO_SYNC is cleared for this run.
   const tel = join(repo, '.agents', 'telemetry'); execFileSync('git', ['init', '-q'], { cwd: tel }); execFileSync('git', ['-c', 'user.email=t@x', '-c', 'user.name=T', 'commit', '-q', '--allow-empty', '-m', 'root'], { cwd: tel });
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tel, encoding: 'utf8' }).trim();
   const r = run(repo, ['calibrate'], { env: { DELIVERY_NO_SYNC: '' } }); assert.equal(r.code, 0, r.stderr);
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tel, encoding: 'utf8' }).trim(), head, 'no sync commit');
   assert.notEqual(execFileSync('git', ['status', '--porcelain'], { cwd: tel, encoding: 'utf8' }).trim(), '', 'pending files left uncommitted');
 });
 
@@ -172,9 +174,36 @@ test('profile set: accepts and validates the policy keys; an unrelated profile c
   writeFileSync(f, JSON.stringify({ calibration: 'off', storeText: false })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
   writeFileSync(f, JSON.stringify({ zeroDurationSec: 30 })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
   const p = JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8'));
-  assert.equal(p.calibration, 'off'); assert.equal(p.storeText, false); assert.equal(p.zeroDurationSec, 30); assert.equal(p.calibrationSample, 'raw');
+  assert.equal(p.calibration, 'off'); assert.equal(p.storeText, false); assert.equal(p.zeroDurationSec, 30); assert.equal('calibrationSample' in p, false, 'unset policies stay unset (no default materialised)');
   writeFileSync(f, JSON.stringify({ calibration: 'on' })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
   assert.equal(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).calibration, 'on', 'an explicit value replaces it');
   writeFileSync(f, JSON.stringify({ calibrationSample: 'all' })); const bad = run(repo, ['profile', 'set', '--from', f]);
   assert.equal(bad.code, 2); assert.match(bad.stderr, /calibrationSample/);
+});
+
+test('CALIBRATION-INVALID writes nothing: the closing sync does not run', () => {
+  const repo = landed(); assert.equal(run(repo, ['calibrate']).code, 0);
+  const file = join(deliveryDir(repo), 'calibration.json'), c = JSON.parse(readFileSync(file, 'utf8')); delete c.cells.all.p80_usd; writeFileSync(file, JSON.stringify(c));
+  const tel = join(repo, '.agents', 'telemetry'); execFileSync('git', ['init', '-q'], { cwd: tel }); execFileSync('git', ['-c', 'user.email=t@x', '-c', 'user.name=T', 'commit', '-q', '--allow-empty', '-m', 'root'], { cwd: tel });
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tel, encoding: 'utf8' }).trim();
+  const r = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'N1', role: 'python-dev', type: 'feature', novel: false }], 'run-x'), 'x.md'), '--id', 'x', '--created-at', '2026-11-10T00:00:00Z'], { env: { DELIVERY_NO_SYNC: '' } }); assert.equal(r.code, 2); assert.match(r.stderr, /CALIBRATION-INVALID/);
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tel, encoding: 'utf8' }).trim(), head, 'no sync commit');
+});
+
+test('effective rule is checked on the unrounded n_eff: just below the minimum is not eligible', () => {
+  const tenth = Array.from({ length: 5 }, (_, k) => sample(k, k * 0.1)); // Kish ≈ 4.99997
+  const cal = buildCalibration(tenth, { now: NOW, sampleRule: 'effective' });
+  assert.ok(cal.cells.all.n_eff < 5 && cal.cells.all.n_eff > 4.999);
+  assert.equal(lookup(cal, { role: 'python-dev' }, { rule: 'effective', now: NOW }), null);
+});
+
+test('cell schema: wrong types are rejected; absent optional fields are fine', async () => {
+  const { cellProblem } = await import('./calibrate.mjs');
+  const ok = { n: 5, p50_usd: 1, p80_usd: 2, return_rate: 0, effort_class: null, by_model: {} };
+  assert.equal(cellProblem(ok), null);
+  assert.equal(cellProblem({ ...ok, effort_class: 'E2', n_eff: 4.2, newest_at: '2026-11-12T12:00:00.000Z' }), null);
+  for (const bad of [{ effort_class: ['E1'] }, { effort_class: undefined }, { newest_at: 2026 }, { newest_at: '11/12/2026' }, { n_eff: '5' }, { n_eff: null }]) {
+    const c = { ...ok, ...bad }; if ('effort_class' in bad && bad.effort_class === undefined) delete c.effort_class;
+    assert.ok(cellProblem(c), JSON.stringify(bad));
+  }
 });

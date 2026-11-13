@@ -100,7 +100,7 @@ function summarize(list, weightOf, bounds) {
   // The class compares unrounded values; rounding is for the file only.
   const newest = list.reduce((m, s) => (m == null || Date.parse(s.done_at) > Date.parse(m) ? s.done_at : m), null);
   return { n: list.length, p50_usd: r2(p50), p80_usd: r2(p80), return_rate: r3(pairs.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / wsum), effort_class: classOf(p50, bounds), by_model: byModel,
-    n_eff: r3(effectiveN(pairs.map((p) => p.w))), newest_at: newest == null ? null : new Date(Date.parse(newest)).toISOString() };
+    n_eff: effectiveN(pairs.map((p) => p.w)), newest_at: newest == null ? null : new Date(Date.parse(newest)).toISOString() };
 }
 
 /** Builds the calibration table from samples. Recency-weighted: a sample's weight halves every `halfLifeDays`, so a model or
@@ -144,9 +144,9 @@ export function cellProblem(c) {
   if (!Number.isInteger(c.n) || c.n < 0) return 'n must be an integer >= 0';
   if (!finite(c.p50_usd) || c.p50_usd <= 0) return 'p50_usd must be a finite number > 0';
   if (!finite(c.p80_usd) || c.p80_usd < c.p50_usd) return 'p80_usd must be a finite number >= p50_usd';
-  if (c.effort_class != null && !/^E[1-4]$/.test(c.effort_class)) return 'effort_class must be null or E1-E4';
-  if (c.n_eff != null && (!finite(c.n_eff) || c.n_eff < 0)) return 'n_eff must be a finite number >= 0';
-  if (c.newest_at != null && Number.isNaN(Date.parse(c.newest_at))) return 'newest_at must be ISO';
+  if (!('effort_class' in c) || !(c.effort_class === null || (typeof c.effort_class === 'string' && /^E[1-4]$/.test(c.effort_class)))) return 'effort_class must be null or E1-E4';
+  if ('n_eff' in c && (!finite(c.n_eff) || c.n_eff < 0)) return 'n_eff must be a finite number >= 0';
+  if ('newest_at' in c && c.newest_at !== null && !(typeof c.newest_at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(c.newest_at) && !Number.isNaN(Date.parse(c.newest_at)))) return 'newest_at must be an ISO UTC timestamp';
   return null;
 }
 

@@ -1,3 +1,4 @@
+// telemetry-publish-policy: v1 (honours .agents/telemetry/policy.json; delivery-monitor doctor checks this marker)
 // STDLIB ONLY. Best-effort telemetry sync (spec §6.1): never stages an unmerged tree, never resolves conflicts, retries once.
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

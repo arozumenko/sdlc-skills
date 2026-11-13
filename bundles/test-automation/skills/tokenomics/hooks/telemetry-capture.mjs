@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// telemetry-publish-policy: v1 (honours .agents/telemetry/policy.json; delivery-monitor doctor checks this marker)
 // telemetry-capture.mjs — durable per-session usage capture for team telemetry.
 //
 // WHY THIS EXISTS. The efficiency-audit skill answers "what did this cost" by

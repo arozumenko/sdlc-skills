@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// telemetry-publish-policy: v1 (honours .agents/telemetry/policy.json; delivery-monitor doctor checks this marker)
 // install-hooks.mjs — wire (or unwire) the tokenomics capture hook in a
 // consumer repo, idempotently. The skill is installed by the sdlc-skills
 // installer like any other; THIS script is the explicit opt-in that turns
