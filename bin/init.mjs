@@ -560,25 +560,35 @@ export function seedMissingFiles(srcPath, destPath) {
 // Splice a factory's instructions.md into the project's root context files
 // inside <!-- FACTORY:<id> START/END --> markers. The block is replaced in
 // place on re-run (idempotent) — no --update needed. AGENTS.md (the full
-// team reference every agent reads) is created if missing; CLAUDE.md is
-// auto-loaded and scout-owned, so its block is only refreshed when the file
-// already exists — we never create or bloat a lean CLAUDE.md.
+// team reference every agent reads) is created if missing. CLAUDE.md is
+// auto-loaded and scout-owned, so it is never created: when it exists its
+// block is replaced in place, or appended if it has none — unless it imports
+// AGENTS.md (`@AGENTS.md`), which already loads the block, so a second copy
+// would only double it.
 //
 // The matcher accepts BOTH the old `BUNDLE:<id>` marker and the current
 // `FACTORY:<id>` marker (pre-rename installs left the old form in place), but
 // always WRITES the new `FACTORY:<id>` form — so a project's block migrates to
 // the new marker the first time it's refreshed, and every write after that
 // only ever needs to match FACTORY again.
-function installInstructions(factory) {
+export function installInstructions(factory, cwd = CWD) {
   if (!factory.instructions) return;
   const src = join(factory.dir, factory.instructions);
   if (!existsSync(src)) {
     console.log(`      ! instructions (missing in factory: ${factory.instructions})`);
     return;
   }
-  const body = filterRoleSections(readFileSync(src, "utf8"), installedRoleNames(CWD));
+  const body = filterRoleSections(readFileSync(src, "utf8"), installedRoleNames(cwd));
   for (const [file, createIfMissing] of [["AGENTS.md", true], ["CLAUDE.md", false]]) {
-    const status = spliceFactoryBlock(join(CWD, file), factory.id, body, createIfMissing);
+    const filePath = join(cwd, file);
+    if (file === "CLAUDE.md" && existsSync(filePath)) {
+      const text = readFileSync(filePath, "utf8");
+      if (!managedFactoryIds(text).includes(factory.id) && importsAgentsMd(text)) {
+        console.log(`      — instructions ${file} (${IMPORTS_AGENTS})`);
+        continue;
+      }
+    }
+    const status = spliceFactoryBlock(filePath, factory.id, body, createIfMissing);
     if (status === "absent") console.log(`      — instructions ${file} (not present; skipped)`);
     else console.log(`      ✓ instructions ${file} (${status})`);
   }
@@ -664,17 +674,34 @@ export function managedFactoryIds(text) {
 // True when CLAUDE.md pulls AGENTS.md in with Claude Code's `@path` import, so
 // the blocks in AGENTS.md already reach the main session. An import is an
 // `@AGENTS.md` / `@./AGENTS.md` token with whitespace or a line end on both
-// sides: Claude Code reads `@AGENTS.md.` as a different path, and skips code
-// fences and inline code (checked against Claude Code 2.1.323). When in doubt
-// this answers false: a doubled block costs context, a missing one loses the
-// team rules.
+// sides (`@AGENTS.md.` is a different path). Text Claude Code does not read
+// as prose is not an import: code fences, indented code blocks, inline code
+// and HTML comments. Observed on Claude Code 2.1.323; the cases are pinned in
+// update-factory-blocks.test.mjs. The checks lean towards false: a wrong
+// "false" doubles a block, a wrong "true" loses the team rules.
+const IMPORTS_AGENTS = "imports AGENTS.md; not added";
 export function importsAgentsMd(text) {
-  let fence = null;
-  for (const l of text.split("\n")) {
-    if (fence) { if (closesFence(l, fence)) fence = null; continue; }
-    const f = fenceOpener(l);
+  let fence = null, inComment = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (fence) { if (closesFence(line, fence)) fence = null; continue; }
+    const f = fenceOpener(line);
     if (f) { fence = f[1]; continue; }
-    if (/(?:^|\s)@(?:\.\/)?AGENTS\.md(?=\s|$)/.test(l.replace(/`[^`]*`/g, ""))) return true;
+    // Drop HTML comments, which may run over several lines.
+    let rest = line, prose = "";
+    while (rest) {
+      const at = rest.indexOf(inComment ? "-->" : "<!--");
+      if (at === -1) { if (!inComment) prose += rest; break; }
+      if (!inComment) prose += rest.slice(0, at) + " ";
+      rest = rest.slice(at + (inComment ? 3 : 4));
+      inComment = !inComment;
+    }
+    if (/^(?: {4}|\t)/.test(line)) continue; // indented code block
+    // Drop inline code: a run of backticks closed by a run of the same length. A run left unclosed makes the line
+    // ambiguous, so it is not counted.
+    prose = prose.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, " ");
+    if (prose.includes("`")) continue;
+    if (/(?:^|\s)@(?:\.\/)?AGENTS\.md(?=\s|$)/.test(prose)) return true;
   }
   return false;
 }
@@ -683,16 +710,19 @@ export function importsAgentsMd(text) {
 // just the one named by `--factory`. Without this, `init --all --update`
 // refreshed agents and skills while AGENTS.md/CLAUDE.md kept the team rules
 // from the original install (e.g. a feature-development block missing the
-// delivery-monitor section its refreshed agents rely on). No file is created
-// and text outside the markers is preserved. `skip` is the factory
-// `--factory` already spliced this run.
+// delivery-monitor section its refreshed agents rely on). Neither AGENTS.md
+// nor CLAUDE.md is created and text outside the markers is preserved; seed
+// files a refreshed factory ships and the project lacks are copied. `skip` is
+// the factory `--factory` already spliced this run.
 //
-// One block is added: a full `--update` copies a block AGENTS.md carries into
-// an existing CLAUDE.md that lacks it. A project that created CLAUDE.md after
-// its first factory install had the block in AGENTS.md only; Claude Code
-// auto-loads CLAUDE.md and not AGENTS.md, so the main session never got the
-// team rules. A CLAUDE.md that imports AGENTS.md already loads them and is
-// left alone, and so is a plain run that only refreshes role-filtered blocks.
+// One case adds blocks: for each block refreshed in AGENTS.md, a full
+// `--update` adds the same body to an existing CLAUDE.md that lacks it
+// (status "added"). A project that created CLAUDE.md after its first factory
+// install had the block in AGENTS.md only; Claude Code auto-loads CLAUDE.md,
+// not AGENTS.md, so the main session never got the team rules. Nothing is
+// added when CLAUDE.md imports AGENTS.md (reported, so a wrong guess shows in
+// the output; blocks it already carries are still refreshed), or with
+// `onlyRoleFiltered` (a plain run after a roster change).
 export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, skip = null, onlyRoleFiltered = false } = {}) {
   const results = [];
   const inAgents = new Map(); // factory id → block body, for the blocks refreshed in AGENTS.md
@@ -723,9 +753,14 @@ export function refreshInstalledFactoryBlocks({ cwd = CWD, pkgRoot = PKG_ROOT, s
       results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
       if (file === "AGENTS.md") inAgents.set(id, body);
     }
-    if (file !== "CLAUDE.md" || onlyRoleFiltered || importsAgentsMd(text)) continue;
+    if (file !== "CLAUDE.md" || onlyRoleFiltered) continue;
+    const imports = importsAgentsMd(text);
     for (const [id, body] of inAgents) {
-      if (!ids.includes(id)) results.push({ file, id, status: spliceFactoryBlock(filePath, id, body, false) });
+      if (ids.includes(id)) continue;
+      if (imports) { results.push({ file, id, status: IMPORTS_AGENTS }); continue; }
+      // "added" tells this copy apart from "appended", which a file's own unclosed block produces.
+      const status = spliceFactoryBlock(filePath, id, body, false);
+      results.push({ file, id, status: status === "appended" ? "added" : status });
     }
   }
   return results;
@@ -2977,7 +3012,8 @@ async function main() {
     installInstructions(factory);
   }
 
-  // --update refreshes every factory block already in the project. A plain run
+  // --update refreshes every factory block already in the project, and adds to
+  // an existing CLAUDE.md the blocks AGENTS.md carries and it lacks. A plain run
   // that changed the installed roster refreshes only the blocks filtered by
   // roster (instructions with <!-- roles: --> markers), so an added role gets
   // its sections back without touching any other block.
@@ -2987,7 +3023,7 @@ async function main() {
     if (refreshed.length) {
       console.log(`\n  → project root (installed factory instructions)`);
       for (const r of refreshed) {
-        const mark = r.status === "refreshed" || r.status === "appended" ? "✓" : "!";
+        const mark = r.status === "refreshed" || r.status === "added" ? "✓" : r.status === IMPORTS_AGENTS ? "—" : "!";
         console.log(`      ${mark} instructions ${r.file} ${r.id} (${r.status})`);
       }
     }
