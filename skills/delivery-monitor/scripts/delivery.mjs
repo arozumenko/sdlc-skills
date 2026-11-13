@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-monitor CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
-import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
@@ -16,6 +16,7 @@ import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './li
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collectSamples, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
+import { POLICY_KEYS, readPolicies, validatePolicies } from './lib/profile.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -110,8 +111,11 @@ function cmdPlanRegister(repo, f, io, now) {
   const prev = loadRun(repo, runId);
   // Tasks the planner left unestimated get a calibrated dollar estimate from calibration.json (if one exists), auto-accepted.
   // --no-calibrate stops new fills only: a re-cut still keeps the calibrated estimates its tasks were planned with.
-  const calib = f['no-calibrate'] ? null : readCalibration(repo);
-  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
+  // A persistent `calibration: "off"` in profile.json is the same for every registration (learning-loops off switch).
+  const policies = readPolicies(repo);
+  const calib = f['no-calibrate'] || policies.calibration === 'off' ? null : readCalibration(repo);
+  if (calib && policies.calibrationSample === 'effective' && calib.cal.sample_rule !== 'effective') io.stderr.write(`WARN calibrationSample is "effective" but ${CALIBRATION_FILE} was built under "${calib.cal.sample_rule ?? 'raw'}": no cell is eligible until you re-run \`delivery.mjs calibrate\`\n`);
+  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null, rule: policies.calibrationSample }) : null;
   const { active } = resolveObservations(repo);
   const next = toCatalogue(full, { version: full.version });
 
@@ -202,12 +206,29 @@ function cmdPlanRegister(repo, f, io, now) {
   return 0;
 }
 
+/** Every table version is kept as `calibration/<sha256>.json`, the exact bytes an estimate's reference digest names, written
+ * once and never overwritten. A valid table from before snapshots existed is preserved first. Both writes are atomic
+ * (temp file + rename), and the snapshot lands before calibration.json moves to it. */
+function writeCalibrationVersioned(repo, text) {
+  const dir = deliveryDir(repo), snaps = resolve(dir, 'calibration');
+  mkdirSync(snaps, { recursive: true });
+  const atomic = (path, data) => { const tmp = `${path}.tmp-${process.pid}`; writeFileSync(tmp, data); renameSync(tmp, path); };
+  const keep = (data) => { const path = resolve(snaps, `${sha256(data)}.json`); if (!existsSync(path)) atomic(path, data); };
+  let current = null; try { current = readCalibration(repo); } catch { /* a broken table is replaced, not preserved */ }
+  if (current) keep(readFileSync(current.path, 'utf8'));
+  keep(text);
+  atomic(resolve(dir, CALIBRATION_FILE), text);
+}
+
 /** `calibrate`: rebuild calibration.json from every landed task's measured cost, and print the table. Run it at plan close;
  * the next `plan register` reads it. `--dry-run` prints without writing; `--json` prints the file; `--half-life <days>`. */
 function cmdCalibrate(repo, p, io, now) {
   // Display only: cents above $1, two significant digits below (the file keeps full precision).
   const usd = (x) => (x == null ? "-" : x >= 1 ? x.toFixed(2) : String(Number(x.toPrecision(2))));
   const f = p.flags;
+  const policies = readPolicies(repo);
+  // The persistent off switch: nothing is computed or written, dry-run and --json included.
+  if (policies.calibration === 'off') { out(io, 'CALIBRATION-OFF profile.json sets calibration "off": nothing computed or written'); return 0; }
   const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
   if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
   // The price table the hook used must be readable; a broken override is reported here rather than ignored.
@@ -216,7 +237,7 @@ function cmdCalibrate(repo, p, io, now) {
   const samples = collectSamples(repo, { now });
   if (!samples.length) throw cliError('NO-EVENTS', 'no landed task with a measured cost yet: the Claude dispatch hook records cost on dispatch_ended');
   const pricesAsOf = prices.asOf;
-  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
+  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf, sampleRule: policies.calibrationSample });
   const text = `${JSON.stringify(cal, null, 2)}\n`;
   if (f.json) { io.stdout.write(text); }
   else {
@@ -227,8 +248,7 @@ function cmdCalibrate(repo, p, io, now) {
     for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);
   }
   if (f['dry-run']) { if (!f.json) out(io, 'DRY-RUN not written'); return 0; }
-  mkdirSync(deliveryDir(repo), { recursive: true });
-  writeFileSync(resolve(deliveryDir(repo), CALIBRATION_FILE), text);
+  writeCalibrationVersioned(repo, text);
   if (!f.json) out(io, `WROTE ${resolve(deliveryDir(repo), CALIBRATION_FILE)}`);
   return 0;
 }
