@@ -151,14 +151,14 @@ export function resolveRefs(run, opts) {
   if (taskResult.items.length || taskResult.how === 'ambiguous') return taskResult;
   return matchLevel(candidates.filter((i) => i.level === 'mission'), opts);
 }
-/** Tasks a resumed agent was sent after its first brief: refs named in its follow-up messages that are not the item(s) it is
- * attributed to. A role that owns tasks is only checked against its own (the resolveRefs role ruling). Its later work stays
+/** Tasks a resumed agent was sent after its first brief: those whose ref is named in its follow-up messages and that are not
+ * the item(s) it is attributed to. A role that owns tasks is only checked against its own (the resolveRefs role ruling). Its later work stays
  * on the first item — the hook cannot split one transcript — so this flags it rather than re-attributing. */
-export function crossedRefs(run, { followUps, role, attributed }) {
+export function crossedTasks(run, { followUps, role, attributed }) {
   const tasks = run.items.filter((i) => i.level === 'task' && !i.cancelled && !attributed.has(i.item_id));
   const owned = role ? tasks.filter((i) => i.role === role) : [];
   const pool = owned.length ? owned : tasks;
-  return pool.filter((i) => followUps.some((f) => wordHit(f.text, i.ref))).map((i) => i.ref);
+  return pool.filter((i) => followUps.some((f) => wordHit(f.text, i.ref)));
 }
 export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k < 10; k++) { const res = appendObservation(repo, r, opts); if (res.result !== 'ID-CONFLICT') return res; r = { ...r, revision: r.revision + 1 }; } return { result: 'ID-CONFLICT', observation_id: rec.observation_id, revision: rec.revision }; }
 // F19: diagnostics lines are exactly {at, kind, session, agent_id, detail} with `kind` drawn from the
@@ -225,20 +225,24 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
   const stage = classifyStage(description) !== 'other' ? classifyStage(description) : classifyStage(tr.firstUserText);
   const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null;
   const { items } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch, role });
-  const crossed = crossedRefs(run, { followUps: tr.followUps, role, attributed: new Set(items.map((i) => i.item_id)) });
+  const crossedTo = crossedTasks(run, { followUps: tr.followUps, role, attributed: new Set(items.map((i) => i.item_id)) }), crossed = crossedTo.map((i) => i.item_id);
   if (crossed.length) {
-    const kind = diagnose(repo, slug, 'task-crossing', payload, `resumed agent sent ${crossed.join(', ')} after its first task (${items.map((i) => i.ref).join(', ') || 'unattributed'}); that work stays on the first item — dispatch a fresh subagent per task`, now);
+    const kind = diagnose(repo, slug, 'task-crossing', payload, `resumed agent sent ${crossedTo.map((i) => i.ref).join(', ')} after its first task (${items.map((i) => i.ref).join(', ') || 'unattributed'}); that work stays on the first item — dispatch a fresh subagent per task`, now);
     diagnostic = diagnostic ?? kind;
   }
   const common = { user: null, host: 'claude', plan: run.run, source: 'hook', source_record_id: `claude:${payload.session_id}:${payload.agent_id}`, session: payload.session_id, agentId: payload.agent_id, role };
   // Effort for calibration: per-model usage and its dollar cost. `split` = how many items this one dispatch is attributed to,
   // so a reader charges each item cost_usd / split and a two-task dispatch is never counted twice.
-  // A broken price table (an unreadable project override) must not quietly price at list: the dispatch is marked unpriced, so
-  // its task is left out of calibration and cost accuracy instead of being trained on the wrong scale.
+  // A broken price table (built-in or override: unreadable, unparseable, or with an invalid entry) must not pass as priced:
+  // the cost is computed from whatever loaded and the dispatch is marked unpriced, so its task is left out of calibration and
+  // cost accuracy instead of being trained on the wrong scale.
   const { prices, problem } = loadPricesChecked(repo);
   const priced = costOf(tr.usage, prices);
   const unpriced = [...priced.unpriced, ...(problem ? ['<prices-unreadable>'] : [])];
-  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length) };
+  // `crossed` lists the item ids of the tasks named in a resumed agent's follow-up messages (`crossedTasks`): their work is
+  // taken to be in this cost, so the timeline marks this item and those tasks `cost_incomplete`. Ids, not refs: an id follows
+  // a rename.
+  const effort = { usage: tr.usage, cost_usd: priced.cost_usd, ...(unpriced.length ? { unpriced_models: unpriced } : {}), split: Math.max(1, items.length), ...(crossed.length ? { crossed } : {}) };
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
     const label = it ? (capturePrompts(repo) ? description.slice(0, 120) : `${it.ref} ${stage}`) : stage;

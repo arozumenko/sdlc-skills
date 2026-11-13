@@ -14,7 +14,7 @@ import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
-import { CALIBRATION_FILE, buildCalibration, collectSamples, fillEstimates, readCalibration } from './lib/calibrate.mjs';
+import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -213,8 +213,10 @@ function cmdCalibrate(repo, p, io, now) {
   // The price table the hook used must be readable; a broken override is reported here rather than ignored.
   const prices = loadPricesChecked(repo);
   if (prices.problem) throw cliError('PRICES-INVALID', `${prices.problem}; dispatches priced while it was broken are recorded as unpriced and left out`);
-  const samples = collectSamples(repo, { now });
-  if (!samples.length) throw cliError('NO-EVENTS', 'no landed task with a measured cost yet: the Claude dispatch hook records cost on dispatch_ended');
+  const { samples, landed, left_out } = collect(repo, { now });
+  // Tasks left out are counted by reason, so a shrinking population is never silent.
+  const leftOut = `${landed - samples.length} of ${landed}`, why = Object.entries(left_out).map(([k, n]) => `${k}=${n}`).join(' ');
+  if (!samples.length) throw cliError('NO-EVENTS', landed ? `no landed task with a complete measured cost: ${leftOut} left out (${why}); the reasons are in SKILL.md, "Effort calibration"` : 'no landed task yet: the Claude dispatch hook records cost on dispatch_ended');
   const pricesAsOf = prices.asOf;
   const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
   const text = `${JSON.stringify(cal, null, 2)}\n`;
@@ -222,6 +224,7 @@ function cmdCalibrate(repo, p, io, now) {
   else {
     const b = cal.class_bounds_usd;
     out(io, `CALIBRATION samples=${cal.samples} half-life=${cal.half_life_days}d classes=${b ? `E1<=$${usd(b[0])} E2<=$${usd(b[1])} E3<=$${usd(b[2])} E4>$${usd(b[2])}` : 'none (fewer than 12 samples)'}`);
+    if (landed > samples.length) out(io, `LEFT-OUT ${leftOut} landed tasks: ${why}`);
     out(io, '| cell | n | p50 $ | p80 $ | return rate | class |'); out(io, '|---|---|---|---|---|---|');
     for (const [k, c] of Object.entries(cal.cells)) out(io, `| ${k} | ${c.n}${c.n < cal.min_n ? ' (too few)' : ''} | ${usd(c.p50_usd)} | ${usd(c.p80_usd)} | ${c.return_rate} | ${c.effort_class ?? '-'} |`);
     for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);

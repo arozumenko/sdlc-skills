@@ -88,9 +88,17 @@ reason that applies and is never double-counted):
 5. `unit_mismatch` — the chosen estimate's unit isn't `h` (e.g. `active_min` — M1 actuals are elapsed time only).
    A `usd` estimate is not a mismatch: it is scored against the task's measured cost (`cost_usd`, the sum of its hooked
    dispatches' priced cost) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
-   `mae_s` is in dollars, rows carry `actual_usd`, and the only reasons are `excluded_item`, `late_accepted` (accepted at or after the task's start), `missing_actual` (no cost, or an
-   unpriced model, an unended hooked dispatch, or — for every task of the run — dispatch cost recorded under an item id the
-   run no longer knows, such as a renamed task's old id), `zero_midpoint`, `zero_actual` and `point`
+   `mae_s` is in dollars and rows carry `actual_usd`. The gates apply in this order: `excluded_item`, `unaccepted`,
+   `no_eligible_latest` (both as above; such a task stays in the `usd:` strata and is never counted as hours),
+   `late_accepted` (accepted at or after the task's measured start; a task with no measured start is judged against the
+   earlier of its first commit and its earliest hooked dispatch of any stage; with neither, the estimate is never late),
+   `missing_actual` (no cost, or an unpriced model, an unended hooked dispatch, a resumed agent's dispatch that lists other
+   tasks in `meta.agent.crossed` — the task of the first brief and each listed task — an earliest hooked dispatch that is a
+   review or a fix round, or — for every task of the run — dispatch cost recorded under an item id the run no longer knows,
+   such as a renamed task's old id), `zero_midpoint`. `late_accepted` comes before `missing_actual` here, the reverse of
+   the hours order; `zero_actual` and `point` are the same non-exclusive counters as for hours. On a `missing_actual` row
+   `actual_usd` is the partial total the ledger holds, shown for inspection (the Markdown report marks it
+   `(incomplete)`); it is not the task's cost
 6. `clock_skew` — the item's own duration was itself clock-skew-excluded (no reliable actual to compare against)
 7. `missing_actual` — no measured duration at all (item never entered the flow-time population)
 8. `late_accepted` — `accepted_at ≥ started_at` (the estimate was accepted after work began — not a timely commitment)

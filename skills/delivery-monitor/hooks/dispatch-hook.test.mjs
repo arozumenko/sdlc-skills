@@ -330,8 +330,9 @@ test('handleStop: a resumed agent sent another task → task-crossing diagnostic
   const obs = resolveObservations(repo).active.filter((o) => o.agentId === 'agent-40');
   assert.deepEqual([...new Set(obs.map((o) => o.ref))], ['TASK-023'], 'the hook flags, it does not split one transcript across tasks');
   const agent = obs.find((o) => o.event === 'dispatch_ended').meta.agent;
-  const { usage: u, cost_usd, unpriced_models, split, ...profile } = agent;
+  const { usage: u, cost_usd, unpriced_models, split, crossed, ...profile } = agent;
   assert.deepEqual(profile, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1, follow_ups: 1 });
+  assert.deepEqual(crossed, [`${R}/task-task-034`], 'the cost record names the task it also worked on by item id, so neither is trained on');
   // Fixture rows carry no model id: usage is still counted (deduplicated by message id), but nothing is priced and that is said.
   assert.deepEqual(u, { unknown: { input: 20, output: 0, cache_write: 0, cache_write_1h: 0, cache_read: 759_980 } });
   assert.equal(cost_usd, 0); assert.deepEqual(unpriced_models, ['unknown']); assert.equal(split, 1);
@@ -343,6 +344,7 @@ test('handleStop: follow-ups on the same task (review comments, CI) are not a cr
   const repo = setup(); const t = resumedTranscript({ agentId: 'agent-41', followUps: ['Rio left two comments on TASK-023; fix them on the same PR.', 'CI is red on the lint step.'] });
   assert.equal(handleStop(payload(t, { agent_id: 'agent-41' }), { repo, now: NOW }).diagnostic, null);
   assert.equal(diagLines(repo).filter((d) => d.kind === 'task-crossing').length, 0);
+  assert.ok(!('crossed' in resolveObservations(repo).active.find((o) => o.agentId === 'agent-41' && o.event === 'dispatch_ended').meta.agent), 'no crossing, no marker');
 });
 
 // PR #105 review: the writer side of effort — what the hook records for a priced transcript.

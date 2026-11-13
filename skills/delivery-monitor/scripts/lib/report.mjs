@@ -13,7 +13,7 @@ import { LEVELS, resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
 import { computeMetrics, toHours } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256 } from './paths.mjs';
-import { buildTimelines, selectOccurrences } from './timeline.mjs';
+import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
 // F19: two more honesty labels the round-3 review asked for, alongside the eight from Global
@@ -166,11 +166,12 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
-    const occ = occurrences.filter((o) => o.plan === r.run && known.get(r.run).has(o.item_id));
+    // A crossing marker is kept even on a dispatch with no item: it says which tasks miss part of their cost.
+    const occ = occurrences.filter((o) => o.plan === r.run && (known.get(r.run).has(o.item_id) || carriesCrossing(o)));
     const { items, counts } = buildTimelines({ occurrences: occ, plan: r, end });
     // Dispatch cost recorded under an id this run no longer knows (a rename in any earlier version) belongs to some task this
     // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
-    if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) it.cost_incomplete = true;
+    if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
     const metrics = computeMetrics({ items, plan: r, since: sinceIso, end, profile, estimateBase, filters });
@@ -340,7 +341,7 @@ export function renderMarkdown(doc) {
       const ex = excludedStr(x.excluded) || '—';
       L.push(`| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : st.startsWith('usd:') ? `$${Math.round(x.mae_s * 100) / 100}` : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${ex} |`);
     }
-    if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h or $) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? (r.estimate.unit === 'usd' ? `[$${r.estimate.low}, $${r.estimate.high}]` : `[${r.estimate.low}, ${r.estimate.high}]`) : '—'} | ${r.estimate?.unit === 'usd' ? (r.actual_usd == null ? '—' : `$${r.actual_usd}`) : h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
+    if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h or $) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? (r.estimate.unit === 'usd' ? `[$${r.estimate.low}, $${r.estimate.high}]` : `[${r.estimate.low}, ${r.estimate.high}]`) : '—'} | ${r.actual_usd != null ? `$${r.actual_usd}${r.reason === 'missing_actual' ? ' (incomplete)' : ''}` : r.estimate?.unit === 'usd' ? '—' : h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
     for (const sv of m.schedule_variance) L.push(`- schedule_variance ${sv.level} ${sv.ref}: actual ${h(sv.actual_s)} vs [${sv.estimate.low}, ${sv.estimate.high}] → [${toHours(sv.band.vs_high_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_high_s)}h, ${toHours(sv.band.vs_low_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_low_s)}h]; scope added ${sv.scope.added}, removed ${sv.scope.removed}`);
     L.push('', '## Coverage & caveats', '');
     // F17: coverage.sources (already present) plus coverage.done_basis — both read straight off
@@ -395,7 +396,7 @@ const needs = (n, floor) => `needs ≥${floor} <span class="stat-sub">(have ${n}
 const spreadLine = (s) => (s ? `median ${s.median == null ? `— (needs ≥5, have ${s.n})` : fmtDur(s.median)} · min ${fmtDur(s.min)} · max ${fmtDur(s.max)}${s.samples ? ` · samples ${s.samples.map(fmtDur).join(', ')}` : ''}` : 'not measured');
 const verdictOf = (r) => {
   if (!r) return null;
-  if (r.reason) return { text: { unaccepted: 'estimate not accepted', unestimated: 'no estimate', missing_actual: 'no actual yet', zero_midpoint: 'zero-width estimate', unit_mismatch: 'unit mismatch', excluded_item: 'excluded item', no_eligible_latest: 'no eligible latest estimate' }[r.reason] ?? r.reason, cls: '' };
+  if (r.reason) return { text: { unaccepted: 'estimate not accepted', unestimated: 'no estimate', missing_actual: 'no usable actual', zero_midpoint: 'zero-width estimate', unit_mismatch: 'unit mismatch', excluded_item: 'excluded item', no_eligible_latest: 'no eligible latest estimate' }[r.reason] ?? r.reason, cls: '' };
   if (r.hit === true) return { text: 'within range', cls: 'oc-done' };
   if (r.hit === false) return r.ratio != null && r.ratio < 1 ? { text: 'below range', cls: 'oc-below' } : { text: 'above range', cls: 'oc-cancelled' };
   return null;

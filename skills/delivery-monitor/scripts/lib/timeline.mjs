@@ -3,6 +3,12 @@ import { SOURCE_RANK, factKey } from './events.mjs';
 import { estimateStatus, mergeCatalogue } from './plan.mjs';
 
 const START_STAGES = new Set([undefined, null, 'build']);
+// Stages that cannot be the first work on a task: something was built before a review, and reviewed before a fix round.
+const UNSTARTED_STAGES = new Set(['review', 'fix']);
+/** A hook `dispatch_ended` whose agent was sent other tasks after its first brief (`meta.agent.crossed`: their item ids). */
+export const carriesCrossing = (o) => o.event === 'dispatch_ended' && o.meta?.agent?.crossed != null;
+/** Mark an item's cost total as not the whole cost of its work, and keep the reason (`cost_gaps`) for the reader to count. */
+export function markCostGap(it, why) { it.cost_incomplete = true; if (!it.cost_gaps.includes(why)) it.cost_gaps.push(why); }
 const TERMINAL = new Set(['done', 'cancelled']);
 const DEFERRED = new Set(['blocked', 'unblocked', 'review_requested', 'review_returned', 'review_approved', 'review_history', 'scope_declared', 'gate_observed', 'outcome_observed']);
 const key = (o) => JSON.stringify([o.plan, o.item_id ?? '', o.transition_id, o.basis]);
@@ -66,7 +72,7 @@ export function estimateLatest(es, before) {
 }
 
 const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent_item_id: i.parent_item_id ?? null, class: i.class ?? null, role: i.role ?? null, story: i.story ?? null, sequence: i.sequence ?? null,
-  type: i.type ?? null, area: i.area ?? null, novel: i.novel ?? null, effort_class: i.effort_class ?? null, cost_usd: null, cost_by_model: {}, cost_agents: 0, cost_incomplete: false, last_done_at: null, last_done_basis: null, last_reopen_at: null,
+  type: i.type ?? null, area: i.area ?? null, novel: i.novel ?? null, effort_class: i.effort_class ?? null, cost_usd: null, cost_by_model: {}, cost_agents: 0, cost_incomplete: false, cost_gaps: [], last_done_at: null, last_done_basis: null, last_reopen_at: null,
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, created_source: null, estimates: [], estimate_original: null, estimate_latest: null,
   scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, start_source: null, first_commit_at: null,
   first_commit_source: null, done_at: null, done_basis: null, done_sha: null, done_source: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, proxy_dispatches: 0, rework_count: 0,
@@ -77,9 +83,12 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const items = new Map(plan.items.map((i) => [i.item_id, newItem(i)]));
   for (const i of items.values()) if (i.parent_item_id && items.has(i.parent_item_id)) items.get(i.parent_item_id).children.push(i.item_id);
   const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0 };
-  const explicitDone = new Map();
+  const explicitDone = new Map(), crossedIds = new Set(); let crossingUnreadable = false;
   for (const o of occurrences) {
     if (o.at >= endIso) continue;
+    // Read before anything can skip the record: the dispatch may be unattributed, or its own cost malformed. A marker that is
+    // not a list of this run's item ids cannot say which tasks miss cost, so no task of the run is trusted.
+    if (carriesCrossing(o)) { const cx = o.meta.agent.crossed; if (Array.isArray(cx) && cx.every((id) => typeof id === 'string' && items.has(id))) for (const id of cx) crossedIds.add(id); else crossingUnreadable = true; }
     const it = items.get(o.item_id); if (!it) { counts.unregistered++; continue; }
     it.seen = true;
     const terminal = TERMINAL.has(it.state);
@@ -121,12 +130,14 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         // A dispatch with no cost (recorded before pricing, or by an older hook) or with a malformed one makes the item's total
         // incomplete: it is kept for display but never trained on or scored, so a rollout never mistakes part of a task for all of it.
         const ag = o.meta.agent;
+        // The agent was later sent other tasks: this item carries their cost and they miss it (see the per-task pass below).
+        if (ag?.crossed != null) markCostGap(it, 'crossed-into-another-task');
         const valid = ag && Number.isFinite(ag.cost_usd) && ag.cost_usd >= 0 && Number.isInteger(ag.split) && ag.split >= 1;
-        if (!valid) { it.cost_incomplete = true; break; }
+        if (!valid) { markCostGap(it, 'no-cost-recorded'); break; }
         {
           const share = ag.cost_usd / ag.split;
           it.cost_usd = (it.cost_usd ?? 0) + share; it.cost_agents++;
-          if (ag.unpriced_models?.length) it.cost_incomplete = true;
+          if (ag.unpriced_models?.length) markCostGap(it, 'unpriced-model');
           // Zero-token host rows (`<synthetic>`) do not make a dispatch multi-model.
           const models = Object.entries(ag.usage ?? {}).filter(([, u]) => Object.values(u ?? {}).some((v) => v > 0)).map(([m]) => m); if (models.length === 1) it.cost_by_model[models[0]] = (it.cost_by_model[models[0]] ?? 0) + share;
           else if (models.length) it.cost_by_model.mixed = (it.cost_by_model.mixed ?? 0) + share;
@@ -137,7 +148,18 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
     }
   }
   // A hooked dispatch that never ended has an unmeasured share: the item's cost total is incomplete.
-  for (const it of items.values()) if (it.hook_spans.some((sp) => sp.to == null)) it.cost_incomplete = true;
+  for (const it of items.values()) if (it.hook_spans.some((sp) => sp.to == null)) markCostGap(it, 'dispatch-not-ended');
+  // A task named in another dispatch's `crossed` list is incomplete too, and so is a task whose earliest hooked dispatch (by
+  // start time) is a review or a fix round: the build is taken to have run where the hook did not record it (an unbound
+  // session, or a builder outside Claude Code). Gate, merge and unclassified dispatches can be a task's own first work and
+  // are not treated as a gap.
+  for (const it of items.values()) {
+    if (it.level !== 'task') continue;
+    if (crossingUnreadable) markCostGap(it, 'crossing-unreadable');
+    if (crossedIds.has(it.item_id)) markCostGap(it, 'crossed-into-another-task');
+    const first = it.hook_spans.reduce((a, sp) => (a == null || sp.from < a.from ? sp : a), null);
+    if (first && UNSTARTED_STAGES.has(first.stage)) markCostGap(it, 'first-dispatch-review-or-fix');
+  }
   for (const it of items.values()) { it.estimates.sort((a, b) => a.revision - b.revision); it.estimate_original = estimateOriginal(it.estimates); }
   for (const level of ['mission', 'campaign']) {
     for (const it of items.values()) {

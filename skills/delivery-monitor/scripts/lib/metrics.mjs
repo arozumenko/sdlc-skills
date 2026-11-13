@@ -55,21 +55,30 @@ const excludedItem = (i) => invalidChain(i) || deferredEpisode(i) || proxyComple
 const throughputExcluded = (i) => invalidChain(i) || proxyCompletion(i);
 const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length, unknown: arr.length });
 
+// When the task's work began, for judging whether a dollar estimate was a forecast: its measured start; without one (e.g. a
+// brief the hook could not classify as a build, or a task recorded by CLI only), the earlier of its first commit and its
+// earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
+const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
+  : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
 /** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
  * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
-  const tier = chosen.tier ?? null;
+  // `chosen` is null when the dollar estimate was never accepted, or when `latest` finds none accepted before the start.
+  const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;
   const keys = ['usd:all', ...(i.class ? [`usd:${i.class}`] : []), ...(tier ? [`usd:tier:${tier}`] : []), ...(i.effort_class ? [`usd:effort:${i.effort_class}`] : [])];
   const bs = keys.map(eb); bs.forEach((b) => b.n++);
-  const mid = (chosen.low + chosen.high) / 2, actual = i.cost_usd;
+  const mid = chosen ? (chosen.low + chosen.high) / 2 : null, actual = i.cost_usd;
   let reason = null;
   if (excludedItem(i)) reason = 'excluded_item';
-  // Same timeliness rule as hours: a range accepted at or after the task started is not a forecast (a re-cut or a
-  // retrospective registration would otherwise score itself).
-  else if (chosen.accepted_at != null && i.started_at && Date.parse(chosen.accepted_at) >= Date.parse(i.started_at)) reason = 'late_accepted';
+  else if (!i.estimate_original) reason = 'unaccepted';
+  else if (!chosen) reason = 'no_eligible_latest';
+  // Timeliness: a range accepted at or after the work began (`beganAt`) is not a forecast (a re-cut or a retrospective
+  // registration would otherwise score itself). Unlike hours, this is tested before `missing_actual` and falls back to the
+  // first commit or hooked dispatch when there is no measured start.
+  else if (chosen.accepted_at != null && Date.parse(chosen.accepted_at) >= beganAt(i)) reason = 'late_accepted';
   else if (actual == null || i.cost_incomplete) reason = 'missing_actual';
   else if (mid === 0) reason = 'zero_midpoint';
-  const row = { item_id: i.item_id, ref: i.ref, level, class: i.class, effort_class: i.effort_class ?? null, tier, base: estimateBase, estimate: { unit: 'usd', low: chosen.low, high: chosen.high }, actual_s: null, actual_basis: null, actual_usd: actual == null ? null : Number(actual.toPrecision(6)), ratio: null, hit: null, reason };
+  const row = { item_id: i.item_id, ref: i.ref, level, class: i.class, effort_class: i.effort_class ?? null, tier, base: estimateBase, estimate: chosen ? { unit: 'usd', low: chosen.low, high: chosen.high } : null, actual_s: null, actual_basis: null, actual_usd: actual == null ? null : Number(actual.toPrecision(6)), ratio: null, hit: null, reason };
   if (reason) { bs.forEach((b) => b.excluded[reason]++); data.estimate_rows.push(row); return; }
   bs.forEach((b) => { b.eligible++; b._aes.push(Math.abs(actual - mid)); b._ratios.push(actual / mid); });
   if (actual === 0) bs.forEach((b) => b.excluded.zero_actual++); else bs.forEach((b) => b._mres.push(Math.abs(actual - mid) / actual));
@@ -158,7 +167,8 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     const est = {}; const eb = (k) => (est[k] ??= emptyEst());
     for (const i of done) {
       const chosen = estimateBase === 'latest' ? i.estimate_latest : i.estimate_original;
-      if (chosen?.unit === 'usd') { usdAccuracy(i, chosen, level, eb, data, estimateBase); continue; }
+      // The unit decides the strata even when no estimate is eligible, so an unscorable dollar estimate is never counted as hours.
+      if ((chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.unit === 'usd') { usdAccuracy(i, chosen, level, eb, data, estimateBase); continue; }
       const keys = ['all', ...(i.class ? [i.class] : [])];
       const tier = chosen?.tier ?? i.estimates[0]?.estimate?.tier ?? null;
       if (tier) keys.push(`tier:${tier}`);
