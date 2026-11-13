@@ -1,7 +1,8 @@
 # Learning loops: how the harness improves itself — design (v3)
 
-Status: v4 · 2026-11-13. Adversarial review (Codex gpt-6-astra, high): round 1 REJECT (15 findings),
-round 2 REJECT (9 new), round 3 REJECT (no blocker, 7 major, 2 minor). v4 answers round 3.
+Status: v5 · 2026-11-13. Adversarial review (Codex gpt-6-astra, high): round 1 REJECT (15 findings),
+round 2 REJECT (9 new), round 3 REJECT (no blocker, 7 major, 2 minor), round 4 REJECT (no blocker,
+4 design gaps + implementation readiness). v5 answers round 4 and adds the Implementation contract.
 
 ## Why
 
@@ -53,16 +54,22 @@ Requirements:
 - **Data boundary.**
   - **Destination.** Records go only to storage the consumer controls and has declared **private**
     (local disk, or a private remote). They never go to the harness authors or a third party.
-  - **One publish policy.** A single persistent project setting (`local-only` or `private-remote`)
-    that **every** component that can commit or push honours: installer, hooks, CLI. `local-only`
-    means no push from any of them.
+  - **One publish policy.** A single persistent project setting that **every** component that can
+    commit or push the shared telemetry tree honours (each skill's installer, hooks and CLI):
+    - *unset* = **legacy**: today's behaviour (push), recorded as **unverified**: it does not claim
+      contract compliance;
+    - `private-remote`: push allowed; setting it is the project's declaration that the remote is
+      private;
+    - `local-only`: no component pushes. It counts as enforced only when every installed publisher
+      honours it; the health check reports any publisher that does not.
   - **Field policy.** One shared policy, applied by hooks, CLI events and backfills alike, decides
     whether free text is stored (dispatch descriptions, commit subjects, PR titles, notes, raw event
     text). The structured fields (ids, refs, stages, timestamps, models, token counts, costs, a user id
     where attribution needs it) are always allowed. Every text source is listed in the skill.
-  - **Compatibility.** Shipping these settings must not change what an existing install does. A
-    setting is added with today's behaviour as its default; making a stricter value the default is
-    itself a treatment under change control.
+  - **Compatibility.** Shipping these settings must not change what an existing install does with
+    valid data, and fresh installs start in the same legacy state. A setting is added with today's
+    behaviour as its default; making a stricter value the default is itself a treatment under change
+    control. Malformed state is not protected by this rule: rejecting it is a fix.
 - **Off switch.** One persistent setting per loop. Off means: no new state is computed, no new decision
   uses the state, and the pre-loop behaviour returns for new decisions. Decisions already made stay as
   recorded history; rolling back does not rewrite them.
@@ -82,7 +89,7 @@ Reference implementation: `skills/delivery-monitor`.
 | Learned state | `calibration.json`: cells tried in order role+type+novel, role+type, role, type, all; recency-weighted (default half-life 42 days) p50/p80 USD per cell; effort-class boundaries are the weighted quartiles of all samples (needs 12 samples in total), and a cell's class comes from where its p50 falls | — |
 | Decision | `plan register` leaves planner estimates and earlier calibrated estimates alone; otherwise fills the task from the first cell with `n ≥ 5` as a `usd` range, auto-accepted | — |
 | Activation | skill install, then **separately** `install-hooks.mjs` (installing the skill never wires the hook); plan registered; session bound; landings recorded. The PM runs `calibrate` after the last mission of a campaign closes | **gap:** no owner for `calibrate` when there is no PM role |
-| Cold start | no cell with `n ≥ 5` → task stays unestimated; a planner hours estimate needs human acceptance. A `calibration.json` that cannot be read, parsed, or has no `cells` object stops registration (`CALIBRATION-INVALID`); a cell with missing fields is not checked and is treated as no cell | **gap:** no schema check of cells |
+| Cold start | no cell with `n ≥ 5` → task stays unestimated; a planner hours estimate needs human acceptance. A `calibration.json` that cannot be read, parsed, or has no `cells` object stops registration (`CALIBRATION-INVALID`); cells themselves are not checked: a cell without `p50_usd` is skipped, while a cell with `p50_usd` but no `p80_usd` produces an estimate that later fails validation | **gap:** no schema check of cells |
 | Effective sample | raw `n ≥ 5`; recency weights shape the distribution but not eligibility; no freshness limit | **gap** |
 | Data boundary | `install-hooks.mjs` bootstraps a telemetry submodule and pushes its branch to `origin` (twice) **without** checking `DELIVERY_NO_SYNC`; only `--no-submodule` avoids it. Hook and CLI sync commit the whole telemetry tree and push unless `DELIVERY_NO_SYNC=1`. Free text stored today: `capturePrompts` (opt-in, up to 120 chars of dispatch description); git backfill stores commit subjects in `raw` and PR backfill stores PR titles, both by default; CLI `--note` and `--raw` are stored with no project setting | **gap:** no single publish policy; installer ignores the env var; destination privacy not checked; no shared field policy. Interim workaround: `install-hooks.mjs --no-submodule` **and** `DELIVERY_NO_SYNC=1`, keeping `capturePrompts` off; this does not stop a person from pushing the telemetry tree with git |
 | Off switch | `--no-calibrate` stops new fills for one registration; earlier fills stay; recording and `calibrate` continue | **gap:** no persistent off setting |
@@ -101,6 +108,25 @@ behaviour:
 7. paired baseline predictions recorded at registration, and a paired evaluator in `report`;
 8. a named `calibrate` owner without a PM: the session that closes the campaign's plan (the
    orchestrator) runs it.
+
+## Implementation contract (increment 1)
+
+The follow-up list is built in two increments. Increment 1 delivers items 1–6 and 8; item 7 (paired
+capture and evaluator) is increment 2, designed with the experiment-record tooling, because it needs an
+explicit activation command and its own immutable pair records.
+
+| # | Decision |
+|---|---|
+| 1 Publish | Policy file `.agents/telemetry/policy.json`, `{"publish": "private-remote" \| "local-only"}`, read from the telemetry owner (main worktree). Honoured by delivery-monitor (installer, hook sync, CLI sync) and tokenomics (installer, capture sync). `DELIVERY_NO_SYNC=1` / `TOKENOMICS_NO_SYNC=1` stay as per-process vetoes. An unreadable or invalid policy file fails closed (`local-only`). With `local-only` and an `origin` remote, the installer does not create the telemetry submodule (its relative URL needs the branch on origin): telemetry stays a plain directory, which no sync pushes. The health check (`doctor`) prints the policy and any installed publisher that does not honour it. |
+| 2 Text | `profile.json` `storeText` (default `true` = legacy). `false` is a veto over every text source: no dispatch description (even with `capturePrompts`), no commit subject or PR title in backfill `raw`, CLI `--note`/`--raw` refused with `USAGE`. A backfill replay whose only difference from an existing observation is suppressed text is skipped, not a conflict. Historical text is not erased. |
+| 3 Off | `profile.json` `calibration: "off"`: `calibrate` (including `--dry-run`) computes nothing, writes nothing, prints `CALIBRATION-OFF`, exit 0; `plan register` fills nothing new; estimates already filled stay through re-cuts and renames; recording continues. |
+| 4 Sample | `profile.json` `calibrationSample: "raw"` (default, legacy) \| `"effective"`. Every cell gains `n_eff` (Kish) and `newest_at` (additive fields). With `effective`, a cell is used only if `n_eff ≥ min_n` and its newest landing is within two half-lives of the registration time; class boundaries need a total effective sample ≥ 12. A cell without the new fields is not eligible in `effective` mode. |
+| 5 Schema | `readCalibration` accepts generated v1 files and rejects a table with any malformed cell (`n` a non-negative integer, `p50_usd` finite > 0, `p80_usd` finite ≥ `p50_usd`, `effort_class` null or E1–E4, optional `n_eff` finite ≥ 0, optional `newest_at` ISO) as `CALIBRATION-INVALID`, before anything is written. |
+| 6 Versions | `calibrate` writes `calibration/<sha256>.json` (the exact bytes of the table, which include `generated_at`) atomically, then atomically replaces `calibration.json`. A valid existing `calibration.json` is preserved as its own snapshot before the first replacement. No pruning; `--dry-run` writes nothing. Estimates made before this change keep their digest; their table may be unavailable. |
+| 8 Owner | Workflow text only: the session that closes the plan (the PM, or the orchestrator when there is no PM) runs `delivery.mjs calibrate` after `plan close` succeeds, when calibration is on; `NO-EVENTS` is expected early. `plan close` itself does not change. |
+
+`profile set` keeps the policy keys already in `profile.json` unless the new file sets them, so an
+unrelated profile change never resets a policy.
 
 ## Improvement proof
 
@@ -165,13 +191,20 @@ may still be reported descriptively.
    - primary metric and guard metrics, each with numerator, denominator, severity scale, observation lag
      and the event that starts the lag (for escapes: the task's landing);
    - the **non-inferiority margin** for each metric (largest harmful change still counted as "no worse");
-   - the analysis: confidence level (default 90%), interval method (default paired bootstrap over
-     matched tasks), matching procedure, and how unfinished tasks are handled (default: censored, i.e.
-     excluded from the comparison and reported as a count);
+   - the analysis, per metric: confidence level (default 90%), interval method, matching procedure.
+     Continuous metrics (forecast error, cost per unit of scope) default to a paired bootstrap over
+     matched tasks. **Rare-event** guards (escapes, missed rulings) use an exact finite-sample bound on
+     the rate difference (e.g. Poisson or Clopper-Pearson upper bound), never a bootstrap: all-zero
+     observations must not certify safety. The record states the exposure needed for that bound to
+     fit inside the margin;
+   - unfinished tasks: excluded only from the forecast-error primary (which needs an outcome). Their
+     spend stays in the cost numerator, they count in the scope guards as unfinished or abandoned, and
+     elapsed time uses a censoring-aware measure or is declared unmeasurable;
    - minimum exposure;
-   - **enrolment deadline** (calendar date); **outcome-maturation date**: the latest landing of an
-     enrolled task plus the longest observation lag, capped by an **absolute evaluation end date**;
-     **maximum extension** (one, with its own deadline); **restart budget** (one);
+   - **enrolment deadline** (calendar date); **outcome maturity**: reached when enrolment has closed
+     and every enrolled task has landed or been marked unfinished, plus the longest observation lag;
+     an **absolute evaluation end date** that never moves; **maximum extension** (one, ending no later
+     than the absolute end date); **restart budget** (one);
    - state snapshot references and rollback target.
 3. **Guard metrics** always include whole-system effects, so a primary metric cannot improve by moving
    cost or work elsewhere:
@@ -181,7 +214,8 @@ may still be reported descriptively.
    - quality: escapes by severity (after the observation lag), blocking findings, missed rulings or scope.
 
    Task-counting and acceptance definitions are fixed before the baseline is collected.
-4. **Decision at the maturation date**, mandatory. For each metric, Δ = treatment − baseline, oriented
+4. **Decision at outcome maturity**, mandatory, and never before enrolment closes. If maturity is not
+   reached by the absolute evaluation end date, the result is terminal *inconclusive* → drop. For each metric, Δ = treatment − baseline, oriented
    so that positive is harmful; [L, U] is its interval; m is its non-inferiority margin.
    - a metric is **non-inferior** when U ≤ m (only the harmful bound matters; a large improvement
      never fails);
