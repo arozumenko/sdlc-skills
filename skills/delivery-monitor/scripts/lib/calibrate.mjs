@@ -80,6 +80,12 @@ export function classOf(cost, bounds) {
   return bounds[0] >= cost ? 'E1' : bounds[1] >= cost ? 'E2' : bounds[2] >= cost ? 'E3' : 'E4';
 }
 
+/** Kish effective sample size (Σw)²/Σw²: n for equal weights, about 1 when one sample dominates. */
+export function effectiveN(weights) {
+  const sum = weights.reduce((a, w) => a + w, 0), sq = weights.reduce((a, w) => a + w * w, 0);
+  return sq > 0 ? (sum * sum) / sq : 0;
+}
+
 // All weights underflowed → equal weights, for quantiles and rates alike.
 const withWeights = (list, weightOf) => { const p = list.map((s) => ({ v: s.cost_usd, w: weightOf(s), s })); return p.some((x) => x.w > 0) ? p : p.map((x) => ({ ...x, w: 1 })); };
 function summarize(list, weightOf, bounds) {
@@ -92,30 +98,64 @@ function summarize(list, weightOf, bounds) {
     byModel[m] = { n: mp.length, p50_usd: r2(weightedQuantile(mp, 0.5)), return_rate: r3(mp.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / (mw || 1)) };
   }
   // The class compares unrounded values; rounding is for the file only.
-  return { n: list.length, p50_usd: r2(p50), p80_usd: r2(p80), return_rate: r3(pairs.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / wsum), effort_class: classOf(p50, bounds), by_model: byModel };
+  const newest = list.reduce((m, s) => (m == null || Date.parse(s.done_at) > Date.parse(m) ? s.done_at : m), null);
+  return { n: list.length, p50_usd: r2(p50), p80_usd: r2(p80), return_rate: r3(pairs.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / wsum), effort_class: classOf(p50, bounds), by_model: byModel,
+    n_eff: effectiveN(pairs.map((p) => p.w)), newest_at: newest == null ? null : new Date(Date.parse(newest)).toISOString() };
 }
 
 /** Builds the calibration table from samples. Recency-weighted: a sample's weight halves every `halfLifeDays`, so a model or
  * harness change washes through without a manual reset. */
-export function buildCalibration(samples, { now = Date.now(), halfLifeDays = HALF_LIFE_DAYS, pricesAsOf = null } = {}) {
+export function buildCalibration(samples, { now = Date.now(), halfLifeDays = HALF_LIFE_DAYS, pricesAsOf = null, sampleRule = 'raw' } = {}) {
   // Weight halves per half-life of age, measured from the newest sample so weights stay ≤ 1 and never all underflow to 0.
   const ageOf = (s) => Math.max(0, now - Date.parse(s.done_at)), newest = samples.length ? Math.min(...samples.map(ageOf)) : 0;
   const weightOf = (s) => 0.5 ** ((ageOf(s) - newest) / (halfLifeDays * DAY));
   const allPairs = samples.map((s) => ({ v: s.cost_usd, w: weightOf(s) }));
-  const bounds = samples.length >= MIN_FOR_CLASSES ? [0.25, 0.5, 0.75].map((q) => weightedQuantile(allPairs, q)) : null;
+  // Raw mode (the shipped rule): 12 samples. Effective mode: the recency weights must add up to an effective 12.
+  const enough = sampleRule === 'effective' ? effectiveN(allPairs.map((p) => p.w)) >= MIN_FOR_CLASSES : samples.length >= MIN_FOR_CLASSES;
+  const bounds = enough ? [0.25, 0.5, 0.75].map((q) => weightedQuantile(allPairs, q)) : null;
   const groups = new Map();
   for (const s of samples) for (const k of cellKeys(s)) { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
   const cells = Object.fromEntries([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, list]) => [k, summarize(list, weightOf, bounds)]));
-  const cal = { v: 1, generated_at: nowIso(now), unit: 'usd', half_life_days: halfLifeDays, min_n: MIN_N, prices_as_of: pricesAsOf, samples: samples.length, class_bounds_usd: bounds && bounds.map(r2), cells, outliers: [] };
+  const cal = { v: 1, generated_at: nowIso(now), unit: 'usd', half_life_days: halfLifeDays, min_n: MIN_N, sample_rule: sampleRule, prices_as_of: pricesAsOf, samples: samples.length, class_bounds_usd: bounds && bounds.map(r2), cells, outliers: [] };
   // The tasks the table fits worst — what the retro should look at, and why the planner's features may be missing something.
   cal.outliers = samples.map((s) => { const hit = lookup(cal, s); return hit && hit.cell.p50_usd > 0 ? { run: s.run, ref: s.ref, cell: hit.key, cost_usd: r2(s.cost_usd), p50_usd: hit.cell.p50_usd, ratio: r2(s.cost_usd / hit.cell.p50_usd) } : null; })
     .filter(Boolean).sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio))).slice(0, 3);
   return cal;
 }
 
-/** The most specific cell with at least `min_n` samples. */
-export function lookup(cal, task) {
-  for (const key of cellKeys(task)) { const cell = cal?.cells?.[key]; if (cell && cell.n >= (cal.min_n ?? MIN_N)) return { key, cell }; }
+/** The most specific eligible cell. Raw rule (the shipped default): at least `min_n` samples. Effective rule: the table was
+ * built under it, the cell's Kish n_eff reaches `min_n`, and its newest landing is within two half-lives of `now` (the
+ * registration time). A cell without n_eff/newest_at is never eligible under the effective rule. */
+export function lookup(cal, task, { rule = 'raw', now = Date.now() } = {}) {
+  const minN = cal?.min_n ?? MIN_N;
+  const eligible = (cell) => {
+    if (rule !== 'effective') return cell.n >= minN;
+    // A relative tolerance of 1e-9 absorbs floating-point error (5 equal weights can sum to 4.999999999999999) without
+    // admitting a genuinely smaller sample (4.99997 stays out).
+    if (cal.sample_rule !== 'effective' || !(typeof cell.n_eff === 'number' && cell.n_eff >= minN * (1 - 1e-9)) || !cell.newest_at) return false;
+    return now - Date.parse(cell.newest_at) <= 2 * (cal.half_life_days ?? HALF_LIFE_DAYS) * DAY;
+  };
+  for (const key of cellKeys(task)) { const cell = cal?.cells?.[key]; if (cell && eligible(cell)) return { key, cell }; }
+  return null;
+}
+
+const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+/** A real calendar instant in ISO UTC form: Date.parse alone accepts 2026-02-31 by rolling it over. */
+const isoUtc = (v) => {
+  const m = typeof v === 'string' && /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?Z$/.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && d.getUTCHours() === +m[4] && d.getUTCMinutes() === +m[5] && d.getUTCSeconds() === +m[6];
+};
+/** Why a cell is malformed, or null. Generated v1 tables pass; n_eff/newest_at are optional (tables from before they existed). */
+export function cellProblem(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return 'not an object';
+  if (!Number.isInteger(c.n) || c.n < 0) return 'n must be an integer >= 0';
+  if (!finite(c.p50_usd) || c.p50_usd <= 0) return 'p50_usd must be a finite number > 0';
+  if (!finite(c.p80_usd) || c.p80_usd < c.p50_usd) return 'p80_usd must be a finite number >= p50_usd';
+  if (!('effort_class' in c) || !(c.effort_class === null || (typeof c.effort_class === 'string' && /^E[1-4]$/.test(c.effort_class)))) return 'effort_class must be null or E1-E4';
+  if ('n_eff' in c && (!finite(c.n_eff) || c.n_eff < 0)) return 'n_eff must be a finite number >= 0';
+  if ('newest_at' in c && !isoUtc(c.newest_at)) return 'newest_at must be an ISO UTC timestamp';
   return null;
 }
 
@@ -129,13 +169,14 @@ export function readCalibration(repo) {
   try { text = readFileSync(path, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw bad(e.code ?? e.message); }
   try { cal = JSON.parse(text); } catch (e) { throw bad(`not valid JSON (${e.message})`); }
   if (!cal || typeof cal !== 'object' || !cal.cells || typeof cal.cells !== 'object' || Array.isArray(cal.cells)) throw bad('no "cells" object');
+  for (const [key, cell] of Object.entries(cal.cells)) { const why = cellProblem(cell); if (why) throw bad(`cell "${key}": ${why}`); }
   return { cal, sha256: sha256(text), path };
 }
 
 /** Fills a calibrated dollar estimate (and learned effort class) into every task the planner left unestimated. Auto-accepted:
  * the numbers are the table's, not anyone's judgement, so there is nothing for a human to sign. A task already carrying a
  * calibrated estimate in the previous version keeps it, so a re-cut does not re-estimate finished planning. Mutates `plan`. */
-export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agents/telemetry/delivery/${CALIBRATION_FILE}`, prevItems = [], renameMap = null } = {}) {
+export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agents/telemetry/delivery/${CALIBRATION_FILE}`, prevItems = [], renameMap = null, rule = 'raw' } = {}) {
   // A task renamed through supersedes.item_map is found under its new id.
   const at = nowIso(now), prevBy = new Map(prevItems.map((i) => [renameMap?.[i.item_id] ?? i.item_id, i]));
   const out = { filled: 0, kept: 0, no_cell: 0, planner: 0 };
@@ -143,7 +184,7 @@ export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agent
     if (t.estimate) { out.planner++; continue; }
     const prev = t.item_id && prevBy.get(t.item_id);
     if (prev?.estimate?.tier === 'calibrated') { t.estimate = prev.estimate; if (prev.effort_class) t.effort_class = prev.effort_class; out.kept++; continue; }
-    const hit = calib && lookup(calib.cal, t);
+    const hit = calib && lookup(calib.cal, t, { rule, now });
     if (!hit || hit.cell.p50_usd == null) { out.no_cell++; continue; }
     t.estimate = { unit: 'usd', low: hit.cell.p50_usd, high: Math.max(hit.cell.p50_usd, hit.cell.p80_usd), tier: 'calibrated', proposed_by: 'calibrate', proposed_at: at, accepted_by: 'calibrate (auto)', accepted_at: at,
       reference: { path: refPath, sha256: calib.sha256, population: `${hit.key} n=${hit.cell.n}` } };

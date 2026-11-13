@@ -73,3 +73,34 @@ test('F1: diagnostics-only changes are never committed or pushed; they ride alon
   assert.match(g(tel, 'ls-files'), /diagnostics-a\.jsonl/, 'diagnostics committed with the real change');
   assert.equal(Number(g(tel, 'rev-list', '--count', 'HEAD')), Number(before) + 1);
 });
+
+test('publish local-only: changes are committed locally and never pushed', () => {
+  const { a, remote } = world(); const tel = join(a, '.agents', 'telemetry');
+  const remoteBefore = g(remote, 'rev-parse', 'HEAD');
+  writeFileSync(join(a, '.agents', 'telemetry', 'policy.json'), '{"publish":"local-only"}\n');
+  write(a, 'events-a.jsonl', '{"a":1}\n');
+  assert.deepEqual(bestEffortSync(a, { env: {} }), { synced: false, reason: 'local-only' });
+  assert.equal(g(remote, 'rev-parse', 'HEAD'), remoteBefore, 'remote untouched');
+  assert.equal(g(tel, 'status', '--porcelain'), '', 'committed locally');
+  assert.match(g(tel, 'log', '-1', '--name-only', '--format='), /events-a\.jsonl/);
+});
+
+test('publish legacy (no policy) pushes; an unreadable policy fails closed', () => {
+  const { a, remote } = world();
+  write(a, 'events-a.jsonl', '{"a":1}\n'); assert.equal(bestEffortSync(a, { env: {} }).synced, true);
+  const r1 = g(remote, 'rev-parse', 'HEAD');
+  writeFileSync(join(a, '.agents', 'telemetry', 'policy.json'), '{broken'); write(a, 'events-a.jsonl', '{"a":2}\n');
+  assert.equal(bestEffortSync(a, { env: {} }).reason, 'local-only');
+  assert.equal(g(remote, 'rev-parse', 'HEAD'), r1, 'a broken profile never widens publication');
+});
+
+test('a policy that arrives with the retry merge stops the retry push', () => {
+  const { a, b, remote } = world();
+  // Teammate a publishes local-only to the shared branch (by hand, as a policy change would arrive).
+  const ta = join(a, '.agents', 'telemetry'); writeFileSync(join(ta, 'policy.json'), '{"publish":"local-only"}\n'); g(ta, 'add', '-A'); g(ta, 'commit', '-q', '-m', 'policy'); g(ta, 'push', '-q');
+  const remoteAfterPolicy = g(remote, 'rev-parse', 'HEAD');
+  write(b, 'events-b.jsonl', '{"b":1}\n'); // b does not have the policy yet: its first push is rejected, then it merges
+  const r = bestEffortSync(b, { env: {} });
+  assert.deepEqual(r, { synced: false, reason: 'local-only' });
+  assert.equal(g(remote, 'rev-parse', 'HEAD'), remoteAfterPolicy, 'nothing pushed after the merge');
+});

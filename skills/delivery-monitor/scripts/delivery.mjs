@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-monitor CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
-import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
+import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations, semanticKey } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
@@ -16,6 +16,7 @@ import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './li
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collectSamples, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
+import { POLICY_KEYS, readPolicies, validatePolicies } from './lib/profile.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
@@ -110,8 +111,11 @@ function cmdPlanRegister(repo, f, io, now) {
   const prev = loadRun(repo, runId);
   // Tasks the planner left unestimated get a calibrated dollar estimate from calibration.json (if one exists), auto-accepted.
   // --no-calibrate stops new fills only: a re-cut still keeps the calibrated estimates its tasks were planned with.
-  const calib = f['no-calibrate'] ? null : readCalibration(repo);
-  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
+  // A persistent `calibration: "off"` in profile.json is the same for every registration (learning-loops off switch).
+  const policies = readPolicies(repo);
+  const calib = f['no-calibrate'] || policies.calibration === 'off' ? null : readCalibration(repo);
+  if (calib && policies.calibrationSample === 'effective' && calib.cal.sample_rule !== 'effective') io.stderr.write(`WARN calibrationSample is "effective" but ${CALIBRATION_FILE} was built under "${calib.cal.sample_rule ?? 'raw'}": no cell is eligible until you re-run \`delivery.mjs calibrate\`\n`);
+  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null, rule: policies.calibrationSample }) : null;
   const { active } = resolveObservations(repo);
   const next = toCatalogue(full, { version: full.version });
 
@@ -202,12 +206,29 @@ function cmdPlanRegister(repo, f, io, now) {
   return 0;
 }
 
+/** Every table version is kept as `calibration/<sha256>.json`, the exact bytes an estimate's reference digest names, written
+ * once and never overwritten. A valid table from before snapshots existed is preserved first. Both writes are atomic
+ * (temp file + rename), and the snapshot lands before calibration.json moves to it. */
+function writeCalibrationVersioned(repo, text) {
+  const dir = deliveryDir(repo), snaps = resolve(dir, 'calibration');
+  mkdirSync(snaps, { recursive: true });
+  const atomic = (path, data) => { const tmp = `${path}.tmp-${process.pid}`; writeFileSync(tmp, data); renameSync(tmp, path); };
+  const keep = (data) => { const path = resolve(snaps, `${sha256(data)}.json`); if (!existsSync(path)) atomic(path, data); };
+  let current = null; try { current = readCalibration(repo); } catch { /* a broken table is replaced, not preserved */ }
+  if (current) keep(readFileSync(current.path, 'utf8'));
+  keep(text);
+  atomic(resolve(dir, CALIBRATION_FILE), text);
+}
+
 /** `calibrate`: rebuild calibration.json from every landed task's measured cost, and print the table. Run it at plan close;
  * the next `plan register` reads it. `--dry-run` prints without writing; `--json` prints the file; `--half-life <days>`. */
 function cmdCalibrate(repo, p, io, now) {
   // Display only: cents above $1, two significant digits below (the file keeps full precision).
   const usd = (x) => (x == null ? "-" : x >= 1 ? x.toFixed(2) : String(Number(x.toPrecision(2))));
   const f = p.flags;
+  const policies = readPolicies(repo);
+  // The persistent off switch: nothing is computed or written, dry-run and --json included.
+  if (policies.calibration === 'off') { io.wroteNothing = true; out(io, 'CALIBRATION-OFF profile.json sets calibration "off": nothing computed or written'); return 0; }
   const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
   if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
   // The price table the hook used must be readable; a broken override is reported here rather than ignored.
@@ -216,7 +237,7 @@ function cmdCalibrate(repo, p, io, now) {
   const samples = collectSamples(repo, { now });
   if (!samples.length) throw cliError('NO-EVENTS', 'no landed task with a measured cost yet: the Claude dispatch hook records cost on dispatch_ended');
   const pricesAsOf = prices.asOf;
-  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
+  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf, sampleRule: policies.calibrationSample });
   const text = `${JSON.stringify(cal, null, 2)}\n`;
   if (f.json) { io.stdout.write(text); }
   else {
@@ -227,8 +248,7 @@ function cmdCalibrate(repo, p, io, now) {
     for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);
   }
   if (f['dry-run']) { if (!f.json) out(io, 'DRY-RUN not written'); return 0; }
-  mkdirSync(deliveryDir(repo), { recursive: true });
-  writeFileSync(resolve(deliveryDir(repo), CALIBRATION_FILE), text);
+  writeCalibrationVersioned(repo, text);
   if (!f.json) out(io, `WROTE ${resolve(deliveryDir(repo), CALIBRATION_FILE)}`);
   return 0;
 }
@@ -298,7 +318,10 @@ function cmdEvent(repo, p, io, now) {
   // The CONFLICT guard reads a live snapshot too — a batch row must see conflicts against rows
   // appended earlier in the SAME batch, not just the pre-batch ledger.
   const seenActive = [...active];
+  const { storeText } = readPolicies(repo);
   const one = (ref, ev, f, token) => {
+    // Text policy: with storeText false no free text is recorded, so a note or raw text is refused rather than dropped silently.
+    if (!storeText && (f.note != null || f.raw != null)) throw cliError('USAGE', `${ref} ${ev}: profile.json sets storeText false, so --note/--raw text is not recorded; drop the flag`);
     const item = resolveRef(run, ref, { allowCancelled: Boolean(f['allow-cancelled']) });
     const rec = buildEvent(repo, run, item, ev, f, token, now);
     // coach-android 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
@@ -387,6 +410,7 @@ function cmdSession(repo, p, io, now) {
 function validateProfile(obj, tpl) {
   const errs = [];
   for (const k of Object.keys(obj)) {
+    if (POLICY_KEYS.includes(k)) { errs.push(...validatePolicies({ [k]: obj[k] })); continue; } // optional; unset = shipped behaviour
     if (!(k in tpl)) { errs.push(`profile.${k} is not a known key`); continue; }
     const v = obj[k];
     if (k === 'capturePrompts') { if (typeof v !== 'boolean') errs.push('profile.capturePrompts must be boolean'); }
@@ -411,7 +435,9 @@ function cmdProfile(repo, p, io) {
   const errs = validateProfile(obj, tpl); if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
   // Issue 3: a shallow {...tpl, ...obj} replaces the whole `baselines` object wholesale, dropping
   // every template baseline the caller didn't mention — merge that one nested object one level deep.
-  const merged = { ...tpl, ...obj, baselines: { ...tpl.baselines, ...(obj.baselines ?? {}) } };
+  // Learning-loop policies already set stay unless the new file sets them: an unrelated profile change never resets a policy.
+  let kept = {}; try { const cur = JSON.parse(readFileSync(profilePath(repo), 'utf8')); kept = Object.fromEntries(POLICY_KEYS.filter((k) => k in cur && !validatePolicies({ [k]: cur[k] }).length).map((k) => [k, cur[k]])); } catch { /* no or unreadable profile */ }
+  const merged = { ...tpl, ...kept, ...obj, baselines: { ...tpl.baselines, ...(obj.baselines ?? {}) } };
   mkdirSync(deliveryDir(repo), { recursive: true }); writeFileSync(profilePath(repo), `${JSON.stringify(merged, null, 2)}\n`);
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
@@ -479,7 +505,10 @@ function cmdBackfill(repo, p, io, now) {
     if (!head) throw cliError('USAGE', `head ${headFlag} not found`);
     derived = deriveGitObservations({ repo, run, head, since, cutoff, now });
   }
-  const { records, notes, skippedOutsideEpoch } = derived;
+  // Text policy: with storeText false, commit subjects and PR titles are not stored.
+  const { storeText } = readPolicies(repo);
+  const { records: derivedRecords, notes, skippedOutsideEpoch } = derived;
+  const records = storeText ? derivedRecords : derivedRecords.map((r) => ({ ...r, raw: null }));
   for (const n of notes) out(io, `NOTE ${n}`);
   // D4: PR backfill reconciles its own prior output — an active `git` `pr:*` observation of this run that the current derivation no longer
   // yields (a re-cut moved the first landing, or an association disappeared) is retracted at revision+1, never left to collide on its
@@ -495,14 +524,22 @@ function cmdBackfill(repo, p, io, now) {
       for (const o of resolveObservations(repo).active) {
         if (o.plan !== run.run || o.source !== 'git' || !String(o.source_record_id).startsWith('pr:') || keep.has(o.observation_id)) continue;
         if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.at}`); continue; }
-        const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+        const res = appendObservation(repo, retraction(o, storeText), { now });
         out(io, `RETRACT ${o.observation_id} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++; else conflicts++;
       }
     }
   }
+  const activeById = storeText ? null : new Map(resolveObservations(repo).active.map((o) => [o.observation_id, o]));
   for (const r0 of records) {
     // A derived observation whose id was previously retracted is revived at the next revision rather than SKIPped against the old rev 0.
     const prev = top.get(r0.observation_id), r = prev && prev.status === 'retracted' ? { ...r0, revision: prev.revision + 1 } : r0;
+    // Text withheld: the current active record differs only by the text it was written with before storeText was turned
+    // off → the same fact, skipped. Any structured difference, or a retracted record, keeps the normal rules.
+    const cur = !storeText ? activeById.get(r0.observation_id) : null; // the resolved current active record, never a raw variant
+    if (cur && semanticKey({ ...cur, raw: null }) === semanticKey({ ...r, revision: cur.revision, raw: null })) {
+      if (f['dry-run']) out(io, `WOULD-SKIP ${r.observation_id} ${r.at} (text withheld)`); else { out(io, `SKIP ${r.observation_id} ${r.at} (text withheld)`); skipped++; }
+      continue;
+    }
     if (f['dry-run']) { out(io, `WOULD ${r.observation_id} ${r.at}`); continue; }
     const res = appendObservation(repo, r, { now });
     out(io, `${res.result} ${res.observation_id} ${r.at}`);
@@ -526,16 +563,25 @@ function cmdDoctor(repo, p, io) {
  * revision + 1 with status 'retracted' (event-model.md). `--agent <id>` takes every active observation that subagent produced in
  * the run (dispatched, dispatch_ended, rework_observed); `--observation <id>` takes exactly one. Re-record the right item with
  * `event <ref> dispatched --at <iso>`. */
+/** A new retraction revision copies the record it retracts. With storeText false, its free text (raw, label, meta.note) is
+ * not copied forward; the older revision keeps what it was written with. */
+const retraction = (o, storeText) => {
+  const r = { ...o, revision: o.revision + 1, status: 'retracted' };
+  if (storeText) return r;
+  const { note, ...meta } = o.meta ?? {};
+  return { ...r, raw: null, label: null, meta };
+};
+
 function cmdRetract(repo, p, io, now) {
   const f = p.flags, agent = f.agent != null ? String(requireValue(f, 'agent')) : null, oid = f.observation != null ? String(requireValue(f, 'observation')) : null;
   if (!agent === !oid) throw cliError('USAGE', 'retract (--agent <agent id> | --observation <observation id>) [--plan <run>] [--dry-run]');
   const run = resolveRun(repo, f.plan);
   const hits = resolveObservations(repo).active.filter((o) => o.plan === run.run && (oid ? o.observation_id === oid : o.agentId === agent));
   if (!hits.length) throw cliError('USAGE', `no active observation ${oid ? oid : `from agent ${agent}`} in ${run.run}`);
-  let retracted = 0;
+  let retracted = 0; const { storeText } = readPolicies(repo);
   for (const o of hits) {
     if (f['dry-run']) { out(io, `WOULD-RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} ${o.at}`); continue; }
-    const res = appendObservation(repo, { ...o, revision: o.revision + 1, status: 'retracted' }, { now });
+    const res = appendObservation(repo, retraction(o, storeText), { now });
     out(io, `RETRACT ${o.observation_id} ${o.ref ?? '—'} ${o.event} rev=${o.revision + 1}`); if (res.result === 'EVENT') retracted++;
   }
   out(io, `RETRACTED ${retracted}${f['dry-run'] ? ' (dry-run)' : ''}`); return 0;
@@ -549,8 +595,9 @@ export async function main(argv = process.argv.slice(2), { repo = process.env.CL
   if (!fn) { stderr.write(`USAGE(unknown command ${p.cmd ?? ''}; expected ${Object.keys(COMMANDS).join('|')})\n`); return 2; }
   let code = 1;
   try { code = await fn(repo, p, io, now); }
-  catch (e) { if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
-  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
+  // CALIBRATION-INVALID rejects a table before anything is written, so the command also writes (and syncs) nothing.
+  catch (e) { if (e.code === 'CALIBRATION-INVALID') io.wroteNothing = true; if (e.code && e.exit) { stderr.write(`${e.message}\n`); code = e.exit; } else { stderr.write(`INTERNAL(${String(e.message).replace(/\n/g, ' ')})\n`); code = 1; } }
+  finally { if (MUTATING.has(p.cmd) && !p.flags['dry-run'] && !io.wroteNothing && p.sub !== 'list' && p.sub !== 'show') { const s = bestEffortSync(repo, { env }); if (!s.synced && !['DELIVERY_NO_SYNC', 'plain-dir', 'diagnostics-only', 'local-only'].includes(s.reason)) stderr.write(`WARN sync: ${s.reason}\n`); } }
   return code;
 }
 // Task 10: `process.exit(c)` right after an async `main()` resolves races Node's own async stdout
