@@ -332,3 +332,17 @@ test('bootstrapTelemetry: matching settings on both sides, or settings only on o
   assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created', 'fresh branch: local settings restored');
   assert.equal(readFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'profile.json'), 'utf8'), '{"storeText":false}\n');
 });
+
+test('doctor: prints the publish policy; under local-only flags an installed publisher that ignores policy.json', () => {
+  const repo = tmp();
+  assert.ok(doctorReport(repo, REL).lines.some((l) => /^publish: legacy \(unverified/.test(l)));
+  mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{"publish":"local-only"}');
+  const old = join(repo, '.claude', 'skills', 'tokenomics', 'hooks'); mkdirSync(old, { recursive: true }); writeFileSync(join(old, 'telemetry-capture.mjs'), '// old version: pushes unconditionally\n');
+  const f = doctorFindings(repo, REL);
+  assert.ok(f.some((x) => /^publish: local-only$/.test(x.line)));
+  const pub = f.find((x) => /^publisher:/.test(x.line)); assert.equal(pub.severity, 'warning'); assert.match(pub.line, /tokenomics\/hooks\/telemetry-capture\.mjs does not honour/);
+  writeFileSync(join(old, 'telemetry-capture.mjs'), "// reads .agents/telemetry/policy.json\n");
+  assert.ok(!doctorFindings(repo, REL).some((x) => /^publisher:/.test(x.line)), 'a current publisher is not flagged');
+  writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{bad');
+  assert.ok(doctorFindings(repo, REL).some((x) => x.severity === 'warning' && /^publish: local-only — .*treated as local-only/.test(x.line)));
+});

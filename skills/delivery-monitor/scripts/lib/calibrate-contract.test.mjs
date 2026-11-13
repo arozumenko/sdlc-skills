@@ -166,3 +166,15 @@ test('calibration off: the command does not run the closing sync (pending teleme
   const r = run(repo, ['calibrate'], { env: { DELIVERY_NO_SYNC: '' } }); assert.equal(r.code, 0, r.stderr);
   assert.notEqual(execFileSync('git', ['status', '--porcelain'], { cwd: tel, encoding: 'utf8' }).trim(), '', 'pending files left uncommitted');
 });
+
+test('profile set: accepts and validates the policy keys; an unrelated profile change keeps policies already set', () => {
+  const repo = initRepo(); const f = join(repo, 'prof.json');
+  writeFileSync(f, JSON.stringify({ calibration: 'off', storeText: false })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
+  writeFileSync(f, JSON.stringify({ zeroDurationSec: 30 })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
+  const p = JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8'));
+  assert.equal(p.calibration, 'off'); assert.equal(p.storeText, false); assert.equal(p.zeroDurationSec, 30); assert.equal(p.calibrationSample, 'raw');
+  writeFileSync(f, JSON.stringify({ calibration: 'on' })); assert.equal(run(repo, ['profile', 'set', '--from', f]).code, 0);
+  assert.equal(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).calibration, 'on', 'an explicit value replaces it');
+  writeFileSync(f, JSON.stringify({ calibrationSample: 'all' })); const bad = run(repo, ['profile', 'set', '--from', f]);
+  assert.equal(bad.code, 2); assert.match(bad.stderr, /calibrationSample/);
+});

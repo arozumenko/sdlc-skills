@@ -4,6 +4,7 @@
 import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readPolicies } from '../scripts/lib/profile.mjs';
 import { deliveryDir, nowIso, sessionPath, sessionsDir, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
@@ -181,7 +182,8 @@ function alreadyDiagnosed(file, kind, session, agentId) {
 const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster']);
 const ONCE_PER_AGENT = new Set(['task-crossing']);
 function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`); if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null; if (ONCE_PER_AGENT.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null, payload.agent_id ?? null)) return kind; appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
-const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts); } catch { return false; } };
+// The dispatch description is free text: stored only when capturePrompts is on and storeText (the text-policy veto) is not off.
+const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts) && readPolicies(repo).storeText; } catch { return false; } };
 
 /** F3: an unbound session binds itself when its working branch associates (lib/associate.mjs) to exactly one item of exactly one
  * OPEN run. Zero or several candidates → null (the caller writes the unbound diagnostic); ambiguity is never guessed across. The

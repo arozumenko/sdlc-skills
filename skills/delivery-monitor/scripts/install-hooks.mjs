@@ -4,7 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameS
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mayPush } from './lib/profile.mjs';
+import { mayPush, readPublishPolicy } from './lib/profile.mjs';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
@@ -204,6 +204,16 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   const wired = [...(settings.hooks?.SubagentStop ?? []), ...(local.hooks?.SubagentStop ?? [])].some((e) => e && e[MARKER]);
   add(wired ? 'ok' : 'warning', `hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`, wired ? null : `node ${rel}/scripts/install-hooks.mjs`);
   const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
+  // Learning-loops publish policy: what this project lets leave the machine, and any installed publisher that ignores it.
+  const pol = readPublishPolicy(repo);
+  add(pol.problem ? 'warning' : 'info', `publish: ${pol.publish === 'legacy' ? 'legacy (unverified: no .agents/telemetry/policy.json)' : pol.publish}${pol.problem ? ` — ${pol.problem}, treated as local-only` : ''}`);
+  if (pol.publish === 'local-only') {
+    for (const host of ['.claude', '.cursor', '.github', '.codex', '.windsurf', '.kiro', '.agents']) {
+      const hook = join(repo, host, 'skills', 'tokenomics', 'hooks', 'telemetry-capture.mjs');
+      let text = null; try { text = readFileSync(hook, 'utf8'); } catch { continue; }
+      if (!text.includes('policy.json')) add('warning', `publisher: ${relative(repo, hook)} does not honour policy.json and may push telemetry`, 'update the tokenomics skill (npx sdlc-skills init --update)');
+    }
+  }
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   // The count alone hid that the orchestrating session was never bound — say so for THIS session.
   const me = currentSession(env);

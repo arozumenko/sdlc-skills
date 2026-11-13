@@ -4,7 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
+import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations, semanticKey } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
@@ -318,7 +318,10 @@ function cmdEvent(repo, p, io, now) {
   // The CONFLICT guard reads a live snapshot too — a batch row must see conflicts against rows
   // appended earlier in the SAME batch, not just the pre-batch ledger.
   const seenActive = [...active];
+  const { storeText } = readPolicies(repo);
   const one = (ref, ev, f, token) => {
+    // Text policy: with storeText false no free text is recorded, so a note or raw text is refused rather than dropped silently.
+    if (!storeText && (f.note != null || f.raw != null)) throw cliError('USAGE', `${ref} ${ev}: profile.json sets storeText false, so --note/--raw text is not recorded; drop the flag`);
     const item = resolveRef(run, ref, { allowCancelled: Boolean(f['allow-cancelled']) });
     const rec = buildEvent(repo, run, item, ev, f, token, now);
     // coach-android 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
@@ -413,6 +416,7 @@ function validateProfile(obj, tpl) {
     else if (k === 'zeroDurationSec') { if (!Number.isInteger(v) || v < 0) errs.push('profile.zeroDurationSec must be an integer >= 0'); }
     else if (k === 'minWholeWeeks') { if (!Number.isInteger(v) || v < 3) errs.push('profile.minWholeWeeks must be an integer >= 3'); }
     else if (k === 'tokenomics') { if (typeof v !== 'string' || !v) errs.push('profile.tokenomics must be a non-empty string'); }
+    else if (POLICY_KEYS.includes(k)) errs.push(...validatePolicies({ [k]: v }));
     else if (k === 'baselines') {
       if (v == null || typeof v !== 'object' || Array.isArray(v)) errs.push('profile.baselines must be an object');
       else for (const [bk, bv] of Object.entries(v)) {
@@ -431,7 +435,9 @@ function cmdProfile(repo, p, io) {
   const errs = validateProfile(obj, tpl); if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
   // Issue 3: a shallow {...tpl, ...obj} replaces the whole `baselines` object wholesale, dropping
   // every template baseline the caller didn't mention — merge that one nested object one level deep.
-  const merged = { ...tpl, ...obj, baselines: { ...tpl.baselines, ...(obj.baselines ?? {}) } };
+  // Learning-loop policies already set stay unless the new file sets them: an unrelated profile change never resets a policy.
+  let kept = {}; try { const cur = JSON.parse(readFileSync(profilePath(repo), 'utf8')); kept = Object.fromEntries(POLICY_KEYS.filter((k) => k in cur && !validatePolicies({ [k]: cur[k] }).length).map((k) => [k, cur[k]])); } catch { /* no or unreadable profile */ }
+  const merged = { ...tpl, ...kept, ...obj, baselines: { ...tpl.baselines, ...(obj.baselines ?? {}) } };
   mkdirSync(deliveryDir(repo), { recursive: true }); writeFileSync(profilePath(repo), `${JSON.stringify(merged, null, 2)}\n`);
   out(io, 'PROFILE written (last-writer-wins)'); return 0;
 }
@@ -499,7 +505,10 @@ function cmdBackfill(repo, p, io, now) {
     if (!head) throw cliError('USAGE', `head ${headFlag} not found`);
     derived = deriveGitObservations({ repo, run, head, since, cutoff, now });
   }
-  const { records, notes, skippedOutsideEpoch } = derived;
+  // Text policy: with storeText false, commit subjects and PR titles are not stored.
+  const { storeText } = readPolicies(repo);
+  const { records: derivedRecords, notes, skippedOutsideEpoch } = derived;
+  const records = storeText ? derivedRecords : derivedRecords.map((r) => ({ ...r, raw: null }));
   for (const n of notes) out(io, `NOTE ${n}`);
   // D4: PR backfill reconciles its own prior output — an active `git` `pr:*` observation of this run that the current derivation no longer
   // yields (a re-cut moved the first landing, or an association disappeared) is retracted at revision+1, never left to collide on its
@@ -523,6 +532,12 @@ function cmdBackfill(repo, p, io, now) {
   for (const r0 of records) {
     // A derived observation whose id was previously retracted is revived at the next revision rather than SKIPped against the old rev 0.
     const prev = top.get(r0.observation_id), r = prev && prev.status === 'retracted' ? { ...r0, revision: prev.revision + 1 } : r0;
+    // Text withheld: the current active record differs only by the text it was written with before storeText was turned
+    // off → the same fact, skipped. Any structured difference, or a retracted record, keeps the normal rules.
+    if (!storeText && prev && prev.status !== 'retracted' && semanticKey({ ...prev, raw: null }) === semanticKey({ ...r, revision: prev.revision, raw: null })) {
+      if (f['dry-run']) out(io, `WOULD-SKIP ${r.observation_id} ${r.at} (text withheld)`); else { out(io, `SKIP ${r.observation_id} ${r.at} (text withheld)`); skipped++; }
+      continue;
+    }
     if (f['dry-run']) { out(io, `WOULD ${r.observation_id} ${r.at}`); continue; }
     const res = appendObservation(repo, r, { now });
     out(io, `${res.result} ${res.observation_id} ${r.at}`);
