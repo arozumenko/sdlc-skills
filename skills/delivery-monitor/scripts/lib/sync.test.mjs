@@ -93,3 +93,14 @@ test('publish legacy (no policy) pushes; an unreadable policy fails closed', () 
   assert.equal(bestEffortSync(a, { env: {} }).reason, 'local-only');
   assert.equal(g(remote, 'rev-parse', 'HEAD'), r1, 'a broken profile never widens publication');
 });
+
+test('a policy that arrives with the retry merge stops the retry push', () => {
+  const { a, b, remote } = world();
+  // Teammate a publishes local-only to the shared branch (by hand, as a policy change would arrive).
+  const ta = join(a, '.agents', 'telemetry'); writeFileSync(join(ta, 'policy.json'), '{"publish":"local-only"}\n'); g(ta, 'add', '-A'); g(ta, 'commit', '-q', '-m', 'policy'); g(ta, 'push', '-q');
+  const remoteAfterPolicy = g(remote, 'rev-parse', 'HEAD');
+  write(b, 'events-b.jsonl', '{"b":1}\n'); // b does not have the policy yet: its first push is rejected, then it merges
+  const r = bestEffortSync(b, { env: {} });
+  assert.deepEqual(r, { synced: false, reason: 'local-only' });
+  assert.equal(g(remote, 'rev-parse', 'HEAD'), remoteAfterPolicy, 'nothing pushed after the merge');
+});

@@ -34,6 +34,8 @@ export function bestEffortSync(repo, { env = process.env } = {}) {
       try { g('merge', '--abort'); } catch { /* nothing to abort */ }
       return { synced: false, reason: conflict ? 'push rejected; merge conflict — manual repair needed (delivery.mjs doctor)' : 'push rejected; merge failed — manual repair needed (delivery.mjs doctor)' };
     }
+    // The merge may have brought a policy that forbids pushing: read it again before the retry (never widen).
+    if (readPublishPolicy(repo).publish === 'local-only') return { synced: false, reason: 'local-only' };
     try { g('push', '-q'); return { synced: true, reason: 'merged remote changes then pushed' }; }
     catch { return { synced: false, reason: 'push failed — retried next invocation' }; }
   } catch (e) { return { synced: false, reason: String(e.message).split('\n')[0] }; }

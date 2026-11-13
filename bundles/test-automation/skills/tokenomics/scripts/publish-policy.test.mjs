@@ -62,3 +62,24 @@ test('installer settings check: a local policy the telemetry branch would shadow
   assert.equal(g(repo, 'ls-files', '--stage'), index);
   assert.ok(!existsSync(join(repo, '.agents', 'telemetry', '.git')) && !existsSync(join(repo, '.agents', 'telemetry.pre-submodule')));
 });
+
+test('capture sync: a policy that arrives with the retry merge stops the retry push', () => {
+  const { repo, remote } = world();
+  assert.equal(installTelemetrySubmodule(repo).status, 'installed');
+  // A teammate pushes local-only to the remote telemetry branch.
+  const other = mkdtempSync(join(tmpdir(), 'tok-other-')); g(other, 'clone', '-q', '-b', 'telemetry', remote, 'c'); const c = join(other, 'c');
+  writeFileSync(join(c, 'policy.json'), '{"publish":"local-only"}\n'); g(c, 'add', '-A'); g(c, 'commit', '-q', '-m', 'policy'); g(c, 'push', '-q', 'origin', 'HEAD:telemetry');
+  const after = g(remote, 'rev-parse', 'refs/heads/telemetry');
+  mkdirSync(join(repo, '.agents', 'telemetry', 'automation'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'automation', 'y.jsonl'), '{}\n');
+  syncTelemetry(repo, {});
+  assert.equal(g(remote, 'rev-parse', 'refs/heads/telemetry'), after, 'nothing pushed after the merge');
+});
+
+test('publishAllowed: a linked worktree follows the main checkout policy (its own copy can only add a veto)', () => {
+  const { repo } = world(); policy(repo, '{"publish":"local-only"}');
+  const wt = join(mkdtempSync(join(tmpdir(), 'tok-wt-')), 'wt'); g(repo, 'worktree', 'add', '-q', wt);
+  assert.equal(publishAllowed(wt, {}), false, 'absent in the worktree: owner local-only wins');
+  policy(wt, '{"publish":"private-remote"}'); assert.equal(publishAllowed(wt, {}), false, 'worktree private-remote cannot override');
+  policy(repo, '{"publish":"private-remote"}'); policy(wt, '{"publish":"local-only"}'); assert.equal(publishAllowed(wt, {}), false, 'worktree may add a veto');
+  policy(wt, '{"publish":"private-remote"}'); assert.equal(publishAllowed(wt, {}), true);
+});

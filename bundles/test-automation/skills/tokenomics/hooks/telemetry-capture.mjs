@@ -1462,12 +1462,22 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
  * next capture moment catches up. TOKENOMICS_NO_SYNC=1 disables.
  */
 // Shared publish policy (.agents/telemetry/policy.json; same rule as scripts/install-hooks.mjs publishAllowed).
-function telemetryPushAllowed(repo) {
+function telemetryOwner(repo) {
+  try {
+    const out = execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\n').find((l) => l.startsWith('worktree '))?.slice(9) || repo;
+  } catch { return repo; }
+}
+function policyAllowsPush(root) {
   let p;
-  try { p = JSON.parse(readFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), 'utf8')); }
+  try { p = JSON.parse(readFileSync(join(root, '.agents', 'telemetry', 'policy.json'), 'utf8')); }
   catch (e) { return e.code === 'ENOENT'; }
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
   return !('publish' in p) || p.publish === 'private-remote';
+}
+function telemetryPushAllowed(repo) {
+  const owner = telemetryOwner(repo);
+  return policyAllowsPush(owner) && (owner === repo || policyAllowsPush(repo));
 }
 
 export function syncTelemetry(repo, env = process.env) {
@@ -1494,7 +1504,7 @@ export function syncTelemetry(repo, env = process.env) {
       try {
         git(['fetch', 'origin', 'telemetry'], 20000);
         git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
-        git(['push', 'origin', 'HEAD:telemetry'], 20000);
+        if (telemetryPushAllowed(repo)) git(['push', 'origin', 'HEAD:telemetry'], 20000); // the merge may have brought a stricter policy
       } catch { /* offline or a real race — the next capture moment retries */ }
     }
     return true;

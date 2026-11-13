@@ -329,13 +329,24 @@ const TELEMETRY_INNER_GITIGNORE = `*/live/
 // Shared telemetry publish policy (.agents/telemetry/policy.json, learning-loops spec item 1). Every skill that commits or
 // pushes the shared tree honours it. No file or no `publish` key = legacy (push, as before). "local-only", an unreadable
 // file, or an unknown value = never push (fail closed). TOKENOMICS_NO_SYNC=1 is a per-process veto.
-export function publishAllowed(repo, env = process.env) {
-  if (env.TOKENOMICS_NO_SYNC === '1') return false;
+// The policy is the main checkout's (the telemetry owner); a linked worktree's own copy can only add a veto.
+export function telemetryOwner(repo) {
+  try {
+    const out = execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\n').find((l) => l.startsWith('worktree '))?.slice(9) || repo;
+  } catch { return repo; }
+}
+function policyAllowsPush(root) {
   let p;
-  try { p = JSON.parse(readFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), 'utf8')); }
+  try { p = JSON.parse(readFileSync(join(root, '.agents', 'telemetry', 'policy.json'), 'utf8')); }
   catch (e) { return e.code === 'ENOENT'; }
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
   return !('publish' in p) || p.publish === 'private-remote';
+}
+export function publishAllowed(repo, env = process.env) {
+  if (env.TOKENOMICS_NO_SYNC === '1') return false;
+  const owner = telemetryOwner(repo);
+  return policyAllowsPush(owner) && (resolve(owner) === resolve(repo) || policyAllowsPush(repo));
 }
 
 // Learning-loops settings check (same rule as delivery-monitor's installer): bootstrap restores an interim top-level entry
