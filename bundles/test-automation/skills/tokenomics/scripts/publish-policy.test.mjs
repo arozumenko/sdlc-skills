@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installTelemetrySubmodule, publishAllowed } from './install-hooks.mjs';
+import { installTelemetrySubmodule, publishAllowed, telemetryPreflight } from './install-hooks.mjs';
 import { syncTelemetry } from '../hooks/telemetry-capture.mjs';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
@@ -82,4 +82,23 @@ test('publishAllowed: a linked worktree follows the main checkout policy (its ow
   policy(wt, '{"publish":"private-remote"}'); assert.equal(publishAllowed(wt, {}), false, 'worktree private-remote cannot override');
   policy(repo, '{"publish":"private-remote"}'); policy(wt, '{"publish":"local-only"}'); assert.equal(publishAllowed(wt, {}), false, 'worktree may add a veto');
   policy(wt, '{"publish":"private-remote"}'); assert.equal(publishAllowed(wt, {}), true);
+});
+
+const seedBranch = (repo, name, content) => {
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: content, encoding: 'utf8', env: ENV }).trim();
+  const tree = execFileSync('git', ['mktree'], { cwd: repo, input: `100644 blob ${blob}\t${name}\n`, encoding: 'utf8', env: ENV }).trim();
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'seed'));
+};
+
+test('telemetryPreflight: read-only; reports a shadowed local policy, nothing otherwise', () => {
+  const { repo } = world(); seedBranch(repo, 'policy.json', '{"publish":"private-remote"}\n');
+  assert.equal(telemetryPreflight(repo), null, 'no local settings: nothing to protect');
+  policy(repo, '{"publish":"local-only"}\n'); const index = g(repo, 'ls-files', '--stage');
+  assert.match(telemetryPreflight(repo), /settings conflict \(policy\.json/);
+  assert.equal(g(repo, 'ls-files', '--stage'), index); assert.ok(existsSync(join(repo, '.agents', 'telemetry', 'policy.json')));
+});
+
+test('installer: a local-only policy on the telemetry branch itself stops every push', () => {
+  const { repo, remote } = world(); seedBranch(repo, 'policy.json', '{"publish":"local-only"}\n');
+  assert.equal(installTelemetrySubmodule(repo).status, 'skipped'); assert.equal(remoteHas(remote), false);
 });

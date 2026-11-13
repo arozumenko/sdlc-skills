@@ -86,6 +86,16 @@ export function settingsConflict(dir, ref, git) {
   return why.length ? `settings conflict (${why.join('; ')}); make the local and branch copies match, then re-run` : null;
 }
 
+/** True when the telemetry branch bootstrap will check out carries a policy that forbids pushing (local-only, or a file
+ * that cannot be parsed): that policy becomes effective, so bootstrap must not push either. */
+export function branchPolicyDenies(ref, git) {
+  if (!ref) return false;
+  let text; try { text = git(['show', `${ref}:policy.json`]); } catch { return false; }
+  let p; try { p = JSON.parse(text); } catch { return true; }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return true;
+  return 'publish' in p && p.publish !== 'private-remote';
+}
+
 /** Ported from tokenomics install-hooks.mjs:329-404 — same branch, same layout, so both skills share one submodule. */
 export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   const dir = join(repo, '.agents', 'telemetry');
@@ -94,14 +104,15 @@ export function bootstrapTelemetry(repo, { env = process.env } = {}) {
   if (existsSync(join(dir, '.git'))) return { status: 'already' };
   // Publish policy (learning-loops data boundary): read before the interim files are stashed. local-only or
   // DELIVERY_NO_SYNC=1 → the branch and the seed commit stay local; nothing is pushed to origin.
-  const noPush = !mayPush(repo, env);
+  // The branch bootstrap will check out (local, else origin's): its own policy becomes effective, so it counts too.
+  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+  const noPush = !mayPush(repo, env) || branchPolicyDenies(branchRef, git);
   const push = (args, cwd) => { if (!noPush) { try { git(args, cwd); } catch { /* no remote / offline */ } } };
   // The submodule URL is relative ('./'), so with an origin git resolves it against origin and needs the branch there.
   // Local-only cannot push it, so the telemetry directory stays plain (sync never pushes a plain directory).
   if (noPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']); } catch { /* no origin */ }
     if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
-  // Settings check before anything is stashed or untracked: the branch bootstrap will check out (local, else origin's).
-  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+  // Settings check before anything is stashed or untracked.
   const conflict = settingsConflict(dir, branchRef, git);
   if (conflict) return { status: 'conflict', reason: conflict };
   const stash = `${dir}.pre-submodule`; let stashed = false;
@@ -283,6 +294,8 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   if (has('--doctor')) { const d = doctorReport(repo, rel, { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo, { env: process.env });
+  // A settings conflict stops the whole install before any hook or ignore file is written.
+  if (tel.status === 'conflict') { process.stderr.write(`delivery-monitor: install stopped, nothing changed — ${tel.reason}\n`); return 2; }
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);
   return 0;

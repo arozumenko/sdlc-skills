@@ -366,6 +366,27 @@ export function settingsConflict(dir, ref, git) {
   return why.length ? `settings conflict (${why.join('; ')}); make the local and branch copies match, then re-run` : null;
 }
 
+/** True when the telemetry branch bootstrap will check out carries a policy that forbids pushing (local-only, or a file
+ * that cannot be parsed): that policy becomes effective, so bootstrap must not push either. */
+export function branchPolicyDenies(ref, git) {
+  if (!ref) return false;
+  let text; try { text = git(['show', `${ref}:policy.json`]); } catch { return false; }
+  let p; try { p = JSON.parse(text); } catch { return true; }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return true;
+  return 'publish' in p && p.publish !== 'private-remote';
+}
+
+const telemetryBranchRef = (git) => ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
+
+/** Read-only check the installer runs before writing anything: a settings conflict at bootstrap (see settingsConflict). */
+export function telemetryPreflight(repo) {
+  const dir = join(repo, '.agents', 'telemetry');
+  const git = (args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+  try { git(['rev-parse', '--git-dir']); } catch { return null; }
+  if (existsSync(join(dir, '.git'))) return null;
+  return settingsConflict(dir, telemetryBranchRef(git), git);
+}
+
 export function installTelemetrySubmodule(repo, { remove = false, env = process.env } = {}) {
   // The submodule sits at the telemetry ROOT — shared across factories, one
   // branch, one sync. Each factory keeps to its own subfolder (ours:
@@ -378,10 +399,10 @@ export function installTelemetrySubmodule(repo, { remove = false, env = process.
   if (existsSync(join(dir, '.git'))) return { status: 'already' };
   // The submodule URL ('./') resolves against origin, so with an origin the branch must be pushed there first. A project
   // that may not push keeps telemetry as a plain directory instead (nothing syncs a plain directory).
-  const mayPush = publishAllowed(repo, env);
+  const branchRef = telemetryBranchRef(git);
+  const mayPush = publishAllowed(repo, env) && !branchPolicyDenies(branchRef, git);
   if (!mayPush) { let origin = ''; try { origin = git(['remote', 'get-url', 'origin']).trim(); } catch { /* no origin */ }
     if (origin) return { status: 'skipped', reason: 'local only: telemetry stays a plain directory (a submodule needs its branch on origin)' }; }
-  const branchRef = ['refs/heads/telemetry', 'refs/remotes/origin/telemetry'].find((r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } }) ?? null;
   const conflict = settingsConflict(dir, branchRef, git);
   if (conflict) return { status: 'conflict', reason: conflict };
 
@@ -792,6 +813,8 @@ export async function main(argv = process.argv.slice(2)) {
     return r.status === 'exists-foreign' ? 1 : 0;
   }
 
+  // Settings conflict at bootstrap: stop before any hook, ignore or config file is written.
+  if (!remove) { const conflict = telemetryPreflight(repo); if (conflict) { process.stderr.write(`tokenomics: install stopped, nothing changed — ${conflict}\n`); return 2; } }
   const host = arg('--host') || 'all';
   const touched = [];
   if (host === 'all' || host === 'claude') touched.push(installClaude(repo, rel, { local, remove }));

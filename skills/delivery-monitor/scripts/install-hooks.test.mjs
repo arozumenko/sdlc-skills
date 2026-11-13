@@ -346,3 +346,24 @@ test('doctor: prints the publish policy; under local-only flags an installed pub
   writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{bad');
   assert.ok(doctorFindings(repo, REL).some((x) => x.severity === 'warning' && /^publish: local-only — .*treated as local-only/.test(x.line)));
 });
+
+test('installer entry point: a settings conflict stops everything — no hook, ignore file, index or ref change', () => {
+  const repo = tmp(); seedBranchPath(repo, 'policy.json', '{"publish":"private-remote"}\n');
+  mkdirSync(join(repo, '.agents', 'telemetry'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'policy.json'), '{"publish":"local-only"}\n');
+  const before = { index: g(repo, 'ls-files', '--stage'), refs: g(repo, 'for-each-ref'), gi: existsSync(join(repo, '.gitignore')) };
+  let code = 0, err = '';
+  try { execFileSync('node', [SCRIPT], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV, CLAUDE_PROJECT_DIR: repo } }); } catch (e) { code = e.status; err = e.stderr; }
+  assert.equal(code, 2); assert.match(err, /install stopped, nothing changed — settings conflict/);
+  assert.ok(!existsSync(join(repo, '.claude', 'settings.json')), 'no hook written');
+  assert.equal(existsSync(join(repo, '.gitignore')), before.gi, 'no ignore file written');
+  assert.equal(g(repo, 'ls-files', '--stage'), before.index); assert.equal(g(repo, 'for-each-ref'), before.refs);
+});
+
+test('bootstrapTelemetry: a local-only policy on the telemetry branch itself stops every push (no local policy file)', () => {
+  const { repo, remote } = withRemote();
+  seedBranchPath(repo, 'policy.json', '{"publish":"local-only"}\n');
+  const r = bootstrapTelemetry(repo, { env: {} });
+  assert.equal(r.status, 'skipped', 'with an origin: stays a plain directory'); assert.equal(remoteHasTelemetry(remote), false);
+  const noOrigin = tmp(); seedBranchPath(noOrigin, 'policy.json', '{bad');
+  assert.equal(bootstrapTelemetry(noOrigin, { env: {} }).status, 'created', 'no origin: local submodule, nothing to push');
+});
