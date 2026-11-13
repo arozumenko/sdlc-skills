@@ -234,8 +234,17 @@ leaves the item discoverable.
    inside `<!-- FACTORY:<id> START -->` / `<!-- FACTORY:<id> END -->` markers.
    Re-running replaces the marked block in place — idempotent, no `--update`
    needed. `AGENTS.md` (the full team reference every agent reads) is created
-   if missing; `CLAUDE.md` is auto-loaded and scout-owned (kept lean), so its
-   block is only refreshed when the file already exists — never created.
+   if missing; `CLAUDE.md` is auto-loaded and scout-owned, so it is never
+   created: when it exists, its block is replaced in place, or appended if it
+   has none.
+   `init --update` also refreshes every block already in either file, and
+   adds to an existing `CLAUDE.md` each block `AGENTS.md` carries and it lacks
+   (a `CLAUDE.md` created after the first install; Claude Code auto-loads
+   `CLAUDE.md`, not `AGENTS.md`). A plain run that changed the installed
+   roster refreshes only the role-filtered blocks and adds none.
+   A `CLAUDE.md` that imports `AGENTS.md` with `@AGENTS.md` already loads the
+   blocks, so none is added to it, by `--factory` or by `--update`; the
+   install output says so, and blocks it already carries are still refreshed.
    When scout later regenerates `AGENTS.md`/`CLAUDE.md`, the
    `seeding-a-project` / `seeding-automation-project` skills preserve
    `<!-- FACTORY:* -->` blocks (legacy `<!-- BUNDLE:* -->` included) verbatim,
