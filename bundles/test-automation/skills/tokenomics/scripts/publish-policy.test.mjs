@@ -129,3 +129,12 @@ test('installer: origin already has the branch, push not allowed by credentials 
   g(repo, 'remote', 'set-url', '--push', 'origin', join(repo, 'no-push-here.git'));
   assert.equal(installTelemetrySubmodule(repo).status, 'installed');
 });
+
+test('installer: origin branch deleted, stale tracking ref equal to local → the push recreates it', () => {
+  const { repo, remote } = world();
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: 'x\n', encoding: 'utf8', env: ENV }).trim();
+  const tree = execFileSync('git', ['mktree'], { cwd: repo, input: `100644 blob ${blob}\tREADME.md\n`, encoding: 'utf8', env: ENV }).trim();
+  g(repo, 'update-ref', 'refs/heads/telemetry', g(repo, 'commit-tree', tree, '-m', 'r')); g(repo, 'push', '-q', 'origin', 'telemetry'); g(repo, 'fetch', '-q', 'origin');
+  g(remote, 'update-ref', '-d', 'refs/heads/telemetry');
+  assert.equal(installTelemetrySubmodule(repo).status, 'installed'); assert.equal(remoteHas(remote), true);
+});

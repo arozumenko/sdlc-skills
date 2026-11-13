@@ -382,15 +382,16 @@ export function branchPolicyDenies(ref, git) {
  * origin's, local fast-forwarded; diverged → a problem and bootstrap stops before changing anything. */
 export function telemetryTarget(git, origin) {
   const has = (r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } };
-  if (origin) { try { git(['fetch', '-q', 'origin', '+refs/heads/telemetry:refs/remotes/origin/telemetry']); } catch { /* no remote branch yet, or offline */ } }
+  let fetched = false;
+  if (origin) { try { git(['fetch', '-q', 'origin', '+refs/heads/telemetry:refs/remotes/origin/telemetry']); fetched = true; } catch { /* no remote branch yet, or offline */ } }
   const local = has('refs/heads/telemetry'), remote = Boolean(origin) && has('refs/remotes/origin/telemetry');
   if (local && remote) {
     const ancestor = (a, b) => { try { git(['merge-base', '--is-ancestor', a, b]); return true; } catch { return false; } };
-    if (ancestor('refs/remotes/origin/telemetry', 'refs/heads/telemetry')) return { ref: 'refs/heads/telemetry', fastForward: false };
-    if (ancestor('refs/heads/telemetry', 'refs/remotes/origin/telemetry')) return { ref: 'refs/remotes/origin/telemetry', fastForward: true };
+    if (ancestor('refs/remotes/origin/telemetry', 'refs/heads/telemetry')) return { ref: 'refs/heads/telemetry', fastForward: false, fetched };
+    if (ancestor('refs/heads/telemetry', 'refs/remotes/origin/telemetry')) return { ref: 'refs/remotes/origin/telemetry', fastForward: true, fetched };
     return { problem: 'the local telemetry branch and origin/telemetry have diverged; merge them, then re-run' };
   }
-  return { ref: local ? 'refs/heads/telemetry' : remote ? 'refs/remotes/origin/telemetry' : null, fastForward: false };
+  return { ref: local ? 'refs/heads/telemetry' : remote ? 'refs/remotes/origin/telemetry' : null, fastForward: false, fetched };
 }
 const originOf = (git) => { try { return git(['remote', 'get-url', 'origin']).trim(); } catch { return ''; } };
 
@@ -460,8 +461,10 @@ export function installTelemetrySubmodule(repo, { remove = false, env = process.
 
     // With an origin the branch must reach it before `submodule add ./` clones from there: a failed push stops bootstrap
     // before the interim files move or the index changes.
-    // Skipped when the fetch showed origin already has exactly this commit (no push access needed then).
-    if (origin && mayPush && !(() => { try { return git(['rev-parse', 'refs/heads/telemetry']).trim() === git(['rev-parse', 'refs/remotes/origin/telemetry']).trim(); } catch { return false; } })()) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
+    // Skipped only when this run's fetch succeeded and showed origin already has exactly this commit (a stale
+    // remote-tracking ref after a failed fetch proves nothing).
+    const published = target.fetched && (() => { try { return git(['rev-parse', 'refs/heads/telemetry']).trim() === git(['rev-parse', 'refs/remotes/origin/telemetry']).trim(); } catch { return false; } })();
+    if (origin && mayPush && !published) git(['push', 'origin', 'refs/heads/telemetry:refs/heads/telemetry']);
 
     // 2. Move the interim files aside.
     const hadFiles = existsSync(dir) && readdirSync(dir).length > 0;

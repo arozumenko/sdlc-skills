@@ -422,3 +422,11 @@ test('bootstrapTelemetry: origin already has the branch and push is not allowed 
   const r = bootstrapTelemetry(repo, { env: {} });
   assert.equal(r.status, 'created', JSON.stringify(r)); assert.ok(existsSync(join(repo, '.agents', 'telemetry', '.git')));
 });
+
+test('bootstrapTelemetry: origin branch deleted, stale tracking ref equal to local → the push recreates it (no skip on a failed fetch)', () => {
+  const { repo, remote } = withRemote();
+  commitOnBranch(repo, 'telemetry', 'README.md', 'x\n'); g(repo, 'push', '-q', 'origin', 'telemetry'); g(repo, 'fetch', '-q', 'origin');
+  g(remote, 'update-ref', '-d', 'refs/heads/telemetry');
+  assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created');
+  assert.equal(remoteHasTelemetry(remote), true, 'branch recreated on origin');
+});
