@@ -67,7 +67,7 @@ Dispatches made before the binding get no recorded start. When the last
 mission of a campaign has landed, close its plan: `delivery.mjs plan close
 <run>`, then refresh the effort calibration the next plan is estimated from:
 `delivery.mjs calibrate` (it reports `NO-EVENTS` until a landed task has a
-measured cost; that is expected early on, and `CALIBRATION-OFF` when the project switched the loop off). Its `OUTLIER` lines name the tasks the estimates
+measured cost; that is expected early on). Its `OUTLIER` lines name the tasks the estimates
 fit worst; say in the close report why, in one line each.
 
 ## How you communicate with the team

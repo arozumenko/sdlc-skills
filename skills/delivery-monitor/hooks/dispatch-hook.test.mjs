@@ -371,14 +371,3 @@ test('handleStop prices the final usage: 1h cache writes apart, fast mode keyed 
   const b = priced(broken);
   assert.deepEqual(b.unpriced_models, ['<prices-unreadable>'], 'a broken override never prices silently at list');
 });
-
-// Text policy (learning-loops spec, implementation contract item 2): storeText false vetoes capturePrompts.
-test('handleStop: capturePrompts stores the description; storeText false overrides it', () => {
-  for (const [prof, expectDescription] of [[{ capturePrompts: true }, true], [{ capturePrompts: true, storeText: false }, false], [{}, false]]) {
-    const repo = setup(); writeFileSync(join(deliveryDir(repo), 'profile.json'), JSON.stringify(prof));
-    handleStop(payload(transcripts()), { repo, now: NOW });
-    const d = resolveObservations(repo).active.find((o) => o.event === 'dispatched');
-    assert.equal(d.label === 'Implement TASK-023 build-report core', expectDescription, JSON.stringify({ prof, label: d.label }));
-    if (!expectDescription) assert.equal(d.label, 'TASK-023 build');
-  }
-});

@@ -51,29 +51,11 @@ return rate (rework, review returned, reopened) and per-model figures, recency-w
 classes E1–E4 learned from the cost quartiles. `plan register` fills every task the plan leaves unestimated with the cell's
 p50–p80 as a `usd` range (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class; `--no-calibrate` stops
 new fills (a re-cut keeps earlier ones). A broken `calibration.json` is `CALIBRATION-INVALID` and a broken price override
-`PRICES-INVALID` (both exit 2), never silently ignored; a cell with missing or impossible fields is `CALIBRATION-INVALID` too.
-`calibrate` says `NO-EVENTS` until a landed task has a measured cost. `report` scores those ranges against measured cost in
-`usd:` strata. Cells need 5 samples, classes 12 in total. Every table version is kept as
-`calibration/<sha256>.json`, the digest an estimate's `reference.sha256` names.
-
-**Loop policies (`profile.json`, all optional; unset = the behaviour above).** `"calibration": "off"` stops the loop:
-`calibrate` prints `CALIBRATION-OFF` and writes nothing, `plan register` fills nothing new, estimates already made stay.
-`"calibrationSample": "effective"` makes a cell count only when its recency-weighted (Kish) sample reaches 5 and its newest
-landing is within two half-lives; re-run `calibrate` after switching. `"storeText": false` keeps every free-text source out
-of the ledger (dispatch descriptions even with `capturePrompts`, commit subjects, PR titles; `--note`/`--raw` are refused).
-`profile set` keeps policies already set unless the new file sets them.
-
-**What leaves the machine (`.agents/telemetry/policy.json`, shared with tokenomics).** Unset: telemetry is pushed to the
-project's `origin` as before (`doctor` shows `publish: legacy (unverified)`). `{"publish": "private-remote"}` declares that
-remote private. `{"publish": "local-only"}`: commits stay local, nothing is pushed; with an `origin` the installer keeps
-telemetry a plain directory in the main tree (only transient files are ignored, so decide whether to gitignore or commit it).
-A broken file counts as local-only. `DELIVERY_NO_SYNC=1` stops this process's sync. `doctor` names any installed publisher that
-ignores the policy. The installer stops without changes if a local `policy.json` or `delivery/profile.json` would be shadowed by
-the telemetry branch's copy.
+`PRICES-INVALID` (both exit 2), never silently ignored; `calibrate` says `NO-EVENTS` until a landed task has a measured cost. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the
-orchestrating session when no project manager runs. The same owner runs `calibrate` after `plan close` succeeds at campaign close. Work that landed no commit is recorded without `--sha`, never with
+orchestrating session when no project manager runs. Work that landed no commit is recorded without `--sha`, never with
 another commit's sha. Read `delivery.mjs report` at mission close, before the next mission is planned.
 
 **Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work
