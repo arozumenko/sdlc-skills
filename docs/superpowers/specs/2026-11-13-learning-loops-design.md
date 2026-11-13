@@ -1,7 +1,7 @@
 # Learning loops: how the harness improves itself — design (v3)
 
-Status: v3 · 2026-11-13. Adversarial review (Codex gpt-6-astra, high): round 1 REJECT (15 findings),
-round 2 REJECT (8 of 15 partly resolved, 9 new findings). v3 answers round 2.
+Status: v4 · 2026-11-13. Adversarial review (Codex gpt-6-astra, high): round 1 REJECT (15 findings),
+round 2 REJECT (9 new), round 3 REJECT (no blocker, 7 major, 2 minor). v4 answers round 3.
 
 ## Why
 
@@ -56,9 +56,13 @@ Requirements:
   - **One publish policy.** A single persistent project setting (`local-only` or `private-remote`)
     that **every** component that can commit or push honours: installer, hooks, CLI. `local-only`
     means no push from any of them.
-  - **Allowed fields.** By default records hold ids, refs, stages, timestamps, models, token counts,
-    costs and a user id where attribution needs it. Free text (dispatch descriptions, raw event text)
-    is **off by default** and opt-in per project; each opt-in is listed in the skill.
+  - **Field policy.** One shared policy, applied by hooks, CLI events and backfills alike, decides
+    whether free text is stored (dispatch descriptions, commit subjects, PR titles, notes, raw event
+    text). The structured fields (ids, refs, stages, timestamps, models, token counts, costs, a user id
+    where attribution needs it) are always allowed. Every text source is listed in the skill.
+  - **Compatibility.** Shipping these settings must not change what an existing install does. A
+    setting is added with today's behaviour as its default; making a stricter value the default is
+    itself a treatment under change control.
 - **Off switch.** One persistent setting per loop. Off means: no new state is computed, no new decision
   uses the state, and the pre-loop behaviour returns for new decisions. Decisions already made stay as
   recorded history; rolling back does not rewrite them.
@@ -78,16 +82,25 @@ Reference implementation: `skills/delivery-monitor`.
 | Learned state | `calibration.json`: cells tried in order role+type+novel, role+type, role, type, all; recency-weighted (default half-life 42 days) p50/p80 USD per cell; effort-class boundaries are the weighted quartiles of all samples (needs 12 samples in total), and a cell's class comes from where its p50 falls | — |
 | Decision | `plan register` leaves planner estimates and earlier calibrated estimates alone; otherwise fills the task from the first cell with `n ≥ 5` as a `usd` range, auto-accepted | — |
 | Activation | skill install, then **separately** `install-hooks.mjs` (installing the skill never wires the hook); plan registered; session bound; landings recorded. The PM runs `calibrate` after the last mission of a campaign closes | **gap:** no owner for `calibrate` when there is no PM role |
-| Cold start | no cell with `n ≥ 5` → task stays unestimated; a planner hours estimate needs human acceptance. A corrupt `calibration.json` stops registration (`CALIBRATION-INVALID`) | — |
+| Cold start | no cell with `n ≥ 5` → task stays unestimated; a planner hours estimate needs human acceptance. A `calibration.json` that cannot be read, parsed, or has no `cells` object stops registration (`CALIBRATION-INVALID`); a cell with missing fields is not checked and is treated as no cell | **gap:** no schema check of cells |
 | Effective sample | raw `n ≥ 5`; recency weights shape the distribution but not eligibility; no freshness limit | **gap** |
-| Data boundary | `install-hooks.mjs` bootstraps a telemetry submodule and pushes its branch to `origin` (twice) **without** checking `DELIVERY_NO_SYNC`; only `--no-submodule` avoids it. Hook and CLI sync commit the whole telemetry tree and push unless `DELIVERY_NO_SYNC=1`. Opt-in free text exists: `capturePrompts` (up to 120 chars of dispatch description) and CLI `raw` | **gap:** no single publish policy; installer ignores the env var; destination privacy not checked. Interim workaround: `install-hooks.mjs --no-submodule` **and** `DELIVERY_NO_SYNC=1`, keeping `capturePrompts` off; this does not stop a person from pushing the telemetry tree with git |
+| Data boundary | `install-hooks.mjs` bootstraps a telemetry submodule and pushes its branch to `origin` (twice) **without** checking `DELIVERY_NO_SYNC`; only `--no-submodule` avoids it. Hook and CLI sync commit the whole telemetry tree and push unless `DELIVERY_NO_SYNC=1`. Free text stored today: `capturePrompts` (opt-in, up to 120 chars of dispatch description); git backfill stores commit subjects in `raw` and PR backfill stores PR titles, both by default; CLI `--note` and `--raw` are stored with no project setting | **gap:** no single publish policy; installer ignores the env var; destination privacy not checked; no shared field policy. Interim workaround: `install-hooks.mjs --no-submodule` **and** `DELIVERY_NO_SYNC=1`, keeping `capturePrompts` off; this does not stop a person from pushing the telemetry tree with git |
 | Off switch | `--no-calibrate` stops new fills for one registration; earlier fills stay; recording and `calibrate` continue | **gap:** no persistent off setting |
-| Reproducible state | each estimate stores the sha256 of `calibration.json` and its cell population; `calibrate` overwrites the one file; history exists only where the telemetry tree is committed | **gap:** no immutable state versions in local-only mode |
-| Improvement metric | `report` scores USD estimates by range midpoint (MRE, MAE, hit rate) | **gap:** no frozen baseline, no paired comparison |
+| Reproducible state | each automatically calibrated estimate stores the sha256 of `calibration.json` and its cell population; `calibrate` overwrites the one file; history exists only where the telemetry tree is committed | **gap:** no immutable state versions in local-only mode |
+| Improvement metric | `report` scores USD estimates by range midpoint (MdMRE, MAE, hit rate), excluding estimates accepted at or after the task started (`late_accepted`) | **gap:** no frozen baseline, no paired comparison |
 
-Follow-up to delivery-monitor, run under the change control below: one publish policy honoured by the
-installer, hooks and CLI; persistent off setting; effective-sample and freshness check; immutable state
-versions; paired baseline predictions written at registration; a named `calibrate` owner without a PM.
+Follow-up to delivery-monitor, run under the change control below, every setting defaulting to today's
+behaviour:
+
+1. one publish policy honoured by the installer, hooks and CLI;
+2. one field policy honoured by hooks, CLI events and backfills;
+3. a persistent calibration off setting;
+4. an effective-sample and freshness check;
+5. a schema check of calibration cells;
+6. immutable calibration state versions;
+7. paired baseline predictions recorded at registration, and a paired evaluator in `report`;
+8. a named `calibrate` owner without a PM: the session that closes the campaign's plan (the
+   orchestrator) runs it.
 
 ## Improvement proof
 
@@ -96,8 +109,10 @@ versions; paired baseline predictions written at registration; a named `calibrat
 - **Same target.** For #105: calibrated USD predictions against a frozen USD baseline. The baseline is a
   **learned global baseline**: the `all` cell frozen at the switch date, not an uncalibrated guess.
   Never against hour estimates; hours and dollars are different outcomes.
-- **Paired, before outcomes.** For each eligible task both predictions are written at registration,
-  timestamped, before the task lands.
+- **Paired, before work starts.** For each eligible task both predictions, and the state version they
+  used, are written before the task's first eligible work starts. A prediction made at or after the
+  start is excluded from efficacy scoring (the shipped `late_accepted` rule) but still counted in
+  coverage reporting.
 - **One primary statistic**, chosen before the window (for #105: median absolute log ratio of predicted
   p50 to measured cost), with sample count, exclusions and an uncertainty range.
 - Fit quality on training data (e.g. `OUTLIER` lines) is not proof of improvement.
@@ -134,8 +149,10 @@ A loop's status records four facts separately: **installed**, **capture active**
 
 **Coverage reconciliation.** Recorded events are checked against an **independent** inventory of the same
 work (e.g. the host's session transcripts and its own usage accounting), broken down by host, role and
-event type. Missing **cost** is bounded, not just missing event count. If missing cost cannot be bounded,
-cost efficacy is declared unmeasurable and only non-cost metrics may be claimed.
+event type, and missing **cost** is bounded. The pass criterion is set in the experiment record. A cost
+decision must hold at the worst end of the missing-cost bound. If missing cost cannot be bounded, the
+cost guard is **unmeasurable**, and an unmeasurable mandatory guard blocks promotion; non-cost results
+may still be reported descriptively.
 
 ### Rules
 
@@ -145,11 +162,16 @@ cost efficacy is declared unmeasurable and only non-cost metrics may be claimed.
    - treatment and its version, and whether learned state updates during the window;
    - eligibility (which tasks or sessions count);
    - baseline window and values;
-   - primary metric and guard metrics, each with numerator, denominator, severity scale and observation lag;
-   - the **non-inferiority margin** for each metric (largest change still counted as "no worse");
+   - primary metric and guard metrics, each with numerator, denominator, severity scale, observation lag
+     and the event that starts the lag (for escapes: the task's landing);
+   - the **non-inferiority margin** for each metric (largest harmful change still counted as "no worse");
+   - the analysis: confidence level (default 90%), interval method (default paired bootstrap over
+     matched tasks), matching procedure, and how unfinished tasks are handled (default: censored, i.e.
+     excluded from the comparison and reported as a count);
    - minimum exposure;
-   - **enrolment deadline** (calendar date), **outcome-maturation date** (deadline plus the longest
-     observation lag), **maximum extension** (one, with its own deadline);
+   - **enrolment deadline** (calendar date); **outcome-maturation date**: the latest landing of an
+     enrolled task plus the longest observation lag, capped by an **absolute evaluation end date**;
+     **maximum extension** (one, with its own deadline); **restart budget** (one);
    - state snapshot references and rollback target.
 3. **Guard metrics** always include whole-system effects, so a primary metric cannot improve by moving
    cost or work elsewhere:
@@ -159,13 +181,22 @@ cost efficacy is declared unmeasurable and only non-cost metrics may be claimed.
    - quality: escapes by severity (after the observation lag), blocking findings, missed rulings or scope.
 
    Task-counting and acceptance definitions are fixed before the baseline is collected.
-4. **Decision at the maturation date**, mandatory, using uncertainty ranges (not point values):
-   - *better* — primary improves beyond its margin; every guard non-inferior → promote;
-   - *non-inferior* — primary and every guard within their margins (the whole uncertainty range inside
-     the margin) → owner decides to keep or drop;
-   - *worse* — primary **or** any guard worse beyond its margin → roll back;
+4. **Decision at the maturation date**, mandatory. For each metric, Δ = treatment − baseline, oriented
+   so that positive is harmful; [L, U] is its interval; m is its non-inferiority margin.
+   - a metric is **non-inferior** when U ≤ m (only the harmful bound matters; a large improvement
+     never fails);
+   - the primary is **superior** when U < 0 (the interval lies wholly on the improving side);
+   - a metric is **worse** when L > m (harm beyond the margin is established);
+   - a mandatory guard that is unmeasurable counts as not non-inferior.
+
+   Outcomes:
+   - *better* — primary superior, every guard non-inferior → promote;
+   - *non-inferior* — primary and every guard non-inferior, primary not superior → owner decides to
+     keep or drop;
+   - *worse* — primary or any guard worse → roll back;
    - *inconclusive* — anything else, including minimum exposure not reached → extend once; at the
      extension deadline, inconclusive means **drop**.
+
    Outcomes that have not matured never count as "no escapes"; promotion waits for maturation.
 5. **Immediate stop**, separate from the statistics: one critical escape, data loss, a privacy breach, or a
    ruling broken because of the treatment → roll back at once, then investigate. Rollback is
@@ -174,7 +205,8 @@ cost efficacy is declared unmeasurable and only non-cost metrics may be claimed.
    (same task types, similar size). Results from different projects are replicated separately, never
    pooled into one effect.
 7. **Freeze.** No model, reviewer or rule change in that project during the window. A material change that
-   cannot wait **restarts** the window (or ends it as inconclusive if it cannot restart).
+   cannot wait **restarts** the window once (the restart budget); a second one ends it as inconclusive.
+   The absolute evaluation end date never moves. Every failed or restarted window stays in the record.
 8. **Owner approval** is needed to activate a treatment and to move a stage forward. Merges follow the
    repository's normal rules.
 
@@ -202,13 +234,13 @@ exposure, not proven waste. Label audit = random sample checked by hand, error r
 | Card | Population | Finding | Meaning | Label audit |
 |---|---|---|---|---|
 | E-ORCH-1 | 14 orchestrator sessions, 13,351 calls | orchestrator 39–41% of priced spend; 87.5% of orchestrator spend on calls with context > 150K | exposure | purposes 50 calls, 22%; spend from billing fields |
-| E-REV-1 | review trial, one project, two periods | blockers with red-run proof 24% → 92% | effect in one project, confounded by a mid-window reviewer change | validity labels by hand |
+| E-REV-1 | review trial, one project, two periods | share of blocking findings that carried red-run proof: 24% before, 92% after a review-rule change | observed before/after change in an evidence practice (not blocker validity or delivery quality); treatment effect unidentified (a reviewer change fell in the window) | validity labels by hand |
 | E-REV-2 | 60 tasks with numbered review rounds | 14 tasks over two rounds; about 10% of window spend on those tasks | exposure, not the marginal cost of extra rounds; finding-free rounds unrecorded | 40 segments, 2.5% |
 | E-REV-3 | 669 review findings linked to window tasks; review ≈ 22% of spend | follow-up cost on dropped or nit findings 0.06–0.35% of window spend | exposure; only 44% of review cost joined to findings | as E-REV-2 |
 | E-BRF-1 | 749 dispatched agents | 3 returned blocked because of the brief; 0.7% of spend associated | exposure | 24 repeats, 42% |
 | E-ESC-1 | 413 recently modified bug records | 36 post-build failure episodes, 13 major/critical; most records were review leftovers | count; repair cost known for under half | 20 finders, 15% |
 | E-SPEC-1 | 65 spec-related records | 34 found after planning; 4 seeded docs contradicted later rulings | count | sample of spec records by hand |
-| E-MEM-1 | 73 corrective messages | 4 matched an existing lesson; 59 recurring reviewer findings of known classes | count | 40 labels, 45% |
+| E-MEM-1 | 73 corrective messages; separately, review-finding ledgers | 4 corrections matched an existing lesson; 59 review findings repeated a known class | observed label counts; not a measure of memory effectiveness | 40 labels, 45% |
 
 ## Registry
 
@@ -236,8 +268,8 @@ exposure, not proven waste. Label audit = random sample checked by hand, error r
 
 | Idea | Why not now | Reconsider if |
 |---|---|---|
-| Reviewer down-ranking by hit rate | E-REV-3: follow-up on noise findings was a very small share of spend | noise share rises, or a cheaper reviewer tier appears |
-| Brief-quality loop | E-BRF-1: brief-caused failures were rare | misread or blocked returns rise |
+| Reviewer down-ranking by hit rate | E-REV-3: low **identified** exposure; only 44% of review cost could be joined to findings, so total noise cost is not bounded | review findings get a recorded outcome (loop 1 instrumentation), or noise share rises, or a cheaper reviewer tier appears |
+| Brief-quality loop | E-BRF-1: low **identified** exposure; the label audit (42% pre-correction error) cannot bound missed cases | dispatch returns get a recorded blocked/question/deviation outcome, or such returns rise |
 
 ### Change log
 
