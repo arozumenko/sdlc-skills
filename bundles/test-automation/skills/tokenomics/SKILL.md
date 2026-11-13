@@ -298,7 +298,10 @@ scope records, `config.json`, `factory-profile.json`, mid-run gate verdicts
 page (`reports/`). **Nobody hand-commits any of it**: every
 capture moment commits and pushes to the `telemetry` branch (best-effort;
 offline just means the next capture catches up; `TOKENOMICS_NO_SYNC=1`
-disables). Because of `ignore = all` and the separate branch, the main working
+disables). `.agents/telemetry/policy.json` with `{"publish": "local-only"}` (shared
+with delivery-monitor) keeps every commit local and stops all pushes, the installer
+and `--pull` included; with an `origin` the installer then leaves telemetry a plain
+directory. A broken policy file counts as local-only. Because of `ignore = all` and the separate branch, the main working
 tree never gets dirty and a branch switch never stashes a record. A teammate
 gets everything with `git clone --recurse-submodules` (forgot? — `git
 submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
