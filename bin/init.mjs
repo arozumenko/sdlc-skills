@@ -564,7 +564,9 @@ export function seedMissingFiles(srcPath, destPath) {
 // auto-loaded and scout-owned, so it is never created: when it exists its
 // block is replaced in place, or appended if it has none — unless it imports
 // AGENTS.md (`@AGENTS.md`), which already loads the block, so a second copy
-// would only double it.
+// would only double it. Blocks are found by scanFactoryBlocks (whole marker
+// lines outside code fences). A START with no END of its own is left as text,
+// a full block is appended after it, and every run names its line with "!".
 //
 // The matcher accepts BOTH the old `BUNDLE:<id>` marker and the current
 // `FACTORY:<id>` marker (pre-rename installs left the old form in place), but
@@ -590,40 +592,75 @@ export function installInstructions(factory, cwd = CWD) {
     }
     const status = spliceFactoryBlock(filePath, factory.id, body, createIfMissing);
     if (status === "absent") console.log(`      — instructions ${file} (not present; skipped)`);
-    else console.log(`      ✓ instructions ${file} (${status})`);
+    else console.log(`      ${status.includes("unclosed START") ? "!" : "✓"} instructions ${file} (${status})`);
   }
 }
 
 function spliceFactoryBlock(filePath, id, body, createIfMissing) {
   const start = `<!-- FACTORY:${id} START -->`;
   const end = `<!-- FACTORY:${id} END -->`;
+  const block = `${start}\n${body.trim()}\n${end}`;
   if (!existsSync(filePath)) {
-    const block = `${start}\n${body.trim()}\n${end}`;
     if (!createIfMissing) return "absent";
     const title = basename(filePath, ".md");
     writeFileSync(filePath, `# ${title}\n\n${block}\n`);
     return "created";
   }
   const text = readFileSync(filePath, "utf8");
-  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Match the OLD `BUNDLE:<id>` marker too — so a project installed before the
-  // rename still gets its block found and replaced (with the new FACTORY form).
-  // `id` must stay escaped: it's interpolated into a RegExp, and a factory id
-  // containing a regex-special char (e.g. ".") would otherwise change match
-  // semantics or throw.
-  const startRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} START -->`;
-  const endRe = `<!-- (?:BUNDLE|FACTORY):${esc(id)} END -->`;
-  // A block runs from the START nearest its END: an earlier START with no END of its own (a damaged file) is left
-  // as text, so the match never swallows the project text between it and a later block.
-  const re = new RegExp(`${startRe}(?:(?!${startRe})[\\s\\S])*?${endRe}`);
-  const block = `${start}\n${body.trim()}\n${end}`;
-  if (re.test(text)) {
-    const updated = dedupeFactoryBlocks(text.replace(re, () => block));
-    if (updated !== text) writeFileSync(filePath, updated);
-    return "refreshed";
+  // The first block of this id, in either marker form (a project installed before the rename keeps `BUNDLE:<id>`
+  // until this rewrite gives it the FACTORY form).
+  const { lines, blocks } = scanFactoryBlocks(text);
+  const found = blocks.find((b) => b.id === id);
+  let status, updated;
+  if (found) {
+    const cr = lines[found.end].endsWith("\r") ? "\r" : "";
+    updated = dedupeFactoryBlocks([...lines.slice(0, found.start), block + cr, ...lines.slice(found.end + 1)].join("\n"));
+    status = "refreshed";
+  } else {
+    updated = dedupeFactoryBlocks(text.replace(/\n*$/, "\n\n") + block + "\n");
+    status = "appended";
   }
-  writeFileSync(filePath, dedupeFactoryBlocks(text.replace(/\n*$/, "\n\n") + block + "\n"));
-  return "appended";
+  if (updated !== text) writeFileSync(filePath, updated);
+  return status + unclosedNote(updated, id);
+}
+
+// A START of this id with no END of its own stays in the file as plain text. Say so on every run, with the line, so
+// the person can repair it: the text after it is often a cut-short copy of old team rules that agents still read.
+function unclosedNote(text, id) {
+  const at = scanFactoryBlocks(text).unclosed.filter((u) => u.id === id).map((u) => u.line + 1);
+  if (!at.length) return "";
+  return `; unclosed START on line ${at.join(", ")} left as text: delete it, or add its END marker`;
+}
+
+// The managed blocks of a root context file. A marker counts only as a whole line outside code fences (a trailing
+// CR is allowed), in the old `BUNDLE:<id>` or the current `FACTORY:<id>` form; markers quoted in prose, inline code
+// or a fenced example are text (trailing spaces or tabs are allowed). A block is a START line and the next END line of its id, skipping fenced lines in
+// between. A START that meets another START of its id, or the end of the file, first has no END of its own: it is
+// listed in `unclosed` and its lines stay project text. Lines are 0-based indexes into `lines`.
+const FACTORY_MARKER = /^<!-- (?:BUNDLE|FACTORY):(\S+) (START|END) -->[ \t]*\r?$/;
+export function scanFactoryBlocks(text) {
+  const lines = text.split("\n");
+  const blocks = [], unclosed = [];
+  let fence = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (fence) { if (closesFence(lines[i], fence)) fence = null; continue; }
+    const f = fenceOpener(lines[i]);
+    if (f) { fence = f[1]; continue; }
+    const m = lines[i].match(FACTORY_MARKER);
+    if (!m || m[2] !== "START") continue;
+    let end = -1;
+    for (let k = i + 1, inner = null; k < lines.length; k++) {
+      if (inner) { if (closesFence(lines[k], inner)) inner = null; continue; }
+      const g = fenceOpener(lines[k]);
+      if (g) { inner = g[1]; continue; }
+      const n = lines[k].match(FACTORY_MARKER);
+      if (n && n[1] === m[1]) { if (n[2] === "END") end = k; break; }
+    }
+    if (end === -1) { unclosed.push({ id: m[1], line: i }); continue; }
+    blocks.push({ id: m[1], start: i, end });
+    i = end;
+  }
+  return { lines, blocks, unclosed };
 }
 
 // Several factories ship the same team-wide section (e.g. "Agent memory — two
@@ -631,47 +668,31 @@ function spliceFactoryBlock(filePath, id, body, createIfMissing) {
 // `## ` section an earlier block already carries, so a multi-factory project
 // reads it once. It runs over the whole file after every splice, so the result
 // depends only on the blocks' current content and order, not on which factory
-// was refreshed first; on an already-deduped file it changes nothing.
+// was refreshed first; on an already-deduped file it changes nothing. Blocks are
+// found by scanFactoryBlocks, so text outside them (an unclosed START and what
+// follows it included) is never deduped, and CRLF files are handled like LF ones.
 export function dedupeFactoryBlocks(text) {
-  // Line-based so markers inside code fences (documentation examples) are not
-  // treated as managed blocks, and CRLF files are handled like LF ones.
-  const lines = text.split("\n");
-  const START = /^<!-- (?:BUNDLE|FACTORY):([A-Za-z0-9._-]+) START -->\r?$/;
+  const { lines, blocks } = scanFactoryBlocks(text);
   const out = [];
-  let earlier = "", fence = null;
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    if (fence) { if (closesFence(l, fence)) fence = null; out.push(l); continue; }
-    const f = fenceOpener(l);
-    if (f) { fence = f[1]; out.push(l); continue; }
-    const m = l.match(START);
-    const endRe = m && new RegExp(`^<!-- (?:BUNDLE|FACTORY):${m[1].replace(/\./g, "\\.")} END -->\\r?$`);
-    let j = -1;
-    for (let k = i + 1, inner = null; m && k < lines.length; k++) {
-      if (inner) { if (closesFence(lines[k], inner)) inner = null; continue; }
-      const g = fenceOpener(lines[k]);
-      if (g) { inner = g[1]; continue; }
-      if (endRe.test(lines[k])) { j = k; break; }
-      if (lines[k].match(START)?.[1] === m[1]) break; // this START has no END of its own: leave it as text
-    }
-    if (j === -1) { out.push(l); continue; }
-    const body = lines.slice(i + 1, j).join("\n");
-    const kept = dropSectionsAlreadyIn(body, earlier).replace(/(\r?\n)+$/, "");
+  let earlier = "", next = 0;
+  for (const { start, end } of blocks) {
+    out.push(...lines.slice(next, start));
+    const kept = dropSectionsAlreadyIn(lines.slice(start + 1, end).join("\n"), earlier).replace(/(\r?\n)+$/, "");
     earlier += "\n" + kept;
-    out.push(l, ...(kept ? [kept] : []), lines[j]);
-    i = j;
+    out.push(lines[start], ...(kept ? [kept] : []), lines[end]);
+    next = end + 1;
   }
+  out.push(...lines.slice(next));
   return out.join("\n");
 }
 
-// Factory ids of the managed blocks already in a root context file, in file
-// order, deduped — both the old `BUNDLE:<id>` and current `FACTORY:<id>` form.
+// Factory ids a root context file carries, in file order, deduped: every
+// complete block, and every unclosed START (so --update repairs that factory by
+// appending a full block, and keeps reporting the stray marker).
 export function managedFactoryIds(text) {
-  const ids = [];
-  for (const m of text.matchAll(/<!-- (?:BUNDLE|FACTORY):([A-Za-z0-9._-]+) START -->/g)) {
-    if (!ids.includes(m[1])) ids.push(m[1]);
-  }
-  return ids;
+  const { blocks, unclosed } = scanFactoryBlocks(text);
+  const marks = [...blocks.map((b) => [b.start, b.id]), ...unclosed.map((u) => [u.line, u.id])].sort((x, y) => x[0] - y[0]);
+  return [...new Set(marks.map(([, id]) => id))];
 }
 
 // True when CLAUDE.md pulls AGENTS.md in with Claude Code's `@path` import, so

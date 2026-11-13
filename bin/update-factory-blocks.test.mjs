@@ -293,10 +293,11 @@ test("with skip (--factory X --update) the other factories' missing blocks are s
 });
 
 test("a block the file names but does not close keeps its warning mark and is not reported as added", () => {
-  // The file's own START marker has no END: the old append path runs. That is a damaged file, not the CLAUDE.md copy.
+  // The file's own START has no END, so spliceFactoryBlock appends a full block after it and names the stray line
+  // (printed with "!"). That is a damaged file, not the CLAUDE.md copy, which reports "added".
   const root = project({ "AGENTS.md": `# A\n\n<!-- FACTORY:aa START -->\nno end marker\n`, "CLAUDE.md": "# CLAUDE\n" });
   const results = refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: fakePkg() });
-  assert.deepEqual(results[0], { file: "AGENTS.md", id: "aa", status: "appended" });
+  assert.deepEqual(results[0], { file: "AGENTS.md", id: "aa", status: "appended; unclosed START on line 3 left as text: delete it, or add its END marker" });
 });
 
 test("importsAgentsMd: only what Claude Code reads as an import counts", () => {
@@ -334,7 +335,7 @@ test("a --factory install does not add its block to a CLAUDE.md that imports AGE
   assert.equal(readFileSync(join(plain, "CLAUDE.md"), "utf8"), `# CLAUDE\n\n${blk("aa", "## A rules\na")}\n`);
 });
 
-test("install output: added is a success, an import skip is a note, an unclosed block stays a warning", () => {
+test("install output: added is a success, an import skip is a note, an unclosed block is a warning", () => {
   const cli = (files) => {
     const root = project(files);
     const r = spawnSync(process.execPath, [INIT, "init", "--skills", "memory", "--update", "--target", "claude", "--yes"], { cwd: root, encoding: "utf8", env: { ...process.env, HOME: root, SDLC_SKILLS_CACHE_DIR: join(root, ".cache") } });
@@ -342,7 +343,7 @@ test("install output: added is a success, an import skip is a note, an unclosed 
     return r.stdout;
   };
   assert.match(cli({ "AGENTS.md": STALE_AGENTS, "CLAUDE.md": "# CLAUDE\n\n@AGENTS.md\n" }), /— instructions CLAUDE\.md feature-development \(imports AGENTS\.md; not added\)/);
-  assert.match(cli({ "AGENTS.md": "# A\n\n<!-- FACTORY:manual-qa START -->\nno end marker\n" }), /! instructions AGENTS\.md manual-qa \(appended\)/);
+  assert.match(cli({ "AGENTS.md": "# A\n\n<!-- FACTORY:manual-qa START -->\nno end marker\n" }), /! instructions AGENTS\.md manual-qa \(appended; unclosed START on line 3/);
 });
 
 // A START marker with no END marker (a hand edit cut the block short). The first run appends a whole block after the
@@ -353,10 +354,10 @@ const ORPHAN = `# A\n\n<!-- FACTORY:aa START -->\nno end marker\n\n## Project no
 test("an unclosed block: the project text after it survives the second run", () => {
   const root = project({ "AGENTS.md": ORPHAN });
   const pkg = fakePkg();
-  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "appended" }]);
+  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "appended; unclosed START on line 3 left as text: delete it, or add its END marker" }]);
   const first = readFileSync(join(root, "AGENTS.md"), "utf8");
   assert.equal(first, `${ORPHAN}\n${blk("aa", "## A rules\na")}\n`);
-  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "refreshed" }]);
+  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg }), [{ file: "AGENTS.md", id: "aa", status: "refreshed; unclosed START on line 3 left as text: delete it, or add its END marker" }]);
   assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), first);
 });
 
@@ -372,4 +373,104 @@ test("an unclosed block: dedupe does not treat the project text up to the next b
   // bb ships "## Shared". The project's own "## Shared" section sits after an orphan aa START, before the real aa block.
   const text = `${blk("bb", "## Shared\nb")}\n\n<!-- FACTORY:aa START -->\n\n## Shared\nproject's own\n\n${blk("aa", "## A rules\na")}\n`;
   assert.equal(dedupeFactoryBlocks(text), text);
+});
+
+// Review round 1 of the unclosed-block fix: markers count only as whole lines outside code fences, in the splice as in
+// dedupe, and an unclosed START is reported on every run, not only on the run that appends.
+const AA = blk("aa", "## A rules\na");
+const runFactory = (root) => {
+  const factory = { id: "aa", dir: join(fakePkg(), "bundles", "aa"), instructions: "instructions.md" };
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(" "));
+  try { installInstructions(factory, root); } finally { console.log = log; }
+  return lines.join("\n");
+};
+const twice = (files, run) => {
+  const root = project(files);
+  const out1 = run(root);
+  const first = readFileSync(join(root, "AGENTS.md"), "utf8");
+  const out2 = run(root);
+  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), first, "the second run changes nothing");
+  return { first, out1, out2 };
+};
+
+test("a fenced example of the markers is not a block: it is left alone and the real block is appended", () => {
+  const doc = "# A\n\n```md\n<!-- FACTORY:aa START -->\nexample\n<!-- FACTORY:aa END -->\n```\n\nmore\n";
+  const { first } = twice({ "AGENTS.md": doc }, runFactory);
+  assert.equal(first, `${doc}\n${AA}\n`);
+});
+
+test("an unclosed START followed by a fenced example END keeps the project text between them", () => {
+  const doc = "# A\n\n<!-- FACTORY:aa START -->\n\n## Mine\nkeep\n\n```\n<!-- FACTORY:aa END -->\n```\n\nafter\n";
+  const { first } = twice({ "AGENTS.md": doc }, runFactory);
+  assert.equal(first, `${doc}\n${AA}\n`);
+});
+
+test("markers quoted inside a line are not a block", () => {
+  const doc = "# A\n\nMarkers look like `<!-- FACTORY:aa START -->...<!-- FACTORY:aa END -->` in docs.\n";
+  const { first } = twice({ "AGENTS.md": doc }, runFactory);
+  assert.equal(first, `${doc}\n${AA}\n`);
+});
+
+test("--update does not treat a factory named only in a fenced example as installed", () => {
+  const doc = "# A\n\n```\n<!-- FACTORY:aa START -->\nexample\n<!-- FACTORY:aa END -->\n```\n";
+  const root = project({ "AGENTS.md": doc });
+  assert.deepEqual(managedFactoryIds(doc), []);
+  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: fakePkg() }), []);
+  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), doc);
+});
+
+test("an unclosed START is reported with its line on every run, on the --factory path", () => {
+  const { out1, out2 } = twice({ "AGENTS.md": ORPHAN }, runFactory);
+  for (const out of [out1, out2]) assert.match(out, /! instructions AGENTS\.md \((?:appended|refreshed); unclosed START on line 3 left as text: delete it, or add its END marker\)/);
+});
+
+test("an unclosed START is reported with its line on every run, on the --update path", () => {
+  const pkg = fakePkg();
+  const refresh = (root) => refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: pkg });
+  const root = project({ "AGENTS.md": ORPHAN });
+  const note = "; unclosed START on line 3 left as text: delete it, or add its END marker";
+  assert.deepEqual(refresh(root), [{ file: "AGENTS.md", id: "aa", status: `appended${note}` }]);
+  assert.deepEqual(refresh(root), [{ file: "AGENTS.md", id: "aa", status: `refreshed${note}` }]);
+  // A stray START after a complete block is reported too, though nothing is appended.
+  const after = project({ "AGENTS.md": `# A\n\n${blk("aa", "old")}\n\n<!-- FACTORY:aa START -->\npasted twice\n` });
+  assert.deepEqual(refresh(after), [{ file: "AGENTS.md", id: "aa", status: "refreshed; unclosed START on line 8 left as text: delete it, or add its END marker" }]);
+});
+
+test("the CLI marks an unclosed START with ! on the second --update", () => {
+  const root = project({ "AGENTS.md": "# A\n\n<!-- FACTORY:manual-qa START -->\nno end marker\n" });
+  const run = () => spawnSync(process.execPath, [INIT, "init", "--skills", "memory", "--update", "--target", "claude", "--yes"], { cwd: root, encoding: "utf8", env: { ...process.env, HOME: root, SDLC_SKILLS_CACHE_DIR: join(root, ".cache") } });
+  run();
+  const r = run();
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /! instructions AGENTS\.md manual-qa \(refreshed; unclosed START on line 3/);
+});
+
+test("an unclosed START keeps the project text in the old BUNDLE form and in CRLF files", () => {
+  const variants = {
+    "BUNDLE start": ORPHAN.replace("FACTORY:aa START", "BUNDLE:aa START"),
+    "BUNDLE start above an old BUNDLE block": `${ORPHAN.replace("FACTORY:aa START", "BUNDLE:aa START")}\n${blk("aa", "old", "BUNDLE")}\n`,
+    "CRLF": ORPHAN.replace(/\n/g, "\r\n"),
+  };
+  for (const [why, doc] of Object.entries(variants)) {
+    const { first } = twice({ "AGENTS.md": doc }, runFactory);
+    assert.ok(first.includes("## Project notes") && first.includes("keep me"), why);
+    assert.ok(first.includes(AA.split("\n").join(first.includes("\r\n") ? "\r\n" : "\n")) || first.includes(AA), why);
+  }
+});
+
+test("dedupe leaves the text after an unclosed START alone in the BUNDLE form and in CRLF files", () => {
+  const base = `${blk("bb", "## Shared\nb")}\n\n<!-- FACTORY:aa START -->\n\n## Shared\nproject's own\n\n${blk("aa", "## A rules\na")}\n`;
+  for (const text of [base.replace("FACTORY:aa START -->\n\n## Shared", "BUNDLE:aa START -->\n\n## Shared"), base.replace(/\n/g, "\r\n")]) {
+    assert.equal(dedupeFactoryBlocks(text), text);
+  }
+});
+
+test("a marker line with trailing spaces or tabs is still a marker", () => {
+  // The splice used to match markers anywhere, so a hand edit that left trailing whitespace still refreshed in place.
+  const doc = `# A\n\n<!-- FACTORY:aa START --> \nold\n<!-- FACTORY:aa END -->\t\n\nafter\n`;
+  const { first, out2 } = twice({ "AGENTS.md": doc }, runFactory);
+  assert.equal(first, `# A\n\n<!-- FACTORY:aa START -->\n## A rules\na\n<!-- FACTORY:aa END -->\n\nafter\n`);
+  assert.match(out2, /✓ instructions AGENTS\.md \(refreshed\)/);
 });
