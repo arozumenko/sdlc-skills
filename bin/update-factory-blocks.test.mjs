@@ -380,8 +380,7 @@ test("an unclosed block: dedupe does not treat the project text up to the next b
   assert.equal(dedupeFactoryBlocks(text), text);
 });
 
-// Markers count only as whole lines outside code fences, in the splice as in dedupe, and an unclosed START is
-// reported on every run, not only on the run that appends.
+// Markers count only as whole lines, and an unclosed START is reported on every run, not only on the run that appends.
 const AA = blk("aa", "## A rules\na");
 const runFactory = (root) => {
   const factory = { id: "aa", dir: join(fakePkg(), "bundles", "aa"), instructions: "instructions.md" };
@@ -400,30 +399,10 @@ const twice = (files, run) => {
   return { first, out1, out2 };
 };
 
-test("a fenced example of the markers is not a block: it is left alone and the real block is appended", () => {
-  const doc = "# A\n\n```md\n<!-- FACTORY:aa START -->\nexample\n<!-- FACTORY:aa END -->\n```\n\nmore\n";
-  const { first } = twice({ "AGENTS.md": doc }, runFactory);
-  assert.equal(first, `${doc}\n${AA}\n`);
-});
-
-test("an unclosed START followed by a fenced example END keeps the project text between them", () => {
-  const doc = "# A\n\n<!-- FACTORY:aa START -->\n\n## Mine\nkeep\n\n```\n<!-- FACTORY:aa END -->\n```\n\nafter\n";
-  const { first } = twice({ "AGENTS.md": doc }, runFactory);
-  assert.equal(first, `${doc}\n${AA}\n`);
-});
-
 test("markers quoted inside a line are not a block", () => {
   const doc = "# A\n\nMarkers look like `<!-- FACTORY:aa START -->...<!-- FACTORY:aa END -->` in docs.\n";
   const { first } = twice({ "AGENTS.md": doc }, runFactory);
   assert.equal(first, `${doc}\n${AA}\n`);
-});
-
-test("--update does not treat a factory named only in a fenced example as installed", () => {
-  const doc = "# A\n\n```\n<!-- FACTORY:aa START -->\nexample\n<!-- FACTORY:aa END -->\n```\n";
-  const root = project({ "AGENTS.md": doc });
-  assert.deepEqual(managedFactoryIds(doc), []);
-  assert.deepEqual(refreshInstalledFactoryBlocks({ cwd: root, pkgRoot: fakePkg() }), []);
-  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), doc);
 });
 
 test("an unclosed START is reported on every run, on the --factory path", () => {
@@ -483,8 +462,7 @@ test("a marker line with trailing spaces or tabs is still a marker", () => {
   assert.match(out2, /✓ instructions AGENTS\.md \(refreshed\)/);
 });
 
-// A fence that never closes is text, as it was for the old splice: otherwise every block after it
-// is hidden and each run appends another copy. Markers may be indented up to 3 spaces (CommonMark still reads them
+// Code fences do not hide markers from the splice, as for the old in-text match. Markers may be indented up to 3 spaces (CommonMark still reads them
 // as HTML) and the first line may carry a byte order mark.
 const REFRESHED = (before, after = "") => `${before}${AA}\n${after}`;
 
@@ -567,5 +545,65 @@ test("every shipped instructions.md scans back as exactly one block", () => {
     const { blocks, unclosed } = scanFactoryBlocks(`# A\n\n${blk(id, filterRoleSections(readFileSync(src, "utf8"), null).trim())}\n`);
     assert.equal(blocks.length, 1, id);
     assert.equal(unclosed.length, 0, id);
+  }
+});
+
+// The splice ignores code fences: a fence left open in project text must not pair with a fence line inside a factory
+// body or in later project text and hide the block, or every run appends another copy.
+const FENCED_BODY = "## F rules\n\n```\nnpm test\n```\n\nmore";
+const runFactoryWith = (body) => (root) => {
+  const pkg = mkdtempSync(join(tmpdir(), "update-blocks-pkg-"));
+  mkdirSync(join(pkg, "bundles", "aa"), { recursive: true });
+  writeFileSync(join(pkg, "bundles", "aa", "instructions.md"), body + "\n");
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(" "));
+  try { installInstructions({ id: "aa", dir: join(pkg, "bundles", "aa"), instructions: "instructions.md" }, root); } finally { console.log = log; }
+  return lines.join("\n");
+};
+
+test("a fence left open in project text does not pair with a fence in the appended block", () => {
+  const doc = "# Project\n\nSetup:\n```\nnpm install\n";
+  const { first, out2 } = twice({ "AGENTS.md": doc }, runFactoryWith(FENCED_BODY));
+  assert.equal(first, `${doc}\n${blk("aa", FENCED_BODY)}\n`);
+  assert.match(out2, /✓ instructions AGENTS\.md \(refreshed\)/);
+});
+
+test("a block after a fence left open in project text is refreshed in place on both paths", () => {
+  const doc = `# A\n\n\`\`\`bash\nnpm i\n\n${blk("aa", "old\n```\nx\n```")}\n`;
+  const { first } = twice({ "AGENTS.md": doc }, runFactoryWith(FENCED_BODY));
+  assert.equal(first, `# A\n\n\`\`\`bash\nnpm i\n\n${blk("aa", FENCED_BODY)}\n`);
+  assert.equal(scanFactoryBlocks(doc).blocks.length, 1);
+  assert.deepEqual(managedFactoryIds(doc), ["aa"]);
+});
+
+test("a factory body with a marker line of its own is not written, and says so", () => {
+  const doc = `# A\n\n${blk("aa", "old")}\n\nafter\n`;
+  const root = project({ "AGENTS.md": doc });
+  const out = runFactoryWith("## Broken\n<!-- FACTORY:aa END -->\nrest")(root);
+  assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), doc);
+  assert.match(out, /! instructions AGENTS\.md \(not written: the factory's instructions contain a block marker line\)/);
+});
+
+test("dedupe treats an indented START as a block, as the splice does", () => {
+  const text = `${blk("bb", "## Shared\nb")}\n\n  <!-- FACTORY:aa START -->\n## Shared\nagain\n<!-- FACTORY:aa END -->\n`;
+  assert.equal(dedupeFactoryBlocks(text), `${blk("bb", "## Shared\nb")}\n\n  <!-- FACTORY:aa START -->\n<!-- FACTORY:aa END -->\n`);
+});
+
+test("fences around or after a block never make the block count grow", () => {
+  const body = "## Rules\n\nbe nice";
+  const cases = {
+    "open fence before, fence pair after": `# P\n\`\`\`\nx\n\n${blk("aa", "old")}\n\n\`\`\`\ny\n\`\`\`\n`,
+    "tilde fence left open before": `# P\n~~~\nx\n\n${blk("aa", "old")}\n`,
+    "closed fence holding a START example": `# P\n\`\`\`\n<!-- FACTORY:aa START -->\n\`\`\`\n\n${blk("aa", "old")}\n\n\`\`\`\ncode\n\`\`\`\n`,
+    "old body had fences, new one has none": `# P\n\`\`\`\nx\n\n${blk("aa", "## F rules\n\n\`\`\`\nnpm test\n\`\`\`\n\nmore")}\n\n\`\`\`\ny\n\`\`\`\n`,
+  };
+  for (const [why, doc] of Object.entries(cases)) {
+    const root = project({ "AGENTS.md": doc });
+    const before = scanFactoryBlocks(doc).blocks.length;
+    for (let n = 0; n < 3; n++) runFactoryWith(body)(root);
+    const after = readFileSync(join(root, "AGENTS.md"), "utf8");
+    assert.equal(scanFactoryBlocks(after).blocks.length, before, why);
+    assert.ok(after.includes(blk("aa", body)), why);
   }
 });
