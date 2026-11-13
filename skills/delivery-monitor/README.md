@@ -1,8 +1,10 @@
 # delivery-monitor — cycle time, cadence, estimate vs actual
 
 `tokenomics` answers *what did it cost*; this skill answers *how long did it
-take and how did that compare with what we said*. It never estimates, never
-defaults a missing number, and labels every proxy as a proxy.
+take and how did that compare with what we said*. It never guesses a number: an
+estimate comes from the planner or from the project's own measured history
+(calibration), a missing number is never defaulted, and every proxy is labelled
+as a proxy.
 
 ## Quick start
 

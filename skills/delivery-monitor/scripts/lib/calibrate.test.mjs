@@ -389,13 +389,15 @@ test('a permission error is not "no file": unreadable calibration.json and price
   } finally { execFileSync('chmod', ['755', locked]); }
 });
 
-// Review of the calibration loop (2026-11-13): cases where part of a task's work was priced and the rest was not.
+// Cases where part of a task's work was priced and the rest was not.
+const idOf = (ref) => `sec/run-1/task-${ref.toLowerCase()}`;
+const registerRefs = (repo, refs) => assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, refs.map((ref) => ({ ref })))), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
 const GOOD = { usage: { 'claude-opus-5-5': { output: 1 } }, cost_usd: 2, split: 1 };
 const samplesOf = async (repo) => { const { collectSamples } = await import('./calibrate.mjs'); return Object.fromEntries(collectSamples(repo, { now: NOW }).map((s) => [s.ref, s.cost_usd])); };
 
 test('a task whose first hooked dispatch is a review or a fix round is left out: the work it reviews was not measured', async () => {
   const repo = initRepo();
-  const refs = ['BLD', 'REV', 'FIX', 'LATE', 'GATE', 'OTH'];
+  const refs = ['BLD', 'REV', 'FIX', 'LATE', 'GATE', 'MRG', 'OTH'];
   assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, refs.map((ref) => ({ ref })))), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
   const t = (h) => `2026-11-03T${h}:00:00.000Z`;
   // BLD: build then review, both priced: the whole task.
@@ -406,29 +408,86 @@ test('a task whose first hooked dispatch is a review or a fix round is left out:
   dispatch(repo, 'sec/run-1', 'FIX', { at: t('10'), id: 'FIX-f', agent: GOOD, stage: 'fix' }); dispatch(repo, 'sec/run-1', 'FIX', { at: t('11'), id: 'FIX-b', agent: GOOD });
   // LATE: a build span exists, but a review came before it, so an earlier build is missing.
   dispatch(repo, 'sec/run-1', 'LATE', { at: t('11'), id: 'LATE-b', agent: GOOD }); dispatch(repo, 'sec/run-1', 'LATE', { at: t('10'), id: 'LATE-r', agent: GOOD, stage: 'review' });
-  // GATE and OTH: a gate task's own work is its gate dispatch, and an unclassified brief is not evidence of a gap.
+  // GATE, MRG and OTH: a gate or merge task's own work is that dispatch, and an unclassified brief is not evidence of a gap.
   dispatch(repo, 'sec/run-1', 'GATE', { at: t('10'), agent: GOOD, stage: 'gate' });
+  dispatch(repo, 'sec/run-1', 'MRG', { at: t('10'), agent: GOOD, stage: 'merge' });
   dispatch(repo, 'sec/run-1', 'OTH', { at: t('10'), agent: GOOD, stage: 'other' });
   for (const ref of refs) done(repo, 'sec/run-1', ref, t('14'));
-  assert.deepEqual(await samplesOf(repo), { BLD: 3, GATE: 2, OTH: 2 });
+  assert.deepEqual(await samplesOf(repo), { BLD: 3, GATE: 2, MRG: 2, OTH: 2 });
+  // The rule applies to tasks only: a mission's own review dispatch is not a gap in anything.
+  const { buildTimelines, selectOccurrences } = await import('./timeline.mjs'); const { resolveObservations } = await import('./events.mjs'); const { listRuns } = await import('./plan.mjs');
+  const mission = 'sec/run-1/mission-g1';
+  obs(repo, { item_id: mission, ref: 'G1', level: 'mission', event: 'dispatched', at: t('09'), source: 'hook', source_record_id: 'claude:s:agent-m', transition_id: `${mission}/dispatched/agent-m`, agentId: 'agent-m', meta: { stage: 'review', version: 1 } });
+  obs(repo, { item_id: mission, ref: 'G1', level: 'mission', event: 'dispatch_ended', at: t('09').replace(':00:00', ':10:00'), source: 'hook', source_record_id: 'claude:s:agent-m', transition_id: `${mission}/dispatch_ended/agent-m`, agentId: 'agent-m', meta: { stage: 'review', version: 1, agent: { turns: 1, ...GOOD } } });
+  const res = resolveObservations(repo); const { items } = buildTimelines({ occurrences: selectOccurrences(res.active, res.conflicts).occurrences.filter((o) => o.plan === 'sec/run-1'), plan: listRuns(repo)[0], end: new Date(NOW).toISOString() });
+  assert.equal(items.get(mission).hook_spans[0].stage, 'review'); assert.equal(items.get(mission).cost_incomplete, false);
 });
 
-test('a dispatch that crossed into another task leaves both tasks out: one was charged for the other', async () => {
-  const repo = initRepo();
-  const refs = ['A', 'B', 'C'];
-  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, refs.map((ref) => ({ ref })))), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
+test('calibrate says how many landed tasks it left out, and why', () => {
+  const repo = initRepo(); registerRefs(repo, ['OK', 'REV', 'FIX', 'X1', 'X2', 'UNP', 'NONE']);
   const at = '2026-11-03T10:00:00.000Z';
-  // The agent briefed for A was later sent B: its whole cost sits on A, and B's own dispatch misses that share.
-  dispatch(repo, 'sec/run-1', 'A', { at, agent: { ...GOOD, cost_usd: 9, crossed: ['B'] } });
-  dispatch(repo, 'sec/run-1', 'B', { at, agent: GOOD });
-  dispatch(repo, 'sec/run-1', 'C', { at, agent: GOOD });
+  dispatch(repo, 'sec/run-1', 'OK', { at, agent: GOOD });
+  dispatch(repo, 'sec/run-1', 'REV', { at, agent: GOOD, stage: 'review' });
+  dispatch(repo, 'sec/run-1', 'FIX', { at, agent: GOOD, stage: 'fix' });
+  dispatch(repo, 'sec/run-1', 'X1', { at, agent: { ...GOOD, crossed: [idOf('X2')] } }); dispatch(repo, 'sec/run-1', 'X2', { at, agent: GOOD });
+  dispatch(repo, 'sec/run-1', 'UNP', { at, agent: { ...GOOD, unpriced_models: ['some-model'] } });
+  for (const ref of ['OK', 'REV', 'FIX', 'X1', 'X2', 'UNP', 'NONE']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
+  const c = run(repo, ['calibrate', '--dry-run']);
+  assert.equal(c.code, 0, c.stderr); assert.match(c.stdout, /CALIBRATION samples=1 /);
+  assert.match(c.stdout, /^LEFT-OUT 6 of 7 landed tasks: crossed-into-another-task=2 first-dispatch-review-or-fix=2 unpriced-model=1 no-cost-recorded=1$/m);
+  // Nothing usable: the message says what the ledger holds, not that nothing was recorded.
+  const none = initRepo(); registerRefs(none, ['REV']);
+  dispatch(none, 'sec/run-1', 'REV', { at, agent: GOOD, stage: 'review' }); done(none, 'sec/run-1', 'REV', '2026-11-03T14:00:00.000Z');
+  const n = run(none, ['calibrate']);
+  assert.equal(n.code, 3, n.stderr); assert.match(n.stderr, /^NO-EVENTS\(no landed task with a complete measured cost: 1 of 1 left out \(first-dispatch-review-or-fix=1\)/);
+  // A clean ledger prints no LEFT-OUT line.
+  const clean = initRepo(); registerRefs(clean, ['OK']); dispatch(clean, 'sec/run-1', 'OK', { at, agent: GOOD }); done(clean, 'sec/run-1', 'OK', '2026-11-03T14:00:00.000Z');
+  assert.doesNotMatch(run(clean, ['calibrate', '--dry-run']).stdout, /LEFT-OUT/);
+});
+
+test('a dispatch that crossed into other tasks leaves all of them out: one was charged for the others', async () => {
+  const repo = initRepo(); const refs = ['A', 'B', 'C', 'D', 'E', 'F'];
+  registerRefs(repo, refs);
+  const at = '2026-11-03T10:00:00.000Z';
+  // The agent briefed for A was later sent B and F: its whole cost sits on A, and their own dispatches miss that share.
+  dispatch(repo, 'sec/run-1', 'A', { at, agent: { ...GOOD, cost_usd: 9, crossed: [idOf('B'), idOf('F')] } });
+  // D's agent was sent E and its own cost is malformed: the crossing still counts.
+  dispatch(repo, 'sec/run-1', 'D', { at, agent: { usage: {}, cost_usd: null, split: 1, crossed: [idOf('E')] } });
+  for (const ref of ['B', 'C', 'E', 'F']) dispatch(repo, 'sec/run-1', ref, { at, agent: GOOD });
   for (const ref of refs) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
   assert.deepEqual(await samplesOf(repo), { C: 2 });
-  // A malformed marker is treated as a crossing, never as a clean dispatch.
-  const repo2 = initRepo();
-  assert.equal(run(repo2, ['plan', 'register', '--from', writePlan(repo2, plan(1, [{ ref: 'A' }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
-  dispatch(repo2, 'sec/run-1', 'A', { at, agent: { ...GOOD, crossed: 'B' } }); done(repo2, 'sec/run-1', 'A', '2026-11-03T14:00:00.000Z');
-  assert.deepEqual(await samplesOf(repo2), {});
+});
+
+test('a crossing recorded on an unattributed dispatch still leaves the crossed task out', async () => {
+  const repo = initRepo(); registerRefs(repo, ['B', 'C']);
+  const at = '2026-11-03T10:00:00.000Z';
+  // The first brief named no task, so the record has no item; a follow-up then sent the agent B.
+  obs(repo, { item_id: null, ref: null, level: null, event: 'dispatch_ended', at: '2026-11-03T10:10:00.000Z', source: 'hook', source_record_id: 'claude:s:agent-u', transition_id: 'unattributed/dispatch_ended/agent-u', agentId: 'agent-u',
+    meta: { stage: 'other', version: 1, unattributed: true, agent: { turns: 10, ...GOOD, cost_usd: 9, crossed: [idOf('B')] } } });
+  for (const ref of ['B', 'C']) { dispatch(repo, 'sec/run-1', ref, { at, agent: GOOD }); done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z'); }
+  assert.deepEqual(await samplesOf(repo), { C: 2 });
+});
+
+test('a crossing marker that cannot be read, or names a task the run does not know, withholds every task of the run', async () => {
+  const at = '2026-11-03T10:00:00.000Z';
+  for (const crossed of ['B', true, [['B']], { 0: idOf('B') }, [idOf('ZZZ')]]) {
+    const repo = initRepo(); registerRefs(repo, ['A', 'B']);
+    dispatch(repo, 'sec/run-1', 'A', { at, agent: { ...GOOD, crossed } }); dispatch(repo, 'sec/run-1', 'B', { at, agent: GOOD });
+    for (const ref of ['A', 'B']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
+    assert.deepEqual(await samplesOf(repo), {}, JSON.stringify(crossed));
+  }
+});
+
+test('a crossing recorded before a rename follows the renamed task', async () => {
+  const repo = initRepo(); registerRefs(repo, ['A', 'OLD', 'C']);
+  dispatch(repo, 'sec/run-1', 'A', { at: '2026-11-03T10:00:00.000Z', agent: { ...GOOD, cost_usd: 9, crossed: [idOf('OLD')] } });
+  dispatch(repo, 'sec/run-1', 'C', { at: '2026-11-03T10:00:00.000Z', agent: GOOD });
+  const v2 = { ...plan(2, [{ ref: 'A' }, { ref: 'NEW' }, { ref: 'C' }]), supersedes: { run: 'sec/run-1', item_map: { [idOf('OLD')]: idOf('NEW') } } };
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, v2, 'v2.md'), '--id', 'r2', '--at', '2026-11-03T11:00:00Z', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
+  dispatch(repo, 'sec/run-1', 'NEW', { at: '2026-11-03T12:00:00.000Z', agent: GOOD });
+  for (const ref of ['A', 'NEW', 'C']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
+  // NEW's own dispatch misses the share that sits on A; C is untouched, so the run is not withheld as a whole.
+  assert.deepEqual(await samplesOf(repo), { C: 2 });
 });
 
 test('a reopen recorded before a rename still counts as a return for the renamed task', async () => {
@@ -449,7 +508,8 @@ test('a malformed cell in calibration.json is CALIBRATION-INVALID and names the 
   const cell = { n: 9, p50_usd: 3, p80_usd: 4, return_rate: 0.1, effort_class: null, by_model: {} };
   assert.equal(cellProblem(cell), null); assert.equal(cellProblem({ ...cell, effort_class: 'E3' }), null); assert.equal(cellProblem({ ...cell, p80_usd: 3 }), null);
   const bad = { 'no p80': { ...cell, p80_usd: undefined }, 'p80 below p50': { ...cell, p80_usd: 2 }, 'negative p50': { ...cell, p50_usd: -1 }, 'string p50': { ...cell, p50_usd: '3' },
-    'NaN p50': { ...cell, p50_usd: NaN }, 'bad class': { ...cell, effort_class: 'E9' }, 'fraction n': { ...cell, n: 2.5 }, 'not an object': 7, 'an array': [] };
+    'NaN p50': { ...cell, p50_usd: NaN }, 'bad class': { ...cell, effort_class: 'E9' }, 'fraction n': { ...cell, n: 2.5 }, 'not an object': 7, 'an array': [],
+    'string p80': { ...cell, p80_usd: 'n/a' }, 'NaN p80': { ...cell, p80_usd: NaN }, 'zero p50': { ...cell, p50_usd: 0, p80_usd: 0 }, 'negative n': { ...cell, n: -1 }, 'null cell': null, 'class with a tail': { ...cell, effort_class: 'E12' } };
   for (const [why, c] of Object.entries(bad)) assert.equal(typeof cellProblem(c), 'string', why);
   const repo = initRepo(), file = writePlan(repo, plan(1, [{ ref: 'T1', role: 'python-dev' }]));
   const table = (cells) => writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), JSON.stringify({ v: 1, min_n: 5, cells }));
@@ -458,9 +518,20 @@ test('a malformed cell in calibration.json is CALIBRATION-INVALID and names the 
     const r = run(repo, ['plan', 'register', '--from', file, '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z', ...extra]);
     assert.equal(r.code, 2, extra.join()); assert.match(r.stderr, /^CALIBRATION-INVALID\(.*cell "role=python-dev": p80_usd/, extra.join());
   }
+  // The table's own fields decide what a cell means; a wrong one must not read as "no cell" and quietly stop estimates.
+  for (const [field, value, why] of [['min_n', 'abc', /min_n/], ['min_n', 0, /min_n/], ['min_n', 2.5, /min_n/], ['unit', 'h', /unit/], ['v', 99, /"v"/]]) {
+    writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), JSON.stringify({ v: 1, unit: 'usd', min_n: 5, cells: { all: cell }, [field]: value }));
+    const r = run(repo, ['plan', 'register', '--from', file, '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z', '--dry-run']);
+    assert.equal(r.code, 2, `${field}=${value}`); assert.match(r.stderr, /^CALIBRATION-INVALID\(/, field); assert.match(r.stderr, why, field);
+  }
   // The same table with the cell repaired registers and fills.
   table({ all: cell, 'role=python-dev': cell });
   assert.match(run(repo, ['plan', 'register', '--from', file, '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).stdout, /CALIBRATED filled=1/);
+  // Every cell calibrate writes passes its own reader, down to one sample and sub-cent costs.
+  for (const costs of [[3], [0.0004, 0.0007], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 50]]) {
+    const cal = buildCalibration(costs.map((c, k) => sample({ ref: `T${k}`, cost_usd: c })), { now: NOW });
+    for (const [key, c] of Object.entries(cal.cells)) assert.equal(cellProblem(c), null, `${costs.length} samples, ${key}`);
+  }
 });
 
 test('a price override with an incomplete model entry is a problem, not a silent NaN cost', () => {
@@ -469,7 +540,7 @@ test('a price override with an incomplete model entry is a problem, not a silent
   const write = (models) => writeFileSync(join(deliveryDirOf(repo), 'prices.json'), JSON.stringify({ models }));
   write({ 'my-model': full, 'x#fast': { ...full, cache_write_1h: 9 } });
   assert.equal(loadPricesCheckedFor(repo).problem, null);
-  for (const [why, entry] of Object.entries({ 'missing cache_read': { input: 1, output: 2, cache_write: 3 }, 'one field of a built-in': { output: 99 }, 'negative': { ...full, input: -1 }, 'string': { ...full, output: '2' }, 'bad 1h rate': { ...full, cache_write_1h: null }, 'not an object': 5 })) {
+  for (const [why, entry] of Object.entries({ 'missing cache_read': { input: 1, output: 2, cache_write: 3 }, 'missing cache_write': { input: 1, output: 2, cache_read: 4 }, 'missing input': { output: 2, cache_write: 3, cache_read: 4 }, 'missing output': { input: 1, cache_write: 3, cache_read: 4 }, 'null entry': null, 'one field of a built-in': { output: 99 }, 'negative': { ...full, input: -1 }, 'string': { ...full, output: '2' }, 'bad 1h rate': { ...full, cache_write_1h: null }, 'not an object': 5 })) {
     write({ 'my-model': full, 'claude-opus-5-5': entry });
     const got = loadPricesCheckedFor(repo);
     assert.match(got.problem ?? '', /model "claude-opus-5-5"/, why);
@@ -482,6 +553,10 @@ test('priceFor: a table\'s own "<model>#fast" entry wins over doubling; inherite
   const rate = (n) => ({ input: n, output: n, cache_write: n, cache_read: n });
   const P = { x: rate(1), 'x#fast': rate(9), y: rate(1) };
   assert.equal(priceFor(P, 'x#fast').input, 9); assert.equal(priceFor(P, 'y#fast').input, 2);
+  // The hook appends #fast to whatever id the transcript carries, so the table's own fast price must hold for those ids too.
+  for (const id of ['x-20260101#fast', 'x[1m]#fast', 'x-20260101[1m]#fast']) assert.equal(priceFor(P, id).input, 9, id);
+  for (const id of ['y-20260101#fast', 'y[1m]#fast']) assert.equal(priceFor(P, id).input, 2, id);
+  assert.equal(priceFor(P, 'z#fast'), null); assert.equal(priceFor(P, 'toString-20260101'), null); assert.equal(priceFor(P, 'toString#fast'), null);
   for (const id of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) {
     assert.equal(priceFor(P, id), null, id);
     assert.deepEqual(costOf({ [id]: { input: 10 } }, P), { cost_usd: 0, unpriced: [id] }, id);
@@ -505,6 +580,33 @@ test('a dollar estimate accepted after the work began is late even when no dispa
   ]);
   const reason = Object.fromEntries(m.estimate_rows.map((r) => [r.ref, r.reason]));
   assert.deepEqual(reason, { SPAN: 'late_accepted', COMMIT: 'late_accepted', TIMELY: null, NOEVID: null, START: null });
+  // With several witnesses the earliest decides, and "at" the start is already late (same boundary as hours).
+  const at = (h) => `2026-11-02T0${h}:00:00.000Z`, spans = (...from) => from.map((x, k) => ({ from: x, to: at(9), agent: `a${k}`, stage: 'other' }));
+  const m2 = await metricsOf([
+    usdItem({ ref: 'COMMIT-FIRST', first_commit_at: at(5), hook_spans: spans(at(7)) }),
+    usdItem({ ref: 'SPAN-FIRST', first_commit_at: at(7), hook_spans: spans(at(5)) }),
+    usdItem({ ref: 'TWO-SPANS', hook_spans: spans(at(7), at(5)) }),
+    usdItem({ ref: 'SAME-INSTANT-SPAN', hook_spans: spans(at(6)) }),
+    usdItem({ ref: 'SAME-INSTANT-COMMIT', first_commit_at: at(6) }),
+  ]);
+  assert.deepEqual(Object.fromEntries(m2.estimate_rows.map((r) => [r.ref, r.reason])), { 'COMMIT-FIRST': 'late_accepted', 'SPAN-FIRST': 'late_accepted', 'TWO-SPANS': 'late_accepted', 'SAME-INSTANT-SPAN': 'late_accepted', 'SAME-INSTANT-COMMIT': 'late_accepted' });
+});
+
+test('report: a late dollar estimate is caught from the ledger when the brief was not classified as a build', () => {
+  const repo = initRepo();
+  const tasks = [{ ref: 'OTH', role: 'python-dev' }];
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, tasks)), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z', '--no-calibrate']).code, 0);
+  // Work the hook saw but could not classify: no measured start.
+  dispatch(repo, 'sec/run-1', 'OTH', { at: '2026-11-03T10:00:00.000Z', agent: GOOD, stage: 'other' });
+  writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), JSON.stringify({ v: 1, unit: 'usd', min_n: 5, cells: { all: { n: 9, p50_usd: 1, p80_usd: 4, return_rate: 0, effort_class: null, by_model: {} } } }));
+  // A re-cut after the work fills a calibrated range, accepted now: not a forecast.
+  const r = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(2, tasks), 'v2.md'), '--id', 'r2', '--at', '2026-11-03T12:00:00Z', '--created-at', '2026-11-01T00:00:00Z']);
+  assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /CALIBRATED filled=1/);
+  const cutoff = new Date(Date.now() + 2 * DAY).toISOString();
+  done(repo, 'sec/run-1', 'OTH', new Date(Date.now() + 3_600_000).toISOString());
+  const doc = JSON.parse(run(repo, ['report', '--json', '--plan', 'sec/run-1', '--cutoff', cutoff]).stdout);
+  const rows = []; const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') { if (v.ref === 'OTH' && 'actual_usd' in v) rows.push(v); Object.values(v).forEach(walk); } }; walk(doc);
+  assert.equal(rows.length, 1); assert.equal(rows[0].reason, 'late_accepted');
 });
 
 test('a dollar estimate that cannot be scored stays in the dollar strata, not the hours ones', async () => {
@@ -523,6 +625,7 @@ test('a dollar estimate that cannot be scored stays in the dollar strata, not th
   // --estimate-base latest with no accepted estimate before the start.
   const latest = await metricsOf([usdItem({ ref: 'NOLATEST', started_at: '2026-11-02T01:00:00.000Z', start_basis: 'observed' })], { estimateBase: 'latest' });
   assert.equal(latest.estimates.task.strata['usd:all'].excluded.no_eligible_latest, 1); assert.equal(latest.estimates.task.strata.all, undefined);
+  assert.equal(latest.estimates.task.strata['usd:tier:calibrated'].excluded.no_eligible_latest, 1, 'the tier comes from the original estimate');
   assert.equal(latest.estimate_rows[0].reason, 'no_eligible_latest');
   // Hours estimates are untouched: an unaccepted hours estimate is still counted in `all`.
   const hours = await metricsOf([usdItem({ ref: 'HRS', estimates: [{ estimate: { unit: 'h', low: 1, high: 2, tier: 'rough' }, status: 'unaccepted' }], estimate_original: null })]);
@@ -540,4 +643,34 @@ test('identity: a dispatch found to have crossed into another task is a new fact
   assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'T1' }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
   assert.equal(appendObservation(repo, rec({}), { now: NOW }).result, 'EVENT');
   assert.equal(appendObservation(repo, rec({ crossed: ['T2'] }), { now: NOW }).result, 'ID-CONFLICT', 'so the hook revises the record');
+});
+
+test('report: a dollar estimate that was never accepted shows its measured cost in dollars, not as an empty hours cell', () => {
+  const repo = initRepo();
+  const proposed = { unit: 'usd', low: 2, high: 4, tier: 'ROM', proposed_by: 'tech-lead', proposed_at: '2026-11-01T00:00:00Z' };
+  const accepted = { ...proposed, accepted_by: 'pm', accepted_at: '2026-11-01T00:00:00Z' };
+  const r = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'UN', estimate: proposed }, { ref: 'RV', estimate: accepted }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z', '--no-calibrate']);
+  assert.equal(r.code, 0, r.stderr);
+  dispatch(repo, 'sec/run-1', 'UN', { at: '2026-11-03T10:00:00.000Z', agent: { ...GOOD, cost_usd: 3 } });
+  // RV: only its review was priced, so the $3 on the ledger is part of its cost.
+  dispatch(repo, 'sec/run-1', 'RV', { at: '2026-11-03T10:00:00.000Z', agent: { ...GOOD, cost_usd: 3 }, stage: 'review' });
+  for (const ref of ['UN', 'RV']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
+  const md = run(repo, ['report', '--plan', 'sec/run-1', '--cutoff', '2026-11-04T00:00:00Z']).stdout;
+  assert.match(md, /\| UN \| task \| — \| ROM \| original \| — \| \$3 \| .*\| unaccepted \|/);
+  assert.match(md, /\| RV \| task \| — \| ROM \| original \| \[\$2, \$4\] \| \$3 \(incomplete\) \| .*\| missing_actual \|/, 'a partial cost is not shown as the actual');
+});
+
+test('a built-in price table with an incomplete entry prices nothing and is reported, not used', async () => {
+  const { cpSync } = await import('node:fs'); const { pathToFileURL } = await import('node:url');
+  // The built-in path is fixed relative to the code, so the broken table lives in a copy of the skill.
+  const copy = join(mkdtempSync(join(tmpdir(), 'dm-skill-')), 'delivery-monitor');
+  cpSync(fileURLToPath(new URL('../..', import.meta.url)), copy, { recursive: true });
+  const file = join(copy, 'references', 'prices.json'), table = JSON.parse(readFileSync(file, 'utf8'));
+  delete table.models['claude-opus-5-5'].cache_read; writeFileSync(file, JSON.stringify(table));
+  const { loadPricesChecked } = await import(pathToFileURL(join(copy, 'scripts', 'lib', 'cost.mjs')).href);
+  const repo = initRepo(), got = loadPricesChecked(repo);
+  assert.match(got.problem, /^built-in .*model "claude-opus-5-5": cache_read/); assert.deepEqual(got.prices, {});
+  registerRefs(repo, ['A']);
+  let err = null; try { execFileSync('node', [join(copy, 'scripts', 'delivery.mjs'), 'calibrate'], { cwd: repo, encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' }, stdio: ['pipe', 'pipe', 'pipe'] }); } catch (e) { err = e; }
+  assert.equal(err?.status, 2); assert.match(err.stderr, /^PRICES-INVALID\(built-in .*cache_read/);
 });

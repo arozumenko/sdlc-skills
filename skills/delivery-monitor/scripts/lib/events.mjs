@@ -86,7 +86,8 @@ const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 
 // coalesce at the same rank), so it is included (obligation F9).
 // `effort` (hook dispatch_ended only): a re-priced or re-measured dispatch is a different fact, so it revises the record
 // (appendOrRevise) instead of SKIPping against the old cost.
-// `crossed` enters the key only when present, so records from before the marker existed keep the key they had.
+// `crossed` is part of the key only when the record has it, so a record without it (an older hook, or a dispatch that did
+// not cross) keeps the same key.
 const effortFact = (a) => (a && 'cost_usd' in a ? { cost_usd: a.cost_usd ?? null, split: a.split ?? null, unpriced: Boolean(a.unpriced_models?.length), ...(a.crossed != null ? { crossed: a.crossed } : {}) } : null);
 const facts = (r) => ({ effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
 export const factKey = (r) => JSON.stringify(sortKeys({ plan: r.plan, item_id: r.item_id, ref: r.ref, level: r.level, event: r.event, transition_id: r.transition_id, basis: r.basis, at: r.at, facts: facts(r) }));

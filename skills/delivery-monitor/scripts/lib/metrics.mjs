@@ -55,12 +55,13 @@ const excludedItem = (i) => invalidChain(i) || deferredEpisode(i) || proxyComple
 const throughputExcluded = (i) => invalidChain(i) || proxyCompletion(i);
 const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length, unknown: arr.length });
 
-/** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
- * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
-// When the task's work began, for judging whether a dollar estimate was a forecast: its measured start, or, when no dispatch
-// gave it one (a brief the hook could not classify as a build), the earliest work the ledger did witness.
+// When the task's work began, for judging whether a dollar estimate was a forecast: its measured start; without one (e.g. a
+// brief the hook could not classify as a build, or a task recorded by CLI only), the earlier of its first commit and its
+// earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
 const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
   : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
+/** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
+ * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   // `chosen` is null when the dollar estimate was never accepted, or when `latest` finds none accepted before the start.
   const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;
@@ -71,8 +72,9 @@ function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   if (excludedItem(i)) reason = 'excluded_item';
   else if (!i.estimate_original) reason = 'unaccepted';
   else if (!chosen) reason = 'no_eligible_latest';
-  // Same timeliness rule as hours: a range accepted at or after the task started is not a forecast (a re-cut or a
-  // retrospective registration would otherwise score itself).
+  // Timeliness: a range accepted at or after the work began (`beganAt`) is not a forecast (a re-cut or a retrospective
+  // registration would otherwise score itself). Unlike hours, this is tested before `missing_actual` and falls back to the
+  // first commit or hooked dispatch when there is no measured start.
   else if (chosen.accepted_at != null && Date.parse(chosen.accepted_at) >= beganAt(i)) reason = 'late_accepted';
   else if (actual == null || i.cost_incomplete) reason = 'missing_actual';
   else if (mid === 0) reason = 'zero_midpoint';

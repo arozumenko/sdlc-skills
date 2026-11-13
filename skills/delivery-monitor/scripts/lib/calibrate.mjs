@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { resolveObservations } from './events.mjs';
 import { cliError, deliveryDir, nowIso, sha256 } from './paths.mjs';
 import { listRuns } from './plan.mjs';
-import { buildTimelines, selectOccurrences } from './timeline.mjs';
+import { buildTimelines, carriesCrossing, selectOccurrences } from './timeline.mjs';
 
 export const CALIBRATION_FILE = 'calibration.json';
 export const MIN_N = 5;
@@ -23,32 +23,47 @@ const reliable = (i) => i.level === 'task' && i.state === 'done' && i.done_basis
   // reopened: in only once it has landed again after the latest reopen.
   && (!i.last_reopen_at || (i.last_done_at != null && i.last_done_at > i.last_reopen_at && i.last_done_basis === 'observed'));
 
+// Why a landed task is not a sample, one reason per task: the first of these that applies (`cost_gaps` from the timeline).
+const LEFT_OUT = ['cost-under-unknown-id', 'crossing-unreadable', 'crossed-into-another-task', 'first-dispatch-review-or-fix', 'unpriced-model', 'dispatch-not-ended', 'no-cost-recorded', 'zero-cost'];
+
 /** Landed tasks with a complete measured cost, across every registered run. */
-export function collectSamples(repo, { now = Date.now() } = {}) {
+export const collectSamples = (repo, opts) => collect(repo, opts).samples;
+
+/** The samples, how many tasks landed, and how many of those were left out for each reason (`left_out`, in a fixed order). */
+export function collect(repo, { now = Date.now() } = {}) {
   const res = resolveObservations(repo);
   const { occurrences } = selectOccurrences(res.active, res.conflicts);
-  const samples = [];
+  const samples = [], tally = new Map(); let landed = 0;
   for (const run of listRuns(repo)) {
     const known = new Set(run.items.map((i) => i.item_id));
     // A task renamed by supersedes.item_map keeps the cost recorded under its old id. Dispatch cost left under an id this run
     // no longer knows (an older rename the run file no longer carries) cannot be attributed, so its tasks' totals are not
     // trusted: the whole run is left out of calibration rather than training on part of a task.
     // Only work evidence moves with a rename: the re-cut's own `created`/`cancelled` for the old id describe the catalogue
-    // change itself, and carried over they would cancel the renamed task.
+    // change itself, and carried over they would cancel the renamed task. A `reopened` moves as well, the re-cut's own
+    // re-add included, and counts as a return. The ids in a crossing marker move the same way.
     const renamed = run.supersedes?.item_map ?? {}, MOVES = new Set(['dispatched', 'dispatch_ended', 'rework_observed', 'review_returned', 'reopened']);
-    const mine = occurrences.filter((o) => o.plan === run.run).map((o) => (o.item_id != null && renamed[o.item_id] && MOVES.has(o.event) ? { ...o, item_id: renamed[o.item_id] } : o));
-    if (mine.some((o) => o.event === 'dispatch_ended' && o.item_id != null && !known.has(o.item_id))) continue;
-    const occ = mine.filter((o) => known.has(o.item_id));
+    const moved = (id) => (typeof id === 'string' && Object.hasOwn(renamed, id) ? renamed[id] : id);
+    const mine = occurrences.filter((o) => o.plan === run.run).map((o) => {
+      const r = o.item_id != null && renamed[o.item_id] && MOVES.has(o.event) ? { ...o, item_id: renamed[o.item_id] } : o;
+      return carriesCrossing(r) && Array.isArray(r.meta.agent.crossed) ? { ...r, meta: { ...r.meta, agent: { ...r.meta.agent, crossed: r.meta.agent.crossed.map(moved) } } } : r;
+    });
+    const orphanCost = mine.some((o) => o.event === 'dispatch_ended' && o.item_id != null && !known.has(o.item_id));
+    // A crossing marker is kept even on a dispatch with no item: it says which tasks miss part of their cost.
+    const occ = mine.filter((o) => known.has(o.item_id) || carriesCrossing(o));
     const returnedIds = new Set(occ.filter((o) => o.event === 'review_returned' || o.event === 'reopened').map((o) => o.item_id));
     const { items } = buildTimelines({ occurrences: occ, plan: run, end: nowIso(now) });
     for (const i of items.values()) {
-      if (!reliable(i) || !(i.cost_usd > 0) || i.cost_incomplete) continue;
+      if (!reliable(i)) continue;
+      landed++;
+      const why = orphanCost ? LEFT_OUT[0] : LEFT_OUT.find((g) => i.cost_gaps.includes(g)) ?? (i.cost_usd == null ? 'no-cost-recorded' : i.cost_usd > 0 ? null : 'zero-cost');
+      if (why) { tally.set(why, (tally.get(why) ?? 0) + 1); continue; }
       const models = Object.entries(i.cost_by_model).sort((a, b) => b[1] - a[1]);
       samples.push({ run: run.run, ref: i.ref, role: i.role ?? null, type: i.type ?? null, area: i.area ?? null, novel: i.novel ?? null, size: i.class ?? null,
         cost_usd: i.cost_usd, done_at: i.last_done_at ?? i.done_at, returned: i.rework_count > 0 || i.reopened || returnedIds.has(i.item_id), model: models[0]?.[0] ?? null });
     }
   }
-  return samples;
+  return { samples, landed, left_out: Object.fromEntries(LEFT_OUT.filter((g) => tally.has(g)).map((g) => [g, tally.get(g)])) };
 }
 
 /** Cell keys for a task, most specific first. A feature the planner left out is skipped, not matched as "null". */
@@ -131,8 +146,8 @@ export function cellProblem(c) {
   return null;
 }
 
-/** null when no table exists yet. A table that exists but cannot be read, does not parse, has no `cells` object or has a
- * malformed cell is an error (CALIBRATION-INVALID), never "no table": otherwise a merge conflict in the file would silently stop estimates. */
+/** null when no table exists yet. A table that exists but cannot be read, does not parse, has no `cells` object, has a wrong
+ * `v`, `unit` or `min_n`, or has a malformed cell is an error (CALIBRATION-INVALID), never "no table": otherwise a merge conflict in the file would silently stop estimates. */
 export function readCalibration(repo) {
   const path = join(deliveryDir(repo), CALIBRATION_FILE);
   const bad = (why) => cliError('CALIBRATION-INVALID', `${path}: ${why}. Re-run \`delivery.mjs calibrate\`, fix the file, or pass --no-calibrate`);
@@ -141,6 +156,10 @@ export function readCalibration(repo) {
   try { text = readFileSync(path, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw bad(e.code ?? e.message); }
   try { cal = JSON.parse(text); } catch (e) { throw bad(`not valid JSON (${e.message})`); }
   if (!cal || typeof cal !== 'object' || !cal.cells || typeof cal.cells !== 'object' || Array.isArray(cal.cells)) throw bad('no "cells" object');
+  // The fields that decide what a cell means. A wrong one would otherwise read as "no cell has enough samples".
+  if (cal.v != null && cal.v !== 1) throw bad(`"v" is ${JSON.stringify(cal.v)}, this reader knows 1`);
+  if (cal.unit != null && cal.unit !== 'usd') throw bad(`"unit" is ${JSON.stringify(cal.unit)}, expected "usd"`);
+  if (cal.min_n != null && !(Number.isInteger(cal.min_n) && cal.min_n >= 1)) throw bad('"min_n" must be an integer >= 1');
   for (const [key, cell] of Object.entries(cal.cells)) { const why = cellProblem(cell); if (why) throw bad(`cell "${key}": ${why}`); }
   return { cal, sha256: sha256(text), path };
 }

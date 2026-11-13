@@ -95,7 +95,13 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 - **Effort** per task = Σ over its `dispatch_ended` records of `meta.agent.cost_usd / meta.agent.split` — every dispatch,
   so fix rounds are in. The total is **incomplete**, and the task is left out of calibration and cost accuracy rather than
   under-counted, when any of its dispatches has no cost (an older hook), a malformed one (cost not a finite number ≥ 0,
-  split not a positive integer), an unpriced model, or never ended.
+  split not a positive integer), an unpriced model, or never ended; when a resumed agent's record lists other tasks
+  (`meta.agent.crossed`: the task of the first brief and each listed task; a marker that cannot be read, or that names an id
+  the run does not know, withholds every task of the run); or when the task's earliest hooked dispatch has stage `review` or
+  `fix`. `calibrate` counts each landed task it leaves out under one reason, the first that applies of:
+  `cost-under-unknown-id`, `crossing-unreadable`, `crossed-into-another-task`, `first-dispatch-review-or-fix`,
+  `unpriced-model`, `dispatch-not-ended`, `no-cost-recorded`, `zero-cost`, and prints them as
+  `LEFT-OUT <n> of <landed> landed tasks: <reason>=<n> …`.
 - A task renamed through `supersedes.item_map` keeps the dispatches, rework and returns recorded under its old id (the
   re-cut's own `created`/`cancelled` for the old id are not carried). If a run has dispatch cost under an id it no longer
   knows (a rename from a version whose map is gone), the whole run is left out of calibration, and `report` withholds cost
@@ -116,8 +122,10 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
 so they are accepted at registration with no human step. A task that already carried a calibrated estimate in the previous
 version keeps it on a re-cut. The planner's own estimates are never replaced. A task with no cell of `n ≥ 5` stays
-unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read, parsed, or has no
-`cells` object stops registration with `CALIBRATION-INVALID` (exit 2) rather than silently estimating nothing.
+unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read or parsed, has no
+`cells` object, has a `v` other than 1, a `unit` other than `usd` or a `min_n` that is not an integer ≥ 1, or has a
+malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `effort_class` not null or
+`E1`–`E4`) stops registration with `CALIBRATION-INVALID` (exit 2) rather than silently estimating nothing.
 `--no-calibrate` stops new fills only; a re-cut still keeps earlier calibrated estimates. The
 registration retry digest is computed before the fill, so a retry is still recognised.
 

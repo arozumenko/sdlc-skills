@@ -332,7 +332,7 @@ test('handleStop: a resumed agent sent another task → task-crossing diagnostic
   const agent = obs.find((o) => o.event === 'dispatch_ended').meta.agent;
   const { usage: u, cost_usd, unpriced_models, split, crossed, ...profile } = agent;
   assert.deepEqual(profile, { turns: 2, turns_over_500k: 1, max_context: 640_000, compactions: 1, follow_ups: 1 });
-  assert.deepEqual(crossed, ['TASK-034'], 'the cost record names the task it also worked on, so neither is trained on');
+  assert.deepEqual(crossed, [`${R}/task-task-034`], 'the cost record names the task it also worked on by item id, so neither is trained on');
   // Fixture rows carry no model id: usage is still counted (deduplicated by message id), but nothing is priced and that is said.
   assert.deepEqual(u, { unknown: { input: 20, output: 0, cache_write: 0, cache_write_1h: 0, cache_read: 759_980 } });
   assert.equal(cost_usd, 0); assert.deepEqual(unpriced_models, ['unknown']); assert.equal(split, 1);

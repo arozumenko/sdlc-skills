@@ -47,17 +47,25 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs calibrate [--dry-run] 
 
 **Effort calibration (estimate → actual → calibrate).** On Claude Code the dispatch hook prices every finished subagent's tokens
 per model (`references/prices.json`; a project `.agents/telemetry/delivery/prices.json` overrides it) and records the dollar cost
-on `dispatch_ended`. A task's effort is its share of all its dispatches, fix rounds included. A task is trained on and scored
-only when all of its work was priced: it is left out when a dispatch has no cost or an unpriced model, never ended, crossed into
-another task (both tasks are left out), or when the first dispatch the hook saw for it was a review or a fix round (what was
-reviewed was built where the hook could not see it). `calibrate` turns landed tasks into
+on `dispatch_ended`. A task's effort is its share of all its dispatches, fix rounds included. A task is left out of calibration and
+of cost accuracy when the ledger shows a gap in its cost: one of its dispatches has no cost or an unpriced model; one of its
+hooked dispatches never ended; a resumed agent's follow-up message named another task (the task of the first brief and every
+task named are left out); or its earliest hooked dispatch is classified `review` or `fix` (the build is assumed to have run
+where the hook did not record it). These checks catch only gaps the ledger shows: work that ran outside the hook after a hooked
+build is not seen. `calibrate` prints how many landed tasks it left out and why (`LEFT-OUT …`); the full list of reasons is
+in `references/plan-block.md`, "Calibrated estimates". `calibrate` turns the remaining landed tasks into
 `.agents/telemetry/delivery/calibration.json`: per cell (`role|type|novel`, then coarser, then `all`) the p50/p80 cost, the
 return rate (rework, review returned, reopened) and per-model figures, recency-weighted (half-life 42 days), with effort
 classes E1–E4 learned from the cost quartiles. `plan register` fills every task the plan leaves unestimated with the cell's
 p50–p80 as a `usd` range (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class; `--no-calibrate` stops
-new fills (a re-cut keeps earlier ones). A broken `calibration.json` (unreadable, or with a malformed cell) is `CALIBRATION-INVALID` and a
-broken price override `PRICES-INVALID` (both exit 2), never silently ignored; an override entry replaces a built-in model whole,
-so it needs all four rates (`input`, `output`, `cache_write`, `cache_read`), and may price a `<model>#fast` id itself; `calibrate` says `NO-EVENTS` until a landed task has a measured cost. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
+new fills (a re-cut keeps earlier ones). `plan register` stops with `CALIBRATION-INVALID` (exit 2) when
+`calibration.json` exists but cannot be read or parsed, or has a malformed cell or a wrong `v`, `unit` or `min_n`.
+`calibrate` stops with `PRICES-INVALID` (exit 2) when the built-in price table or the project override cannot be read or has
+an invalid model entry. No other command reports a broken price table: until `calibrate` runs, the hook marks each dispatch
+unpriced (`<prices-unreadable>`) and `report` shows those tasks only as `missing_actual`. An override entry replaces a
+built-in model whole, so it needs all four rates (`input`, `output`, `cache_write`, `cache_read`); it may price a
+`<model>#fast` id itself, otherwise fast mode is the base model at double every rate. `calibrate` says `NO-EVENTS` until a
+landed task has a complete measured cost, and says how many it left out. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the
@@ -72,8 +80,10 @@ ran has no cycle time for it — backfill gives created/first-commit/done only. 
 
 **One task per subagent.** The hook attributes a subagent to the task named in its first brief. An agent that is messaged its
 next task keeps billing that task's time to the first one; the hook flags it as a `task-crossing` diagnostic and does not
-re-attribute it. Its cost record names the other tasks (`meta.agent.crossed`), and neither they nor the first task feed
-calibration or cost accuracy. The report's `agents:` line (`coverage.dispatch_agents`) shows how many agents were resumed or compacted and the
+re-attribute it. The agent's `dispatch_ended` record lists the other tasks (`meta.agent.crossed`, their item ids), and the
+task of the first brief and every listed task are left out of calibration and cost accuracy. Not caught: a follow-up that does
+not name the task's ref, a task owned by another role when the agent's role owns tasks, and an agent whose transcript never
+completed. The report's `agents:` line (`coverage.dispatch_agents`) shows how many agents were resumed or compacted and the
 share of their turns above 500k context.
 
 Plans may carry `branch_prefix` and `branch_map` (`[{pattern, ref}]`, regex with named groups → ref template, e.g.

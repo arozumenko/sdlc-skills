@@ -21,8 +21,9 @@ function entryProblem(models) {
 }
 
 /** Built-in list prices with a project's `.agents/telemetry/delivery/prices.json` (same shape) layered on top, plus what went
- * wrong reading them. A missing override is normal (`problem: null`); an override that exists but does not parse or has no
- * `models` object is a problem: the caller must not price with the built-in list as if the override had been applied. */
+ * wrong reading them. A missing override is normal (`problem: null`). `problem` is set when the built-in table or the
+ * override cannot be read or parsed, has no `models` object, or has an invalid model entry (`entryProblem`); the broken
+ * table is left out of `prices`, and the caller must not treat the result as fully priced. */
 export function loadPricesChecked(repo) {
   const builtin = readJson(BUILTIN);
   const builtinBad = !isPriceTable(builtin) ? 'unreadable' : entryProblem(builtin.models);
@@ -46,21 +47,25 @@ export function loadPricesChecked(repo) {
 /** Prices only (the checked loader without the problem report). */
 export const loadPrices = (repo) => loadPricesChecked(repo).prices;
 
-/** Model ids in transcripts can carry a date or context suffix (`claude-opus-5-5-20260101`, `…[1m]`). */
+/** Model ids in transcripts can carry a date or context suffix (`claude-opus-5-5-20260101`, `…[1m]`), and the hook adds
+ * `#fast` to a fast-mode turn's id. */
 export function priceFor(prices, model) {
   if (!model) return null;
   // Own keys only: `prices.toString` is not a model.
   const own = (id) => (Object.hasOwn(prices, id) ? prices[id] : null);
-  // `<model>#fast` marks fast-mode turns: same model, every rate doubled (Opus 5.5 fast is $8 / $40), unless the table
-  // prices the fast id itself.
-  if (own(String(model))) return own(String(model));
-  if (String(model).endsWith('#fast')) { const p = priceFor(prices, String(model).slice(0, -5)); return p && Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v * 2])); }
-  const id = String(model).replace(/\[.*\]$/, '');
-  if (own(id)) return own(id);
+  const raw = String(model);
+  // An id the table lists verbatim wins.
+  if (own(raw)) return own(raw);
+  const fast = raw.endsWith('#fast'), id = (fast ? raw.slice(0, -5) : raw).replace(/\[.*\]$/, '');
   // Only a dated snapshot of a known id (`<id>-YYYYMMDD`) borrows its price; any other unknown id (a new version such as
   // `claude-opus-5-9`) stays unpriced rather than guessed.
-  const dated = /^(.*)-\d{8}$/.exec(id);
-  return dated ? own(dated[1]) : null;
+  const dated = /^(.*)-\d{8}$/.exec(id), ids = dated ? [id, dated[1]] : [id];
+  if (!fast) return ids.map(own).find(Boolean) ?? null;
+  // Fast mode: the table's own `<id>#fast` entry if it has one, else the base model with every rate doubled (Opus 5.5 fast
+  // is $8 / $40).
+  const p = ids.map((x) => own(`${x}#fast`)).find(Boolean); if (p) return p;
+  const base = ids.map(own).find(Boolean);
+  return base ? Object.fromEntries(Object.entries(base).map(([k, v]) => [k, v * 2])) : null;
 }
 
 /** usage: {model: {input, output, cache_write, cache_write_1h, cache_read}} → {cost_usd, unpriced: [models]}. A model with no
