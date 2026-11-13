@@ -430,3 +430,12 @@ test('bootstrapTelemetry: origin branch deleted, stale tracking ref equal to loc
   assert.equal(bootstrapTelemetry(repo, { env: {} }).status, 'created');
   assert.equal(remoteHasTelemetry(remote), true, 'branch recreated on origin');
 });
+
+test('bootstrapTelemetry: no origin but a leftover origin/telemetry ref → the settings check reads that branch too', () => {
+  const repo = tmp();
+  seedBranchPath(repo, 'delivery/profile.json', '{"storeText":true}\n');
+  g(repo, 'update-ref', 'refs/remotes/origin/telemetry', 'refs/heads/telemetry'); g(repo, 'update-ref', '-d', 'refs/heads/telemetry');
+  mkdirSync(join(repo, '.agents', 'telemetry', 'delivery'), { recursive: true }); writeFileSync(join(repo, '.agents', 'telemetry', 'delivery', 'profile.json'), '{"storeText":false}\n');
+  const r = bootstrapTelemetry(repo, { env: {} });
+  assert.equal(r.status, 'conflict', JSON.stringify(r)); assert.match(r.reason, /delivery\/profile\.json/);
+});

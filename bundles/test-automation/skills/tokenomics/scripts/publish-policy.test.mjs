@@ -138,3 +138,11 @@ test('installer: origin branch deleted, stale tracking ref equal to local → th
   g(remote, 'update-ref', '-d', 'refs/heads/telemetry');
   assert.equal(installTelemetrySubmodule(repo).status, 'installed'); assert.equal(remoteHas(remote), true);
 });
+
+test('telemetryPreflight: no origin but a leftover origin/telemetry ref → that branch is checked', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'tok-left-')); g(repo, 'init', '-q', '-b', 'main'); g(repo, 'commit', '-q', '--allow-empty', '-m', 'root');
+  seedBranch(repo, 'policy.json', '{"publish":"private-remote"}\n');
+  g(repo, 'update-ref', 'refs/remotes/origin/telemetry', 'refs/heads/telemetry'); g(repo, 'update-ref', '-d', 'refs/heads/telemetry');
+  policy(repo, '{"publish":"local-only"}\n');
+  assert.match(telemetryPreflight(repo), /policy\.json/);
+});

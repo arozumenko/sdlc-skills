@@ -93,3 +93,14 @@ test('storeText false: new retraction revisions do not copy text forward (reconc
   assert.equal(newest.length, 2);
   for (const r of newest) { assert.equal(r.raw ?? null, null); assert.equal(r.meta?.note, undefined); assert.ok(!JSON.stringify(r).includes('Secret customer') && !JSON.stringify(r).includes('private note')); }
 });
+
+test('storeText false: a replay never hides an existing conflict between raw variants (compares the resolved active record)', () => {
+  const { repo, prs } = setup();
+  assert.equal(run(repo, ['backfill', '--pr', '--from-json', prs, '--cutoff', '2026-12-31T00:00:00Z']).code, 0);
+  // A second writer's file holds a disagreeing variant at the same revision (different time): the observation is in conflict.
+  const rec = readRaw(repo).lines.map((l) => l.rec).find((r) => r.event === 'done' && r.ref === 'M1');
+  writeFileSync(join(deliveryDir(repo), 'events-zzz.jsonl'), `${JSON.stringify({ ...rec, at: '2026-09-25T10:00:00.000Z' })}\n`);
+  profile(repo, { storeText: false });
+  const r = run(repo, ['backfill', '--pr', '--from-json', prs, '--cutoff', '2026-12-31T00:00:00Z']);
+  assert.doesNotMatch(r.stdout, /text withheld/); assert.notEqual(r.code, 0, 'still reported as a conflict');
+});

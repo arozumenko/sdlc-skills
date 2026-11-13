@@ -529,12 +529,14 @@ function cmdBackfill(repo, p, io, now) {
       }
     }
   }
+  const activeById = storeText ? null : new Map(resolveObservations(repo).active.map((o) => [o.observation_id, o]));
   for (const r0 of records) {
     // A derived observation whose id was previously retracted is revived at the next revision rather than SKIPped against the old rev 0.
     const prev = top.get(r0.observation_id), r = prev && prev.status === 'retracted' ? { ...r0, revision: prev.revision + 1 } : r0;
     // Text withheld: the current active record differs only by the text it was written with before storeText was turned
     // off → the same fact, skipped. Any structured difference, or a retracted record, keeps the normal rules.
-    if (!storeText && prev && prev.status !== 'retracted' && semanticKey({ ...prev, raw: null }) === semanticKey({ ...r, revision: prev.revision, raw: null })) {
+    const cur = !storeText ? activeById.get(r0.observation_id) : null; // the resolved current active record, never a raw variant
+    if (cur && semanticKey({ ...cur, raw: null }) === semanticKey({ ...r, revision: cur.revision, raw: null })) {
       if (f['dry-run']) out(io, `WOULD-SKIP ${r.observation_id} ${r.at} (text withheld)`); else { out(io, `SKIP ${r.observation_id} ${r.at} (text withheld)`); skipped++; }
       continue;
     }

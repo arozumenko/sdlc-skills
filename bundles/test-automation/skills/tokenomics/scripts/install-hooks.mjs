@@ -384,8 +384,8 @@ export function telemetryTarget(git, origin) {
   const has = (r) => { try { git(['rev-parse', '--verify', '-q', r]); return true; } catch { return false; } };
   let fetched = false;
   if (origin) { try { git(['fetch', '-q', 'origin', '+refs/heads/telemetry:refs/remotes/origin/telemetry']); fetched = true; } catch { /* no remote branch yet, or offline */ } }
-  const local = has('refs/heads/telemetry'), remote = Boolean(origin) && has('refs/remotes/origin/telemetry');
-  if (local && remote) {
+  const local = has('refs/heads/telemetry'), remote = has('refs/remotes/origin/telemetry'); // a leftover tracking ref counts too: bootstrap branches from it
+  if (origin && local && remote) {
     const ancestor = (a, b) => { try { git(['merge-base', '--is-ancestor', a, b]); return true; } catch { return false; } };
     if (ancestor('refs/remotes/origin/telemetry', 'refs/heads/telemetry')) return { ref: 'refs/heads/telemetry', fastForward: false, fetched };
     if (ancestor('refs/heads/telemetry', 'refs/remotes/origin/telemetry')) return { ref: 'refs/remotes/origin/telemetry', fastForward: true, fetched };
