@@ -543,12 +543,15 @@ When a developer reports a blocker:
 
 1. **Classify:** Technical (→ tech lead), scope (→ BA), decision (→ user), dependency (→ wait or reorder)
 2. **Route:** Hand off to the right person via a host-native subagent call (see `.agents/team-comms.md`) with full context
-3. **Track:** Note the blocker in your status; record it — `node
+3. **Track:** Note the blocker in your status. Whenever a task cannot proceed
+   until something else happens (another project, a human ruling, a
+   dependency, a technical blocker routed to someone else), record it — `node
    .claude/skills/delivery-monitor/scripts/delivery.mjs event <TASK-NNN>
-   blocked --id blk-<NNN>-<n>` (the report shows it as time blocked)
+   blocked --id blk-<NNN>-<n> --note "<what it waits on>"` (while the task is
+   open the report shows `blocked since`; once it is done, its time blocked)
 4. **Follow up:** Check if it's resolved, report back to the blocked
    developer; record `event <TASK-NNN> unblocked --id blk-<NNN>-<n>` when it
-   clears
+   resumes
 
 ## Issue Tracker
 

@@ -72,9 +72,16 @@ export function validateTransition(history, event) {
   return null;
 }
 
-/** A fix closes a defect this item already has: an active defect_found with the same id, not later than the fix. */
-function validateDefectFix(observations, item, rec) {
-  const found = observations.find((o) => o.item_id === item.item_id && o.event === 'defect_found' && o.status === 'active' && o.meta?.defect === rec.meta.defect);
+/** The defect pair stays in order: a fix closes a defect this item already has (an active defect_found with the same id, not
+ * later than the fix), and a defect_found (or its correction) may not move past an active fix of the same defect — either way
+ * the replay would leave an orphan fix and a defect open forever. */
+function validateDefectPair(observations, item, rec) {
+  const pair = (event) => observations.find((o) => o.item_id === item.item_id && o.event === event && o.status === 'active' && o.meta?.defect === rec.meta.defect);
+  if (rec.event === 'defect_found') {
+    const fixed = pair('defect_fixed');
+    return fixed && rec.at > fixed.at ? `defect_found ${rec.meta.defect} (${rec.at}) would follow its defect_fixed (${fixed.at}) — correct or retract the fix first` : null;
+  }
+  const found = pair('defect_found');
   if (!found) return `defect_fixed ${rec.meta.defect} has no defect_found on this item — record the defect on the item that caused it first`;
   if (rec.at < found.at) return `defect_fixed ${rec.meta.defect} (${rec.at}) precedes its defect_found (${found.at})`;
   return null;
@@ -349,7 +356,7 @@ function cmdEvent(repo, p, io, now) {
       // F10.2: corrections (--revision >= 1) still run validateTransition — a correction that merely
       // re-affirms the same event is "the same occurrence" and passes; a correction that would smuggle
       // in a genuinely different transition is still rejected.
-      const why = validateTransition(historyFor(item), ev) ?? (ev === 'defect_fixed' ? validateDefectFix(seenActive, item, rec) : null);
+      const why = validateTransition(historyFor(item), ev) ?? (defectEv ? validateDefectPair(seenActive, item, rec) : null);
       if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`);
       // A defect id names one occurrence on the item across every episode, so reopen episodes do not separate two of them.
       const conflict = conflictingRecord(seenActive, rec, defectEv ? [] : historyFor(item));

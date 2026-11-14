@@ -849,3 +849,34 @@ test('event --from: defect and block rows are accepted like any other event (fix
   assert.equal(d.meta.found_stage, 'gate'); assert.equal(d.meta.severity, 'minor'); assert.equal(d.meta.found_by, 'gate'); assert.equal(d.source_record_id, 'BUG-7');
   assert.match(run(repo, ['event', '--from', f]).stdout, /EVENTS appended=0 skipped=4/, 'a re-run of the batch is idempotent');
 });
+
+test('defect review fixes: same-instant batch found+fixed is fixed (B1); a found correction past its fix is refused (B2); re-cut-removed item (T8); retry across a reopen SKIPs (T9)', async () => {
+  const { assemble } = await import('./lib/report.mjs');
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  // B1: batch rows without `at` share one `now`; the fix must still attach to its defect.
+  const f = join(repo, 'ev.jsonl');
+  writeFileSync(f, [{ ref: 'TASK-001', event: 'defect_found', defect: 'BUG-1', found_stage: 'qa' }, { ref: 'TASK-001', event: 'defect_fixed', defect: 'BUG-1' }].map((j) => JSON.stringify(j)).join('\n') + '\n');
+  const b = run(repo, ['event', '--from', f]); assert.equal(b.code, 0, b.stderr); assert.match(b.stdout, /EVENTS appended=2/);
+  const [x, y] = resolveObservations(repo).active.filter((o) => o.meta.defect === 'BUG-1'); assert.equal(x.at, y.at, 'same instant');
+  const doc = assemble(repo, { now: Date.now() + 1000 });
+  const d = doc.plans[0].items.find((i) => i.ref === 'TASK-001').defects[0];
+  assert.equal(d.fixed_at, d.found_at, 'fixed, time to restore 0'); assert.equal(doc.envelope.coverage.orphan_defect_fixes, 0);
+  // B2: a defect_found correction may not move the defect past its own active fix.
+  assert.equal(run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'BUG-2', '--found-stage', 'qa', '--at', '2026-09-17T09:00:00Z']).code, 0);
+  assert.equal(run(repo, ['event', 'TASK-002', 'defect_fixed', '--defect', 'BUG-2', '--at', '2026-09-18T10:00:00Z']).code, 0);
+  const late = run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'BUG-2', '--found-stage', 'qa', '--at', '2026-09-18T11:00:00Z', '--revision', '1']);
+  assert.equal(late.code, 2); assert.match(late.stderr, /^INVALID-TRANSITION\(TASK-002: defect_found BUG-2 \(2026-09-18T11:00:00.000Z\) would follow its defect_fixed \(2026-09-18T10:00:00.000Z\)/);
+  assert.equal(run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'BUG-2', '--found-stage', 'qa', '--at', '2026-09-18T10:00:00Z', '--revision', '1']).code, 0, 'a correction up to the fix instant is fine');
+  // T9: done → found → reopened → the same found again is a SKIP.
+  assert.equal(run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T10:00:00Z', '--id', 'done-1']).code, 0);
+  assert.equal(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'BUG-3', '--found-stage', 'user']).code, 0);
+  assert.equal(run(repo, ['event', 'TASK-001', 'reopened', '--id', 'reo-1']).code, 0);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'BUG-3', '--found-stage', 'user']).stdout, /^SKIP/);
+  // T8: an item removed from scope by a re-cut is still a valid cause, without --allow-cancelled.
+  const v2 = plan(2, [{ ref: 'TASK-001', class: 'S', branch: 'task/task-001', estimate: EST }]);
+  assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, v2, 'p2.md'), '--id', 'reg-2', '--at', '2026-09-19T00:00:00Z']).code, 0);
+  assert.match(run(repo, ['event', 'TASK-002', 'done', '--id', 'z']).stderr, /--allow-cancelled/, 'other events still need the flag');
+  const rm = run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'BUG-4', '--found-stage', 'user']);
+  assert.equal(rm.code, 0, rm.stderr);
+});

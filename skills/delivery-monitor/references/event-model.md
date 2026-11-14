@@ -53,13 +53,13 @@ flow and DORA figures read:
 | `reopened` | CLI `event`, `plan register` (scope re-addition) | flags `deferred-episode`, opens a new episode |
 | `rework_observed` | Claude hook (`stage: fix`), `backfill --git` (`address review` commits) | `rework_count++` — activity/quality proxy, never a state transition |
 | `dispatch_ended` | Claude hook only | no state effect (`break` in the switch) — closes the hook's own dispatch/completion pair |
-| `blocked` | CLI `event` | opens a block span (`blocked_spans[]`) unless one is already open; no state change. `blocked_since` = the open span's start |
+| `blocked` | CLI `event` | opens a block span (`blocked_spans[]`) unless one is already open; no state change. `blocked_since` = the open span's start. Accepted on any level; on a mission, campaign or case it is counted (`coverage.non_task_blocks`), never task time |
 | `unblocked` | CLI `event` | closes the open block span; with none open it is ignored and counted (`counts.strayUnblocked`, `coverage.stray_unblocked`, a caveat) |
 | `defect_found` | CLI `event` | appends `{defect, found_at, found_stage, severity, found_by, fixed_at: null, fixed_sha: null}` to the causing item's `defects[]`; never a state change, accepted in any state (done and cancelled included) |
-| `defect_fixed` | CLI `event` | sets `fixed_at`/`fixed_sha` on that item's defect with the same id; the CLI refuses it (`INVALID-TRANSITION`) without an active `defect_found` for that id on that item, or earlier than it. A fix the replay cannot attach is counted (`coverage.orphan_defect_fixes`, a caveat) |
+| `defect_fixed` | CLI `event` | sets `fixed_at`/`fixed_sha` on that item's defect with the same id; the CLI refuses it (`INVALID-TRANSITION`) without an active `defect_found` for that id on that item, or earlier than it. A `defect_found` (or its correction) later than an active fix of the same defect is refused too. A fix with no `defect_found` for that id on the item is counted (`coverage.orphan_defect_fixes`, a caveat); a later fix for an already fixed defect is ignored. At the same instant, a fix is replayed after its defect (time to restore 0) |
 
 A defect is recorded on the item that **caused** it — normally a task. A mission or campaign ref is accepted when the cause is
-known only at that level; such a defect is *untraced* (counted in the report, never in the change failure rate). A ref
+known only at that level (a case ref likewise); such a defect is *untraced* (counted in the report, never in the change failure rate). A ref
 removed from the plan's scope is still accepted for a defect event (no `--allow-cancelled`): it still caused the defect. An `event --from`
 batch row takes the same fields as JSON keys: `{"ref", "event", "defect", "found_stage", "severity", "found_by", "at", "sha", "note", "id"}`.
 

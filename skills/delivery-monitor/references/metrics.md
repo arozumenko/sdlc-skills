@@ -81,13 +81,18 @@ in Markdown; when a level's `done` items have zero observed dispatches, the repo
 `review_rounds`/`first_pass_rate` are rendered as `"unknown (M2)"` — see the M2+ list below.
 
 An open item with an open block span shows `in_progress (blocked since <at>)` in the Open items table (Markdown and HTML) and
-`blocked_since=<at>` in `status`.
+`blocked_since=<at>` in `status`. A task blocked before its first dispatch is listed there too, as `planned (blocked since <at>)`.
+Block records on a mission, campaign or case open a span (so open items show them) but are not task time: they are counted as
+`coverage.non_task_blocks` with the caveat `N block record(s) on non-task items — not in time_blocked`. A done task with block
+records but no observed start has no cycle to clip them to; the coverage line says how many (`blocked_no_start`).
 
 ## DORA
 
-`metrics.dora` (per plan, task level, same `--level`/`--class` filters as the rest of the report), rendered as `## DORA`
-after Quality in Markdown, a DORA panel in HTML, and in `--json` through the metrics object. It reads the defect pair
-(`defect_found`/`defect_fixed`, `references/event-model.md`), recorded on the item that caused each defect.
+`metrics.dora` (per plan, task level), rendered as `## DORA` after Quality in Markdown, a DORA panel in HTML, and in
+`--json` through the metrics object. It reads the defect pair (`defect_found`/`defect_fixed`, `references/event-model.md`),
+recorded on the item that caused each defect. The figures take the already filtered item list: `--level task` hides
+`untraced`, any other `--level` leaves the change failure rate empty, and `--class` filters the cohort. `recorded` (below) is
+neither filtered nor windowed.
 
 | Measure | Definition | Population | Caveat |
 |---|---|---|---|
@@ -96,13 +101,14 @@ after Quality in Markdown, a DORA panel in HTML, and in `--json` through the met
 | `change_failure_rate` | tasks with ≥1 **escaped** defect ÷ tasks in the cohort; `by_severity` counts each failed task once, by the worst severity among its escaped defects (`critical > major > minor > unrated`) | tasks whose first completion is in `[since, end)`, minus `throughputExcluded` (invalid-chain, proxy completion) — the throughput cohort | defects are found later, so recent tasks are undercounted; `— (n=0 completed in window)` when the cohort is empty |
 | `time_to_restore` | `stats()` of `fixed_at − found_at` (same floors as flow time); `open` = escaped defects with no fix, `oldest_open_s` = the oldest one's age at the window end | escaped defects found in `[since, end)` on tasks not `throughputExcluded` | a fix is the moment the fix landed (`defect_fixed`), not a production restore |
 | `defects_by_stage` | per `found_stage` (`build, review, qa, gate, demo, user`): `escaped` vs `before_landing` | defects found in `[since, end)` on tasks not `throughputExcluded` | "where do we catch defects"; rows with no defect are not printed |
-| `untraced` | count (and per stage) of defects recorded on a mission or campaign | found in `[since, end)` | never in the change failure numerator |
+| `untraced` | count (and per stage) of defects recorded on a mission, campaign or case — the cause is not traced to a task | found in `[since, end)` | never in the change failure numerator |
 | `excluded_defects` | defects on tasks whose completion is quarantined or a proxy | found in `[since, end)` | escape cannot be judged without a trustworthy landing clock |
 
 **Escaped** = the defect's `found_at` is later than its task's first `done_at` (first completion). A defect found before
 that (or on a task not done yet) was caught before landing.
 
-`dora.recorded` is false when the run holds no defect event at all (any level, up to the window end). The report then prints
+`dora.recorded` is false when the run holds no active `defect_found` at all (any level, any filter, before or inside the
+window, up to its end). The report then prints
 one line — ``no defects recorded — change failure rate and time to restore need `event <ref> defect_found` `` — instead of a
 0% nobody measured; the two pointer lines still print.
 

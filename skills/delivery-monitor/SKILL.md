@@ -33,7 +33,8 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs retract --agent <agent
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --id done-infra-2    # landed no commit (infra, QA run, gate): no --sha, stamped now
-#    A task waits on something outside the team's control (another project, a human ruling): blocked; when it resumes: unblocked
+#    A task cannot proceed until something else happens (another project, a human ruling, a dependency, a technical blocker
+#    routed to someone else): blocked, with what it waits on in --note; when it resumes: unblocked
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1 --note "waits on API team"
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 unblocked --id unblk-023-1
 #    A bug is filed in your tracker and traced to the plan item that caused it: record it on that item (any id your tracker uses),
@@ -77,10 +78,11 @@ built-in model whole, so it needs all four rates (`input`, `output`, `cache_writ
 landed task has a complete measured cost, and says how many it left out. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
-work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the
-orchestrating session when no project manager runs. Work that landed no commit is recorded without `--sha`, never with
+work board replaces it. The project manager records every merge, landing, cancellation, block/unblock and defect/fix at the
+moment it happens, or the orchestrating session when no project manager runs; pass `--at` when recording later (a defect's
+found time defaults to now and decides whether it escaped and how long it took to fix). Work that landed no commit is recorded without `--sha`, never with
 another commit's sha. Read `delivery.mjs report` at mission close, before the next mission is planned.
-A defect goes on the item that caused it (a mission or campaign ref when the cause is not traced to a task), with
+A defect goes on the item that caused it (a mission, campaign or case ref when the cause is not traced to a task), with
 `--found-stage build|review|qa|gate|demo|user`; the report's DORA block reads these pairs (`references/metrics.md`, "DORA").
 
 **Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work

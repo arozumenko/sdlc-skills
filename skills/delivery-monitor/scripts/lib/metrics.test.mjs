@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { secondsBetween, toHours, stats, isoWeekUtc, weekKeys, computeMetrics } from './metrics.mjs';
+import { makeObservation } from './events.mjs';
+import { buildTimelines, selectOccurrences } from './timeline.mjs';
 
 const PROFILE = { zeroDurationSec: 60, minWholeWeeks: 3 };
 const H = 3600;
@@ -307,4 +309,58 @@ test('dora: change failure rate over the throughput cohort (escaped = found afte
   // No defect anywhere → recorded false; nothing measured is claimed.
   const none = computeMetrics({ items: toMap([t('t3', { done: '2026-09-09T11:00:00Z' })]), ...args }).dora;
   assert.equal(none.recorded, false); assert.equal(none.change_failure_rate.denominator, 1); assert.equal(none.time_to_restore.stats, null); assert.equal(none.time_to_restore.oldest_open_s, null);
+});
+
+const DF = (defect, found_at, found_stage, o = {}) => ({ defect, found_at, found_stage, severity: o.severity ?? null, found_by: null, fixed_at: o.fixed ?? null, fixed_sha: null });
+const dt = (id, o, defects = [], extra = {}) => Object.assign(item({ id, ...o }), { defects }, extra);
+const WIN = { plan: { observation_start: '2026-09-07T00:00:00Z' }, since: '2026-09-07T00:00:00Z', end: '2026-09-21T00:00:00Z', profile: PROFILE };
+
+test('dora T1: escape is judged against the FIRST done — a defect found between a first done and a reopened second done escaped', () => {
+  const R = 'sec/run-1', id = `${R}/task-a`;
+  const plan = { run: R, items: [{ item_id: id, ref: 'TASK-A', level: 'task', parent_item_id: null }] };
+  const o = (event, at, tok, meta = {}) => makeObservation({ user: 'u', host: 'cli', plan: R, item_id: id, ref: 'TASK-A', level: 'task', event, at, transition_id: `${id}/${event}/${tok}`, source: 'cli', source_record_id: `${event}-${tok}`, meta: { version: 1, ...meta } }, { now: 0 });
+  const occ = selectOccurrences([o('dispatched', '2026-09-08T08:00:00Z', 'd'), o('done', '2026-09-08T10:00:00Z', 'episode-1'), o('reopened', '2026-09-09T10:00:00Z', 'r'),
+    o('defect_found', '2026-09-10T10:00:00Z', 'X', { defect: 'X', found_stage: 'qa' }), o('done', '2026-09-12T10:00:00Z', 'episode-2')]).occurrences;
+  const { items } = buildTimelines({ occurrences: occ, plan, end: WIN.end });
+  const d = computeMetrics({ items, ...WIN }).dora;
+  assert.equal(d.change_failure_rate.numerator, 1); assert.equal(d.change_failure_rate.denominator, 1);
+  assert.deepEqual(d.defects_by_stage.qa, { escaped: 1, before_landing: 0 });
+});
+
+test('dora T2/T4/T5: worst severity per failed task; found at the done instant is before landing; oldest open is the earliest found', () => {
+  const items = toMap([
+    dt('a', { done: '2026-09-08T10:00:00Z' }, [DF('A1', '2026-09-09T00:00:00Z', 'qa', { severity: 'minor' }), DF('A2', '2026-09-10T00:00:00Z', 'user', { severity: 'critical' })]),
+    dt('b', { done: '2026-09-08T10:00:00Z' }, [DF('B1', '2026-09-08T09:00:00Z', 'review', { severity: 'critical' }), DF('B2', '2026-09-14T00:00:00Z', 'user', { severity: 'minor' })]),
+    dt('c', { done: '2026-09-11T10:00:00Z' }, [DF('C1', '2026-09-11T10:00:00Z', 'gate', { severity: 'critical' }), DF('C2', '2026-09-12T00:00:00Z', 'qa')]),
+  ]);
+  const d = computeMetrics({ items, ...WIN }).dora;
+  assert.deepEqual(d.change_failure_rate.by_severity, { critical: 1, major: 0, minor: 1, unrated: 1 }, 'a: critical (not minor), b: minor (its critical was caught before landing), c: unrated');
+  assert.deepEqual(d.defects_by_stage.gate, { escaped: 0, before_landing: 1 }, 'found_at === done_at is not escaped');
+  const only = computeMetrics({ items: toMap([dt('c', { done: '2026-09-11T10:00:00Z' }, [DF('C1', '2026-09-11T10:00:00Z', 'gate')])]), ...WIN }).dora;
+  assert.equal(only.change_failure_rate.numerator, 0);
+  // open escaped defects: B2 found 09-14 listed before C2 found 09-12 → the oldest is C2
+  assert.equal(d.time_to_restore.open, 4); assert.equal(d.time_to_restore.oldest_open_s, secondsBetween('2026-09-09T00:00:00Z', WIN.end));
+  const two = computeMetrics({ items: toMap([dt('b', { done: '2026-09-08T10:00:00Z' }, [DF('B2', '2026-09-14T00:00:00Z', 'user'), DF('C2', '2026-09-12T00:00:00Z', 'qa')])]), ...WIN }).dora;
+  assert.equal(two.time_to_restore.oldest_open_s, secondsBetween('2026-09-12T00:00:00Z', WIN.end));
+});
+
+test('dora T6/T7/B6: recorded ignores window and filters; out-of-window defects stay out; case-level defects are untraced', () => {
+  const early = toMap([dt('a', { done: '2026-09-01T10:00:00Z' }, [DF('E', '2026-09-02T00:00:00Z', 'qa')])]);
+  assert.equal(computeMetrics({ items: early, ...WIN }).dora.recorded, true, 'a defect found before since still counts as recorded');
+  const taskOnly = toMap([dt('a', { done: '2026-09-08T10:00:00Z' }, [DF('E', '2026-09-09T00:00:00Z', 'qa')]), dt('m', { level: 'mission', done: '2026-09-10T00:00:00Z' })]);
+  assert.equal(computeMetrics({ items: taskOnly, ...WIN, filters: { level: 'mission' } }).dora.recorded, true, '--level mission does not hide that defects exist');
+  const base = [dt('a', { done: '2026-09-08T10:00:00Z' }, [DF('A', '2026-09-09T00:00:00Z', 'qa', { fixed: '2026-09-09T02:00:00Z' })]), dt('m', { level: 'mission', done: '2026-09-10T00:00:00Z' }, [DF('M', '2026-09-11T00:00:00Z', 'user')])];
+  const outside = [dt('o', { done: '2026-09-01T10:00:00Z' }, [DF('O', '2026-09-05T00:00:00Z', 'qa', { fixed: '2026-09-08T00:00:00Z' })]), dt('n', { level: 'mission', done: '2026-09-01T00:00:00Z' }, [DF('N', '2026-09-05T00:00:00Z', 'user')])];
+  const a = computeMetrics({ items: toMap(base), ...WIN }).dora, b = computeMetrics({ items: toMap([...base, ...outside]), ...WIN }).dora;
+  assert.deepEqual(b.time_to_restore.stats.samples, a.time_to_restore.stats.samples); assert.equal(b.untraced.n, a.untraced.n); assert.equal(b.untraced.n, 1);
+  const withCase = computeMetrics({ items: toMap([...base, dt('k', { level: 'case' }, [DF('K', '2026-09-12T00:00:00Z', 'demo')])]), ...WIN }).dora;
+  assert.deepEqual(withCase.untraced, { n: 2, by_stage: { user: 1, demo: 1 } });
+});
+
+test('coverage B4: done tasks with block records but no observed start are counted as unmeasured', () => {
+  const sp = [{ from: '2026-09-08T08:00:00Z', to: '2026-09-08T09:00:00Z' }];
+  const items = toMap([dt('a', { started: '2026-09-08T07:00:00Z', done: '2026-09-08T10:00:00Z' }, [], { blocked_spans: sp, blocked_s: 3600 }),
+    dt('b', { commit: '2026-09-08T07:00:00Z', done: '2026-09-08T10:00:00Z' }, [], { blocked_spans: sp, blocked_s: null }), dt('c', { done: '2026-09-08T10:00:00Z' })]);
+  const c = computeMetrics({ items, ...WIN }).coverage.task;
+  assert.equal(c.with_blocked, 2); assert.equal(c.blocked_no_start, 1);
 });

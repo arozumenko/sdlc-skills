@@ -429,3 +429,27 @@ test('defect pair derives into per-item defects (never deferred, never a state c
     { defect: 'GH-1', found_at: '2026-09-17T09:00:00.000Z', found_stage: 'user', severity: 'critical', found_by: 'customer', fixed_at: '2026-09-17T15:00:00.000Z', fixed_sha: 'f1x' }]);
   assert.deepEqual(items.get(it('task-b').item_id).defects, []); assert.equal(counts.orphanDefectFixes, 1);
 });
+
+test('replay order: a defect_fixed at the same instant as its defect_found is replayed after it (fixed, not an orphan) in both sort sites', () => {
+  const df = (event, at) => obs('task-a', event, at, { transition_id: `${it('task-a').item_id}/${event}/GH-5`, token: 'GH-5', meta: { defect: 'GH-5', ...(event === 'defect_found' ? { found_stage: 'qa' } : {}) } });
+  const fixed = df('defect_fixed', '2026-09-16T12:00:00Z'), found = df('defect_found', '2026-09-16T12:00:00Z');
+  const sel = selectOccurrences([fixed, found]).occurrences.map((o) => o.event);
+  assert.deepEqual(sel, ['defect_found', 'defect_fixed'], 'selectOccurrences sorts found before fixed at equal at');
+  // buildTimelines re-sorts its input: hand it fixed-first to prove its own tie-break.
+  const occ = selectOccurrences([fixed, found]).occurrences.reverse();
+  const { items, counts } = buildTimelines({ occurrences: occ, plan, end: END });
+  const d = items.get(it('task-a').item_id).defects[0];
+  assert.equal(d.fixed_at, '2026-09-16T12:00:00.000Z'); assert.equal(counts.orphanDefectFixes, 0);
+});
+
+test('blocks: a closed span ending after done is clipped at done; block records on non-task items are counted; a never-dispatched task can be blocked', () => {
+  const blk = (k, event, at, tok) => obs(k, event, at, { transition_id: `${it(k).item_id}/${event}/${tok}`, token: tok });
+  const o = [obs('task-a', 'dispatched', '2026-09-16T09:00:00Z', { transition_id: `${R}/task-a/dispatched/x`, token: 'x' }),
+    blk('task-a', 'blocked', '2026-09-16T16:00:00Z', 'b1'), obs('task-a', 'done', '2026-09-16T17:00:00Z'), blk('task-a', 'unblocked', '2026-09-16T18:00:00Z', 'u1'),
+    blk('mission-g1', 'blocked', '2026-09-16T10:00:00Z', 'g1'), blk('mission-g1', 'unblocked', '2026-09-16T11:00:00Z', 'g2'), blk('campaign', 'blocked', '2026-09-16T10:00:00Z', 'c1'),
+    blk('task-b', 'blocked', '2026-09-16T10:00:00Z', 'tb')];
+  const { items, counts } = tl(o);
+  assert.equal(items.get(it('task-a').item_id).blocked_s, 3600, 'closed span 16:00–18:00 clipped to done at 17:00');
+  assert.equal(counts.nonTaskBlocks, 3);
+  const b = items.get(it('task-b').item_id); assert.equal(b.state, 'planned'); assert.equal(b.blocked_since, '2026-09-16T10:00:00.000Z');
+});

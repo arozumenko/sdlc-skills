@@ -133,7 +133,8 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
           // wait (last dispatch end → merge); both only where the hook witnessed the task.
           if (i.agent_span_s != null) targets.forEach((t) => t.agent_span.push(i.agent_span_s));
           if (i.review_wait_s != null && i.review_wait_s >= 0) targets.forEach((t) => t.review_wait.push(i.review_wait_s));
-          // Only tasks with a block record (blocked_s null otherwise) and hook-witnessed agent time: no record is never a zero.
+          // time_blocked only for tasks with a block record (blocked_s is null otherwise, never 0); flow_efficiency only where
+          // the hook recorded agent time.
           if (i.blocked_s != null) targets.forEach((t) => t.time_blocked.push(i.blocked_s));
           if (i.flow_efficiency != null) targets.forEach((t) => t.flow_efficiency.push(i.flow_efficiency));
         }
@@ -216,6 +217,8 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     const src = (field) => done.reduce((m, i) => { const s = i[field]; if (s) m[s] = (m[s] ?? 0) + 1; return m; }, {});
     data.coverage[level] = { done: done.length, with_dispatched: done.filter((i) => i.start_basis === 'observed').length, with_first_commit: done.filter((i) => i.first_commit_at).length, with_created: done.filter((i) => i.created_at).length,
       with_blocked: done.filter((i) => i.blocked_spans?.length).length,
+      // Block records on a done item with no observed start: there is no measured cycle to clip them to, so no time_blocked.
+      blocked_no_start: done.filter((i) => i.blocked_spans?.length && i.start_basis !== 'observed').length,
       start_source: { observed: done.filter((i) => i.start_basis === 'observed').length, 'derived-child': done.filter((i) => i.start_basis === 'derived-child').length, none: done.filter((i) => !i.started_at).length },
       // Minor fix: done_basis split so coverage.done reconciles with throughput — observed +
       // 'derived-child' + proxy always sums to coverage.done, and observed + 'derived-child' is
@@ -238,9 +241,10 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
 /** DORA change failure rate and time to restore, task level, from the defect pair (`defect_found`/`defect_fixed`) recorded on
  * the item that caused each defect. A defect *escaped* when it was found after its task's first completion; one found earlier
  * was caught before landing. A task whose completion is quarantined or a proxy (`throughputExcluded`) has no trustworthy
- * landing clock, so its defects are counted apart (`excluded_defects`), never classified. A defect recorded on a mission or
- * campaign is `untraced`: counted, never in the change failure numerator. `recorded` is false when the run (up to the end,
- * unfiltered) holds no defect at all — the renderer then says so instead of printing a 0% nobody measured. */
+ * landing clock, so its defects are counted apart (`excluded_defects`), never classified. A defect recorded on a mission,
+ * campaign or case is `untraced` (its cause is not traced to a task): counted, never in the change failure numerator. The
+ * figures read the already filtered list (`--level`/`--class`); `recorded` does not: it is false only when the run (up to the
+ * end, any window, any filter) holds no active defect_found at all — the renderer then says so instead of a 0% nobody measured. */
 function doraFigures(all, items, sinceIso, endIso) {
   const tasks = all.filter((i) => i.level === 'task'), traced = tasks.filter((i) => !throughputExcluded(i));
   const escaped = (i, d) => i.done_at != null && d.found_at > i.done_at;
@@ -260,7 +264,7 @@ function doraFigures(all, items, sinceIso, endIso) {
   const open = esc.filter(({ d }) => !d.fixed_at).map(({ d }) => d.found_at).sort();
   const byStage = Object.fromEntries(DEFECT_STAGES.map((st) => [st, { escaped: 0, before_landing: 0 }]));
   for (const { i, d } of found(traced)) if (byStage[d.found_stage]) byStage[d.found_stage][escaped(i, d) ? 'escaped' : 'before_landing']++;
-  const untraced = found(all.filter((i) => i.level === 'mission' || i.level === 'campaign'));
+  const untraced = found(all.filter((i) => i.level !== 'task'));
   return {
     recorded: [...items.values()].some((i) => i.defects?.length),
     change_failure_rate: { numerator: failed, denominator: cohort.length, ratio: cohort.length ? Math.round((failed / cohort.length) * 10000) / 10000 : null, by_severity: bySeverity },

@@ -111,6 +111,8 @@ const isFinished = (status, items) => {
   const tasks = items.filter((i) => i.level === 'task'), pool = tasks.length ? tasks : items.filter((i) => i.level === 'mission');
   return status === 'open' && pool.length > 0 && pool.every((i) => i.state === 'done' || i.state === 'cancelled');
 };
+// An open item: in progress, or still planned but blocked (blocked before its first dispatch — otherwise it would show nowhere).
+const isOpen = (i) => i.state === 'in_progress' || (i.state === 'planned' && Boolean(i.blocked_since));
 const closeHint = (run) => `every item is done or cancelled but the plan is still open — once it has landed, close it: delivery.mjs plan close ${run}`;
 export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
   repo = resolveOwnerRepo(repo);
@@ -164,7 +166,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const st = [...agentStats.values()], turns = st.reduce((n, a) => n + (a.turns ?? 0), 0), heavy = st.reduce((n, a) => n + (a.turns_over_500k ?? 0), 0);
   const dispatchAgents = { agents: st.length, resumed: st.filter((a) => a.follow_ups > 0).length, compacted: st.filter((a) => a.compactions > 0).length, max_follow_ups: st.length ? Math.max(...st.map((a) => a.follow_ups ?? 0)) : null, turns, turns_over_500k: heavy, over_500k_share: turns ? Math.round((heavy / turns) * 10000) / 10000 : null };
 
-  const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0 }; let gaps = 0; const docs = [];
+  const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
     // A crossing marker is kept even on a dispatch with no item: it says which tasks miss part of their cost.
@@ -174,7 +176,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
     if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
-    cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes;
+    cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes; cov.non_task_blocks += counts.nonTaskBlocks;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
     const metrics = computeMetrics({ items, plan: r, since: sinceIso, end, profile, estimateBase, filters });
 
@@ -203,6 +205,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.awaiting_landing) derived.push(`${cov.awaiting_landing} mission(s) with all children terminal but no landing evidence`);
   if (malformedRuns) derived.push(`${malformedRuns} registered run file(s) malformed — skipped, never counted as unregistered`);
   if (cov.stray_unblocked) derived.push(`${cov.stray_unblocked} unblocked event(s) with no open block — ignored`);
+  if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
   if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
@@ -246,7 +249,7 @@ function doraLines(m, e) {
   const stages = Object.entries(d.defects_by_stage).filter(([, v]) => v.escaped || v.before_landing);
   if (stages.length) L.push('', '| found stage | escaped (after landing) | before landing |', '|---|---|---|', ...stages.map(([k, v]) => `| ${k} | ${v.escaped} | ${v.before_landing} |`), '');
   else L.push('- defects_by_stage: — (none found in the window)');
-  if (d.untraced.n) L.push(`- untraced (recorded on a mission or campaign, not in change_failure_rate): ${d.untraced.n}`);
+  if (d.untraced.n) L.push(`- untraced (recorded on a mission, campaign or case, not in change_failure_rate): ${d.untraced.n}`);
   if (d.excluded_defects) L.push(`- excluded: ${d.excluded_defects} defect(s) on tasks with a quarantined or proxy completion — escape not judged`);
   return L;
 }
@@ -379,11 +382,11 @@ export function renderMarkdown(doc) {
     // metrics.mjs's per-level coverage object, nothing invented here.
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${JSON.stringify(c.sources)}`);
     // Block records are optional: say how many done tasks carry one, and never let a missing record read as zero blocked time.
-    const ct = m.coverage.task; if (ct && ct.with_blocked != null) L.push(ct.with_blocked ? `- task: blocked records on ${ct.with_blocked} of ${ct.done} done task(s)` : '- task: no blocked records — time_blocked not measured (not zero)');
+    const ct = m.coverage.task; if (ct && ct.with_blocked != null) L.push(ct.with_blocked ? `- task: blocked records on ${ct.with_blocked} of ${ct.done} done task(s)${ct.blocked_no_start ? `; ${ct.blocked_no_start} without an observed start — time_blocked not measured` : ''}` : '- task: no blocked records — time_blocked not measured (not zero)');
     L.push(`- registration_gaps=${p.registration_gaps}`);
     if (p.finished) L.push(`- ${closeHint(p.run)}`);
     L.push('', '## Open items', '', '| ref | level | state | started | age |', '|---|---|---|---|---|');
-    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.blocked_since ? ` (blocked since ${i.blocked_since})` : ''}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
+    for (const i of p.items.filter(isOpen)) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.blocked_since ? ` (blocked since ${i.blocked_since})` : ''}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
     L.push('');
   }
   L.push('### Envelope', '', `- ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}`);
@@ -466,7 +469,7 @@ function doraPanel(m, e) {
     cells.push(statCell('Change failure rate', c.denominator ? `${c.numerator} of ${c.denominator} <span class="stat-sub">tasks landed in the window (${pctOf(c.ratio)})</span>` : '— <span class="stat-sub">no task landed in the window</span>'));
     cells.push(statCell('Time to restore <span class="stat-sub">found → fixed</span>', `${r.stats ? (r.stats.median == null ? `${fmtDur(r.stats.min)}–${fmtDur(r.stats.max)} <span class="stat-sub">(n=${r.stats.n})</span>` : fmtDur(r.stats.median)) : '—'}${r.open ? ` <span class="stat-sub">· ${r.open} open, oldest ${fmtDur(r.oldest_open_s)}</span>` : ''}`));
     const stages = Object.entries(d.defects_by_stage).filter(([, v]) => v.escaped || v.before_landing);
-    body = `${stages.length ? `<table><tr><th>found at</th><th>escaped (after landing)</th><th>before landing</th></tr>${stages.map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${v.escaped}</td><td>${v.before_landing}</td></tr>`).join('')}</table>` : ''}${d.untraced.n ? `<p class="note">${d.untraced.n} defect(s) recorded on a mission or campaign, not traced to a task — not in the change failure rate.</p>` : ''}`;
+    body = `${stages.length ? `<table><tr><th>found at</th><th>escaped (after landing)</th><th>before landing</th></tr>${stages.map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${v.escaped}</td><td>${v.before_landing}</td></tr>`).join('')}</table>` : '<p class="note">No defect found in the window.</p>'}${d.untraced.n ? `<p class="note">${d.untraced.n} defect(s) recorded on a mission, campaign or case, not traced to a task — not in the change failure rate.</p>` : ''}${d.excluded_defects ? `<p class="note">${d.excluded_defects} defect(s) on tasks with a quarantined or proxy completion — escape not judged.</p>` : ''}`;
   }
   return `<section class="panel"><h2>DORA</h2><p class="panel-sub">A task "deploys" when it merges (${label}). Change failure rate = landed tasks with a defect found after they landed; defects are found later, so recent tasks are undercounted.</p><div class="kpi-grid">${cells.join('')}</div>${body}</section>`;
 }
@@ -584,7 +587,7 @@ export function renderHtml(doc) {
 
     if (m.dora) parts.push(doraPanel(m, e));
 
-    const open = p.items.filter((i) => i.state === 'in_progress');
+    const open = p.items.filter(isOpen);
     if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.blocked_since ? ` <span class="sub">(blocked since ${fmtTs(i.blocked_since)})</span>` : ''}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);
 
     parts.push('</section>');
@@ -600,7 +603,7 @@ export function renderStatus(doc) {
     L.push(`STATUS ${p.run} v${p.version} (${p.status}) at ${e.window.effective_end}`);
     for (const lv of ['campaign', 'mission', 'task', 'case']) { const rows = p.items.filter((i) => i.level === lv); if (!rows.length) continue; const n = (s) => rows.filter((i) => i.state === s).length; L.push(`  ${lv}: done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`); }
     for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
-    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}${i.blocked_since ? ` blocked_since=${i.blocked_since}` : ''}`);
+    for (const i of p.items.filter((i) => isOpen(i) && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}${i.blocked_since ? ` blocked_since=${i.blocked_since}` : ''}`);
     if (p.registration_gaps) L.push(`  registration_gaps=${p.registration_gaps} (items without a created observation)`);
     if (p.finished) L.push(`  ${closeHint(p.run)}`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);

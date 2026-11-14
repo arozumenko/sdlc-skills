@@ -22,8 +22,9 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs retract --agent <agent
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --id done-infra-2    # landed no commit (infra, QA run, gate): no --sha, stamped now
-#    Waits on something outside the team (another project, a human ruling), and resumes:
-node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1
+#    Cannot proceed until something else happens (another project, a human ruling, a dependency, a technical blocker routed
+#    to someone else) — what it waits on goes in --note — and resumes:
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1 --note "waits on API team"
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 unblocked --id unblk-023-1
 #    A bug filed in your tracker, traced to the item that caused it (free-form id), and its fix landing:
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_found --defect BUG-7 --found-stage qa [--severity major] [--found-by <who>]

@@ -12,6 +12,9 @@ export function markCostGap(it, why) { it.cost_incomplete = true; if (!it.cost_g
 const TERMINAL = new Set(['done', 'cancelled']);
 const DEFERRED = new Set(['review_requested', 'review_returned', 'review_approved', 'review_history', 'scope_declared', 'gate_observed', 'outcome_observed']);
 const key = (o) => JSON.stringify([o.plan, o.item_id ?? '', o.transition_id, o.basis]);
+// Replay order: by time, then transition id — except that at the same instant a defect_fixed comes after every other event, so
+// a fix recorded with its defect's own clock (a batch without `at`, a date-only export) attaches to it instead of preceding it.
+const replayOrder = (a, b) => a.at.localeCompare(b.at) || (a.event === 'defect_fixed') - (b.event === 'defect_fixed') || a.transition_id.localeCompare(b.transition_id);
 
 /** F8: `ledgerConflicts` is `resolveObservations().conflicts[]` — one entry per still-disputed
  * observation_id, each carrying the *union* of its conflicting variants (one per disagreeing
@@ -60,7 +63,7 @@ export function selectOccurrences(observations, ledgerConflicts = []) {
     conflicts.push({ item_id: v.item_id, transition_id: v.transition_id, basis: v.basis, reason: 'ledger-conflict', sources: [c.observation_id] });
   }
 
-  occurrences.sort((a, b) => a.at.localeCompare(b.at) || a.transition_id.localeCompare(b.transition_id));
+  occurrences.sort(replayOrder);
   return { occurrences, conflicts, counts: { occurrences: occurrences.length, conflicts: conflicts.length } };
 }
 
@@ -82,7 +85,7 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
   const items = new Map(plan.items.map((i) => [i.item_id, newItem(i)]));
   for (const i of items.values()) if (i.parent_item_id && items.has(i.parent_item_id)) items.get(i.parent_item_id).children.push(i.item_id);
-  const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0, strayUnblocked: 0, orphanDefectFixes: 0 };
+  const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0, strayUnblocked: 0, orphanDefectFixes: 0, nonTaskBlocks: 0 };
   const explicitDone = new Map(), crossedIds = new Set(); let crossingUnreadable = false;
   for (const o of occurrences) {
     if (o.at >= endIso) continue;
@@ -145,9 +148,10 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         break;
       }
       // A block is a span: `blocked` opens one unless one is already open, `unblocked` closes it. An `unblocked` with nothing open
-      // cannot say when the block began, so it is ignored and counted rather than guessed into a span.
-      case 'blocked': if (!it.blocked_spans.some((sp) => sp.to == null)) it.blocked_spans.push({ from: o.at, to: null }); break;
-      case 'unblocked': { const sp = it.blocked_spans.find((x) => x.to == null); if (sp) sp.to = o.at; else counts.strayUnblocked++; break; }
+      // cannot say when the block began, so it is ignored and counted rather than guessed into a span. time_blocked is a task
+      // figure: a block record on a mission/campaign/case still opens its span (open items show it) and is counted apart.
+      case 'blocked': if (it.level !== 'task') counts.nonTaskBlocks++; if (!it.blocked_spans.some((sp) => sp.to == null)) it.blocked_spans.push({ from: o.at, to: null }); break;
+      case 'unblocked': { if (it.level !== 'task') counts.nonTaskBlocks++; const sp = it.blocked_spans.find((x) => x.to == null); if (sp) sp.to = o.at; else counts.strayUnblocked++; break; }
       // Defects describe the item that caused them; they never move its state. One entry per defect id (the CLI keeps the id
       // unique per item); a fix with no found on this item (retracted, or written by another producer) is counted, not attached.
       case 'defect_found': if (!it.defects.some((d) => d.defect === o.meta.defect)) it.defects.push({ defect: o.meta.defect, found_at: o.at, found_stage: o.meta.found_stage ?? null, severity: o.meta.severity ?? null, found_by: o.meta.found_by ?? null, fixed_at: null, fixed_sha: null }); break;
@@ -276,7 +280,7 @@ function catalogueAt(plan, at) {
 
 export function buildTimelines({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
-  const ordered = [...occurrences].sort((a, b) => a.at.localeCompare(b.at) || a.transition_id.localeCompare(b.transition_id));
+  const ordered = [...occurrences].sort(replayOrder);
   const boundaries = [...new Set([...ordered.map((o) => o.at), ...(plan.versions ?? []).slice(1).map((v) => new Date(v.at).toISOString())])].filter((t) => t < endIso).sort();
   const first = new Map();
   // Pure replay of readable evidence, not an additional ledger or transaction.
