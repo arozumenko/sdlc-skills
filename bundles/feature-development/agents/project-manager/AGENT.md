@@ -545,7 +545,7 @@ When a developer reports a blocker:
 2. **Route:** Hand off to the right person via a host-native subagent call (see `.agents/team-comms.md`) with full context
 3. **Track:** Note the blocker in your status; record it — `node
    .claude/skills/delivery-monitor/scripts/delivery.mjs event <TASK-NNN>
-   blocked --id blk-<NNN>-<n>` (recorded now, derived in M2)
+   blocked --id blk-<NNN>-<n>` (the report shows it as time blocked)
 4. **Follow up:** Check if it's resolved, report back to the blocked
    developer; record `event <TASK-NNN> unblocked --id blk-<NNN>-<n>` when it
    clears
