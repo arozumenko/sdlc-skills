@@ -137,12 +137,23 @@ const matchLevel = (items, { description, firstUserText, branch }) => {
 // ambiguous rather than falling through to a mission-level guess) do we consider mission-level items.
 //
 // Role ruling (coach-android 2026-10-08): when the dispatched role owns tasks in the plan (`tasks[].role`), only those tasks are
-// matched — a ref that is also an ordinary word ("qa", "review") in another role's prompt must not win over the role's own task.
-// The role's only task takes the dispatch even with no textual hit; several unmatched → unattributed, never another role's task.
+// matched (except under the briefed-task ruling below) — a ref that is also an ordinary word ("qa", "review") in another role's
+// prompt must not win over the role's own task. The role's only task takes the dispatch even with no textual hit; several
+// unmatched → unattributed. Another role's task is reached only through a digit-bearing ref in the description.
 // A role that owns no task (a tech-lead reviewing a js-dev task) keeps the plain text matching below.
+// Briefed-task ruling (production case, 2026-11-13): a description that names none of the role's own tasks but exactly one other task
+// by an id-like ref (it holds a digit, so it is no ordinary word) is the task the dispatch is for: "QA and land T1.11" goes to
+// T1.11 although the brief also names QA's own T1.16 as a later gap. Trade-off, chosen from a replay of two projects' ledgers
+// (2026-11-14: 16 of 17 moved dispatches were QA of a build task): a role's own task that is itself about the named task
+// ("TASK-024: review TASK-023") loses a "Review TASK-023" dispatch to TASK-023.
+const idLike = (ref) => /\d/.test(String(ref));
 export function resolveRefs(run, opts) {
   const candidates = run.items.filter((i) => i.level !== 'campaign' && !i.cancelled);
   const owned = opts.role ? candidates.filter((i) => i.level === 'task' && i.role === opts.role) : [];
+  if (owned.length && !owned.some((i) => wordHit(opts.description, i.ref))) {
+    const named = candidates.filter((i) => i.level === 'task' && i.role !== opts.role && idLike(i.ref) && wordHit(opts.description, i.ref));
+    if (named.length === 1) return { items: named, how: 'description' };
+  }
   if (owned.length) {
     const r = matchLevel(owned, opts);
     return r.items.length || r.how === 'ambiguous' || owned.length > 1 ? r : { items: owned, how: 'role' };
@@ -152,12 +163,15 @@ export function resolveRefs(run, opts) {
   return matchLevel(candidates.filter((i) => i.level === 'mission'), opts);
 }
 /** Tasks a resumed agent was sent after its first brief: those whose ref is named in its follow-up messages and that are not
- * the item(s) it is attributed to. A role that owns tasks is only checked against its own (the resolveRefs role ruling). Its later work stays
- * on the first item — the hook cannot split one transcript — so this flags it rather than re-attributing. */
+ * the item(s) it is attributed to. A role that owns tasks is only checked against its own (the resolveRefs role ruling), unless
+ * the briefed-task ruling credited it with another role's task: then other roles' tasks with an id-like ref count too, so a QA
+ * agent credited with T1.11 and later sent "QA T1.12" is flagged. Its later work stays on the first item — the hook cannot split
+ * one transcript — so this flags it rather than re-attributing. */
 export function crossedTasks(run, { followUps, role, attributed }) {
   const tasks = run.items.filter((i) => i.level === 'task' && !i.cancelled && !attributed.has(i.item_id));
   const owned = role ? tasks.filter((i) => i.role === role) : [];
-  const pool = owned.length ? owned : tasks;
+  const foreign = Boolean(role) && run.items.some((i) => attributed.has(i.item_id) && i.level === 'task' && i.role !== role);
+  const pool = !owned.length ? tasks : foreign ? tasks.filter((i) => i.role === role || idLike(i.ref)) : owned;
   return pool.filter((i) => followUps.some((f) => wordHit(f.text, i.ref)));
 }
 export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k < 10; k++) { const res = appendObservation(repo, r, opts); if (res.result !== 'ID-CONFLICT') return res; r = { ...r, revision: r.revision + 1 }; } return { result: 'ID-CONFLICT', observation_id: rec.observation_id, revision: rec.revision }; }

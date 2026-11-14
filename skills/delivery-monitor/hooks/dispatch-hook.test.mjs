@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyStage, resolveRefs, handleStop, ownerRepo, parseTranscript, findChildTranscript } from './dispatch-hook.mjs';
+import { classifyStage, crossedTasks, resolveRefs, handleStop, ownerRepo, parseTranscript, findChildTranscript } from './dispatch-hook.mjs';
 import { loadRun, saveRun } from '../scripts/lib/plan.mjs';
 import { makeRoster } from '../scripts/lib/roster.mjs';
 import { resolveObservations } from '../scripts/lib/events.mjs';
@@ -293,6 +293,51 @@ test('resolveRefs: a task owned by the dispatched role wins over a word hit on a
   // A role owning no task (tech-lead reviewing a js-dev task in the PM flow) keeps plain text matching.
   const pm = { items: [t('TASK-023', 'js-dev')] };
   assert.deepEqual(resolveRefs(pm, { description: 'Review TASK-023', firstUserText: '', role: 'tech-lead' }).items.map((i) => i.ref), ['TASK-023']);
+});
+
+// Production case 2026-11-13: a qa-engineer dispatch "QA and land M21 T1.11" (android-dev's task) whose brief also named
+// QA's own T1.16 as a later gap. The role ruling looked only at QA's own tasks and credited T1.16. A task named by an id-like ref in
+// the description is the task the dispatch is for; the role ruling still guards plain-word refs ("qa", "impl").
+test('resolveRefs: a task id named in the description wins over the role\'s own task named only in the brief', () => {
+  const t = (ref, role) => ({ item_id: `p/${ref}`, ref, level: 'task', role });
+  // The mission ref holds a digit and is named in the description, as in production: only tasks may take the dispatch this way.
+  const run = { items: [{ item_id: 'p/M21', ref: 'M21', level: 'mission' }, t('T1.11', 'android-dev'), t('T1.16', 'qa-engineer')] };
+  const brief = 'QA the T1.11 task. The live-edge figures pass stays a device gap held for the operator (T1.16 covers it).';
+  const refs = (o) => resolveRefs(run, { firstUserText: brief, role: 'qa-engineer', ...o }).items.map((i) => i.ref);
+  assert.deepEqual(refs({ description: 'QA and land M21 T1.11' }), ['T1.11']);
+  assert.equal(resolveRefs(run, { description: 'QA and land M21 T1.11', firstUserText: brief, role: 'qa-engineer' }).how, 'description');
+  // The role's own task named in the description still wins, even next to another task's id.
+  assert.deepEqual(refs({ description: 'QA T1.16 after T1.11' }), ['T1.16']);
+  // No task id in the description: the role ruling is unchanged (own task, found in the brief).
+  assert.deepEqual(refs({ description: 'QA pass' }), ['T1.16']);
+  // Two other tasks' ids in the description: no single answer there, so the role ruling decides.
+  const three = { items: [...run.items, t('T1.12', 'android-dev')] };
+  assert.deepEqual(resolveRefs(three, { description: 'QA T1.11 and T1.12', firstUserText: brief, role: 'qa-engineer' }).items.map((i) => i.ref), ['T1.16']);
+  // Plain-word refs (no digit) never take a dispatch from the role's own task, in the description either (the 10-08 case).
+  const words = { items: [t('impl', 'android-dev'), t('qa', 'qa-engineer')] };
+  assert.deepEqual(resolveRefs(words, { description: 'Implement the fix, then QA', firstUserText: '', role: 'android-dev' }).items.map((i) => i.ref), ['impl']);
+  // A cancelled task named in the description does not take it: the role ruling decides.
+  const cancelled = { items: run.items.map((i) => (i.ref === 'T1.11' ? { ...i, cancelled: true } : i)) };
+  assert.deepEqual(resolveRefs(cancelled, { description: 'QA and land T1.11', firstUserText: brief, role: 'qa-engineer' }).items.map((i) => i.ref), ['T1.16']);
+  // A role owning several tasks, none named: the named task of another role still takes it (before, it stayed unattributed).
+  const several = { items: [...run.items, t('T1.17', 'qa-engineer')] };
+  assert.deepEqual(resolveRefs(several, { description: 'QA and land T1.11', firstUserText: '', role: 'qa-engineer' }).items.map((i) => i.ref), ['T1.11']);
+  // Known trade-off, chosen from the replay of 2026-11-14 (16 of 17 moved dispatches in two projects were QA of a build task): a
+  // role's own task that is itself about the named task ("TASK-024: review TASK-023") loses the dispatch to the named task.
+  const reviewPlan = { items: [t('TASK-023', 'js-dev'), t('TASK-024', 'tech-lead')] };
+  assert.deepEqual(resolveRefs(reviewPlan, { description: 'Review TASK-023', firstUserText: 'Your task TASK-024: review the PR for TASK-023', role: 'tech-lead' }).items.map((i) => i.ref), ['TASK-023']);
+});
+
+test('crossedTasks: an agent credited with another role\'s task is flagged when later sent a further task of that role', () => {
+  const t = (ref, role) => ({ item_id: `p/${ref}`, ref, level: 'task', role });
+  const run = { items: [t('T1.11', 'android-dev'), t('T1.12', 'android-dev'), t('T1.16', 'qa-engineer'), t('impl', 'android-dev')] };
+  const crossed = (attributedRef, text) => crossedTasks(run, { followUps: [{ text }], role: 'qa-engineer', attributed: new Set([`p/${attributedRef}`]) }).map((i) => i.ref);
+  assert.deepEqual(crossed('T1.11', 'Next: QA T1.12.'), ['T1.12']);
+  // Plain-word refs of other roles still never count.
+  assert.deepEqual(crossed('T1.11', 'then impl the fix'), []);
+  // Credited to its own task, a role owning another task is checked against its own only (unchanged).
+  const own = { items: [...run.items, t('T1.17', 'qa-engineer')] };
+  assert.deepEqual(crossedTasks(own, { followUps: [{ text: 'Next: QA T1.12, then T1.17.' }], role: 'qa-engineer', attributed: new Set(['p/T1.16']) }).map((i) => i.ref), ['T1.17']);
 });
 
 // Production case: a dev dispatched for its first task was messaged five more in the same transcript. Its first brief names only
