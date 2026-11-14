@@ -6,7 +6,11 @@ import { cliError, deliveryDir, eventsPath, nowIso, sha256, whoAmI, withLock } f
 
 export const SCHEMA_VERSION = 2;
 export const EVENTS = ['created', 'estimated', 'dispatched', 'dispatch_ended', 'first_commit', 'review_requested', 'review_returned', 'review_approved',
-  'review_history', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'scope_declared', 'gate_observed', 'outcome_observed', 'rework_observed'];
+  'review_history', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'scope_declared', 'gate_observed', 'outcome_observed', 'rework_observed', 'defect_found', 'defect_fixed'];
+// A defect pair is recorded on the item that CAUSED it; `meta.defect` is the tracker's own id, free-form (never parsed).
+export const DEFECT_EVENTS = ['defect_found', 'defect_fixed'];
+export const DEFECT_STAGES = ['build', 'review', 'qa', 'gate', 'demo', 'user'];
+export const DEFECT_SEVERITIES = ['minor', 'major', 'critical'];
 export const SOURCES = ['cli', 'automation-sync', 'hook', 'git'];
 export const SOURCE_RANK = Object.fromEntries(SOURCES.map((s, i) => [s, i]));
 export const BASES = ['observed', 'derived-child', 'scope-proxy', 'gate-proxy', 'receipt-proxy', 'plan-commit'];
@@ -61,6 +65,11 @@ export function validateRecord(r) {
   if (r.source && r.source_record_id && r.event && r.observation_id !== observationId({ source: r.source, sourceRecordId: r.source_record_id, itemId: r.item_id, event: r.event })) errs.push('observation_id does not match its tuple');
   if (r.estimate != null) errs.push(...validateEstimate(r.estimate));
   if (r.meta != null && typeof r.meta !== 'object') errs.push('meta must be an object');
+  else if (DEFECT_EVENTS.includes(r.event)) {
+    if (typeof r.meta?.defect !== 'string' || !r.meta.defect.trim()) errs.push('meta.defect (the defect id) required for defect events');
+    if (r.event === 'defect_found' && !DEFECT_STAGES.includes(r.meta?.found_stage)) errs.push(`meta.found_stage must be ${DEFECT_STAGES.join('|')}`);
+    if (r.event === 'defect_found' && r.meta?.severity != null && !DEFECT_SEVERITIES.includes(r.meta.severity)) errs.push(`meta.severity must be ${DEFECT_SEVERITIES.join('|')} or null`);
+  }
   return errs;
 }
 
@@ -88,8 +97,10 @@ const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 
 // (appendOrRevise) instead of SKIPping against the old cost.
 // `crossed` is part of the key only when the record has it, so a record without it (an older hook, or a dispatch that did
 // not cross) keeps the same key.
+// `defect` likewise only on defect events (id, stage, severity, finder): a re-rated defect is a correction, not a retry.
 const effortFact = (a) => (a && 'cost_usd' in a ? { cost_usd: a.cost_usd ?? null, split: a.split ?? null, unpriced: Boolean(a.unpriced_models?.length), ...(a.crossed != null ? { crossed: a.crossed } : {}) } : null);
-const facts = (r) => ({ effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
+const defectFact = (m) => (m?.defect != null ? { defect: { id: m.defect, found_stage: m.found_stage ?? null, severity: m.severity ?? null, found_by: m.found_by ?? null } } : {});
+const facts = (r) => ({ ...defectFact(r.meta), effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
 export const factKey = (r) => JSON.stringify(sortKeys({ plan: r.plan, item_id: r.item_id, ref: r.ref, level: r.level, event: r.event, transition_id: r.transition_id, basis: r.basis, at: r.at, facts: facts(r) }));
 export const semanticKey = (r) => JSON.stringify(sortKeys({ observation_id: r.observation_id, revision: r.revision, status: r.status, fact: JSON.parse(factKey(r)) }));
 

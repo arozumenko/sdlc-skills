@@ -4,7 +4,7 @@ import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileS
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
-import { EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
+import { DEFECT_EVENTS, DEFECT_SEVERITIES, DEFECT_STAGES, EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
 import { importTasksMarkdown } from './lib/plan-markdown.mjs';
 import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
@@ -18,7 +18,7 @@ import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibra
 import { loadPricesChecked } from './lib/cost.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit'];
+const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit', 'defect_found', 'defect_fixed'];
 const TERMINAL_HISTORY_EVENTS = ['done', 'cancelled', 'reopened'];
 const out = (io, s) => io.stdout.write(`${s}\n`);
 const isoOrThrow = (s, flag) => { if (Number.isNaN(Date.parse(s))) throw cliError('USAGE', `invalid ${flag} ${s}`); return new Date(s).toISOString(); };
@@ -62,11 +62,28 @@ export function resolveRef(run, ref, { allowCancelled = false } = {}) {
  * the same occurrence, not a transition, and is always valid — the fold below only ever reaches a
  * "done"/"cancelled" state via that same event, so `event === state` never trips the guards. */
 export function validateTransition(history, event) {
+  // Defect and block events describe the item, they never move it: allowed in any state (a defect is usually found after done).
+  if (DEFECT_EVENTS.includes(event) || event === 'blocked' || event === 'unblocked') return null;
   let state = 'open';
   for (const h of history) { if (TERMINAL_HISTORY_EVENTS.includes(h.event) && h.event !== 'reopened') state = h.event; else if (h.event === 'reopened') state = 'open'; }
   if (event === 'done' && state === 'cancelled') return 'done after cancelled without reopened';
   if (event === 'cancelled' && state === 'done') return 'cancelled after done without reopened';
   if (event === 'reopened' && state === 'open') return 'reopened when the item is not terminal';
+  return null;
+}
+
+/** The defect pair stays in order: a fix closes a defect this item already has (an active defect_found with the same id, not
+ * later than the fix), and a defect_found (or its correction) may not move past an active fix of the same defect — either way
+ * the replay would leave an orphan fix and a defect open forever. */
+function validateDefectPair(observations, item, rec) {
+  const pair = (event) => observations.find((o) => o.item_id === item.item_id && o.event === event && o.status === 'active' && o.meta?.defect === rec.meta.defect);
+  if (rec.event === 'defect_found') {
+    const fixed = pair('defect_fixed');
+    return fixed && rec.at > fixed.at ? `defect_found ${rec.meta.defect} (${rec.at}) would follow its defect_fixed (${fixed.at}) — correct or retract the fix first` : null;
+  }
+  const found = pair('defect_found');
+  if (!found) return `defect_fixed ${rec.meta.defect} has no defect_found on this item — record the defect on the item that caused it first`;
+  if (rec.at < found.at) return `defect_fixed ${rec.meta.defect} (${rec.at}) precedes its defect_found (${found.at})`;
   return null;
 }
 
@@ -251,6 +268,20 @@ function bindCaller(repo, runId, f, io, now) {
   out(io, `SESSION ${me.host}:${me.session} -> ${runId}`);
 }
 
+function defectMeta(ev, f) {
+  const defect = requireValue(f, 'defect');
+  if (defect == null || !String(defect).trim()) throw cliError('USAGE', `${ev} needs --defect <id> (the defect's id in your tracker)`);
+  if (ev === 'defect_fixed') {
+    if (['found-stage', 'severity', 'found-by'].some((k) => f[k] != null)) throw cliError('USAGE', '--found-stage/--severity/--found-by belong to defect_found');
+    return { defect: String(defect) };
+  }
+  const stage = requireValue(f, 'found-stage'), severity = requireValue(f, 'severity'), foundBy = requireValue(f, 'found-by');
+  if (stage == null) throw cliError('USAGE', `defect_found needs --found-stage ${DEFECT_STAGES.join('|')}`);
+  if (!DEFECT_STAGES.includes(stage)) throw cliError('USAGE', `invalid --found-stage ${stage}; expected ${DEFECT_STAGES.join('|')}`);
+  if (severity != null && !DEFECT_SEVERITIES.includes(severity)) throw cliError('USAGE', `invalid --severity ${severity}; expected ${DEFECT_SEVERITIES.join('|')}`);
+  return { defect: String(defect), found_stage: stage, severity: severity ?? null, found_by: foundBy == null ? null : String(foundBy) };
+}
+
 function buildEvent(repo, run, item, ev, f, token, now) {
   if (!CLI_EVENTS.includes(ev) || !EVENTS.includes(ev)) throw cliError('USAGE', `unknown event ${ev}; expected one of ${CLI_EVENTS.join('|')}`);
   const revision = f.revision != null ? Number(requireValue(f, 'revision')) : 0;
@@ -263,7 +294,10 @@ function buildEvent(repo, run, item, ev, f, token, now) {
   }
   if (!at) at = nowIso(now);
   if (f.note) meta.note = String(f.note);
-  const transition = f.transition ?? (['done', 'cancelled', 'reopened'].includes(ev) ? `${item.item_id}/${ev}/episode-1` : `${item.item_id}/${ev}/${token}`);
+  // One occurrence per (item, event, defect id). The id is the tracker's own (GH-412, PROJ-123, BUG-7…): taken as given,
+  // never parsed, and percent-encoded where it becomes part of the transition so a '/' cannot split it.
+  if (DEFECT_EVENTS.includes(ev)) Object.assign(meta, defectMeta(ev, f));
+  const transition = f.transition ?? (['done', 'cancelled', 'reopened'].includes(ev) ? `${item.item_id}/${ev}/episode-1` : DEFECT_EVENTS.includes(ev) ? `${item.item_id}/${ev}/${encodeURIComponent(meta.defect)}` : `${item.item_id}/${ev}/${token}`);
   return makeObservation({ user: null, host: 'cli', plan: run.run, item_id: item.item_id, ref: item.ref, level: item.level, event: ev, transition_id: transition, source: 'cli',
     source_record_id: token, at, revision, status: f.status ?? 'active', raw: f.raw ?? null, meta }, { now });
 }
@@ -302,8 +336,14 @@ function cmdEvent(repo, p, io, now) {
   // appended earlier in the SAME batch, not just the pre-batch ledger.
   const seenActive = [...active];
   const one = (ref, ev, f, token) => {
-    const item = resolveRef(run, ref, { allowCancelled: Boolean(f['allow-cancelled']) });
-    const rec = buildEvent(repo, run, item, ev, f, token, now);
+    const defectEv = DEFECT_EVENTS.includes(ev);
+    // A defect may be traced to an item that has since left the plan's scope: it still caused the defect.
+    const item = resolveRef(run, ref, { allowCancelled: defectEv || Boolean(f['allow-cancelled']) });
+    // Without --id a defect event's retry token is its defect id, so the same command twice is the same observation.
+    if (defectEv) token ??= defectMeta(ev, f).defect;
+    let rec = buildEvent(repo, run, item, ev, f, token, now);
+    // A defect retried without --at/--sha keeps the clock it was first recorded with (not "now" again), so the retry SKIPs.
+    if (defectEv && !f.at && !f.sha) { const prior = seenActive.find((o) => o.observation_id === rec.observation_id); if (prior) rec = buildEvent(repo, run, item, ev, { ...f, at: prior.at }, token, now); }
     // coach-android 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
     // merge's time — before its own dispatch. A sha-derived `done` earlier than the item's first observed dispatch (this
     // episode) is not this item's merge; an explicit --at correction (meta.clock 'corrected') is the caller's decision.
@@ -316,8 +356,10 @@ function cmdEvent(repo, p, io, now) {
       // F10.2: corrections (--revision >= 1) still run validateTransition — a correction that merely
       // re-affirms the same event is "the same occurrence" and passes; a correction that would smuggle
       // in a genuinely different transition is still rejected.
-      const why = validateTransition(historyFor(item), ev); if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`);
-      const conflict = conflictingRecord(seenActive, rec, historyFor(item));
+      const why = validateTransition(historyFor(item), ev) ?? (defectEv ? validateDefectPair(seenActive, item, rec) : null);
+      if (why) throw cliError('INVALID-TRANSITION', `${ref}: ${why}`);
+      // A defect id names one occurrence on the item across every episode, so reopen episodes do not separate two of them.
+      const conflict = conflictingRecord(seenActive, rec, defectEv ? [] : historyFor(item));
       if (conflict) throw cliError('CONFLICT', `${ref} ${ev}: an equal-priority record disagrees (${conflict.observation_id} rev ${conflict.revision}); record a correction with --revision or retract it`);
     }
     const res = appendObservation(repo, rec, { now });
@@ -340,7 +382,7 @@ function cmdEvent(repo, p, io, now) {
       // or number) would otherwise reach `j.ref` as undefined and fail deep inside — reject it here,
       // counted the same as invalid JSON.
       if (j === null || typeof j !== 'object' || Array.isArray(j)) { invalid++; io.stderr.write(`WARN line ${n}: not an object\n`); continue; }
-      try { const res = one(j.ref, j.event, { at: j.at, sha: j.sha, transition: j.transition, raw: j.raw, revision: j.revision, status: j.status, note: j.note }, j.id); if (res.result === 'EVENT') appended++; else if (res.result === 'SKIP') skipped++; else conflicts++; }
+      try { const res = one(j.ref, j.event, { at: j.at, sha: j.sha, transition: j.transition, raw: j.raw, revision: j.revision, status: j.status, note: j.note, defect: j.defect, 'found-stage': j.found_stage, severity: j.severity, 'found-by': j.found_by }, j.id); if (res.result === 'EVENT') appended++; else if (res.result === 'SKIP') skipped++; else conflicts++; }
       // Issue 2: only a genuine cliError (code + a mapped exit) is "this row is invalid input" — a
       // real system error (e.g. a thrown fs Error with a string .code like EACCES/ENOSPC) must not be
       // swallowed as an invalid line; it propagates out to main()'s INTERNAL/exit-1 catch-all, exactly
@@ -352,7 +394,7 @@ function cmdEvent(repo, p, io, now) {
     return 0;
   }
   const [ref, ev] = p.positional;
-  if (!ref || !ev || !p.flags.id) throw cliError('USAGE', 'event <ref> <event> --id <token> [--plan <run>]');
+  if (!ref || !ev || (!p.flags.id && !DEFECT_EVENTS.includes(ev))) throw cliError('USAGE', 'event <ref> <event> --id <token> [--plan <run>] | event <ref> defect_found|defect_fixed --defect <id> …');
   const res = one(ref, ev, p.flags, p.flags.id);
   if (res.result === 'ID-CONFLICT') throw cliError('ID-CONFLICT', `${res.observation_id} rev ${res.revision} exists with different content; use --revision ${res.revision + 1}`);
   return 0;

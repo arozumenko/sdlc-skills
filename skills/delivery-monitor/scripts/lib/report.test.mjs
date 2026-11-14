@@ -510,3 +510,91 @@ test('dispatch_agents: per-agent context profile from dispatch_ended meta.agent 
   const empty = tmp(); seed(empty);
   assert.deepEqual(assemble(empty, { plans: [R], now: NOW }).envelope.coverage.dispatch_agents, { agents: 0, resumed: 0, compacted: 0, max_follow_ups: null, turns: 0, turns_over_500k: 0, over_500k_share: null });
 });
+
+const seedDora = (repo) => {
+  seed(repo);
+  const o = (id, ref, level, event, at, tok, meta = {}, source = 'cli') => appendObservation(repo, makeObservation({ user: 'u', host: source === 'hook' ? 'claude' : 'cli', plan: R, item_id: `${R}/${id}`, ref, level, event, at, transition_id: `${R}/${id}/${event}/${tok}`, source, source_record_id: tok, meta: { version: 1, ...meta } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'TASK-A', 'task', 'dispatch_ended', '2026-09-09T10:00:00Z', 'agent-1', {}, 'hook');
+  o('task-a', 'TASK-A', 'task', 'blocked', '2026-09-09T09:30:00Z', 'b1'); o('task-a', 'TASK-A', 'task', 'unblocked', '2026-09-09T10:00:00Z', 'u1');
+  o('task-b', 'TASK-B', 'task', 'blocked', '2026-09-12T08:00:00Z', 'b2'); o('task-z', 'TASK-Z', 'task', 'unblocked', '2026-09-12T08:00:00Z', 'u9');
+  o('task-a', 'TASK-A', 'task', 'defect_found', '2026-09-10T09:00:00Z', 'GH-1', { defect: 'GH-1', found_stage: 'user', severity: 'major', found_by: null });
+  o('task-a', 'TASK-A', 'task', 'defect_fixed', '2026-09-11T09:00:00Z', 'GH-1', { defect: 'GH-1' });
+  o('task-b', 'TASK-B', 'task', 'defect_found', '2026-09-11T09:00:00Z', 'GH-3', { defect: 'GH-3', found_stage: 'review', severity: null, found_by: null });
+  o('mission-g1', 'G1', 'mission', 'defect_found', '2026-09-12T09:00:00Z', 'GH-2', { defect: 'GH-2', found_stage: 'demo', severity: null, found_by: null });
+};
+
+test('blocked time, flow efficiency and DORA: JSON fields, Markdown rows and section, open item blocked, coverage and caveats', () => {
+  const repo = tmp(); seedDora(repo);
+  const doc = assemble(repo, { now: NOW });
+  const p = doc.plans[0], a = p.items.find((i) => i.ref === 'TASK-A'), b = p.items.find((i) => i.ref === 'TASK-B');
+  assert.equal(a.blocked_s, 1800); assert.equal(a.flow_efficiency, 0.5); assert.equal(a.defects[0].fixed_at, '2026-09-11T09:00:00.000Z'); assert.equal(b.blocked_since, '2026-09-12T08:00:00.000Z');
+  assert.equal(doc.envelope.coverage.stray_unblocked, 1); assert.equal(doc.envelope.coverage.deferred_events, 0, 'block events are derived now');
+  assert.equal(doc.envelope.policy.labels.deployment_frequency, 'merge to the integration branch, not a production deploy');
+  assert.equal(doc.envelope.policy.labels.lead_time_for_changes, 'merge to the integration branch, not a production deploy');
+  assert.deepEqual(p.metrics.dora.change_failure_rate, { numerator: 1, denominator: 1, ratio: 1, by_severity: { critical: 0, major: 1, minor: 0, unrated: 0 } });
+  const md = renderMarkdown(doc);
+  assert.ok(md.includes('| task time_blocked | all | n=1 | — (n<5) | — (n<7) | — (n<10) | 0.5h–0.5h (0.5h) |'), 'time_blocked in hours');
+  assert.ok(md.includes('| task flow_efficiency | all | n=1 | — (n<5) | — (n<7) | — (n<10) | 50%–50% (50%) |'), 'flow_efficiency as a percentage');
+  const order = ['## Quality', '## DORA', '## Estimates'].map((h) => md.indexOf(h)); assert.ok(order[0] < order[1] && order[1] < order[2], 'DORA sits after Quality');
+  assert.ok(md.includes('- change_failure_rate: 1/1 (100%) — critical=0 major=1 minor=0 unrated=0 (defects are found later, so recent tasks are undercounted)'));
+  assert.ok(md.includes('- time_to_restore (escaped defects found in the window, found → fixed): n=1, median — (n<5), min–max 24h–24h (24h); open 0'));
+  assert.ok(md.includes('| found stage | escaped (after landing) | before landing |') && md.includes('| user | 1 | 0 |') && md.includes('| review | 0 | 1 |'));
+  assert.ok(!md.includes('| build | 0 | 0 |'), 'stages with no defect are not printed');
+  assert.ok(md.includes('- untraced (recorded on a mission, campaign or case, not in change_failure_rate): 1'));
+  assert.match(md, /- deployment frequency: task velocity — \(2 whole weeks < 3\); weekly throughput under Throughput \(merge to the integration branch, not a production deploy\)/);
+  assert.match(md, /- lead time for changes: task cycle_time median — \(n<5\), commit_to_done median — \(not measured\) \(merge to the integration branch, not a production deploy\)/);
+  assert.ok(md.includes('| TASK-B | task | in_progress (blocked since 2026-09-12T08:00:00.000Z) |'), 'open item flagged as blocked');
+  assert.ok(md.includes('- task: blocked records on 1 of 1 done task(s)'));
+  assert.ok(md.includes('- caveat: 1 unblocked event(s) with no open block — ignored'));
+  const html = renderHtml(doc);
+  assert.ok(html.includes('<h2>DORA</h2>'), 'DORA panel'); assert.ok(html.includes('1 of 1 <span class="stat-sub">tasks landed in the window (100%)</span>'));
+  assert.ok(html.includes('in progress <span class="sub">(blocked since 12 Sep 2026 08:00 UTC)</span>'));
+  assert.ok(html.includes('<br>Time blocked: median') && html.includes('<br>Flow efficiency <span class="sub">(agent time ÷ cycle time, a lower bound)</span>: median — (needs ≥5, have 1) · min 50%'), 'spread lines when measured');
+  assert.match(renderStatus(doc), /open TASK-B \(task\) started=[^\n]* blocked_since=2026-09-12T08:00:00.000Z/);
+});
+
+test('no defect and no block recorded: DORA says so in one line (no 0%), no blocked/flow rows, no stray caveat', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  const md = renderMarkdown(doc), html = renderHtml(doc);
+  assert.equal(doc.plans[0].metrics.dora.recorded, false);
+  assert.ok(md.includes('## DORA') && md.includes('- no defects recorded — change failure rate and time to restore need `event <ref> defect_found`'));
+  assert.ok(!md.includes('change_failure_rate:') && !md.includes('time_to_restore') && !/\b0%/.test(md.split('## DORA')[1].split('##')[0]), 'no measured-looking zero');
+  assert.ok(!md.includes('time_blocked |') && !md.includes('flow_efficiency |'));
+  assert.ok(md.includes('- task: no blocked records — time_blocked not measured (not zero)'));
+  assert.ok(!md.includes('unblocked event(s)') && !md.includes('blocked since'));
+  assert.ok(html.includes('<h2>DORA</h2>') && html.includes('No defects recorded') && !html.includes('Time blocked:'));
+});
+
+test('--from-json of an archive made before DORA existed still renders (no dora block, no crash)', () => {
+  const repo = tmp(); seed(repo);
+  const doc = JSON.parse(JSON.stringify(assemble(repo, { now: NOW })));
+  delete doc.plans[0].metrics.dora; delete doc.envelope.policy.labels.deployment_frequency; delete doc.envelope.policy.labels.lead_time_for_changes;
+  for (const i of doc.plans[0].items) { delete i.blocked_since; delete i.defects; }
+  const md = renderMarkdown(doc); assert.ok(!md.includes('## DORA')); assert.ok(!renderHtml(doc).includes('<h2>DORA</h2>'));
+});
+
+test('review fixes: non-task block caveat, blocked-but-unmeasured reason, planned-and-blocked open item, HTML excluded/none-found lines', () => {
+  const repo = tmp();
+  const t = (k) => ({ item_id: `${R}/task-${k}`, ref: `TASK-${k.toUpperCase()}`, level: 'task', parent_item_id: `${R}/mission-g1` });
+  saveRun(repo, { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-07T00:00:00Z', canonical_sha256: 'c'.repeat(64), items: [
+    { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 }, t('a'), t('y'), t('z'), t('p')] });
+  const o = (id, event, at, tok, meta = {}) => appendObservation(repo, makeObservation({ user: 'u', host: 'cli', plan: R, item_id: `${R}/${id}`, ref: id === 'mission-g1' ? 'G1' : `TASK-${id.slice(5).toUpperCase()}`, level: id === 'mission-g1' ? 'mission' : 'task', event, at, transition_id: `${R}/${id}/${event}/${tok}`, source: 'cli', source_record_id: tok, meta: { version: 1, ...meta } }, { now: 0 }), { slug: 'u', now: 0 });
+  o('task-a', 'dispatched', '2026-09-08T09:00:00Z', 'd'); o('task-a', 'done', '2026-09-08T11:00:00Z', 'episode-1');
+  o('task-y', 'cancelled', '2026-09-08T09:00:00Z', 'episode-1'); o('task-y', 'done', '2026-09-08T10:00:00Z', 'episode-1');
+  o('task-y', 'defect_found', '2026-09-09T10:00:00Z', 'Y-1', { defect: 'Y-1', found_stage: 'qa' });
+  o('task-z', 'blocked', '2026-09-08T08:00:00Z', 'b'); o('task-z', 'unblocked', '2026-09-08T09:00:00Z', 'u'); o('task-z', 'done', '2026-09-08T12:00:00Z', 'episode-1');
+  o('task-p', 'blocked', '2026-09-10T08:00:00Z', 'b');
+  o('mission-g1', 'blocked', '2026-09-08T08:00:00Z', 'b'); o('mission-g1', 'unblocked', '2026-09-08T09:00:00Z', 'u');
+  const doc = assemble(repo, { now: NOW });
+  assert.equal(doc.envelope.coverage.non_task_blocks, 2);
+  const md = renderMarkdown(doc), html = renderHtml(doc);
+  assert.ok(md.includes('- caveat: 2 block record(s) on non-task items — not in time_blocked'));
+  assert.ok(md.includes('- task: blocked records on 1 of 2 done task(s); 1 without an observed start — time_blocked not measured'));
+  assert.ok(md.includes('| TASK-P | task | planned (blocked since 2026-09-10T08:00:00.000Z) |'), 'a task blocked before any dispatch is an open item');
+  assert.match(renderStatus(doc), /open TASK-P \(task\) started=— age=— blocked_since=2026-09-10T08:00:00.000Z/);
+  assert.ok(md.includes('- defects_by_stage: — (none found in the window)') && md.includes('- excluded: 1 defect(s) on tasks with a quarantined or proxy completion — escape not judged'));
+  assert.ok(html.includes('planned <span class="sub">(blocked since 10 Sep 2026 08:00 UTC)</span>'));
+  assert.ok(html.includes('No defect found in the window.'), 'HTML says none found, like Markdown');
+  assert.ok(html.includes('1 defect(s) on tasks with a quarantined or proxy completion — escape not judged.'), 'HTML shows excluded defects');
+});

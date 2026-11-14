@@ -18,27 +18,29 @@ read-time resolution order and source precedence.
 | `plan` | **the run id, `<campaign_id>/<run_id>`** (e.g. `sec/run-1`) — not a bare campaign slug. A re-cut (`version`) does not change `plan`; the version travels in `meta.version` instead |
 | `item_id` | **run-scoped**: `<run>/campaign`, `<run>/mission-<slug(ref)>`, `<run>/task-<slug(ref)>` (`assignIds` in `lib/plan.mjs`) — ids from two different runs can never collide, even if their human-readable `ref`s do |
 | `ref`, `level` | the plan catalogue's human-readable ref (`TASK-023`, `G12`, …) and `campaign\|mission\|task\|case`; null only together with `item_id` for an admitted-but-unattributed hook dispatch (`meta.unattributed: true`) |
-| `event` | one of the 18 below |
-| `transition_id` | stable occurrence token. CLI: `<item_id>/<event>/episode-1` for `done`/`cancelled`/`reopened` (one occurrence per episode), else `<item_id>/<event>/<token>` (`--id`); the hook uses `<item_id-or-'unattributed'>/<event>/<agent_id>`; `plan register` uses `<item_id>/created/0` and `<item_id>/estimated/rev-<n>` |
+| `event` | one of the 20 below |
+| `transition_id` | stable occurrence token. CLI: `<item_id>/<event>/episode-1` for `done`/`cancelled`/`reopened` (one occurrence per episode), `<item_id>/<event>/<defect id, percent-encoded>` for `defect_found`/`defect_fixed` (one occurrence per item, event and defect), else `<item_id>/<event>/<token>` (`--id`); the hook uses `<item_id-or-'unattributed'>/<event>/<agent_id>`; `plan register` uses `<item_id>/created/0` and `<item_id>/estimated/rev-<n>` |
 | `source` | `cli \| automation-sync \| hook \| git` — who produced this observation (see precedence below) |
-| `source_record_id` | the producer's own retry/request token — `--id` on the CLI, `claude:<session>:<agent_id>` for the hook, the merge commit sha's own token for `backfill --git`, `pr:<number>` for `backfill --pr` (the PR number; `meta` carries `pr`, `git_sha` = the PR's merge commit, `head_ref`, `base_ref`, `landing`) |
+| `source_record_id` | the producer's own retry/request token — `--id` on the CLI (for a defect event without `--id`, the defect id itself, so the same command twice is a `SKIP`; a retry without `--at`/`--sha` keeps the first record's clock), `claude:<session>:<agent_id>` for the hook, the merge commit sha's own token for `backfill --git`, `pr:<number>` for `backfill --pr` (the PR number; `meta` carries `pr`, `git_sha` = the PR's merge commit, `head_ref`, `base_ref`, `landing`) |
 | `observation_id` | `<source>:<source_record_id>:<item_id \| 'unattributed'>:<event>`, percent-encoded per segment (`observationId()`) — the identity a retry is checked against |
 | `revision` | integer ≥ 0; a correction is the same `observation_id` at a strictly higher revision, full replacement payload (never a diff) |
 | `status` | `active \| retracted` — retraction is simply the next revision with `status: retracted` (`delivery.mjs retract --agent <id>` / `--observation <id>` writes one for a wrong claim, e.g. a misattributed hook dispatch) |
 | `basis` | `observed \| derived-child \| scope-proxy \| gate-proxy \| receipt-proxy \| plan-commit` — how trustworthy the fact is, kept as a separate population from `source` (who produced it) |
 | `meta.version` | the plan **catalogue version** (`run.version` at record time) this observation was made against — carried by registration, CLI `event`, and hook records; deliberately excluded from semantic identity (`facts()` in `lib/events.mjs`) so a plan re-cut or a CLI retry against the re-cut plan reproduces the same identity for an otherwise-unchanged historical observation |
 | `meta.git_sha`, `meta.stage`, `meta.round`, `meta.clock`, `meta.note`, `meta.unattributed` | evidence locator / hook stage label (`fix\|gate\|merge\|review\|build\|other`, classified from the dispatch description, else from the full first user message; when several stage words appear, the **earliest** in the text wins, so "implement …, do not merge" is `build`) / rework round / `'corrected'` when `--sha` and `--at` disagreed / free-text note / unattributed-dispatch flag |
+| `meta.defect`, `meta.found_stage`, `meta.severity`, `meta.found_by` | defect events only. `defect` is the defect's id in whatever tracker holds it (`GH-412`, `PROJ-123`, `BUG-7`): free-form, never parsed or looked up; required on both events. `found_stage` (`build\|review\|qa\|gate\|demo\|user`, required) and `severity` (`minor\|major\|critical` or null), `found_by` (free text or null) are on `defect_found` only; `defect_fixed` may carry the fix's merge `git_sha`. All four are facts (`facts()`): a re-rated defect under the same id is a correction (`--revision`), not a retry |
 | `meta.agent` | hook `dispatch_ended` only. **Context profile** `{turns, turns_over_500k, max_context, compactions, follow_ups}`: API turns deduplicated by message id, turns whose context (input + cache read + cache write) exceeded 500k, the peak, compaction summaries, and messages the orchestrator sent after the first brief. The profile is not a fact (outside `facts()`); the report rolls it up as `coverage.dispatch_agents`. **Effort** `{usage: {<model>: {input, output, cache_write, cache_write_1h, cache_read}}, cost_usd, unpriced_models?, split, crossed?}`: each message's final token counts per model (fast-mode turns keyed `<model>#fast`, priced with the table's own `<model>#fast` entry when it has one, else at double the base model), priced with `references/prices.json` and the project override `.agents/telemetry/delivery/prices.json` (when the built-in table or the override cannot be read or parsed, or has an invalid model entry — not an object, one of the four rates missing or not a number ≥ 0, or a bad `cache_write_1h` — the hook adds `<prices-unreadable>` to `unpriced_models`; `cost_usd` is then still a number, priced without the broken table, and is not the dispatch's cost); `split` is how many items the dispatch was attributed to, and each item is charged `cost_usd / split`. The effort's `cost_usd`, `split`, whether any model was unpriced and `crossed` ARE facts (`effortFact`), so a re-priced dispatch revises the record instead of being skipped. When a resumed agent's follow-up messages name another task's ref, the hook writes a `task-crossing` diagnostic, keeps the whole transcript on the item(s) of the first brief (or on no item, when that brief was unattributed), and lists the other tasks' item ids in `crossed`. The timeline then marks the first-brief item(s) and every task listed in `crossed` as `cost_incomplete`; a `crossed` that is not a list of the run's item ids marks every task of the run. The timeline also marks a task `cost_incomplete` when the earliest hooked dispatch recorded for that task (by start time) has stage `review` or `fix`: the build is assumed to have run where the hook did not record it, and the stage comes from the brief's wording, so a build brief that opens with a review or fix phrase is excluded too. The other causes (no or malformed cost, unpriced model, unended hooked dispatch, cost under an unknown item id) and the reason names are in `references/plan-block.md`, "Calibrated estimates" |
 | `estimate` | present only on `event: estimated`; `{unit,low,high,tier,proposed_by,proposed_at,accepted_by,accepted_at,reference?,probability?}` — see `references/plan-block.md` |
 | `session`, `agentId`, `role`, `label` | nullable host-qualified handles the hook fills in; the CLI leaves them null |
 
-## The 18 events, and what M1 does with each
+## The 20 events, and what M1 does with each
 
 `EVENTS` (`lib/events.mjs`) is the full accepted vocabulary; only some of it is *derived* into
 item state by `reduceTimelineSnapshot` (`lib/timeline.mjs`) in M1 — the rest is accepted,
 counted, and deferred.
 
-**Derived (9)** — drive state, `started_at`/`done_at`/`cancelled_at`, WIP, throughput:
+**Derived (13)** — drive state, `started_at`/`done_at`/`cancelled_at`, WIP, throughput, or the per-item spans and defects the
+flow and DORA figures read:
 
 | Event | Producer(s) | Effect |
 |---|---|---|
@@ -51,11 +53,19 @@ counted, and deferred.
 | `reopened` | CLI `event`, `plan register` (scope re-addition) | flags `deferred-episode`, opens a new episode |
 | `rework_observed` | Claude hook (`stage: fix`), `backfill --git` (`address review` commits) | `rework_count++` — activity/quality proxy, never a state transition |
 | `dispatch_ended` | Claude hook only | no state effect (`break` in the switch) — closes the hook's own dispatch/completion pair |
+| `blocked` | CLI `event` | opens a block span (`blocked_spans[]`) unless one is already open; no state change. `blocked_since` = the open span's start. Accepted on any level; on a mission, campaign or case it is counted (`coverage.non_task_blocks`), never task time |
+| `unblocked` | CLI `event` | closes the open block span; with none open it is ignored and counted (`counts.strayUnblocked`, `coverage.stray_unblocked`, a caveat) |
+| `defect_found` | CLI `event` | appends `{defect, found_at, found_stage, severity, found_by, fixed_at: null, fixed_sha: null}` to the causing item's `defects[]`; never a state change, accepted in any state (done and cancelled included) |
+| `defect_fixed` | CLI `event` | sets `fixed_at`/`fixed_sha` on that item's defect with the same id; the CLI refuses it (`INVALID-TRANSITION`) without an active `defect_found` for that id on that item, or earlier than it. A `defect_found` (or its correction) later than an active fix of the same defect is refused too. A fix with no `defect_found` for that id on the item is counted (`coverage.orphan_defect_fixes`, a caveat); a later fix for an already fixed defect is ignored. At the same instant, a fix is replayed after its defect (time to restore 0) |
 
-**Accepted and deferred (9)** — schema-valid, ledger-recorded and counted
+A defect is recorded on the item that **caused** it — normally a task. A mission or campaign ref is accepted when the cause is
+known only at that level (a case ref likewise); such a defect is *untraced* (counted in the report, never in the change failure rate). A ref
+removed from the plan's scope is still accepted for a defect event (no `--allow-cancelled`): it still caused the defect. An `event --from`
+batch row takes the same fields as JSON keys: `{"ref", "event", "defect", "found_stage", "severity", "found_by", "at", "sha", "note", "id"}`.
+
+**Accepted and deferred (7)** — schema-valid, ledger-recorded and counted
 (`it.deferred_events++`, `counts.deferredEvents`) but **not derived into state in M1**:
-`blocked`, `unblocked` (recorded now, block-interval derivation is M2 — see the
-project-manager's *Handling Blockers*), `review_requested`, `review_returned`,
+`review_requested`, `review_returned`,
 `review_approved`, `review_history` (M1 has no `review_rounds`/`first_pass_rate`), and the
 `test-automation` sync-adapter events `scope_declared`, `gate_observed`, `outcome_observed`
 (no `sync` subcommand ships in M1 — nothing currently produces these three).

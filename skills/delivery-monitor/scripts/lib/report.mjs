@@ -24,6 +24,7 @@ export const UNCONDITIONAL_CAVEATS = [
   'shared-files: last-writer-wins', 'sync: best-effort', 'concurrency: best-effort', 'hook-transcript-shapes: provisional until SPIKE-1',
   'producer-compatibility: unverified', 'association-history: not retained',
 ];
+const DEPLOY_LABEL = 'merge to the integration branch, not a production deploy';
 const TEMPLATE = resolve(fileURLToPath(import.meta.url), '..', '..', '..', 'templates', 'profile.template.json');
 
 export function loadProfile(repo) {
@@ -99,7 +100,7 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -110,6 +111,8 @@ const isFinished = (status, items) => {
   const tasks = items.filter((i) => i.level === 'task'), pool = tasks.length ? tasks : items.filter((i) => i.level === 'mission');
   return status === 'open' && pool.length > 0 && pool.every((i) => i.state === 'done' || i.state === 'cancelled');
 };
+// An open item: in progress, or still planned but blocked (blocked before its first dispatch — otherwise it would show nowhere).
+const isOpen = (i) => i.state === 'in_progress' || (i.state === 'planned' && Boolean(i.blocked_since));
 const closeHint = (run) => `every item is done or cancelled but the plan is still open — once it has landed, close it: delivery.mjs plan close ${run}`;
 export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
   repo = resolveOwnerRepo(repo);
@@ -163,7 +166,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const st = [...agentStats.values()], turns = st.reduce((n, a) => n + (a.turns ?? 0), 0), heavy = st.reduce((n, a) => n + (a.turns_over_500k ?? 0), 0);
   const dispatchAgents = { agents: st.length, resumed: st.filter((a) => a.follow_ups > 0).length, compacted: st.filter((a) => a.compactions > 0).length, max_follow_ups: st.length ? Math.max(...st.map((a) => a.follow_ups ?? 0)) : null, turns, turns_over_500k: heavy, over_500k_share: turns ? Math.round((heavy / turns) * 10000) / 10000 : null };
 
-  const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0 }; let gaps = 0; const docs = [];
+  const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
     // A crossing marker is kept even on a dispatch with no item: it says which tasks miss part of their cost.
@@ -173,6 +176,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
     if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
+    cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes; cov.non_task_blocks += counts.nonTaskBlocks;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
     const metrics = computeMetrics({ items, plan: r, since: sinceIso, end, profile, estimateBase, filters });
 
@@ -200,6 +204,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.parent_incomplete) derived.push(`${cov.parent_incomplete} explicit parent completion(s) with unfinished children (PARENT-INCOMPLETE)`);
   if (cov.awaiting_landing) derived.push(`${cov.awaiting_landing} mission(s) with all children terminal but no landing evidence`);
   if (malformedRuns) derived.push(`${malformedRuns} registered run file(s) malformed — skipped, never counted as unregistered`);
+  if (cov.stray_unblocked) derived.push(`${cov.stray_unblocked} unblocked event(s) with no open block — ignored`);
+  if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
+  if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const envelope = {
@@ -211,7 +218,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
       // true idea-to-done lead time, or a PR-open-to-merge clock for cycle time — time_to_merge
       // itself is not computed until M2 (PR-mode backfill), but the label travels with the policy
       // now so both metrics carry the same honest caveat wherever they're read.
-      labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time' } },
+      // The DORA block reuses task throughput and cycle time for deployment frequency and lead time for changes; a task lands
+      // when it merges to the plan's integration branch, which is not a production deploy.
+      labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time', deployment_frequency: DEPLOY_LABEL, lead_time_for_changes: DEPLOY_LABEL } },
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
@@ -219,8 +228,31 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
 }
 
 const h = (s) => (s == null ? '—' : `${toHours(s)}h`);
-const statRow = (name, stratum, s) => (s ? `| ${name} | ${stratum} | n=${s.n} | ${s.median == null ? '— (n<5)' : h(s.median)} | ${s.p85 == null ? '— (n<7)' : h(s.p85)} | ${s.p90 == null ? '— (n<10)' : h(s.p90)} | ${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''} |` : null);
 const pct = (r) => (r == null ? '—' : `${Math.round(r * 1000) / 10}%`);
+// `fmt` renders one value: hours for durations, a percentage for a ratio (flow_efficiency).
+const statRow = (name, stratum, s, fmt = h) => (s ? `| ${name} | ${stratum} | n=${s.n} | ${s.median == null ? '— (n<5)' : fmt(s.median)} | ${s.p85 == null ? '— (n<7)' : fmt(s.p85)} | ${s.p90 == null ? '— (n<10)' : fmt(s.p90)} | ${fmt(s.min)}–${fmt(s.max)}${s.samples ? ` (${s.samples.map(fmt).join(', ')})` : ''} |` : null);
+const RATIO_METRICS = new Set(['flow_efficiency']);
+const NO_DEFECTS = 'no defects recorded — change failure rate and time to restore need `event <ref> defect_found`';
+/** The `## DORA` lines. Deployment frequency and lead time for changes point at figures computed elsewhere in the report
+ * (never recomputed); change failure rate and time to restore come from `metrics.dora`, or one line when no defect exists. */
+function doraLines(m, e) {
+  const d = m.dora, label = e.policy.labels.deployment_frequency ?? DEPLOY_LABEL, L = [];
+  const t = m.throughput.task, all = m.flow.task?.strata?.all;
+  L.push(`- deployment frequency: task velocity ${t?.velocity ? `${t.velocity.median} per whole week (n=${t.velocity.whole_weeks} whole weeks)` : `— (${t ? t.weeks.filter((w) => w.whole).length : 0} whole weeks < ${e.policy.minWholeWeeks})`}; weekly throughput under Throughput (${label})`);
+  const med = (s) => (s?.median != null ? h(s.median) : s ? '— (n<5)' : '— (not measured)');
+  L.push(`- lead time for changes: task cycle_time median ${med(all?.cycle_time)}, commit_to_done median ${med(all?.commit_to_done)} (${e.policy.labels.lead_time_for_changes ?? DEPLOY_LABEL})`);
+  if (!d.recorded) { L.push(`- ${NO_DEFECTS}`); return L; }
+  const c = d.change_failure_rate;
+  L.push(`- change_failure_rate: ${c.denominator ? `${c.numerator}/${c.denominator} (${pct(c.ratio)}) — ${Object.entries(c.by_severity).map(([k, v]) => `${k}=${v}`).join(' ')}` : '— (n=0 completed in window)'} (defects are found later, so recent tasks are undercounted)`);
+  const r = d.time_to_restore, s = r.stats;
+  L.push(`- time_to_restore (escaped defects found in the window, found → fixed): ${s ? `n=${s.n}, median ${s.median == null ? '— (n<5)' : h(s.median)}${s.p85 != null ? `, P85 ${h(s.p85)}` : ''}${s.p90 != null ? `, P90 ${h(s.p90)}` : ''}, min–max ${h(s.min)}–${h(s.max)}${s.samples ? ` (${s.samples.map(h).join(', ')})` : ''}` : '— (n=0 fixed)'}; open ${r.open}${r.open ? ` (oldest ${h(r.oldest_open_s)} at the window end)` : ''}`);
+  const stages = Object.entries(d.defects_by_stage).filter(([, v]) => v.escaped || v.before_landing);
+  if (stages.length) L.push('', '| found stage | escaped (after landing) | before landing |', '|---|---|---|', ...stages.map(([k, v]) => `| ${k} | ${v.escaped} | ${v.before_landing} |`), '');
+  else L.push('- defects_by_stage: — (none found in the window)');
+  if (d.untraced.n) L.push(`- untraced (recorded on a mission, campaign or case, not in change_failure_rate): ${d.untraced.n}`);
+  if (d.excluded_defects) L.push(`- excluded: ${d.excluded_defects} defect(s) on tasks with a quarantined or proxy completion — escape not judged`);
+  return L;
+}
 // Minor (b): the "how long has this open item been open, as of the window's effective end" figure
 // was duplicated at each open-items call-site — one shared helper.
 const ageH = (end, started) => (started ? `${toHours((Date.parse(end) - Date.parse(started)) / 1000)}h` : null);
@@ -310,7 +342,7 @@ export function renderMarkdown(doc) {
           // Review fix (§6.10/policy.labels): every lead_time row carries its honesty label inline
           // in Markdown, matching `envelope.policy.labels.lead_time` in the JSON export.
           const label = name === 'lead_time' ? ` (${e.policy.labels.lead_time})` : '';
-          const row = statRow(`${lv} ${name}${label}`, st, s); if (row) L.push(row);
+          const row = statRow(`${lv} ${name}${label}`, st, s, RATIO_METRICS.has(name) ? pct : h); if (row) L.push(row);
         }
         // F17: the stratum's own quality denominator sits immediately next to its speed rows, not
         // collapsed into one level-wide line — `strata.<class>.quality` is where metrics.mjs puts it.
@@ -336,6 +368,8 @@ export function renderMarkdown(doc) {
     const cs = m.quality.cancelled_share;
     L.push(`- cancelled_share: ${cs.denominator ? `${cs.numerator}/${cs.denominator} (${pct(cs.ratio)})` : '— (n=0 created in window)'}`);
     for (const lv of Object.keys(m.flow)) { const rows = p.items.filter((i) => i.level === lv); L.push(`- ${lv}: rework_proxy_items ${lv === 'task' ? m.rework_proxy_items : '—'}, deferred-episodes ${rows.filter((i) => i.reopened).length}, review rounds unknown (M2)`); }
+    // An archive written before the DORA block existed has no `metrics.dora`; it re-renders without the section.
+    if (m.dora) L.push('', '## DORA', '', ...doraLines(m, e));
     L.push('', '## Estimates', '', '| level | stratum | n | eligible | work_ratio median | MdMRE | PRED(25) | MAE | hit_rate | excluded |', '|---|---|---|---|---|---|---|---|---|---|');
     for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
       const ex = excludedStr(x.excluded) || '—';
@@ -347,10 +381,12 @@ export function renderMarkdown(doc) {
     // F17: coverage.sources (already present) plus coverage.done_basis — both read straight off
     // metrics.mjs's per-level coverage object, nothing invented here.
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${JSON.stringify(c.sources)}`);
+    // Block records are optional: say how many done tasks carry one, and never let a missing record read as zero blocked time.
+    const ct = m.coverage.task; if (ct && ct.with_blocked != null) L.push(ct.with_blocked ? `- task: blocked records on ${ct.with_blocked} of ${ct.done} done task(s)${ct.blocked_no_start ? `; ${ct.blocked_no_start} without an observed start — time_blocked not measured` : ''}` : '- task: no blocked records — time_blocked not measured (not zero)');
     L.push(`- registration_gaps=${p.registration_gaps}`);
     if (p.finished) L.push(`- ${closeHint(p.run)}`);
     L.push('', '## Open items', '', '| ref | level | state | started | age |', '|---|---|---|---|---|');
-    for (const i of p.items.filter((i) => i.state === 'in_progress')) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
+    for (const i of p.items.filter(isOpen)) L.push(`| ${i.ref} | ${i.level} | ${i.state}${i.blocked_since ? ` (blocked since ${i.blocked_since})` : ''}${i.flags.length ? ` (${i.flags.join(', ')})` : ''} | ${i.started_at ?? '—'} | ${i.first_completion && i.current_scope?.pending ? '— (pending-scope age unavailable in M1)' : ageH(e.window.effective_end, i.started_at) ?? '— (no observed start)'} |`);
     L.push('');
   }
   L.push('### Envelope', '', `- ledger: unregistered=${e.coverage.unregistered} malformed-lines=${e.coverage.malformed_lines} ledger_conflicts=${e.coverage.ledger_conflicts} occurrence_conflicts=${e.coverage.occurrence_conflicts} retries=${e.coverage.retries} retracted=${e.coverage.retracted} deferred_events=${e.coverage.deferred_events} invalid_chains=${e.coverage.invalid_chains}`);
@@ -393,6 +429,7 @@ const fmtSpan = (a, b) => { if (!a || !b) return null; const da = new Date(a), d
 const pctOf = (ratio) => (ratio == null ? '—' : `${Math.round(ratio * 100)}%`);
 const projectOf = (e) => { const f = e.sources?.events_files?.[0]?.path ?? e.sources?.plan_files?.[0]?.path ?? ''; const m = /([^/]+)\/\.agents\//.exec(f); return m ? m[1] : null; };
 const needs = (n, floor) => `needs ≥${floor} <span class="stat-sub">(have ${n})</span>`;
+const spreadPct = (s) => `median ${s.median == null ? `— (needs ≥5, have ${s.n})` : pctOf(s.median)} · min ${pctOf(s.min)} · max ${pctOf(s.max)}${s.samples ? ` · samples ${s.samples.map(pctOf).join(', ')}` : ''}`;
 const spreadLine = (s) => (s ? `median ${s.median == null ? `— (needs ≥5, have ${s.n})` : fmtDur(s.median)} · min ${fmtDur(s.min)} · max ${fmtDur(s.max)}${s.samples ? ` · samples ${s.samples.map(fmtDur).join(', ')}` : ''}` : 'not measured');
 const verdictOf = (r) => {
   if (!r) return null;
@@ -416,6 +453,27 @@ const trendText = (t) => {
   return `${pct > 0 ? '+' : ''}${pct}% <span class="stat-sub">${t.direction} — latest ${t.latest.n} vs earlier ${t.earlier.n}</span>`;
 };
 
+/** The DORA panel: the same figures as the Markdown `## DORA` block, in the page's units. */
+function doraPanel(m, e) {
+  const d = m.dora, label = escHtml(e.policy.labels.deployment_frequency ?? DEPLOY_LABEL), t = m.throughput.task, all = m.flow.task?.strata?.all;
+  const cells = [
+    statCell('Deployment frequency <span class="stat-sub">task velocity</span>', t?.velocity ? `${t.velocity.median} <span class="stat-sub">per week</span>` : `— <span class="stat-sub">needs ${e.policy.minWholeWeeks} whole weeks</span>`),
+    // Cycle time when dispatch starts were observed, else the commit → done fallback clock (the same rule as the flow table).
+    (() => { const s = all?.cycle_time ?? all?.commit_to_done ?? null, what = all?.cycle_time ? 'median task cycle time' : 'median commit → done';
+      return statCell(`Lead time for changes <span class="stat-sub">${what}</span>`, s ? (s.median == null ? `— <span class="stat-sub">needs ≥5 (has ${s.n})</span>` : fmtDur(s.median)) : '—'); })(),
+  ];
+  let body;
+  if (!d.recorded) body = '<p class="note">No defects recorded — change failure rate and time to restore need <code>event &lt;ref&gt; defect_found</code>.</p>';
+  else {
+    const c = d.change_failure_rate, r = d.time_to_restore;
+    cells.push(statCell('Change failure rate', c.denominator ? `${c.numerator} of ${c.denominator} <span class="stat-sub">tasks landed in the window (${pctOf(c.ratio)})</span>` : '— <span class="stat-sub">no task landed in the window</span>'));
+    cells.push(statCell('Time to restore <span class="stat-sub">found → fixed</span>', `${r.stats ? (r.stats.median == null ? `${fmtDur(r.stats.min)}–${fmtDur(r.stats.max)} <span class="stat-sub">(n=${r.stats.n})</span>` : fmtDur(r.stats.median)) : '—'}${r.open ? ` <span class="stat-sub">· ${r.open} open, oldest ${fmtDur(r.oldest_open_s)}</span>` : ''}`));
+    const stages = Object.entries(d.defects_by_stage).filter(([, v]) => v.escaped || v.before_landing);
+    body = `${stages.length ? `<table><tr><th>found at</th><th>escaped (after landing)</th><th>before landing</th></tr>${stages.map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${v.escaped}</td><td>${v.before_landing}</td></tr>`).join('')}</table>` : '<p class="note">No defect found in the window.</p>'}${d.untraced.n ? `<p class="note">${d.untraced.n} defect(s) recorded on a mission, campaign or case, not traced to a task — not in the change failure rate.</p>` : ''}${d.excluded_defects ? `<p class="note">${d.excluded_defects} defect(s) on tasks with a quarantined or proxy completion — escape not judged.</p>` : ''}`;
+  }
+  return `<section class="panel"><h2>DORA</h2><p class="panel-sub">A task "deploys" when it merges (${label}). Change failure rate = landed tasks with a defect found after they landed; defects are found later, so recent tasks are undercounted.</p><div class="kpi-grid">${cells.join('')}</div>${body}</section>`;
+}
+
 export function renderHtml(doc) {
   const e = doc.envelope; const esc = escHtml;
   const metaFilters = e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${esc(JSON.stringify(e.policy.filters))}` : '';
@@ -436,6 +494,7 @@ export function renderHtml(doc) {
     const missionOf = new Map(); for (const t of tasks) if (t.parent_item_id) { const g = missions.find((x) => x.item_id === t.parent_item_id); if (g) missionOf.set(t.item_id, g.ref); }
     const ct = m.flow.task?.strata?.all?.cycle_time ?? null, lt = m.flow.task?.strata?.all?.lead_time ?? null;
     const rw = m.flow.task?.strata?.all?.review_wait ?? null, ag = m.flow.task?.strata?.all?.agent_span ?? null;
+    const tb = m.flow.task?.strata?.all?.time_blocked ?? null, fe = m.flow.task?.strata?.all?.flow_efficiency ?? null;
     const es = m.estimates.task?.strata?.all ?? null, esUsd = m.estimates.task?.strata?.['usd:all'] ?? null;
     const doneTasks = count(tasks, 'done');
     const weeksTxt = (lv) => { const t = m.throughput[lv]; if (!t?.weeks.length) return '—'; return t.weeks.map((w) => `${esc(w.key)}: ${w.count}${w.whole ? '' : ' <span class="stat-sub">(partial)</span>'}`).join(' · '); };
@@ -524,10 +583,12 @@ export function renderHtml(doc) {
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
     parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks (click a mission to fold it). Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; "fixes" counts the times a task was sent back before it merged.</p>
 <div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">done</div><div class="c">fixes</div><div class="c">started → finished (UTC)</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
-    parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
+    parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${tb ? `<br>Time blocked: ${spreadLine(tb)}` : ''}${fe ? `<br>Flow efficiency <span class="sub">(agent time ÷ cycle time, a lower bound)</span>: ${spreadPct(fe)}` : ''}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
-    const open = p.items.filter((i) => i.state === 'in_progress');
-    if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);
+    if (m.dora) parts.push(doraPanel(m, e));
+
+    const open = p.items.filter(isOpen);
+    if (open.length) parts.push(`<section class="panel"><h2>Open items</h2><p class="panel-sub">Age is measured to the report's cutoff (${fmtTs(e.window.effective_end)}).</p><table><tr><th>ref</th><th>level</th><th>state</th><th>started</th><th>open for</th></tr>${open.map((i) => `<tr><td>${esc(i.ref)}</td><td>${esc(i.level)}</td><td>${esc(i.state.replace('_', ' '))}${i.blocked_since ? ` <span class="sub">(blocked since ${fmtTs(i.blocked_since)})</span>` : ''}${i.flags.length ? ` <span class="sub">(${esc(i.flags.join(', '))})</span>` : ''}</td><td>${i.started_at ? fmtTs(i.started_at) : '— <span class="sub">no observed start</span>'}</td><td>${i.first_completion && i.current_scope?.pending ? '— <span class="sub">pending-scope age unavailable in M1</span>' : (i.started_at ? fmtDur(elapsedS(i.started_at, e.window.effective_end)) : '—')}</td></tr>`).join('')}</table></section>`);
 
     parts.push('</section>');
   }
@@ -542,7 +603,7 @@ export function renderStatus(doc) {
     L.push(`STATUS ${p.run} v${p.version} (${p.status}) at ${e.window.effective_end}`);
     for (const lv of ['campaign', 'mission', 'task', 'case']) { const rows = p.items.filter((i) => i.level === lv); if (!rows.length) continue; const n = (s) => rows.filter((i) => i.state === s).length; L.push(`  ${lv}: done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`); }
     for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
-    for (const i of p.items.filter((i) => i.state === 'in_progress' && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}`);
+    for (const i of p.items.filter((i) => isOpen(i) && i.level !== 'campaign' && !i.first_completion)) L.push(`  open ${i.ref} (${i.level}${i.flags.length ? `, ${i.flags.join(', ')}` : ''}) started=${i.started_at ?? '—'} age=${ageH(e.window.effective_end, i.started_at) ?? '—'}${i.blocked_since ? ` blocked_since=${i.blocked_since}` : ''}`);
     if (p.registration_gaps) L.push(`  registration_gaps=${p.registration_gaps} (items without a created observation)`);
     if (p.finished) L.push(`  ${closeHint(p.run)}`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
