@@ -31,6 +31,8 @@ export function weekKeys(since, end, coverageStart = since, coverageEnd = end) {
 }
 
 const LEVELS = ['campaign', 'mission', 'task', 'case'];
+const DEFECT_STAGES = ['build', 'review', 'qa', 'gate', 'demo', 'user'];
+const SEVERITY_RANK = ['critical', 'major', 'minor'];
 const inWin = (t, a, b) => t != null && t >= a && t < b;
 const EXCL = ['excluded_item', 'unestimated', 'unaccepted', 'no_eligible_latest', 'unit_mismatch', 'missing_actual', 'late_accepted', 'zero_midpoint', 'zero_actual', 'point', 'clock_skew'];
 const emptyEst = () => ({ n: 0, eligible: 0, work_ratio: null, mdmre: null, pred25: null, mae_s: null, hit_rate: { hits: 0, ranged: 0, rate: null }, excluded: Object.fromEntries(EXCL.map((k) => [k, 0])), _ratios: [], _mres: [], _aes: [] });
@@ -117,7 +119,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     // F17: every class present in the done cohort gets a stratum (so quality denominators are never
     // silently dropped for a class whose items were all excluded from durations), plus 'all'.
     const classKeys = new Set(['all', ...done.map((i) => i.class).filter(Boolean)]);
-    const strata = {}; for (const cls of classKeys) strata[cls] = { cycle_time: [], commit_to_done: [], lead_time: [], parent_elapsed: [], agent_span: [], review_wait: [] };
+    const strata = {}; for (const cls of classKeys) strata[cls] = { cycle_time: [], commit_to_done: [], lead_time: [], parent_elapsed: [], agent_span: [], review_wait: [], time_blocked: [], flow_efficiency: [] };
     const bucket = (cls) => strata[cls];
     const actualOf = new Map();
     for (const i of measurable) {
@@ -131,6 +133,9 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
           // wait (last dispatch end → merge); both only where the hook witnessed the task.
           if (i.agent_span_s != null) targets.forEach((t) => t.agent_span.push(i.agent_span_s));
           if (i.review_wait_s != null && i.review_wait_s >= 0) targets.forEach((t) => t.review_wait.push(i.review_wait_s));
+          // Only tasks with a block record (blocked_s null otherwise) and hook-witnessed agent time: no record is never a zero.
+          if (i.blocked_s != null) targets.forEach((t) => t.time_blocked.push(i.blocked_s));
+          if (i.flow_efficiency != null) targets.forEach((t) => t.flow_efficiency.push(i.flow_efficiency));
         }
         else { targets.forEach((t) => t.parent_elapsed.push(s)); actualOf.set(i.item_id, { s, basis: 'derived-child' }); }
       } else if (i.first_commit_at) { const s = secondsBetween(i.first_commit_at, i.done_at); if (s < 0) ex.clock_skew_commit++; else targets.forEach((t) => t.commit_to_done.push(s)); }
@@ -210,6 +215,7 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     // trustworthy the fact is). Both are useful but answer different questions; coverage.sources answers "where did this evidence come from".
     const src = (field) => done.reduce((m, i) => { const s = i[field]; if (s) m[s] = (m[s] ?? 0) + 1; return m; }, {});
     data.coverage[level] = { done: done.length, with_dispatched: done.filter((i) => i.start_basis === 'observed').length, with_first_commit: done.filter((i) => i.first_commit_at).length, with_created: done.filter((i) => i.created_at).length,
+      with_blocked: done.filter((i) => i.blocked_spans?.length).length,
       start_source: { observed: done.filter((i) => i.start_basis === 'observed').length, 'derived-child': done.filter((i) => i.start_basis === 'derived-child').length, none: done.filter((i) => !i.started_at).length },
       // Minor fix: done_basis split so coverage.done reconciles with throughput — observed +
       // 'derived-child' + proxy always sums to coverage.done, and observed + 'derived-child' is
@@ -225,5 +231,42 @@ export function computeMetrics({ items, plan, since, end, profile = {}, estimate
     else data.mission_turnaround.pairs.push({ from: a.ref, to: b.ref, gap_s: null, overlap_s: a.done_at ? secondsBetween(b.started_at, a.done_at) : null });
   }
   data.mission_turnaround.stats = stats(gaps);
+  data.dora = doraFigures(all, items, sinceIso, endIso);
   return data;
+}
+
+/** DORA change failure rate and time to restore, task level, from the defect pair (`defect_found`/`defect_fixed`) recorded on
+ * the item that caused each defect. A defect *escaped* when it was found after its task's first completion; one found earlier
+ * was caught before landing. A task whose completion is quarantined or a proxy (`throughputExcluded`) has no trustworthy
+ * landing clock, so its defects are counted apart (`excluded_defects`), never classified. A defect recorded on a mission or
+ * campaign is `untraced`: counted, never in the change failure numerator. `recorded` is false when the run (up to the end,
+ * unfiltered) holds no defect at all — the renderer then says so instead of printing a 0% nobody measured. */
+function doraFigures(all, items, sinceIso, endIso) {
+  const tasks = all.filter((i) => i.level === 'task'), traced = tasks.filter((i) => !throughputExcluded(i));
+  const escaped = (i, d) => i.done_at != null && d.found_at > i.done_at;
+  const defectsOf = (rows) => rows.flatMap((i) => (i.defects ?? []).map((d) => ({ i, d })));
+  const found = (rows) => defectsOf(rows).filter(({ d }) => inWin(d.found_at, sinceIso, endIso));
+  // Change failure rate: the throughput cohort (first completion in the window), each failed task counted once by the worst
+  // severity among its escaped defects.
+  const cohort = traced.filter((i) => inWin(i.done_at, sinceIso, endIso));
+  const bySeverity = { critical: 0, major: 0, minor: 0, unrated: 0 }; let failed = 0;
+  for (const i of cohort) {
+    const esc = (i.defects ?? []).filter((d) => escaped(i, d)); if (!esc.length) continue;
+    failed++; bySeverity[SEVERITY_RANK.find((s) => esc.some((d) => d.severity === s)) ?? 'unrated']++;
+  }
+  // Time to restore: escaped defects found in the window that have a fix (fix − found); the rest are open, aged to the end.
+  const esc = found(traced).filter(({ i, d }) => escaped(i, d));
+  const restored = esc.filter(({ d }) => d.fixed_at).map(({ d }) => secondsBetween(d.found_at, d.fixed_at)).filter((x) => x >= 0);
+  const open = esc.filter(({ d }) => !d.fixed_at).map(({ d }) => d.found_at).sort();
+  const byStage = Object.fromEntries(DEFECT_STAGES.map((st) => [st, { escaped: 0, before_landing: 0 }]));
+  for (const { i, d } of found(traced)) if (byStage[d.found_stage]) byStage[d.found_stage][escaped(i, d) ? 'escaped' : 'before_landing']++;
+  const untraced = found(all.filter((i) => i.level === 'mission' || i.level === 'campaign'));
+  return {
+    recorded: [...items.values()].some((i) => i.defects?.length),
+    change_failure_rate: { numerator: failed, denominator: cohort.length, ratio: cohort.length ? Math.round((failed / cohort.length) * 10000) / 10000 : null, by_severity: bySeverity },
+    time_to_restore: { stats: stats(restored), open: open.length, oldest_open_s: open.length ? secondsBetween(open[0], endIso) : null },
+    defects_by_stage: byStage,
+    untraced: { n: untraced.length, by_stage: untraced.reduce((m, { d }) => { m[d.found_stage] = (m[d.found_stage] ?? 0) + 1; return m; }, {}) },
+    excluded_defects: found(tasks.filter(throughputExcluded)).length,
+  };
 }

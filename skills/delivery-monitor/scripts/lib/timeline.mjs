@@ -10,7 +10,7 @@ export const carriesCrossing = (o) => o.event === 'dispatch_ended' && o.meta?.ag
 /** Mark an item's cost total as not the whole cost of its work, and keep the reason (`cost_gaps`) for the reader to count. */
 export function markCostGap(it, why) { it.cost_incomplete = true; if (!it.cost_gaps.includes(why)) it.cost_gaps.push(why); }
 const TERMINAL = new Set(['done', 'cancelled']);
-const DEFERRED = new Set(['blocked', 'unblocked', 'review_requested', 'review_returned', 'review_approved', 'review_history', 'scope_declared', 'gate_observed', 'outcome_observed']);
+const DEFERRED = new Set(['review_requested', 'review_returned', 'review_approved', 'review_history', 'scope_declared', 'gate_observed', 'outcome_observed']);
 const key = (o) => JSON.stringify([o.plan, o.item_id ?? '', o.transition_id, o.basis]);
 
 /** F8: `ledgerConflicts` is `resolveObservations().conflicts[]` — one entry per still-disputed
@@ -76,13 +76,13 @@ const newItem = (i) => ({ item_id: i.item_id, ref: i.ref, level: i.level, parent
   version_added: i.version_added ?? 1, cancelled_in_plan: Boolean(i.cancelled), created_at: null, created_basis: null, created_sha: null, created_source: null, estimates: [], estimate_original: null, estimate_latest: null,
   scope_since: i.scope_since ?? null, membership_since: i.membership_since ?? null, first_completion: null, current_scope: null, started_at: null, start_basis: null, start_source: null, first_commit_at: null,
   first_commit_source: null, done_at: null, done_basis: null, done_sha: null, done_source: null, landing_at: null, cancelled_at: null, state: 'planned', dispatch_count: 0, proxy_dispatches: 0, rework_count: 0,
-  deferred_events: 0, reopened: false, fix_spans: [], hook_spans: [], children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
+  deferred_events: 0, reopened: false, fix_spans: [], hook_spans: [], blocked_spans: [], defects: [], children: [], child_summary: { done: 0, cancelled: 0, open: 0, unknown: 0, cancelled_scope: 0 }, flags: [], seen: false });
 
 function reduceTimelineSnapshot({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
   const items = new Map(plan.items.map((i) => [i.item_id, newItem(i)]));
   for (const i of items.values()) if (i.parent_item_id && items.has(i.parent_item_id)) items.get(i.parent_item_id).children.push(i.item_id);
-  const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0 };
+  const counts = { unregistered: 0, deferredEvents: 0, deferredEpisodes: 0, invalidChains: 0, parentIncomplete: 0, awaitingLanding: 0, clockSkew: 0, strayUnblocked: 0, orphanDefectFixes: 0 };
   const explicitDone = new Map(), crossedIds = new Set(); let crossingUnreadable = false;
   for (const o of occurrences) {
     if (o.at >= endIso) continue;
@@ -144,6 +144,14 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         }
         break;
       }
+      // A block is a span: `blocked` opens one unless one is already open, `unblocked` closes it. An `unblocked` with nothing open
+      // cannot say when the block began, so it is ignored and counted rather than guessed into a span.
+      case 'blocked': if (!it.blocked_spans.some((sp) => sp.to == null)) it.blocked_spans.push({ from: o.at, to: null }); break;
+      case 'unblocked': { const sp = it.blocked_spans.find((x) => x.to == null); if (sp) sp.to = o.at; else counts.strayUnblocked++; break; }
+      // Defects describe the item that caused them; they never move its state. One entry per defect id (the CLI keeps the id
+      // unique per item); a fix with no found on this item (retracted, or written by another producer) is counted, not attached.
+      case 'defect_found': if (!it.defects.some((d) => d.defect === o.meta.defect)) it.defects.push({ defect: o.meta.defect, found_at: o.at, found_stage: o.meta.found_stage ?? null, severity: o.meta.severity ?? null, found_by: o.meta.found_by ?? null, fixed_at: null, fixed_sha: null }); break;
+      case 'defect_fixed': { const d = it.defects.find((x) => x.defect === o.meta.defect); if (d && !d.fixed_at) { d.fixed_at = o.at; d.fixed_sha = o.meta.git_sha ?? null; } else if (!d) counts.orphanDefectFixes++; break; }
       default: if (DEFERRED.has(o.event)) { it.deferred_events++; counts.deferredEvents++; }
     }
   }
@@ -221,6 +229,22 @@ function reduceTimelineSnapshot({ occurrences, plan, end }) {
         total += ce - cs;
         it.agent_span_s = total / 1000; it.review_wait_s = (doneT - Math.max(...closed.map(([, b]) => b))) / 1000;
       }
+    }
+    it.blocked_since = it.blocked_spans.find((sp) => sp.to == null)?.from ?? null;
+    // Over a measured task cycle (observed start → done): time blocked = union of block spans clipped to the cycle (an open span
+    // ends at done). Null when the task has no block record at all — most orchestrators never record blocks, so 0 would be a
+    // false claim. Flow efficiency = agent time ÷ cycle time, capped at 1; the orchestrator's own work is not a dispatch, so it
+    // is a lower bound on the share of the cycle spent working.
+    it.blocked_s = null; it.flow_efficiency = null;
+    if (it.level === 'task' && it.start_basis === 'observed' && it.started_at && it.done_at) {
+      const s0 = Date.parse(it.started_at), s1 = Date.parse(it.done_at), cycle = (s1 - s0) / 1000;
+      if (cycle >= 0 && it.blocked_spans.length) {
+        const clipped = it.blocked_spans.map((sp) => [Math.max(s0, Date.parse(sp.from)), Math.min(s1, sp.to ? Date.parse(sp.to) : s1)]).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+        let total = 0, end = -Infinity;
+        for (const [a, b] of clipped) { if (b <= end) continue; total += b - Math.max(a, end); end = b; }
+        it.blocked_s = total / 1000;
+      }
+      if (cycle > 0 && it.agent_span_s != null) it.flow_efficiency = Math.min(1, it.agent_span_s / cycle);
     }
   }
   return { items, counts };

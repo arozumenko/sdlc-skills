@@ -152,6 +152,7 @@ test('validateTransition rules', () => {
   assert.equal(validateTransition(h('created', 'cancelled', 'reopened'), 'done'), null);
   assert.match(validateTransition(h('created'), 'reopened'), /not terminal/);
   assert.equal(validateTransition(h('created', 'done'), 'dispatched'), null);
+  for (const ev of ['defect_found', 'defect_fixed', 'blocked', 'unblocked']) for (const st of [h('created'), h('created', 'done'), h('created', 'cancelled')]) assert.equal(validateTransition(st, ev), null, `${ev} never changes state`);
 });
 
 test('event --from jsonl (invalid line counted, exit 2); session set; plan list/show/close/roster (F3: roster requires the installed union)', () => {
@@ -784,4 +785,67 @@ test('retract --agent withdraws every observation of a misattributed hook dispat
   const all = run(repo, ['retract', '--agent', 'ag-1']);
   assert.equal(all.code, 0, all.stderr); assert.match(all.stdout, /RETRACT \S+ TASK-002 dispatched rev=1/); assert.match(all.stdout, /RETRACTED 1/);
   assert.doesNotMatch(status(), /open TASK-002/);
+});
+
+test('event defect_found/defect_fixed: free-form tracker id, stage/severity validated, identity per (item, event, defect), idempotent retry, any item state', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  assert.equal(run(repo, ['event', 'TASK-001', 'done', '--at', '2026-09-16T10:00:00Z', '--id', 'done-1']).code, 0);
+  // Recorded on the causing item even after it is done; no --id needed (the defect id is the retry token).
+  const f = run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'PROJ-123/a', '--found-stage', 'qa', '--severity', 'major', '--found-by', 'qa run 7', '--at', '2026-09-17T09:00:00Z', '--note', 'login 500']);
+  assert.equal(f.code, 0, f.stderr); assert.match(f.stdout, /^EVENT cli:PROJ-123%2Fa:sec%2Frun-1%2Ftask-task-001:defect_found 2026-09-17T09:00:00.000Z/);
+  const rec = resolveObservations(repo).active.find((o) => o.event === 'defect_found');
+  assert.equal(rec.transition_id, 'sec/run-1/task-task-001/defect_found/PROJ-123%2Fa', 'the defect id is encoded into the transition, never parsed');
+  assert.deepEqual({ defect: rec.meta.defect, found_stage: rec.meta.found_stage, severity: rec.meta.severity, found_by: rec.meta.found_by, note: rec.meta.note }, { defect: 'PROJ-123/a', found_stage: 'qa', severity: 'major', found_by: 'qa run 7', note: 'login 500' });
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'PROJ-123/a', '--found-stage', 'qa', '--severity', 'major', '--found-by', 'qa run 7', '--at', '2026-09-17T09:00:00Z', '--note', 'login 500']).stdout, /^SKIP/, 'same command twice → SKIP');
+  // Without --at the first record's clock is kept, so a plain retry is still a SKIP rather than a new clock.
+  const g = run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'GH-7', '--found-stage', 'review']);
+  assert.equal(g.code, 0, g.stderr);
+  const again = run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'GH-7', '--found-stage', 'review']);
+  assert.equal(again.code, 0, again.stderr); assert.match(again.stdout, /^SKIP/);
+  const g7 = resolveObservations(repo).active.find((o) => o.meta.defect === 'GH-7'); assert.equal(g7.meta.severity, null); assert.equal(g7.meta.found_by, null);
+  // A re-rated defect under the same id is a correction (--revision), not a retry.
+  assert.match(run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'GH-7', '--found-stage', 'review', '--severity', 'critical']).stderr, /^ID-CONFLICT/);
+  assert.equal(run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'GH-7', '--found-stage', 'review', '--severity', 'critical', '--revision', '1']).code, 0);
+  // Usage errors.
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--found-stage', 'qa']).stderr, /^USAGE\(defect_found needs --defect/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect']).stderr, /^USAGE\(--defect requires a value/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'X-1']).stderr, /^USAGE\(defect_found needs --found-stage build\|review\|qa\|gate\|demo\|user/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'X-1', '--found-stage', 'prod']).stderr, /^USAGE\(invalid --found-stage prod/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_found', '--defect', 'X-1', '--found-stage', 'qa', '--severity', 'blocker']).stderr, /^USAGE\(invalid --severity blocker/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_fixed', '--defect', 'X-1', '--found-stage', 'qa']).stderr, /^USAGE\(--found-stage\/--severity\/--found-by belong to defect_found/);
+  assert.match(run(repo, ['event', 'TASK-001', 'done']).stderr, /^USAGE\(event <ref> <event> --id/, 'other events still need --id');
+  // defect_fixed: needs an active defect_found for that id on that item, and not before it.
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_fixed', '--defect', 'GH-999']).stderr, /^INVALID-TRANSITION\(TASK-001: defect_fixed GH-999 has no defect_found on this item/);
+  assert.match(run(repo, ['event', 'TASK-002', 'defect_fixed', '--defect', 'PROJ-123/a']).stderr, /^INVALID-TRANSITION/, 'found on another item');
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_fixed', '--defect', 'PROJ-123/a', '--at', '2026-09-17T08:00:00Z']).stderr, /^INVALID-TRANSITION\(TASK-001: defect_fixed PROJ-123\/a \(2026-09-17T08:00:00.000Z\) precedes its defect_found \(2026-09-17T09:00:00.000Z\)/);
+  const sha = commitAt(repo, 'fix login', '2026-09-18T10:00:00Z');
+  const fx = run(repo, ['event', 'TASK-001', 'defect_fixed', '--defect', 'PROJ-123/a', '--sha', sha]);
+  assert.equal(fx.code, 0, fx.stderr); assert.match(fx.stdout, /^EVENT cli:PROJ-123%2Fa:sec%2Frun-1%2Ftask-task-001:defect_fixed 2026-09-18T10:00:00.000Z/);
+  assert.match(run(repo, ['event', 'TASK-001', 'defect_fixed', '--defect', 'PROJ-123/a', '--sha', sha]).stdout, /^SKIP/);
+  const fixed = resolveObservations(repo).active.find((o) => o.event === 'defect_fixed'); assert.equal(fixed.meta.git_sha, sha); assert.equal(fixed.meta.defect, 'PROJ-123/a');
+  // Defect events never change state: TASK-001 is still done, a later cancel is still refused, a defect on a cancelled item is accepted.
+  assert.match(run(repo, ['event', 'TASK-001', 'cancelled', '--id', 'c1']).stderr, /^INVALID-TRANSITION/);
+  assert.equal(run(repo, ['event', 'TASK-002', 'cancelled', '--id', 'c2', '--at', '2026-09-17T12:00:00Z']).code, 0);
+  assert.equal(run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'GH-8', '--found-stage', 'user', '--at', '2026-09-18T12:00:00Z']).code, 0);
+  // A mission ref is allowed (cause known only at mission level).
+  assert.equal(run(repo, ['event', 'G1', 'defect_found', '--defect', 'GH-9', '--found-stage', 'demo', '--at', '2026-09-18T12:00:00Z']).code, 0);
+});
+
+test('event --from: defect and block rows are accepted like any other event (fix validated against the same batch)', () => {
+  const repo = initRepo();
+  run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
+  const f = join(repo, 'ev.jsonl');
+  writeFileSync(f, [
+    { ref: 'TASK-001', event: 'blocked', at: '2026-09-16T09:00:00Z', id: 'b1' },
+    { ref: 'TASK-001', event: 'unblocked', at: '2026-09-16T10:00:00Z', id: 'u1' },
+    { ref: 'TASK-001', event: 'defect_found', defect: 'BUG-7', found_stage: 'gate', severity: 'minor', found_by: 'gate', at: '2026-09-16T11:00:00Z' },
+    { ref: 'TASK-001', event: 'defect_fixed', defect: 'BUG-7', at: '2026-09-16T12:00:00Z' },
+    { ref: 'TASK-001', event: 'defect_fixed', defect: 'BUG-8', at: '2026-09-16T12:00:00Z' },
+  ].map((j) => JSON.stringify(j)).join('\n') + '\n');
+  const r = run(repo, ['event', '--from', f]);
+  assert.equal(r.code, 2); assert.match(r.stdout, /EVENTS appended=4 skipped=0 conflicts=0 invalid=1/); assert.match(r.stderr, /line 5: INVALID-TRANSITION\(TASK-001: defect_fixed BUG-8 has no defect_found/);
+  const d = resolveObservations(repo).active.find((o) => o.event === 'defect_found');
+  assert.equal(d.meta.found_stage, 'gate'); assert.equal(d.meta.severity, 'minor'); assert.equal(d.meta.found_by, 'gate'); assert.equal(d.source_record_id, 'BUG-7');
+  assert.match(run(repo, ['event', '--from', f]).stdout, /EVENTS appended=0 skipped=4/, 'a re-run of the batch is idempotent');
 });

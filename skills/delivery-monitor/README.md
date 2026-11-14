@@ -22,6 +22,12 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs retract --agent <agent
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --id done-infra-2    # landed no commit (infra, QA run, gate): no --sha, stamped now
+#    Waits on something outside the team (another project, a human ruling), and resumes:
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 unblocked --id unblk-023-1
+#    A bug filed in your tracker, traced to the item that caused it (free-form id), and its fix landing:
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_found --defect BUG-7 --found-stage qa [--severity major] [--found-by <who>]
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_fixed --defect BUG-7 [--sha <fix merge sha>]
 # 3. Fill in history that predates the ledger
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
 # 4. Optional: automatic dispatch start/end on Claude Code (+ shared telemetry submodule)
@@ -82,7 +88,13 @@ the report/status output where it applies, never silently dropped.
   ordinary forward correction.
 - No claim of host completeness, full review/block history, origin tracking,
   or cross-team comparability.
-- Out of scope entirely: DORA metrics, flow efficiency, benefit ROI,
+- DORA is partial and labelled: change failure rate and time to restore come from
+  recorded defect pairs (nothing recorded → the report says so, never 0%);
+  deployment frequency and lead time for changes reuse task throughput and cycle
+  time — a merge to the integration branch, not a production deploy. Flow
+  efficiency (agent time ÷ cycle time) is a lower bound; time blocked counts
+  only recorded blocks.
+- Out of scope entirely: benefit ROI,
   per-person/per-agent productivity, dashboards/uploads/OTel, story-point
   velocity, time-in-status heatmaps, forecasting/Monte Carlo, and Little's
   Law. Manual-qa native wiring, automatic run inference, and Cursor/Kiro/Codex

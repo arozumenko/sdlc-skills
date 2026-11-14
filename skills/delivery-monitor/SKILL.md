@@ -33,6 +33,13 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs retract --agent <agent
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --id done-infra-2    # landed no commit (infra, QA run, gate): no --sha, stamped now
+#    A task waits on something outside the team's control (another project, a human ruling): blocked; when it resumes: unblocked
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1 --note "waits on API team"
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 unblocked --id unblk-023-1
+#    A bug is filed in your tracker and traced to the plan item that caused it: record it on that item (any id your tracker uses),
+#    with the stage where it was found. When the fix lands, record the fix. These feed change failure rate and time to restore.
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_found --defect BUG-7 --found-stage qa [--severity major] [--found-by <who>] [--at <iso>]
+node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_fixed --defect BUG-7 [--sha <fix merge sha>]
 # 3. Fill in history that predates the ledger
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
 #    GitHub-merged work (squash/merge-commit PRs, task PRs into a mission branch): read merged PRs via gh, or offline from JSON
@@ -73,6 +80,8 @@ landed task has a complete measured cost, and says how many it left out. `report
 work board replaces it. The project manager records every merge, landing and cancellation at the moment it happens, or the
 orchestrating session when no project manager runs. Work that landed no commit is recorded without `--sha`, never with
 another commit's sha. Read `delivery.mjs report` at mission close, before the next mission is planned.
+A defect goes on the item that caused it (a mission or campaign ref when the cause is not traced to a task), with
+`--found-stage build|review|qa|gate|demo|user`; the report's DORA block reads these pairs (`references/metrics.md`, "DORA").
 
 **Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work
 ran has no cycle time for it — backfill gives created/first-commit/done only. At campaign close, after the last landing, run

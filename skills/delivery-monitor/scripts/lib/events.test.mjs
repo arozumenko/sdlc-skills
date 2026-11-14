@@ -198,3 +198,20 @@ test('readRaw: JSON that parses to a non-object is malformed ("not an object"), 
   assert.equal(raw.counts.unknownVersion, 0);
   assert.ok(raw.malformed.every((m) => m.reason === 'not an object'));
 });
+
+test('defect events: in the vocabulary; meta.defect required, found_stage/severity validated; the defect facts are part of semantic identity', () => {
+  const found = (meta = {}) => base({ event: 'defect_found', transition_id: 'sec/run-1/task-023/defect_found/GH-412', source_record_id: 'GH-412', meta: { version: 1, defect: 'GH-412', found_stage: 'qa', severity: 'major', found_by: null, ...meta } });
+  assert.ok(EVENTS.includes('defect_found') && EVENTS.includes('defect_fixed'));
+  assert.deepEqual(validateRecord(found()), []);
+  assert.throws(() => found({ defect: undefined }), /SCHEMA-INVALID\(meta\.defect/);
+  assert.throws(() => found({ defect: '' }), /SCHEMA-INVALID\(meta\.defect/);
+  assert.throws(() => found({ found_stage: 'prod' }), /SCHEMA-INVALID\(meta\.found_stage/);
+  assert.throws(() => found({ severity: 'blocker' }), /SCHEMA-INVALID\(meta\.severity/);
+  assert.doesNotThrow(() => found({ severity: null }));
+  assert.doesNotThrow(() => base({ event: 'defect_fixed', transition_id: 'sec/run-1/task-023/defect_fixed/GH-412', meta: { version: 1, defect: 'GH-412' } }));
+  assert.throws(() => base({ event: 'defect_fixed', meta: { version: 1 } }), /SCHEMA-INVALID\(meta\.defect/);
+  assert.notEqual(semanticKey(found()), semanticKey(found({ severity: 'minor' })), 'a different severity is a different fact, not a retry');
+  assert.notEqual(factKey(found()), factKey(found({ found_stage: 'user' })));
+  // A record without defect meta keeps the key it had before defect events existed.
+  assert.ok(!factKey(base()).includes('defect'));
+});

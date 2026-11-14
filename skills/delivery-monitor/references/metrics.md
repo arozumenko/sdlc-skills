@@ -14,6 +14,15 @@ that are **not** computed yet (M2+).
 | `parent_elapsed` | earliest child `started_at` (`start_basis: derived-child`, rolled up in `reduceTimelineSnapshot`) | first qualifying `done`/landing for the parent | seconds internal, hours rendered | mission/campaign items (their own start is always derived, never a direct dispatch) |
 | `commit_to_done` | `first_commit` | `done` | seconds internal, hours rendered | measurable items with **no** observed dispatch start (dispatch missing → this is the fallback clock) |
 | `lead_time` | `created` | `done` | seconds internal, hours rendered | measurable items with a `created_at`, excluding the retrospective-plan-proxy case below |
+| `agent_span` | union of the hook's closed dispatch spans up to the merge | — | seconds internal, hours rendered | measured task cycles the hook witnessed |
+| `review_wait` | last dispatch end before the merge | `done` | seconds internal, hours rendered | same as `agent_span` |
+| `time_blocked` | union of the task's `blocked`→`unblocked` spans, clipped to its cycle (an open span ends at `done`) | — | seconds internal, hours rendered | measured task cycles (observed start → done) with at least one block record; a task with no block record is `null`, never 0 |
+| `flow_efficiency` | `agent_span ÷ cycle_time`, capped at 1 | — | ratio, rendered as a percentage | measured task cycles with an `agent_span` and a cycle > 0 |
+
+`flow_efficiency` is a **lower bound** on the share of the cycle spent working: the orchestrator's own work between dispatches
+is not a dispatch, so it counts as waiting. `time_blocked` is only as complete as the block records: most orchestrators record
+none, so the report states how many done tasks carry one (`coverage.<level>.with_blocked`; the Markdown says
+`no blocked records — time_blocked not measured (not zero)` when none do).
 
 `lead_time` is labelled **"plan-tracked, not idea-to-done"** everywhere it is surfaced — both
 beside every `lead_time` row in the Markdown report and as `envelope.policy.labels.lead_time` in
@@ -21,7 +30,7 @@ the JSON export (`report.mjs`). `created_at` is the plan's own registration/back
 when the idea for the work first existed — the label keeps a reader from over-reading it as a
 true idea-to-done duration.
 
-All four are grouped per level (`campaign\|mission\|task\|case`) into strata — `all` plus one
+All of them are grouped per level (`campaign\|mission\|task\|case`) into strata — `all` plus one
 stratum per `class` value actually present in the completed cohort (`strata.<class>`), via
 `stats()`.
 
@@ -67,9 +76,35 @@ in Markdown; when a level's `done` items have zero observed dispatches, the repo
 |---|---|---|
 | `cancelled_share` | items cancelled in the **creation cohort** (`created_at` in `[since, end)`, same `--level`/`--class` filters as the rest of the report) ÷ that cohort's size | `"— (n=0 created in window)"` when the cohort is empty; this is computed in `report.mjs` (F15), not `metrics.mjs`, so it is provably the same cohort as `cohorts.created` |
 | `rework_proxy_items` | task-level items with `rework_count > 0` (from `rework_observed` occurrences) | activity proxy only — not a review-round count |
-| coverage (`data.coverage[level]`) | `done`, `with_dispatched`, `with_first_commit`, `with_created`; `start_source`/`done_basis` breakdowns (`observed`/`derived-child`/`none`/`proxy`); `sources` (by `*_source` field: `created_source`, `start_source`, `first_commit_source`, `done_source`) | `sources` answers "where did this evidence come from" (cli/hook/git/automation-sync); `*_basis` answers "how trustworthy is it" (observed/derived-child/proxy) — never conflate the two |
+| coverage (`data.coverage[level]`) | `done`, `with_dispatched`, `with_first_commit`, `with_created`, `with_blocked` (done items with any block record); `start_source`/`done_basis` breakdowns (`observed`/`derived-child`/`none`/`proxy`); `sources` (by `*_source` field: `created_source`, `start_source`, `first_commit_source`, `done_source`) | `sources` answers "where did this evidence come from" (cli/hook/git/automation-sync); `*_basis` answers "how trustworthy is it" (observed/derived-child/proxy) — never conflate the two |
 
 `review_rounds`/`first_pass_rate` are rendered as `"unknown (M2)"` — see the M2+ list below.
+
+An open item with an open block span shows `in_progress (blocked since <at>)` in the Open items table (Markdown and HTML) and
+`blocked_since=<at>` in `status`.
+
+## DORA
+
+`metrics.dora` (per plan, task level, same `--level`/`--class` filters as the rest of the report), rendered as `## DORA`
+after Quality in Markdown, a DORA panel in HTML, and in `--json` through the metrics object. It reads the defect pair
+(`defect_found`/`defect_fixed`, `references/event-model.md`), recorded on the item that caused each defect.
+
+| Measure | Definition | Population | Caveat |
+|---|---|---|---|
+| deployment frequency | not recomputed: points at task `velocity` and the weekly throughput (Throughput section) | throughput cohort | labelled `envelope.policy.labels.deployment_frequency` = **"merge to the integration branch, not a production deploy"** |
+| lead time for changes | not recomputed: points at task `cycle_time` median (and `commit_to_done` when starts were not observed) | flow-time cohort | same label, `envelope.policy.labels.lead_time_for_changes` |
+| `change_failure_rate` | tasks with ≥1 **escaped** defect ÷ tasks in the cohort; `by_severity` counts each failed task once, by the worst severity among its escaped defects (`critical > major > minor > unrated`) | tasks whose first completion is in `[since, end)`, minus `throughputExcluded` (invalid-chain, proxy completion) — the throughput cohort | defects are found later, so recent tasks are undercounted; `— (n=0 completed in window)` when the cohort is empty |
+| `time_to_restore` | `stats()` of `fixed_at − found_at` (same floors as flow time); `open` = escaped defects with no fix, `oldest_open_s` = the oldest one's age at the window end | escaped defects found in `[since, end)` on tasks not `throughputExcluded` | a fix is the moment the fix landed (`defect_fixed`), not a production restore |
+| `defects_by_stage` | per `found_stage` (`build, review, qa, gate, demo, user`): `escaped` vs `before_landing` | defects found in `[since, end)` on tasks not `throughputExcluded` | "where do we catch defects"; rows with no defect are not printed |
+| `untraced` | count (and per stage) of defects recorded on a mission or campaign | found in `[since, end)` | never in the change failure numerator |
+| `excluded_defects` | defects on tasks whose completion is quarantined or a proxy | found in `[since, end)` | escape cannot be judged without a trustworthy landing clock |
+
+**Escaped** = the defect's `found_at` is later than its task's first `done_at` (first completion). A defect found before
+that (or on a task not done yet) was caught before landing.
+
+`dora.recorded` is false when the run holds no defect event at all (any level, up to the window end). The report then prints
+one line — ``no defects recorded — change failure rate and time to restore need `event <ref> defect_found` `` — instead of a
+0% nobody measured; the two pointer lines still print.
 
 ## Estimates
 
@@ -136,8 +171,6 @@ left to apply them to.
 - `time_to_merge` / `time_in_review` (PR-mode backfill) — `time_to_merge` already carries its
   label, `envelope.policy.labels.time_to_merge` = **"PR open to merge — not lead time, not cycle
   time"**, even though the metric itself is not computed until this lands
-- `time_blocked` (derives `blocked`/`unblocked` into clipped intervals — M1 records the events
-  but does not derive state from them, see `references/event-model.md`)
 - `work_item_age` / `reopened_age` / `history_age` / `reopen_cycle_time`
 - `scope_to_done` (mission declaration → observed landing, scope-proxy only)
 - `review_rounds` / `first_pass_rate` (needs `review_history` completeness, not derived in M1)
