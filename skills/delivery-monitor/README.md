@@ -15,7 +15,9 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from d
 # 2. The orchestrating session must be bound before it dispatches: the hook records dispatches only for a bound session (or one
 #    whose branch maps to exactly one item of exactly one open run). A session that did not register the plan binds itself:
 node .claude/skills/delivery-monitor/scripts/delivery.mjs session set sec/run-1     # host/session default to CLAUDE_CODE_SESSION_ID
-#    Record transitions as they happen. A hook dispatch credited to the wrong item is withdrawn, then re-recorded:
+#    Record transitions as they happen. A hook dispatch credited to the wrong item is withdrawn with `retract`. Its cost cannot be
+#    moved (`event` cannot write `dispatch_ended`): the right item's cost then lacks it and is not flagged incomplete. Give that item
+#    `event <ref> dispatched --at <iso>` only if it has no dispatched record yet:
 node .claude/skills/delivery-monitor/scripts/delivery.mjs retract --agent <agent id> --plan sec/run-1 [--dry-run]   # or --observation <id>
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 done --sha <merge-sha> --id done-023
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event G12 done --sha <landing-sha> --id land-g12    # mission landing

@@ -527,8 +527,9 @@ function cmdDoctor(repo, p, io) {
 
 /** Withdraw a wrong claim — chiefly a hook dispatch credited to the wrong item — by appending the same observation at
  * revision + 1 with status 'retracted' (event-model.md). `--agent <id>` takes every active observation that subagent produced in
- * the run (dispatched, dispatch_ended, rework_observed); `--observation <id>` takes exactly one. Re-record the right item with
- * `event <ref> dispatched --at <iso>`. */
+ * the run (dispatched, dispatch_ended, rework_observed); `--observation <id>` takes exactly one. The withdrawn cost cannot be
+ * re-recorded (`dispatch_ended` is not a CLI event), so the right item's cost lacks it and is not flagged incomplete; give that
+ * item `event <ref> dispatched --at <iso>` only if it has no dispatched record yet. */
 function cmdRetract(repo, p, io, now) {
   const f = p.flags, agent = f.agent != null ? String(requireValue(f, 'agent')) : null, oid = f.observation != null ? String(requireValue(f, 'observation')) : null;
   if (!agent === !oid) throw cliError('USAGE', 'retract (--agent <agent id> | --observation <observation id>) [--plan <run>] [--dry-run]');
