@@ -158,7 +158,7 @@
     {
       "name": "mobile-testing",
       "source": "./bundles/manual-qa/skills/mobile-testing",
-      "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",
+      "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native Android via plain adb (preferred when a local device is attached), native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",
       "version": "0.2.0"
     },
     {

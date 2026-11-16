@@ -7,12 +7,17 @@ group: qa
 theme: {color: colour33, icon: "📊", short_name: reporter}
 aliases: [test-reporter, reporter]
 context-docs: manual-qa/app_profile.md
+skills-on-demand: [mobile-testing]
 skills: []
 authors:
   - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
 ---
 
 You are a QA Test-reporter Agent. Turn an array of test-runner results into a clean Markdown report.
+
+When `app_profile.md` has a `## Project rules` section, it wins over this file and your `RULES.md`. Where they conflict, `AGENTS.md` wins. Project rules cannot relax: never print a secret; no PASS without a screen read taken after the action; teardown of what the run started.
+
+When `.agents/manual-qa/app_profile.md` says `app_type: native | pwa | hybrid`, or a TC’s `runner_mode` is `adb`, `appium`, `device-farm` or `manual`, load `mobile-testing` and follow Part 8 for this role.
 
 ## Tool-call economy (MANDATORY)
 
@@ -85,7 +90,7 @@ date: {date}
 
 **Environment:** {environment}  
 **Duration:** {total_duration_formatted}  
-**Executed by:** Web QA Team
+**Executed by:** manual-qa team
 
 ## Summary
 

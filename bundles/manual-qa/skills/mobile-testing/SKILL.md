@@ -1,17 +1,17 @@
 ---
 name: mobile-testing
-description: Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.
+description: Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native Android via plain adb (preferred when a local device is attached), native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.
 license: Apache-2.0
-compatibility: "Appium mode: Node.js 22+, JDK 8+, appium-mcp, Android SDK (Android) or macOS+Xcode (iOS). Device-farm mode: mobitru-mcp-server, DEVICE_FARM_API_KEY. Playwright mode: Node.js 18+, @playwright/mcp. Manual mode: no additional tooling."
+compatibility: "Adb mode: Android SDK platform-tools (adb), a local emulator or USB device; Node.js 18+ for scripts/ui-read.mjs. Appium mode: Node.js 22+, JDK 8+, appium-mcp, Android SDK (Android) or macOS+Xcode (iOS). Device-farm mode: mobitru-mcp-server, DEVICE_FARM_API_KEY. Playwright mode: Node.js 18+, @playwright/mcp. Manual mode: no additional tooling."
 metadata:
   authors:
     - Olha Stetsenko1 <Olha_Stetsenko1@epam.com>
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Mobile Testing
 
-Add-on skill for all manual-qa agents. Augments app-profiler, test-author, test-sizer, test-run-lead, test-runner, and test-reporter to handle native iOS/Android apps (via Appium MCP or Mobitru device farm) and PWA/hybrid apps (via Playwright mobile viewport).
+Add-on skill for all manual-qa agents. Augments app-profiler, test-author, test-sizer, test-run-lead, test-runner, and test-reporter to handle native Android apps (via plain adb, the preferred local route), native iOS/Android apps (via Appium MCP or Mobitru device farm) and PWA/hybrid apps (via Playwright mobile viewport).
 
 ## When to Use Each Section
 
@@ -58,13 +58,45 @@ Ask all at once:
 
 **Determine `runner_mode`** in this priority order:
 - PWA/Hybrid → `playwright`
-- Native + APK/IPA provided:
+- Native **Android** + `adb devices` lists a local emulator or device → `adb` _(the most local driver; no MCP, no server)_
+- Native **Android** + no device listed yet, but `emulator -list-avds` lists an AVD or the profile's Device Toolkit has a device-up command → `adb` (boot it in Step 3d)
+- Native + APK/IPA provided (iOS, or Android with no local device):
   1. `check_device_farm_status` succeeds (Mobitru MCP available) → `device-farm` _(real devices preferred)_
   2. Else local Appium MCP available → `appium`
   3. Else → `manual`
 - Native + no build file → `manual` (interview-driven)
 
-If both Mobitru and local Appium are available: "I'm defaulting to `device-farm` (real cloud devices). Say 'use local Appium' to switch to `appium` mode."
+Within that fallback branch, if both Mobitru and local Appium are available: "I'm defaulting to `device-farm` (real cloud devices). Say 'use local Appium' to switch to `appium` mode."
+
+**Driver choice rule:** use the most local command-line driver that can do the job, and an MCP driver only where nothing local exists (a device farm, a real iPhone). An `AGENTS.md` or an existing `app_profile.md` that names a mode wins over this order. Where they conflict, `AGENTS.md` wins. Project rules cannot relax: never print a secret; no PASS without a screen read taken after the action; teardown of what the run started.
+
+### Phase 2e — Native Android Exploration via adb
+
+Use when `app_type: native`, `platform: android`, `runner_mode: adb`. Plain `adb` only; no MCP, no Appium server.
+
+**Project toolkit first.** If the project ships device scripts (make targets or a script folder for device up/down, app reset, screen reading, tapping, credential entry, teardown), record them in the profile's `## Device Toolkit` section and use them instead of raw adb. Raw adb below is the fallback and the reference for what each operation means.
+
+```bash
+# 1. Device and app
+adb devices                                             # pick one serial; always pass -s <serial>
+adb -s <serial> shell pm path {package}                 # installed?  else: adb -s <serial> install -r {build_path}
+adb -s <serial> shell am force-stop {package}
+adb -s <serial> shell monkey -p {package} -c android.intent.category.LAUNCHER 1
+adb -s <serial> shell wm size; adb -s <serial> shell wm density   # px size and density: dp = px * 160 / density
+
+# 2. Read the screen as text (never paste the raw XML into context)
+adb -s <serial> shell uiautomator dump /sdcard/ui.xml && adb -s <serial> pull /sdcard/ui.xml <run dir>/ui.xml
+#    If the project has no reader of its own, filter the pulled file:
+node <skill dir>/scripts/ui-read.mjs <file>
+
+# 3. Screenshot to a file (shell + pull; piping exec-out through a capturing shell corrupts the PNG)
+adb -s <serial> shell screencap -p /sdcard/s.png && adb -s <serial> pull /sdcard/s.png <run dir>/{screen}.png
+#    resize before viewing (e.g. sips -Z 1280 on macOS) and note the px scale factor
+
+# 4. Walk each key screen from the user's flow list: read, act, read again
+```
+
+Record in the profile: package, serial or AVD name, px size and density, how the user reaches each key screen, which labels are unique, where state lives (a Compose row often carries its state in its content-desc, e.g. "Item 3, selected"), and anything the dump cannot show (canvas drawings, map markers, some chip states) so testers know when a screenshot is required.
 
 ### Phase 2a — Native Exploration via Appium MCP
 
@@ -197,6 +229,8 @@ Ask only about gaps you couldn't determine from exploration:
 
 ### Phase 4 — Write `.agents/manual-qa/app_profile.md`
 
+When updating an existing profile, copy `## Project rules` unchanged; never rewrite, shorten or drop it.
+
 For mobile apps, write the profile using the mobile template below (extends the standard manual-qa profile with mobile-specific sections):
 
 ```markdown
@@ -205,13 +239,16 @@ app_name: {name}
 bundle_id: {com.example.app}
 platform: ios | android | both
 app_type: native | pwa | hybrid
-runner_mode: device-farm | appium | playwright | manual
+runner_mode: adb | device-farm | appium | playwright | manual
 build_path: {/path/to/app.apk or /path/to/app.ipa}
 base_url: {url — for pwa/hybrid only; omit for native}
 last_updated: {YYYY-MM-DD}
 ---
 
 # App Profile: {App Name}
+
+## Project rules
+Rules for this repository that win over the manual-qa agent bodies, their `RULES.md` and `knowledge/` conventions; written by the project; kept word for word by app-profiler. Where they conflict, `AGENTS.md` wins. Project rules cannot relax: never print a secret; no PASS without a screen read taken after the action; teardown of what the run started.
 
 ## Overview
 {2-3 sentences}
@@ -222,7 +259,7 @@ last_updated: {YYYY-MM-DD}
 |-------|-------|
 | Platform | {iOS / Android / Both} |
 | App type | {native / pwa / hybrid} |
-| Runner mode | {device-farm / appium / playwright / manual} |
+| Runner mode | {adb / device-farm / appium / playwright / manual} |
 | Bundle ID / Package | {identifier} |
 | Build path | {/path/to/app.apk or IPA, or "n/a" for PWA} |
 | App version | {x.y.z} |
@@ -240,6 +277,21 @@ _(device-farm runner_mode only — constraints passed to `device_farm_find_devic
 | Platform | Preferred OS version | Notes |
 |----------|---------------------|-------|
 | {android} | {14} | |
+
+## Device Toolkit
+_(adb runner_mode only — the project's own device commands; the runner uses these before raw adb)_
+
+| Operation | Command | Notes |
+|-----------|---------|-------|
+| device up | {e.g. emulator -avd <name> -no-window} | |
+| environment | {test backend identifier: a name, a URL, or none} | passed to toolkit commands that need it |
+| backend up / seed | {project command, if the app needs a test backend} | |
+| app reset | {force-stop + launch, or a project script} | |
+| read screen as text | {project script, else uiautomator dump + filter} | |
+| act (tap by label / bounds, press, drag, wait) | {project script, else adb shell input} | |
+| screenshot | {project script, else screencap + pull} | |
+| credential entry | {a command that types the secret without printing it} | never echo a secret into context |
+| teardown | {one command that stops everything the run started} | |
 
 ## Authentication
 
@@ -349,7 +401,7 @@ Set defaults for every TC from profile: `platform`, `app_type`, `runner_mode`, `
 id: TC-NNN
 title: {one-line description}
 priority: critical | high | medium | low
-runner_mode: device-farm | appium | playwright | manual
+runner_mode: adb | device-farm | appium | playwright | manual
 platform: ios | android | both
 app_type: native | pwa | hybrid
 device_type: real | emulator | simulator
@@ -452,6 +504,7 @@ Read `.agents/manual-qa/app_profile.md`:
 - If present: read `runner_mode`, `platform`, `build_path`, `base_url` (PWA/hybrid only).
 
 Announce the run mode to the user:
+- `adb`: "Running in adb mode — native Android automation via plain adb on a local device."
 - `device-farm`: "Running in Device Farm mode — real device automation via Mobitru MCP."
 - `appium`: "Running in Appium mode — native app automation via local Appium MCP."
 - `playwright`: "Running in Playwright mode — PWA/hybrid via browser with mobile viewport."
@@ -460,7 +513,7 @@ Announce the run mode to the user:
 
 For `runner_mode: playwright` suites — ask for `base_url` if not provided in the request:
 "What base_url should I run against? (e.g. https://staging.myapp.com)"
-Native suites (`device-farm`, `appium`, `manual`) — no base_url needed.
+Native suites (`adb`, `device-farm`, `appium`, `manual`) — no base_url needed.
 
 ### Step 2 — Size Unsized Cases
 
@@ -506,11 +559,35 @@ mobile_appium_init → { deviceSerial: "{suite_serial}", useDeviceFarm: true, se
 Store `suite_serial` — pass it to every `test-runner` dispatch in Step 4.
 The Appium session and device stay alive for the duration of the suite. Runners inherit the active session — they do NOT call `mobile_appium_init`, `mobile_use_device`, or `mobile_terminate_app` at TC end.
 
+### Step 3d — Device Setup (adb suites)
+
+Before dispatching an adb TC, read the profile's Device Toolkit and select the device as in Step 4. If no device is listed, run the Device Toolkit device-up command; if none is provided, boot an AVD listed by `emulator -list-avds` with `emulator -avd <name>`. Wait until `adb devices` lists it as ready and record its serial. If multiple devices are available with none selected in the profile, ask as in Step 4.
+
+Run the profile's backend up / seed commands if the toolkit has them, passing its environment handle where needed. Confirm the app is installed on the selected device; install `build_path` if not (`adb -s {device_serial} install {build_path}`). If the build is missing, report BLOCKED.
+
+Record what this run started: device/emulator, backend, seeded resources and any reverse/forward mappings, plus their cleanup commands. Step 6a tears down exactly that. Keep this ownership record even if setup or execution fails.
+
 ### Step 4 — Execute Test Cases (sequential)
 
 Iterate using `suite_plan` from Step 3b (groups → TCs with `inherit_state`). Execute sequentially within each group. When a TC FAILs, set `inherit_state: false` for the next TC in the same group — failure invalidates shared state.
 
 Read each TC's `runner_mode` from its frontmatter:
+
+**`runner_mode: adb`** → dispatch `test-runner`:
+```
+Agent: test-runner
+Prompt: "Execute the mobile test case at {file_path}.
+         device_serial={serial}
+         environment={handle}
+         inherit_state={true|false}
+         preserve_final_state={true|false}   # true when the next TC in this group has inherit_state: true
+         Do NOT run the toolkit teardown at TC end — run-lead owns it.
+         Read .agents/manual-qa/app_profile.md for package, Device Toolkit commands, credentials handling and fragile areas."
+```
+
+`{handle}` is the test backend's identifier from the profile's Device Toolkit (a name, a URL, or `none`). The runner passes it to any toolkit command that needs it.
+
+Use the profile's Test Devices serial for `device_serial`; else use the single device that `adb devices` lists. If there is more than one device and none named in the profile, ask which to use.
 
 **`runner_mode: playwright` or `runner_mode: appium`** → dispatch `test-runner`:
 ```
@@ -586,12 +663,19 @@ Do this before generating the report. If release fails, log a warning in the sum
 
 ### Step 6 — Generate Report
 
+For native adb runs, pass `environment={handle}` using the same handle as the adb dispatch. For native appium and device-farm runs, pass `environment={device name}` from the profile, or `none` if no device name is known. For web/PWA/hybrid runs, pass `base_url={base_url}`.
+
 ```
 Agent: test-reporter
 Prompt: "Generate mobile test run report with run_id={run_id}, suite={suite_name},
-         base_url={base_url}, date={YYYY-MM-DD}, results={json_array_with_usage_fields}.
+         {environment={handle} for native adb; environment={device name or none} for native appium/device-farm; base_url={base_url} for web/PWA/hybrid},
+         date={YYYY-MM-DD}, results={json_array_with_usage_fields}.
          Read .agents/manual-qa/app_profile.md for device, platform, app_version, and runner_mode."
 ```
+
+### Step 6a — Device Teardown (adb mode)
+
+After the reporter completes (or setup/execution aborts), use the Step 3d ownership record to tear down exactly what this run started. Run the profile's **Device Toolkit → teardown** command once if its scope matches that record; otherwise use the recorded cleanup commands. Do not stop a device or backend that was already running. Remove any `adb reverse`/`adb forward` this run added, clean up its seeded resources, stop its backend and stop the emulator only if this run booted it (`adb -s <serial> emu kill`). Use the selected device exclusively during the suite. Report each cleanup outcome; a failed teardown is reported, never hidden.
 
 ### Step 6b — Server Teardown (appium mode)
 
@@ -615,7 +699,7 @@ Do not stop the appium-mcp embedded process (managed by MCP lifecycle — restar
 ```
 Run ID:      {run_id}
 Suite:       {suite_name}
-Platform:    {platform}  Runner mode: {device-farm | appium | playwright | mixed}
+Platform:    {platform}  Runner mode: {adb | device-farm | appium | playwright | mixed}
 Total: N  Passed: N  Failed: N  Blocked (guide): N  Blocked (env): N
 Pass rate:   XX%
 Report:      reports/{run_id}.md
@@ -720,7 +804,7 @@ If every TC is its own group: "No state chaining possible. Add precondition_stat
 
 ## Part 6 — Mobile TC Execution
 
-**Trigger:** test-runner executing a TC with `runner_mode: playwright`, `appium`, or `device-farm`.
+**Trigger:** test-runner executing a TC with `runner_mode: adb`, `playwright`, `appium`, or `device-farm`.
 
 ### Setup (always read first)
 
@@ -728,6 +812,7 @@ If every TC is its own group: "No state chaining possible. Add precondition_stat
 2. Read `runner_mode` from TC frontmatter. If absent → read from `.agents/manual-qa/app_profile.md`.
 3. Read `.agents/manual-qa/app_profile.md` — device info, `build_path`, reliable locators, credentials, fragile areas.
 4. Route:
+   - `adb` → Adb Mode section below
    - `playwright` → Playwright Mode (standard manual-qa flow + mobile viewport; consult `playwright-testing` skill)
    - `appium` → Appium Mode section below
    - `device-farm` → Device Farm Mode section below
@@ -735,6 +820,56 @@ If every TC is its own group: "No state chaining possible. Add precondition_stat
 
 Apply `verification-before-completion`: before reporting PASS, confirm the Expected Final State is actually present.
 Apply `systematic-debugging` on any failure: evidence first, then hypothesis, then one retry.
+
+**Evidence rules for every automated mode (adb, appium, device-farm, playwright):**
+
+1. A step's result comes from a read of the screen taken after the action (UI tree or a viewed screenshot), never from a command or tool call that returned success.
+2. Synthetic input (adb `input`, Appium gestures, Playwright clicks) does not prove that a real finger gesture survives. A TC about gesture survival uses a real-event command the project provides, or is reported BLOCKED.
+3. Every run tears down what it started. Part 4 owns suite teardown; a runner never leaves its own extras behind.
+4. A step whose data does not exist in the test environment is BLOCKED with `failure_reason` starting `UNREACHABLE:` and saying what was missing. The runner never creates the record itself and calls it a pass.
+
+### Adb Mode (runner_mode: adb)
+
+For native Android apps on a local emulator or USB device, through plain `adb`. Use the profile's **Device Toolkit** commands wherever they exist; the raw adb below is the fallback.
+
+#### Session Start
+
+- Always pass `-s {device_serial}`. Never start, wipe or snapshot a device, clear app data or change device settings unless the TC says so.
+- **`inherit_state: false`:** reset the app (toolkit reset, else `am force-stop {package}` then the launcher intent), then read the screen and confirm the starting screen.
+- **`inherit_state: true`:** read the screen; if it is not the TC's precondition screen, fall back to the reset path and set `fallback_occurred = true`.
+- Write every dump, screenshot and step file under `reports/screenshots/{TC_ID}/` (or the toolkit's output dir). Never read a raw XML dump or a full-size screenshot into context when a filtered read answers the question.
+
+#### Reading the screen
+
+1. **Text first.** Read the UI tree through the toolkit's reader. If the project has no reader of its own, use `uiautomator dump` + pull, then `node <skill dir>/scripts/ui-read.mjs <file>` for one line per element. Add `--grep TEXT` to filter by text, content-desc or resource-id.
+2. **State lives in the tree.** Selected and checked are flags; a Compose row is one merged node whose state is often in its content-desc. A Compose chip may report selection as `checked`, a tab as `selected`. When the tree shows no state flag at all, say so: that is a finding about the build, and the step needs a screenshot.
+3. **Screenshot only when the tree cannot answer** (drawn content, map markers, colours, a state the tree omits). Resize before viewing and keep the scale factor in mind when mapping pixels to taps. Count every screenshot you open.
+4. Wait for the screen to settle after a transition before reading (a dump taken mid-animation can be empty or stale). A `uiautomator dump` fails while another UiAutomation client is connected; stop that client rather than retrying.
+
+#### Acting
+
+- Tap a node by the centre of its bounds, chosen from the latest read; never from a read taken before the previous action. Prefer the toolkit's tap-by-label when it exists.
+- Several identical labels: choose by position in the list or by the row's other text, and say which one you chose.
+- A real-length press is a same-point `input swipe X Y X Y 150`. Follow the shared Setup evidence rule for gesture survival.
+- Text: `input text` (spaces as `%s`). Hide the soft keyboard with `input keyevent 111` before reading controls it may cover. BACK (`keyevent 4`) can close a sheet or leave the screen — prefer the on-screen close control.
+- **Credentials:** prefer the toolkit's credential command. Without one, test credentials recorded in the profile may be typed with `input text`. A secret that must not enter context without a toolkit command makes the login TC BLOCKED. Never print or echo a secret, or use a command whose output exposes it to context.
+
+#### Execution Protocol
+
+1. Verify preconditions with a read.
+2. Determine start point exactly as in Appium Mode (`setup_steps`, `steps_skipped`).
+3. For each step: map the TC verb to an adb action (see `references/gestures.md`), act, then **read again** and record the observed value that proves the step.
+4. **Verification before PASS**: a final read confirms the Expected Final State → PASS.
+5. Save the final screenshot to `reports/screenshots/{TC_ID}_{YYYY-MM-DD}.png` before any cleanup.
+6. Then execute the TC's Teardown steps. If it has none and the dispatch says `preserve_final_state=true`, leave the final state in place; otherwise return the app to its start screen.
+
+#### Results
+
+Use PASS, FAIL or BLOCKED as in the Output JSON and follow the shared Setup evidence rules. Add `screenshots_viewed` and `state_reads_needing_screenshot` to `notes`.
+
+#### Session End (adb)
+
+Leave the device and app running; run-lead owns teardown (Part 4, Step 6a).
 
 ### Playwright Mode (runner_mode: playwright)
 
@@ -913,8 +1048,8 @@ End response with exactly one JSON block:
 ```
 
 `result`: `PASS` | `FAIL` | `BLOCKED`
-`runner_mode`: reflect what actually ran — `playwright`, `appium`, or `device-farm`.
-`screenshot`: `.png` for playwright/appium; `.mp4` recording path for device-farm.
+`runner_mode`: reflect what actually ran — `adb`, `playwright`, `appium`, or `device-farm`.
+`screenshot`: `.png` for adb/playwright/appium; `.mp4` recording path for device-farm.
 `manual_guide`: always `null` for automated modes.
 `steps_skipped`: setup steps skipped due to state inheritance (`0` when `inherit_state: false` or fallback occurred).
 `fallback_occurred`: `true` if `inherit_state: true` but precondition check failed and runner fell back to a full reset.
@@ -930,7 +1065,7 @@ For native apps when Appium MCP is not available. Generate a human-executable ch
 ### Setup
 
 1. Read the test case file.
-2. Confirm `runner_mode: manual`. If not manual → route to Part 6 (Appium or Device Farm mode).
+2. Confirm `runner_mode: manual`. If not manual → route to Part 6 (Adb, Playwright, Appium or Device Farm mode).
 3. Read `.agents/manual-qa/app_profile.md` — for device name, platform, app version.
 
 ### Guide Format
@@ -1037,6 +1172,7 @@ Screenshot: `reports/screenshots/{TC_ID}_{YYYY-MM-DD}_step1.png`
 Received from test-run-lead:
 - `run_id` — e.g. `RUN-2026-06-09-001`
 - `suite` — suite name
+- `environment` — base_url for web/PWA/hybrid; Device Toolkit handle for native adb; device name or `none` for native appium/device-farm
 - `date` — YYYY-MM-DD
 - `results` — JSON array of runner result objects (with `tokens`, `tool_uses`, `duration_ms`)
 
@@ -1045,11 +1181,13 @@ Before writing, read `.agents/manual-qa/app_profile.md` for `platform`, device n
 ### Compute Metrics
 
 - `total`, `passed`, `failed`, `blocked`, `pass_rate` (round to 1 decimal)
-- Runner mode breakdown: count results by `runner_mode` field in each result object. Valid values: `playwright`, `appium`, `device-farm`, `manual`. Do NOT read from profile — derive from results array. Set report `runner_mode` to dominant mode, or `mixed` when multiple modes present.
+- Runner mode breakdown: count results by `runner_mode` field in each result object. Valid values: `adb`, `playwright`, `appium`, `device-farm`, `manual`. Do NOT read from profile — derive from results array. Set report `runner_mode` to dominant mode, or `mixed` when multiple modes present.
 - Size distribution: count by `size` (S / M / L); omit section if all sizes null.
 - `total_tokens` = sum of `tokens` (omit Performance Metrics section if all tokens null)
 - `total_duration_ms` = sum of `duration_ms` (if available); convert to human-readable ("4m 12s")
 - Manual guides: collect `manual_guide` paths from BLOCKED results where `manual_guide` is not null.
+
+The report's `environment` field shows `base_url` for web/PWA/hybrid runs, the Device Toolkit handle for native adb runs, and the device name or `none` for native appium/device-farm runs.
 
 ### Report Structure
 
@@ -1064,12 +1202,14 @@ device: {device name + OS from profile}
 app_version: {version from profile}
 date: {YYYY-MM-DD}
 runner_mode: {dominant mode | mixed}
+environment: {base_url or native environment handle}
 ---
 
 # Mobile QA Run — {App Name}: {suite_name}
 
 **Date:** {YYYY-MM-DD} | **Platform:** {platform} | **Device:** {device} | **App version:** {version}
-**Runner mode:** {mode} | **Duration:** {total duration} | **Executed by:** Web QA Team
+**Environment:** {environment}
+**Runner mode:** {mode} | **Duration:** {total duration} | **Executed by:** manual-qa team
 
 ## Summary
 
@@ -1081,6 +1221,7 @@ runner_mode: {dominant mode | mixed}
 
 | Mode | Count |
 |------|-------|
+| Adb | {N} |
 | Device Farm | {N} |
 | Appium | {N} |
 | Playwright | {N} |

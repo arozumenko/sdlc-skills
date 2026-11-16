@@ -17,7 +17,7 @@ use_cases:
 
 A standalone agentic manual-QA team for web and mobile apps — it authors and
 sizes cases when needed, runs them live (web via Playwright MCP, mobile via
-Appium), and reports.
+adb, Appium, device-farm, Playwright or manual guides), and reports.
 
 ## Install
 

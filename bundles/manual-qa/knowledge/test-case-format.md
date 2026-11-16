@@ -103,7 +103,9 @@ User is authenticated and on the dashboard. No error messages visible. URL is `{
 
 ## The `{{base_url}}` Placeholder
 
-All URLs in the test case use `{{base_url}}` as a prefix. The test-run-lead substitutes the real URL at run time, making test cases environment-agnostic (works against dev, staging, production).
+For web, PWA and hybrid cases, all URLs in the test case use `{{base_url}}` as a prefix. The test-run-lead substitutes the real URL at run time, making test cases environment-agnostic (works against dev, staging, production).
+
+Native cases have no URL and follow `mobile-testing` Part 2.
 
 **Example:** `{{base_url}}/login` → `https://staging.app.com/login`
 

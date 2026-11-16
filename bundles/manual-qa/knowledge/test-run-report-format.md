@@ -29,7 +29,7 @@ date: 2026-05-18
 
 **Environment:** https://app.example.com  
 **Duration:** 2m 43s  
-**Executed by:** Web QA Team
+**Executed by:** manual-qa team
 
 ## Summary
 
