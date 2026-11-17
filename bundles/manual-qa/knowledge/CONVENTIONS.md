@@ -1,5 +1,7 @@
 # Manual QA team conventions
 
+When `app_profile.md` has a `## Project rules` section, it wins over this file and your `RULES.md`. Where they conflict, `AGENTS.md` wins. Project rules cannot relax: never print a secret; no PASS without a screen read taken after the action; teardown of what the run started.
+
 ## Pipeline
 
 Onboard once with `app-profiler`, then drive `test-run-lead` — it is the
@@ -21,8 +23,8 @@ standalone for authoring work outside a run.
 - **`test-author`** — takes a feature or flow description and writes formatted
   test cases under `tasks/<suite>/TC-NNN_<slug>.md`. Dispatched by the lead, or
   run standalone.
-- **`test-runner`** — receives a single `TC-NNN` file path and a `base_url`;
-  runs the case live via Playwright MCP; emits a structured JSON result.
+- **`test-runner`** — receives a single `TC-NNN` file path and the environment;
+  runs the case with its selected driver (Playwright MCP for web, `mobile-testing` Part 6 for native); emits a structured JSON result.
 - **`test-reporter`** — collects test-runner results and writes the run report to
   `reports/RUN-YYYY-MM-DD-NNN.md`, linking any screenshots.
 
@@ -38,13 +40,13 @@ reports/screenshots/               evidence screenshots from test-runner runs
 
 ## `{{base_url}}` rule
 
-All test-case URLs are written as `{{base_url}}/path`. The test-runner substitutes
+For web, PWA and hybrid cases, all test-case URLs are written as `{{base_url}}/path`. The test-runner substitutes
 `{{base_url}}` with the real base URL at run time, keeping cases
-environment-agnostic (dev / staging / prod).
+environment-agnostic (dev / staging / prod). Native cases have no URL and follow `mobile-testing` Part 2.
 
 ## Evidence before PASS
 
-The test-runner must capture a final Playwright snapshot confirming the
+The test-runner must capture a final screen read (UI tree or viewed screenshot; Playwright snapshot for web) confirming the
 **Expected Final State** described in the test case before recording a PASS.
 A PASS without a confirming snapshot is invalid.
 

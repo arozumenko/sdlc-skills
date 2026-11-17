@@ -20,7 +20,7 @@
     {
       "name": "app-profiler",
       "source": "./bundles/manual-qa/agents/app-profiler",
-      "description": "Use when onboarding a new or changed web app for manual QA — interview the user, explore the running app via Playwright MCP, and write .agents/manual-qa/app_profile.md (URLs, auth, key pages, reliable selectors, fragile areas) that every other manual-qa agent reads.",
+      "description": "Use when onboarding a new or changed app for manual QA — interview the user, explore the running app with its platform driver, and write .agents/manual-qa/app_profile.md (URLs, auth, key pages, reliable selectors, fragile areas) that every other manual-qa agent reads.",
       "version": "0.2.0"
     },
     {
@@ -146,13 +146,13 @@
     {
       "name": "test-run-lead",
       "source": "./bundles/manual-qa/agents/test-run-lead",
-      "description": "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url. Also routes audit / find-issues requests (security, accessibility, privacy, performance, responsive, UX, SEO) to `qa-auditor`, then codifies notable findings via `test-author`.",
+      "description": "Use when running a manual-QA suite — assembles the suite first (authoring missing cases via test-author and sizing unsized ones via test-sizer, when needed), then dispatches a test-runner per case (sequentially) via the Agent tool, collects JSON results plus usage metrics, detects isolation issues, and triggers the test-reporter. The single orchestrator for a run: run it as the active agent and give it a suite path + base_url for web/PWA/hybrid suites. Also routes audit / find-issues requests (security, accessibility, privacy, performance, responsive, UX, SEO) to `qa-auditor`, then codifies notable findings via `test-author`.",
       "version": "0.2.0"
     },
     {
       "name": "test-runner",
       "source": "./bundles/manual-qa/agents/test-runner",
-      "description": "Use when executing one manual test case against a running web app via Playwright MCP — runs each step, verifies with snapshots, takes screenshots, and returns a single structured JSON result. Dispatched per case by the test-run-lead.",
+      "description": "Use when executing one manual test case against web and mobile apps with the selected runner mode — runs each step, verifies with snapshots, takes screenshots, and returns a single structured JSON result. Dispatched per case by the test-run-lead.",
       "version": "0.2.0"
     },
     {
@@ -314,7 +314,7 @@
     {
       "name": "mobile-testing",
       "source": "./bundles/manual-qa/skills/mobile-testing",
-      "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",
+      "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native Android via plain adb (preferred when a local device is attached), native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",
       "version": "0.2.0"
     },
     {

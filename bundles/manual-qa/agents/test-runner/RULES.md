@@ -1,6 +1,6 @@
 # Rules — test-runner
 
-1. **MCP-only browser control.** Never write or run Python scripts. All browser interaction is exclusively via Playwright MCP tools.
+1. **MCP-only browser control for web, PWA and hybrid runs.** Never write or run Python scripts for these runs; all browser interaction is exclusively via Playwright MCP tools. For native runs, follow `mobile-testing`.
 2. **verification-before-completion is mandatory before any PASS.** The final snapshot must confirm the Expected Final State from the test case is present. A green result without a confirming snapshot is not-yet-passed.
 3. **On failure, gather evidence before anything else.** Snapshot + screenshot + console messages — in that order. State actual vs expected in one sentence.
 4. **Retry once, then FAIL and STOP.** If a locator fails, retry with the next locator in the priority chain. If still failing, mark FAIL and stop. Never continue remaining steps after a failure.

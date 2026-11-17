@@ -1,7 +1,7 @@
 # Manual QA Team
 
-A standalone agentic manual-QA team for web and mobile apps. Cases are authored as structured Markdown and run live — web via Playwright MCP, mobile via Appium
-MCP (local native) or the Mobitru device farm (cloud real devices) — no test code is generated, making this distinct from a Playwright automation engineer.
+A standalone agentic manual-QA team for web and mobile apps. Cases are authored as structured Markdown and run live — web via Playwright MCP, mobile via adb (local Android), Appium
+MCP (local native), the Mobitru device farm (cloud real devices), Playwright (mobile web), or manual guides — no test code is generated, making this distinct from a Playwright automation engineer.
 
 ## Install
 
@@ -27,8 +27,8 @@ Installs the 7 agents into `.claude/agents/`, seeds reference docs into
 **Phase 1 — Inception (`app-profiler`, once per app).** _"Use the
 app-profiler agent to onboard this app."_ It **interviews you** (base URL,
 what the app does, auth + test credentials, the 3–5 key flows, user roles,
-external-service flows), then explores the running app live via Playwright
-MCP and writes `.agents/manual-qa/app_profile.md` (URLs, auth, key pages,
+external-service flows), then explores the running app live via the selected driver (Playwright
+MCP for web, `mobile-testing` for native) and writes `.agents/manual-qa/app_profile.md` (URLs, auth, key pages,
 reliable selectors, fragile areas). **Why it's first:** there's no scout
 here — `app-profiler` is the onboarding agent, and every other manual-qa agent
 reads this profile before acting.
@@ -44,7 +44,7 @@ orchestrator for a run. It assembles the suite first, dispatching sub-agents
   agent-execution cost and writes it into their frontmatter.
 
 Then it runs the suite: one `test-runner` per case (each runs live via
-Playwright MCP and must capture a confirming snapshot to record PASS),
+the selected driver and must capture a confirming snapshot to record PASS),
 followed by `test-reporter` writing `reports/RUN-YYYY-MM-DD-NNN.md`. You talk
 only to the lead — don't invoke `test-sizer` / `test-author` / `test-runner` /
 `test-reporter` by hand during a led run (you can still run sizer/author
@@ -83,7 +83,7 @@ flowchart TD
         lead["test-run-lead — active agent,<br/>orchestrates the run"]
         author["test-author — write TC-NNN files<br/>(when cases missing)"]
         sizer["test-sizer — rate S/M/L<br/>(when cases unsized)"]
-        runner["test-runner — run one case<br/>live via Playwright MCP"]
+        runner["test-runner — run one case<br/>live via the selected driver"]
         reporter["test-reporter — write run report"]
         lead -->|"when needed"| author
         lead -->|"when needed"| sizer
@@ -109,7 +109,7 @@ flowchart TD
 | `test-sizer` | sizer | Rates cases S/M/L for AI-agent execution cost; sizes descriptions before authoring and scores existing TC files into their `size:` frontmatter |
 | `test-author` | author | Takes a feature or flow description and authors formatted test cases under `tasks/<suite>/` |
 | `test-run-lead` | lead | **Run orchestrator** — assembles the suite (dispatches `test-author` / `test-sizer` when needed), runs one `test-runner` per case, triggers `test-reporter` |
-| `test-runner` | runner | Runs one test case live via Playwright MCP and emits a structured JSON result |
+| `test-runner` | runner | Runs one test case live via the selected driver and emits a structured JSON result |
 | `test-reporter` | reporter | Collects test-runner results and writes the run report to `reports/` |
 | `qa-auditor` | auditor | Specialist web auditor — runs Step-0 Playwright evidence collection, then the applicable specialist passes (security, accessibility, privacy, performance, responsive, UX, SEO), writes a findings report, and codifies notable findings into regression cases |
 

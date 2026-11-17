@@ -1,5 +1,24 @@
 # Mobile Gestures Reference
 
+## Adb Mode — `adb shell input`
+
+Coordinates are device pixels, taken from the centre of a node's bounds in the latest UI read. Always `adb -s <serial> shell ...`.
+
+| TC verb | Command | Notes |
+|---------|---------|-------|
+| Tap | `input tap X Y` | synthetic event |
+| Real-length press | `input swipe X Y X Y 150` | same start and end point |
+| Double-tap | two `input tap X Y` in one shell call | `input tap X Y; input tap X Y` |
+| Long-press | `input swipe X Y X Y 1000` | |
+| Swipe left / right / up / down | `input swipe X1 Y1 X2 Y2 300` | 80% → 20% of the scrollable node's bounds |
+| Drag (scrub, slider) | `input swipe X1 Y1 X2 Y2 600` | a longer duration holds the drag |
+| Type text | `input text 'word%sword'` | `%s` is a space; focus the field first |
+| Hide keyboard | `input keyevent 111` | ESCAPE |
+| Back | `input keyevent 4` | can close a sheet or leave the screen |
+| Home | `input keyevent 3` | |
+
+Synthetic input cannot prove that a real finger gesture survives (a build that drops real presses can still pass `input tap`). Use the project toolkit's real-event command for gesture-survival checks, or report BLOCKED.
+
 ## Appium Mode — Appium MCP Tool Parameters
 
 All gestures go through `appium_gesture`. Pass the action and parameters as shown.
