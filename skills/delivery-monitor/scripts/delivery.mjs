@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // STDLIB ONLY. delivery-monitor CLI (spec §6.5). Thin dispatcher over scripts/lib/*.
-import { realpathSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliError, currentSession, deliveryDir, nowIso, profilePath, sessionPath, sessionsDir, sha256 } from './lib/paths.mjs';
@@ -125,12 +125,7 @@ function cmdPlanRegister(repo, f, io, now) {
   // even though the fill stamps the current time.
   const runId = runIdOf(full), digest = sha256(`${token}\n${canonicalHash(full)}`);
   const prev = loadRun(repo, runId);
-  // Tasks the planner left unestimated get a calibrated dollar estimate from calibration.json (if one exists), auto-accepted.
-  // --no-calibrate stops new fills only: a re-cut still keeps the calibrated estimates its tasks were planned with.
-  const calib = f['no-calibrate'] ? null : readCalibration(repo);
-  const fill = !prev?.requests?.[token] && (calib || prev) ? fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null }) : null;
   const { active } = resolveObservations(repo);
-  const next = toCatalogue(full, { version: full.version });
 
   // 1. Identical retry → re-emit the saved observations verbatim (they SKIP against the ledger).
   // F9: this must SKIP even after the run has moved on to a later version, since events.mjs's
@@ -161,6 +156,22 @@ function cmdPlanRegister(repo, f, io, now) {
     const supErrs = validateSupersedes(full, prev?.items ?? []);
     if (supErrs.length) throw cliError('MIGRATION-REQUIRED', supErrs[0]);
   }
+  // Rebuild only for a new, writing registration. Retries never even read the table.
+  let calibrationNote = f['no-calibrate'] ? 'CALIBRATION disabled (--no-calibrate)' : null;
+  if (!f['no-calibrate'] && !f['dry-run']) {
+    try { rebuildCalibration(repo, { now }); }
+    catch (e) {
+      if (e.code === 'NO-EVENTS') calibrationNote = `CALIBRATION none: ${e.reason}`;
+      else if (e.code === 'PRICES-INVALID') {
+        io.stderr.write(`WARN PRICES-INVALID ${e.problem}; calibration not rebuilt\n`);
+        calibrationNote = 'CALIBRATION none: prices invalid; calibration not rebuilt';
+      } else throw e;
+    }
+  }
+  const calib = f['no-calibrate'] ? null : readCalibration(repo);
+  const fill = fillEstimates(full, calib, { now, prevItems: prev?.items ?? [], renameMap: full.supersedes?.item_map ?? null });
+  const next = toCatalogue(full, { version: full.version });
+
   const renameMap = full.supersedes
     ? Object.fromEntries(Object.entries(full.supersedes.item_map ?? {}).filter(([oldId, newId]) => oldId !== newId))
     : null;
@@ -213,42 +224,56 @@ function cmdPlanRegister(repo, f, io, now) {
   const conflicts = emitRegistration(repo, io, { run: rec, delta, token, at, createdAtOf: (i) => created[i.item_id], now, active, records: observations });
   const st = next.map((i) => estimateStatus(i.estimate));
   out(io, `PLAN ${runId} v${full.version} items=${next.length} created=${delta.created.length} estimated=${delta.estimated.length} stale-acceptance=${delta.estimated.filter((e) => e.stale).length} cancelled=${delta.cancelled.length} reopened=${delta.reopened.length} accepted=${st.filter((s) => s === 'accepted').length} unaccepted=${st.filter((s) => s === 'unaccepted').length} unestimated=${st.filter((s) => s === 'none').length} scope_removed_delivered=${scopeRemovedDelivered.length}`);
-  if (fill && (calib || fill.kept)) out(io, `CALIBRATED filled=${fill.filled} kept=${fill.kept} planner=${fill.planner} no-cell=${fill.no_cell} (${calib ? `${CALIBRATION_FILE} ${calib.sha256.slice(0, 12)}` : 'no calibration table'})`);
+  if (calibrationNote) out(io, calibrationNote);
+  if (calib || fill.kept) out(io, `CALIBRATED filled=${fill.filled} kept=${fill.kept} planner=${fill.planner} no-cell=${fill.no_cell} samples=${calib?.cal.samples ?? 0} (${calib ? `${CALIBRATION_FILE} ${calib.sha256.slice(0, 12)}` : 'no calibration table'})`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
   bindCaller(repo, runId, f, io, now);
   return 0;
 }
 
-/** `calibrate`: rebuild calibration.json from every landed task's measured cost, and print the table. Run it at plan close;
- * the next `plan register` reads it. `--dry-run` prints without writing; `--json` prints the file; `--half-life <days>`. */
+/** Shared ledger-to-table pipeline. No samples and invalid prices leave the saved table untouched. */
+function rebuildCalibration(repo, { now, halfLife, write = true }) {
+  const prices = loadPricesChecked(repo);
+  if (prices.problem) {
+    const error = cliError('PRICES-INVALID', `${prices.problem}; dispatches priced while it was broken are recorded as unpriced and left out`);
+    error.problem = prices.problem;
+    throw error;
+  }
+  const { samples, landed, left_out } = collect(repo, { now });
+  const leftOut = `${landed - samples.length} of ${landed}`, why = Object.entries(left_out).map(([k, n]) => `${k}=${n}`).join(' ');
+  if (!samples.length) {
+    const reason = landed ? `no landed task with a complete measured cost: ${leftOut} left out (${why}); the reasons are in SKILL.md, "Effort calibration"` : 'no landed task yet: the Claude dispatch hook records cost on dispatch_ended';
+    const error = cliError('NO-EVENTS', reason); error.reason = reason; throw error;
+  }
+  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf: prices.asOf });
+  const text = `${JSON.stringify(cal, null, 2)}\n`;
+  if (write) {
+    mkdirSync(deliveryDir(repo), { recursive: true });
+    // Atomic replace: two sessions may register at once, and a reader must never see a half-written table.
+    const target = resolve(deliveryDir(repo), CALIBRATION_FILE), tmp = `${target}.${process.pid}.tmp`;
+    writeFileSync(tmp, text); renameSync(tmp, target);
+  }
+  return { cal, text, landed, leftOut, why };
+}
+
+/** Optional manual rebuild or inspection, with --dry-run, --json and --half-life <days>. */
 function cmdCalibrate(repo, p, io, now) {
   // Display only: cents above $1, two significant digits below (the file keeps full precision).
   const usd = (x) => (x == null ? "-" : x >= 1 ? x.toFixed(2) : String(Number(x.toPrecision(2))));
   const f = p.flags;
   const halfLife = f['half-life'] != null ? Number(requireValue(f, 'half-life')) : undefined;
   if (halfLife !== undefined && !(halfLife > 0)) throw cliError('USAGE', '--half-life must be a positive number of days');
-  // The price table the hook used must be readable; a broken override is reported here rather than ignored.
-  const prices = loadPricesChecked(repo);
-  if (prices.problem) throw cliError('PRICES-INVALID', `${prices.problem}; dispatches priced while it was broken are recorded as unpriced and left out`);
-  const { samples, landed, left_out } = collect(repo, { now });
-  // Tasks left out are counted by reason, so a shrinking population is never silent.
-  const leftOut = `${landed - samples.length} of ${landed}`, why = Object.entries(left_out).map(([k, n]) => `${k}=${n}`).join(' ');
-  if (!samples.length) throw cliError('NO-EVENTS', landed ? `no landed task with a complete measured cost: ${leftOut} left out (${why}); the reasons are in SKILL.md, "Effort calibration"` : 'no landed task yet: the Claude dispatch hook records cost on dispatch_ended');
-  const pricesAsOf = prices.asOf;
-  const cal = buildCalibration(samples, { now, ...(halfLife ? { halfLifeDays: halfLife } : {}), pricesAsOf });
-  const text = `${JSON.stringify(cal, null, 2)}\n`;
+  const { cal, text, landed, leftOut, why } = rebuildCalibration(repo, { now, halfLife, write: !f['dry-run'] });
   if (f.json) { io.stdout.write(text); }
   else {
     const b = cal.class_bounds_usd;
     out(io, `CALIBRATION samples=${cal.samples} half-life=${cal.half_life_days}d classes=${b ? `E1<=$${usd(b[0])} E2<=$${usd(b[1])} E3<=$${usd(b[2])} E4>$${usd(b[2])}` : 'none (fewer than 12 samples)'}`);
-    if (landed > samples.length) out(io, `LEFT-OUT ${leftOut} landed tasks: ${why}`);
+    if (landed > cal.samples) out(io, `LEFT-OUT ${leftOut} landed tasks: ${why}`);
     out(io, '| cell | n | p50 $ | p80 $ | return rate | class |'); out(io, '|---|---|---|---|---|---|');
     for (const [k, c] of Object.entries(cal.cells)) out(io, `| ${k} | ${c.n}${c.n < cal.min_n ? ' (too few)' : ''} | ${usd(c.p50_usd)} | ${usd(c.p80_usd)} | ${c.return_rate} | ${c.effort_class ?? '-'} |`);
     for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);
   }
   if (f['dry-run']) { if (!f.json) out(io, 'DRY-RUN not written'); return 0; }
-  mkdirSync(deliveryDir(repo), { recursive: true });
-  writeFileSync(resolve(deliveryDir(repo), CALIBRATION_FILE), text);
   if (!f.json) out(io, `WROTE ${resolve(deliveryDir(repo), CALIBRATION_FILE)}`);
   return 0;
 }
@@ -494,6 +519,12 @@ function cmdReport(repo, p, io, now) {
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
   io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now })));
+  // Status never fails on the calibration line: a broken table is reported, not thrown.
+  try {
+    const calib = readCalibration(repo);
+    if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
+    else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
+  } catch (e) { out(io, `CALIBRATION invalid: ${e.message}`); }
   return 0;
 }
 
@@ -561,8 +592,21 @@ function cmdBackfill(repo, p, io, now) {
 
 // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, surfaced as the
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
-function cmdDoctor(repo, p, io) {
+function cmdDoctor(repo, p, io, now) {
   const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)), { env: io.env });
+  let samples = [], warning = null;
+  try { ({ samples } = collect(repo, { now })); } catch (e) { warning = `ledger unreadable: ${e.message}`; }
+  if (samples.length) {
+    try {
+      const calib = readCalibration(repo);
+      if (!calib) warning = 'missing; run plan register or calibrate';
+      else if (Math.max(...samples.map((s) => Date.parse(s.done_at))) - Date.parse(calib.cal.generated_at) > 7 * 86_400_000) warning = 'stale by more than 7 days; run plan register or calibrate';
+    } catch (e) { warning = e.message; }
+  }
+  if (warning) {
+    d.lines.splice(d.lines.length - 1, 0, `warning: calibration: ${warning}`);
+    d.lines[d.lines.length - 1] = 'doctor: attention';
+  }
   for (const l of d.lines) out(io, l);
   return 0;
 }

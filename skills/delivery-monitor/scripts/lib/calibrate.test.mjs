@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendObservation, makeObservation } from './events.mjs';
 import { deliveryDir, runPath } from './paths.mjs';
@@ -384,7 +384,8 @@ test('a permission error is not "no file": unreadable calibration.json and price
   execFileSync('chmod', ['000', locked]);
   try {
     const reg = run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'T1' }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']);
-    assert.equal(reg.code, 2); assert.match(reg.stderr, /^CALIBRATION-INVALID\(.*EACCES/);
+    assert.equal(reg.code, 2); assert.match(reg.stderr, /^WARN PRICES-INVALID .*EACCES.*; calibration not rebuilt/m);
+    assert.match(reg.stderr, /^CALIBRATION-INVALID\(.*EACCES/m);
     const p = loadPricesCheckedFor(repo); assert.match(p.problem, /unreadable \(EACCES\)/);
   } finally { execFileSync('chmod', ['755', locked]); }
 });
@@ -673,4 +674,121 @@ test('a built-in price table with an incomplete entry prices nothing and is repo
   registerRefs(repo, ['A']);
   let err = null; try { execFileSync('node', [join(copy, 'scripts', 'delivery.mjs'), 'calibrate'], { cwd: repo, encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' }, stdio: ['pipe', 'pipe', 'pipe'] }); } catch (e) { err = e; }
   assert.equal(err?.status, 2); assert.match(err.stderr, /^PRICES-INVALID\(built-in .*cache_read/);
+});
+
+// Registration must arm the loop without a preceding manual calibrate command.
+const registerNext = (repo, n, extra = []) => run(repo, ['plan', 'register', '--from', writePlan(repo, { ...plan(1, [{ ref: 'NEW', role: 'python-dev' }]), run_id: `next-${n}` }, `next-${n}.md`), '--id', `next-${n}`, '--created-at', '2026-11-10T00:00:00Z', ...extra]);
+const seededLedger = () => {
+  const repo = initRepo(); registerRefs(repo, ['T0', 'T1', 'T2', 'T3', 'T4', 'T5']);
+  for (let k = 0; k < 5; k++) landTask(repo, 'sec/run-1', `T${k}`, { cost: 2 + k, at: '2026-11-03T10:00:00Z' });
+  return repo;
+};
+const calibrationPath = (repo) => join(deliveryDir(repo), 'calibration.json');
+
+test('register arms calibration out of the box and refreshes it for the next request', () => {
+  const repo = seededLedger();
+  const r = registerNext(repo, 1); assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /CALIBRATED filled=1.*samples=5/);
+  assert.equal(JSON.parse(readFileSync(calibrationPath(repo))).samples, 5);
+  const item = JSON.parse(readFileSync(runPath(repo, 'sec/next-1'))).items.find((i) => i.ref === 'NEW');
+  assert.equal(item.estimate.unit, 'usd'); assert.equal(item.estimate.tier, 'calibrated');
+  landTask(repo, 'sec/run-1', 'T5', { cost: 20, at: '2026-11-04T10:00:00Z' });
+  assert.equal(registerNext(repo, 2).code, 0);
+  assert.equal(JSON.parse(readFileSync(calibrationPath(repo))).samples, 6);
+});
+
+test('register without samples explains the empty calibration and preserves any existing table', () => {
+  const repo = initRepo(); const r = registerNext(repo, 1);
+  assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /CALIBRATION none: no landed task yet/);
+  assert.equal(existsSync(calibrationPath(repo)), false);
+  writeFileSync(calibrationPath(repo), JSON.stringify(buildCalibration([sample({ cost_usd: 2 })])));
+  const before = readFileSync(calibrationPath(repo), 'utf8');
+  assert.equal(registerNext(repo, 2).code, 0); assert.equal(readFileSync(calibrationPath(repo), 'utf8'), before);
+  done(repo, 'sec/next-1', 'NEW', '2026-11-11T12:00:00Z');
+  const empty = registerNext(repo, 3);
+  assert.equal(empty.code, 0, empty.stderr);
+  assert.match(empty.stdout, /CALIBRATION none: no landed task with a complete measured cost: 1 of 1 left out \(no-cost-recorded=1\)/);
+  const manual = run(repo, ['calibrate']); assert.equal(manual.code, 3);
+  assert.ok(manual.stderr.includes(empty.stdout.split('CALIBRATION none: ')[1].split('\n')[0]));
+  assert.equal(readFileSync(calibrationPath(repo), 'utf8'), before);
+});
+
+test('identical retry leaves calibration bytes and mtime unchanged, even if calibration is now corrupt', () => {
+  const repo = seededLedger(); assert.equal(registerNext(repo, 1).code, 0);
+  assert.ok(existsSync(calibrationPath(repo)));
+  const original = readFileSync(calibrationPath(repo), 'utf8'), mtime = statSync(calibrationPath(repo)).mtimeMs;
+  const retry = registerNext(repo, 1);
+  assert.equal(retry.code, 0, retry.stderr); assert.match(retry.stdout, /SKIP /); assert.match(retry.stdout, /\(retry\)/);
+  assert.doesNotMatch(retry.stdout, /CALIBRAT/);
+  assert.equal(readFileSync(calibrationPath(repo), 'utf8'), original); assert.equal(statSync(calibrationPath(repo)).mtimeMs, mtime);
+  writeFileSync(calibrationPath(repo), 'broken');
+  const before = statSync(calibrationPath(repo)).mtimeMs;
+  const r = registerNext(repo, 1);
+  assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /\(retry\)/); assert.doesNotMatch(r.stdout, /CALIBRAT/);
+  assert.equal(readFileSync(calibrationPath(repo), 'utf8'), 'broken'); assert.equal(statSync(calibrationPath(repo)).mtimeMs, before);
+});
+
+test('dry-run writes no ledger files and no-calibrate skips rebuild and fill', () => {
+  const repo = seededLedger();
+  const before = readdirSync(deliveryDir(repo), { recursive: true }).map((p) => [p, statSync(join(deliveryDir(repo), p)).mtimeMs]);
+  assert.equal(registerNext(repo, 1, ['--dry-run']).code, 0);
+  assert.deepEqual(readdirSync(deliveryDir(repo), { recursive: true }).map((p) => [p, statSync(join(deliveryDir(repo), p)).mtimeMs]), before);
+  assert.equal(registerNext(repo, 2, ['--no-calibrate']).code, 0); assert.equal(existsSync(calibrationPath(repo)), false);
+  assert.equal(JSON.parse(readFileSync(runPath(repo, 'sec/next-2'))).items.find((i) => i.ref === 'NEW').estimate, null);
+  writeFileSync(calibrationPath(repo), JSON.stringify(buildCalibration(Array.from({ length: 5 }, () => sample({ cost_usd: 99 })))));
+  const saved = readFileSync(calibrationPath(repo), 'utf8'), mtime = statSync(calibrationPath(repo)).mtimeMs;
+  assert.equal(registerNext(repo, 3, ['--no-calibrate']).code, 0);
+  assert.equal(JSON.parse(readFileSync(runPath(repo, 'sec/next-3'))).items.find((i) => i.ref === 'NEW').estimate, null);
+  assert.equal(readFileSync(calibrationPath(repo), 'utf8'), saved); assert.equal(statSync(calibrationPath(repo)).mtimeMs, mtime);
+});
+
+test('broken prices warn during register and preserve and fill from the existing calibration', () => {
+  const repo = seededLedger();
+  writeFileSync(calibrationPath(repo), JSON.stringify(buildCalibration(Array.from({ length: 5 }, () => sample({ cost_usd: 7 })))));
+  const before = readFileSync(calibrationPath(repo), 'utf8');
+  writeFileSync(join(deliveryDir(repo), 'prices.json'), 'broken');
+  const r = spawnSync('node', [CLI, 'plan', 'register', '--from', writePlan(repo, { ...plan(1, [{ ref: 'NEW' }]), run_id: 'next' }), '--id', 'next'], { cwd: repo, encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' } });
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stderr, /WARN PRICES-INVALID .*; calibration not rebuilt/);
+  assert.match(r.stdout, /CALIBRATED filled=1/); assert.equal(readFileSync(calibrationPath(repo), 'utf8'), before);
+});
+
+test('register repairs a corrupt calibration when priced samples exist', () => {
+  const repo = seededLedger(); writeFileSync(calibrationPath(repo), 'broken');
+  const r = registerNext(repo, 1); assert.equal(r.code, 0, r.stderr);
+  assert.equal(JSON.parse(readFileSync(calibrationPath(repo))).samples, 5);
+});
+
+test('status explains missing calibration; doctor warns for missing and stale tables but stays quiet when fresh', () => {
+  const repo = initRepo(); registerNext(repo, 0);
+  assert.match(run(repo, ['status']).stdout, /CALIBRATION none: no priced landed task yet/);
+  const seeded = seededLedger();
+  assert.match(run(seeded, ['status']).stdout, /CALIBRATION none: not built yet: run plan register or calibrate/);
+  assert.match(run(seeded, ['doctor']).stdout, /warning: calibration: missing/);
+  registerNext(seeded, 1);
+  assert.match(run(seeded, ['status']).stdout, /CALIBRATION samples=5 age=0d/);
+  assert.doesNotMatch(run(seeded, ['doctor']).stdout, /warning: calibration:/);
+  const cal = JSON.parse(readFileSync(calibrationPath(seeded))); cal.generated_at = '2026-10-01T00:00:00Z';
+  writeFileSync(calibrationPath(seeded), JSON.stringify(cal));
+  assert.match(run(seeded, ['doctor']).stdout, /warning: calibration: stale/);
+  // A broken table never breaks status or doctor: both report it and exit 0.
+  writeFileSync(calibrationPath(seeded), 'broken');
+  const st = run(seeded, ['status']); assert.equal(st.code, 0, st.stderr); assert.match(st.stdout, /CALIBRATION invalid: /);
+  const dr = run(seeded, ['doctor']); assert.equal(dr.code, 0, dr.stderr); assert.match(dr.stdout, /warning: calibration: /);
+  assert.match(dr.stdout, /doctor: attention/);
+});
+
+test('register leaves no temporary calibration file behind', () => {
+  const repo = seededLedger(); registerNext(repo, 1);
+  const dir = dirname(calibrationPath(repo));
+  assert.deepEqual(readdirSync(dir).filter((n) => n.endsWith('.tmp')), []);
+});
+
+test('skill and PM prose assign rebuilding to plan register and keep manual inspection optional', () => {
+  const skill = readFileSync(new URL('../../SKILL.md', import.meta.url), 'utf8');
+  const pm = readFileSync(new URL('../../../../bundles/feature-development/agents/project-manager/AGENT.md', import.meta.url), 'utf8');
+  for (const text of [skill, pm]) {
+    assert.match(text, /`plan register` rebuilds/);
+    assert.doesNotMatch(text, /At plan close: rebuild|then refresh the effort calibration/);
+  }
+  assert.match(pm, /calibrate --dry-run/);
 });
