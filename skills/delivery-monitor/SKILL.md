@@ -51,7 +51,7 @@ node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --re
 node .claude/skills/delivery-monitor/scripts/delivery.mjs status
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
-# 6. At plan close: rebuild the effort calibration the next plan is estimated from
+# 6. Optional: manually rebuild or inspect calibration (plan register rebuilds it automatically)
 node .claude/skills/delivery-monitor/scripts/delivery.mjs calibrate [--dry-run] [--json] [--half-life 42]
 ```
 
@@ -63,19 +63,26 @@ hooked dispatches never ended; a resumed agent's follow-up message named another
 task named are left out); or its earliest hooked dispatch is classified `review` or `fix` (the build is assumed to have run
 where the hook did not record it). These checks catch only gaps the ledger shows: work that ran outside the hook after a hooked
 build is not seen. `calibrate` prints how many landed tasks it left out and why (`LEFT-OUT …`); the full list of reasons is
-in `references/plan-block.md`, "Calibrated estimates". `calibrate` turns the remaining landed tasks into
+in `references/plan-block.md`, "Calibrated estimates". `plan register` rebuilds the calibration from the ledger
+for every new registration, before filling estimates. It turns the remaining landed tasks into
 `.agents/telemetry/delivery/calibration.json`: per cell (`role|type|novel`, then coarser, then `all`) the p50/p80 cost, the
 return rate (rework, review returned, reopened) and per-model figures, recency-weighted (half-life 42 days), with effort
 classes E1–E4 learned from the cost quartiles. `plan register` fills every task the plan leaves unestimated with the cell's
 p50–p80 as a `usd` range (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class; `--no-calibrate` stops
-new fills (a re-cut keeps earlier ones). `plan register` stops with `CALIBRATION-INVALID` (exit 2) when
-`calibration.json` exists but cannot be read or parsed, or has a malformed cell or a wrong `v`, `unit` or `min_n`.
+the rebuild and new fills (a re-cut keeps earlier ones). Identical retries and `--dry-run` never rebuild.
+With no samples, registration prints `CALIBRATION none:` and keeps any existing table.
+`plan register` stops with `CALIBRATION-INVALID` (exit 2) if rebuilding cannot replace a broken existing table.
+A table is broken if it cannot be read or parsed, has a malformed cell, or has a wrong `v`, `unit` or `min_n`.
 `calibrate` stops with `PRICES-INVALID` (exit 2) when the built-in price table or the project override cannot be read or has
-an invalid model entry. No other command reports a broken price table: until `calibrate` runs, the hook marks each dispatch
-unpriced (`<prices-unreadable>`) and `report` shows those tasks only as `missing_actual`. An override entry replaces a
+an invalid model entry. `plan register` warns with `WARN PRICES-INVALID` and uses the existing table if available.
+While prices are broken, the hook marks each dispatch unpriced (`<prices-unreadable>`), and `report` shows those tasks
+only as `missing_actual`. An override entry replaces a
 built-in model whole, so it needs all four rates (`input`, `output`, `cache_write`, `cache_read`); it may price a
 `<model>#fast` id itself, otherwise fast mode is the base model at double every rate. `calibrate` says `NO-EVENTS` until a
-landed task has a complete measured cost, and says how many it left out. `report` scores those ranges against measured cost in `usd:` strata. Cells need 5 samples, classes 12.
+landed task has a complete measured cost, and says how many it left out. Use `calibrate` for an optional manual rebuild
+or `calibrate --dry-run` to inspect the table and `OUTLIER` lines. `status` shows sample count and age; `doctor` warns
+about missing or stale calibration. `report` scores those ranges against measured cost in `usd:` strata.
+Cells need 5 samples, classes 12.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing, cancellation, block/unblock and defect/fix at the

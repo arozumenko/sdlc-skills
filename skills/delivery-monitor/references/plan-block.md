@@ -78,8 +78,8 @@ ledger record):
 - `tier` must be `ROM \| budgetary \| calibrated \| unknown`.
 - **`tier: "calibrated"` requires `reference: {path, sha256, population}`** — `path` and
   `population` non-empty, `sha256` exactly 64 hex characters. A calibrated tier with no saved
-  reference is rejected at registration (`SCHEMA-INVALID`). `delivery.mjs calibrate` writes the reference
-  (`calibration.json`) and `plan register` fills calibrated estimates from it.
+  reference is rejected at registration (`SCHEMA-INVALID`). `plan register` rebuilds the reference
+  (`calibration.json`) from the ledger and fills calibrated estimates from it.
 - `proposed_by` required (any non-empty value); `proposed_at` must be a valid ISO timestamp.
 - `accepted_by`/`accepted_at` are independently nullable, but validated when present:
   `accepted_by` a non-empty string, `accepted_at` a valid ISO timestamp.
@@ -87,7 +87,7 @@ ledger record):
 
 ## Calibrated estimates
 
-`delivery.mjs calibrate` reads every landed task (task `done` with basis `observed`, not invalid-chain; a reopened task only
+`plan register` rebuilds the calibration from the ledger for every new registration. It reads every landed task (task `done` with basis `observed`, not invalid-chain; a reopened task only
 once its latest landing after the reopen is observed, dated by that landing)
 whose hooked dispatches carry a complete priced cost, and writes `.agents/telemetry/delivery/calibration.json`
 (`scripts/lib/calibrate.mjs`):
@@ -117,6 +117,10 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
   samples; a cell's class is the class of its p50.
 - `outliers`: the three tasks the table fits worst (largest |log(actual / cell p50)|), for the retro.
 
+`calibrate` remains an optional manual rebuild; `calibrate --dry-run` inspects the table without writing.
+Identical retries and `--dry-run` never rebuild. No samples leaves the existing table untouched and prints
+`CALIBRATION none:` with the reason. Invalid prices print `WARN PRICES-INVALID`; registration uses the existing table if available.
+
 `plan register` then fills each task that has no `estimate`: the most specific cell with `n ≥ 5` gives
 `{unit: "usd", low: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
 reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
@@ -125,8 +129,8 @@ version keeps it on a re-cut. The planner's own estimates are never replaced. A 
 unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read or parsed, has no
 `cells` object, has a `v` other than 1, a `unit` other than `usd` or a `min_n` that is not an integer ≥ 1, or has a
 malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `effort_class` not null or
-`E1`–`E4`) stops registration with `CALIBRATION-INVALID` (exit 2) rather than silently estimating nothing.
-`--no-calibrate` stops new fills only; a re-cut still keeps earlier calibrated estimates. The
+`E1`–`E4`) stops registration with `CALIBRATION-INVALID` (exit 2) if rebuilding cannot replace it.
+`--no-calibrate` skips rebuilding and new fills; a re-cut still keeps earlier calibrated estimates. The
 registration retry digest is computed before the fill, so a retry is still recognised.
 
 ## Acceptance semantics
