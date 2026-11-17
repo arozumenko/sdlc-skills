@@ -127,6 +127,8 @@ Prompt: "Execute the test case at {file_path} against base_url={base_url}"
 ```
 
 Wait for each test-runner to complete before starting the next.
+Dispatch every test-runner in the foreground, never as a background agent (for example, Agent `run_in_background`).
+Never end your turn while a runner is running; a headless run stops background work when the turn ends.
 
 From each test-runner's final message, collect **two things**:
 
@@ -178,6 +180,18 @@ If any match: add a warning to the Step 7 summary:
 
 This distinguishes a **test design bug** from an **application bug** — both need different follow-up actions.
 
+## Step 5c — Check FAILs for case drift
+
+Only check FAILs; skip this step if there are none.
+For each FAIL, compare the TC's expected result with the current source of truth:
+the requirement or acceptance criteria it cites, the project's spec or decision records, or the code.
+If the app follows the current source and the TC is stale, keep the result FAIL:
+- Mark it as case drift: prefix `failure_reason` with `CASE DRIFT:`.
+- List it separately from app failures in the Step 7 summary.
+- After the report, dispatch `test-author` to update the TC. Do not rerun it in this run.
+If unsure, leave it as an app FAIL and say what you could not confirm.
+Never change a result to PASS.
+
 ## Step 6 — Generate Report
 
 Dispatch a `test-reporter` sub-agent via the Agent tool:
@@ -201,7 +215,10 @@ Tokens:    NNN,NNN total  (avg NN,NNN / TC)
 Report:    reports/{run_id}.md
 
 {If failures:}
-Failed tests:
+App failures:
+  TC-NNN — {title}: {failure_reason}
+{If case drift:}
+Case-drift FAILs:
   TC-NNN — {title}: {failure_reason}
 ```
 
