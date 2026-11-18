@@ -175,4 +175,3 @@ Plans may carry `branch_prefix` and `branch_map` (`[{pattern, ref}]`, regex with
 (`references/plan-block.md`). Use **one** backfill mode per run: `--git` and `--pr` stamp the same merge with different clocks.
 
 Contracts: `references/event-model.md`, `references/plan-block.md`, `references/metrics.md`, `references/spike-1.md`.
-Design (in the sdlc-skills repo): `docs/superpowers/specs/2026-09-16-delivery-metrics-design.md`.
