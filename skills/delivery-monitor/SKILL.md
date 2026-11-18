@@ -51,7 +51,7 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --transcripts
 node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
 # 5. Read
 node .claude/skills/delivery-monitor/scripts/delivery.mjs status
-node .claude/skills/delivery-monitor/scripts/delivery.mjs spend [--since <iso>] [--until <iso>] [--json]
+node .claude/skills/delivery-monitor/scripts/delivery.mjs spend [--since <iso>] [--until <iso>] [--by plan] [--json]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs doctor
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
@@ -73,6 +73,24 @@ removes that allocation; captured spend remains visible as unattributed. Output 
 priced ones), store/legacy discrepancies, inconsistent legacy allocations, observation conflicts and legacy starts without an end.
 Anonymous estimates are shown apart from exact spend. Inputs include file hashes. The unattributed share is `(plan + not-in-ledger)
 / total` by spend, null for a zero total; above 10% it prints `FLAG`.
+
+`spend` appends an `ATTRIBUTION` block for dispatches outside the ledger. Exact task or mission refs in the description
+win. The first brief is used only when the description has no matching refs. A standalone campaign code can restrict
+matches to that campaign. Branch evidence can confirm text (`text+branch`) or resolve repeated refs (`branch-resolves-text`).
+Several matching items in one run can yield `text-plan`. A branch match without text is `branch-only`, a heuristic.
+`branch-plan` is also a heuristic. Refs found only in the first brief give `brief-only` or `brief-plan`, also heuristics,
+unless the branch confirms them. Ambiguous or conflicting evidence stays unresolved. Retracted allocations stay
+`legacy-withdrawn`, and conflicting allocations stay `legacy-conflict`. Active legacy keys keep their class without an invented owner.
+
+Attribution uses the current catalogue, including today's names and task cuts. Cancelled items are excluded.
+Work before `observation_start` is excluded. A closed run uses `updated_at` as an approximate end. Closing it again moves that end.
+Incomplete captured refs cannot yield text attribution. A conflicting captured branch cannot yield branch attribution.
+The `crossed` flag means a follow-up names another item in the same run. It does not split the spend.
+
+`attributed_share` excludes the branch and brief heuristics. `attributed_share_incl_heuristic` includes them. Both are null for a zero total.
+Use `--by plan` for recovered item and plan totals per run, plus project totals for legacy and unresolved spend.
+JSON adds `attribution` and per-key decisions. If a run file cannot be read or fails validation, attribution is unavailable.
+The base spend report still succeeds. Recovered spend is shown in `spend` only; task costs and calibration do not use it yet.
 
 The spend window selects **dispatches started in `[since, until)`** and includes their lifetime usage. Start time is the
 earliest resolved legacy `dispatched` time, else the store's start. `unknown-start` keys are included only without a window.

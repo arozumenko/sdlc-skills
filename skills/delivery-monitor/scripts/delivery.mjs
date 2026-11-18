@@ -17,6 +17,7 @@ import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
+import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
 import { tombstone } from './lib/dispatches.mjs';
 import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
@@ -540,12 +541,14 @@ function cmdStatus(repo, p, io, now) {
 
 function cmdSpend(repo, p, io) {
   const f = p.flags;
+  if (f.by != null && f.by !== 'plan') throw cliError('USAGE', '--by takes exactly plan');
   const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
   const until = f.until != null ? isoOrThrow(requireValue(f, 'until'), '--until') : null;
   if (since && until && since >= until) throw cliError('USAGE', 'since must precede until');
   const report = spendReport(repo, { since, until });
-  if (f.json) out(io, JSON.stringify(report, null, 2));
-  else io.stdout.write(renderSpend(report));
+  const enriched = attributeSpend(repo, report, { byPlan: f.by === 'plan' });
+  if (f.json) out(io, JSON.stringify(enriched, null, 2));
+  else io.stdout.write(renderSpend(report) + renderAttribution(enriched));
   return 0;
 }
 
