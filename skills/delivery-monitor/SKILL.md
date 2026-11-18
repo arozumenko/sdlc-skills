@@ -57,6 +57,8 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--htm
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 # 6. Optional: manually rebuild or inspect calibration (plan register rebuilds it automatically)
 node .claude/skills/delivery-monitor/scripts/delivery.mjs calibrate [--dry-run] [--json] [--half-life 42]
+# 7. Optional, once after upgrading: log the session and run files as they are now (not idempotent; --dry-run lists them)
+node .claude/skills/delivery-monitor/scripts/delivery.mjs history snapshot [--dry-run]
 ```
 
 **Dispatch capture and spend.** The hook captures every dispatch whose child transcript is available, before checking session
@@ -65,6 +67,13 @@ binding, an open plan or the role roster. The separate append-only store,
 `claude:<session>:<agent>`. The compact store interns model names and stores five token counters in arrays, keyed by 12 hex characters of the message identity hash. Hook writes append one snapshot without scanning history; reducers deduplicate. Stable message identities are unioned across snapshots and token counters use their maximum,
 so repeats and partial transcripts keep captured usage without counting a message twice. Anonymous usage is estimated
 separately and marked `identity-uncertain`. Store capture leaves existing task observations, reports and calibration unchanged.
+
+**Write history.** Every session binding write and run file write also appends one line to
+`.agents/telemetry/delivery/history-<user>.jsonl` (`history.v1`). A line holds the file's kind and key, what wrote it, the time,
+a short summary of the file as it was just before, and a short summary of the file as written. It is evidence, not a complete
+record: a crash, two writers at the same time, or an older installed copy can leave a write unlogged. A history failure never
+changes what a command or hook does. A command prints one `WARN history not recorded: <reason>` line on stderr. Nothing reads
+the file yet. After upgrading, run `history snapshot` once to log the files as they are now.
 
 `spend` works without a plan. It counts each dispatch once, using the greater of captured usage cost and active legacy
 `dispatch_ended` usage cost, repriced with the current price table. Its classes are `item` (allocated to a task or other item),
