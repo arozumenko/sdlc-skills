@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
+import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join } from 'node:path';
 import { appendHistory, historyPath, readPrev, runSummary, sessionSummary, snapshot, writeBinding } from './history.mjs';
 import { saveRun } from './plan.mjs';
@@ -117,11 +118,22 @@ test('a history failure never propagates: state still written, reason passed to 
   writeBinding(repo, 'claude', 's1', 'demo/run-1', T2, { by: 'session_set', slug: SLUG });
 });
 
-test('a failing slug lookup is also contained in the history step', () => {
-  const repo = tmp();
-  const reasons = [];
-  writeBinding(repo, 'claude', 's1', 'demo/run-1', T1, { by: 'session_set', slug: { toString() { throw new Error('boom'); } }, onHistoryError: (r) => reasons.push(r) });
-  assert.ok(existsSync(sessionPath(repo, 'claude', 's1'))); assert.equal(reasons.length, 1);
+test('a failing identity lookup is also contained in the history step', () => {
+  // No slug is passed, so the helpers look the user up. With no git user.name and a failing OS lookup, whoAmI throws.
+  const repo = tmp(), reasons = [], saved = { userInfo: os.userInfo, global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_NOSYSTEM };
+  os.userInfo = () => { throw new Error('no such user'); }; syncBuiltinESMExports();
+  process.env.GIT_CONFIG_GLOBAL = '/dev/null'; process.env.GIT_CONFIG_NOSYSTEM = '1';
+  try {
+    assert.throws(() => whoAmI(repo), /no such user/, 'the lookup really fails in this test');
+    writeBinding(repo, 'claude', 's1', 'demo/run-1', T1, { by: 'session_set', onHistoryError: (r) => reasons.push(r) });
+    saveRun(repo, rec(), { by: 'register', now: T1, onHistoryError: (r) => reasons.push(r) });
+  } finally {
+    os.userInfo = saved.userInfo; syncBuiltinESMExports();
+    for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.system]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+  assert.equal(readFileSync(sessionPath(repo, 'claude', 's1'), 'utf8'), `{"host":"claude","session":"s1","plan":"demo/run-1","at":"${iso(T1)}"}\n`);
+  assert.ok(existsSync(runPath(repo, 'demo/run-1')));
+  assert.deepEqual(reasons, ['no such user', 'no such user']);
 });
 
 test('a state-write failure propagates and writes no record', () => {
@@ -156,14 +168,19 @@ test('documented limit: two overlapping writers can log out of order', () => {
   const repo = tmp();
   const path = runPath(repo, 'demo/run-1');
   mkdirSync(plansDir(repo), { recursive: true });
-  // Writer 1 and writer 2 both observe "missing"; writer 2 finishes first, then writer 1 overwrites.
-  const p1 = readPrev(path, runSummary), p2 = readPrev(path, runSummary);
-  const w1 = rec({ version: 1, updated_at: iso(T1) }), w2 = rec({ version: 2, updated_at: iso(T2) });
-  writeFileSync(path, `${JSON.stringify(w2, null, 2)}\n`); appendHistory(historyPath(repo, SLUG), { kind: 'run', by: 'register', recorded_at: iso(T2), prev: p2, next: runSummary(w2) });
-  writeFileSync(path, `${JSON.stringify(w1, null, 2)}\n`); appendHistory(historyPath(repo, SLUG), { kind: 'run', by: 'register', recorded_at: iso(T1), prev: p1, next: runSummary(w1) });
+  // The helpers' three steps (read prev, write the file, append the record), interleaved by hand for two writers:
+  // both read prev; A writes, then B writes; B appends, then A appends.
+  const A = rec({ version: 1, updated_at: iso(T1) }), B = rec({ version: 2, updated_at: iso(T2) });
+  const prevA = readPrev(path, runSummary), prevB = readPrev(path, runSummary);
+  writeFileSync(path, `${JSON.stringify(A, null, 2)}\n`);
+  writeFileSync(path, `${JSON.stringify(B, null, 2)}\n`);
+  appendHistory(historyPath(repo, SLUG), { kind: 'run', by: 'register', recorded_at: iso(T2), prev: prevB, next: runSummary(B) });
+  appendHistory(historyPath(repo, SLUG), { kind: 'run', by: 'register', recorded_at: iso(T1), prev: prevA, next: runSummary(A) });
   const l = lines(repo);
-  assert.deepEqual(l.map((r) => r.prev.state), ['missing', 'missing']);
-  assert.ok(l[1].recorded_at < l[0].recorded_at, 'the log order is not the real order');
+  assert.deepEqual(l.map((r) => r.next.version), [2, 1], 'the files were written A then B; the log says B then A');
+  assert.deepEqual(l.map((r) => r.prev.state), ['missing', 'missing'], 'neither record shows the other write');
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).version, 2, 'the file holds B');
+  assert.equal(l.at(-1).next.version, 1, 'the last record names A: the last record is not the current value');
 });
 
 test('snapshot: one record per readable file, sessions then runs, no prev, unreadable skipped, dry-run writes nothing', () => {

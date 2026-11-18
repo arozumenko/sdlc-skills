@@ -55,10 +55,11 @@ test('G7: an append failure in the hook leaves the result, the session file and 
   const control = setup(), broken = setup();
   mkdirSync(historyPath(broken, whoAmI(broken).slug), { recursive: true });
   const a = handleStop(payload(branchRepo()), { repo: control, now: NOW }), b = handleStop(payload(branchRepo()), { repo: broken, now: NOW });
-  const shape = (r) => ({ n: r.wrote.length, diagnostic: r.diagnostic, results: r.wrote.map((w) => w.result) });
-  assert.deepEqual(shape(b), shape(a)); assert.equal(b.wrote.length, 2);
+  // The whole hook result, with only the two temp repo paths made equal.
+  const whole = (r, repo) => JSON.parse(JSON.stringify(r).split(repo).join('<REPO>'));
+  assert.deepEqual(whole(b, broken), whole(a, control)); assert.equal(b.wrote.length, 2);
   assert.equal(readFileSync(sessionPath(broken, 'claude', 's1'), 'utf8'), BOUND);
   assert.equal(readFileSync(sessionPath(broken, 'claude', 's1'), 'utf8'), readFileSync(sessionPath(control, 'claude', 's1'), 'utf8'));
   const events = (repo) => readFileSync(join(deliveryDir(repo), `events-${whoAmI(repo).slug}.jsonl`), 'utf8');
-  assert.equal(events(broken).replace(/"recorded_at":"[^"]*"/g, ''), events(control).replace(/"recorded_at":"[^"]*"/g, ''));
+  assert.equal(events(broken), events(control));
 });

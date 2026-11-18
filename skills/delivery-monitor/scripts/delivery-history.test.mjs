@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import { main } from './delivery.mjs';
 import { deliveryDir, runPath, sessionPath, sessionsDir } from './lib/paths.mjs';
 import { saveRun } from './lib/plan.mjs';
+import { runScenario } from '../fixtures/history-baseline/scenario.mjs';
+
+const BASELINE = JSON.parse(readFileSync(new URL('../fixtures/history-baseline/golden.json', import.meta.url), 'utf8'));
 
 const T0 = Date.parse('2026-09-16T10:00:00Z');
 const iso = (t) => new Date(t).toISOString();
@@ -193,20 +196,18 @@ test('G8: session and run files have no new keys and exact bytes', async () => {
   assert.equal(readFileSync(runPath(copy, RUN), 'utf8'), text);
 });
 
-test('G8: read commands print the same with and without the history file', async () => {
-  const repo = initRepo();
-  await cli(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1'], { env: S1 });
-  await cli(repo, ['event', 'TASK-001', 'dispatched', '--id', 'e1', '--at', '2026-09-16T09:00:00Z']);
-  await cli(repo, ['plan', 'close', RUN], { now: T0 + 1000 });
-  await cli(repo, ['plan', 'register', '--from', writePlan(repo, plan(2)), '--id', 'reg-2', '--at', iso(T0 + 2000)], { now: T0 + 2000, env: S1 });
-  assert.ok(lines(repo).length > 3);
-  const commands = [['plan', 'show', '--plan', RUN], ['status'], ['report', '--json'], ['spend'], ['spend', '--json'], ['spend', '--by', 'plan'], ['calibrate', '--dry-run', '--json'], ['doctor']];
-  const snap = async () => { const out = []; for (const c of commands) out.push(await cli(repo, c, { now: T0 + 5000 })); return out; };
-  const withHistory = await snap();
-  rmSync(HIST(repo));
-  const without = await snap();
-  assert.deepEqual(withHistory, without);
-  assert.ok(withHistory.some((r) => r.code === 0 && r.stdout.length > 0));
+test('G8: state files, writer output and read-command output equal the baseline recorded before history existed', async () => {
+  let records = 0;
+  const got = await runScenario(main, { between: (dir) => { records = readFileSync(join(dir, 'history-tester.jsonl'), 'utf8').split('\n').filter(Boolean).length; } });
+  assert.equal(records, 7, 'the scenario exercised the history writers: register x2 (run + bind), roster, close, session set');
+  for (const name of Object.keys(BASELINE.files)) assert.equal(got.files[name], BASELINE.files[name], name);
+  for (const kind of ['writes', 'reads']) BASELINE[kind].forEach((want, i) => assert.deepEqual(got[kind][i], want, `${kind}: ${want.argv}`));
+  assert.deepEqual(got, BASELINE);
+});
+
+test('G8: read commands print the baseline output when the history file is gone', async () => {
+  const got = await runScenario(main, { between: (dir) => rmSync(join(dir, 'history-tester.jsonl')) });
+  BASELINE.reads.forEach((want, i) => assert.deepEqual(got.reads[i], want, want.argv));
 });
 
 test('G9: history snapshot appends one by-snapshot record per file with no prev; output lines; unreadable file skipped', async () => {
@@ -240,6 +241,10 @@ test('G9: history snapshot --dry-run writes nothing and ends with DRY-RUN; other
   const empty = initRepo();
   const e = await cli(empty, ['history', 'snapshot']);
   assert.equal(e.stdout, 'HISTORY snapshot sessions=0 runs=0 skipped=0\n');
+  // Only a missing directory counts as empty: a sessions path that cannot be listed fails the command.
+  mkdirSync(deliveryDir(empty), { recursive: true }); writeFileSync(sessionsDir(empty), 'a regular file where the sessions dir should be');
+  const x = await cli(empty, ['history', 'snapshot']);
+  assert.notEqual(x.code, 0); assert.doesNotMatch(x.stdout, /HISTORY snapshot/);
 });
 
 test('G11: with a telemetry git repo and sync on, a mutating command leaves history-<slug>.jsonl committed', async () => {

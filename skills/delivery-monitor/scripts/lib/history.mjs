@@ -52,7 +52,7 @@ export function snapshot(repo, { dryRun = false, now = Date.now(), slug, emit = 
   const count = { sessions: 0, runs: 0, skipped: 0 };
   slug ??= whoAmI(repo).slug;
   for (const [kind, dir, summarize, tally] of [['session', sessionsDir(repo), sessionSummary, 'sessions'], ['run', plansDir(repo), runSummary, 'runs']]) {
-    let names = []; try { names = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { /* missing dir: zero */ }
+    let names = []; try { names = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch (e) { if (e.code !== 'ENOENT') throw e; /* missing dir: zero */ }
     for (const name of names) {
       const key = decodeSegment(name.slice(0, -5)), r = readObject(join(dir, name));
       if (r.state !== 'present') { count.skipped++; emit(`SKIP ${kind} ${key} unreadable`); continue; }
