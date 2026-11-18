@@ -312,3 +312,44 @@ test('report, spend and plan output is byte-identical to the baseline produced b
   baseline.reads.forEach((want, i) => assert.deepEqual(got.reads[i], want, want.argv.join(' ')));
   assert.deepEqual(got, baseline);
 });
+
+// ---------- code review follow-ups ----------
+test('crossing: a follow-up repeating the owner\'s own ref is read as the owner, even when another run has a task with that ref', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1'] }, { campaign: 'sec', run: 'run-2', tasks: ['T1'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 }); snap(f, { id: 'a', desc: 'T1', usd: 2, follow: ['also T1'] });
+  ledger(f, { run: 'sec/run-2', refs: ['T1'], id: 'b', usd: 1 });
+  land(f, 'sec/run-1', 'T1'); land(f, 'sec/run-2', 'T1');
+  const r = result(f); assert.deepEqual(r.samples.map((x) => x.run).sort(), ['sec/run-1', 'sec/run-2']); assert.deepEqual(r.left_out, {});
+});
+test('commands: an unreadable dispatch store is ATTRIBUTION-UNAVAILABLE, not an internal error; register keeps the table and warns', async (t) => {
+  const f = await landed(t); assert.equal((await cli(f.repo, ['calibrate'])).code, 0);
+  const before = tableOf(f), store = join(deliveryDir(f.repo), 'dispatches-t.jsonl');
+  rmSync(store); mkdirSync(store);
+  for (const args of [['calibrate'], ['calibrate', '--json'], ['calibrate', '--dry-run']]) {
+    const r = await cli(f.repo, args);
+    assert.equal(r.code, 2, args.join(' ')); assert.match(r.stderr, /^ATTRIBUTION-UNAVAILABLE\(/, r.stderr); assert.doesNotMatch(r.stderr, /INTERNAL/);
+  }
+  const file = join(f.repo, 'p2.md'); writeFileSync(file, `# p\n\`\`\`json delivery-plan\n${JSON.stringify(planDoc('sec', 'run-9', [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'N1' }] }]))}\n\`\`\`\n`);
+  const r = await cli(f.repo, ['plan', 'register', '--from', file, '--id', 'reg-9', '--no-bind', '--created-at', '2026-11-01T00:00:00Z']);
+  assert.equal(r.code, 0, r.stderr); assert.equal(tableOf(f), before); assert.equal(r.stderr.match(/WARN ATTRIBUTION-UNAVAILABLE/g)?.length, 1, r.stderr);
+});
+test('model vector: sub-micro-dollar model costs keep every model', async (t) => {
+  // m: 4 cache-read tokens at $0.1/M = $0.0000004; n: 3 at $0.2/M = $0.0000006; together $0.000001.
+  const f = await fx(t); ledger(f, { refs: ['T1'], id: 'a', usd: 0.000001, usage: { m: { cache_read: 4 }, n: { cache_read: 3 } } });
+  const k = costs(f).keys[0];
+  near(k.usd, 0.000001); assert.deepEqual(Object.keys(k.vector).sort(), ['m', 'n']);
+  near(k.vector.m, 0.0000004); near(k.vector.n, 0.0000006);
+});
+test('model vector: equal store and ledger totals with different models take the store side; fractional parts scale to usd', async (t) => {
+  const f = await fx(t); ledger(f, { refs: ['T1'], id: 'a', usage: U({ m: 1 }) }); snap(f, { id: 'a', desc: 'T1', models: { m: 0.25, n: 0.75 } });
+  const k = costs(f).keys[0];
+  near(k.usd, 1); assert.deepEqual(Object.keys(k.vector).sort(), ['m', 'n']); near(k.vector.m, 0.25); near(k.vector.n, 0.75);
+  land(f, 'sec/run-1', 'T1'); assert.equal(result(f).samples[0].model, 'n');
+});
+test('gaps: text-incomplete leaves the task out of the samples (through collect)', async (t) => {
+  const f = await fx(t); snap(f, { desc: 'T1' }); land(f, 'sec/run-1', 'T1'); f.flush();
+  assert.equal(collect(f.repo, { now: NOW }).samples.length, 1, 'a sample without the flag');
+  const enriched = attributeSpend(f.repo, spendReport(f.repo)); enriched.keys[0].attribution.flags = ['text-incomplete'];
+  const r = collect(f.repo, { now: NOW, enriched });
+  assert.equal(r.samples.length, 0); assert.deepEqual(r.left_out, { 'text-incomplete': 1 });
+});

@@ -21,9 +21,11 @@ const UNSTARTED = new Set(['review', 'fix']);
 // Same test as the timeline's: a hook end with no valid cost or split recorded.
 const endHasNoCost = (ag) => !(ag && Number.isFinite(ag.cost_usd) && ag.cost_usd >= 0 && Number.isInteger(ag.split) && ag.split >= 1);
 
-/** Per-model dollars of a usage object at current prices, scaled so they sum exactly to `usd` (empty when nothing is priced). */
+/** Per-model dollars of a usage object at current prices, scaled so they sum exactly to `usd` (empty when nothing is priced).
+ * Each model is priced on a million times its tokens, so `costOf`'s micro-dollar rounding cannot erase a tiny share. */
+const MEGA = (u) => Object.fromEntries(Object.entries(u ?? {}).map(([k, v]) => [k, typeof v === 'number' ? v * 1e6 : v]));
 function vectorOf(usage, usd, prices) {
-  const parts = Object.entries(usage ?? {}).map(([m, u]) => [m, costOf({ [m]: u }, prices).cost_usd]).filter(([, c]) => c > 0);
+  const parts = Object.entries(usage ?? {}).map(([m, u]) => [m, costOf({ [m]: MEGA(u) }, prices).cost_usd]).filter(([, c]) => c > 0);
   const sum = parts.reduce((n, [, c]) => n + c, 0);
   return sum > 0 ? Object.fromEntries(parts.map(([m, c]) => [m, c * usd / sum])) : {};
 }
@@ -32,9 +34,13 @@ function vectorOf(usage, usd, prices) {
 export function taskCosts(repo, { resolved = resolveObservations(repo), enriched = null } = {}) {
   const loaded = loadPricesChecked(repo);
   if (loaded.problem) { const e = cliError('PRICES-INVALID', `${loaded.problem}; dispatches priced while it was broken are recorded as unpriced and left out`); e.problem = loaded.problem; throw e; }
-  const doc = enriched ?? attributeSpend(repo, spendReport(repo));
-  if (doc.attribution.unavailable) { const e = cliError('ATTRIBUTION-UNAVAILABLE', doc.attribution.unavailable); e.reason = doc.attribution.unavailable; throw e; }
-  const { runs } = loadRunsChecked(repo), stored = reduce(readDispatches(repo)), prices = loaded.prices;
+  const unavailable = (reason) => { const e = cliError('ATTRIBUTION-UNAVAILABLE', reason); e.reason = reason; return e; };
+  // Any failure to read what attribution needs (dispatch store, ledger, run files) is one reason, never an internal error.
+  let doc, runs, stored;
+  try { doc = enriched ?? attributeSpend(repo, spendReport(repo)); ({ runs } = loadRunsChecked(repo)); stored = reduce(readDispatches(repo)); }
+  catch (e) { if (e.code === 'PRICES-INVALID') throw e; throw unavailable(String(e?.message ?? e).split('\n')[0]); }
+  if (doc.attribution.unavailable) throw unavailable(doc.attribution.unavailable);
+  const prices = loaded.prices;
   const byRun = new Map(runs.map((r) => [r.run, { items: new Map(r.items.map((i) => [i.item_id, i])), renamed: r.supersedes?.item_map ?? {} }]));
   // The canonical task of an item id: renamed first, and only a task the run still knows can own.
   const canon = (plan, id) => {
@@ -87,7 +93,9 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
       const cancelled = new Set(scope.flatMap((r) => r.items.filter((i) => i.cancelled && ['task', 'mission'].includes(i.level)).map((i) => lower(i.ref))));
       if ([...s.refs.desc, ...s.refs.msg].map(lower).some((t) => cancelled.has(t) || rejected.has(t))) markOwners('attribution-unstable');
     }
-    // A follow-up that names a task other than the key's own owners: the agent was sent that work too.
+    // A follow-up that names a task other than the key's own owners: the agent was sent that work too. A token equal to an owner's
+    // own ref is read as that owner, as the hook reads it: task refs repeat across runs, and reading `T1` as every other run's T1
+    // would leave out most tasks whose follow-ups only repeat their own ref (measured on two real ledgers).
     const ownRefs = new Set([...owners.values()].map((c) => lower(c.ref)));
     for (const token of s.follow_ups.flatMap((f) => f.refs).map(lower)) {
       if (ownRefs.has(token)) continue;

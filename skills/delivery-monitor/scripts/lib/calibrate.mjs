@@ -32,10 +32,11 @@ const LEFT_OUT = ['cost-under-unknown-id', 'crossing-unreadable', 'crossed-into-
 export const collectSamples = (repo, opts) => collect(repo, opts).samples;
 
 /** The samples, how many tasks landed, and how many of those were left out for each reason (`left_out`, in a fixed order). */
-export function collect(repo, { now = Date.now() } = {}) {
+/** `enriched` is for tests: a PR 2 enriched spend report passed to `taskCosts`. */
+export function collect(repo, { now = Date.now(), enriched = null } = {}) {
   const res = resolveObservations(repo);
   const { occurrences } = selectOccurrences(res.active, res.conflicts);
-  const tc = taskCosts(repo, { resolved: res });   // throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE
+  const tc = taskCosts(repo, { resolved: res, enriched });   // throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE
   const samples = [], tally = new Map(); let landed = 0;
   for (const run of listRuns(repo)) {
     const known = new Set(run.items.map((i) => i.item_id));
