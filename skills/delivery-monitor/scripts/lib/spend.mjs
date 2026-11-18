@@ -27,6 +27,9 @@ export function legacyBridge(resolved, prices, pricesProblem = false) {
     const priced = usages.filter(validUsage).map(u => pricesProblem ? {cost_usd:0,unpriced:['<prices-unreadable>']} : costOf(u,prices));
     value.cost_usd = priced.length && usages.every(validUsage) ? Math.max(...priced.map(p=>p.cost_usd)) : null;
     value.unpriced = usages.some(u=>!validUsage(u)) || priced.some(p=>p.unpriced.length>0);
+    // Older hooks wrote allocations with no usage at all. That is a gap in the ledger, not an unknown model,
+    // so a fully priced store snapshot of the same dispatch prices it.
+    value.unknown_model = usages.some(u=>u!=null && !validUsage(u)) || priced.some(p=>p.unpriced.length>0);
     value.inconsistent = new Set(usages.map(u => JSON.stringify(canonical(u)))).size > 1;
     value.class = value.allocations.some(r=>r.item_id != null) ? 'item' : value.allocations.length ? 'plan' : null;
   }
@@ -61,7 +64,8 @@ export function spendReport(repo, { since = null, until = null } = {}) {
     const sc=s ? priced(s.usage):null, anon=s ? priced(s.anon.usage):null;
     const lc=l?.allocations.length ? l.cost_usd:null;
     const usd=Math.max(sc?.cost_usd ?? 0,lc ?? 0), cls=l?.class ?? 'not-in-ledger';
-    const unpriced=Boolean(sc?.unpriced.length || l?.unpriced || !sc && lc===null);
+    const storePriced=Boolean(sc && !sc.unpriced.length);
+    const unpriced=Boolean(sc?.unpriced.length || l?.unknown_model || l?.unpriced && !storePriced || !sc && lc===null);
     if(unpriced) doc.unpriced++;
     // Compare fully priced sides in micro-dollars so the strict 1% boundary is exact.
     if(sc && lc!==null && !sc.unpriced.length && !l.unpriced && Math.max(sc.cost_usd,lc)>0 && Math.abs(Math.round(sc.cost_usd*1e6)-Math.round(lc*1e6))*100 > Math.max(Math.round(sc.cost_usd*1e6),Math.round(lc*1e6))) {
