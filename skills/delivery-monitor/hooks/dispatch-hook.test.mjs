@@ -144,14 +144,14 @@ test('handleStop: fix stage adds rework_observed; unresolved/ambiguous → unatt
   const un = resolveObservations(repo).active.filter((o) => o.meta.unattributed); assert.equal(un.length, 2); assert.equal(un[0].item_id, null); assert.equal(un[0].plan, R);
 });
 
-test('guards: no open plan → nothing; unbound session → diagnostic; foreign-but-installed role → nothing; unknown role → admitted + diagnostic; no transcript → diagnostic', () => {
+test('guards: no open plan has no observations; unbound session → diagnostic; foreign role → no observations; unknown role → admitted; no transcript → gap', () => {
   const t = transcripts();
-  const none = tmp(); assert.deepEqual(handleStop(payload(t), { repo: none, now: NOW }), { wrote: [], diagnostic: null }); assert.ok(!existsSync(deliveryDir(none)));
+  const none = tmp(); assert.deepEqual(handleStop(payload(t), { repo: none, now: NOW }), { wrote: [], diagnostic: null }); assert.ok(readdirSync(deliveryDir(none)).some((f) => f.startsWith('dispatches-')));
   const unbound = setup({ bind: false }); assert.equal(handleStop(payload(t), { repo: unbound, now: NOW }).diagnostic, 'unbound-session'); assert.equal(resolveObservations(unbound).active.length, 0); assert.ok(readdirSync(deliveryDir(unbound)).some((f) => f.startsWith('diagnostics-')));
   const positive = setup(); assert.equal(handleStop(payload(transcripts({ agentType: 'test-automation-lead' })), { repo: positive, now: NOW }).wrote.length, 2);
   const foreign = setup(); assert.deepEqual(handleStop(payload(transcripts({ agentType: 'qa-auditor' })), { repo: foreign, now: NOW }), { wrote: [], diagnostic: null }, 'qa-auditor is not in the plan roster even if installed');
   const unknown = setup(); const ru = handleStop(payload(transcripts({ agentType: '' })), { repo: unknown, now: NOW }); assert.equal(ru.diagnostic, 'unknown-role'); assert.equal(ru.wrote.length, 2);
-  const missing = setup(); const rm = handleStop(payload(t, { agent_id: 'agent-9' }), { repo: missing, now: NOW }); assert.equal(rm.diagnostic, 'no-transcript'); assert.equal(rm.wrote.length, 0);
+  const missing = setup(); const rm = handleStop(payload(t, { agent_id: 'agent-9' }), { repo: missing, now: NOW }); assert.equal(rm.diagnostic, null); assert.equal(rm.wrote.length, 0); assert.ok(readdirSync(deliveryDir(missing)).some((f) => f.startsWith('dispatches-')));
 });
 
 test('invalid-roster: a tampered roster snapshot short-circuits before the transcript guard', () => {

@@ -1,0 +1,108 @@
+[
+  {
+    "v": 2,
+    "at": "2026-11-18T10:00:00.000Z",
+    "recorded_at": "2026-11-18T12:00:00.000Z",
+    "user": "capture-fixture",
+    "host": "claude",
+    "plan": "p/r",
+    "item_id": "p/r/t1",
+    "ref": "T1",
+    "level": "task",
+    "event": "dispatched",
+    "transition_id": "p/r/t1/dispatched/a1",
+    "source": "hook",
+    "source_record_id": "claude:s1:a1",
+    "observation_id": "hook:claude%3As1%3Aa1:p%2Fr%2Ft1:dispatched",
+    "revision": 0,
+    "status": "active",
+    "basis": "observed",
+    "session": "s1",
+    "agentId": "a1",
+    "role": "js-dev",
+    "label": "T1 fix",
+    "raw": null,
+    "meta": {
+      "stage": "fix",
+      "version": 1
+    }
+  },
+  {
+    "v": 2,
+    "at": "2026-11-18T10:03:00.000Z",
+    "recorded_at": "2026-11-18T12:00:00.000Z",
+    "user": "capture-fixture",
+    "host": "claude",
+    "plan": "p/r",
+    "item_id": "p/r/t1",
+    "ref": "T1",
+    "level": "task",
+    "event": "dispatch_ended",
+    "transition_id": "p/r/t1/dispatch_ended/a1",
+    "source": "hook",
+    "source_record_id": "claude:s1:a1",
+    "observation_id": "hook:claude%3As1%3Aa1:p%2Fr%2Ft1:dispatch_ended",
+    "revision": 0,
+    "status": "active",
+    "basis": "observed",
+    "session": "s1",
+    "agentId": "a1",
+    "role": "js-dev",
+    "label": "T1 fix",
+    "raw": null,
+    "meta": {
+      "stage": "fix",
+      "version": 1,
+      "agent": {
+        "turns": 2,
+        "turns_over_500k": 0,
+        "max_context": 12,
+        "compactions": 0,
+        "follow_ups": 1,
+        "usage": {
+          "claude-sonnet-4-6": {
+            "input": 22,
+            "output": 10,
+            "cache_write": 0,
+            "cache_write_1h": 0,
+            "cache_read": 0
+          }
+        },
+        "cost_usd": 0.000216,
+        "split": 1,
+        "crossed": [
+          "p/r/t2"
+        ]
+      }
+    }
+  },
+  {
+    "v": 2,
+    "at": "2026-11-18T10:00:00.000Z",
+    "recorded_at": "2026-11-18T12:00:00.000Z",
+    "user": "capture-fixture",
+    "host": "claude",
+    "plan": "p/r",
+    "item_id": "p/r/t1",
+    "ref": "T1",
+    "level": "task",
+    "event": "rework_observed",
+    "transition_id": "p/r/t1/rework_observed/a1",
+    "source": "hook",
+    "source_record_id": "claude:s1:a1",
+    "observation_id": "hook:claude%3As1%3Aa1:p%2Fr%2Ft1:rework_observed",
+    "revision": 0,
+    "status": "active",
+    "basis": "observed",
+    "session": "s1",
+    "agentId": "a1",
+    "role": "js-dev",
+    "label": "T1 fix",
+    "raw": null,
+    "meta": {
+      "stage": "fix",
+      "version": 1,
+      "round": null
+    }
+  }
+]

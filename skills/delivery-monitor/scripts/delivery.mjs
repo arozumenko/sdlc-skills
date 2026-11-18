@@ -16,6 +16,9 @@ import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './li
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
+import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
+import { tombstone } from './lib/dispatches.mjs';
+import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
 export const SKILL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_EVENTS = ['dispatched', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'review_requested', 'review_returned', 'review_approved', 'first_commit', 'defect_found', 'defect_fixed'];
@@ -459,7 +462,7 @@ function validateProfile(obj, tpl) {
   for (const k of Object.keys(obj)) {
     if (!(k in tpl)) { errs.push(`profile.${k} is not a known key`); continue; }
     const v = obj[k];
-    if (k === 'capturePrompts') { if (typeof v !== 'boolean') errs.push('profile.capturePrompts must be boolean'); }
+    if (['capturePrompts', 'captureRefs', 'captureBranch'].includes(k)) { if (typeof v !== 'boolean') errs.push(`profile.${k} must be boolean`); }
     else if (k === 'zeroDurationSec') { if (!Number.isInteger(v) || v < 0) errs.push('profile.zeroDurationSec must be an integer >= 0'); }
     else if (k === 'minWholeWeeks') { if (!Number.isInteger(v) || v < 3) errs.push('profile.minWholeWeeks must be an integer >= 3'); }
     else if (k === 'tokenomics') { if (typeof v !== 'string' || !v) errs.push('profile.tokenomics must be a non-empty string'); }
@@ -518,13 +521,31 @@ function cmdReport(repo, p, io, now) {
 }
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
-  io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now })));
+  const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { out(io, `SPEND unavailable: ${e.message}`); } };
+  try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now }))); }
+  catch (e) {
+    // Global spend remains useful before a plan or its first observation exists. Preserve the original status error.
+    if (['NO-PLAN', 'NO-EVENTS'].includes(e.code)) spendLine();
+    throw e;
+  }
   // Status never fails on the calibration line: a broken table is reported, not thrown.
   try {
     const calib = readCalibration(repo);
     if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
     else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
   } catch (e) { out(io, `CALIBRATION invalid: ${e.message}`); }
+  spendLine();
+  return 0;
+}
+
+function cmdSpend(repo, p, io) {
+  const f = p.flags;
+  const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
+  const until = f.until != null ? isoOrThrow(requireValue(f, 'until'), '--until') : null;
+  if (since && until && since >= until) throw cliError('USAGE', 'since must precede until');
+  const report = spendReport(repo, { since, until });
+  if (f.json) out(io, JSON.stringify(report, null, 2));
+  else io.stdout.write(renderSpend(report));
   return 0;
 }
 
@@ -535,8 +556,16 @@ function cmdStatus(repo, p, io, now) {
  * cliError → exit 2. */
 function cmdBackfill(repo, p, io, now) {
   const f = p.flags;
+  if (f.transcripts) {
+    if (f.git || f.pr) throw cliError('USAGE', '--transcripts, --git and --pr are exclusive');
+    const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
+    const result = backfillTranscripts(repo, { since, dryRun: Boolean(f['dry-run']), env: io.env, now, stderr: io.stderr });
+    const fields = ['children', 'ingested', 'unchanged', 'tombstoned', 'unidentified', 'unreadable', 'failed', 'parents', 'interrupted', 'no-child'];
+    out(io, `BACKFILL ${fields.map((key) => `${key}=${result[key]}`).join(' ')}`);
+    return 0;
+  }
   if (f.git && f.pr) throw cliError('USAGE', '--git and --pr are exclusive');
-  if (!f.git && !f.pr) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run] | backfill --pr --plan <run> [--from-json <file>] [--since] [--cutoff] [--dry-run]');
+  if (!f.git && !f.pr) throw cliError('USAGE', 'backfill --git --plan <run> --head <sha> [--since] [--cutoff] [--dry-run] | backfill --pr --plan <run> [--from-json <file>] [--since] [--cutoff] [--dry-run] | backfill --transcripts [--since <iso>] [--dry-run]');
   const planFlag = f.plan != null ? requireValue(f, 'plan') : null;
   const run = resolveRun(repo, planFlag);
   const since = f.since != null ? isoOrThrow(requireValue(f, 'since'), '--since') : null;
@@ -594,6 +623,14 @@ function cmdBackfill(repo, p, io, now) {
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io, now) {
   const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)), { env: io.env });
+  try {
+    const counts = coverage(repo, { env: io.env });
+    const fields = ['identities', 'in_store', 'missing_from_store', 'gaps_resolved', 'gaps_unresolved', 'interrupted', 'unreadable_children', 'oldest_transcript_date'];
+    d.lines.splice(d.lines.length - 1, 0, `coverage: ${fields.map((key) => `${key}=${counts[key] ?? 'none'}`).join(' ')}`);
+  } catch {
+    d.lines.splice(d.lines.length - 1, 0, 'warning: coverage unreadable');
+    d.lines[d.lines.length - 1] = 'doctor: attention';
+  }
   let samples = [], warning = null;
   try { ({ samples } = collect(repo, { now })); } catch (e) { warning = `ledger unreadable: ${e.message}`; }
   if (samples.length) {
@@ -618,6 +655,15 @@ function cmdDoctor(repo, p, io, now) {
  * item `event <ref> dispatched --at <iso>` only if it has no dispatched record yet. */
 function cmdRetract(repo, p, io, now) {
   const f = p.flags, agent = f.agent != null ? String(requireValue(f, 'agent')) : null, oid = f.observation != null ? String(requireValue(f, 'observation')) : null;
+  if (f.dispatch != null) {
+    const key = requireValue(f, 'dispatch'), reason = requireValue(f, 'reason');
+    if (agent || oid) throw cliError('USAGE', '--dispatch, --agent and --observation are exclusive');
+    if (!reason || !String(reason).trim()) throw cliError('USAGE', 'retract --dispatch <key> requires --reason <reason>');
+    if (!/^claude:[^\s:/\\]+:[^\s:/\\]+$/.test(key)) throw cliError('USAGE', 'invalid dispatch key');
+    if (f['dry-run']) out(io, `WOULD-RETRACT ${key}`);
+    else { const result = tombstone(repo, key, reason, { now }); out(io, `${result.result === 'unchanged' ? 'SKIP' : 'RETRACT'} ${key}`); }
+    return 0;
+  }
   if (!agent === !oid) throw cliError('USAGE', 'retract (--agent <agent id> | --observation <observation id>) [--plan <run>] [--dry-run]');
   const run = resolveRun(repo, f.plan);
   const hits = resolveObservations(repo).active.filter((o) => o.plan === run.run && (oid ? o.observation_id === oid : o.agentId === agent));
@@ -631,7 +677,7 @@ function cmdRetract(repo, p, io, now) {
   out(io, `RETRACTED ${retracted}${f['dry-run'] ? ' (dry-run)' : ''}`); return 0;
 }
 
-export const COMMANDS = { calibrate: cmdCalibrate, plan: cmdPlan, session: cmdSession, event: cmdEvent, retract: cmdRetract, profile: cmdProfile, report: cmdReport, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
+export const COMMANDS = { calibrate: cmdCalibrate, plan: cmdPlan, session: cmdSession, event: cmdEvent, retract: cmdRetract, profile: cmdProfile, report: cmdReport, spend: cmdSpend, status: cmdStatus, backfill: cmdBackfill, doctor: cmdDoctor };
 const MUTATING = new Set(['plan', 'session', 'event', 'retract', 'profile', 'backfill', 'calibrate']);
 
 export async function main(argv = process.argv.slice(2), { repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), now = Date.now(), stdout = process.stdout, stderr = process.stderr, env = process.env, gh = null } = {}) {
