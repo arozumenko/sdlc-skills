@@ -105,7 +105,7 @@ const compact = (i, occ) => ({ first_completion: i.first_completion, current_sco
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
 
-/** An open plan whose every task (or, task-less, every mission) is done or cancelled — nobody closed it (coach-android 2026-10-08:
+/** An open plan whose every task (or, task-less, every mission) is done or cancelled — nobody closed it (a consumer project, 2026-10-08:
  * finished plans sat open and kept admitting hook dispatches). */
 const isFinished = (status, items) => {
   const tasks = items.filter((i) => i.level === 'task'), pool = tasks.length ? tasks : items.filter((i) => i.level === 'mission');

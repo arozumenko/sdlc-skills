@@ -95,8 +95,8 @@ test('review fix: a cancelled task whose branch is still merged yields no record
 
 test('matchMergeSubject: GitHub "Merge pull request #N from owner/branch" parses the branch, not "pull"', () => {
   const r = run('/x');
-  assert.equal(matchMergeSubject('Merge pull request #661 from aquanautica/task/task-001', r).ref, 'TASK-001');
-  assert.equal(matchMergeSubject('Merge pull request #661 from aquanautica/feat/unrelated', r), null);
+  assert.equal(matchMergeSubject('Merge pull request #661 from example-org/task/task-001', r).ref, 'TASK-001');
+  assert.equal(matchMergeSubject('Merge pull request #661 from example-org/feat/unrelated', r), null);
   const mapped = { ...run('/x'), branch_prefix: 'bp', branch_map: [{ pattern: '-m(?<m>\\d+)-t(?<t>\\d+)$', ref: 'TASK-00{t}' }] };
   assert.equal(matchMergeSubject('Merge pull request #7 from org/feat/bp-m1-t2', mapped).ref, 'TASK-002');
 });
