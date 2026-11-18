@@ -783,9 +783,13 @@ test('register leaves no temporary calibration file behind', () => {
   assert.deepEqual(readdirSync(dir).filter((n) => n.endsWith('.tmp')), []);
 });
 
-test('skill and PM prose assign rebuilding to plan register and keep manual inspection optional', () => {
+// Source-repo only: the PM agent lives in a factory, which does not ship with an installed copy of this skill.
+const pmAgent = new URL('../../../../bundles/feature-development/agents/project-manager/AGENT.md', import.meta.url);
+test('skill and PM prose assign rebuilding to plan register and keep manual inspection optional', {
+  skip: !existsSync(pmAgent) && 'not in the sdlc-skills source repo',
+}, () => {
   const skill = readFileSync(new URL('../../SKILL.md', import.meta.url), 'utf8');
-  const pm = readFileSync(new URL('../../../../bundles/feature-development/agents/project-manager/AGENT.md', import.meta.url), 'utf8');
+  const pm = readFileSync(pmAgent, 'utf8');
   for (const text of [skill, pm]) {
     assert.match(text, /`plan register` rebuilds/);
     assert.doesNotMatch(text, /At plan close: rebuild|then refresh the effort calibration/);

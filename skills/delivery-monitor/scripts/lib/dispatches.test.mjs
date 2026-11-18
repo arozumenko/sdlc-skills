@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { snapshotFromTranscript, snapshotDigest, dispatchIndex, ingestDispatch, tombstone, gap, readDispatches, reduce, captureRefs } from './dispatches.mjs';
@@ -209,6 +211,18 @@ test('all ingested permutations give the same usage, dollars and evidence despit
     expected ??= actual; assert.deepEqual(actual,expected);
   }
 });
+// Runs fn while counting bytes read from one file through node:fs (ESM named imports follow syncBuiltinESMExports).
+function storeBytesRead(file, fn) {
+  const saved={openSync:fs.openSync,closeSync:fs.closeSync,readSync:fs.readSync,readFileSync:fs.readFileSync};
+  const fds=new Set(); let bytes=0;
+  fs.openSync=(path,...rest)=>{const fd=saved.openSync(path,...rest); if(String(path)===file) fds.add(fd); return fd;};
+  fs.closeSync=(fd)=>{fds.delete(fd); return saved.closeSync(fd);};
+  fs.readSync=(fd,...rest)=>{const n=saved.readSync(fd,...rest); if(fds.has(fd)) bytes+=n; return n;};
+  fs.readFileSync=(path,...rest)=>{const out=saved.readFileSync(path,...rest); if(String(path)===file) bytes+=out.length; return out;};
+  syncBuiltinESMExports();
+  try { fn(); } finally { Object.assign(fs,saved); syncBuiltinESMExports(); }
+  return bytes;
+}
 test('scale: 5000 snapshots of 100 messages, bounded hook append', (t) => {
   const dir=repo(t), messages=Object.fromEntries(Array.from({length:100},(_,i)=>[`message-${i}`,message(i,2)]));
   ingestDispatch(dir,snap({messages}));
@@ -217,10 +231,13 @@ test('scale: 5000 snapshots of 100 messages, bounded hook append', (t) => {
   const snapshots=Array.from({length:5000},(_,i)=>({...compact,session:`s${i%300}`,dispatch_key:`claude:s${i%300}:agent`}));
   mkdirSync(deliveryDir(dir),{recursive:true});
   writeFileSync(storeFile, snapshots.map(JSON.stringify).join('\n')+'\n');
-  let start=performance.now(); ingestDispatch(dir,snap({messages})); const hook=performance.now()-start;
-  start=performance.now(); const reduced=reduce(readDispatches(dir)); const elapsed=performance.now()-start;
-  console.log(`SCALE read+reduce=${elapsed.toFixed(1)}ms hook=${hook.toFixed(1)}ms`);
-  assert.equal(reduced.size,301); assert.ok(hook<200,`hook ${hook}ms`); assert.ok(elapsed<3000,`reduce ${elapsed}ms`);
+  // The hook must not read the store: it checks only the last byte, then appends. Count the bytes read from the store
+  // file during one ingest. Deterministic, unlike a time limit, which a busy machine breaks.
+  const read=storeBytesRead(storeFile,()=>ingestDispatch(dir,snap({messages})));
+  assert.ok(read<=1,`hook read ${read} bytes of the store`);
+  const start=performance.now(); const reduced=reduce(readDispatches(dir)); const elapsed=performance.now()-start;
+  console.log(`SCALE read+reduce=${elapsed.toFixed(1)}ms`);
+  assert.equal(reduced.size,301); assert.ok(elapsed<10000,`reduce ${elapsed}ms`);
 });
 test('v1 and v2 readers reconcile one stable identity across schema versions', (t)=>{
  const dir=repo(t), a=snap({messages:{x:message(5)}});
