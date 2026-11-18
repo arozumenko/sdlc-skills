@@ -11,6 +11,7 @@ import { costOf, loadPricesChecked } from '../scripts/lib/cost.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
 import { validRoster } from '../scripts/lib/roster.mjs';
+import { gap, ingestDispatch, snapshotFromTranscript } from '../scripts/lib/dispatches.mjs';
 
 export const SUPPORTED_SHAPES = ['claude-projects-subagents-v1'];
 const STAGE = [[/\b(fix round|address review)\b/i, 'fix'], [/\b(mini-gate|hardening gate|gate)\b/i, 'gate'], [/\bmerge\b/i, 'merge'], [/\breview\w*/i, 'review'], [/\b(implement\w*|build)\b/i, 'build']];
@@ -78,7 +79,7 @@ const NOT_AUTHORED = [/^<command-/, /^\[SYSTEM NOTIFICATION/, /^<task-notificati
 const isFollowUp = (r, text) => (r.origin?.kind === 'coordinator' && text.trim().length > 0) || !r.isMeta && !r.isCompactSummary && !r.isVisibleInTranscriptOnly && text.trim() && !NOT_AUTHORED.some((re) => re.test(text.trimStart()));
 const contextOf = (u) => (u ? (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) : 0);
 export function parseTranscript(path) {
-  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false, followUps: [], stats: { turns: 0, turns_over_500k: 0, max_context: 0, compactions: 0 }, usage: {} };
+  const out = { firstTs: null, lastTs: null, firstUserText: '', records: 0, complete: false, hasActivity: false, followUps: [], stats: { turns: 0, turns_over_500k: 0, max_context: 0, compactions: 0 }, usage: {}, messages: {}, anon: { records: 0, usage: {} }, last_uuid: null, torn: false, branch: null, lastRecordAt: null };
   let text; try { text = readFileSync(path, 'utf8'); } catch { return out; }
   const lines = text.split('\n');
   // F13 (review round): a torn/truncated FINAL line means the write is mid-flight, and the
@@ -93,7 +94,11 @@ export function parseTranscript(path) {
   for (const line of lines) {
     if (!line.trim()) continue;
     let r; try { r = JSON.parse(line); } catch { continue; } // malformed/torn lines contribute no evidence to lastRecord
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    if (out.records === 0) out.branch = typeof r.gitBranch === 'string' ? r.gitBranch : null;
     out.records++;
+    out.last_uuid = typeof r.uuid === 'string' ? r.uuid : null;
+    out.lastRecordAt = r.timestamp && Number.isFinite(Date.parse(r.timestamp)) ? new Date(r.timestamp).toISOString() : null;
     const t = r.timestamp ? Date.parse(r.timestamp) : NaN;
     if (!Number.isNaN(t)) { const iso = new Date(t).toISOString(); if (!out.firstTs || iso < out.firstTs) out.firstTs = iso; lastRecord = r; lastRecordTs = iso; }
     if (r.type === 'user') sawUser = true; else if (sawUser) out.hasActivity = true;
@@ -109,6 +114,15 @@ export function parseTranscript(path) {
       const u = r.message.usage, m = `${r.message.model ?? 'unknown'}${u.speed === 'fast' ? '#fast' : ''}`;
       const w1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
       const cur = { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cache_write: Math.max(0, (u.cache_creation_input_tokens ?? 0) - w1h), cache_write_1h: w1h, cache_read: u.cache_read_input_tokens ?? 0 };
+      // Stable capture identities never depend on transcript position. Keep the legacy aggregate below unchanged.
+      if (id != null) {
+        const previous = Object.hasOwn(out.messages, id) ? out.messages[id] : null;
+        Object.defineProperty(out.messages, id, { value: { model: m, ...Object.fromEntries(Object.keys(cur).map((k) => [k, Math.max(cur[k], previous?.[k] ?? 0)])) }, enumerable: true, configurable: true, writable: true });
+      } else {
+        out.anon.records++;
+        if (!Object.hasOwn(out.anon.usage, m)) Object.defineProperty(out.anon.usage, m, { value: { input: 0, output: 0, cache_write: 0, cache_write_1h: 0, cache_read: 0 }, enumerable: true });
+        for (const k of Object.keys(cur)) out.anon.usage[m][k] += cur[k];
+      }
       const key = id ?? `line-${out.records}`, prev = msgUsage.get(key);
       msgUsage.set(key, { m, u: prev ? Object.fromEntries(Object.keys(cur).map((k) => [k, Math.max(cur[k], prev.u[k])])) : cur });
       if (id && seen.has(id)) continue; if (id) seen.add(id);
@@ -122,6 +136,7 @@ export function parseTranscript(path) {
   // (`!tornTail`); a progress row, or a torn trailing line after real evidence, leaves `complete`
   // false even though `hasActivity` is true.
   if (!tornTail && sawUser && lastRecord && lastRecord.type !== 'user' && isCompletionEvidence(lastRecord)) { out.complete = true; out.lastTs = lastRecordTs; }
+  out.torn = tornTail;
   return out;
 }
 // Case-insensitive (review minor b): a lowercase `task-023` in a description/message must match
@@ -211,23 +226,25 @@ function bindByBranch(repo, payload, now) {
   } catch { return null; }
 }
 
-export function handleStop(payload, { repo, now = Date.now() } = {}) {
+function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
   repo = resolveOwnerRepo(repo);
   const none = { wrote: [], diagnostic: null };
   if (!payload?.session_id || !payload?.agent_id) return none;
+  const child = findChildTranscript(payload);
+  if (!child) { try { gap(repo, `claude:${payload.session_id}:${payload.agent_id}`, { now }); } catch { /* best effort */ } return none; }
+  let meta = {}; try { meta = JSON.parse(readFileSync(child.metaPath, 'utf8')) ?? {}; } catch { /* optional metadata */ }
+  const tr = parseTranscript(child.path);
+  // Evidence is independent of attribution admission. A failed capture must not suppress legacy observations.
+  try { ingestDispatch(repo, snapshotFromTranscript(tr, { session: payload.session_id, agent_id: payload.agent_id, agent_type: meta.agentType || payload.agent_type || null, description: meta.description ?? '', repo, now })); } catch { /* hooks never fail the host */ }
   if (!listRuns(repo).some((r) => r.status === 'open')) return none;
   const { slug } = whoAmI(repo);
   const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now);
   if (!run) return { wrote: [], diagnostic: diagnose(repo, slug, 'unbound-session', payload, 'run: delivery.mjs session set --host claude --session <id> --plan <run>', now) };
-  const child = findChildTranscript(payload);
-  let meta = {}; if (child) { try { meta = JSON.parse(readFileSync(child.metaPath, 'utf8')); } catch { meta = {}; } }
   if (!validRoster(run.roster)) return { wrote: [], diagnostic: diagnose(repo, slug, 'invalid-roster', payload, 'refresh plan roster with this installed skill', now) };
   const role = meta.agentType || payload.agent_type || null;
   let diagnostic = null;
   if (role && !rosterOf(run).has(role)) return none;
   if (!role) diagnostic = diagnose(repo, slug, 'unknown-role', payload, 'agentType missing — admitted, role test relaxed', now);
-  if (!child) return { wrote: [], diagnostic: diagnose(repo, slug, 'no-transcript', payload, 'child transcript not found in a supported shape', now) };
-  const tr = parseTranscript(child.path);
   if (!tr.firstTs) return { wrote: [], diagnostic: diagnose(repo, slug, 'no-transcript', payload, 'child transcript has no timestamps', now) };
   // F13: a user-only transcript (no activity at all beyond the host's own dispatch payload) is not
   // evidence a subagent ever started — emit nothing, just the diagnostic. A transcript with real
@@ -268,6 +285,10 @@ export function handleStop(payload, { repo, now = Date.now() } = {}) {
     if (it && stage === 'fix') wrote.push(appendOrRevise(repo, mk('rework_observed', tr.firstTs, { round: null }), { slug, now }));
   }
   return { wrote, diagnostic };
+}
+
+export function handleStop(payload, options = {}) {
+  try { return handleStopUnsafe(payload, options); } catch { return { wrote: [], diagnostic: null }; }
 }
 
 async function main() {

@@ -63,7 +63,9 @@ GitLab-only projects, stay with `issue-tracking`.
 If `.agents/telemetry/delivery/plans/` has an open run, bind this session
 before your first dispatch: `node .claude/skills/delivery-monitor/scripts/delivery.mjs
 session set <run>` (the session id comes from `CLAUDE_CODE_SESSION_ID`).
-Dispatches made before the binding get no recorded start. When the last
+Binding gives tasks their cost and cycle time. Unbound dispatches are still
+captured when their transcripts are available and appear as unattributed spend
+in `delivery.mjs spend`; they do not acquire task observations later. When the last
 mission of a campaign has landed, close its plan: `delivery.mjs plan close
 <run>`. `plan register` rebuilds the effort calibration from the ledger for every new registration.
 Use `delivery.mjs calibrate --dry-run` to inspect its `OUTLIER` lines at close.

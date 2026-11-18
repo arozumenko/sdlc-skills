@@ -1,6 +1,6 @@
 ---
 name: delivery-monitor
-description: Delivery monitor for harness work items — the cycle-time and cadence sibling of tokenomics. Registers a plan (campaign → mission → task) with ranged, human-accepted estimates, records dispatch/merge/cancel transitions into a git-committed event ledger (.agents/telemetry/delivery/), backfills history from git, and reports cycle time, weekly throughput/velocity and estimate-vs-actual delta per level. Use when the user asks "how fast are we delivering", "register the plan / estimates", "record that TASK-023 merged", "delivery report / status", "enable delivery tracking", or "how good were our estimates". For cost per case use tokenomics; for sizing new work use automation-scoping.
+description: Delivery monitor for harness work items — the cycle-time and cadence sibling of tokenomics. Registers a plan (campaign → mission → task) with ranged, human-accepted estimates, records dispatch/merge/cancel transitions into a git-committed event ledger (.agents/telemetry/delivery/), captures dispatch usage, backfills history from git or Claude transcripts, and reports cycle time, cadence, estimate accuracy and global spend. Use when the user asks "how fast are we delivering", "register the plan / estimates", "record that TASK-023 merged", "delivery report / status", "delivery spend / unattributed spend", "recover dispatches from transcripts", "enable delivery tracking", or "how good were our estimates". For cost per case use tokenomics; for sizing new work use automation-scoping.
 license: Apache-2.0
 compatibility: "Requires Node 18+ and git. Automatic dispatch capture on Claude Code only (SubagentStop hook, opt-in via scripts/install-hooks.mjs); every other host records transitions with the CLI and the git backfill."
 metadata:
@@ -23,8 +23,8 @@ as a proxy.
 # 1. Register the plan BEFORE the first dispatch (the tech-lead's plan file carries a ```json delivery-plan block). Inside Claude
 #    Code this also binds the calling session (subagents included) to the run — prints `SESSION claude:<id> -> <run>`.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs plan register --from docs/superpowers/plans/<plan>.md --id reg-1
-# 2. The orchestrating session must be bound before it dispatches: the hook records dispatches only for a bound session (or one
-#    whose branch maps to exactly one item of exactly one open run). A session that did not register the plan binds itself:
+# 2. Bind before dispatching so tasks receive their cost and cycle time (or use a branch that maps to exactly one item of
+#    exactly one open run). Every available child transcript is captured even when unbound. A session that did not register binds itself:
 node .claude/skills/delivery-monitor/scripts/delivery.mjs session set sec/run-1     # host/session default to CLAUDE_CODE_SESSION_ID
 #    Record transitions as they happen. A hook dispatch credited to the wrong item is withdrawn with `retract`. Its cost cannot be
 #    moved (`event` cannot write `dispatch_ended`): the right item's cost then lacks it and is not flagged incomplete. Give that item
@@ -45,15 +45,51 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --git --plan sec/run-1 --head <sha>
 #    GitHub-merged work (squash/merge-commit PRs, task PRs into a mission branch): read merged PRs via gh, or offline from JSON
 node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --pr --plan sec/run-1 [--from-json prs.json] [--since <iso>] [--dry-run]
+#    Recover dispatch usage independently of any plan; this does not add task observations
+node .claude/skills/delivery-monitor/scripts/delivery.mjs backfill --transcripts [--since <iso>] [--dry-run]
 # 4. Optional: automatic dispatch start/end on Claude Code (+ shared telemetry submodule)
 node .claude/skills/delivery-monitor/scripts/install-hooks.mjs            # --remove undoes, --doctor checks
 # 5. Read
 node .claude/skills/delivery-monitor/scripts/delivery.mjs status
+node .claude/skills/delivery-monitor/scripts/delivery.mjs spend [--since <iso>] [--until <iso>] [--json]
+node .claude/skills/delivery-monitor/scripts/delivery.mjs doctor
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report [--json] [--html] [--from-json <f>] [--since 2026-09-01] [--level task] [--class M]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs report --html --out delivery.html
 # 6. Optional: manually rebuild or inspect calibration (plan register rebuilds it automatically)
 node .claude/skills/delivery-monitor/scripts/delivery.mjs calibrate [--dry-run] [--json] [--half-life 42]
 ```
+
+**Dispatch capture and spend.** The hook captures every dispatch whose child transcript is available, before checking session
+binding, an open plan or the role roster. The separate append-only store,
+`.agents/telemetry/delivery/dispatches-<user>.jsonl` (`dispatch.v2`; readers also accept v1), holds usage and evidence keyed by
+`claude:<session>:<agent>`. The compact store interns model names and stores five token counters in arrays, keyed by 12 hex characters of the message identity hash. Hook writes append one snapshot without scanning history; reducers deduplicate. Stable message identities are unioned across snapshots and token counters use their maximum,
+so repeats and partial transcripts keep captured usage without counting a message twice. Anonymous usage is estimated
+separately and marked `identity-uncertain`. Store capture leaves existing task observations, reports and calibration unchanged.
+
+`spend` works without a plan. It counts each dispatch once, using the greater of captured usage cost and active legacy
+`dispatch_ended` usage cost, repriced with the current price table. Its classes are `item` (allocated to a task or other item),
+`plan` (allocated without an item), and `not-in-ledger` (captured with no active allocation). Withdrawing an observation
+removes that allocation; captured spend remains visible as unattributed. Output includes unpriced dispatches (including partly
+priced ones), store/legacy discrepancies, inconsistent legacy allocations, observation conflicts and legacy starts without an end.
+Anonymous estimates are shown apart from exact spend. Inputs include file hashes. The unattributed share is `(plan + not-in-ledger)
+/ total` by spend, null for a zero total; above 10% it prints `FLAG`.
+
+The spend window selects **dispatches started in `[since, until)`** and includes their lifetime usage. Start time is the
+earliest resolved legacy `dispatched` time, else the store's start. `unknown-start` keys are included only without a window.
+`status` adds the same calculation for dispatches started in the last seven days, even when it reports `NO-PLAN` or `NO-EVENTS`.
+
+`backfill --transcripts` scans the main checkout's Claude project transcripts (`$CLAUDE_CONFIG_DIR/projects`, else
+`~/.claude/projects`), children first, then parents for enrichment and coverage. Each child failure is isolated, reported on stderr, and counted as `failed=N`. It captures orphan children when their identity is corroborated by parent results, metadata, or their own records. Uncorroborated files count as unidentified. `--since`
+selects children whose last record is at or after that time; `--dry-run` counts without writing. Repeating it is safe.
+`doctor` reads coverage without writing: identifiable dispatches, in/missing from store, resolved/unresolved capture gaps,
+interrupted calls, unreadable children and oldest transcript date. Missing transcripts remain unresolved gaps until captured.
+
+To exclude a dispatch from all spend totals permanently, run
+`delivery.mjs retract --dispatch claude:<session>:<agent> --reason "<why>" [--dry-run]`. This appends a tombstone; future
+captures of the key are ignored. Use the existing `--agent` or `--observation` mode to withdraw task allocations instead.
+Profile `captureRefs: false` disables identifier refs and follow-up refs; `captureBranch: false` disables branch evidence.
+Both default to true. Refs use a capped identifier grammar, which can still capture sensitive identifiers.
+Description text is stored only with the existing `capturePrompts: true` switch (default false).
 
 **Effort calibration (estimate → actual → calibrate).** On Claude Code the dispatch hook prices every finished subagent's tokens
 per model (`references/prices.json`; a project `.agents/telemetry/delivery/prices.json` overrides it) and records the dollar cost
@@ -92,11 +128,12 @@ another commit's sha. Read `delivery.mjs report` at mission close, before the ne
 A defect goes on the item that caused it (a mission, campaign or case ref when the cause is not traced to a task), with
 `--found-stage build|review|qa|gate|demo|user`; the report's DORA block reads these pairs (`references/metrics.md`, "DORA").
 
-**Lifecycle rules.** Dispatch starts cannot be recovered after the fact: a plan registered (or a session bound) after the work
-ran has no cycle time for it — backfill gives created/first-commit/done only. At campaign close, after the last landing, run
+**Lifecycle rules.** Bind before dispatching to record task cycle time. Transcript recovery preserves usage and start evidence
+in the dispatch store; it does not create task observations. Git/PR backfill gives created/first-commit/done only.
+At campaign close, after the last landing, run
 `delivery.mjs plan close <run>`; an open plan keeps admitting hook dispatches and makes every unpinned command ambiguous.
 `status`/`report` say so when every item of an open plan is done or cancelled. `install-hooks.mjs --doctor` prints
-`this session: … unbound` when the session you are in will record nothing.
+`this session: … unbound` when the session will not attribute dispatches to the plan; available transcripts are still captured.
 
 **One task per subagent.** The hook attributes a subagent to the task named in its first brief. An agent that is messaged its
 next task keeps billing that task's time to the first one; the hook flags it as a `task-crossing` diagnostic and does not
