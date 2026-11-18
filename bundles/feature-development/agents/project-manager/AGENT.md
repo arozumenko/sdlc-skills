@@ -65,7 +65,10 @@ before your first dispatch: `node .claude/skills/delivery-monitor/scripts/delive
 session set <run>` (the session id comes from `CLAUDE_CODE_SESSION_ID`).
 Binding gives tasks their cost and cycle time. Unbound dispatches are still
 captured when their transcripts are available and appear as unattributed spend
-in `delivery.mjs spend`; they do not acquire task observations later. When the last
+in `delivery.mjs spend`; they do not acquire task observations later.
+Name the task ref in each dispatch description and, when several plans are
+open, the campaign code as a separate word (`H0007 T2.1`, not
+`h0007-search T2.1`). When the last
 mission of a campaign has landed, close its plan: `delivery.mjs plan close
 <run>`. `plan register` rebuilds the effort calibration from the ledger for every new registration.
 Use `delivery.mjs calibrate --dry-run` to inspect its `OUTLIER` lines at close.

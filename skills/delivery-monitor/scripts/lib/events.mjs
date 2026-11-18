@@ -133,7 +133,7 @@ export function readRaw(repo) {
   return { lines, files, counts, malformed };
 }
 
-export function resolveObservations(repo) {
+export function resolveObservations(repo, { detail = false } = {}) {
   const raw = readRaw(repo);
   const byId = new Map();
   let retries = 0;
@@ -144,7 +144,7 @@ export function resolveObservations(repo) {
     if (!cur) revs.set(rec.revision, { variants: new Map([[key, rec]]), paths: [`${path}:${line}`], first: { path, line } });
     else { if (cur.variants.has(key)) retries++; else cur.variants.set(key, rec); cur.paths.push(`${path}:${line}`); }
   }
-  const active = [], conflicts = [];
+  const active = [], conflicts = [], retractedRecords = [];
   let superseded = 0, retracted = 0;
   for (const [id, revs] of byId) {
     const top = Math.max(...revs.keys());
@@ -167,12 +167,12 @@ export function resolveObservations(repo) {
       continue;
     }
     const sample = variants[0];
-    if (sample.status === 'retracted') { retracted++; continue; }
+    if (sample.status === 'retracted') { retracted++; retractedRecords.push(sample); continue; }
     Object.defineProperty(sample, '_at', { value: entry.first, enumerable: false });
     active.push(sample);
   }
   active.sort((a, b) => a.at.localeCompare(b.at) || a.observation_id.localeCompare(b.observation_id));
-  return { active, conflicts, files: raw.files, malformed: raw.malformed, counts: { ...raw.counts, retries, superseded, retracted, conflicts: conflicts.length } };
+  return { active, conflicts, ...(detail ? { retracted: retractedRecords.sort((a,b) => a.observation_id.localeCompare(b.observation_id)) } : {}), files: raw.files, malformed: raw.malformed, counts: { ...raw.counts, retries, superseded, retracted, conflicts: conflicts.length } };
 }
 
 export function appendObservation(repo, rec, { slug, now = Date.now() } = {}) {
