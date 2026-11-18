@@ -1,7 +1,7 @@
 // STDLIB ONLY. Effort calibration: finished tasks' measured dollar cost → a lookup table the next plan's estimates come from.
 //
-// One sample per landed task: its share of every hooked dispatch's priced cost (rework included — a fix round is just more
-// dispatches on the same task), whether it came back (rework, review_returned, reopened), and the features the planner gave it
+// One sample per landed task: its share of every attributed dispatch's cost, hooked or recovered from captured transcripts, each
+// dispatch counted once at current prices (rework included — a fix round is just more dispatches on the same task), whether it came back (rework, review_returned, reopened), and the features the planner gave it
 // (role, type, novel). Cells are those features at decreasing detail; a task is estimated from the most specific cell with
 // enough samples. Effort classes E1–E4 are learned from the cost quartiles, not declared by the planner.
 import { readFileSync } from 'node:fs';
@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { resolveObservations } from './events.mjs';
 import { cliError, deliveryDir, nowIso, sha256 } from './paths.mjs';
 import { listRuns } from './plan.mjs';
+import { taskCosts, taskOutcome } from './task-costs.mjs';
 import { buildTimelines, carriesCrossing, selectOccurrences } from './timeline.mjs';
 
 export const CALIBRATION_FILE = 'calibration.json';
@@ -23,8 +24,9 @@ const reliable = (i) => i.level === 'task' && i.state === 'done' && i.done_basis
   // reopened: in only once it has landed again after the latest reopen.
   && (!i.last_reopen_at || (i.last_done_at != null && i.last_done_at > i.last_reopen_at && i.last_done_basis === 'observed'));
 
-// Why a landed task is not a sample, one reason per task: the first of these that applies (`cost_gaps` from the timeline).
-const LEFT_OUT = ['cost-under-unknown-id', 'crossing-unreadable', 'crossed-into-another-task', 'first-dispatch-review-or-fix', 'unpriced-model', 'dispatch-not-ended', 'no-cost-recorded', 'zero-cost'];
+// Why a landed task is not a sample, one reason per task: the first of these that applies (the timeline's `cost_gaps`, recomputed
+// from all of the task's dispatches by `taskOutcome`).
+const LEFT_OUT = ['cost-under-unknown-id', 'crossing-unreadable', 'crossed-into-another-task', 'first-dispatch-review-or-fix', 'unpriced-model', 'dispatch-not-ended', 'text-incomplete', 'attribution-unstable', 'no-cost-recorded', 'zero-cost'];
 
 /** Landed tasks with a complete measured cost, across every registered run. */
 export const collectSamples = (repo, opts) => collect(repo, opts).samples;
@@ -33,6 +35,7 @@ export const collectSamples = (repo, opts) => collect(repo, opts).samples;
 export function collect(repo, { now = Date.now() } = {}) {
   const res = resolveObservations(repo);
   const { occurrences } = selectOccurrences(res.active, res.conflicts);
+  const tc = taskCosts(repo, { resolved: res });   // throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE
   const samples = [], tally = new Map(); let landed = 0;
   for (const run of listRuns(repo)) {
     const known = new Set(run.items.map((i) => i.item_id));
@@ -56,11 +59,11 @@ export function collect(repo, { now = Date.now() } = {}) {
     for (const i of items.values()) {
       if (!reliable(i)) continue;
       landed++;
-      const why = orphanCost ? LEFT_OUT[0] : LEFT_OUT.find((g) => i.cost_gaps.includes(g)) ?? (i.cost_usd == null ? 'no-cost-recorded' : i.cost_usd > 0 ? null : 'zero-cost');
+      const cost = taskOutcome(tc, run.run, i);
+      const why = orphanCost ? LEFT_OUT[0] : LEFT_OUT.find((g) => cost.gaps.has(g)) ?? null;
       if (why) { tally.set(why, (tally.get(why) ?? 0) + 1); continue; }
-      const models = Object.entries(i.cost_by_model).sort((a, b) => b[1] - a[1]);
       samples.push({ run: run.run, ref: i.ref, role: i.role ?? null, type: i.type ?? null, area: i.area ?? null, novel: i.novel ?? null, size: i.class ?? null,
-        cost_usd: i.cost_usd, done_at: i.last_done_at ?? i.done_at, returned: i.rework_count > 0 || i.reopened || returnedIds.has(i.item_id), model: models[0]?.[0] ?? null });
+        cost_usd: cost.cost_usd, done_at: i.last_done_at ?? i.done_at, returned: i.rework_count > 0 || i.reopened || returnedIds.has(i.item_id), model: cost.model, cost_source: cost.source });
     }
   }
   return { samples, landed, left_out: Object.fromEntries(LEFT_OUT.filter((g) => tally.has(g)).map((g) => [g, tally.get(g)])) };
@@ -121,7 +124,7 @@ export function buildCalibration(samples, { now = Date.now(), halfLifeDays = HAL
   const groups = new Map();
   for (const s of samples) for (const k of cellKeys(s)) { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
   const cells = Object.fromEntries([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, list]) => [k, summarize(list, weightOf, bounds)]));
-  const cal = { v: 1, generated_at: nowIso(now), unit: 'usd', half_life_days: halfLifeDays, min_n: MIN_N, prices_as_of: pricesAsOf, samples: samples.length, class_bounds_usd: bounds && bounds.map(r2), cells, outliers: [] };
+  const cal = { v: 1, generated_at: nowIso(now), unit: 'usd', half_life_days: halfLifeDays, min_n: MIN_N, prices_as_of: pricesAsOf, samples: samples.length, samples_by_source: Object.fromEntries(['ledger', 'recovered', 'both'].map((n) => [n, samples.filter((s) => s.cost_source === n).length])), class_bounds_usd: bounds && bounds.map(r2), cells, outliers: [] };
   // The tasks the table fits worst — what the retro should look at, and why the planner's features may be missing something.
   cal.outliers = samples.map((s) => { const hit = lookup(cal, s); return hit && hit.cell.p50_usd > 0 ? { run: s.run, ref: s.ref, cell: hit.key, cost_usd: r2(s.cost_usd), p50_usd: hit.cell.p50_usd, ratio: r2(s.cost_usd / hit.cell.p50_usd) } : null; })
     .filter(Boolean).sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio))).slice(0, 3);

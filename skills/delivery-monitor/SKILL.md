@@ -99,7 +99,7 @@ The `crossed` flag means a follow-up names another item in the same run. It does
 `attributed_share` excludes the branch and brief heuristics. `attributed_share_incl_heuristic` includes them. Both are null for a zero total.
 Use `--by plan` for recovered item and plan totals per run, plus project totals for legacy and unresolved spend.
 JSON adds `attribution` and per-key decisions. If a run file cannot be read or fails validation, attribution is unavailable.
-The base spend report still succeeds. Recovered spend is shown in `spend` only; task costs and calibration do not use it yet.
+The base spend report still succeeds. Recovered spend is shown in `spend`; `report` task costs do not use it yet. Calibration does (see below).
 
 The spend window selects **dispatches started in `[since, until)`** and includes their lifetime usage. Start time is the
 earliest resolved legacy `dispatched` time, else the store's start. `unknown-start` keys are included only without a window.
@@ -146,6 +146,15 @@ landed task has a complete measured cost, and says how many it left out. Use `ca
 or `calibrate --dry-run` to inspect the table and `OUTLIER` lines. `status` shows sample count and age; `doctor` warns
 about missing or stale calibration. `report` scores those ranges against measured cost in `usd:` strata.
 Cells need 5 samples, classes 12.
+
+Calibration also counts attributed dispatches the hook missed. It takes every dispatch that `spend` attributes to a task,
+each dispatch once, at current prices. A dispatch shared by several tasks is split equally. The completeness rules are the same
+as above, applied to all of a task's dispatches. Two reasons are new: `text-incomplete` and `attribution-unstable` (the
+description or brief names a cancelled task or mission, or a campaign prefix that is not a qualifier). `calibrate` stops with
+`ATTRIBUTION-UNAVAILABLE` (exit 2) when attribution cannot be computed; `plan register` then warns and keeps the saved table.
+`calibration.json` gains `samples_by_source` (`ledger`, `recovered`, `both`). Because of this, these numbers can change: sample
+costs and models, sample counts, and the cells and classes built from them. `report`, `spend` and every other output keep their
+numbers. The report keeps the hook's task costs until a later change.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing, cancellation, block/unblock and defect/fix at the

@@ -170,6 +170,9 @@ function cmdPlanRegister(repo, f, io, now) {
       else if (e.code === 'PRICES-INVALID') {
         io.stderr.write(`WARN PRICES-INVALID ${e.problem}; calibration not rebuilt\n`);
         calibrationNote = 'CALIBRATION none: prices invalid; calibration not rebuilt';
+      } else if (e.code === 'ATTRIBUTION-UNAVAILABLE') {
+        io.stderr.write(`WARN ATTRIBUTION-UNAVAILABLE ${e.reason}; calibration not rebuilt\n`);
+        calibrationNote = 'CALIBRATION none: attribution unavailable; calibration not rebuilt';
       } else throw e;
     }
   }
