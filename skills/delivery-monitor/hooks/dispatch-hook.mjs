@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // STDLIB ONLY. Claude SubagentStop → dispatched / dispatch_ended (+ rework_observed) observations (spec §6.6).
 // Never prints to stdout, always exits 0. Admission: open run, session→run association, role in the run's roster snapshot.
-import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync, writeFileSync } from 'node:fs';
+import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, nowIso, sessionPath, sessionsDir, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
+import { deliveryDir, nowIso, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
+import { writeBinding } from '../scripts/lib/history.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
 import { costOf, loadPricesChecked } from '../scripts/lib/cost.mjs';
 import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
@@ -215,13 +216,12 @@ const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(
 /** F3: an unbound session binds itself when its working branch associates (lib/associate.mjs) to exactly one item of exactly one
  * OPEN run. Zero or several candidates → null (the caller writes the unbound diagnostic); ambiguity is never guessed across. The
  * binding file has the shape `session set` writes, plus `bound_by: 'branch'`, so later stops skip the git call. */
-function bindByBranch(repo, payload, now) {
+function bindByBranch(repo, payload, now, slug) {
   try {
     const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null; if (!branch) return null;
     const hits = listRuns(repo).filter((r) => r.status === 'open' && associate(r, { head: branch }).items.length === 1);
     if (hits.length !== 1) return null;
-    mkdirSync(sessionsDir(repo), { recursive: true });
-    writeFileSync(sessionPath(repo, 'claude', payload.session_id), `${JSON.stringify({ host: 'claude', session: payload.session_id, plan: hits[0].run, at: nowIso(now), bound_by: 'branch' })}\n`);
+    writeBinding(repo, 'claude', payload.session_id, hits[0].run, now, { by: 'branch', bound_by: 'branch', slug });
     return hits[0];
   } catch { return null; }
 }
@@ -238,7 +238,7 @@ function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
   try { ingestDispatch(repo, snapshotFromTranscript(tr, { session: payload.session_id, agent_id: payload.agent_id, agent_type: meta.agentType || payload.agent_type || null, description: meta.description ?? '', repo, now })); } catch { /* hooks never fail the host */ }
   if (!listRuns(repo).some((r) => r.status === 'open')) return none;
   const { slug } = whoAmI(repo);
-  const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now);
+  const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now, slug);
   if (!run) return { wrote: [], diagnostic: diagnose(repo, slug, 'unbound-session', payload, 'run: delivery.mjs session set --host claude --session <id> --plan <run>', now) };
   if (!validRoster(run.roster)) return { wrote: [], diagnostic: diagnose(repo, slug, 'invalid-roster', payload, 'refresh plan roster with this installed skill', now) };
   const role = meta.agentType || payload.agent_type || null;

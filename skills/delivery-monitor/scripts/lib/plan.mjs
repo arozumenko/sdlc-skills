@@ -16,6 +16,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { makeObservation, validateEstimate } from './events.mjs';
 import { decodeSegment, plansDir, runPath, sha256 } from './paths.mjs';
+import { logWrite, readPrev, runSummary } from './history.mjs';
 
 export { validateEstimate };
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -136,7 +137,11 @@ export function toCatalogue(p, { version }) {
 const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
 export const canonicalHash = (p) => sha256(JSON.stringify(sortKeys(p)));
 
-export function saveRun(repo, rec) { mkdirSync(plansDir(repo), { recursive: true }); writeFileSync(runPath(repo, rec.run), `${JSON.stringify(rec, null, 2)}\n`); }
+export function saveRun(repo, rec, { by, now, slug, onHistoryError } = {}) {
+  const path = runPath(repo, rec.run), prev = by ? readPrev(path, runSummary) : null;
+  mkdirSync(plansDir(repo), { recursive: true }); writeFileSync(path, `${JSON.stringify(rec, null, 2)}\n`);
+  if (by) logWrite(repo, { by, now, slug, onHistoryError }, 'run', rec.run, prev, runSummary(rec));
+}
 export function loadRun(repo, runId) { const p = runPath(repo, runId); if (!existsSync(p)) return null; try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } }
 export function listRuns(repo) {
   if (!existsSync(plansDir(repo))) return [];
