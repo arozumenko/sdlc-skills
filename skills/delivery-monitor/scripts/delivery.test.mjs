@@ -712,7 +712,7 @@ test('D4: a gh PR list that reaches the --limit cap may be truncated, so reconci
   assert.equal(code, 0); assert.match(buf, /NOTE reconciliation skipped: .*limit/); assert.match(buf, /retracted=0/); assert.equal(activePr(repo).length, 1, 'the earlier observation survives');
 });
 
-// coach-android 2026-10-08: no orchestrator ever ran `session set`, so 8 of 9 plans captured no dispatch. Registering from inside
+// A consumer project, 2026-10-08: no orchestrator ever ran `session set`, so 8 of 9 plans captured no dispatch. Registering from inside
 // Claude Code now binds the calling session; outside it, a NOTE names the command.
 test('plan register binds the calling Claude session (--no-bind opts out; no session → NOTE); session set defaults to it', () => {
   const repo = initRepo(), sess = (id) => join(deliveryDir(repo), 'sessions', `claude%3A${id}.json`);
@@ -747,7 +747,7 @@ test('plan close/show accept the run positionally; status/report flag an open pl
   assert.doesNotMatch(run(repo, ['status', '--plan', 'sec/run-1']).stdout, /plan close/);
 });
 
-// coach-android 2026-10-08: an infra task landed no commit; `done --sha <main HEAD>` took an unrelated earlier merge's time,
+// A consumer project, 2026-10-08: an infra task landed no commit; `done --sha <main HEAD>` took an unrelated earlier merge's time,
 // four minutes before the task's own dispatch.
 test('event done: a sha that predates the item\'s first dispatch is rejected; no --sha stamps now; an --at correction is allowed', () => {
   const repo = initRepo();

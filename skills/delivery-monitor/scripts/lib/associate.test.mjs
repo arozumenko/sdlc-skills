@@ -53,9 +53,9 @@ test('associate D1: alias beats branch_map; ambiguity falls through; the note sa
 });
 
 test('associate D3: branch_prefix may be an array — a head matching ANY entry (case-insensitive) is considered', () => {
-  const two = { ...run, branch_prefix: ['coach-android-c6', 'Live-Monitor-Deferred'], branch_map: [{ pattern: '-m(?<m>\\d+)(?:-[a-z][\\w-]*)?$', ref: 'M{m}' }] };
-  assert.deepEqual(associate(two, { head: 'feat/coach-android-c6-m1' }).items.map((i) => i.ref), ['M1']);
-  assert.deepEqual(associate(two, { head: 'feat/live-monitor-deferred-defects-m2' }).items.map((i) => i.ref), ['M2']);
+  const two = { ...run, branch_prefix: ['demo-app-c6', 'Feature-Deferred'], branch_map: [{ pattern: '-m(?<m>\\d+)(?:-[a-z][\\w-]*)?$', ref: 'M{m}' }] };
+  assert.deepEqual(associate(two, { head: 'feat/demo-app-c6-m1' }).items.map((i) => i.ref), ['M1']);
+  assert.deepEqual(associate(two, { head: 'feat/feature-deferred-defects-m2' }).items.map((i) => i.ref), ['M2']);
 });
 test('associate D3: with a prefix set, the repo-wide title step cannot claim an unrelated PR (#476 shape)', () => {
   const pre = { ...run, branch_prefix: ['lm-deferred'], branch_map: [] };

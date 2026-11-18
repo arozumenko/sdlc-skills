@@ -285,7 +285,7 @@ function cmdCalibrate(repo, p, io, now) {
 
 /** History options for a state write: the first failure reason is kept on io and printed once by main. */
 const hist = (io, by, now) => ({ by, now, onHistoryError: (reason) => { io.historyError ??= reason; } });
-/** coach-android 2026-10-08: no orchestrator ever ran `session set`, so the hook recorded nothing for 8 of 9 plans. Registering a plan
+/** A consumer project, 2026-10-08: no orchestrator ever ran `session set`, so the hook recorded nothing for 8 of 9 plans. Registering a plan
  * from inside Claude Code binds the calling session (subagents share the parent's CLAUDE_CODE_SESSION_ID) — the session that registers
  * the plan is the one about to dispatch it. `--no-bind` opts out; outside Claude Code there is nothing to bind and a NOTE says so. */
 function bindCaller(repo, runId, f, io, now, by) {
@@ -372,7 +372,7 @@ function cmdEvent(repo, p, io, now) {
     let rec = buildEvent(repo, run, item, ev, f, token, now);
     // A defect retried without --at/--sha keeps the clock it was first recorded with (not "now" again), so the retry SKIPs.
     if (defectEv && !f.at && !f.sha) { const prior = seenActive.find((o) => o.observation_id === rec.observation_id); if (prior) rec = buildEvent(repo, run, item, ev, { ...f, at: prior.at }, token, now); }
-    // coach-android 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
+    // A consumer project, 2026-10-08: an infra task landed no commit, so `done --sha <main HEAD>` stamped it with an unrelated earlier
     // merge's time — before its own dispatch. A sha-derived `done` earlier than the item's first observed dispatch (this
     // episode) is not this item's merge; an explicit --at correction (meta.clock 'corrected') is the caller's decision.
     if (ev === 'done' && rec.status === 'active' && rec.meta.git_sha && rec.meta.clock !== 'corrected') {

@@ -152,7 +152,7 @@ const matchLevel = (items, { description, firstUserText, branch }) => {
 // when no task-level match is found (and the task-level result isn't itself ambiguous — that stays
 // ambiguous rather than falling through to a mission-level guess) do we consider mission-level items.
 //
-// Role ruling (coach-android 2026-10-08): when the dispatched role owns tasks in the plan (`tasks[].role`), only those tasks are
+// Role ruling (a consumer project, 2026-10-08): when the dispatched role owns tasks in the plan (`tasks[].role`), only those tasks are
 // matched (except under the briefed-task ruling below) — a ref that is also an ordinary word ("qa", "review") in another role's
 // prompt must not win over the role's own task. The role's only task takes the dispatch even with no textual hit; several
 // unmatched → unattributed. Another role's task is reached only through a digit-bearing ref in the description.

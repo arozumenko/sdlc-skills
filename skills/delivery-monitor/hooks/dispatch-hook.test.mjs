@@ -275,7 +275,7 @@ test('F3: branch_map binding works for a run with a prefix; a closed run is neve
   assert.equal(handleStop(payload(transcripts(), { cwd: gitRepoOnBranch('task/task-023') }), { repo: closed, now: NOW }).diagnostic, null, 'no open run → nothing at all');
 });
 
-// coach-android 2026-10-08 (replay-identity-1008): tasks impl/review/qa owned by android-dev/tech-lead/qa-engineer. The android-dev
+// A consumer project, 2026-10-08 (replay-identity-1008): tasks impl/review/qa owned by android-dev/tech-lead/qa-engineer. The android-dev
 // prompt said "closes it after QA" and named branch `…-impl` (no word hit) → credited to qa. The role's own task must win.
 test('resolveRefs: a task owned by the dispatched role wins over a word hit on another role\'s task', () => {
   const t = (ref, role) => ({ item_id: `p/task-${ref}`, ref, level: 'task', role });
