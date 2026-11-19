@@ -8,7 +8,7 @@ import { attributeSpend, loadRunsChecked, rejectedQualifiers, runsInScope } from
 import { costOf, loadPricesChecked } from './cost.mjs';
 import { readDispatches, reduce } from './dispatches.mjs';
 import { resolveObservations } from './events.mjs';
-import { cliError } from './paths.mjs';
+import { cliError, isInputError } from './paths.mjs';
 import { spendReport } from './spend.mjs';
 
 export const taskKey = (run, itemId) => `${run}\u0000${itemId}`;
@@ -35,10 +35,11 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
   const loaded = loadPricesChecked(repo);
   if (loaded.problem) { const e = cliError('PRICES-INVALID', `${loaded.problem}; dispatches priced while it was broken are recorded as unpriced and left out`); e.problem = loaded.problem; throw e; }
   const unavailable = (reason) => { const e = cliError('ATTRIBUTION-UNAVAILABLE', reason); e.reason = reason; return e; };
-  // Any failure to read what attribution needs (dispatch store, ledger, run files) is one reason, never an internal error.
+  // A failure to read what attribution needs (dispatch store, ledger, run files) is one reason; any other exception is a
+  // programming error and propagates (INTERNAL).
   let doc, runs, stored;
   try { doc = enriched ?? attributeSpend(repo, spendReport(repo)); ({ runs } = loadRunsChecked(repo)); stored = reduce(readDispatches(repo)); }
-  catch (e) { if (e.code === 'PRICES-INVALID') throw e; throw unavailable(String(e?.message ?? e).split('\n')[0]); }
+  catch (e) { if (e.code === 'PRICES-INVALID' || !isInputError(e)) throw e; throw unavailable(String(e?.message ?? e).split('\n')[0]); }
   if (doc.attribution.unavailable) throw unavailable(doc.attribution.unavailable);
   const prices = loaded.prices;
   const byRun = new Map(runs.map((r) => [r.run, { items: new Map(r.items.map((i) => [i.item_id, i])), renamed: r.supersedes?.item_map ?? {} }]));

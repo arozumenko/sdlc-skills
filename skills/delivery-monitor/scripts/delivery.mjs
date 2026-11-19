@@ -3,7 +3,7 @@
 import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cliError, currentSession, deliveryDir, nowIso, profilePath, sha256 } from './lib/paths.mjs';
+import { cliError, currentSession, isInputError, deliveryDir, nowIso, profilePath, sha256 } from './lib/paths.mjs';
 import { snapshot, writeBinding } from './lib/history.mjs';
 import { DEFECT_EVENTS, DEFECT_SEVERITIES, DEFECT_STAGES, EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
@@ -545,7 +545,7 @@ function cmdStatus(repo, p, io, now) {
     const calib = readCalibration(repo);
     if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
     else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
-  } catch (e) { out(io, `CALIBRATION invalid: ${e.message}`); }
+  } catch (e) { if (!isInputError(e)) throw e; out(io, `CALIBRATION invalid: ${e.message}`); }
   spendLine();
   return 0;
 }

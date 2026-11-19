@@ -53,11 +53,16 @@ export const currentSession = (env = process.env) => (env.CLAUDE_CODE_SESSION_ID
 export const nowIso = (now = Date.now()) => new Date(now).toISOString();
 export const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
-const EXIT = { USAGE: 2, 'SCHEMA-INVALID': 2, 'ID-CONFLICT': 2, 'INVALID-TRANSITION': 2, 'AMBIGUOUS-PLAN': 2, 'MIGRATION-REQUIRED': 2, 'LOCK-BUSY': 2, CONFLICT: 2, 'CALIBRATION-INVALID': 2, 'PRICES-INVALID': 2, 'ATTRIBUTION-UNAVAILABLE': 2, 'NO-PLAN': 3, 'NO-EVENTS': 3 };
+const EXIT = { USAGE: 2, 'SCHEMA-INVALID': 2, 'ID-CONFLICT': 2, 'INVALID-TRANSITION': 2, 'AMBIGUOUS-PLAN': 2, 'MIGRATION-REQUIRED': 2, 'LOCK-BUSY': 2, CONFLICT: 2, 'CALIBRATION-INVALID': 2, 'PRICES-INVALID': 2, 'ATTRIBUTION-UNAVAILABLE': 2, 'RUN-UNREADABLE': 2, 'NO-PLAN': 3, 'NO-EVENTS': 3 };
 export function cliError(code, detail) {
   const e = new Error(`${code}(${String(detail).replace(/\s*\n\s*/g, ' ')})`);
   e.code = code; e.exit = EXIT[code] ?? 1; return e;
 }
+
+/** An error that says an input could not be read, not that the code is wrong: a cliError with a known code, a Node file-system
+ * error (ENOENT, EACCES, EISDIR, ...) or a JSON SyntaxError. Attribution and task costs turn only these into "unavailable"; any
+ * other exception (TypeError, ReferenceError, ...) is a programming error and reaches main as INTERNAL. */
+export const isInputError = (e) => e instanceof SyntaxError || (typeof e?.code === 'string' && (Object.hasOwn(EXIT, e.code) || /^E[A-Z0-9]+$/.test(e.code)));
 
 /** Same identity rule as tokenomics: git user.name, else OS user, else email local-part; slugged. */
 export function whoAmI(repo) {
