@@ -63,8 +63,8 @@ const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length,
 // earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
 const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
   : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
-/** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
- * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
+/** Dollar estimates (unit `usd`, from calibration) are scored against the item's `cost_usd` (the report's task cost, or the
+ * hook-time cost on fallback) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   // `chosen` is null when the dollar estimate was never accepted, or when `latest` finds none accepted before the start.
   const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;

@@ -138,7 +138,7 @@ test('CLI: calibrate writes the table from landed tasks; plan register fills cal
   assert.equal(rows[0].actual_usd, n1.estimate.low); assert.equal(rows[0].reason, null); assert.equal(rows[0].hit, true); assert.equal(rows[0].effort_class, n1.effort_class);
   assert.ok(JSON.stringify(doc).includes('"usd:all"'), 'usd estimates are scored in their own strata');
   const md = run(repo, ['report', '--plan', 'sec/run-2', '--cutoff', cutoff]).stdout;
-  assert.match(md, new RegExp(`\\| N1 \\| task \\| — \\| calibrated \\| original \\| \\[\\$${n1.estimate.low}, \\$${n1.estimate.high}\\] \\| \\$${n1.estimate.low} \\|`));
+  assert.match(md, new RegExp(`\\| N1 \\| task \\| — \\| calibrated \\| original \\| \\[\\$${n1.estimate.low}, \\$${n1.estimate.high}\\] \\| [^|]* \\| \\$${n1.estimate.low}( E\\d)? \\|`));
   assert.match(md, /\| task \| usd:all \| 1 \| 1 \|/);
   const html = run(repo, ['report', '--html', '--plan', 'sec/run-2', '--cutoff', cutoff]).stdout;
   assert.match(html, /Cost estimates/); assert.ok(html.includes(`$${n1.estimate.low}–$${n1.estimate.high}`), 'task row shows the dollar range, not hours');
@@ -663,8 +663,8 @@ test('report: a dollar estimate that was never accepted shows its measured cost 
   dispatch(repo, 'sec/run-1', 'RV', { at: '2026-11-03T10:00:00.000Z', agent: { ...GOOD, cost_usd: 3 }, stage: 'review' });
   for (const ref of ['UN', 'RV']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
   const md = run(repo, ['report', '--plan', 'sec/run-1', '--cutoff', '2026-11-04T00:00:00Z']).stdout;
-  assert.match(md, /\| UN \| task \| — \| ROM \| original \| — \| \$3 \| .*\| unaccepted \|/);
-  assert.match(md, /\| RV \| task \| — \| ROM \| original \| \[\$2, \$4\] \| \$3 \(incomplete\) \| .*\| missing_actual \|/, 'a partial cost is not shown as the actual');
+  assert.match(md, /\| UN \| task \| — \| ROM \| original \| — \| — \| \$3 \| .*\| unaccepted \|/);
+  assert.match(md, /\| RV \| task \| — \| ROM \| original \| \[\$2, \$4\] \| — \| \$3 \(incomplete\) \| .*\| missing_actual \|/, 'a partial cost is not shown as the actual');
 });
 
 test('a built-in price table with an incomplete entry prices nothing and is reported, not used', async () => {

@@ -127,16 +127,18 @@ reason that applies and is never double-counted):
 3. `unaccepted` — has an estimate but no `estimate_original` (never had a valid `accepted_by`+`accepted_at` pair)
 4. `no_eligible_latest` — `estimateBase: latest` requested but no accepted estimate qualifies before the item's start/cutoff
 5. `unit_mismatch` — the chosen estimate's unit isn't `h` (e.g. `active_min` — M1 actuals are elapsed time only).
-   A `usd` estimate is not a mismatch: it is scored against the task's measured cost (`cost_usd`, the sum of its hooked
-   dispatches' priced cost) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
+   A `usd` estimate is not a mismatch: it is scored against the task's cost (`cost_usd`: every dispatch attributed to the
+   task, counted once, at current prices, from dispatches started before the effective end; the hook-time cost when the
+   report falls back) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
    `mae_s` is in dollars and rows carry `actual_usd`. The gates apply in this order: `excluded_item`, `unaccepted`,
    `no_eligible_latest` (both as above; such a task stays in the `usd:` strata and is never counted as hours),
    `late_accepted` (accepted at or after the task's measured start; a task with no measured start is judged against the
    earlier of its first commit and its earliest hooked dispatch of any stage; with neither, the estimate is never late),
-   `missing_actual` (no cost, or an unpriced model, an unended hooked dispatch, a resumed agent's dispatch that lists other
-   tasks in `meta.agent.crossed` — the task of the first brief and each listed task — an earliest hooked dispatch that is a
-   review or a fix round, or — for every task of the run — dispatch cost recorded under an item id the run no longer knows,
-   such as a renamed task's old id), `zero_midpoint`. `late_accepted` comes before `missing_actual` here, the reverse of
+   `missing_actual` (no cost, zero cost, or an unpriced model, an unended dispatch, a resumed agent's dispatch that lists other
+   tasks in `meta.agent.crossed` — the task of the first brief and each listed task — an earliest dispatch that is a
+   review or a fix round, unstable or incomplete attribution, or — for every task of the run — dispatch cost recorded under
+   an item id the run neither knows nor maps through `supersedes.item_map`), `zero_midpoint`. The eligible rows are also
+   banded (`estimated_band`, `actual_band`, `band_distance`; see SKILL.md, "Task cost in the report"). `late_accepted` comes before `missing_actual` here, the reverse of
    the hours order; `zero_actual` and `point` are the same non-exclusive counters as for hours. On a `missing_actual` row
    `actual_usd` is the partial total the ledger holds, shown for inspection (the Markdown report marks it
    `(incomplete)`); it is not the task's cost

@@ -105,7 +105,7 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 - A task renamed through `supersedes.item_map` keeps the dispatches, rework and returns recorded under its old id (the
   re-cut's own `created`/`cancelled` for the old id are not carried). If a run has dispatch cost under an id it no longer
   knows (a rename from a version whose map is gone), the whole run is left out of calibration, and `report` withholds cost
-  accuracy for its tasks.
+  accuracy for its tasks. `report` maps renamed ids the same way for task costs.
 - A changed cost for the same dispatch (prices corrected, transcript re-read) is a different fact: the hook writes it as the
   next revision of that observation, and the highest revision is read.
 - **Cells** at decreasing detail: `role=…|type=…|novel=…`, `role=…|type=…`, `role=…`, `type=…`, `all`. A feature the plan

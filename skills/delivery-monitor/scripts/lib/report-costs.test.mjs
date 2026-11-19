@@ -367,3 +367,41 @@ test('8 per-plan cost: (c) is the sum of per-task costs; (a) plus the other task
   const inA = new Set(['T1', 'T2']);
   assert.equal(p.cost.done_in_window_usd + sum(tasks.filter((i) => !inA.has(i.ref))), p.cost.all_tasks_usd);
 });
+
+// ---------- 9. Markdown, HTML, JSON and --from-json ----------
+async function rendered(t) {
+  const f = await banded(t, [['T1', usdEst(1.5, 3), 1.5], ['T2', usdEst(1, 3, 'ROM'), 3], ['T3', usdEst(0.5, 0.5, 'ROM'), 5], ['T4', null, 2.5]], { cls: ['S', 'S', 'M', 'M'] });
+  calibration(f); f.flush();
+  const md = (await cli(f.repo, ['report', '--cutoff', CUT])).stdout, html = (await cli(f.repo, ['report', '--html', '--cutoff', CUT])).stdout;
+  return { f, md, html, doc: await report(f, ['--cutoff', CUT]) };
+}
+test('9 Markdown: a Cost section with basis, plan cost, band headline and matrix, dollar detail renamed, and a task cost table', async (t) => {
+  const { md } = await rendered(t);
+  const cost = md.slice(md.indexOf('## Cost'), md.indexOf('## Coverage'));
+  assert.match(cost, /^- basis: current prices as of 2026-11-01; lifetime cost of dispatches started before the effective end; may be revised$/m);
+  assert.match(cost, /^- plan cost: done in window \$12 \(4 tasks\), done without a usable cost 0, all tasks \$12$/m);
+  assert.match(cost, /^- estimate bands: same 1 · one off 1 · two or more off 1 — within one band 2 of 3 \(E1 ≤ \$1, E2 ≤ \$2, E3 ≤ \$3, E4 above\)$/m);
+  assert.match(cost, /^\| estimated \\ actual \| E2 \| E3 \| E4 \|$/m); assert.match(cost, /^\| E1 \| — \| — \| 1 \|$/m); assert.match(cost, /^\| E2 \| 1 \| 1 \| — \|$/m);
+  assert.match(cost, /^- planner size × actual band: — \(4 tasks, shown from 5\)$/m);
+  assert.match(cost, /within dollar range/); assert.match(cost, /^\| T2 \| task \| S \| ROM \| original \| \[\$1, \$3\] \| \$2 E2 \| \$3 E3 \| 1\.5 \| yes \| — \|$/m);
+  assert.match(cost, /^\| ref \| state \| cost \| band \| source \| gaps \|$/m); assert.match(cost, /^\| T4 \| done \| \$2\.5 \| E3 \| ledger \| — \|$/m);
+  const est = md.slice(md.indexOf('## Estimates'), md.indexOf('## Cost'));
+  assert.doesNotMatch(est, /usd:/, 'dollar strata moved to the Cost section');
+});
+test('9 HTML: cost column with the actual band chip, band card without hook wording, and a Cost panel', async (t) => {
+  const { html } = await rendered(t);
+  assert.match(html, /<div class="c">cost<\/div>/);
+  assert.match(html, /<span title="sec\/run-1\/task-t3">T3<\/span>.*?\$5 <span class="oc band">E4<\/span>/s);
+  assert.match(html, /2 <span class="stat-sub">of 3<\/span><\/span><span class="hero-label">estimates within one effort band<\/span>/);
+  assert.doesNotMatch(html, /hooked dispatches/); assert.match(html, /<h2>Cost<\/h2>/);
+});
+test('9 --from-json: an archived report without the cost fields renders Markdown and HTML with no cost values and no bands', async (t) => {
+  const { f, doc } = await rendered(t);
+  const strip = (v) => JSON.parse(JSON.stringify(v, (k, x) => (['cost_usd', 'cost_source', 'cost_gaps', 'cost_band', 'cost_basis', 'cost_fallback', 'prices_as_of', 'task_cost', 'cost', 'estimate_bands', 'planner_size_bands', 'estimate_rep_usd', 'estimated_band', 'actual_band', 'band_distance'].includes(k) ? undefined : x)));
+  const file = join(f.repo, 'old.json'); writeFileSync(file, JSON.stringify(strip(doc)));
+  const md = await cli(f.repo, ['report', '--from-json', file]), html = await cli(f.repo, ['report', '--from-json', file, '--html']);
+  assert.equal(md.code, 0, md.stderr); assert.equal(html.code, 0, html.stderr);
+  assert.match(md.stdout, /^- basis: — \(archived report without task costs\)$/m); assert.doesNotMatch(md.stdout, /estimate bands: same/);
+  assert.match(md.stdout, /^\| T4 \| done \| — \| — \| — \| — \|$/m);
+  assert.doesNotMatch(html.stdout, /class="oc band"/); assert.doesNotMatch(html.stdout, /within one effort band/);
+});
