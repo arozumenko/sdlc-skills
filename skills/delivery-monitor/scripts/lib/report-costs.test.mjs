@@ -434,3 +434,15 @@ test('4b cost view time: a dispatch spend does not list and with no known start 
   const get = view(f);
   assert.equal(get('T1').cost_usd, 2); assert.ok(!get('T1').cost_gaps.includes('cost-under-unknown-id'), get('T1').cost_gaps.join());
 });
+
+test('5 error boundary: doctor and the status spend line keep their soft messages for unreadable input, but a programming error is INTERNAL', async (t) => {
+  const f = await landed(t);
+  failInside(t, 'taskCosts', enoent, ['attributeSpend']);
+  let r = await cli(f.repo, ['doctor']); assert.notEqual(r.code, 1, r.stderr); assert.match(r.stdout, /warning: calibration: ledger unreadable: ATTRIBUTION-UNAVAILABLE\(/);
+  t.mock.restoreAll(); failInside(t, 'taskCosts', typeError, ['attributeSpend']);
+  r = await cli(f.repo, ['doctor']); assert.equal(r.code, 1); assert.match(r.stderr, /^INTERNAL\(injected programming error\)/);
+  t.mock.restoreAll(); failInside(t, 'statusSpend', enoent);
+  r = await cli(f.repo, ['status']); assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /^SPEND unavailable: /m);
+  t.mock.restoreAll(); failInside(t, 'statusSpend', typeError);
+  r = await cli(f.repo, ['status']); assert.equal(r.code, 1); assert.match(r.stderr, /^INTERNAL\(injected programming error\)/);
+});
