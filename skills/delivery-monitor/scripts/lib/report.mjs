@@ -203,8 +203,21 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
     // C1 replaces the hook's cost values on every item before metrics and rendering; durations, spans and counts stay as built.
     if (tc) {
-      const cv = costView(tc, r, occurrences);
-      for (const it of items.values()) { const c = cv.get(it.item_id); it.cost_usd = c.cost_usd; it.cost_source = c.cost_source; it.cost_gaps = c.cost_gaps; it.cost_incomplete = c.cost_gaps.length > 0; }
+      const cv = costView(tc, r, occurrences), renamed = r.supersedes?.item_map ?? {}, taken = new Set();
+      // The cost view holds a renamed task's cost under its new id. A report ending before the re-cut still has the old item: an
+      // item with no usable cost whose rename target (followed through item_map) is in the cost view but not among this
+      // timeline's items takes the target's cost, each target once. The chain is followed to the first id the cost view holds a
+      // cost under (the view maps one step, as calibration does).
+      const targetOf = (id) => {
+        for (let x = id, seen = new Set([id]); Object.hasOwn(renamed, x) && !seen.has(renamed[x]);) { x = renamed[x]; seen.add(x); if (cv.get(x)?.cost_usd != null && !items.has(x) && !taken.has(x)) return x; }
+        return null;
+      };
+      for (const it of items.values()) {
+        let c = cv.get(it.item_id);
+        if (c?.cost_usd == null) { const to = targetOf(it.item_id); if (to) { c = cv.get(to); taken.add(to); } }
+        c ??= { cost_usd: null, cost_source: null, cost_gaps: ['no-cost-recorded'] };
+        it.cost_usd = c.cost_usd; it.cost_source = c.cost_source; it.cost_gaps = c.cost_gaps; it.cost_incomplete = c.cost_gaps.length > 0;
+      }
     }
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
     cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes; cov.non_task_blocks += counts.nonTaskBlocks;

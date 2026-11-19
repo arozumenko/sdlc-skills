@@ -454,3 +454,46 @@ test('5 error boundary: doctor and the status spend line keep their soft message
   t.mock.restoreAll(); failInside(t, 'statusSpend', typeError);
   r = await cli(f.repo, ['status']); assert.equal(r.code, 1); assert.match(r.stderr, /^INTERNAL\(injected programming error\)/);
 });
+
+// ---------- historical renames: a report ending before the re-cut ----------
+async function recut(t, chain) {
+  // v1 registers chain[0]; each later version (one day apart, from Nov 5) renames the previous ref to the next one.
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: [chain[0]] }]);
+  const ids = [f.itemId('sec/run-1', chain[0])];
+  ledger(f, { refs: [chain[0]], id: 'a', usd: 2 }); land(f, 'sec/run-1', chain[0]); f.flush();
+  for (let v = 1; v < chain.length; v++) {
+    const file = join(f.repo, `v${v + 1}.md`), at = `2026-11-0${4 + v}T00:00:00Z`, newId = `sec/run-1/task-${chain[v].toLowerCase()}`;
+    writeFileSync(file, `# p\n\`\`\`json delivery-plan\n${JSON.stringify({ ...planDoc('sec', 'run-1', [{ ref: 'G1', sequence: 1, tasks: [{ ref: chain[v] }] }]), version: v + 1, supersedes: { run: 'sec/run-1', item_map: { [ids[v - 1]]: newId } } })}\n\`\`\`\n`);
+    const r = await cli(f.repo, ['plan', 'register', '--from', file, '--id', `reg-v${v + 1}`, '--no-calibrate', '--no-bind', '--at', at]); assert.equal(r.code, 0, r.stderr);
+    ids.push(f.itemId('sec/run-1', chain[v]));
+  }
+  return { f, ids };
+}
+test('historical rename: a report ending before the re-cut keeps the cost on the old item the timeline still has', async (t) => {
+  const { f } = await recut(t, ['OLD', 'NEW']);
+  const doc = await report(f, ['--until', '2026-11-04T00:00:00Z', '--cutoff', '2026-11-10T00:00:00Z']);
+  assert.ok(item(doc, 'OLD'), 'the timeline at the end still has OLD'); assert.equal(item(doc, 'NEW'), undefined);
+  assert.equal(item(doc, 'OLD').cost_usd, 2); assert.deepEqual(item(doc, 'OLD').cost_gaps, []);
+  // (The report's own replay reads only ids the latest catalogue knows, so OLD is not done here: a non-cost limit left as it is.)
+  assert.equal(doc.plans[0].cost.all_tasks_usd, 2);
+  const after = await report(f, ['--cutoff', '2026-11-10T00:00:00Z']);
+  assert.equal(item(after, 'NEW').cost_usd, 2, 'after the re-cut the cost sits on NEW, once'); assert.equal(after.plans[0].cost.all_tasks_usd, 2);
+});
+test('historical rename: a two-step chain stays withheld as in calibration; a cost goes to one old item only', async (t) => {
+  const { f, ids } = await recut(t, ['OLD', 'MID', 'NEW']);
+  // Even with both links in the map, the cost view maps one step, exactly as calibration does: OLD's cost lands under MID, an id
+  // the run no longer knows, so the whole run is withheld rather than credited to OLD.
+  f.mutate('sec/run-1', (r) => { r.supersedes.item_map = { [ids[0]]: ids[1], [ids[1]]: ids[2] }; });
+  const doc = await report(f, ['--until', '2026-11-04T00:00:00Z', '--cutoff', '2026-11-10T00:00:00Z']);
+  assert.equal(item(doc, 'OLD').cost_usd, null); assert.ok(item(doc, 'OLD').cost_gaps.includes('cost-under-unknown-id'));
+  // Two old ids mapped to one new id (register refuses this; a hand-edited run file can hold it): only the first takes its cost.
+  const g = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['A', 'B'] }]);
+  const [a, b] = ['A', 'B'].map((x) => g.itemId('sec/run-1', x));
+  ledger(g, { refs: ['A'], id: 'a', usd: 2 }); g.flush();
+  const file = join(g.repo, 'v2.md');
+  writeFileSync(file, `# p\n\`\`\`json delivery-plan\n${JSON.stringify({ ...planDoc('sec', 'run-1', [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'C' }] }]), version: 2, supersedes: { run: 'sec/run-1', item_map: { [a]: 'sec/run-1/task-c' } } })}\n\`\`\`\n`);
+  const r = await cli(g.repo, ['plan', 'register', '--from', file, '--id', 'reg-v2', '--no-calibrate', '--no-bind', '--at', '2026-11-05T00:00:00Z']); assert.equal(r.code, 0, r.stderr);
+  g.mutate('sec/run-1', (x) => { x.supersedes.item_map[b] = 'sec/run-1/task-c'; });
+  const d2 = await report(g, ['--until', '2026-11-04T00:00:00Z', '--cutoff', '2026-11-10T00:00:00Z']);
+  assert.deepEqual([item(d2, 'A').cost_usd, item(d2, 'B').cost_usd, d2.plans[0].cost.all_tasks_usd], [2, null, 2]);
+});
