@@ -183,13 +183,13 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   }
 
   // Effort bands (C2) need C1 costs and valid bounds from the current calibration table; otherwise one reason says why not.
-  let bounds = null, bandsOff = null, calPricesAsOf = null;
+  let bounds = null, bandsOff = null, calPricesAsOf = null, calRead = false;
   if (!tc) bandsOff = costs ? 'fallback' : null;
   else {
     let cal = null;
     try { cal = readCalibration(repo); } catch (e) { if (e.code !== 'CALIBRATION-INVALID') throw e; bandsOff = 'unreadable'; }
     if (!bandsOff && !cal) bandsOff = 'no-calibration';
-    else if (cal) { calPricesAsOf = cal.cal.prices_as_of ?? null; const b = cal.cal.class_bounds_usd; if (b == null) bandsOff = 'too-few-samples'; else if (!validBounds(b)) bandsOff = 'invalid-bounds'; else bounds = b; }
+    else if (cal) { calRead = true; calPricesAsOf = cal.cal.prices_as_of ?? null; const b = cal.cal.class_bounds_usd; if (b == null) bandsOff = 'too-few-samples'; else if (!validBounds(b)) bandsOff = 'invalid-bounds'; else bounds = b; }
   }
 
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
@@ -244,7 +244,9 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
   if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
-  if (bounds && calPricesAsOf !== (tc?.prices_as_of ?? null)) derived.push(`estimate bands: calibration bounds priced as of ${calPricesAsOf ?? 'unknown'}, actual costs at current prices as of ${tc?.prices_as_of ?? 'unknown'}`);
+  // Dollar estimates keep the prices of the calibration that filled them; task costs are at current prices. Said whenever both are
+  // in use and differ, bands or not (the dollar detail still compares them).
+  if (tc && calRead && calPricesAsOf !== (tc.prices_as_of ?? null)) derived.push(`prices: calibration priced as of ${calPricesAsOf ?? 'unknown'}, task costs at current prices as of ${tc.prices_as_of ?? 'unknown'}; estimates keep their recorded dollars`);
   if (costFallback) derived.push(`task cost: hook-time costs, not current prices (${costFallback.code}: ${costFallback.reason}); estimate bands suppressed`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const envelope = {

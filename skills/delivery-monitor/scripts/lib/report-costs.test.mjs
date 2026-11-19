@@ -345,10 +345,18 @@ test('6 bands: each suppression reason keeps the dollar detail and says why', as
     assert.equal(row(doc, 'T1').ratio, 0.8, 'dollar detail kept'); assert.equal(row(doc, 'T1').estimated_band, undefined); assert.equal(item(doc, 'T1').cost_band, null);
   }
 });
-test('6 bands: a calibration priced on another date adds one caveat', async (t) => {
-  const f = await banded(t, [['T1', usdEst(1, 4, 'ROM'), 2]]); calibration(f, { prices_as_of: '2026-10-01' });
-  const doc = await report(f, ['--cutoff', CUT]);
-  assert.equal(doc.envelope.caveats.filter((c) => /^estimate bands: /.test(c)).length, 1);
+test('6 bands: a calibration priced on another date adds one caveat, whether or not bands can be shown', async (t) => {
+  const price = (c) => c.startsWith('prices: ');
+  for (const [cal, bands] of [[{ prices_as_of: '2026-10-01' }, true], [{ prices_as_of: '2026-10-01', class_bounds_usd: null }, false], [{ prices_as_of: '2026-10-01', class_bounds_usd: [3, 2, 1] }, false]]) {
+    const f = await banded(t, [['T1', usdEst(1, 4, 'ROM'), 2]]); calibration(f, cal);
+    const doc = await report(f, ['--cutoff', CUT]);
+    assert.equal(doc.plans[0].metrics.estimate_bands != null, bands, JSON.stringify(cal)); assert.equal(row(doc, 'T1').ratio, 0.8, 'dollar detail');
+    assert.deepEqual(doc.envelope.caveats.filter(price), ['prices: calibration priced as of 2026-10-01, task costs at current prices as of 2026-11-01; estimates keep their recorded dollars'], JSON.stringify(cal));
+  }
+  const same = await banded(t, [['T1', usdEst(1, 4, 'ROM'), 2]]); calibration(same, { class_bounds_usd: null });
+  assert.equal((await report(same, ['--cutoff', CUT])).envelope.caveats.filter(price).length, 0, 'same date: no caveat');
+  writeFileSync(join(deliveryDir(same.repo), 'plans', 'broken.json'), '{ not json'); calibration(same, { prices_as_of: '2026-10-01' });
+  assert.equal((await report(same, ['--cutoff', CUT])).envelope.caveats.filter(price).length, 0, 'fallback: no current-price costs, no caveat');
 });
 test('6 bands: --latest-estimate bands the latest accepted estimate', async (t) => {
   const f = await banded(t, [['T1', usdEst(0.5, 0.5, 'ROM'), 2.5]]); calibration(f);
