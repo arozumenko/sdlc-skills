@@ -63,8 +63,9 @@ test('nowIso, sha256, cliError, whoAmI', () => {
   assert.equal(cliError('USAGE', 'x').exit, 2); assert.equal(cliError('WHAT', 'x').exit, 1);
   assert.match(whoAmI(tmp()).slug, /^[a-z0-9-]+$/);
 });
-test('isInputError: known cliError codes, Node file-system codes and SyntaxError; never a TypeError or an unknown code', () => {
+test('isInputError: known cliError codes and Node file-system errors; never a raw SyntaxError, a TypeError or an unknown code', () => {
   assert.ok(isInputError(cliError('RUN-UNREADABLE', 'x'))); assert.equal(cliError('RUN-UNREADABLE', 'x').exit, 2);
-  assert.ok(isInputError(Object.assign(new Error('x'), { code: 'EISDIR' }))); assert.ok(isInputError(new SyntaxError('x')));
-  assert.ok(!isInputError(new TypeError('x'))); assert.ok(!isInputError(cliError('WHAT', 'x'))); assert.ok(!isInputError(Object.assign(new TypeError('x'), { code: 'ERR_INVALID_ARG_TYPE' })));
+  assert.ok(isInputError(Object.assign(new Error('x'), { code: 'EISDIR', syscall: 'read' })));
+  assert.ok(!isInputError(new SyntaxError('x')), 'a raw SyntaxError is not tagged by a reader'); assert.ok(!isInputError(Object.assign(new Error('x'), { code: 'EISDIR' })), 'no syscall: not a file-system error');
+  assert.ok(!isInputError(Object.assign(new TypeError('x'), { code: 'EBUG' }))); assert.ok(!isInputError(new TypeError('x'))); assert.ok(!isInputError(cliError('WHAT', 'x'))); assert.ok(!isInputError(Object.assign(new TypeError('x'), { code: 'ERR_INVALID_ARG_TYPE' })));
 });

@@ -25,7 +25,8 @@ const evidence = (items, empty = 'no-evidence') => ({ items: uniqueItems(items),
  * any other exception propagates as it is. */
 export function loadRunsChecked(repo) {
   const dir = plansDir(repo), runs = [], inputs = [], seen = new Set();
-  const unreadable = (path, e) => { if (typeof e?.code !== 'string') throw e; throw Object.assign(new Error(`${path}: ${e.code}`), { code: e.code }); };
+  // A file-system failure keeps its code and syscall (so it stays an input error); anything else propagates as it is.
+  const unreadable = (path, e) => { if (typeof e?.code !== 'string' || typeof e.syscall !== 'string') throw e; throw Object.assign(new Error(`${path}: ${e.code}`), { code: e.code, syscall: e.syscall }); };
   // Only a missing directory means "no plans"; any other failure to read it must not look like an empty catalogue.
   let names;
   try { names = readdirSync(dir); }

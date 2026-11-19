@@ -90,7 +90,10 @@ function failInside(t, inside, make, outside = []) {
 }
 const enoent = () => Object.assign(new Error('gone'), { code: 'ENOENT', syscall: 'scandir' });
 const typeError = () => new TypeError('injected programming error');
-const syntaxError = () => new SyntaxError('Unexpected token in JSON');
+// Programming errors that look like input errors: a SyntaxError the code computed itself, and a TypeError carrying an E-code but
+// no file-system call. Neither may read as "unavailable".
+const syntaxError = () => new SyntaxError('injected programming error');
+const codedTypeError = () => Object.assign(new TypeError('injected programming error'), { code: 'EBUG' });
 async function landed(t) { const f = await fx(t); ledger(f, { refs: ['T1'], usd: 2 }); land(f, 'sec/run-1', 'T1'); f.flush(); return f; }
 
 // ---------- 5. error boundary ----------
@@ -103,12 +106,21 @@ test('5 error boundary: a TypeError inside attribution or inside task-cost input
     });
   }
 });
-test('5 error boundary: ENOENT inside attribution and a SyntaxError inside task-cost input assembly are ATTRIBUTION-UNAVAILABLE from calibrate', async (t) => {
-  for (const [inside, make, outside] of [['attributeSpend', enoent, ['loadRunsChecked']], ['taskCosts', syntaxError, ['attributeSpend']]]) {
+test('5 error boundary: ENOENT inside attribution or inside task-cost input assembly is ATTRIBUTION-UNAVAILABLE from calibrate', async (t) => {
+  for (const [inside, make, outside] of [['attributeSpend', enoent, ['loadRunsChecked']], ['taskCosts', enoent, ['attributeSpend']]]) {
     await t.test(inside, async (tt) => {
       const f = await landed(tt); failInside(tt, inside, make, outside);
       const r = await cli(f.repo, ['calibrate', '--dry-run']);
       assert.equal(r.code, 2, r.stderr); assert.match(r.stderr, /^ATTRIBUTION-UNAVAILABLE\(/);
+    });
+  }
+});
+test('5 error boundary: a computed SyntaxError or a TypeError with an E-code is INTERNAL (exit 1) from calibrate and from report', async (t) => {
+  for (const make of [syntaxError, codedTypeError]) for (const [inside, outside] of [['attributeSpend', ['loadRunsChecked']], ['taskCosts', ['attributeSpend']]]) for (const cmd of ['calibrate', 'report']) {
+    await t.test(`${cmd} ${inside} ${make().constructor.name}${make().code ? ` ${make().code}` : ''}`, async (tt) => {
+      const f = await landed(tt); failInside(tt, inside, make, outside);
+      const r = await cli(f.repo, cmd === 'calibrate' ? ['calibrate', '--dry-run'] : ['report', '--json']);
+      assert.equal(r.code, 1, r.stderr); assert.match(r.stderr, /^INTERNAL\(injected programming error\)/);
     });
   }
 });
@@ -134,6 +146,13 @@ test('5 run reader: through calibrate, a malformed-JSON and an invalid-schema ru
   }
 });
 
+test('5 real readers: a corrupt run file and an unreadable dispatch store make report fall back (exit 0) and calibrate exit 2', async (t) => {
+  for (const breakIt of [(f) => writeFileSync(join(deliveryDir(f.repo), 'plans', 'broken.json'), '{ not json'), (f) => { const p = join(deliveryDir(f.repo), 'dispatches-t.jsonl'); rmSync(p); mkdirSync(p); }]) {
+    const f = await landed(t); breakIt(f);
+    const r = await cli(f.repo, ['report', '--json']); assert.equal(r.code, 0, r.stderr); assert.equal(JSON.parse(r.stdout).envelope.cost_fallback.code, 'ATTRIBUTION-UNAVAILABLE');
+    const c = await cli(f.repo, ['calibrate', '--dry-run']); assert.equal(c.code, 2, c.stderr); assert.match(c.stderr, /^ATTRIBUTION-UNAVAILABLE\(/);
+  }
+});
 test('5 error boundary: status still prints CALIBRATION invalid for unavailable attribution, but a programming error is INTERNAL', async (t) => {
   const f = await landed(t); failInside(t, 'taskCosts', enoent, ['attributeSpend']);
   let r = await cli(f.repo, ['status']); assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /^CALIBRATION invalid: ATTRIBUTION-UNAVAILABLE\(/m);
@@ -275,9 +294,9 @@ test('5 fallback: attribution unavailable or invalid prices → hook costs, cost
     const md = await cli(f.repo, ['report']); assert.equal(md.code, 0, md.stderr);
   }
 });
-test('5 error boundary: a TypeError inside attribution or task-cost input assembly is exit 1 from report; ENOENT and SyntaxError there fall back', async (t) => {
-  for (const [inside, make, outside, code] of [['attributeSpend', typeError, ['loadRunsChecked'], 1], ['taskCosts', typeError, ['attributeSpend'], 1], ['attributeSpend', enoent, ['loadRunsChecked'], 0], ['taskCosts', syntaxError, ['attributeSpend'], 0]]) {
-    await t.test(`${inside} ${make().constructor.name}`, async (tt) => {
+test('5 error boundary: a TypeError inside attribution or task-cost input assembly is exit 1 from report; ENOENT there falls back', async (t) => {
+  for (const [inside, make, outside, code] of [['attributeSpend', typeError, ['loadRunsChecked'], 1], ['taskCosts', typeError, ['attributeSpend'], 1], ['attributeSpend', enoent, ['loadRunsChecked'], 0], ['taskCosts', enoent, ['attributeSpend'], 0]]) {
+    await t.test(`${inside} ${make().code ?? make().constructor.name}`, async (tt) => {
       const f = await landed(tt); failInside(tt, inside, make, outside);
       const r = await cli(f.repo, ['report', '--json']);
       assert.equal(r.code, code, r.stderr);

@@ -59,10 +59,11 @@ export function cliError(code, detail) {
   e.code = code; e.exit = EXIT[code] ?? 1; return e;
 }
 
-/** An error that says an input could not be read, not that the code is wrong: a cliError with a known code, a Node file-system
- * error (ENOENT, EACCES, EISDIR, ...) or a JSON SyntaxError. Attribution and task costs turn only these into "unavailable"; any
- * other exception (TypeError, ReferenceError, ...) is a programming error and reaches main as INTERNAL. */
-export const isInputError = (e) => e instanceof SyntaxError || (typeof e?.code === 'string' && (Object.hasOwn(EXIT, e.code) || /^E[A-Z0-9]+$/.test(e.code)));
+/** An error that says an input could not be read, not that the code is wrong: a cliError with a known code (a reader that finds
+ * a file it cannot parse tags it at the origin, e.g. RUN-UNREADABLE), or a Node file-system error (a string `syscall` and
+ * `code`: ENOENT, EACCES, EISDIR, ...). Attribution and task costs turn only these into "unavailable"; any other exception
+ * (a TypeError, an untagged SyntaxError, ...) is a programming error and reaches main as INTERNAL. */
+export const isInputError = (e) => typeof e?.code === 'string' && (Object.hasOwn(EXIT, e.code) || typeof e.syscall === 'string');
 
 /** Same identity rule as tokenomics: git user.name, else OS user, else email local-part; slugged. */
 export function whoAmI(repo) {
