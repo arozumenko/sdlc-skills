@@ -13,6 +13,7 @@ import { LEVELS, resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
 import { computeMetrics, toHours } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256 } from './paths.mjs';
+import { costView, taskCosts } from './task-costs.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -101,6 +102,7 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
 const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+  cost_usd: i.cost_usd == null ? null : Number(i.cost_usd.toPrecision(6)), cost_source: i.cost_source ?? null, cost_gaps: [...i.cost_gaps],
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -114,7 +116,11 @@ const isFinished = (status, items) => {
 // An open item: in progress, or still planned but blocked (blocked before its first dispatch — otherwise it would show nowhere).
 const isOpen = (i) => i.state === 'in_progress' || (i.state === 'planned' && Boolean(i.blocked_since));
 const closeHint = (run) => `every item is done or cancelled but the plan is still open — once it has landed, close it: delivery.mjs plan close ${run}`;
-export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
+const TASK_COST_POLICY = 'lifetime cost of dispatches started before the effective end; may be revised';
+// The two failures that leave the report on the hook's own task costs; any other error propagates.
+const COST_FALLBACK = new Set(['ATTRIBUTION-UNAVAILABLE', 'PRICES-INVALID']);
+/** `costs: false` (status) skips task costs: items keep the hook-time values and the envelope carries no cost basis. */
+export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {}, costs = true } = {}) {
   repo = resolveOwnerRepo(repo);
   // F20: an unrecognised --level is user input, not a crash — reject it before anything else runs.
   if (filters.level != null && !LEVELS.includes(filters.level)) throw cliError('USAGE', `unknown --level ${filters.level}; expected ${LEVELS.join('|')}`);
@@ -166,6 +172,15 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const st = [...agentStats.values()], turns = st.reduce((n, a) => n + (a.turns ?? 0), 0), heavy = st.reduce((n, a) => n + (a.turns_over_500k ?? 0), 0);
   const dispatchAgents = { agents: st.length, resumed: st.filter((a) => a.follow_ups > 0).length, compacted: st.filter((a) => a.compactions > 0).length, max_follow_ups: st.length ? Math.max(...st.map((a) => a.follow_ups ?? 0)) : null, turns, turns_over_500k: heavy, over_500k_share: turns ? Math.round((heavy / turns) * 10000) / 10000 : null };
 
+  // Task cost (spec PR 3b, C1): one projection per report, over all runs (so a key shared across plans keeps its shares under
+  // --plan), counting dispatches started before the effective end at their current lifetime cost. Only attribution being
+  // unavailable or invalid prices fall back to the hook-time costs the timeline already carries.
+  let tc = null, costFallback = null;
+  if (costs) {
+    try { tc = taskCosts(repo, { resolved: res, end }); }
+    catch (e) { if (!COST_FALLBACK.has(e.code)) throw e; costFallback = { code: e.code, reason: e.reason ?? e.problem ?? e.message }; }
+  }
+
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
@@ -175,6 +190,11 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     // Dispatch cost recorded under an id this run no longer knows (a rename in any earlier version) belongs to some task this
     // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
     if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
+    // C1 replaces the hook's cost values on every item before metrics and rendering; durations, spans and counts stay as built.
+    if (tc) {
+      const cv = costView(tc, r, occurrences);
+      for (const it of items.values()) { const c = cv.get(it.item_id); it.cost_usd = c.cost_usd; it.cost_source = c.cost_source; it.cost_gaps = c.cost_gaps; it.cost_incomplete = c.cost_gaps.length > 0; }
+    }
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
     cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes; cov.non_task_blocks += counts.nonTaskBlocks;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
@@ -208,6 +228,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
   if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
+  if (costFallback) derived.push(`task cost: hook-time costs, not current prices (${costFallback.code}: ${costFallback.reason}); estimate bands suppressed`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const envelope = {
     schema: SCHEMA, generated_at: nowIso(now), cutoff: cutoffIso, window: { since: sinceIso, until: untilIso, effective_end: end, requested: { since, until, cutoff } },
@@ -224,6 +245,8 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
+  if (costs) Object.assign(envelope, { cost_basis: tc ? 'c1' : 'hook', cost_fallback: costFallback, prices_as_of: tc?.prices_as_of ?? null });
+  if (costs) envelope.policy.task_cost = tc ? TASK_COST_POLICY : 'hook-time cost recorded at each dispatch end (fallback)';
   return { envelope, plans: docs };
 }
 

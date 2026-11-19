@@ -15,6 +15,7 @@ import { deliveryDir, runPath } from './paths.mjs';
 import { costView, taskCosts, taskKey } from './task-costs.mjs';
 import { resolveObservations } from './events.mjs';
 import { selectOccurrences } from './timeline.mjs';
+import { assemble } from './report.mjs';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
 const T = '2026-11-02T10:00:00.000Z', DONE = '2026-11-03T10:00:00.000Z';
@@ -201,4 +202,85 @@ test('4b cost view time: ended after the end is not dispatch-not-ended; a late c
   assert.ok(get('T1').cost_gaps.includes('crossed-into-another-task')); assert.ok(get('T2').cost_gaps.includes('crossed-into-another-task'));
   assert.ok(get('T3').cost_gaps.includes('dispatch-not-ended')); assert.ok(!get('T4').cost_gaps.includes('dispatch-not-ended'));
   for (const ref of ['T1', 'T2', 'T3', 'T4']) assert.ok(!get(ref).cost_gaps.includes('cost-under-unknown-id'), ref);
+});
+
+// ---------- report: C1 replaces the hook's task costs ----------
+const usdEst = (low, high, tier = 'calibrated') => ({ unit: 'usd', low, high, tier, proposed_by: 'tl', proposed_at: '2026-11-01T00:00:00Z', accepted_by: 'tl', accepted_at: '2026-11-01T00:00:00Z',
+  ...(tier === 'calibrated' ? { reference: { path: '.agents/telemetry/delivery/calibration.json', sha256: 'c'.repeat(64), population: 'all n=12' } } : {}) });
+const report = async (f, args = []) => { f.flush(); const r = await cli(f.repo, ['report', '--json', ...args]); assert.equal(r.code, 0, r.stderr); return JSON.parse(r.stdout); };
+const item = (doc, ref, run = 'sec/run-1') => doc.plans.find((p) => p.run === run).items.find((i) => i.ref === ref);
+const row = (doc, ref, run = 'sec/run-1') => doc.plans.find((p) => p.run === run).metrics.estimate_rows.find((r) => r.ref === ref);
+
+test('1 cutoff through report: the effective end is min(--until, --cutoff) in either order; the policy says lifetime cost, may be revised', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 }); ledger(f, { refs: ['T2'], id: 'b', usd: 3, at: AFTER });
+  for (const args of [['--until', END, '--cutoff', '2026-11-04T00:00:00Z'], ['--until', '2026-11-04T00:00:00Z', '--cutoff', END]]) {
+    const doc = await report(f, args);
+    assert.equal(doc.envelope.window.effective_end, END);
+    assert.equal(item(doc, 'T1').cost_usd, 2, args.join(' ')); assert.equal(item(doc, 'T2').cost_usd, null, args.join(' '));
+  }
+  const all = await report(f, ['--cutoff', '2026-11-04T00:00:00Z']);
+  assert.equal(item(all, 'T2').cost_usd, 3); assert.equal(all.envelope.cost_basis, 'c1'); assert.equal(all.envelope.prices_as_of, '2026-11-01');
+  assert.equal(all.envelope.cost_fallback, null);
+  assert.equal(all.envelope.policy.task_cost, 'lifetime cost of dispatches started before the effective end; may be revised');
+});
+test('2 global owners: a key shared by tasks in two plans keeps half per task under --plan of either', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1'] }, { campaign: 'sec', run: 'run-2', tasks: ['T1'] }]);
+  ledger(f, { run: 'sec/run-1', refs: [{ item_id: f.itemId('sec/run-1', 'T1'), ref: 'T1' }], id: 'a', usd: 4 });
+  ledger(f, { run: 'sec/run-2', refs: [{ item_id: f.itemId('sec/run-2', 'T1'), ref: 'T1' }], id: 'a', usd: 4 });
+  for (const run of ['sec/run-1', 'sec/run-2']) {
+    const doc = await report(f, ['--plan', run, '--cutoff', '2026-11-04T00:00:00Z']);
+    assert.equal(item(doc, 'T1', run).cost_usd, 2, run); assert.equal(item(doc, 'T1', run).cost_source, 'ledger');
+  }
+});
+test('3 projection: a recovered-only task is a scored row; a hook no-cost-recorded repaired by a priced store snapshot is usable', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: [{ ref: 'T1', estimate: usdEst(1, 4) }, { ref: 'T2', estimate: usdEst(1, 4) }] }]);
+  snap(f, { id: 'r', desc: 'T1', usd: 3 });                                          // recovered only: the hook saw nothing
+  ledger(f, { refs: ['T2'], id: 'a', agent: null }); snap(f, { id: 'a', desc: 'T2', usd: 2 });   // old hook end, no cost
+  land(f, 'sec/run-1', 'T1'); land(f, 'sec/run-1', 'T2');
+  const doc = await report(f, ['--cutoff', '2026-11-04T00:00:00Z']);
+  assert.deepEqual([row(doc, 'T1').reason, row(doc, 'T1').actual_usd, item(doc, 'T1').cost_source, item(doc, 'T1').cost_gaps], [null, 3, 'recovered', []]);
+  assert.deepEqual([row(doc, 'T2').reason, row(doc, 'T2').actual_usd, item(doc, 'T2').cost_gaps], [null, 2, []]);
+  const usd = doc.plans[0].metrics.estimates.task.strata['usd:all'];
+  assert.equal(usd.eligible, 2); assert.equal(usd.excluded.missing_actual, 0);
+});
+const nonCost = (doc) => JSON.parse(JSON.stringify(doc, (k, v) => (['cost_usd', 'cost_source', 'cost_gaps', 'cost_basis', 'cost_fallback', 'prices_as_of', 'task_cost', 'cost', 'estimate_bands', 'planner_size_bands', 'class_bounds_usd', 'cost_band'].includes(k) ? undefined : v)));
+test('3 projection: non-cost output equals the report without task costs on a fixture with renames, crossings and reopens', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2', 'T3'] }]);
+  const id2 = f.itemId('sec/run-1', 'T2');
+  f.mutate('sec/run-1', (r) => { r.supersedes = { run: 'sec/run-1', item_map: { 'sec/run-1/task-old1': f.itemId('sec/run-1', 'T1') } }; });
+  ledger(f, { refs: [{ item_id: 'sec/run-1/task-old1', ref: 'T1' }], id: 'a', usd: 2, crossed: [id2] });
+  ledger(f, { refs: ['T2'], id: 'b', usd: 1, at: plus(T, 3_600_000) }); ledger(f, { refs: ['T3'], id: 'c', usd: 1, endAt: AFTER });
+  for (const ref of ['T1', 'T2', 'T3']) land(f, 'sec/run-1', ref);
+  f.obs.push(mk({ plan: 'sec/run-1', item_id: f.itemId('sec/run-1', 'T3'), ref: 'T3', event: 'reopened', at: '2026-11-03T12:00:00.000Z', source: 'cli', host: 'cli', source_record_id: 'reopen-T3', transition_id: `${f.itemId('sec/run-1', 'T3')}/reopened/1`, meta: { version: 1 } }));
+  f.flush();
+  for (const cutoff of [END, '2026-11-04T00:00:00Z']) {
+    const opts = { cutoff, now: NOW }, withCosts = assemble(f.repo, opts), without = assemble(f.repo, { ...opts, costs: false });
+    // Cost gaps differ by design (C1 recomputes them); everything else must be identical.
+    assert.deepEqual(nonCost(withCosts), nonCost(without), cutoff);
+  }
+});
+
+// ---------- 5. report fallback and error boundary ----------
+test('5 fallback: attribution unavailable or invalid prices → hook costs, cost_basis hook, cost_fallback, one caveat, exit 0', async (t) => {
+  for (const [code, breakIt] of [['ATTRIBUTION-UNAVAILABLE', (f) => writeFileSync(join(deliveryDir(f.repo), 'plans', 'broken.json'), '{ not json')], ['PRICES-INVALID', (f) => writeFileSync(join(deliveryDir(f.repo), 'prices.json'), '{ nope')]]) {
+    const f = await fx(t); ledger(f, { refs: ['T1'], usd: 2 }); snap(f, { id: 'a', desc: 'T1', usd: 5 }); land(f, 'sec/run-1', 'T1'); f.flush();
+    assert.equal(item(await report(f), 'T1').cost_usd, 5, 'C1: the store total');
+    breakIt(f);
+    const doc = await report(f);
+    assert.equal(doc.envelope.cost_basis, 'hook', code); assert.equal(doc.envelope.cost_fallback.code, code); assert.ok(doc.envelope.cost_fallback.reason);
+    assert.equal(doc.envelope.prices_as_of, null); assert.equal(item(doc, 'T1').cost_usd, 2, 'the hook-time cost'); assert.equal(item(doc, 'T1').cost_source, null);
+    assert.equal(doc.envelope.caveats.filter((c) => c.startsWith('task cost:')).length, 1); assert.match(doc.envelope.caveats.find((c) => c.startsWith('task cost:')), new RegExp(code));
+    const md = await cli(f.repo, ['report']); assert.equal(md.code, 0, md.stderr);
+  }
+});
+test('5 error boundary: a TypeError inside attribution or task-cost input assembly is exit 1 from report; ENOENT and SyntaxError there fall back', async (t) => {
+  for (const [inside, make, outside, code] of [['attributeSpend', typeError, ['loadRunsChecked'], 1], ['taskCosts', typeError, ['attributeSpend'], 1], ['attributeSpend', enoent, ['loadRunsChecked'], 0], ['taskCosts', syntaxError, ['attributeSpend'], 0]]) {
+    await t.test(`${inside} ${make().constructor.name}`, async (tt) => {
+      const f = await landed(tt); failInside(tt, inside, make, outside);
+      const r = await cli(f.repo, ['report', '--json']);
+      assert.equal(r.code, code, r.stderr);
+      if (code) assert.match(r.stderr, /^INTERNAL\(injected programming error\)/); else assert.equal(JSON.parse(r.stdout).envelope.cost_fallback.code, 'ATTRIBUTION-UNAVAILABLE');
+    });
+  }
 });

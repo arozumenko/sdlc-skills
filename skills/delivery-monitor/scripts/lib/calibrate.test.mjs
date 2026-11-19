@@ -304,7 +304,7 @@ test('a renamed task keeps the cost recorded under its old id; unattributable co
   assert.equal(row.actual_usd, 0.003); assert.equal(row.hit, true);
 });
 
-test('report: a renamed task with cost under its old id is not scored on part of its cost', () => {
+test('report: a renamed task keeps the cost recorded under its mapped old id, as calibration does (PR 3b cost view)', () => {
   const repo = initRepo();
   const est = { unit: 'usd', low: 1, high: 3, tier: 'calibrated', proposed_by: 'calibrate', proposed_at: '2026-11-01T00:00:00Z', accepted_by: 'calibrate (auto)', accepted_at: '2026-11-01T00:00:00Z', reference: { path: 'x', sha256: 'b'.repeat(64), population: 'all n=9' } };
   assert.equal(run(repo, ['plan', 'register', '--from', writePlan(repo, plan(1, [{ ref: 'OLD', estimate: est }])), '--id', 'r1', '--created-at', '2026-11-01T00:00:00Z']).code, 0);
@@ -316,7 +316,8 @@ test('report: a renamed task with cost under its old id is not scored on part of
   done(repo, 'sec/run-1', 'NEW', '2026-11-03T14:00:00.000Z');
   const rows = []; const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') { if (v.ref === 'NEW' && 'actual_usd' in v) rows.push(v); Object.values(v).forEach(walk); } };
   walk(JSON.parse(run(repo, ['report', '--json', '--cutoff', '2026-11-10T00:00:00Z']).stdout));
-  assert.equal(rows.length, 1); assert.equal(rows[0].reason, 'missing_actual', 'the $2 visible here is not the task\'s $12');
+  // Before the report used task costs, it read only the $2 under the new id and withheld the score; now the mapped $10 moves too.
+  assert.equal(rows.length, 1); assert.equal(rows[0].reason, null); assert.equal(rows[0].actual_usd, 12);
 });
 
 test('report rename guard survives a later re-cut; an identity mapping does not withhold a complete cost', () => {

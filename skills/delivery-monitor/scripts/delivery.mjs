@@ -534,7 +534,7 @@ function cmdReport(repo, p, io, now) {
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
   const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { out(io, `SPEND unavailable: ${e.message}`); } };
-  try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now }))); }
+  try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now, costs: false }))); }
   catch (e) {
     // Global spend remains useful before a plan or its first observation exists. Preserve the original status error.
     if (['NO-PLAN', 'NO-EVENTS'].includes(e.code)) spendLine();
