@@ -12,6 +12,9 @@ import { loadRunsChecked } from './attribution.mjs';
 import { snapshotFromTranscript } from './dispatches.mjs';
 import { makeObservation } from './events.mjs';
 import { deliveryDir, runPath } from './paths.mjs';
+import { costView, taskCosts, taskKey } from './task-costs.mjs';
+import { resolveObservations } from './events.mjs';
+import { selectOccurrences } from './timeline.mjs';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
 const T = '2026-11-02T10:00:00.000Z', DONE = '2026-11-03T10:00:00.000Z';
@@ -65,9 +68,9 @@ function ledger(f, { run = 'sec/run-1', refs = ['T1'], id = 'a', usd = 2, at = T
   }
 }
 /** A captured dispatch in the store; with a ledger id of the same value it is that dispatch's snapshot. */
-function snap(f, { id = 'a', desc = 'T1', usd = 2, at = T, complete = true } = {}) {
-  f.snaps.push(snapshotFromTranscript({ firstTs: at, lastRecordAt: at, records: 2, complete, last_uuid: 'u', messages: { x0: { model: 'm', input: tok(usd) } } },
-    { session: 's', agent_id: id, description: desc, now: Date.parse(at) }));
+function snap(f, { id = 'a', desc = 'T1', usd = 2, at = T, last = at, complete = true, follow } = {}) {
+  f.snaps.push(snapshotFromTranscript({ firstTs: at, lastRecordAt: last, ...(follow ? { followUps: follow.map((text) => ({ at, text })) } : {}), records: 2, complete, last_uuid: 'u', messages: { x0: { model: 'm', input: tok(usd) } } },
+    { session: 's', agent_id: id, description: desc, now: Date.parse(last) }));
 }
 const land = (f, run, ref, at = DONE) => f.obs.push(mk({ plan: run, item_id: f.itemId(run, ref), ref, event: 'done', at, source: 'cli', host: 'cli', source_record_id: `done-${run}-${ref}`, transition_id: `${f.itemId(run, ref)}/done/episode-1`, meta: { version: 1 } }));
 
@@ -134,4 +137,68 @@ test('5 error boundary: status still prints CALIBRATION invalid for unavailable 
   let r = await cli(f.repo, ['status']); assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /^CALIBRATION invalid: ATTRIBUTION-UNAVAILABLE\(/m);
   t.mock.restoreAll(); failInside(t, 'taskCosts', typeError, ['attributeSpend']);
   r = await cli(f.repo, ['status']); assert.equal(r.code, 1); assert.match(r.stderr, /^INTERNAL\(injected programming error\)/);
+});
+
+// ---------- 1. cutoff (bounded taskCosts) ----------
+const END = '2026-11-02T12:00:00.000Z', AFTER = '2026-11-02T13:00:00.000Z';
+const bounded = (f, end = END) => { f.flush(); return taskCosts(f.repo, { end }); };
+const cost = (tc, f, ref, run = 'sec/run-1') => tc.tasks.get(taskKey(run, f.itemId(run, ref)))?.cost_usd ?? null;
+test('1 cutoff: a key started before the end counts with its later cumulative cost; at or after the end, or with no known start, it is left out', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2', 'T3', 'T4'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 }); snap(f, { id: 'a', desc: 'T1', usd: 5, last: AFTER });   // the store snapshot grew after the end
+  ledger(f, { refs: ['T2'], id: 'b', usd: 3, at: END });                                              // started exactly at the end
+  ledger(f, { refs: ['T3'], id: 'u', usd: 4, start: false });                                         // no known start
+  snap(f, { id: 'r', desc: 'T4', usd: 1, at: AFTER });                                                // recovered, after the end
+  const tc = bounded(f);
+  assert.equal(cost(tc, f, 'T1'), 5); assert.equal(cost(tc, f, 'T2'), null); assert.equal(cost(tc, f, 'T3'), null); assert.equal(cost(tc, f, 'T4'), null);
+  assert.deepEqual(tc.keys.map((k) => k.dispatch_key), ['claude:s:a']);
+  const all = taskCosts(f.repo);
+  assert.deepEqual([cost(all, f, 'T1'), cost(all, f, 'T2'), cost(all, f, 'T3'), cost(all, f, 'T4')], [5, 3, 4, 1], 'unbounded keeps every key');
+});
+test('1 cutoff: a left-out key gives no marks and no noCost; an end whose key spend does not list counts only before the end', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2', 'T3'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 });
+  snap(f, { id: 'x', desc: 'T2', usd: 1, at: AFTER, follow: ['now T1'] });            // after the end: its crossing must not mark T1
+  ledger(f, { refs: ['T2'], id: 'n', agent: null, at: AFTER });                        // no cost recorded, after the end
+  ledger(f, { refs: ['T3'], id: 'gone1', agent: null }); ledger(f, { refs: ['T3'], id: 'gone2', agent: null, at: AFTER });
+  for (const id of ['gone1', 'gone2']) f.snaps.push({ v: 'dispatch.v2', dispatch_key: `claude:s:${id}`, retracted: true, reason: 'test', at: T });
+  const tc = bounded(f), tk = (ref) => taskKey('sec/run-1', f.itemId('sec/run-1', ref));
+  assert.equal(tc.marks.get(tk('T1')), undefined); assert.equal(tc.noCost.get(tk('T2')), undefined);
+  assert.deepEqual([...tc.noCost.get(tk('T3'))], ['claude:s:gone1']);
+  const all = taskCosts(f.repo);
+  assert.ok(all.marks.get(tk('T1')).has('crossed-into-another-task')); assert.deepEqual([...all.noCost.get(tk('T2'))], ['claude:s:n']); assert.deepEqual([...all.noCost.get(tk('T3'))].sort(), ['claude:s:gone1', 'claude:s:gone2']);
+});
+
+// ---------- 4 / 4b. the cost view: renames, crossings and time ----------
+const view = (f, run = 'sec/run-1', end = END) => {
+  f.flush(); const res = resolveObservations(f.repo), tc = taskCosts(f.repo, { resolved: res, end });
+  const { occurrences } = selectOccurrences(res.active, res.conflicts);
+  const v = costView(tc, f.run(run), occurrences);
+  return (ref) => v.get(f.itemId(run, ref));
+};
+test('4 renames: cost under a mapped old id is kept and its crossing marker moves; an unmapped old id withholds the run', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2'] }]);
+  const id1 = f.itemId('sec/run-1', 'T1'), id2 = f.itemId('sec/run-1', 'T2');
+  f.mutate('sec/run-1', (r) => { r.supersedes = { run: 'sec/run-1', item_map: { 'sec/run-1/task-old1': id1, 'sec/run-1/task-old2': id2 } }; });
+  ledger(f, { refs: [{ item_id: 'sec/run-1/task-old1', ref: 'T1' }], id: 'a', usd: 2, crossed: ['sec/run-1/task-old2'] });
+  let get = view(f);
+  assert.equal(get('T1').cost_usd, 2); assert.ok(get('T1').cost_gaps.includes('crossed-into-another-task'));
+  assert.ok(get('T2').cost_gaps.includes('crossed-into-another-task'), 'the marker moved to the renamed T2');
+  assert.ok(!get('T1').cost_gaps.includes('crossing-unreadable'));
+  ledger(f, { refs: [{ item_id: 'sec/run-1/task-lost', ref: 'TX' }], id: 'b', usd: 1 });
+  get = view(f);
+  assert.ok(get('T1').cost_gaps.includes('cost-under-unknown-id') && get('T2').cost_gaps.includes('cost-under-unknown-id'));
+});
+test('4b cost view time: ended after the end is not dispatch-not-ended; a late crossing marks both; start-only before the end is not ended, after it nothing; a future orphan does not withhold', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2', 'T3', 'T4'] }]);
+  const id2 = f.itemId('sec/run-1', 'T2');
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2, endAt: AFTER, crossed: [id2] });     // started before, ended (and crossed) after the end
+  ledger(f, { refs: ['T3'], id: 's', endAt: null });                              // start-only, before the end
+  ledger(f, { refs: ['T4'], id: 'z', endAt: null, at: AFTER });                   // start-only, after the end
+  ledger(f, { refs: [{ item_id: 'sec/run-1/task-lost', ref: 'TX' }], id: 'o', usd: 1, at: AFTER });   // a future orphan end
+  const get = view(f);
+  assert.equal(get('T1').cost_usd, 2); assert.ok(!get('T1').cost_gaps.includes('dispatch-not-ended'), get('T1').cost_gaps.join());
+  assert.ok(get('T1').cost_gaps.includes('crossed-into-another-task')); assert.ok(get('T2').cost_gaps.includes('crossed-into-another-task'));
+  assert.ok(get('T3').cost_gaps.includes('dispatch-not-ended')); assert.ok(!get('T4').cost_gaps.includes('dispatch-not-ended'));
+  for (const ref of ['T1', 'T2', 'T3', 'T4']) assert.ok(!get(ref).cost_gaps.includes('cost-under-unknown-id'), ref);
 });
