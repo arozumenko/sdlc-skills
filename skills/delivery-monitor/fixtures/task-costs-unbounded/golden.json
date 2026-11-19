@@ -1,0 +1,309 @@
+{
+  "taskCosts": {
+    "tasks": [
+      [
+        "sec/run-1\u0000sec/run-1/task-t1",
+        {
+          "cost_usd": 2,
+          "cost_by_model": {
+            "m": 2
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:h1",
+              "ledger": true,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": null
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t2",
+        {
+          "cost_usd": 5,
+          "cost_by_model": {
+            "m": 5
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:r2",
+              "ledger": false,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": "other"
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t3",
+        {
+          "cost_usd": 2,
+          "cost_by_model": {
+            "m": 2
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:h3",
+              "ledger": true,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": "other"
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t4",
+        {
+          "cost_usd": 3,
+          "cost_by_model": {
+            "m": 3
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:u4",
+              "ledger": true,
+              "unpriced": false,
+              "started_at": null,
+              "stage": null
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t5",
+        {
+          "cost_usd": 1,
+          "cost_by_model": {
+            "m": 1
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:h5",
+              "ledger": true,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": null
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t7",
+        {
+          "cost_usd": 2,
+          "cost_by_model": {
+            "m": 2
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:h7",
+              "ledger": true,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": null
+            }
+          ]
+        }
+      ],
+      [
+        "sec/run-1\u0000sec/run-1/task-t8",
+        {
+          "cost_usd": 1,
+          "cost_by_model": {
+            "m": 1
+          },
+          "keys": [
+            {
+              "dispatch_key": "claude:s:r8",
+              "ledger": false,
+              "unpriced": false,
+              "started_at": "2026-11-02T10:00:00.000Z",
+              "stage": "other"
+            }
+          ]
+        }
+      ]
+    ],
+    "marks": [],
+    "noCost": [
+      [
+        "sec/run-1\u0000sec/run-1/task-t6",
+        [
+          "claude:s:tb"
+        ]
+      ]
+    ],
+    "keys": [
+      {
+        "dispatch_key": "claude:s:h1",
+        "usd": 2,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t1"
+        ],
+        "assigned": 2,
+        "vector": {
+          "m": 2
+        }
+      },
+      {
+        "dispatch_key": "claude:s:h3",
+        "usd": 2,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t3"
+        ],
+        "assigned": 2,
+        "vector": {
+          "m": 2
+        }
+      },
+      {
+        "dispatch_key": "claude:s:h5",
+        "usd": 1,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t5"
+        ],
+        "assigned": 1,
+        "vector": {
+          "m": 1
+        }
+      },
+      {
+        "dispatch_key": "claude:s:h7",
+        "usd": 2,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t7"
+        ],
+        "assigned": 2,
+        "vector": {
+          "m": 2
+        }
+      },
+      {
+        "dispatch_key": "claude:s:r0",
+        "usd": 7,
+        "owners": [],
+        "assigned": 0,
+        "vector": {
+          "m": 7
+        }
+      },
+      {
+        "dispatch_key": "claude:s:r2",
+        "usd": 5,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t2"
+        ],
+        "assigned": 5,
+        "vector": {
+          "m": 5
+        }
+      },
+      {
+        "dispatch_key": "claude:s:r8",
+        "usd": 1,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t8"
+        ],
+        "assigned": 1,
+        "vector": {
+          "m": 1
+        }
+      },
+      {
+        "dispatch_key": "claude:s:u4",
+        "usd": 3,
+        "owners": [
+          "sec/run-1\u0000sec/run-1/task-t4"
+        ],
+        "assigned": 3,
+        "vector": {
+          "m": 3
+        }
+      }
+    ],
+    "ownerless_usd": 7
+  },
+  "collect": {
+    "samples": [
+      {
+        "run": "sec/run-1",
+        "ref": "T1",
+        "role": "js-dev",
+        "type": "feature",
+        "area": null,
+        "novel": null,
+        "size": null,
+        "cost_usd": 2,
+        "done_at": "2026-11-03T10:00:00.000Z",
+        "returned": false,
+        "model": "m",
+        "cost_source": "ledger"
+      },
+      {
+        "run": "sec/run-1",
+        "ref": "T2",
+        "role": "js-dev",
+        "type": "feature",
+        "area": null,
+        "novel": null,
+        "size": null,
+        "cost_usd": 5,
+        "done_at": "2026-11-03T10:00:00.000Z",
+        "returned": false,
+        "model": "m",
+        "cost_source": "recovered"
+      },
+      {
+        "run": "sec/run-1",
+        "ref": "T3",
+        "role": "js-dev",
+        "type": "feature",
+        "area": null,
+        "novel": null,
+        "size": null,
+        "cost_usd": 2,
+        "done_at": "2026-11-03T10:00:00.000Z",
+        "returned": false,
+        "model": "m",
+        "cost_source": "ledger"
+      },
+      {
+        "run": "sec/run-1",
+        "ref": "T4",
+        "role": "js-dev",
+        "type": "feature",
+        "area": null,
+        "novel": null,
+        "size": null,
+        "cost_usd": 3,
+        "done_at": "2026-11-03T10:00:00.000Z",
+        "returned": false,
+        "model": "m",
+        "cost_source": "ledger"
+      },
+      {
+        "run": "sec/run-1",
+        "ref": "T5",
+        "role": "js-dev",
+        "type": "feature",
+        "area": null,
+        "novel": null,
+        "size": null,
+        "cost_usd": 1,
+        "done_at": "2026-11-03T10:00:00.000Z",
+        "returned": false,
+        "model": "m",
+        "cost_source": "ledger"
+      }
+    ],
+    "landed": 8,
+    "left_out": {
+      "crossed-into-another-task": 2,
+      "no-cost-recorded": 1
+    }
+  }
+}

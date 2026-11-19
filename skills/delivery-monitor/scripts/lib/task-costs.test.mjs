@@ -13,6 +13,7 @@ import { deliveryDir, runPath } from './paths.mjs';
 import { spendReport } from './spend.mjs';
 import { taskCosts, taskKey } from './task-costs.mjs';
 import { runScenario } from '../../fixtures/task-costs-baseline/scenario.mjs';
+import { runScenario as runUnbounded } from '../../fixtures/task-costs-unbounded/scenario.mjs';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
 const T = '2026-11-02T10:00:00.000Z', T2 = '2026-11-02T11:00:00.000Z', DONE = '2026-11-03T10:00:00.000Z';
@@ -352,4 +353,15 @@ test('gaps: text-incomplete leaves the task out of the samples (through collect)
   const enriched = attributeSpend(f.repo, spendReport(f.repo)); enriched.keys[0].attribution.flags = ['text-incomplete'];
   const r = collect(f.repo, { now: NOW, enriched });
   assert.equal(r.samples.length, 0); assert.deepEqual(r.left_out, { 'text-incomplete': 1 });
+});
+
+test('unbounded: taskCosts with no end and the calibration samples equal the baseline from before the report change (1b)', async () => {
+  const baseline = JSON.parse(readFileSync(new URL('../../fixtures/task-costs-unbounded/golden.json', import.meta.url), 'utf8'));
+  const got = await runUnbounded({ main, makeObservation, snapshotFromTranscript, taskCosts, collect });
+  // The scenario carries the two cases a bounded call treats differently: a ledger allocation with no known start, and an unpriced
+  // hook end whose key `spend` does not list (tombstoned).
+  assert.ok(got.taskCosts.keys.some((k) => k.dispatch_key === 'claude:s:u4'), 'unknown-start key kept');
+  assert.deepEqual(got.taskCosts.noCost.map(([, s]) => s), [['claude:s:tb']], 'tombstoned no-cost end kept');
+  assert.deepEqual(got.taskCosts, baseline.taskCosts);
+  assert.deepEqual(got.collect, baseline.collect);
 });
