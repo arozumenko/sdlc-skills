@@ -11,7 +11,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LEVELS, resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
-import { computeMetrics, toHours } from './metrics.mjs';
+import { readCalibration, classOf } from './calibrate.mjs';
+import { computeMetrics, estimateBands, planCost, plannerSizeBands, toHours, usableCost, validBounds } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256 } from './paths.mjs';
 import { costView, taskCosts } from './task-costs.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
@@ -101,8 +102,8 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
-  cost_usd: i.cost_usd == null ? null : Number(i.cost_usd.toPrecision(6)), cost_source: i.cost_source ?? null, cost_gaps: [...i.cost_gaps],
+const compact = (i, occ, bounds = null) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+  cost_usd: i.cost_usd == null ? null : Number(i.cost_usd.toPrecision(6)), cost_source: i.cost_source ?? null, cost_gaps: [...i.cost_gaps], cost_band: bounds && usableCost(i) ? classOf(i.cost_usd, bounds) : null,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -181,6 +182,16 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     catch (e) { if (!COST_FALLBACK.has(e.code)) throw e; costFallback = { code: e.code, reason: e.reason ?? e.problem ?? e.message }; }
   }
 
+  // Effort bands (C2) need C1 costs and valid bounds from the current calibration table; otherwise one reason says why not.
+  let bounds = null, bandsOff = null, calPricesAsOf = null;
+  if (!tc) bandsOff = costs ? 'fallback' : null;
+  else {
+    let cal = null;
+    try { cal = readCalibration(repo); } catch (e) { if (e.code !== 'CALIBRATION-INVALID') throw e; bandsOff = 'unreadable'; }
+    if (!bandsOff && !cal) bandsOff = 'no-calibration';
+    else if (cal) { calPricesAsOf = cal.cal.prices_as_of ?? null; const b = cal.cal.class_bounds_usd; if (b == null) bandsOff = 'too-few-samples'; else if (!validBounds(b)) bandsOff = 'invalid-bounds'; else bounds = b; }
+  }
+
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
@@ -211,7 +222,12 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     const cancelledInCohort = createdCohort.filter((i) => i.state === 'cancelled').length;
     metrics.quality = { cancelled_share: { numerator: cancelledInCohort, denominator: createdCohort.length, ratio: createdCohort.length ? Math.round((cancelledInCohort / createdCohort.length) * 10000) / 10000 : null } };
 
-    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, metrics, counts, items: [...items.values()].map((i) => compact(i, occ)) });
+    if (costs) {
+      metrics.estimate_bands = bounds ? estimateBands(metrics.estimate_rows, items, bounds) : null;
+      metrics.planner_size_bands = bounds ? plannerSizeBands(items, { since: sinceIso, end, filters, bounds }) : null;
+    }
+    const cost = costs ? planCost(items, { since: sinceIso, end, filters }) : undefined;
+    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, ...(cost ? { cost } : {}), metrics, counts, items: [...items.values()].map((i) => compact(i, occ, bounds)) });
   }
   const pending = docs.flatMap((d) => d.items).filter((i) => i.first_completion && i.current_scope?.pending).length;
   const derived = docs.flatMap((d) => d.metrics.caveats.map((c) => `${d.run}: ${c}`));
@@ -228,6 +244,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
   if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
+  if (bounds && calPricesAsOf !== (tc?.prices_as_of ?? null)) derived.push(`estimate bands: calibration bounds priced as of ${calPricesAsOf ?? 'unknown'}, actual costs at current prices as of ${tc?.prices_as_of ?? 'unknown'}`);
   if (costFallback) derived.push(`task cost: hook-time costs, not current prices (${costFallback.code}: ${costFallback.reason}); estimate bands suppressed`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const envelope = {
@@ -245,7 +262,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
-  if (costs) Object.assign(envelope, { cost_basis: tc ? 'c1' : 'hook', cost_fallback: costFallback, prices_as_of: tc?.prices_as_of ?? null });
+  if (costs) Object.assign(envelope, { cost_basis: tc ? 'c1' : 'hook', cost_fallback: costFallback, prices_as_of: tc?.prices_as_of ?? null, estimate_bands: { bounds_usd: bounds, suppressed: bandsOff, calibration_prices_as_of: calPricesAsOf } });
   if (costs) envelope.policy.task_cost = tc ? TASK_COST_POLICY : 'hook-time cost recorded at each dispatch end (fallback)';
   return { envelope, plans: docs };
 }

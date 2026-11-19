@@ -16,6 +16,7 @@ import { costView, taskCosts, taskKey } from './task-costs.mjs';
 import { resolveObservations } from './events.mjs';
 import { selectOccurrences } from './timeline.mjs';
 import { assemble } from './report.mjs';
+import { estimateBands } from './metrics.mjs';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
 const T = '2026-11-02T10:00:00.000Z', DONE = '2026-11-03T10:00:00.000Z';
@@ -283,4 +284,86 @@ test('5 error boundary: a TypeError inside attribution or task-cost input assemb
       if (code) assert.match(r.stderr, /^INTERNAL\(injected programming error\)/); else assert.equal(JSON.parse(r.stdout).envelope.cost_fallback.code, 'ATTRIBUTION-UNAVAILABLE');
     });
   }
+});
+
+// ---------- 6. estimate bands ----------
+const CUT = '2026-11-04T00:00:00Z';
+const calibration = (f, over = {}) => writeFileSync(join(deliveryDir(f.repo), 'calibration.json'), typeof over === 'string' ? over : JSON.stringify({ v: 1, unit: 'usd', min_n: 5, prices_as_of: '2026-11-01', samples: 12, class_bounds_usd: [1, 2, 3], cells: {}, ...over }));
+/** One landed task per [ref, estimate, actual usd]; each has its own hooked dispatch. */
+async function banded(t, rows, { cls } = {}) {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: rows.map(([ref, estimate], k) => ({ ref, ...(estimate ? { estimate } : {}), ...(cls ? { class: cls[k] } : {}) })) }]);
+  rows.forEach(([ref, , usd], k) => { if (usd != null) ledger(f, { refs: [ref], id: `d${k}`, usd }); land(f, 'sec/run-1', ref); });
+  return f;
+}
+test('6 bands: calibrated low, planner midpoint and point value against inclusive bounds; distances 0, 1 and >= 2', async (t) => {
+  // T1's low (1.5, E2) and midpoint (2.25, E3) differ; T4 has no cost, so it is not a scoring row and is not banded.
+  const f = await banded(t, [['T1', usdEst(1.5, 3), 1.5], ['T2', usdEst(1, 3, 'ROM'), 3], ['T3', usdEst(0.5, 0.5, 'ROM'), 5], ['T4', usdEst(1, 2, 'ROM'), null]]);
+  calibration(f);
+  const doc = await report(f, ['--cutoff', CUT]), m = doc.plans[0].metrics;
+  assert.deepEqual(['T1', 'T2', 'T3'].map((r) => [row(doc, r).estimated_band, row(doc, r).actual_band, row(doc, r).band_distance]), [['E2', 'E2', 0], ['E2', 'E3', 1], ['E1', 'E4', 3]]);
+  assert.equal(row(doc, 'T4').reason, 'missing_actual'); assert.equal(row(doc, 'T4').estimated_band, undefined);
+  assert.deepEqual({ ...m.estimate_bands, matrix: undefined }, { n: 3, same: 1, one_off: 1, two_or_more_off: 1, within_one: 2, matrix: undefined });
+  assert.deepEqual(m.estimate_bands.matrix, { E1: { E4: 1 }, E2: { E2: 1, E3: 1 } });
+  assert.deepEqual(doc.envelope.estimate_bands, { bounds_usd: [1, 2, 3], suppressed: null, calibration_prices_as_of: '2026-11-01' });
+  assert.equal(item(doc, 'T3').cost_band, 'E4');
+  assert.equal(doc.envelope.caveats.filter((c) => /estimate bands/.test(c)).length, 0, 'same price date: no caveat');
+});
+test('6 bands: values on a bound fall in the lower band; equal bounds skip the empty band', () => {
+  const rows = [1, 2, 3, 1.5].map((v, k) => ({ item_id: `i${k}`, estimate: { unit: 'usd', low: v, high: v }, tier: 'ROM', reason: null }));
+  const items = new Map(rows.map((r) => [r.item_id, { cost_usd: r.estimate.low, cost_gaps: [] }]));
+  estimateBands(rows, items, [1, 2, 3]); assert.deepEqual(rows.map((r) => r.actual_band), ['E1', 'E2', 'E3', 'E2']);
+  estimateBands(rows, items, [1, 1, 3]); assert.deepEqual(rows.map((r) => r.actual_band), ['E1', 'E3', 'E3', 'E3']);
+});
+test('6 bands: each suppression reason keeps the dollar detail and says why', async (t) => {
+  const cases = [['no-calibration', null], ['unreadable', '{'], ['too-few-samples', { class_bounds_usd: null }], ['invalid-bounds', { class_bounds_usd: [3, 2, 1] }], ['invalid-bounds', { class_bounds_usd: [1, 2] }],
+    ['invalid-bounds', { class_bounds_usd: [-1, 2, 3] }], ['invalid-bounds', { class_bounds_usd: [1, 'x', 3] }], ['fallback', {}]];
+  for (const [reason, cal] of cases) {
+    const f = await banded(t, [['T1', usdEst(1, 4, 'ROM'), 2]]);
+    if (cal !== null) calibration(f, cal);
+    if (reason === 'fallback') writeFileSync(join(deliveryDir(f.repo), 'plans', 'broken.json'), '{ not json');
+    const doc = await report(f, ['--cutoff', CUT]);
+    assert.equal(doc.envelope.estimate_bands.suppressed, reason, JSON.stringify(cal)); assert.equal(doc.plans[0].metrics.estimate_bands, null);
+    assert.equal(row(doc, 'T1').ratio, 0.8, 'dollar detail kept'); assert.equal(row(doc, 'T1').estimated_band, undefined); assert.equal(item(doc, 'T1').cost_band, null);
+  }
+});
+test('6 bands: a calibration priced on another date adds one caveat', async (t) => {
+  const f = await banded(t, [['T1', usdEst(1, 4, 'ROM'), 2]]); calibration(f, { prices_as_of: '2026-10-01' });
+  const doc = await report(f, ['--cutoff', CUT]);
+  assert.equal(doc.envelope.caveats.filter((c) => /^estimate bands: /.test(c)).length, 1);
+});
+test('6 bands: --latest-estimate bands the latest accepted estimate', async (t) => {
+  const f = await banded(t, [['T1', usdEst(0.5, 0.5, 'ROM'), 2.5]]); calibration(f);
+  const file = join(f.repo, 'plan-v2.md'), late = { ...usdEst(2.5, 2.5, 'ROM'), proposed_at: '2026-11-01T12:00:00Z', accepted_at: '2026-11-01T12:00:00Z' };
+  writeFileSync(file, `# p\n\`\`\`json delivery-plan\n${JSON.stringify({ ...planDoc('sec', 'run-1', [{ ref: 'G1', sequence: 1, tasks: [{ ref: 'T1', estimate: late }] }]), version: 2 })}\n\`\`\`\n`);
+  const reg = await cli(f.repo, ['plan', 'register', '--from', file, '--id', 'reg-v2', '--no-calibrate', '--no-bind', '--at', '2026-11-01T12:00:00Z']); assert.equal(reg.code, 0, reg.stderr);
+  assert.deepEqual([row(await report(f, ['--cutoff', CUT]), 'T1').estimated_band, row(await report(f, ['--cutoff', CUT, '--latest-estimate']), 'T1').estimated_band], ['E1', 'E3']);
+});
+
+// ---------- 7. planner size × actual band ----------
+test('7 planner sizes: shown from 5 tasks; a reopened task and filtered-out tasks are left out; no verdict', async (t) => {
+  const refs = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'], usd = [0.5, 1.5, 2.5, 3.5, 0.5, 2.5];
+  const f = await banded(t, refs.map((r, k) => [r, null, usd[k]]), { cls: ['S', 'S', 'M', 'M', 'S', 'S'] }); calibration(f);
+  let m = (await report(f, ['--cutoff', CUT])).plans[0].metrics.planner_size_bands;
+  assert.deepEqual(m, { n: 6, min_n: 5, matrix: { M: { E3: 1, E4: 1 }, S: { E1: 2, E2: 1, E3: 1 } } });
+  f.obs.push(mk({ plan: 'sec/run-1', item_id: f.itemId('sec/run-1', 'T6'), ref: 'T6', event: 'reopened', at: '2026-11-03T12:00:00.000Z', source: 'cli', host: 'cli', source_record_id: 'reopen-T6', transition_id: `${f.itemId('sec/run-1', 'T6')}/reopened/1`, meta: { version: 1 } }));
+  m = (await report(f, ['--cutoff', CUT])).plans[0].metrics.planner_size_bands;
+  assert.deepEqual(m, { n: 5, min_n: 5, matrix: { M: { E3: 1, E4: 1 }, S: { E1: 2, E2: 1 } } });
+  m = (await report(f, ['--cutoff', CUT, '--class', 'S'])).plans[0].metrics.planner_size_bands;
+  assert.deepEqual(m, { n: 3, min_n: 5, matrix: null });
+});
+
+// ---------- 8. per-plan cost partition ----------
+test('8 per-plan cost: (c) is the sum of per-task costs; (a) plus the other tasks is (c); (b) counts done tasks without a usable cost', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1', 'T2', 'T3', 'T4', 'T5'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 }); ledger(f, { refs: ['T2'], id: 'b', usd: 3 });
+  ledger(f, { refs: ['T3'], id: 'c', usd: 1, endAt: null }); snap(f, { id: 'c', desc: 'T3', usd: 1, complete: false });  // done, not ended
+  ledger(f, { refs: ['T4'], id: 'd', usd: 4 });                                                                            // in progress
+  for (const r of ['T1', 'T2', 'T3']) land(f, 'sec/run-1', r);
+  land(f, 'sec/run-1', 'T5', '2026-11-05T00:00:00.000Z');                                                                   // done after the window: no cost either way
+  const doc = await report(f, ['--cutoff', CUT]), p = doc.plans[0], tasks = p.items.filter((i) => i.level === 'task');
+  const sum = (xs) => xs.reduce((n, i) => n + (i.cost_usd ?? 0), 0);
+  assert.equal(p.cost.all_tasks_usd, sum(tasks)); assert.equal(p.cost.all_tasks_usd, 10);
+  assert.deepEqual([p.cost.done_in_window_usd, p.cost.done_in_window_n, p.cost.done_without_cost], [5, 2, 1]);
+  const inA = new Set(['T1', 'T2']);
+  assert.equal(p.cost.done_in_window_usd + sum(tasks.filter((i) => !inA.has(i.ref))), p.cost.all_tasks_usd);
 });
