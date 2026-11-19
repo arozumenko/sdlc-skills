@@ -100,7 +100,7 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
   the run does not know, withholds every task of the run); or when the task's earliest hooked dispatch has stage `review` or
   `fix`. `calibrate` counts each landed task it leaves out under one reason, the first that applies of:
   `cost-under-unknown-id`, `crossing-unreadable`, `crossed-into-another-task`, `first-dispatch-review-or-fix`,
-  `unpriced-model`, `dispatch-not-ended`, `no-cost-recorded`, `zero-cost`, and prints them as
+  `unpriced-model`, `dispatch-not-ended`, `text-incomplete`, `attribution-unstable`, `no-cost-recorded`, `zero-cost`, and prints them as
   `LEFT-OUT <n> of <landed> landed tasks: <reason>=<n> …`.
 - A task renamed through `supersedes.item_map` keeps the dispatches, rework and returns recorded under its old id (the
   re-cut's own `created`/`cancelled` for the old id are not carried). If a run has dispatch cost under an id it no longer

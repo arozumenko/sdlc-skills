@@ -82,7 +82,11 @@ test('fillEstimates: unestimated tasks get a calibrated, auto-accepted usd range
 // the report scores them against measured cost.
 const obs = (repo, f) => appendObservation(repo, makeObservation({ user: null, host: 'claude', plan: 'sec/run-1', level: 'task', basis: 'observed', ...f }, { now: NOW }), { now: NOW });
 // One hooked dispatch (start + end) on an item. `agent` overrides the effort payload (null = an older hook with no cost).
+// Calibration prices the dispatch's usage at current prices (it does not read the hook's own cost_usd), so a payload that gives a
+// cost and a usage gets a usage that costs exactly that: output tokens at $20 per million. Zero-token host rows are kept.
+const pricedUsage = (cost) => ({ 'claude-opus-5-5': { output: Math.round(cost * 50000) } });
 function dispatch(repo, runId, ref, { at, id = ref, agent: effort, stage = 'build' }) {
+  if (effort?.usage && Object.keys(effort.usage).every((m) => m === 'claude-opus-5-5' || m.startsWith('<')) && Number.isFinite(effort.cost_usd) && effort.cost_usd >= 0) effort = { ...effort, usage: { ...pricedUsage(effort.cost_usd), ...Object.fromEntries(Object.entries(effort.usage).filter(([m]) => m.startsWith('<'))) } };
   const item_id = `${runId}/task-${ref.toLowerCase()}`, agent = `agent-${id}`;
   const base = { plan: runId, item_id, ref };
   obs(repo, { ...base, event: 'dispatched', at, source: 'hook', source_record_id: `claude:s:${agent}`, transition_id: `${item_id}/dispatched/${agent}`, agentId: agent, meta: { stage, version: 1 } });
@@ -157,9 +161,10 @@ test('cost completeness: an uncosted, malformed, unpriced or unfinished dispatch
   const at = '2026-11-03T10:00:00.000Z', end = '2026-11-03T12:00:00.000Z', good = { usage: { 'claude-opus-5-5': { output: 1 } }, cost_usd: 2, split: 1 };
   dispatch(repo, 'sec/run-1', 'OK', { at, agent: good });
   dispatch(repo, 'sec/run-1', 'OLD', { at, id: 'OLD-build', agent: null }); dispatch(repo, 'sec/run-1', 'OLD', { at: '2026-11-03T10:30:00.000Z', id: 'OLD-fix', agent: good });
-  dispatch(repo, 'sec/run-1', 'NEG', { at, agent: { ...good, cost_usd: -10 } });
-  dispatch(repo, 'sec/run-1', 'STR', { at, agent: { ...good, split: '0.5' } });
-  dispatch(repo, 'sec/run-1', 'UNP', { at, agent: { ...good, unpriced_models: ['x'] } });
+  // No usage either: a malformed cost with a priceable usage would be priced from the usage now.
+  dispatch(repo, 'sec/run-1', 'NEG', { at, agent: { ...good, cost_usd: -10, usage: undefined } });
+  dispatch(repo, 'sec/run-1', 'STR', { at, agent: { ...good, split: '0.5', usage: undefined } });
+  dispatch(repo, 'sec/run-1', 'UNP', { at, agent: { ...good, usage: { x: { output: 1 } }, unpriced_models: ['x'] } });
   // OPEN: a hooked dispatch that started but never ended.
   obs(repo, { plan: 'sec/run-1', item_id: 'sec/run-1/task-open', ref: 'OPEN', event: 'dispatched', at, source: 'hook', source_record_id: 'claude:s:agent-OPEN-2', transition_id: 'sec/run-1/task-open/dispatched/agent-OPEN-2', agentId: 'agent-OPEN-2', meta: { stage: 'build', version: 1 } });
   dispatch(repo, 'sec/run-1', 'OPEN', { at, agent: good });
@@ -431,7 +436,7 @@ test('calibrate says how many landed tasks it left out, and why', () => {
   dispatch(repo, 'sec/run-1', 'REV', { at, agent: GOOD, stage: 'review' });
   dispatch(repo, 'sec/run-1', 'FIX', { at, agent: GOOD, stage: 'fix' });
   dispatch(repo, 'sec/run-1', 'X1', { at, agent: { ...GOOD, crossed: [idOf('X2')] } }); dispatch(repo, 'sec/run-1', 'X2', { at, agent: GOOD });
-  dispatch(repo, 'sec/run-1', 'UNP', { at, agent: { ...GOOD, unpriced_models: ['some-model'] } });
+  dispatch(repo, 'sec/run-1', 'UNP', { at, agent: { ...GOOD, usage: { 'some-model': { output: 1 } }, unpriced_models: ['some-model'] } });
   for (const ref of ['OK', 'REV', 'FIX', 'X1', 'X2', 'UNP', 'NONE']) done(repo, 'sec/run-1', ref, '2026-11-03T14:00:00.000Z');
   const c = run(repo, ['calibrate', '--dry-run']);
   assert.equal(c.code, 0, c.stderr); assert.match(c.stdout, /CALIBRATION samples=1 /);

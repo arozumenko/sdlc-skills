@@ -65,6 +65,14 @@ export function deriveQualifiers(runs) {
   }
   return new Map([...campaigns].filter(([,cs])=>cs.size===1).sort(([a],[b])=>a.localeCompare(b)).map(([q,cs])=>[q,[...cs][0]]));
 }
+/** The runs a dispatch that started at `startedAt` can belong to: registered by then, and not yet closed. */
+export const runsInScope = (runs, startedAt) => runs.filter(r => Date.parse(r.observation_start ?? r.registered_at) <= Date.parse(startedAt) && (r.status !== 'closed' || Date.parse(startedAt) < Date.parse(r.updated_at)));
+/** First `-` segments (lower case) that look like a campaign qualifier but are not one: an item ref has the same text, or two campaigns share it. */
+export function rejectedQualifiers(runs) {
+  const accepted = deriveQualifiers(runs), shaped = new Set();
+  for (const r of runs) { const segment = r.campaign_id.split('-')[0]; if (/\d/.test(segment) && captureRefs(segment).refs.some(t => t === segment)) shaped.add(lower(segment)); }
+  return new Set([...shaped].filter(q => !accepted.has(q)));
+}
 const restricted = (runs, qualifiers, qs) => qs.length ? runs.filter(r => qs.some(q => qualifiers.get(q) === r.campaign_id)) : runs;
 export function textEvidence(tokens, runs, qualifiers = new Map(), qs = []) {
   const ids = [...new Set(tokens.filter(t=>/\d/.test(t)).map(lower))];
@@ -106,7 +114,7 @@ export function decide(text, branch, branchPlan = null) {
 
 function infer(key, snapshot, runs, qualifiers) {
   if (!key.started_at) return result('none','unknown-start');
-  const scope = runs.filter(r => Date.parse(r.observation_start ?? r.registered_at) <= Date.parse(key.started_at) && (r.status !== 'closed' || Date.parse(key.started_at) < Date.parse(r.updated_at)));
+  const scope = runsInScope(runs, key.started_at);
   const s = snapshot ?? {refs:{desc:[],msg:[],truncated:false},follow_ups:[]};
   const qIn = ts => [...new Set(ts.map(lower).filter(t=>qualifiers.has(t)))].sort();
   const qd=qIn(s.refs.desc); let qs=qd;
