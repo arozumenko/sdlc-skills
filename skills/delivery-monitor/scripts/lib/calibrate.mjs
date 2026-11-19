@@ -9,8 +9,8 @@ import { join } from 'node:path';
 import { resolveObservations } from './events.mjs';
 import { cliError, deliveryDir, nowIso, sha256 } from './paths.mjs';
 import { listRuns } from './plan.mjs';
-import { taskCosts, taskOutcome } from './task-costs.mjs';
-import { buildTimelines, carriesCrossing, selectOccurrences } from './timeline.mjs';
+import { mappedOccurrences, taskCosts, taskOutcome } from './task-costs.mjs';
+import { buildTimelines, selectOccurrences } from './timeline.mjs';
 
 export const CALIBRATION_FILE = 'calibration.json';
 export const MIN_N = 5;
@@ -39,22 +39,9 @@ export function collect(repo, { now = Date.now(), enriched = null } = {}) {
   const tc = taskCosts(repo, { resolved: res, enriched });   // throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE
   const samples = [], tally = new Map(); let landed = 0;
   for (const run of listRuns(repo)) {
-    const known = new Set(run.items.map((i) => i.item_id));
-    // A task renamed by supersedes.item_map keeps the cost recorded under its old id. Dispatch cost left under an id this run
-    // no longer knows (an older rename the run file no longer carries) cannot be attributed, so its tasks' totals are not
-    // trusted: the whole run is left out of calibration rather than training on part of a task.
-    // Only work evidence moves with a rename: the re-cut's own `created`/`cancelled` for the old id describe the catalogue
-    // change itself, and carried over they would cancel the renamed task. A `reopened` moves as well, the re-cut's own
-    // re-add included, and counts as a return. The ids in a crossing marker move the same way.
-    const renamed = run.supersedes?.item_map ?? {}, MOVES = new Set(['dispatched', 'dispatch_ended', 'rework_observed', 'review_returned', 'reopened']);
-    const moved = (id) => (typeof id === 'string' && Object.hasOwn(renamed, id) ? renamed[id] : id);
-    const mine = occurrences.filter((o) => o.plan === run.run).map((o) => {
-      const r = o.item_id != null && renamed[o.item_id] && MOVES.has(o.event) ? { ...o, item_id: renamed[o.item_id] } : o;
-      return carriesCrossing(r) && Array.isArray(r.meta.agent.crossed) ? { ...r, meta: { ...r.meta, agent: { ...r.meta.agent, crossed: r.meta.agent.crossed.map(moved) } } } : r;
-    });
-    const orphanCost = mine.some((o) => o.event === 'dispatch_ended' && o.item_id != null && !known.has(o.item_id));
-    // A crossing marker is kept even on a dispatch with no item: it says which tasks miss part of their cost.
-    const occ = mine.filter((o) => known.has(o.item_id) || carriesCrossing(o));
+    // Renames, crossing ids and the orphan-rename rule: `mappedOccurrences` (shared with the report's cost view). Dispatch cost left
+    // under an id this run no longer knows cannot be attributed, so the whole run is left out rather than training on part of a task.
+    const { occ, orphanCost } = mappedOccurrences(run, occurrences);
     const returnedIds = new Set(occ.filter((o) => o.event === 'review_returned' || o.event === 'reopened').map((o) => o.item_id));
     const { items } = buildTimelines({ occurrences: occ, plan: run, end: nowIso(now) });
     for (const i of items.values()) {

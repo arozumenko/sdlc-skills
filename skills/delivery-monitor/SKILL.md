@@ -99,7 +99,7 @@ The `crossed` flag means a follow-up names another item in the same run. It does
 `attributed_share` excludes the branch and brief heuristics. `attributed_share_incl_heuristic` includes them. Both are null for a zero total.
 Use `--by plan` for recovered item and plan totals per run, plus project totals for legacy and unresolved spend.
 JSON adds `attribution` and per-key decisions. If a run file cannot be read or fails validation, attribution is unavailable.
-The base spend report still succeeds. Recovered spend is shown in `spend`; `report` task costs do not use it yet. Calibration does (see below).
+The base spend report still succeeds. Recovered spend is shown in `spend`, and `report` and calibration count it in task costs (see below).
 
 The spend window selects **dispatches started in `[since, until)`** and includes their lifetime usage. Start time is the
 earliest resolved legacy `dispatched` time, else the store's start. `unknown-start` keys are included only without a window.
@@ -138,8 +138,8 @@ With no samples, registration prints `CALIBRATION none:` and keeps any existing 
 A table is broken if it cannot be read or parsed, has a malformed cell, or has a wrong `v`, `unit` or `min_n`.
 `calibrate` stops with `PRICES-INVALID` (exit 2) when the built-in price table or the project override cannot be read or has
 an invalid model entry. `plan register` warns with `WARN PRICES-INVALID` and uses the existing table if available.
-While prices are broken, the hook marks each dispatch unpriced (`<prices-unreadable>`), and `report` shows those tasks
-only as `missing_actual`. An override entry replaces a
+While prices are broken, the hook marks each dispatch unpriced (`<prices-unreadable>`), and `report` falls back to the
+hook-time task costs (see "Task cost in the report"). An override entry replaces a
 built-in model whole, so it needs all four rates (`input`, `output`, `cache_write`, `cache_read`); it may price a
 `<model>#fast` id itself, otherwise fast mode is the base model at double every rate. `calibrate` says `NO-EVENTS` until a
 landed task has a complete measured cost, and says how many it left out. Use `calibrate` for an optional manual rebuild
@@ -153,8 +153,23 @@ as above, applied to all of a task's dispatches. Two reasons are new: `text-inco
 description or brief names a cancelled task or mission, or a campaign prefix that is not a qualifier). `calibrate` stops with
 `ATTRIBUTION-UNAVAILABLE` (exit 2) when attribution cannot be computed; `plan register` then warns and keeps the saved table.
 `calibration.json` gains `samples_by_source` (`ledger`, `recovered`, `both`). Because of this, these numbers can change: sample
-costs and models, sample counts, and the cells and classes built from them. `report`, `spend` and every other output keep their
-numbers. The report keeps the hook's task costs until a later change.
+costs and models, sample counts, and the cells and classes built from them.
+
+**Task cost in the report.** `report` uses the same task cost: every dispatch attributed to the task, counted once, at
+current prices. It counts a dispatch only when its start is known and before the report's effective end
+(`min(--until, --cutoff or now)`), and then at its current lifetime cost, so a past report can change when such a dispatch
+grows or is re-attributed (`policy.task_cost` says so). Shares are computed over all runs before `--plan`. Each item carries
+`cost_usd`, `cost_source` (`ledger`, `recovered`, `both` or null), `cost_gaps` and `cost_band`; the envelope carries
+`cost_basis` (`c1`), `prices_as_of` and `estimate_bands`. When attribution is unavailable or prices are invalid, the report
+keeps the hook-time costs: `cost_basis: "hook"`, `cost_fallback: {code, reason}`, one caveat, exit 0. Any other error is
+`INTERNAL` (exit 1), in `calibrate` and `status` too. Dollar estimates are judged as effort bands against the current
+calibration's `class_bounds_usd`: an estimate's band is its calibrated p50 (`low`), another range's midpoint or a point's
+value; the actual's band is the task cost (bounds inclusive). The headline is same / one off / two or more off, with an
+estimated × actual table; the dollar ratio, MdMRE and "within dollar range" stay as detail under `## Cost`. Bands are
+suppressed, with one reason, on `fallback`, `no-calibration`, `unreadable`, `too-few-samples` or `invalid-bounds`; a
+calibration priced on another date adds a caveat. The Cost section also shows planner size × actual band (from 5 done tasks
+with a size and a usable cost) and per plan: cost of tasks done in the window, done tasks without a usable cost, and the
+cost of all the plan's tasks. `spend` and every other output keep their numbers.
 
 **Who does what.** The ledger is the record of mission state; neither memory layer (per-role memory, shared knowledge) nor a
 work board replaces it. The project manager records every merge, landing, cancellation, block/unblock and defect/fix at the

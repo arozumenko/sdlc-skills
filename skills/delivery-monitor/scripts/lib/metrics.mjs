@@ -1,4 +1,5 @@
 // STDLIB ONLY. Metrics (spec §6.10) over timeline items. Seconds everywhere; rendering rounds. Every figure carries n; caveats from numbers.
+import { classOf } from './calibrate.mjs';
 export const secondsBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 1000;
 export const toHours = (s) => (s == null ? null : Math.round((s / 3600) * 100) / 100);
 export const nearestRank = (sorted, q) => sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)];
@@ -62,8 +63,8 @@ const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length,
 // earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
 const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
   : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
-/** Dollar estimates (unit `usd`, from calibration) are scored against the task's measured cost (hook dispatch_ended cost_usd,
- * split per item) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
+/** Dollar estimates (unit `usd`, from calibration) are scored against the item's `cost_usd` (the report's task cost, or the
+ * hook-time cost on fallback) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   // `chosen` is null when the dollar estimate was never accepted, or when `latest` finds none accepted before the start.
   const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;
@@ -273,4 +274,51 @@ function doraFigures(all, items, sinceIso, endIso) {
     untraced: { n: untraced.length, by_stage: untraced.reduce((m, { d }) => { m[d.found_stage] = (m[d.found_stage] ?? 0) + 1; return m; }, {}) },
     excluded_defects: found(tasks.filter(throughputExcluded)).length,
   };
+}
+
+// ---------- task cost (spec PR 3b, C2/C3) ----------
+export const BANDS = ['E1', 'E2', 'E3', 'E4'];
+/** Effort-class bounds a report can band with: three finite, non-negative, non-decreasing numbers. */
+export const validBounds = (b) => Array.isArray(b) && b.length === 3 && b.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) && b[0] <= b[1] && b[1] <= b[2];
+/** A cost the report trusts: positive, with no completeness gap. */
+export const usableCost = (i) => i.cost_usd > 0 && !i.cost_gaps?.length;
+/** A task done at its endpoint: done, and landed again after its latest reopen if it was reopened. */
+const currentlyDone = (i) => i.state === 'done' && (!i.last_reopen_at || (i.last_done_at != null && i.last_done_at > i.last_reopen_at));
+const doneTasks = (items, { since, end, filters = {} }) => [...items.values()].filter((i) => i.level === 'task' && (!filters.level || filters.level === 'task') && (!filters.class || i.class === filters.class)
+  && inWin(i.done_at, new Date(since).toISOString(), new Date(end).toISOString()) && currentlyDone(i));
+const tally = (m, a, b) => { m[a] ??= {}; m[a][b] = (m[a][b] ?? 0) + 1; };
+const sortedMatrix = (m) => Object.fromEntries(Object.keys(m).sort().map((k) => [k, Object.fromEntries(Object.keys(m[k]).sort().map((c) => [c, m[k][c]]))]));
+
+/** Estimate quality as effort bands, over exactly the dollar-scoring rows (eligible `usd` rows), judged on each item's cost.
+ * The representative estimate: a calibrated range's low (the cell p50), any other range's midpoint, a point's value. Bands use
+ * `classOf`'s inclusive upper bounds; the distance is the band-index difference. Annotates each banded row. */
+export function estimateBands(rows, items, bounds) {
+  const out = { n: 0, same: 0, one_off: 0, two_or_more_off: 0, within_one: 0, matrix: {} };
+  for (const r of rows) {
+    if (r.estimate?.unit !== 'usd' || r.reason != null) continue;
+    const actual = items.get(r.item_id)?.cost_usd, rep = r.tier === 'calibrated' ? r.estimate.low : (r.estimate.low + r.estimate.high) / 2;
+    const e = classOf(rep, bounds), a = classOf(actual, bounds), d = Math.abs(BANDS.indexOf(e) - BANDS.indexOf(a));
+    Object.assign(r, { estimate_rep_usd: rep, estimated_band: e, actual_band: a, band_distance: d });
+    out.n++; out[d === 0 ? 'same' : d === 1 ? 'one_off' : 'two_or_more_off']++; if (d <= 1) out.within_one++;
+    tally(out.matrix, e, a);
+  }
+  out.matrix = sortedMatrix(out.matrix);
+  return out;
+}
+
+/** Planner size × actual band: tasks done in the window and still done, report filters applied, with a planner class and a usable
+ * cost. The matrix is shown only from `min_n` tasks; it carries no verdict. */
+export function plannerSizeBands(items, { since, end, filters, bounds, minN = 5 }) {
+  const rows = doneTasks(items, { since, end, filters }).filter((i) => i.class && usableCost(i)), m = {};
+  for (const i of rows) tally(m, i.class, classOf(i.cost_usd, bounds));
+  return { n: rows.length, min_n: minN, matrix: rows.length >= minN ? sortedMatrix(m) : null };
+}
+
+/** The per-plan cost line: (a) cost of the tasks done in the window (still done, filters applied) with a usable cost, (b) how many
+ * such done tasks have no usable cost, (c) the cost of all the plan's tasks, whatever their state (every cost already counts
+ * only dispatches started before the end). */
+export function planCost(items, { since, end, filters }) {
+  const done = doneTasks(items, { since, end, filters }), usable = done.filter(usableCost), sum = (xs) => xs.reduce((n, i) => n + (i.cost_usd ?? 0), 0);
+  const r6 = (x) => Number(x.toPrecision(6));
+  return { done_in_window_usd: r6(sum(usable)), done_in_window_n: usable.length, done_without_cost: done.length - usable.length, all_tasks_usd: r6(sum([...items.values()].filter((i) => i.level === 'task'))) };
 }

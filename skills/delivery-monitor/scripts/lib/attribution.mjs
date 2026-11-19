@@ -1,7 +1,7 @@
 // STDLIB ONLY. Spend-only attribution from captured evidence and the current run catalogue.
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { plansDir, decodeSegment, sha256 } from './paths.mjs';
+import { cliError, decodeSegment, isInputError, plansDir, sha256 } from './paths.mjs';
 import { captureRefs, readDispatches, reduce } from './dispatches.mjs';
 import { resolveObservations } from './events.mjs';
 import { expandRef } from './associate.mjs';
@@ -20,37 +20,44 @@ const prefixHit = (r,h) => prefixes(r).some(p => lower(h).includes(lower(p)));
 const uniqueItems = items => [...new Map(items.map(i => [JSON.stringify([i.plan,i.item_id]),i])).values()].sort((a,b) => a.plan.localeCompare(b.plan) || a.item_id.localeCompare(b.item_id));
 const evidence = (items, empty = 'no-evidence') => ({ items: uniqueItems(items), state: items.length ? uniqueItems(items).length === 1 ? 'unique' : 'ambiguous' : empty });
 
-/** Unlike listRuns, a damaged competitor must never silently disappear. */
+/** Unlike listRuns, a damaged competitor must never silently disappear. Failures are tagged where they happen: a file or
+ * directory that cannot be read keeps its Node error code, a file that does not parse or fails the schema is RUN-UNREADABLE, and
+ * any other exception propagates as it is. */
 export function loadRunsChecked(repo) {
   const dir = plansDir(repo), runs = [], inputs = [], seen = new Set();
+  // A file-system failure keeps its code and syscall (so it stays an input error); anything else propagates as it is.
+  const unreadable = (path, e) => { if (typeof e?.code !== 'string' || typeof e.syscall !== 'string') throw e; throw Object.assign(new Error(`${path}: ${e.code}`), { code: e.code, syscall: e.syscall }); };
   // Only a missing directory means "no plans"; any other failure to read it must not look like an empty catalogue.
   let names;
   try { names = readdirSync(dir); }
-  catch (e) { if (e.code === 'ENOENT' && !lstatExists(dir)) return { runs, inputs }; throw new Error(`${dir}: ${e.code ?? e.message}`); }
+  catch (e) { if (e.code === 'ENOENT' && !lstatExists(dir)) return { runs, inputs }; unreadable(dir, e); }
   for (const name of names.filter(n => n.endsWith('.json')).sort()) {
-    const path = join(dir,name);
-    try {
-      const bytes = readFileSync(path), r = JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
-      const fail = message => { throw new Error(message); };
-      if (!object(r) || typeof r.run !== 'string' || r.run !== decodeSegment(name.slice(0,-5)) || seen.has(r.run)) fail('invalid or duplicate run');
-      if (typeof r.campaign_id !== 'string' || !r.campaign_id.trim() || !['open','closed'].includes(r.status) || !Array.isArray(r.items)) fail('invalid run schema');
-      for (const field of ['observation_start','registered_at']) if (field in r && !iso(r[field])) fail(`invalid ${field}`);
-      if (!iso(r.observation_start ?? r.registered_at) || r.status === 'closed' && !iso(r.updated_at)) fail('invalid scope dates');
-      const ids = new Set();
-      for (const i of r.items) {
-        if (!object(i) || typeof i.item_id !== 'string' || ids.has(i.item_id) || typeof i.ref !== 'string' || !i.ref.trim() || !['campaign','mission','task'].includes(i.level)) fail('invalid item');
-        ids.add(i.item_id);
-        if ('cancelled' in i && typeof i.cancelled !== 'boolean' || 'branch' in i && i.branch !== null && typeof i.branch !== 'string') fail('invalid item options');
+    const path = join(dir,name), fail = message => { throw cliError('RUN-UNREADABLE', `${path}: ${message}`); };
+    let bytes, r;
+    try { bytes = readFileSync(path); } catch (e) { unreadable(path, e); }
+    try { r = JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)); }
+    catch (e) { if (e instanceof SyntaxError || e?.code === 'ERR_ENCODING_INVALID_ENCODED_DATA') fail(e.message); throw e; }
+    if (!object(r) || typeof r.run !== 'string' || r.run !== decodeSegment(name.slice(0,-5)) || seen.has(r.run)) fail('invalid or duplicate run');
+    if (typeof r.campaign_id !== 'string' || !r.campaign_id.trim() || !['open','closed'].includes(r.status) || !Array.isArray(r.items)) fail('invalid run schema');
+    for (const field of ['observation_start','registered_at']) if (field in r && !iso(r[field])) fail(`invalid ${field}`);
+    if (!iso(r.observation_start ?? r.registered_at) || r.status === 'closed' && !iso(r.updated_at)) fail('invalid scope dates');
+    const ids = new Set();
+    for (const i of r.items) {
+      if (!object(i) || typeof i.item_id !== 'string' || ids.has(i.item_id) || typeof i.ref !== 'string' || !i.ref.trim() || !['campaign','mission','task'].includes(i.level)) fail('invalid item');
+      ids.add(i.item_id);
+      if ('cancelled' in i && typeof i.cancelled !== 'boolean' || 'branch' in i && i.branch !== null && typeof i.branch !== 'string') fail('invalid item options');
+    }
+    // plan register saves an unset branch_map / branch_prefix / source_epoch as null: null means absent.
+    if (r.branch_map != null) {
+      if (!Array.isArray(r.branch_map)) fail('invalid branch_map');
+      for (const e of r.branch_map) {
+        if (!object(e) || typeof e.pattern !== 'string' || typeof e.ref !== 'string') fail('invalid branch_map entry');
+        try { new RegExp(e.pattern,'i'); } catch (x) { if (x instanceof SyntaxError) fail(`invalid branch_map pattern (${x.message})`); throw x; }
       }
-      // plan register saves an unset branch_map / branch_prefix / source_epoch as null: null means absent.
-      if (r.branch_map != null) {
-        if (!Array.isArray(r.branch_map)) fail('invalid branch_map');
-        for (const e of r.branch_map) { if (!object(e) || typeof e.pattern !== 'string' || typeof e.ref !== 'string') fail('invalid branch_map entry'); new RegExp(e.pattern,'i'); }
-      }
-      if (r.branch_prefix != null && !(typeof r.branch_prefix === 'string' || Array.isArray(r.branch_prefix) && r.branch_prefix.every(p => typeof p === 'string'))) fail('invalid branch_prefix');
-      if (r.source_epoch != null && (!object(r.source_epoch) || 'integration_ref' in r.source_epoch && r.source_epoch.integration_ref !== null && typeof r.source_epoch.integration_ref !== 'string')) fail('invalid source_epoch.integration_ref');
-      seen.add(r.run); runs.push(r); inputs.push({path,sha256:sha256(bytes),bytes:bytes.length});
-    } catch (e) { throw new Error(`${path}: ${e.message}`); }
+    }
+    if (r.branch_prefix != null && !(typeof r.branch_prefix === 'string' || Array.isArray(r.branch_prefix) && r.branch_prefix.every(p => typeof p === 'string'))) fail('invalid branch_prefix');
+    if (r.source_epoch != null && (!object(r.source_epoch) || 'integration_ref' in r.source_epoch && r.source_epoch.integration_ref !== null && typeof r.source_epoch.integration_ref !== 'string')) fail('invalid source_epoch.integration_ref');
+    seen.add(r.run); runs.push(r); inputs.push({path,sha256:sha256(bytes),bytes:bytes.length});
   }
   return { runs, inputs };
 }
@@ -148,7 +155,8 @@ function infer(key, snapshot, runs, qualifiers) {
 const LEVELS=['legacy-item','legacy-plan','task','mission','plan','none'];
 const EVIDENCES=['legacy','legacy-withdrawn','legacy-conflict','unknown-start','qualifier-out-of-scope','text+branch','text','branch-resolves-text','conflict','text-plan','ambiguous','branch-only','branch-plan','brief-only','brief-plan','no-evidence'];
 const heuristic = d => ['branch-only','branch-plan','brief-only','brief-plan'].includes(d.evidence);
-/** Returns a new report. Failure never exposes partially enriched keys. Base errors belong to the caller. */
+/** Returns a new report. Failure never exposes partially enriched keys. Base errors belong to the caller. Only an input that
+ * cannot be read (`isInputError`) makes attribution unavailable; a programming error propagates. */
 export function attributeSpend(repo, baseDoc, {byPlan=false} = {}) {
   try {
     const {runs,inputs}=loadRunsChecked(repo), qualifiers=deriveQualifiers(runs);
@@ -178,7 +186,7 @@ export function attributeSpend(repo, baseDoc, {byPlan=false} = {}) {
     const attribution={policy:'pr2.v1',by_level,by_evidence,attributed_share:baseDoc.total_usd?round(confident)/baseDoc.total_usd:null,attributed_share_incl_heuristic:baseDoc.total_usd?round(inclusive)/baseDoc.total_usd:null,inputs};
     if(byPlan) {attribution.by_plan=[...rows.values()];attribution.project=project;}
     return {...baseDoc,keys,attribution};
-  } catch(e) {return {...baseDoc,attribution:{unavailable:e.message}};}
+  } catch(e) {if(!isInputError(e))throw e;return {...baseDoc,attribution:{unavailable:e.message}};}
 }
 export function renderAttribution(doc) {
   const a=doc.attribution;

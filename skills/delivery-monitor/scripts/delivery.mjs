@@ -3,7 +3,7 @@
 import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cliError, currentSession, deliveryDir, nowIso, profilePath, sha256 } from './lib/paths.mjs';
+import { cliError, currentSession, isInputError, deliveryDir, nowIso, profilePath, sha256 } from './lib/paths.mjs';
 import { snapshot, writeBinding } from './lib/history.mjs';
 import { DEFECT_EVENTS, DEFECT_SEVERITIES, DEFECT_STAGES, EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
@@ -533,8 +533,9 @@ function cmdReport(repo, p, io, now) {
 }
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
-  const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { out(io, `SPEND unavailable: ${e.message}`); } };
-  try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now }))); }
+  // Unreadable input is a soft line; a programming error is INTERNAL, as in every command.
+  const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { if (!isInputError(e)) throw e; out(io, `SPEND unavailable: ${e.message}`); } };
+  try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now, costs: false }))); }
   catch (e) {
     // Global spend remains useful before a plan or its first observation exists. Preserve the original status error.
     if (['NO-PLAN', 'NO-EVENTS'].includes(e.code)) spendLine();
@@ -545,7 +546,7 @@ function cmdStatus(repo, p, io, now) {
     const calib = readCalibration(repo);
     if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
     else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
-  } catch (e) { out(io, `CALIBRATION invalid: ${e.message}`); }
+  } catch (e) { if (!isInputError(e)) throw e; out(io, `CALIBRATION invalid: ${e.message}`); }
   spendLine();
   return 0;
 }
@@ -646,13 +647,14 @@ function cmdDoctor(repo, p, io, now) {
     d.lines[d.lines.length - 1] = 'doctor: attention';
   }
   let samples = [], warning = null;
-  try { ({ samples } = collect(repo, { now })); } catch (e) { warning = `ledger unreadable: ${e.message}`; }
+  // Unreadable input is a warning; a programming error is INTERNAL, as in every command.
+  try { ({ samples } = collect(repo, { now })); } catch (e) { if (!isInputError(e)) throw e; warning = `ledger unreadable: ${e.message}`; }
   if (samples.length) {
     try {
       const calib = readCalibration(repo);
       if (!calib) warning = 'missing; run plan register or calibrate';
       else if (Math.max(...samples.map((s) => Date.parse(s.done_at))) - Date.parse(calib.cal.generated_at) > 7 * 86_400_000) warning = 'stale by more than 7 days; run plan register or calibrate';
-    } catch (e) { warning = e.message; }
+    } catch (e) { if (!isInputError(e)) throw e; warning = e.message; }
   }
   if (warning) {
     d.lines.splice(d.lines.length - 1, 0, `warning: calibration: ${warning}`);

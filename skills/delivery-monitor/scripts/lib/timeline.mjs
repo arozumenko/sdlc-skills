@@ -278,6 +278,11 @@ function catalogueAt(plan, at) {
   return rows.map((i) => ({ ...i, scope_since: scopeSince.get(i.item_id) ?? null, membership_since: membershipSince.get(i.item_id) ?? null }));
 }
 
+/** The last snapshot only, replayed with no end: the cost outputs (`cost_gaps`, `hook_spans`) of every item, without the
+ * per-boundary first-completion replay that `buildTimelines` adds for clocks. */
+const NO_END = '9999-12-31T23:59:59.999Z';
+export const costTimeline = ({ occurrences, plan }) => reduceTimelineSnapshot({ occurrences: [...occurrences].sort(replayOrder), plan: { ...plan, items: catalogueAt(plan, '9999-12-31T23:59:59.998Z') }, end: NO_END }).items;
+
 export function buildTimelines({ occurrences, plan, end }) {
   const endIso = new Date(end).toISOString();
   const ordered = [...occurrences].sort(replayOrder);

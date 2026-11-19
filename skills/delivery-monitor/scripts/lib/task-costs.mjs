@@ -1,5 +1,5 @@
-// STDLIB ONLY. What each task cost, from every dispatch attributed to it, each counted once at current prices. Calibration reads this;
-// `report` does not (it keeps the hook's task costs until a later change).
+// STDLIB ONLY. What each task cost, from every dispatch attributed to it, each counted once at current prices. Calibration reads
+// this with no end; `report` reads it bounded by its effective end (dispatches started before it, at their current lifetime cost).
 //
 // A dispatch is a `spend` key. Its owners are the tasks it belongs to, a recovered key's through PR 2's attribution, a hooked key's
 // through its active allocations. Each owner gets an equal share of the key's `spend` cost. The completeness gaps that depend on
@@ -8,8 +8,9 @@ import { attributeSpend, loadRunsChecked, rejectedQualifiers, runsInScope } from
 import { costOf, loadPricesChecked } from './cost.mjs';
 import { readDispatches, reduce } from './dispatches.mjs';
 import { resolveObservations } from './events.mjs';
-import { cliError } from './paths.mjs';
+import { cliError, isInputError } from './paths.mjs';
 import { spendReport } from './spend.mjs';
+import { carriesCrossing, costTimeline, markCostGap } from './timeline.mjs';
 
 export const taskKey = (run, itemId) => `${run}\u0000${itemId}`;
 const lower = (s) => String(s).toLowerCase();
@@ -30,17 +31,25 @@ function vectorOf(usage, usd, prices) {
   return sum > 0 ? Object.fromEntries(parts.map(([m, c]) => [m, c * usd / sum])) : {};
 }
 
-/** `enriched` is for tests: a PR 2 enriched spend report to use instead of computing one. Throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE. */
-export function taskCosts(repo, { resolved = resolveObservations(repo), enriched = null } = {}) {
+/** `enriched` is for tests: a PR 2 enriched spend report to use instead of computing one. Throws PRICES-INVALID or ATTRIBUTION-UNAVAILABLE.
+ * With `end` (the report's), a key counts only when its start is known and before `end`; any other key is left out before owners,
+ * shares, marks and `noCost`. With no `end` (calibration) every key counts. */
+export function taskCosts(repo, { resolved = resolveObservations(repo), enriched = null, end = null } = {}) {
   const loaded = loadPricesChecked(repo);
   if (loaded.problem) { const e = cliError('PRICES-INVALID', `${loaded.problem}; dispatches priced while it was broken are recorded as unpriced and left out`); e.problem = loaded.problem; throw e; }
   const unavailable = (reason) => { const e = cliError('ATTRIBUTION-UNAVAILABLE', reason); e.reason = reason; return e; };
-  // Any failure to read what attribution needs (dispatch store, ledger, run files) is one reason, never an internal error.
+  // A failure to read what attribution needs (dispatch store, ledger, run files) is one reason; any other exception is a
+  // programming error and propagates (INTERNAL).
   let doc, runs, stored;
   try { doc = enriched ?? attributeSpend(repo, spendReport(repo)); ({ runs } = loadRunsChecked(repo)); stored = reduce(readDispatches(repo)); }
-  catch (e) { if (e.code === 'PRICES-INVALID') throw e; throw unavailable(String(e?.message ?? e).split('\n')[0]); }
+  catch (e) { if (e.code === 'PRICES-INVALID' || !isInputError(e)) throw e; throw unavailable(String(e?.message ?? e).split('\n')[0]); }
   if (doc.attribution.unavailable) throw unavailable(doc.attribution.unavailable);
-  const prices = loaded.prices;
+  const prices = loaded.prices, endT = end == null ? null : Date.parse(end);
+  const spendKeys = new Set(doc.keys.map((k) => k.dispatch_key));
+  const counted = endT == null ? doc.keys : doc.keys.filter((k) => k.started_at && Date.parse(k.started_at) < endT), admitted = new Set(counted.map((k) => k.dispatch_key));
+  // Bounded: a hook end counts toward `noCost` when its key is admitted, or, for a key `spend` does not list (tombstoned), when
+  // the end itself was observed before `end`.
+  const endCounts = (o) => endT == null || (spendKeys.has(o.source_record_id) ? admitted.has(o.source_record_id) : Date.parse(o.at) < endT);
   const byRun = new Map(runs.map((r) => [r.run, { items: new Map(r.items.map((i) => [i.item_id, i])), renamed: r.supersedes?.item_map ?? {} }]));
   // The canonical task of an item id: renamed first, and only a task the run still knows can own.
   const canon = (plan, id) => {
@@ -52,7 +61,7 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
     if (o.event !== 'dispatch_ended' || !LEDGER_KEY.test(o.source_record_id)) continue;
     if (o.source === 'hook') allocs.set(o.source_record_id, [...(allocs.get(o.source_record_id) ?? []), o]);
     // The timeline's own `no-cost-recorded`, per task: which dispatches' hook ends recorded no valid cost.
-    if (o.item_id != null && endHasNoCost(o.meta?.agent)) {
+    if (o.item_id != null && endHasNoCost(o.meta?.agent) && endCounts(o)) {
       const r = byRun.get(o.plan), tk = taskKey(o.plan, r && Object.hasOwn(r.renamed, o.item_id) ? r.renamed[o.item_id] : o.item_id);
       noCost.set(tk, new Set([...(noCost.get(tk) ?? []), o.source_record_id]));
     }
@@ -61,7 +70,7 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
   const tasks = new Map(), marks = new Map(), keys = [];
   const mark = (tk, gap) => { if (!marks.has(tk)) marks.set(tk, new Set()); marks.get(tk).add(gap); };
   let ownerless = 0;
-  for (const k of doc.keys) {
+  for (const k of counted) {
     const ledgerKey = k.class !== 'not-in-ledger', d = k.attribution, s = stored.get(k.dispatch_key), owners = new Map();
     if (ledgerKey) { for (const a of allocs.get(k.dispatch_key) ?? []) { const c = a.item_id != null && canon(a.plan, a.item_id); if (c) owners.set(taskKey(c.plan, c.item_id), c); } }
     else if (d.level === 'task' && OWNER_EVIDENCE.has(d.evidence)) { const c = canon(d.plan, d.item_id); if (c) owners.set(taskKey(c.plan, c.item_id), c); }
@@ -107,7 +116,51 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
       }
     }
   }
-  return { tasks, marks, noCost, keys, ownerless_usd: ownerless };
+  return { tasks, marks, noCost, keys, ownerless_usd: ownerless, end: end == null ? null : new Date(end).toISOString(), admitted: endT == null ? null : admitted, spend_keys: spendKeys, prices_as_of: loaded.asOf ?? null };
+}
+
+/** A run's occurrences as calibration reads them. A task renamed by supersedes.item_map keeps the cost recorded under its old id:
+ * only work evidence moves with a rename (the re-cut's own `created`/`cancelled` for the old id describe the catalogue change
+ * itself, and carried over they would cancel the renamed task); a `reopened` moves as well and counts as a return; the ids in a
+ * crossing marker move the same way. `orphanCost`: dispatch cost left under an id the run neither knows nor maps (an older rename
+ * the run file no longer carries), so no task total of the run is trusted. A crossing marker is kept even on a dispatch with no
+ * item: it says which tasks miss part of their cost. */
+const MOVES = new Set(['dispatched', 'dispatch_ended', 'rework_observed', 'review_returned', 'reopened']);
+export function mappedOccurrences(run, occurrences) {
+  const known = new Set(run.items.map((i) => i.item_id)), renamed = run.supersedes?.item_map ?? {};
+  const moved = (id) => (typeof id === 'string' && Object.hasOwn(renamed, id) ? renamed[id] : id);
+  const mine = occurrences.filter((o) => o.plan === run.run).map((o) => {
+    const r = o.item_id != null && renamed[o.item_id] && MOVES.has(o.event) ? { ...o, item_id: renamed[o.item_id] } : o;
+    return carriesCrossing(r) && Array.isArray(r.meta.agent.crossed) ? { ...r, meta: { ...r.meta, agent: { ...r.meta.agent, crossed: r.meta.agent.crossed.map(moved) } } } : r;
+  });
+  const orphanCost = mine.some((o) => o.event === 'dispatch_ended' && o.item_id != null && !known.has(o.item_id));
+  return { occ: mine.filter((o) => known.has(o.item_id) || carriesCrossing(o)), orphanCost };
+}
+
+/** The dispatch (`spend` key) a hooked start or end belongs to, from its observation id; null for any other occurrence. */
+const dispatchKeyOf = (o) => {
+  if (o.source !== 'hook' || (o.event !== 'dispatched' && o.event !== 'dispatch_ended')) return null;
+  const p = o.provenance?.find((x) => x.source === 'hook'), key = p ? decodeURIComponent(String(p.observation_id).split(':')[1] ?? '') : null;
+  return key && LEDGER_KEY.test(key) ? key : null;
+};
+/** The report's cost view of one run: item id → {cost_usd, cost_source, cost_gaps}. Its ledger evidence is the run's occurrences
+ * mapped as calibration maps them, restricted to admitted dispatches (`tc.admitted`; a dispatch `spend` does not list, such as a
+ * start with no end, only when its first start is known and before the end), and replayed with no end: an admitted dispatch's end
+ * or crossing marker recorded after the report's end still counts, as its lifetime cost does. Durations never come from here. */
+export function costView(tc, run, occurrences) {
+  let occ = occurrences;
+  if (tc.admitted) {
+    const endT = Date.parse(tc.end), starts = new Map();
+    for (const o of occ) { const k = o.event === 'dispatched' && dispatchKeyOf(o); if (k) starts.set(k, Math.min(starts.get(k) ?? Infinity, Date.parse(o.at))); }
+    occ = occ.filter((o) => { const k = dispatchKeyOf(o); return !k || tc.admitted.has(k) || (!tc.spend_keys.has(k) && starts.get(k) < endT); });
+  }
+  const mapped = mappedOccurrences(run, occ), out = new Map();
+  for (const it of costTimeline({ occurrences: mapped.occ, plan: run }).values()) {
+    if (mapped.orphanCost) markCostGap(it, 'cost-under-unknown-id');
+    const c = taskOutcome(tc, run.run, it);
+    out.set(it.item_id, { cost_usd: c.cost_usd, cost_source: c.source, cost_gaps: [...c.gaps].sort() });
+  }
+  return out;
 }
 
 /** One timeline item's cost and why it may not be trusted. */

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, existsSync, utimesSync, realpathSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { resolveOwnerRepo, ownerRepo, deliveryDir, encodeSegment, decodeSegment, runPath, eventsPath, sessionPath, withLock, nowIso, sha256, whoAmI, cliError } from './paths.mjs';
+import { resolveOwnerRepo, ownerRepo, deliveryDir, encodeSegment, decodeSegment, runPath, eventsPath, sessionPath, withLock, nowIso, sha256, whoAmI, cliError, isInputError } from './paths.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-paths-'));
 
@@ -62,4 +62,10 @@ test('nowIso, sha256, cliError, whoAmI', () => {
   assert.equal(e.exit, 3); assert.equal(e.message, 'NO-PLAN(a b)');
   assert.equal(cliError('USAGE', 'x').exit, 2); assert.equal(cliError('WHAT', 'x').exit, 1);
   assert.match(whoAmI(tmp()).slug, /^[a-z0-9-]+$/);
+});
+test('isInputError: known cliError codes and Node file-system errors; never a raw SyntaxError, a TypeError or an unknown code', () => {
+  assert.ok(isInputError(cliError('RUN-UNREADABLE', 'x'))); assert.equal(cliError('RUN-UNREADABLE', 'x').exit, 2);
+  assert.ok(isInputError(Object.assign(new Error('x'), { code: 'EISDIR', syscall: 'read' })));
+  assert.ok(!isInputError(new SyntaxError('x')), 'a raw SyntaxError is not tagged by a reader'); assert.ok(!isInputError(Object.assign(new Error('x'), { code: 'EISDIR' })), 'no syscall: not a file-system error');
+  assert.ok(!isInputError(Object.assign(new TypeError('x'), { code: 'EBUG' }))); assert.ok(!isInputError(new TypeError('x'))); assert.ok(!isInputError(cliError('WHAT', 'x'))); assert.ok(!isInputError(Object.assign(new TypeError('x'), { code: 'ERR_INVALID_ARG_TYPE' })));
 });

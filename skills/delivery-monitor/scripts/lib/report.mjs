@@ -11,8 +11,10 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LEVELS, resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
-import { computeMetrics, toHours } from './metrics.mjs';
+import { readCalibration, classOf } from './calibrate.mjs';
+import { computeMetrics, estimateBands, planCost, plannerSizeBands, toHours, usableCost, validBounds } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256 } from './paths.mjs';
+import { costView, taskCosts } from './task-costs.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -100,7 +102,8 @@ function evidenceFor(occ, itemId, event, at, basis = null) {
 // landed parent must be matched on `landing_at`, not `done_at`, or the lookup silently misses a real
 // landing occurrence whenever a child finished after it.
 const doneEvidence = (occ, i) => (i.level === 'task' ? evidenceFor(occ, i.item_id, 'done', i.done_at) : (i.landing_at != null ? evidenceFor(occ, i.item_id, 'done', i.landing_at) : null));
-const compact = (i, occ) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+const compact = (i, occ, bounds = null) => ({ first_completion: i.first_completion, current_scope: i.current_scope, item_id: i.item_id, parent_item_id: i.parent_item_id ?? null, children: i.children ?? [], ref: i.ref, level: i.level, class: i.class, state: i.state, created_at: i.created_at, started_at: i.started_at, start_basis: i.start_basis, first_commit_at: i.first_commit_at, done_at: i.done_at, done_basis: i.done_basis, landing_at: i.landing_at, cancelled_at: i.cancelled_at, dispatch_count: i.dispatch_count, rework_count: i.rework_count, agent_span_s: i.agent_span_s ?? null, review_wait_s: i.review_wait_s ?? null, blocked_s: i.blocked_s ?? null, flow_efficiency: i.flow_efficiency ?? null, blocked_since: i.blocked_since ?? null, defects: i.defects ?? [], reopened: i.reopened, estimate: i.estimate_original, estimate_status: i.estimates?.length ? (i.estimate_original ? 'accepted' : 'unaccepted') : 'none', flags: i.flags,
+  cost_usd: i.cost_usd == null ? null : Number(i.cost_usd.toPrecision(6)), cost_source: i.cost_source ?? null, cost_gaps: [...i.cost_gaps], cost_band: bounds && usableCost(i) ? classOf(i.cost_usd, bounds) : null,
   // F18: evidence locators for the three clocks a compact row carries — never derived from anything
   // but the occurrence that produced the clock (see evidenceFor above).
   evidence: { created: evidenceFor(occ, i.item_id, 'created', i.created_at), started: i.start_basis === 'observed' ? evidenceFor(occ, i.item_id, 'dispatched', i.started_at, 'observed') : null, done: doneEvidence(occ, i) } });
@@ -114,7 +117,11 @@ const isFinished = (status, items) => {
 // An open item: in progress, or still planned but blocked (blocked before its first dispatch — otherwise it would show nowhere).
 const isOpen = (i) => i.state === 'in_progress' || (i.state === 'planned' && Boolean(i.blocked_since));
 const closeHint = (run) => `every item is done or cancelled but the plan is still open — once it has landed, close it: delivery.mjs plan close ${run}`;
-export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {} } = {}) {
+const TASK_COST_POLICY = 'lifetime cost of dispatches started before the effective end; may be revised';
+// The two failures that leave the report on the hook's own task costs; any other error propagates.
+const COST_FALLBACK = new Set(['ATTRIBUTION-UNAVAILABLE', 'PRICES-INVALID']);
+/** `costs: false` (status) skips task costs: items keep the hook-time values and the envelope carries no cost basis. */
+export function assemble(repo, { plans = null, since = null, until = null, cutoff = null, now = Date.now(), estimateBase = 'original', filters = {}, costs = true } = {}) {
   repo = resolveOwnerRepo(repo);
   // F20: an unrecognised --level is user input, not a crash — reject it before anything else runs.
   if (filters.level != null && !LEVELS.includes(filters.level)) throw cliError('USAGE', `unknown --level ${filters.level}; expected ${LEVELS.join('|')}`);
@@ -166,6 +173,25 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   const st = [...agentStats.values()], turns = st.reduce((n, a) => n + (a.turns ?? 0), 0), heavy = st.reduce((n, a) => n + (a.turns_over_500k ?? 0), 0);
   const dispatchAgents = { agents: st.length, resumed: st.filter((a) => a.follow_ups > 0).length, compacted: st.filter((a) => a.compactions > 0).length, max_follow_ups: st.length ? Math.max(...st.map((a) => a.follow_ups ?? 0)) : null, turns, turns_over_500k: heavy, over_500k_share: turns ? Math.round((heavy / turns) * 10000) / 10000 : null };
 
+  // Task cost (spec PR 3b, C1): one projection per report, over all runs (so a key shared across plans keeps its shares under
+  // --plan), counting dispatches started before the effective end at their current lifetime cost. Only attribution being
+  // unavailable or invalid prices fall back to the hook-time costs the timeline already carries.
+  let tc = null, costFallback = null;
+  if (costs) {
+    try { tc = taskCosts(repo, { resolved: res, end }); }
+    catch (e) { if (!COST_FALLBACK.has(e.code)) throw e; costFallback = { code: e.code, reason: e.reason ?? e.problem ?? e.message }; }
+  }
+
+  // Effort bands (C2) need C1 costs and valid bounds from the current calibration table; otherwise one reason says why not.
+  let bounds = null, bandsOff = null, calPricesAsOf = null, calRead = false;
+  if (!tc) bandsOff = costs ? 'fallback' : null;
+  else {
+    let cal = null;
+    try { cal = readCalibration(repo); } catch (e) { if (e.code !== 'CALIBRATION-INVALID') throw e; bandsOff = 'unreadable'; }
+    if (!bandsOff && !cal) bandsOff = 'no-calibration';
+    else if (cal) { calRead = true; calPricesAsOf = cal.cal.prices_as_of ?? null; const b = cal.cal.class_bounds_usd; if (b == null) bandsOff = 'too-few-samples'; else if (!validBounds(b)) bandsOff = 'invalid-bounds'; else bounds = b; }
+  }
+
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
@@ -175,6 +201,24 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     // Dispatch cost recorded under an id this run no longer knows (a rename in any earlier version) belongs to some task this
     // replay cannot identify, so no task's cost total is trusted: cost accuracy is withheld for the run (same rule as calibrate).
     if (occurrences.some((o) => o.plan === r.run && o.at < end && o.event === 'dispatch_ended' && o.item_id != null && !known.get(r.run).has(o.item_id))) for (const it of items.values()) markCostGap(it, 'cost-under-unknown-id');
+    // C1 replaces the hook's cost values on every item before metrics and rendering; durations, spans and counts stay as built.
+    if (tc) {
+      const cv = costView(tc, r, occurrences), renamed = r.supersedes?.item_map ?? {}, taken = new Set();
+      // The cost view holds a renamed task's cost under its new id. A report ending before the re-cut still has the old item: an
+      // item with no usable cost whose rename target (followed through item_map) is in the cost view but not among this
+      // timeline's items takes the target's cost, each target once. The chain is followed to the first id the cost view holds a
+      // cost under (the view maps one step, as calibration does).
+      const targetOf = (id) => {
+        for (let x = id, seen = new Set([id]); Object.hasOwn(renamed, x) && !seen.has(renamed[x]);) { x = renamed[x]; seen.add(x); if (cv.get(x)?.cost_usd != null && !items.has(x) && !taken.has(x)) return x; }
+        return null;
+      };
+      for (const it of items.values()) {
+        let c = cv.get(it.item_id);
+        if (c?.cost_usd == null) { const to = targetOf(it.item_id); if (to) { c = cv.get(to); taken.add(to); } }
+        c ??= { cost_usd: null, cost_source: null, cost_gaps: ['no-cost-recorded'] };
+        it.cost_usd = c.cost_usd; it.cost_source = c.cost_source; it.cost_gaps = c.cost_gaps; it.cost_incomplete = c.cost_gaps.length > 0;
+      }
+    }
     cov.deferred_events += counts.deferredEvents; cov.deferred_episodes += counts.deferredEpisodes; cov.invalid_chains += counts.invalidChains; cov.parent_incomplete += counts.parentIncomplete; cov.awaiting_landing += counts.awaitingLanding;
     cov.stray_unblocked += counts.strayUnblocked; cov.orphan_defect_fixes += counts.orphanDefectFixes; cov.non_task_blocks += counts.nonTaskBlocks;
     const g = [...items.values()].filter((i) => !i.created_at).length; gaps += g;
@@ -191,7 +235,12 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     const cancelledInCohort = createdCohort.filter((i) => i.state === 'cancelled').length;
     metrics.quality = { cancelled_share: { numerator: cancelledInCohort, denominator: createdCohort.length, ratio: createdCohort.length ? Math.round((cancelledInCohort / createdCohort.length) * 10000) / 10000 : null } };
 
-    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, metrics, counts, items: [...items.values()].map((i) => compact(i, occ)) });
+    if (costs) {
+      metrics.estimate_bands = bounds ? estimateBands(metrics.estimate_rows, items, bounds) : null;
+      metrics.planner_size_bands = bounds ? plannerSizeBands(items, { since: sinceIso, end, filters, bounds }) : null;
+    }
+    const cost = costs ? planCost(items, { since: sinceIso, end, filters }) : undefined;
+    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, ...(cost ? { cost } : {}), metrics, counts, items: [...items.values()].map((i) => compact(i, occ, bounds)) });
   }
   const pending = docs.flatMap((d) => d.items).filter((i) => i.first_completion && i.current_scope?.pending).length;
   const derived = docs.flatMap((d) => d.metrics.caveats.map((c) => `${d.run}: ${c}`));
@@ -208,6 +257,10 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   if (cov.non_task_blocks) derived.push(`${cov.non_task_blocks} block record(s) on non-task items — not in time_blocked`);
   if (cov.orphan_defect_fixes) derived.push(`${cov.orphan_defect_fixes} defect_fixed event(s) with no defect_found on the same item — ignored`);
   if (unattributedDispatches) derived.push(`${unattributedDispatches} admitted dispatch(es) unattributed (no item_id) — excluded from item timelines`);
+  // Dollar estimates keep the prices of the calibration that filled them; task costs are at current prices. Said whenever both are
+  // in use and differ, bands or not (the dollar detail still compares them).
+  if (tc && calRead && calPricesAsOf !== (tc.prices_as_of ?? null)) derived.push(`prices: calibration priced as of ${calPricesAsOf ?? 'unknown'}, task costs at current prices as of ${tc.prices_as_of ?? 'unknown'}; estimates keep their recorded dollars`);
+  if (costFallback) derived.push(`task cost: hook-time costs, not current prices (${costFallback.code}: ${costFallback.reason}); estimate bands suppressed`);
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const envelope = {
     schema: SCHEMA, generated_at: nowIso(now), cutoff: cutoffIso, window: { since: sinceIso, until: untilIso, effective_end: end, requested: { since, until, cutoff } },
@@ -224,6 +277,8 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
+  if (costs) Object.assign(envelope, { cost_basis: tc ? 'c1' : 'hook', cost_fallback: costFallback, prices_as_of: tc?.prices_as_of ?? null, estimate_bands: { bounds_usd: bounds, suppressed: bandsOff, calibration_prices_as_of: calPricesAsOf } });
+  if (costs) envelope.policy.task_cost = tc ? TASK_COST_POLICY : 'hook-time cost recorded at each dispatch end (fallback)';
   return { envelope, plans: docs };
 }
 
@@ -303,8 +358,8 @@ h2 .sub{font-weight:400;font-size:.85rem;margin-left:.5rem}
 .sub{color:var(--text-muted)}
 .oc{font-size:.72rem;border:1px solid var(--gridline);border-radius:8px;padding:0 .4rem;margin-left:.35rem;color:var(--text-muted);display:inline-block}
 .oc-done{color:var(--ok);border-color:var(--ok)}.oc-cancelled{color:var(--warn);border-color:var(--warn)}
-.items{font-size:.87rem;min-width:900px}
-.mrow{display:grid;grid-template-columns:minmax(140px,1.1fr) 96px minmax(170px,1.5fr) minmax(110px,.9fr) minmax(160px,1.4fr) 64px 64px minmax(170px,1.2fr);gap:.6rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid var(--gridline)}
+.items{font-size:.87rem;min-width:990px}
+.mrow{display:grid;grid-template-columns:minmax(140px,1.1fr) 96px minmax(170px,1.5fr) minmax(110px,.9fr) minmax(160px,1.4fr) 90px 64px 64px minmax(170px,1.2fr);gap:.6rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid var(--gridline)}
 .mrow .c{min-width:0;overflow-wrap:anywhere}
 .mrow .c.num,.mrow .c.span,.cell-bar .num{white-space:nowrap}
 .mrow .oc{white-space:normal;line-height:1.35}
@@ -325,6 +380,44 @@ details.mission[open]>summary .c.ref::before{transform:rotate(90deg)}
 `;
 const statCell = (label, value) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
 const kpiCard = (title, cells, callout, hero = null) => `<div class="kpi-card"><h3>${title}</h3>${hero ? `<div class="hero"><span class="hero-value">${hero.value}</span><span class="hero-label">${hero.label}</span></div>` : ''}<div class="kpi-grid">${cells.join('')}</div>${callout ? `<div class="kpi-callout">${callout}</div>` : ''}</div>`;
+
+const estimateStratumRow = (lv, st, x) => `| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : st.startsWith('usd:') ? `$${Math.round(x.mae_s * 100) / 100}` : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${excludedStr(x.excluded) || '—'} |`;
+const usd = (x) => (x == null ? '—' : `$${Math.round(x * 100) / 100}`);
+/** What the report's task costs are, in one line. An archived report from before task costs has no basis. */
+const costBasis = (e) => (e.cost_basis === 'c1' ? `current prices as of ${e.prices_as_of ?? 'unknown'}; ${e.policy.task_cost}`
+  : e.cost_basis === 'hook' ? `hook-time costs recorded at each dispatch end, not current prices (fallback ${e.cost_fallback?.code}: ${e.cost_fallback?.reason})` : '— (archived report without task costs)');
+const boundsText = (b) => `E1 ≤ $${b[0]}, E2 ≤ $${b[1]}, E3 ≤ $${b[2]}, E4 above`;
+/** A band table (rows × actual band): only the rows and columns that have counts. */
+const bandTable = (matrix, corner) => {
+  const rows = Object.keys(matrix), cols = [...new Set(rows.flatMap((r) => Object.keys(matrix[r])))].sort();
+  return [`| ${corner} | ${cols.join(' | ')} |`, `|---|${cols.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${r} | ${cols.map((c) => matrix[r][c] ?? '—').join(' | ')} |`)];
+};
+const withBand = (v, band) => (v == null ? '—' : `$${Number(v.toPrecision(6))}${band ? ` ${band}` : ''}`);
+/** The `## Cost` section of one plan: basis, plan cost line, estimate bands, planner size × band, dollar detail, per-task costs. */
+function costLines(p, e) {
+  const m = p.metrics, L = ['## Cost', '', `- basis: ${costBasis(e)}`];
+  if (p.cost) L.push(`- plan cost: done in window ${usd(p.cost.done_in_window_usd)} (${p.cost.done_in_window_n} tasks), done without a usable cost ${p.cost.done_without_cost}, all tasks ${usd(p.cost.all_tasks_usd)}`);
+  const eb = e.estimate_bands, b = m.estimate_bands;
+  if (b) {
+    L.push(`- estimate bands: same ${b.same} · one off ${b.one_off} · two or more off ${b.two_or_more_off} — within one band ${b.within_one} of ${b.n} (${boundsText(eb.bounds_usd)})`);
+    if (b.n) L.push('', ...bandTable(b.matrix, 'estimated \\ actual'), '');
+  } else if (eb?.suppressed) L.push(`- estimate bands: — (suppressed: ${eb.suppressed})`);
+  const ps = m.planner_size_bands;
+  if (ps) L.push(...(ps.matrix ? [`- planner size × actual band (n=${ps.n}, no verdict):`, '', ...bandTable(ps.matrix, 'planner size \\ actual'), ''] : [`- planner size × actual band: — (${ps.n} tasks, shown from ${ps.min_n})`]));
+  // Dollar detail: the dollar strata and rows the Estimates table no longer carries.
+  const strata = Object.entries(m.estimates).flatMap(([lv, es]) => Object.entries(es.strata).filter(([st]) => st.startsWith('usd:')).map(([st, x]) => estimateStratumRow(lv, st, x)));
+  const rows = m.estimate_rows.filter(isUsdRow);
+  if (strata.length || rows.length) {
+    L.push('- dollar detail (ratio = actual ÷ estimate midpoint; within dollar range = actual inside the estimate\'s dollar range):', '', '| level | stratum | n | eligible | cost ratio median | MdMRE | PRED(25) | MAE | within dollar range | excluded |', '|---|---|---|---|---|---|---|---|---|---|', ...strata);
+    if (rows.length) L.push('', '| ref | level | class | tier | base | range ($) | estimate | actual | ratio | within dollar range | reason |', '|---|---|---|---|---|---|---|---|---|---|---|',
+      ...rows.map((r) => `| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? `[$${r.estimate.low}, $${r.estimate.high}]` : '—'} | ${withBand(r.estimate_rep_usd, r.estimated_band)} | ${r.actual_usd != null ? `${withBand(r.actual_usd, r.actual_band)}${r.reason === 'missing_actual' ? ' (incomplete)' : ''}` : '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`));
+  }
+  const tasks = p.items.filter((i) => i.level === 'task').sort((a, z) => a.ref.localeCompare(z.ref, 'en', { numeric: true }));
+  if (tasks.length) L.push('', '| ref | state | cost | band | source | gaps |', '|---|---|---|---|---|---|', ...tasks.map((i) => `| ${i.ref} | ${i.state} | ${i.cost_usd == null ? '—' : `$${i.cost_usd}`} | ${i.cost_band ?? '—'} | ${i.cost_source ?? '—'} | ${i.cost_gaps?.length ? i.cost_gaps.join(', ') : '—'} |`));
+  return [...L, ''];
+}
+// A dollar estimate row: `usdAccuracy` gives every one an `actual_usd` key (null when there is no actual); hour rows have none.
+const isUsdRow = (r) => 'actual_usd' in r;
 
 export function renderMarkdown(doc) {
   const e = doc.envelope; const L = [];
@@ -371,13 +464,13 @@ export function renderMarkdown(doc) {
     // An archive written before the DORA block existed has no `metrics.dora`; it re-renders without the section.
     if (m.dora) L.push('', '## DORA', '', ...doraLines(m, e));
     L.push('', '## Estimates', '', '| level | stratum | n | eligible | work_ratio median | MdMRE | PRED(25) | MAE | hit_rate | excluded |', '|---|---|---|---|---|---|---|---|---|---|');
-    for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) {
-      const ex = excludedStr(x.excluded) || '—';
-      L.push(`| ${lv} | ${st} | ${x.n} | ${x.eligible} | ${x.work_ratio ? (x.work_ratio.median ?? `— (n<5; ${x.work_ratio.samples.map((v) => Math.round(v * 100) / 100).join(', ')})`) : '—'} | ${x.mdmre ?? '—'} | ${x.pred25 ?? '—'} | ${x.mae_s == null ? '—' : st.startsWith('usd:') ? `$${Math.round(x.mae_s * 100) / 100}` : h(x.mae_s)} | ${x.hit_rate.rate == null ? '—' : `${x.hit_rate.hits}/${x.hit_rate.ranged}`} | ${ex} |`);
-    }
-    if (m.estimate_rows.length) { L.push('', '| ref | level | class | tier | base | range (h or $) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of m.estimate_rows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? (r.estimate.unit === 'usd' ? `[$${r.estimate.low}, $${r.estimate.high}]` : `[${r.estimate.low}, ${r.estimate.high}]`) : '—'} | ${r.actual_usd != null ? `$${r.actual_usd}${r.reason === 'missing_actual' ? ' (incomplete)' : ''}` : r.estimate?.unit === 'usd' ? '—' : h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
+    // Dollar strata and rows are cost output: they render under `## Cost` (dollar detail), so this table is hours only.
+    for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) if (!st.startsWith('usd:')) L.push(estimateStratumRow(lv, st, x));
+    const hourRows = m.estimate_rows.filter((r) => !isUsdRow(r));
+    if (hourRows.length) { L.push('', '| ref | level | class | tier | base | range (h or $) | actual | basis | ratio | hit | reason |', '|---|---|---|---|---|---|---|---|---|---|---|'); for (const r of hourRows) L.push(`| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? (r.estimate.unit === 'usd' ? `[$${r.estimate.low}, $${r.estimate.high}]` : `[${r.estimate.low}, ${r.estimate.high}]`) : '—'} | ${r.actual_usd != null ? `$${r.actual_usd}${r.reason === 'missing_actual' ? ' (incomplete)' : ''}` : r.estimate?.unit === 'usd' ? '—' : h(r.actual_s)} | ${r.actual_basis ?? '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`); }
     for (const sv of m.schedule_variance) L.push(`- schedule_variance ${sv.level} ${sv.ref}: actual ${h(sv.actual_s)} vs [${sv.estimate.low}, ${sv.estimate.high}] → [${toHours(sv.band.vs_high_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_high_s)}h, ${toHours(sv.band.vs_low_s) >= 0 ? '+' : ''}${toHours(sv.band.vs_low_s)}h]; scope added ${sv.scope.added}, removed ${sv.scope.removed}`);
-    L.push('', '## Coverage & caveats', '');
+    L.push('', ...costLines(p, e));
+    L.push('## Coverage & caveats', '');
     // F17: coverage.sources (already present) plus coverage.done_basis — both read straight off
     // metrics.mjs's per-level coverage object, nothing invented here.
     for (const [lv, c] of Object.entries(m.coverage)) L.push(`- ${lv}: done ${c.done}, observed dispatch ${c.with_dispatched}, first commit ${c.with_first_commit}, created ${c.with_created}; start observed=${c.start_source.observed} derived-child=${c.start_source['derived-child']} none=${c.start_source.none}; done_basis observed=${c.done_basis.observed} derived-child=${c.done_basis['derived-child']} proxy=${c.done_basis.proxy}; sources ${JSON.stringify(c.sources)}`);
@@ -474,6 +567,24 @@ function doraPanel(m, e) {
   return `<section class="panel"><h2>DORA</h2><p class="panel-sub">A task "deploys" when it merges (${label}). Change failure rate = landed tasks with a defect found after they landed; defects are found later, so recent tasks are undercounted.</p><div class="kpi-grid">${cells.join('')}</div>${body}</section>`;
 }
 
+/** The Cost panel: per-plan cost line, estimated × actual band table and planner size × band table. Nothing for an archived
+ * report from before task costs. */
+function costPanel(p, e) {
+  if (!e.cost_basis) return '';
+  const esc = escHtml, m = p.metrics, c = p.cost, b = m.estimate_bands, ps = m.planner_size_bands;
+  const table = (matrix, corner) => {
+    const rows = Object.keys(matrix), cols = [...new Set(rows.flatMap((r) => Object.keys(matrix[r])))].sort();
+    return `<table><tr><th>${corner}</th>${cols.map((x) => `<th>${esc(x)}</th>`).join('')}</tr>${rows.map((r) => `<tr><td>${esc(r)}</td>${cols.map((x) => `<td>${matrix[r][x] ?? '—'}</td>`).join('')}</tr>`).join('')}</table>`;
+  };
+  const basis = e.cost_basis === 'c1' ? `At current prices (as of ${esc(e.prices_as_of ?? 'unknown')}): the lifetime cost of dispatches started before the report's end, so a past report can be revised.`
+    : `Hook-time costs: current-price task costs were unavailable (${esc(e.cost_fallback?.code)}).`;
+  const line = c ? `<p>Tasks done in the window: ${usd(c.done_in_window_usd)} <span class="sub">(${c.done_in_window_n} with a usable cost${c.done_without_cost ? `; ${c.done_without_cost} without` : ''})</span> · all tasks: ${usd(c.all_tasks_usd)}</p>` : '';
+  const bands = b ? (b.n ? `<p>Estimated band (rows) against actual band (columns): ${b.same} same, ${b.one_off} one off, ${b.two_or_more_off} two or more off.</p>${table(b.matrix, 'estimated')}` : '')
+    : `<p class="note">Effort bands not shown: ${esc(e.estimate_bands?.suppressed ?? 'unavailable')}.</p>`;
+  const sizes = ps ? (ps.matrix ? `<p>Planner size (rows) against actual band (columns), ${ps.n} tasks:</p>${table(ps.matrix, 'size')}` : `<p class="note">Planner size against actual band appears from ${ps.min_n} sized tasks with a usable cost (has ${ps.n}).</p>`) : '';
+  return `<section class="panel"><h2>Cost</h2><p class="panel-sub">${basis}${e.estimate_bands?.bounds_usd ? ` Bands: ${esc(boundsText(e.estimate_bands.bounds_usd))}.` : ''}</p>${line}${bands}${sizes}</section>`;
+}
+
 export function renderHtml(doc) {
   const e = doc.envelope; const esc = escHtml;
   const metaFilters = e.policy.filters?.level || e.policy.filters?.class ? ` · filters ${esc(JSON.stringify(e.policy.filters))}` : '';
@@ -539,13 +650,23 @@ export function renderHtml(doc) {
       ] : [statCell('Estimates', '— <span class="stat-sub">none registered</span>')],
       'Only accepted estimates count. "Work vs estimate" = actual ÷ midpoint of the range; typical error = median |estimate − actual| ÷ actual (MdMRE).',
       es ? { value: es.hit_rate.rate == null ? '—' : `${es.hit_rate.hits} <span class="stat-sub">of ${es.hit_rate.ranged}</span>`, label: 'tasks finished within their estimated range' } : null),
-      // Calibrated dollar estimates (effort unit) are scored against each task's measured cost, separately from hours.
-      ...(esUsd ? [kpiCard('Cost estimates <span class="stat-sub">calibrated, vs measured $</span>', [
-        statCell('Cost vs estimate', esUsd.work_ratio ? (esUsd.work_ratio.median == null ? `${pctOf(esUsd.work_ratio.min)}–${pctOf(esUsd.work_ratio.max)} <span class="stat-sub">of estimate (${esUsd.work_ratio.n}; median from 5)</span>` : `${pctOf(esUsd.work_ratio.median)} <span class="stat-sub">of estimate (median)</span>`) : '—'),
-        statCell('Typical error <span class="stat-sub">MdMRE</span>', esUsd.mdmre == null ? '—' : `${Math.round(esUsd.mdmre * 100)}%`),
-        statCell('Counted', `${esUsd.eligible} of ${esUsd.n}`),
-      ], 'Range = the calibration cell\'s p50–p80 dollar cost; actual = the task\'s share of its hooked dispatches\' priced tokens, fix rounds included.',
-      { value: esUsd.hit_rate.rate == null ? '—' : `${esUsd.hit_rate.hits} <span class="stat-sub">of ${esUsd.hit_rate.ranged}</span>`, label: 'tasks finished within their cost range' })] : []),
+      // Dollar estimates are judged on each task's cost, separately from hours: as effort bands when the report can band them,
+      // with the dollar figures as detail.
+      ...(esUsd ? [(() => {
+        const b = m.estimate_bands, within = `${esUsd.hit_rate.hits} <span class="stat-sub">of ${esUsd.hit_rate.ranged}</span>`;
+        const dollars = [
+          statCell('Cost vs estimate', esUsd.work_ratio ? (esUsd.work_ratio.median == null ? `${pctOf(esUsd.work_ratio.min)}–${pctOf(esUsd.work_ratio.max)} <span class="stat-sub">of estimate (${esUsd.work_ratio.n}; median from 5)</span>` : `${pctOf(esUsd.work_ratio.median)} <span class="stat-sub">of estimate (median)</span>`) : '—'),
+          statCell('Typical error <span class="stat-sub">MdMRE</span>', esUsd.mdmre == null ? '—' : `${Math.round(esUsd.mdmre * 100)}%`),
+          statCell('Counted', `${esUsd.eligible} of ${esUsd.n}`),
+        ];
+        const cells = b ? [statCell('Same band', String(b.same)), statCell('One band off', String(b.one_off)), statCell('Two or more off', String(b.two_or_more_off)), statCell('Within dollar range', esUsd.hit_rate.rate == null ? '—' : within), ...dollars] : dollars;
+        const off = e.estimate_bands?.suppressed ? ` Bands not shown: ${esc(e.estimate_bands.suppressed)}.` : '';
+        const actual = e.cost_basis === 'c1' ? "the task's cost: every dispatch attributed to it, counted once, at current prices, from dispatches started before the report's end"
+          : e.cost_basis === 'hook' ? "the task's hook-time cost (current-price task costs were unavailable)" : "the task's recorded cost";
+        const help = `Bands E1–E4 are the calibration table's cost quartiles. An estimate's band is its calibrated p50 (another range's midpoint, or a point's value); the actual is ${actual}. Within dollar range = the actual falls inside the estimate's dollars.${off}`;
+        return kpiCard('Cost estimates <span class="stat-sub">vs task cost</span>', cells, help,
+          b ? { value: `${b.within_one} <span class="stat-sub">of ${b.n}</span>`, label: 'estimates within one effort band' } : { value: esUsd.hit_rate.rate == null ? '—' : within, label: 'tasks finished within their dollar range' });
+      })()] : []),
     ].join('');
     parts.push(`<section class="kpi-row">${cards}</section>`);
 
@@ -558,10 +679,12 @@ export function renderHtml(doc) {
     const verdictChip = (v) => (v ? `<span class="oc ${v.cls}">${esc(v.text)}</span>` : '');
     const bar = (sec, max) => (sec == null ? '<span class="sub">—</span>' : `<div class="cell-bar"><div class="track"><div class="bar" style="width:${Math.max(1, (sec / max) * 100)}%"></div></div><span class="num">${fmtDur(sec)}</span></div>`);
     const cell = (cls, inner) => `<div class="c ${cls}">${inner}</div>`;
+    // A task's cost and its actual effort band; an incomplete cost is marked, never banded.
+    const costCell = (t) => (t.cost_usd == null ? '<span class="sub">—</span>' : `${usd(t.cost_usd)}${t.cost_band ? ` <span class="oc band">${esc(t.cost_band)}</span>` : ''}${t.cost_gaps?.length ? ` <span class="sub" title="${esc(t.cost_gaps.join(', '))}">(incomplete)</span>` : ''}`);
     const taskRow = (t) => {
       const c = cycleOf.get(t.item_id); const r = estRow.get(t.item_id); const v = verdictOf(r) ?? (t.estimate ? null : (t.estimate_status === 'unaccepted' ? { text: 'not accepted', cls: '' } : (t.state === 'done' ? { text: 'no estimate', cls: '' } : null)));
       const start = t.started_at ? '' : (t.state === 'planned' || t.state === 'cancelled' ? '' : ' <span class="sub">(no observed start)</span>');
-      return `<div class="mrow task">${cell('ref', `<span title="${esc(t.item_id)}">${esc(t.ref)}</span>${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}`)}${cell('', stateChip(t.state))}${cell('', `${bar(c, maxCycle)}${start}`)}${cell('', t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>')}${cell('', verdictChip(v))}${cell('num', '')}${cell('num', t.rework_count ? String(t.rework_count) : '<span class="sub">—</span>')}${cell('span', fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtShort(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
+      return `<div class="mrow task">${cell('ref', `<span title="${esc(t.item_id)}">${esc(t.ref)}</span>${t.class ? ` <span class="chip">${esc(t.class)}</span>` : ''}`)}${cell('', stateChip(t.state))}${cell('', `${bar(c, maxCycle)}${start}`)}${cell('', t.estimate ? fmtRangeH(t.estimate) : '<span class="sub">—</span>')}${cell('', verdictChip(v))}${cell('num', costCell(t))}${cell('num', '')}${cell('num', t.rework_count ? String(t.rework_count) : '<span class="sub">—</span>')}${cell('span', fmtSpan(t.started_at, t.done_at) ?? (t.started_at ? `${fmtShort(t.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
     };
     const missionElapsed = missions.map((g) => elapsedS(g.started_at, g.landing_at ?? g.done_at));
     const maxMission = Math.max(1, ...missionElapsed.filter((c) => c != null));
@@ -575,14 +698,15 @@ export function renderHtml(doc) {
       const v = sv ? { text: bandText(sv), cls: sv.band.vs_low_s < 0 ? '' : sv.band.vs_high_s > 0 ? 'oc-cancelled' : 'oc-done' } : null;
       const kids = tasks.filter((t) => t.parent_item_id === g.item_id);
       const expanded = tasks.length <= COLLAPSE_ABOVE || g.state !== 'done';
-      const header = `<div class="mrow mission">${cell('ref', `<span title="${esc(g.item_id)}">${esc(g.ref)}</span>`)}${cell('', stateChip(g.state))}${cell('', bar(el, maxMission))}${cell('', g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>')}${cell('', `${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}`)}${cell('num', `${cs.done}/${inScope}${cs.cancelled ? `<br><span class="sub">+${cs.cancelled} canc.</span>` : ''}`)}${cell('num', (() => { const n = kids.reduce((a, t) => a + (t.rework_count || 0), 0); return n ? String(n) : '<span class="sub">—</span>'; })())}${cell('span', fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtShort(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
+      const header = `<div class="mrow mission">${cell('ref', `<span title="${esc(g.item_id)}">${esc(g.ref)}</span>`)}${cell('', stateChip(g.state))}${cell('', bar(el, maxMission))}${cell('', g.estimate ? fmtRangeH(g.estimate) : '<span class="sub">—</span>')}${cell('', `${verdictChip(v)}${sv && (sv.scope.added || sv.scope.removed) ? ` <span class="chip">scope +${sv.scope.added}/−${sv.scope.removed}</span>` : ''}`)}${cell('num', '')}${cell('num', `${cs.done}/${inScope}${cs.cancelled ? `<br><span class="sub">+${cs.cancelled} canc.</span>` : ''}`)}${cell('num', (() => { const n = kids.reduce((a, t) => a + (t.rework_count || 0), 0); return n ? String(n) : '<span class="sub">—</span>'; })())}${cell('span', fmtSpan(g.started_at, g.landing_at ?? g.done_at) ?? (g.started_at ? `${fmtShort(g.started_at)} → <span class="sub">open</span>` : '<span class="sub">—</span>'))}</div>`;
       return `<details class="mission"${expanded ? ' open' : ''}><summary>${header}</summary>${kids.map(taskRow).join('') || '<div class="mrow task"><div class="c ref sub">no tasks</div></div>'}</details>`;
     };
     const orphanTasks = tasks.filter((t) => !t.parent_item_id || !missions.some((g) => g.item_id === t.parent_item_id));
-    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<details class="mission" open><summary><div class="mrow mission">${cell('ref', 'no mission')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('num', `${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}`)}${cell('num', '')}${cell('span', '')}</div></summary>${orphanTasks.map(taskRow).join('')}</details>` : '');
+    const tableBody = missions.map(missionBlock).join('') + (orphanTasks.length ? `<details class="mission" open><summary><div class="mrow mission">${cell('ref', 'no mission')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('', '')}${cell('num', '')}${cell('num', `${orphanTasks.filter((t) => t.state === 'done').length}/${orphanTasks.filter((t) => t.state !== 'cancelled').length}`)}${cell('num', '')}${cell('span', '')}</div></summary>${orphanTasks.map(taskRow).join('')}</details>` : '');
     const campaignLine = campaign ? `<p class="note">Campaign ${esc(campaign.ref)}: ${esc(campaign.state.replace('_', ' '))}${elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at) != null ? `, ${fmtDur(elapsedS(campaign.started_at, campaign.landing_at ?? campaign.done_at))} from first dispatch to landing` : ''}${campaign.estimate ? ` · estimate ${fmtRangeH(campaign.estimate)}` : ''}${svRow.get(campaign.ref) ? ` · ${esc(bandText(svRow.get(campaign.ref)))}` : ''}.</p>` : '';
-    parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks (click a mission to fold it). Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; "fixes" counts the times a task was sent back before it merged.</p>
-<div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">done</div><div class="c">fixes</div><div class="c">started → finished (UTC)</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
+    parts.push(`<section class="panel"><h2>Missions and tasks</h2><p class="panel-sub">A mission row, then its tasks (click a mission to fold it). Time = cycle time for a task (first dispatch → merge) and elapsed for a mission (first task dispatched → landed); bars are scaled within their kind. The verdict compares the actual with the accepted estimate range; cost is the task's cost with its effort band; "fixes" counts the times a task was sent back before it merged.</p>
+<div class="items"><div class="mrow head"><div class="c">item</div><div class="c">status</div><div class="c">time</div><div class="c">estimate</div><div class="c">verdict</div><div class="c">cost</div><div class="c">done</div><div class="c">fixes</div><div class="c">started → finished (UTC)</div></div>${tableBody || '<p class="note">No items in this plan.</p>'}</div>${campaignLine}</section>`);
+    parts.push(costPanel(p, e));
     parts.push(`<section class="panel"><h2>Spread</h2><p>Task cycle time: ${spreadLine(ct)}<br>Task lead time (planned → merge): ${spreadLine(lt)}<br>Agent time: ${spreadLine(ag)}<br>Review turnaround: ${spreadLine(rw)}${tb ? `<br>Time blocked: ${spreadLine(tb)}` : ''}${fe ? `<br>Flow efficiency <span class="sub">(agent time ÷ cycle time, a lower bound)</span>: ${spreadPct(fe)}` : ''}${m.mission_turnaround.pairs.length ? `<br>Mission turnaround: ${m.mission_turnaround.pairs.map((x) => `${esc(x.from)} → ${esc(x.to)} ${x.gap_s != null ? fmtDur(x.gap_s) : `overlap ${fmtDur(x.overlap_s)}`}`).join('; ')}` : ''}</p></section>`);
 
     if (m.dora) parts.push(doraPanel(m, e));
