@@ -424,3 +424,13 @@ test('9 --from-json: an archived report without the cost fields renders Markdown
   assert.match(md.stdout, /^\| T4 \| done \| — \| — \| — \| — \|$/m);
   assert.doesNotMatch(html.stdout, /class="oc band"/); assert.doesNotMatch(html.stdout, /within one effort band/);
 });
+
+test('4b cost view time: a dispatch spend does not list and with no known start is not admitted, even with an end before the cutoff', async (t) => {
+  const f = await fx(t, [{ campaign: 'sec', run: 'run-1', tasks: ['T1'] }]);
+  ledger(f, { refs: ['T1'], id: 'a', usd: 2 });
+  // An orphan end (an id the run neither knows nor maps), no start, its key tombstoned so `spend` does not list it.
+  ledger(f, { refs: [{ item_id: 'sec/run-1/task-lost', ref: 'TX' }], id: 'o', usd: 1, start: false });
+  f.snaps.push({ v: 'dispatch.v2', dispatch_key: 'claude:s:o', retracted: true, reason: 'test', at: T });
+  const get = view(f);
+  assert.equal(get('T1').cost_usd, 2); assert.ok(!get('T1').cost_gaps.includes('cost-under-unknown-id'), get('T1').cost_gaps.join());
+});

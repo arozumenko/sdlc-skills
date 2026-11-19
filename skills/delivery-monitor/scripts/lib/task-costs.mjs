@@ -145,14 +145,14 @@ const dispatchKeyOf = (o) => {
 };
 /** The report's cost view of one run: item id → {cost_usd, cost_source, cost_gaps}. Its ledger evidence is the run's occurrences
  * mapped as calibration maps them, restricted to admitted dispatches (`tc.admitted`; a dispatch `spend` does not list, such as a
- * start with no end, by its first start, else by the occurrence's own time), and replayed with no end: an admitted dispatch's end
+ * start with no end, only when its first start is known and before the end), and replayed with no end: an admitted dispatch's end
  * or crossing marker recorded after the report's end still counts, as its lifetime cost does. Durations never come from here. */
 export function costView(tc, run, occurrences) {
   let occ = occurrences;
   if (tc.admitted) {
     const endT = Date.parse(tc.end), starts = new Map();
     for (const o of occ) { const k = o.event === 'dispatched' && dispatchKeyOf(o); if (k) starts.set(k, Math.min(starts.get(k) ?? Infinity, Date.parse(o.at))); }
-    occ = occ.filter((o) => { const k = dispatchKeyOf(o); return !k || tc.admitted.has(k) || (!tc.spend_keys.has(k) && (starts.get(k) ?? Date.parse(o.at)) < endT); });
+    occ = occ.filter((o) => { const k = dispatchKeyOf(o); return !k || tc.admitted.has(k) || (!tc.spend_keys.has(k) && starts.get(k) < endT); });
   }
   const mapped = mappedOccurrences(run, occ), out = new Map();
   for (const it of costTimeline({ occurrences: mapped.occ, plan: run }).values()) {
