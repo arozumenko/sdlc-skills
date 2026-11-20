@@ -15,6 +15,7 @@ import { taskCosts, taskKey } from './task-costs.mjs';
 import { runScenario } from '../../fixtures/task-costs-baseline/scenario.mjs';
 import { runScenario as runUnbounded } from '../../fixtures/task-costs-unbounded/scenario.mjs';
 
+import { legacyScenario } from '../../fixtures/legacy-output.mjs';
 const NOW = Date.parse('2026-11-18T12:00:00Z');
 const T = '2026-11-02T10:00:00.000Z', T2 = '2026-11-02T11:00:00.000Z', DONE = '2026-11-03T10:00:00.000Z';
 const PRICES = { models: { m: { input: 1, output: 2, cache_write: 3, cache_read: 0.1 }, n: { input: 2, output: 4, cache_write: 6, cache_read: 0.2 } } };
@@ -308,7 +309,7 @@ test('commands: an empty ledger and zero plans fail as before', async (t) => {
 
 test('report, spend and plan output is byte-identical to the baseline produced before this change', async () => {
   const baseline = JSON.parse(readFileSync(new URL('../../fixtures/task-costs-baseline/golden.json', import.meta.url), 'utf8'));
-  const got = await runScenario({ main, makeObservation, snapshotFromTranscript });
+  const got = legacyScenario(await runScenario({ main, makeObservation, snapshotFromTranscript }));
   assert.deepEqual(got.register, baseline.register);
   baseline.reads.forEach((want, i) => assert.deepEqual(got.reads[i], want, want.argv.join(' ')));
   assert.deepEqual(got, baseline);
@@ -358,6 +359,8 @@ test('gaps: text-incomplete leaves the task out of the samples (through collect)
 test('unbounded: taskCosts with no end and the calibration samples equal the baseline from before the report change (1b)', async () => {
   const baseline = JSON.parse(readFileSync(new URL('../../fixtures/task-costs-unbounded/golden.json', import.meta.url), 'utf8'));
   const got = await runUnbounded({ main, makeObservation, snapshotFromTranscript, taskCosts, collect });
+  // Per-plan budget coverage adds plan membership to each key; all pre-existing key fields remain exact.
+  got.taskCosts.keys = got.taskCosts.keys.map(({ plans, ...key }) => key);
   // The scenario carries the two cases a bounded call treats differently: a ledger allocation with no known start, and an unpriced
   // hook end whose key `spend` does not list (tombstoned).
   assert.ok(got.taskCosts.keys.some((k) => k.dispatch_key === 'claude:s:u4'), 'unknown-start key kept');

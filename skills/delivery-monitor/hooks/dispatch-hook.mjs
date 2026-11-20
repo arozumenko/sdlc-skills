@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // STDLIB ONLY. Claude SubagentStop → dispatched / dispatch_ended (+ rework_observed) observations (spec §6.6).
 // Never prints to stdout, always exits 0. Admission: open run, session→run association, role in the run's roster snapshot.
-import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
+import { realpathSync, rmSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, nowIso, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo } from '../scripts/lib/paths.mjs';
+import { deliveryDir, nowIso, sha256, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo, withLock } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { writeBinding } from '../scripts/lib/history.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
@@ -13,6 +13,10 @@ import { listRuns, loadRun } from '../scripts/lib/plan.mjs';
 import { git } from '../scripts/lib/git.mjs';
 import { validRoster } from '../scripts/lib/roster.mjs';
 import { gap, ingestDispatch, snapshotFromTranscript } from '../scripts/lib/dispatches.mjs';
+
+import { budgetedItem, budgetInputs, recordBudget } from '../scripts/lib/budget.mjs';
+import { taskCosts, taskKey } from '../scripts/lib/task-costs.mjs';
+import { usageRecord } from '../scripts/lib/transcript-usage.mjs';
 
 export const SUPPORTED_SHAPES = ['claude-projects-subagents-v1'];
 const STAGE = [[/\b(fix round|address review)\b/i, 'fix'], [/\b(mini-gate|hardening gate|gate)\b/i, 'gate'], [/\bmerge\b/i, 'merge'], [/\breview\w*/i, 'review'], [/\b(implement\w*|build)\b/i, 'build']];
@@ -113,8 +117,7 @@ export function parseTranscript(path) {
       // Per-model token usage for pricing. One API message is written as several records while it streams, and its usage
       // grows (output 1 → 1,000): keep the largest value of each counter per message id, summed after the pass.
       const u = r.message.usage, m = `${r.message.model ?? 'unknown'}${u.speed === 'fast' ? '#fast' : ''}`;
-      const w1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
-      const cur = { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cache_write: Math.max(0, (u.cache_creation_input_tokens ?? 0) - w1h), cache_write_1h: w1h, cache_read: u.cache_read_input_tokens ?? 0 };
+      const cur = usageRecord(r).usage;
       // Stable capture identities never depend on transcript position. Keep the legacy aggregate below unchanged.
       if (id != null) {
         const previous = Object.hasOwn(out.messages, id) ? out.messages[id] : null;
@@ -201,22 +204,35 @@ const DIAG_TAIL = 1024 * 1024;
 function alreadyDiagnosed(file, kind, session, agentId) {
   let fd; try { fd = openSync(file, 'r'); } catch { return false; }
   try {
-    const { size } = fstatSync(fd), len = Math.min(size, DIAG_TAIL), buf = Buffer.alloc(len); readSync(fd, buf, 0, len, size - len);
+    const { size } = fstatSync(fd), len = kind === 'budget-check-unavailable' ? size : Math.min(size, DIAG_TAIL), buf = Buffer.alloc(len); readSync(fd, buf, 0, len, size - len);
     const lines = buf.toString('utf8').split('\n'); if (size > len) lines.shift(); // first line of a mid-file tail is partial
     return lines.some((l) => { try { const d = JSON.parse(l); return d.kind === kind && d.session === session && (agentId === undefined || d.agent_id === agentId); } catch { return false; } });
   } catch { return false; } finally { closeSync(fd); }
 }
 // `once` kinds (unbound-session, invalid-roster) describe the session, not the agent — one line per (session, kind), else a 100-subagent run floods the log.
 // `task-crossing` describes one agent and is re-checked on every stop of a resumed agent — one line per (session, agent).
-const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster']);
+const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster', 'budget-check-unavailable']);
 const ONCE_PER_AGENT = new Set(['task-crossing']);
-function diagnose(repo, slug, kind, payload, detail, now) { try { mkdirSync(deliveryDir(repo), { recursive: true }); const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`); if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null; if (ONCE_PER_AGENT.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null, payload.agent_id ?? null)) return kind; appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`); } catch { /* best effort */ } return kind; }
+export function diagnose(repo, slug, kind, payload, detail, now) {
+  try {
+    const write = () => {
+      mkdirSync(deliveryDir(repo), { recursive: true });
+      const file = join(deliveryDir(repo), `diagnostics-${slug}.jsonl`);
+      if (ONCE_KINDS.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null)) return null;
+      if (ONCE_PER_AGENT.has(kind) && alreadyDiagnosed(file, kind, payload.session_id ?? null, payload.agent_id ?? null)) return kind;
+      appendFileSync(file, `${JSON.stringify({ at: nowIso(now), kind, session: payload.session_id ?? null, agent_id: payload.agent_id ?? null, detail })}\n`);
+      return kind;
+    };
+    return kind === 'budget-check-unavailable' ? withLock(repo, write) : write();
+  } catch { /* best effort */ }
+  return kind;
+}
 const capturePrompts = (repo) => { try { return Boolean(JSON.parse(readFileSync(join(deliveryDir(repo), 'profile.json'), 'utf8')).capturePrompts); } catch { return false; } };
 
 /** F3: an unbound session binds itself when its working branch associates (lib/associate.mjs) to exactly one item of exactly one
  * OPEN run. Zero or several candidates → null (the caller writes the unbound diagnostic); ambiguity is never guessed across. The
  * binding file has the shape `session set` writes, plus `bound_by: 'branch'`, so later stops skip the git call. */
-function bindByBranch(repo, payload, now, slug) {
+export function bindByBranch(repo, payload, now, slug) {
   try {
     const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null; if (!branch) return null;
     const hits = listRuns(repo).filter((r) => r.status === 'open' && associate(r, { head: branch }).items.length === 1);
@@ -255,7 +271,7 @@ function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
   const description = meta.description ?? '';
   const stage = classifyStage(description) !== 'other' ? classifyStage(description) : classifyStage(tr.firstUserText);
   const branch = payload.cwd ? git(payload.cwd, ['branch', '--show-current']) : null;
-  const { items } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch, role });
+  const { items, how } = resolveRefs(run, { description, firstUserText: tr.firstUserText, branch, role });
   const crossedTo = crossedTasks(run, { followUps: tr.followUps, role, attributed: new Set(items.map((i) => i.item_id)) }), crossed = crossedTo.map((i) => i.item_id);
   if (crossed.length) {
     const kind = diagnose(repo, slug, 'task-crossing', payload, `resumed agent sent ${crossedTo.map((i) => i.ref).join(', ')} after its first task (${items.map((i) => i.ref).join(', ') || 'unattributed'}); that work stays on the first item — dispatch a fresh subagent per task`, now);
@@ -277,7 +293,7 @@ function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
   const wrote = [];
   for (const it of (items.length ? items : [null])) {
     const label = it ? (capturePrompts(repo) ? description.slice(0, 120) : `${it.ref} ${stage}`) : stage;
-    const base = it ? { item_id: it.item_id, ref: it.ref, level: it.level, meta: { stage, version: run.version } } : { item_id: null, ref: null, level: null, meta: { stage, version: run.version, unattributed: true } };
+    const base = it ? { item_id: it.item_id, ref: it.ref, level: it.level, meta: { stage, version: run.version, ...(it.estimate?.unit === 'usd' && !['description', 'message'].includes(how) ? { budget_eligible: false } : {}) } } : { item_id: null, ref: null, level: null, meta: { stage, version: run.version, unattributed: true } };
     const key = it ? it.item_id : 'unattributed';
     const mk = (event, at, extra = {}) => makeObservation({ ...common, ...base, label, event, at, transition_id: `${key}/${event}/${payload.agent_id}`, meta: { ...base.meta, ...extra } }, { now });
     wrote.push(appendOrRevise(repo, mk('dispatched', tr.firstTs), { slug, now }));
@@ -288,7 +304,32 @@ function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
 }
 
 export function handleStop(payload, options = {}) {
-  try { return handleStopUnsafe(payload, options); } catch { return { wrote: [], diagnostic: null }; }
+  let result;
+  try { result = handleStopUnsafe(payload, options); } catch { result = { wrote: [], diagnostic: null }; }
+  // Capture and legacy allocation happen first. The budget check is record-only, even above the hard cap.
+  if (payload?.agent_id && payload?.session_id && (!payload.host || payload.host === 'claude')) {
+    const repo = options.repo ?? ownerRepo(payload), now = options.now ?? Date.now();
+    try {
+      const inputs = budgetInputs(repo), run = sessionRun(repo, 'claude', payload.session_id);
+      if (run) {
+        const child = findChildTranscript(payload);
+        if (child) {
+          const meta = JSON.parse(readFileSync(child.metaPath, 'utf8')), role = meta.agentType ?? payload.agent_type;
+          if (!role || rosterOf(run).has(role)) {
+            const tr = parseTranscript(child.path), match = resolveRefs(run, { description: meta.description ?? '', firstUserText: tr.firstUserText, role });
+            const item = match.items.length === 1 && match.how !== 'role' ? match.items[0] : null;
+            if (budgetedItem(item)) {
+              const cost = taskCosts(repo, { resolved: inputs.resolved }).tasks.get(taskKey(run.run, item.item_id))?.cost_usd ?? 0;
+              recordBudget(repo, { run, item, cost, dispatchKey: `claude:${payload.session_id}:${payload.agent_id}`, source: 'subagent-stop', profile: inputs.profile, session: payload.session_id, agentId: payload.agent_id, now });
+            }
+          }
+        }
+      }
+    } catch (e) { diagnose(repo, whoAmI(repo).slug, 'budget-check-unavailable', payload, String(e.message), now); }
+    // The PreToolUse cursor is per agent and has no use once the agent has stopped.
+    try { rmSync(join(deliveryDir(repo), `.pending-budget-${sha256(`claude:${payload.session_id}:${payload.agent_id}`)}.json`), { force: true }); } catch { /* best effort */ }
+  }
+  return result;
 }
 
 async function main() {

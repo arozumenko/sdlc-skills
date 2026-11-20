@@ -9,12 +9,12 @@ import { classifyStage, crossedTasks, resolveRefs, handleStop, ownerRepo, parseT
 import { loadRun, saveRun } from '../scripts/lib/plan.mjs';
 import { makeRoster } from '../scripts/lib/roster.mjs';
 import { resolveObservations } from '../scripts/lib/events.mjs';
-import { deliveryDir, sessionsDir, sessionPath } from '../scripts/lib/paths.mjs';
+import { deliveryDir, sessionsDir, sessionPath, sha256 } from '../scripts/lib/paths.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./dispatch-hook.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-hook-'));
 const R = 'sec/run-1';
-const run = { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', roster_agents: ['js-dev', 'tech-lead'], items: [
+const run = { run: R, campaign_id: 'sec', run_id: 'run-1', version: 1, status: 'open', observation_start: '2026-09-01T00:00:00Z', roster_agents: ['js-dev', 'tech-lead'], items: [
   { item_id: `${R}/campaign`, ref: 'sec', level: 'campaign', parent_item_id: null }, { item_id: `${R}/mission-g1`, ref: 'G1', level: 'mission', parent_item_id: `${R}/campaign`, sequence: 1 },
   { item_id: `${R}/task-task-023`, ref: 'TASK-023', level: 'task', parent_item_id: `${R}/mission-g1`, branch: 'task/task-023' }, { item_id: `${R}/task-task-034`, ref: 'TASK-034', level: 'task', parent_item_id: `${R}/mission-g1`, branch: 'task/task-034' }] };
 const setup = ({ bind = true } = {}) => { const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true }); for (const role of ['js-dev', 'tech-lead', 'test-automation-lead', 'qa-auditor']) { const d = join(repo, '.claude', 'agents', role); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'AGENT.md'), 'role'); } const roster = makeRoster(repo, ['feature-development', 'test-automation']); saveRun(repo, { ...run, roster, roster_agents: roster.agents }); if (bind) { mkdirSync(sessionsDir(repo), { recursive: true }); writeFileSync(sessionPath(repo, 'claude', 'sess-1'), JSON.stringify({ host: 'claude', session: 'sess-1', plan: R })); } return repo; };
@@ -417,4 +417,12 @@ test('handleStop prices the final usage: 1h cache writes apart, fast mode keyed 
   const broken = setup(); writeFileSync(join(deliveryDir(broken), 'prices.json'), '{ "models": ');
   const b = priced(broken);
   assert.deepEqual(b.unpriced_models, ['<prices-unreadable>'], 'a broken override never prices silently at list');
+});
+
+test('handleStop: deletes that agent\'s .pending-budget file and leaves other agents\' files', () => {
+  const repo = setup(); const t = transcripts(); const d = deliveryDir(repo);
+  const mine = join(d, `.pending-budget-${sha256('claude:sess-1:agent-1')}.json`), other = join(d, `.pending-budget-${sha256('claude:sess-1:agent-2')}.json`);
+  writeFileSync(mine, '{}'); writeFileSync(other, '{}');
+  handleStop(payload(t), { repo, now: NOW });
+  assert.equal(existsSync(mine), false, 'own cursor removed'); assert.equal(existsSync(other), true, 'other agent cursor kept');
 });

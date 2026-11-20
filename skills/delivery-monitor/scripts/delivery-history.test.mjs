@@ -9,6 +9,7 @@ import { deliveryDir, runPath, sessionPath, sessionsDir } from './lib/paths.mjs'
 import { saveRun } from './lib/plan.mjs';
 import { runScenario } from '../fixtures/history-baseline/scenario.mjs';
 
+import { legacyScenario } from '../fixtures/legacy-output.mjs';
 const BASELINE = JSON.parse(readFileSync(new URL('../fixtures/history-baseline/golden.json', import.meta.url), 'utf8'));
 
 const T0 = Date.parse('2026-09-16T10:00:00Z');
@@ -198,7 +199,7 @@ test('G8: session and run files have no new keys and exact bytes', async () => {
 
 test('G8: state files, writer output and read-command output equal the baseline recorded before history existed', async () => {
   let records = 0;
-  const got = await runScenario(main, { between: (dir) => { records = readFileSync(join(dir, 'history-tester.jsonl'), 'utf8').split('\n').filter(Boolean).length; } });
+  const got = legacyScenario(await runScenario(main, { between: (dir) => { records = readFileSync(join(dir, 'history-tester.jsonl'), 'utf8').split('\n').filter(Boolean).length; } }));
   assert.equal(records, 7, 'the scenario exercised the history writers: register x2 (run + bind), roster, close, session set');
   for (const name of Object.keys(BASELINE.files)) assert.equal(got.files[name], BASELINE.files[name], name);
   for (const kind of ['writes', 'reads']) BASELINE[kind].forEach((want, i) => assert.deepEqual(got[kind][i], want, `${kind}: ${want.argv}`));
@@ -206,7 +207,7 @@ test('G8: state files, writer output and read-command output equal the baseline 
 });
 
 test('G8: read commands print the baseline output when the history file is gone', async () => {
-  const got = await runScenario(main, { between: (dir) => rmSync(join(dir, 'history-tester.jsonl')) });
+  const got = legacyScenario(await runScenario(main, { between: (dir) => rmSync(join(dir, 'history-tester.jsonl')) }));
   BASELINE.reads.forEach((want, i) => assert.deepEqual(got.reads[i], want, want.argv));
 });
 

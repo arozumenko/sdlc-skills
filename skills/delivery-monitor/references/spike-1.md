@@ -25,3 +25,20 @@ Until step 4 is committed, `findChildTranscript` accepts only the
 documented shape (`<parent dir>/<session>/subagents/<agent_id>.jsonl` with
 a sibling `.meta.json`) and every report prints
 `hook-transcript-shapes: provisional until SPIKE-1`.
+
+
+## T1.1 budget hook capability spike — 2026-11-20
+
+Claude Code 2.1.329: PASS for in-run enforcement (M1-AC4 retained). The probe logs are retained by the operator; not published.
+
+PreToolUse fires for the child's own tools with `agent_id` and `agent_type`; parent calls omit these.
+`transcript_path` is the parent session transcript. By the first child tool call the sibling
+`<parent without .jsonl>/subagents/agent-<agent_id>.meta.json` exists and carries `toolUseId`, equal to the parent's Agent
+`tool_use_id`, plus `agentType`, `description` and `model`. The child transcript shares that basename with `.jsonl`.
+A synchronous PreToolUse `permissionDecision: deny` prevents the tool and supplies the reason to the child; it still emits
+a final message and SubagentStop. The parent continues. `continue:false` was rejected because it stops after the tool runs
+and suppresses the final message. SubagentStop supplies `agent_id`, `agent_type`, `agent_transcript_path`,
+`last_assistant_message`, `session_id` and the parent `transcript_path`.
+
+This verifies the budget mechanism on that version. It does not retroactively supply SPIKE-1's earlier sanitized
+cross-worktree fixture matrix, so the existing general transcript-shape caveat remains.

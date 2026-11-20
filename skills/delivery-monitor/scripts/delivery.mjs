@@ -3,7 +3,7 @@
 import { realpathSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cliError, currentSession, isInputError, deliveryDir, nowIso, profilePath, sha256 } from './lib/paths.mjs';
+import { cliError, currentSession, isInputError, deliveryDir, nowIso, profilePath, sha256, resolveOwnerRepo } from './lib/paths.mjs';
 import { snapshot, writeBinding } from './lib/history.mjs';
 import { DEFECT_EVENTS, DEFECT_SEVERITIES, DEFECT_STAGES, EVENTS, appendObservation, factKey, makeObservation, readRaw, resolveObservations } from './lib/events.mjs';
 import { assignIds, canonicalHash, estimateStatus, extractPlanBlock, listRuns, loadRun, mergeCatalogue, planDelta, registrationObservations, runIdOf, saveRun, toCatalogue, validateIds, validatePlan, validateSupersedes } from './lib/plan.mjs';
@@ -13,12 +13,13 @@ import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
-import { assemble, renderMarkdown, renderHtml, renderStatus, SCHEMA } from './lib/report.mjs';
+import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, SCHEMA } from './lib/report.mjs';
 import { doctorReport, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
 import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
+import { budgetSummary } from './lib/budget.mjs';
 import { tombstone } from './lib/dispatches.mjs';
 import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
@@ -215,10 +216,21 @@ function cmdPlanRegister(repo, f, io, now) {
   const mergedItems = mergeCatalogue(prev?.items ?? [], next, { keepMissing, renameMap });
   const removedDeliveredIds = new Set(scopeRemovedDelivered.map((i) => i.item_id));
   for (const i of mergedItems) if (removedDeliveredIds.has(i.item_id)) { i.cancelled = false; i.removed_delivered = true; }
+  // Budget identities must survive more than one re-cut; supersedes itself only describes this cut.
+  const budgetItemMap = { ...(prev?.budget_item_map ?? {}) };
+  if (prev?.items.some(i => i.estimate?.unit === 'usd') || Object.keys(budgetItemMap).length) {
+    Object.assign(budgetItemMap, prev?.supersedes?.item_map ?? {}, renameMap ?? {});
+    for (const id of Object.keys(budgetItemMap)) {
+      const seen = new Set([id]); let to = budgetItemMap[id];
+      while (budgetItemMap[to] && !seen.has(to)) { seen.add(to); to = budgetItemMap[to]; }
+      budgetItemMap[id] = to;
+    }
+  }
   const rec = {
     run: runId, campaign_id: full.campaign_id, run_id: full.run_id, version: full.version, factory: full.factory, status: 'open',
     registered_at: prev?.registered_at ?? nowIso(now), updated_at: nowIso(now), observation_start: full.observation_start, source_epoch: full.source_epoch, mission_kind: full.mission_kind, branch_map: full.branch_map ?? null, branch_prefix: full.branch_prefix ?? null,
     source: { path: file, rel, sha256: sha256(text), head: sourceHead }, canonical_sha256: canonicalHash(full), roster,
+    ...(Object.keys(budgetItemMap).length ? { budget_item_map: budgetItemMap } : {}),
     import: full.import ?? null, supersedes: full.supersedes ?? null, items: mergedItems,
     versions: [...(prev?.versions ?? []), { version: full.version, at, keep_missing: keepMissing, canonical_sha256: canonicalHash(full), items: next }],
     requests: { ...(prev?.requests ?? {}) },
@@ -475,6 +487,7 @@ function validateProfile(obj, tpl) {
     if (!(k in tpl)) { errs.push(`profile.${k} is not a known key`); continue; }
     const v = obj[k];
     if (['capturePrompts', 'captureRefs', 'captureBranch'].includes(k)) { if (typeof v !== 'boolean') errs.push(`profile.${k} must be boolean`); }
+    else if (['budgetSoftMultiplier', 'budgetHardMultiplier'].includes(k)) { if (!Number.isFinite(v) || v <= 0) errs.push(`profile.${k} must be a finite number > 0`); }
     else if (k === 'zeroDurationSec') { if (!Number.isInteger(v) || v < 0) errs.push('profile.zeroDurationSec must be an integer >= 0'); }
     else if (k === 'minWholeWeeks') { if (!Number.isInteger(v) || v < 3) errs.push('profile.minWholeWeeks must be an integer >= 3'); }
     else if (k === 'tokenomics') { if (typeof v !== 'string' || !v) errs.push('profile.tokenomics must be a non-empty string'); }
@@ -486,6 +499,7 @@ function validateProfile(obj, tpl) {
       }
     }
   }
+  if ((obj.budgetHardMultiplier ?? tpl.budgetHardMultiplier) < (obj.budgetSoftMultiplier ?? tpl.budgetSoftMultiplier)) errs.push('profile.budgetHardMultiplier must be >= budgetSoftMultiplier');
   return errs;
 }
 function cmdProfile(repo, p, io) {
@@ -538,7 +552,11 @@ function cmdStatus(repo, p, io, now) {
   try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now, costs: false }))); }
   catch (e) {
     // Global spend remains useful before a plan or its first observation exists. Preserve the original status error.
-    if (['NO-PLAN', 'NO-EVENTS'].includes(e.code)) spendLine();
+    if (['NO-PLAN', 'NO-EVENTS'].includes(e.code)) {
+      spendLine();
+      try { out(io, renderBudgetCoverage(budgetSummary(repo))); }
+      catch (problem) { if (!isInputError(problem)) throw problem; out(io, renderBudgetCoverage({ unavailable: problem.message })); }
+    }
     throw e;
   }
   // Status never fails on the calibration line: a broken table is reported, not thrown.
@@ -637,6 +655,7 @@ function cmdBackfill(repo, p, io, now) {
 // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, surfaced as the
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io, now) {
+  repo = resolveOwnerRepo(repo);
   const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)), { env: io.env });
   try {
     const counts = coverage(repo, { env: io.env });

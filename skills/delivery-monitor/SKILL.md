@@ -6,7 +6,7 @@ compatibility: "Requires Node 18+ and git. Automatic dispatch capture on Claude 
 metadata:
   authors:
     - Daniel Sallai <daniel_sallai@epam.com>
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # delivery-monitor — cycle time, cadence, estimate vs actual
@@ -117,6 +117,30 @@ captures of the key are ignored. Use the existing `--agent` or `--observation` m
 Profile `captureRefs: false` disables identifier refs and follow-up refs; `captureBranch: false` disables branch evidence.
 Both default to true. Refs use a capped identifier grammar, which can still capture sensitive identifiers.
 Description text is stored only with the existing `capturePrompts: true` switch (default false).
+
+**Task USD budgets (Claude Code).** Leave task estimates empty in the plan block so `plan register` fills calibrated
+USD ranges. Keep human effort in the board's `tokenomics.effort_days`. A missing calibration cell is a planning gap;
+check `CALIBRATED ... no-cell=0` before dispatching. In-flight hours estimates remain valid and unbudgeted.
+
+Run `install-hooks.mjs` to install both synchronous hooks (only in a consumer project you are authorized to configure).
+PreToolUse checks Agent/Task dispatches before they start and subagents before each tool call. SubagentStop captures and
+records crossings; it never refuses work. Task cost comes from `taskCosts`, including prior dispatches, fix rounds and
+recovered attribution. In-run checks cache prior task cost once per agent and add incremental child-transcript usage.
+At strictly more than the range's high end, `budget_exceeded` flags the task. At strictly more than three times high,
+`budget_stopped` refuses the dispatch or every later tool call of that running subagent. The denial names the task,
+its cost and cap. The orchestrator treats the task as blocked and decides the next action.
+
+Profile settings `budgetSoftMultiplier` (default 1) and `budgetHardMultiplier` (default 3) are finite positive numbers;
+hard must be at least soft. Crossings are recorded once per task/threshold, including across `supersedes.item_map`
+renames. The first writer's `cost_at_crossing` stays unchanged. Details: `references/event-model.md`, "Budget events".
+Unreadable evidence lets work proceed and writes one `budget-check-unavailable` diagnostic per session.
+
+`status` adds BUDGET lines and `report --json` adds `budget`: resolved exceeded/stopped counts per open plan, and
+current lifetime coverage as dispatch counts and USD (`budgeted`, `all`, `unbudgeted`, `codex`). A dispatch without a
+named USD task, outside an open plan, or from Codex is unbudgeted and is never stopped. Codex coverage includes only
+keys available to the cost projection; this skill does not capture Codex spend. The project total includes ownerless
+work; a plan's coverage includes work allocated or attributed to that plan. Coverage ignores report window/item filters.
+Transient per-agent cursors are `.pending-budget-*.json` (ignored by the existing transient patterns).
 
 **Effort calibration (estimate → actual → calibrate).** On Claude Code the dispatch hook prices every finished subagent's tokens
 per model (`references/prices.json`; a project `.agents/telemetry/delivery/prices.json` overrides it) and records the dollar cost

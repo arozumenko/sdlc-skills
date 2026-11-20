@@ -81,7 +81,7 @@ export function taskCosts(repo, { resolved = resolveObservations(repo), enriched
     else usage = (allocs.get(k.dispatch_key) ?? []).map((a) => ({ id: a.observation_id, usage: a.meta?.agent?.usage })).filter((x) => x.usage && typeof x.usage === 'object')
       .map((x) => ({ ...x, total: costOf(x.usage, prices).cost_usd })).sort((a, b) => b.total - a.total || (a.id < b.id ? -1 : 1))[0]?.usage ?? null;
     const vector = vectorOf(usage, k.usd, prices), n = owners.size;
-    keys.push({ dispatch_key: k.dispatch_key, usd: k.usd, owners: [...owners.keys()], assigned: n ? k.usd : 0, vector });
+    keys.push({ ...((allocs.get(k.dispatch_key) ?? []).some(a => a.meta?.budget_eligible === false) ? { budget_eligible: false } : {}), dispatch_key: k.dispatch_key, usd: k.usd, plans: [...new Set([...(allocs.get(k.dispatch_key) ?? []).map(a => a.plan), ...(d.plan ? [d.plan] : [])])], owners: [...owners.keys()], assigned: n ? k.usd : 0, vector });
     if (!n) { ownerless += k.usd; continue; }
     const info = { dispatch_key: k.dispatch_key, ledger: ledgerKey, unpriced: k.unpriced, started_at: k.started_at, stage: s?.stage ?? null };
     for (const [tk] of owners) {
@@ -178,4 +178,16 @@ export function taskOutcome(tc, run, item) {
   const kinds = new Set(own.map((k) => (k.ledger ? 'ledger' : 'recovered')));
   const models = Object.entries(t?.cost_by_model ?? {}).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   return { cost_usd: t?.cost_usd ?? null, model: models[0]?.[0] ?? null, source: kinds.size > 1 ? 'both' : [...kinds][0] ?? null, gaps };
+}
+
+/** Cache only the pre-existing share, excluding this dispatch. Even a resumed/already-captured key cannot bill itself twice. */
+export function priorTaskCost(tc, run, item, dispatchKey) {
+  const tk = taskKey(run.run, item.item_id), key = tc.keys.find(k => k.dispatch_key === dispatchKey);
+  const share = key?.owners.includes(tk) ? key.usd / key.owners.length : 0;
+  return { prior: (tc.tasks.get(tk)?.cost_usd ?? 0) - share, floor: key?.usd ?? 0, split: key?.owners.includes(tk) ? key.owners.length : 1 };
+}
+export function liveTaskCost(prior, usage, prices) {
+  const cost = costOf(usage, prices);
+  if (cost.unpriced.length) throw new Error(`unpriced transcript: ${cost.unpriced.join(', ')}`);
+  return prior.prior + Math.max(prior.floor, cost.cost_usd) / prior.split;
 }

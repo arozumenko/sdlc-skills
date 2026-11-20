@@ -73,7 +73,8 @@ test('status keeps NO-PLAN and NO-EVENTS exit codes and adds the seven day spend
     const r = await run(repo, ['status']);
     assert.equal(r.code, 3, r.stderr);
     assert.match(r.stderr, withPlan ? /^NO-EVENTS/ : /^NO-PLAN/);
-    assert.equal(r.stdout.trim().split('\n').length, 1);
+    assert.equal(r.stdout.trim().split('\n').filter(line => !line.startsWith('BUDGET ')).length, 1);
+    assert.match(r.stdout, /^BUDGET /m);
     assert.match(r.stdout, /SPEND.*total_usd=6(?:\.0+)?(?:\D|$)/);
   }
 });

@@ -14,14 +14,13 @@ document, next to the task templates from § 3 "Create Technical Tasks". Fill in
                                   that area before; area = module/directory (optional).
                                   role + type + novel pick the calibration cell the estimate
                                   comes from; area is recorded, not yet used for cells.
-  - task "estimate"            — LEAVE IT OUT when .agents/telemetry/delivery/calibration.json
-                                  exists: plan register fills a calibrated dollar range and
-                                  effort class, already accepted. A task with no cell of 5+
-                                  similar tasks stays unestimated (CALIBRATED ... no-cell=N);
-                                  give it an hours range. With no calibration yet,
-                                  propose an hours range {unit "h", low, high, tier} and
-                                  leave "accepted_by"/"accepted_at" null for a named human
-                                  (references/plan-block.md "Acceptance semantics").
+  - task "estimate"            — LEAVE IT OUT. plan register fills the calibrated USD range
+                                  and effort class from measured history. Check CALIBRATED:
+                                  every task needs a cell of 5+ samples (no-cell=0).
+                                  If calibration is missing or has no matching cell, report
+                                  the gap; do not insert an hours estimate, which prevents
+                                  the calibrated fill. Keep human effort in the board's
+                                  tokenomics.effort_days, outside this block.
   - mission / campaign "estimate" — hours ranges you propose, as above. Developers never estimate.
   - tasks[].story/class/role/branch — mirror the task template's Story/Complexity/
                                   Assigned-to/branch fields; role must be an installed
@@ -61,8 +60,7 @@ TASK-003 in G2) — trim or extend the missions[]/tasks[] arrays to match your o
           "role": "js-dev",
           "type": "feature",
           "novel": false,
-          "branch": "task/task-001",
-          "estimate": {"unit": "h", "low": 1, "high": 3, "tier": "budgetary", "proposed_by": "tech-lead", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null}
+          "branch": "task/task-001"
         },
         {
           "ref": "TASK-002",
@@ -71,8 +69,7 @@ TASK-003 in G2) — trim or extend the missions[]/tasks[] arrays to match your o
           "role": "python-dev",
           "type": "bugfix",
           "novel": false,
-          "branch": "task/task-002",
-          "estimate": {"unit": "h", "low": 3, "high": 6, "tier": "budgetary", "proposed_by": "tech-lead", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null}
+          "branch": "task/task-002"
         }
       ]
     },
@@ -86,8 +83,7 @@ TASK-003 in G2) — trim or extend the missions[]/tasks[] arrays to match your o
           "story": "US-002",
           "class": "M",
           "role": "qa-engineer",
-          "branch": "task/task-003",
-          "estimate": {"unit": "h", "low": 2, "high": 5, "tier": "budgetary", "proposed_by": "tech-lead", "proposed_at": "2026-01-01T00:00:00Z", "accepted_by": null, "accepted_at": null}
+          "branch": "task/task-003"
         }
       ]
     }

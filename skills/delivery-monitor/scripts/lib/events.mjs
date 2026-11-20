@@ -6,7 +6,7 @@ import { cliError, deliveryDir, eventsPath, nowIso, sha256, whoAmI, withLock } f
 
 export const SCHEMA_VERSION = 2;
 export const EVENTS = ['created', 'estimated', 'dispatched', 'dispatch_ended', 'first_commit', 'review_requested', 'review_returned', 'review_approved',
-  'review_history', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'scope_declared', 'gate_observed', 'outcome_observed', 'rework_observed', 'defect_found', 'defect_fixed'];
+  'review_history', 'done', 'cancelled', 'blocked', 'unblocked', 'reopened', 'scope_declared', 'gate_observed', 'outcome_observed', 'rework_observed', 'defect_found', 'defect_fixed', 'budget_exceeded', 'budget_stopped'];
 // A defect pair is recorded on the item that CAUSED it; `meta.defect` is the tracker's own id, free-form (never parsed).
 export const DEFECT_EVENTS = ['defect_found', 'defect_fixed'];
 export const DEFECT_STAGES = ['build', 'review', 'qa', 'gate', 'demo', 'user'];
@@ -64,6 +64,12 @@ export function validateRecord(r) {
   if (!BASES.includes(r.basis)) errs.push(`basis ${r.basis} unknown`);
   if (r.source && r.source_record_id && r.event && r.observation_id !== observationId({ source: r.source, sourceRecordId: r.source_record_id, itemId: r.item_id, event: r.event })) errs.push('observation_id does not match its tuple');
   if (r.estimate != null) errs.push(...validateEstimate(r.estimate));
+  if (['budget_exceeded', 'budget_stopped'].includes(r.event)) {
+    const b = r.meta?.budget, num = v => Number.isFinite(v) && v >= 0;
+    if (!b || !num(b.high) || !num(b.cap_usd) || !num(b.cost_at_crossing) || !(b.soft_multiplier > 0) || !Number.isFinite(b.soft_multiplier) || !(b.hard_multiplier >= b.soft_multiplier) || !Number.isFinite(b.hard_multiplier)
+      || b.cap_usd !== b.high * b.hard_multiplier || typeof b.dispatch_key !== 'string' || !b.dispatch_key || !['pre-dispatch', 'in-run', 'subagent-stop'].includes(b.source)) errs.push('meta.budget crossing evidence required');
+    if (r.host !== 'claude' || r.source !== 'hook' || r.level !== 'task') errs.push('budget event requires Claude hook task');
+  }
   if (r.meta != null && typeof r.meta !== 'object') errs.push('meta must be an object');
   else if (DEFECT_EVENTS.includes(r.event)) {
     if (typeof r.meta?.defect !== 'string' || !r.meta.defect.trim()) errs.push('meta.defect (the defect id) required for defect events');
@@ -100,7 +106,7 @@ const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 
 // `defect` likewise only on defect events (id, stage, severity, finder): a re-rated defect is a correction, not a retry.
 const effortFact = (a) => (a && 'cost_usd' in a ? { cost_usd: a.cost_usd ?? null, split: a.split ?? null, unpriced: Boolean(a.unpriced_models?.length), ...(a.crossed != null ? { crossed: a.crossed } : {}) } : null);
 const defectFact = (m) => (m?.defect != null ? { defect: { id: m.defect, found_stage: m.found_stage ?? null, severity: m.severity ?? null, found_by: m.found_by ?? null } } : {});
-const facts = (r) => ({ ...defectFact(r.meta), effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
+const facts = (r) => ({ ...defectFact(r.meta), ...(r.meta?.budget_eligible === false ? { budget_eligible: false } : {}), ...(['budget_exceeded', 'budget_stopped'].includes(r.event) ? { budget: r.meta?.budget } : {}), effort: effortFact(r.meta?.agent), stage: r.meta?.stage ?? null, round: r.meta?.round ?? null, result: r.meta?.result ?? null, git_sha: r.meta?.git_sha ?? null, pr: r.meta?.pr ?? null, estimate: r.estimate ?? null, raw: r.raw ?? null, acceptance: r.meta?.acceptance ?? null });
 export const factKey = (r) => JSON.stringify(sortKeys({ plan: r.plan, item_id: r.item_id, ref: r.ref, level: r.level, event: r.event, transition_id: r.transition_id, basis: r.basis, at: r.at, facts: facts(r) }));
 export const semanticKey = (r) => JSON.stringify(sortKeys({ observation_id: r.observation_id, revision: r.revision, status: r.status, fact: JSON.parse(factKey(r)) }));
 
@@ -175,13 +181,15 @@ export function resolveObservations(repo, { detail = false } = {}) {
   return { active, conflicts, ...(detail ? { retracted: retractedRecords.sort((a,b) => a.observation_id.localeCompare(b.observation_id)) } : {}), files: raw.files, malformed: raw.malformed, counts: { ...raw.counts, retries, superseded, retracted, conflicts: conflicts.length } };
 }
 
-export function appendObservation(repo, rec, { slug, now = Date.now() } = {}) {
+export function appendObservation(repo, rec, { slug, now = Date.now(), firstFor = null } = {}) {
   const line = { ...rec, user: rec.user ?? slug ?? whoAmI(repo).slug, recorded_at: nowIso(now) };
   const errs = validateRecord(line);
   if (errs.length) throw cliError('SCHEMA-INVALID', errs[0]);
   return withLock(repo, () => {
+    const raw = readRaw(repo);
+    if (firstFor && raw.lines.some(({ rec: r }) => firstFor(r))) return { result: 'SKIP', observation_id: line.observation_id, revision: line.revision, path: null };
     const key = semanticKey(line);
-    for (const { rec: r } of readRaw(repo).lines) {
+    for (const { rec: r } of raw.lines) {
       if (r.observation_id !== line.observation_id || r.revision !== line.revision) continue;
       return { result: semanticKey(r) === key ? 'SKIP' : 'ID-CONFLICT', observation_id: line.observation_id, revision: line.revision, path: null };
     }
