@@ -13,8 +13,9 @@ import { LEVELS, resolveObservations } from './events.mjs';
 import { git } from './git.mjs';
 import { readCalibration, classOf } from './calibrate.mjs';
 import { computeMetrics, estimateBands, planCost, plannerSizeBands, toHours, usableCost, validBounds } from './metrics.mjs';
-import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256 } from './paths.mjs';
+import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256, isInputError } from './paths.mjs';
 import { costView, taskCosts } from './task-costs.mjs';
+import { budgetSummary } from './budget.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -58,7 +59,7 @@ function readAllRunFiles(repo) {
   });
 }
 
-const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'malformed'];
+const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'budget-check-unavailable', 'malformed'];
 /** F19: hook capture-loss diagnostics — `.agents/telemetry/delivery/diagnostics-*.jsonl`, one JSON
  * object per line, `{at, kind, session, agent_id, detail}`. Never landed as a writer in this task; this
  * is a read-only, best-effort reader — a missing directory/file is zero counts, not an error, and any
@@ -192,6 +193,10 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
     else if (cal) { calRead = true; calPricesAsOf = cal.cal.prices_as_of ?? null; const b = cal.cal.class_bounds_usd; if (b == null) bandsOff = 'too-few-samples'; else if (!validBounds(b)) bandsOff = 'invalid-bounds'; else bounds = b; }
   }
 
+  let budget;
+  try { budget = budgetSummary(repo, { resolved: res }); }
+  catch (e) { if (!COST_FALLBACK.has(e.code) && !isInputError(e)) throw e; budget = { unavailable: e.message }; }
+
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
     const r = f.rec;
@@ -240,7 +245,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
       metrics.planner_size_bands = bounds ? plannerSizeBands(items, { since: sinceIso, end, filters, bounds }) : null;
     }
     const cost = costs ? planCost(items, { since: sinceIso, end, filters }) : undefined;
-    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), observations: occ.length, registration_gaps: g, ...(cost ? { cost } : {}), metrics, counts, items: [...items.values()].map((i) => compact(i, occ, bounds)) });
+    docs.push({ run: r.run, version: r.version, status: r.status, finished: isFinished(r.status, [...items.values()]), ...(budget.plans?.[r.run] ? { budget: budget.plans[r.run] } : {}), observations: occ.length, registration_gaps: g, ...(cost ? { cost } : {}), metrics, counts, items: [...items.values()].map((i) => compact(i, occ, bounds)) });
   }
   const pending = docs.flatMap((d) => d.items).filter((i) => i.first_completion && i.current_scope?.pending).length;
   const derived = docs.flatMap((d) => d.metrics.caveats.map((c) => `${d.run}: ${c}`));
@@ -279,7 +284,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   };
   if (costs) Object.assign(envelope, { cost_basis: tc ? 'c1' : 'hook', cost_fallback: costFallback, prices_as_of: tc?.prices_as_of ?? null, estimate_bands: { bounds_usd: bounds, suppressed: bandsOff, calibration_prices_as_of: calPricesAsOf } });
   if (costs) envelope.policy.task_cost = tc ? TASK_COST_POLICY : 'hook-time cost recorded at each dispatch end (fallback)';
-  return { envelope, plans: docs };
+  return { budget, envelope, plans: docs };
 }
 
 const h = (s) => (s == null ? '—' : `${toHours(s)}h`);
@@ -491,7 +496,7 @@ export function renderMarkdown(doc) {
   L.push(`- capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}`);
   const da = e.coverage.dispatch_agents;
   L.push(`- agents: n=${da.agents} resumed=${da.resumed} compacted=${da.compacted} max_follow_ups=${da.max_follow_ups ?? '—'} turns=${da.turns} over_500k=${pct(da.over_500k_share)}`);
-  L.push(`- diagnostics: ${DIAG_KINDS.map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
+  L.push(`- diagnostics: ${DIAG_KINDS.filter(k => k !== 'budget-check-unavailable' || e.coverage.diagnostics[k]).map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
   L.push(`- baselines: ${Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', ')}`);
   for (const c of e.caveats) L.push(`- caveat: ${c}`);
   L.push(`- policy: weeks ${e.policy.weeks}, percentiles ${e.policy.percentile} (floors median≥5 P85≥7 P90≥10), estimate base ${e.policy.estimate_base}, ${e.policy.durations}, tokenomics ${e.sources.tokenomics}, sources hashed as read`);
@@ -721,9 +726,18 @@ export function renderHtml(doc) {
   return parts.join('\n');
 }
 
+export function renderBudgetCoverage(budget) {
+  if (budget?.coverage) {
+    const c = budget.coverage;
+    return `BUDGET coverage: budgeted=${c.budgeted.count}/${c.all.count} USD=${c.budgeted.usd}/${c.all.usd} unbudgeted=${c.unbudgeted.count} USD=${c.unbudgeted.usd} Codex unbudgeted=${c.codex.count} USD=${c.codex.usd}`;
+  }
+  return `BUDGET unavailable: ${budget?.unavailable ?? 'unknown'}`;
+}
+
 export function renderStatus(doc) {
   const e = doc.envelope; const L = [];
   for (const p of doc.plans) {
+    if (p.budget) L.push(`BUDGET ${p.run}: exceeded=${p.budget.budget_exceeded} stopped=${p.budget.budget_stopped}`);
     L.push(`STATUS ${p.run} v${p.version} (${p.status}) at ${e.window.effective_end}`);
     for (const lv of ['campaign', 'mission', 'task', 'case']) { const rows = p.items.filter((i) => i.level === lv); if (!rows.length) continue; const n = (s) => rows.filter((i) => i.state === s).length; L.push(`  ${lv}: done=${n('done')} in_progress=${n('in_progress')} planned=${n('planned')} cancelled=${n('cancelled')}`); }
     for (const i of p.items.filter((i) => i.first_completion && i.current_scope?.pending)) L.push(`  pending scope ${i.ref}: first_done=${i.first_completion.done_at}; current_done=unknown; pending-scope age unavailable (M1)`);
@@ -732,6 +746,7 @@ export function renderStatus(doc) {
     if (p.finished) L.push(`  ${closeHint(p.run)}`);
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
+  if (doc.budget) L.push(renderBudgetCoverage(doc.budget));
   L.push(`  ledger: occurrence_conflicts=${e.coverage.occurrence_conflicts} ledger_conflicts=${e.coverage.ledger_conflicts} unregistered=${e.coverage.unregistered} malformed=${e.coverage.malformed_lines} malformed_runs=${e.coverage.malformed_runs}`);
   // Minor (f): `e.caveats` is `[...UNCONDITIONAL_CAVEATS, ...derived]` (assemble) — printing the
   // whole array, in that order, surfaces the derived count-bearing caveats (malformed lines,

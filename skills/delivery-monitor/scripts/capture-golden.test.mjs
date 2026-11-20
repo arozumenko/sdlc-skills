@@ -6,8 +6,9 @@ import { main } from './delivery.mjs';
 import { buildFixtureRepo } from '../fixtures/security-testing/build-fixture-repo.mjs';
 import { ingestDispatch, snapshotFromTranscript } from './lib/dispatches.mjs';
 import { appendObservation, makeObservation, resolveObservations } from './lib/events.mjs';
+import { legacyCommand } from '../fixtures/legacy-output.mjs';
 const NOW=Date.parse('2026-11-18T12:00:00Z');
-async function run(fn,repo,args) {let stdout='',stderr='';const code=await fn(args,{repo,now:NOW,env:{DELIVERY_NO_SYNC:'1'},stdout:{write:s=>{stdout+=s;}},stderr:{write:s=>{stderr+=s;}}});return {code,stdout,stderr};}
+async function run(fn,repo,args) {let stdout='',stderr='';const code=await fn(args,{repo,now:NOW,env:{DELIVERY_NO_SYNC:'1'},stdout:{write:s=>{stdout+=s;}},stderr:{write:s=>{stderr+=s;}}});return legacyCommand({code,stdout,stderr});}
 
 // The invariant: a dispatch store changes no existing output; status only gains its SPEND line.
 // It needs no git history, so it holds in an installed copy too. Byte equality with the code before

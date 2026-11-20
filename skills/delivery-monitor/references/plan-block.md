@@ -4,7 +4,7 @@ The tech-lead's decomposition document carries one fenced ```` ```json delivery-
 the machine-readable plan `plan register` validates, assigns stable ids to, and stores as a run
 under `.agents/telemetry/delivery/plans/<encoded-run-id>.json`. This document is the landed
 schema (`scripts/lib/plan.mjs` `validatePlan`/`validateIds`/`assignIds`), the estimate object,
-acceptance semantics, re-cut mechanics, and the markdown importer's limits. A filled example is
+acceptance semantics, re-cut mechanics, and the markdown importer's limits. Leave task-level `estimate` fields empty so registration can fill calibrated USD ranges. Keep human effort in the board's `tokenomics.effort_days`. A missing cell is a planning gap, not a reason to insert hours. A filled example is
 `templates/plan-block.template.md`.
 
 ## Block schema

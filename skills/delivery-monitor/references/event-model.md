@@ -18,7 +18,7 @@ read-time resolution order and source precedence.
 | `plan` | **the run id, `<campaign_id>/<run_id>`** (e.g. `sec/run-1`) — not a bare campaign slug. A re-cut (`version`) does not change `plan`; the version travels in `meta.version` instead |
 | `item_id` | **run-scoped**: `<run>/campaign`, `<run>/mission-<slug(ref)>`, `<run>/task-<slug(ref)>` (`assignIds` in `lib/plan.mjs`) — ids from two different runs can never collide, even if their human-readable `ref`s do |
 | `ref`, `level` | the plan catalogue's human-readable ref (`TASK-023`, `G12`, …) and `campaign\|mission\|task\|case`; null only together with `item_id` for an admitted-but-unattributed hook dispatch (`meta.unattributed: true`) |
-| `event` | one of the 20 below |
+| `event` | one of the 22 below |
 | `transition_id` | stable occurrence token. CLI: `<item_id>/<event>/episode-1` for `done`/`cancelled`/`reopened` (one occurrence per episode), `<item_id>/<event>/<defect id, percent-encoded>` for `defect_found`/`defect_fixed` (one occurrence per item, event and defect), else `<item_id>/<event>/<token>` (`--id`); the hook uses `<item_id-or-'unattributed'>/<event>/<agent_id>`; `plan register` uses `<item_id>/created/0` and `<item_id>/estimated/rev-<n>` |
 | `source` | `cli \| automation-sync \| hook \| git` — who produced this observation (see precedence below) |
 | `source_record_id` | the producer's own retry/request token — `--id` on the CLI (for a defect event without `--id`, the defect id itself, so the same command twice is a `SKIP`; a retry without `--at`/`--sha` keeps the first record's clock), `claude:<session>:<agent_id>` for the hook, the merge commit sha's own token for `backfill --git`, `pr:<number>` for `backfill --pr` (the PR number; `meta` carries `pr`, `git_sha` = the PR's merge commit, `head_ref`, `base_ref`, `landing`) |
@@ -33,7 +33,7 @@ read-time resolution order and source precedence.
 | `estimate` | present only on `event: estimated`; `{unit,low,high,tier,proposed_by,proposed_at,accepted_by,accepted_at,reference?,probability?}` — see `references/plan-block.md` |
 | `session`, `agentId`, `role`, `label` | nullable host-qualified handles the hook fills in; the CLI leaves them null |
 
-## The 20 events, and what M1 does with each
+## The 22 events, and what M1 does with each
 
 `EVENTS` (`lib/events.mjs`) is the full accepted vocabulary; only some of it is *derived* into
 item state by `reduceTimelineSnapshot` (`lib/timeline.mjs`) in M1 — the rest is accepted,
@@ -160,3 +160,34 @@ the same observation at `revision + 1` with `status: 'retracted'`. This is what 
 lines; the `BACKFILL` line carries `retracted=<n>`. A retracted id that is derived again is revived at the next revision.
 With `--since`/`--cutoff` the window is partial, so reconciliation is skipped with a `NOTE`. Likewise when `gh` returns exactly its `--limit` (`PR_LIMIT`, 1000) PRs: the list may be truncated, so nothing is retracted; reconcile from a complete list with `--from-json`.
 
+
+## Budget events
+
+`budget_exceeded` and `budget_stopped` are hook observations on task items. They do not change task state.
+The enclosing fields retain ledger v2. `meta.budget` is required:
+
+```json
+{"high":3,"soft_multiplier":1,"hard_multiplier":3,"cap_usd":9,"cost_at_crossing":3.5,"dispatch_key":"claude:session:agent","source":"in-run"}
+```
+
+`high` is the task range's upper USD bound. Multipliers default to 1 and 3; `cap_usd = high * hard_multiplier`.
+`cost_at_crossing` is the full task cost priced when the first writer observes the strict crossing, including prior dispatches.
+`dispatch_key` names that writer's dispatch; before a dispatch exists, its agent segment is the Agent/Task `tool_use_id`.
+`source` is `pre-dispatch`, `in-run` or `subagent-stop` (distinct from the enclosing `source: hook`).
+A hard crossing records both events if neither exists. SubagentStop only records; it never denies.
+
+`transition_id` is `<item_id>/<event>/budget`, one per task and threshold. The first-writer test and append run under the
+ledger's existing advisory lock. Writers compare canonical item ids through `supersedes.item_map` before writing; registration retains
+cumulative USD-task rename links in the additive run field `budget_item_map`, so a
+rename, later dispatch or second hook path cannot create another crossing. The first observation's dispatch key, clock,
+transition id and cost remain intact. Retracting that observation removes its resolved count without re-firing it.
+`dispatch_ended.meta.budget_eligible: false` marks USD-task allocations inferred only from role or branch fallback.
+Their task costs remain allocated as before; budget coverage counts these unnamed dispatches as unbudgeted.
+
+The entire budget evidence object is part of semantic identity. Status/report counts use resolved observations and
+occurrence selection, then map renamed ids; retracted or conflicted observations do not count.
+
+`budget-check-unavailable` joins the fixed diagnostics vocabulary. Its shape is the existing
+`{at, kind, session, agent_id, detail}`; one line per session, with no permission decision. Invalid/unreadable calibration,
+plans, events, dispatches, prices or a live transcript make the budget check unavailable. Missing calibration is normal
+for a new project; a task without a USD range remains unbudgeted.

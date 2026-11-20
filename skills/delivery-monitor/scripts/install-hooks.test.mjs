@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +27,7 @@ test('installClaude: marked entry, foreign entries and later user edits preserve
   const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
   writeFileSync(join(repo, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] }, hooks: { SubagentStop: [{ matcher: '*', hooks: [{ type: 'command', command: 'node tok.mjs --dispatch', timeout: 60, async: true }], _tokenomics: true }] } }, null, 2));
   const file = installClaude(repo, REL, {}); let s = JSON.parse(readFileSync(file, 'utf8'));
-  assert.equal(s.hooks.SubagentStop.length, 2); const ours = s.hooks.SubagentStop.find((e) => e[MARKER]); assert.match(ours.hooks[0].command, /dispatch-hook\.mjs" --stop$/); assert.ok(ours.hooks[0].command.startsWith('node "${CLAUDE_PROJECT_DIR}/') && ours.hooks[0].command.includes(`${REL}/hooks/dispatch-hook.mjs`), ours.hooks[0].command); assert.equal(ours.hooks[0].async, true); assert.equal(ours.hooks[0].timeout, 30);
+  assert.equal(s.hooks.SubagentStop.length, 2); const ours = s.hooks.SubagentStop.find((e) => e[MARKER]); assert.match(ours.hooks[0].command, /dispatch-hook\.mjs" --stop$/); assert.ok(ours.hooks[0].command.startsWith('node "${CLAUDE_PROJECT_DIR}/') && ours.hooks[0].command.includes(`${REL}/hooks/dispatch-hook.mjs`), ours.hooks[0].command); assert.notEqual(ours.hooks[0].async, true); assert.equal(ours.hooks[0].timeout, 30);
   assert.deepEqual(s.permissions, { allow: ['Bash(npm test)'] });
   installClaude(repo, REL, {}); s = JSON.parse(readFileSync(file, 'utf8')); assert.equal(s.hooks.SubagentStop.length, 2);
   s.hooks.SubagentStop.push({ matcher: 'x', hooks: [], note: 'user edit after install' }); writeFileSync(file, JSON.stringify(s));
@@ -267,3 +267,22 @@ test('doctor: says whether THIS session is bound; a binding to a closed plan is 
   assert.ok(d.lines.includes('session: claude:me -> sec/run-2 closed'));
   assert.ok(!d.lines.some((l) => /^session: .* (missing|malformed)$/.test(l)));
 });
+
+ test('budget hooks install synchronously, doctor checks paths and flags async, removal preserves foreign entries', () => {
+  const repo=tmp();installClaude(repo,REL);installIgnoreBlocks(repo);
+  const path=join(repo,'.claude/settings.json'),s=JSON.parse(readFileSync(path,'utf8'));
+  const pre=s.hooks.PreToolUse.find(e=>e[MARKER]);assert.equal(pre.matcher,'*');
+  assert.match(pre.hooks[0].command,/budget-hook\.mjs/);assert.notEqual(pre.hooks[0].async,true);
+  assert.ok(doctorReport(repo,REL).lines.some(l=>/budget.*wired/.test(l)));
+  pre.hooks[0].async=true;writeFileSync(path,JSON.stringify(s));
+  assert.ok(doctorReport(repo,REL).lines.some(l=>/budget.*MISSING/.test(l)));
+  installClaude(repo,REL,{remove:true});assert.ok(doctorReport(repo,REL).lines.some(l=>/budget.*MISSING/.test(l)));
+ });
+
+ test('delivery doctor resolves an aliased repository before deriving hook script paths', () => {
+  const repo=tmp(), base=mkdtempSync(join(tmpdir(),'dm-doctor-alias-')), alias=join(base,'a/b/c/d/e/alias');
+  mkdirSync(join(base,'a/b/c/d/e'),{recursive:true});symlinkSync(repo,alias,'dir');
+  execFileSync('node',[SCRIPT,'--no-submodule'],{cwd:repo,env:{...process.env,CLAUDE_PROJECT_DIR:repo,DELIVERY_NO_SYNC:'1'}});
+  const output=execFileSync('node',[DELIVERY,'doctor'],{cwd:alias,encoding:'utf8',env:{...process.env,CLAUDE_PROJECT_DIR:alias,DELIVERY_NO_SYNC:'1',CLAUDE_CODE_SESSION_ID:''}});
+  assert.match(output,/hook: wired/);assert.match(output,/budget hook: wired/);assert.match(output,/doctor: ok/);
+ });

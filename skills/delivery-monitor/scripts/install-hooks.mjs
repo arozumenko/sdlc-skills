@@ -20,11 +20,11 @@ export function installClaude(repo, rel, { local = false, remove = false } = {})
   const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
   const existed = existsSync(file);
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
-  const kept = (Array.isArray(settings.hooks.SubagentStop) ? settings.hooks.SubagentStop : []).filter((e) => !e || !e[MARKER]);
-  // Spike finding S1: same shape as tokenomics — `${CLAUDE_PROJECT_DIR}` + repo-relative path, so a
-  // cloned or moved checkout keeps a working hook instead of a dangling absolute path.
-  if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/${posix(join(rel, 'hooks/dispatch-hook.mjs'))}" --stop`, timeout: 30, async: true }], [MARKER]: true });
-  if (kept.length) settings.hooks.SubagentStop = kept; else delete settings.hooks.SubagentStop;
+  for (const [event, script, flag] of [['SubagentStop', 'dispatch-hook.mjs', ' --stop'], ['PreToolUse', 'budget-hook.mjs', '']]) {
+    const kept = (Array.isArray(settings.hooks[event]) ? settings.hooks[event] : []).filter(e => !e || !e[MARKER]);
+    if (!remove) kept.push({ matcher: '*', hooks: [{ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/${posix(join(rel, 'hooks', script))}"${flag}`, timeout: 30 }], [MARKER]: true });
+    if (kept.length) settings.hooks[event] = kept; else delete settings.hooks[event];
+  }
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
   // --remove on a settings file that never existed, with nothing else left to write, must not
   // conjure an empty settings.json into existence.
@@ -170,8 +170,12 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   const findings = [];
   const add = (severity, line, fix = null) => findings.push({ severity, message: line, fix, checkout, line });
   const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
-  const wired = [...(settings.hooks?.SubagentStop ?? []), ...(local.hooks?.SubagentStop ?? [])].some((e) => e && e[MARKER]);
+  const hookPresent = (event, script, flag = '') => [...(settings.hooks?.[event] ?? []), ...(local.hooks?.[event] ?? [])].some(e =>
+    e?.matcher === '*' && e.hooks?.some(h => h.type === 'command' && h.async !== true && h.command?.includes(`${posix(join(rel, 'hooks', script))}"${flag}`)));
+  const wired = hookPresent('SubagentStop', 'dispatch-hook.mjs', ' --stop');
   add(wired ? 'ok' : 'warning', `hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`, wired ? null : `node ${rel}/scripts/install-hooks.mjs`);
+  const budget = hookPresent('PreToolUse', 'budget-hook.mjs');
+  add(budget ? 'ok' : 'warning', `budget hook: ${budget ? 'wired' : 'MISSING'} (Claude PreToolUse, synchronous Agent|Task + subagent calls)`, budget ? null : `node ${rel}/scripts/install-hooks.mjs --no-submodule`);
   const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   // The count alone hid that the orchestrating session was never bound — say so for THIS session.
