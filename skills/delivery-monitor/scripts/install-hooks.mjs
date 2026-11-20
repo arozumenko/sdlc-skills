@@ -170,12 +170,16 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   const findings = [];
   const add = (severity, line, fix = null) => findings.push({ severity, message: line, fix, checkout, line });
   const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
-  const hookPresent = (event, script, flag = '') => [...(settings.hooks?.[event] ?? []), ...(local.hooks?.[event] ?? [])].some(e =>
-    e?.matcher === '*' && e.hooks?.some(h => h.type === 'command' && h.async !== true && h.command?.includes(`${posix(join(rel, 'hooks', script))}"${flag}`)));
-  const wired = hookPresent('SubagentStop', 'dispatch-hook.mjs', ' --stop');
-  add(wired ? 'ok' : 'warning', `hook: ${wired ? 'wired' : 'not wired'} (Claude SubagentStop, marker ${MARKER})`, wired ? null : `node ${rel}/scripts/install-hooks.mjs`);
-  const budget = hookPresent('PreToolUse', 'budget-hook.mjs');
-  add(budget ? 'ok' : 'warning', `budget hook: ${budget ? 'wired' : 'MISSING'} (Claude PreToolUse, synchronous Agent|Task + subagent calls)`, budget ? null : `node ${rel}/scripts/install-hooks.mjs --no-submodule`);
+  const entries = (event, script, flag = '') => [...(settings.hooks?.[event] ?? []), ...(local.hooks?.[event] ?? [])].flatMap(e =>
+    e?.matcher === '*' ? (e.hooks ?? []).filter(h => h.type === 'command' && h.command?.includes(`${posix(join(rel, 'hooks', script))}"${flag}`)) : []);
+  const fix = `node ${rel}/scripts/install-hooks.mjs --no-submodule`;
+  const stops = entries('SubagentStop', 'dispatch-hook.mjs', ' --stop');
+  if (stops.some(h => h.async !== true)) add('ok', `hook: wired (Claude SubagentStop, marker ${MARKER})`);
+  else if (stops.length) add('info', 'hook: wired (async) - re-run install-hooks.mjs --no-submodule to make it synchronous', fix);
+  else add('warning', `hook: not wired (Claude SubagentStop, marker ${MARKER})`, fix);
+  // The budget hook must be synchronous to deny, so an async entry does not count.
+  const budget = entries('PreToolUse', 'budget-hook.mjs').some(h => h.async !== true);
+  add(budget ? 'ok' : 'warning', `budget hook: ${budget ? 'wired' : 'MISSING'} (Claude PreToolUse, synchronous Agent|Task + subagent calls)`, budget ? null : fix);
   const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   // The count alone hid that the orchestrating session was never bound — say so for THIS session.
@@ -237,8 +241,9 @@ export function doctorReport(repo, rel, opts = {}) {
 }
 
 export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()) {
-  repo = resolveOwnerRepo(repo);
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
+  // An explicit --repo wins over cwd and CLAUDE_PROJECT_DIR.
+  repo = resolveOwnerRepo(val('--repo') ?? repo);
   const host = val('--host') ?? 'claude'; if (host !== 'claude') { process.stderr.write(`UNSUPPORTED-HOST(${host})\n`); return 2; }
   const rel = posix(relative(repo, skillRootOf()));
   // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, printed as the

@@ -286,3 +286,30 @@ test('doctor: says whether THIS session is bound; a binding to a closed plan is 
   const output=execFileSync('node',[DELIVERY,'doctor'],{cwd:alias,encoding:'utf8',env:{...process.env,CLAUDE_PROJECT_DIR:alias,DELIVERY_NO_SYNC:'1',CLAUDE_CODE_SESSION_ID:''}});
   assert.match(output,/hook: wired/);assert.match(output,/budget hook: wired/);assert.match(output,/doctor: ok/);
  });
+
+const asyncEntry = (script, flag = '') => ({ matcher: '*', hooks: [{ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/${REL}/hooks/${script}"${flag}`, timeout: 30, async: true }], [MARKER]: true });
+
+test('doctor: an async SubagentStop entry is reported as wired (async) with a --no-submodule hint, not as not wired', () => {
+  const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
+  writeFileSync(join(repo, '.claude', 'settings.json'), JSON.stringify({ hooks: { SubagentStop: [asyncEntry('dispatch-hook.mjs', ' --stop')] } }));
+  const hook = doctorFindings(repo, REL).find((x) => /^hook:/.test(x.line));
+  assert.equal(hook.line, 'hook: wired (async) - re-run install-hooks.mjs --no-submodule to make it synchronous');
+  assert.doesNotMatch(hook.line, /not wired/);
+});
+
+test('doctor: every SubagentStop/budget fix hint carries --no-submodule', () => {
+  const repo = tmp();
+  const fixes = doctorFindings(repo, REL).filter((x) => /^(hook|budget hook):/.test(x.line)).map((x) => x.fix);
+  assert.equal(fixes.length, 2); for (const f of fixes) assert.match(f, /install-hooks\.mjs --no-submodule/);
+});
+
+test('install/--remove honour an explicit --repo over cwd and CLAUDE_PROJECT_DIR', () => {
+  const c1 = tmp(), c2 = tmp(); const env = { ...process.env, CLAUDE_PROJECT_DIR: c2 };
+  const settings = (r) => join(r, '.claude', 'settings.json');
+  execFileSync('node', [SCRIPT, '--no-submodule', '--repo', c1], { cwd: c2, env, encoding: 'utf8' });
+  assert.ok(existsSync(settings(c1)), 'c1 written'); assert.ok(!existsSync(settings(c2)), 'c2 untouched');
+  assert.ok(JSON.parse(readFileSync(settings(c1), 'utf8')).hooks.SubagentStop.some((e) => e[MARKER]));
+  execFileSync('node', [SCRIPT, '--no-submodule', '--repo', c2], { cwd: c2, env, encoding: 'utf8' });
+  execFileSync('node', [SCRIPT, '--remove', '--repo', c1], { cwd: c2, env, encoding: 'utf8' });
+  assert.ok(!JSON.parse(readFileSync(settings(c1), 'utf8')).hooks, 'c1 stripped'); assert.ok(JSON.parse(readFileSync(settings(c2), 'utf8')).hooks.SubagentStop.some((e) => e[MARKER]), 'c2 still installed');
+});

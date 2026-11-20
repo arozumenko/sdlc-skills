@@ -9,7 +9,7 @@ import { classifyStage, crossedTasks, resolveRefs, handleStop, ownerRepo, parseT
 import { loadRun, saveRun } from '../scripts/lib/plan.mjs';
 import { makeRoster } from '../scripts/lib/roster.mjs';
 import { resolveObservations } from '../scripts/lib/events.mjs';
-import { deliveryDir, sessionsDir, sessionPath } from '../scripts/lib/paths.mjs';
+import { deliveryDir, sessionsDir, sessionPath, sha256 } from '../scripts/lib/paths.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./dispatch-hook.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-hook-'));
@@ -417,4 +417,12 @@ test('handleStop prices the final usage: 1h cache writes apart, fast mode keyed 
   const broken = setup(); writeFileSync(join(deliveryDir(broken), 'prices.json'), '{ "models": ');
   const b = priced(broken);
   assert.deepEqual(b.unpriced_models, ['<prices-unreadable>'], 'a broken override never prices silently at list');
+});
+
+test('handleStop: deletes that agent\'s .pending-budget file and leaves other agents\' files', () => {
+  const repo = setup(); const t = transcripts(); const d = deliveryDir(repo);
+  const mine = join(d, `.pending-budget-${sha256('claude:sess-1:agent-1')}.json`), other = join(d, `.pending-budget-${sha256('claude:sess-1:agent-2')}.json`);
+  writeFileSync(mine, '{}'); writeFileSync(other, '{}');
+  handleStop(payload(t), { repo, now: NOW });
+  assert.equal(existsSync(mine), false, 'own cursor removed'); assert.equal(existsSync(other), true, 'other agent cursor kept');
 });

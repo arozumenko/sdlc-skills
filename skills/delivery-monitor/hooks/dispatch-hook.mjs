@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // STDLIB ONLY. Claude SubagentStop → dispatched / dispatch_ended (+ rework_observed) observations (spec §6.6).
 // Never prints to stdout, always exits 0. Admission: open run, session→run association, role in the run's roster snapshot.
-import { realpathSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
+import { realpathSync, rmSync, appendFileSync, existsSync, mkdirSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deliveryDir, nowIso, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo, withLock } from '../scripts/lib/paths.mjs';
+import { deliveryDir, nowIso, sha256, sessionPath, whoAmI, ownerRepo, resolveOwnerRepo, withLock } from '../scripts/lib/paths.mjs';
 import { associate, wordHit } from '../scripts/lib/associate.mjs';
 import { writeBinding } from '../scripts/lib/history.mjs';
 import { appendObservation, makeObservation } from '../scripts/lib/events.mjs';
@@ -326,6 +326,8 @@ export function handleStop(payload, options = {}) {
         }
       }
     } catch (e) { diagnose(repo, whoAmI(repo).slug, 'budget-check-unavailable', payload, String(e.message), now); }
+    // The PreToolUse cursor is per agent and has no use once the agent has stopped.
+    try { rmSync(join(deliveryDir(repo), `.pending-budget-${sha256(`claude:${payload.session_id}:${payload.agent_id}`)}.json`), { force: true }); } catch { /* best effort */ }
   }
   return result;
 }

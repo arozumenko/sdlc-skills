@@ -29,8 +29,7 @@ a sibling `.meta.json`) and every report prints
 
 ## T1.1 budget hook capability spike — 2026-11-20
 
-Claude Code 2.1.329: PASS for in-run enforcement (M1-AC4 retained). The supplied probe logs are
-`/private/tmp/claude-501/-Users-Daniel-Sallai-dev-aquanautica-solo/84b3e60a-88c3-4b90-b206-60ffd1c28306/scratchpad/spike-t11/logs/*/events.jsonl`.
+Claude Code 2.1.329: PASS for in-run enforcement (M1-AC4 retained). The probe logs are retained by the operator; not published.
 
 PreToolUse fires for the child's own tools with `agent_id` and `agent_type`; parent calls omit these.
 `transcript_path` is the parent session transcript. By the first child tool call the sibling
