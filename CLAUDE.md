@@ -49,6 +49,10 @@ it also runs `npm run test:fast`, `validate:marketplaces` and `validate:dupes`.
 `.github/workflows/tests-full.yml` runs the full `npm test` on push to `main`
 and nightly. A new test file is in the fast set by default; add it to `SLOW` in
 `bin/fast-tests.mjs` only if it alone takes more than about 10 seconds.
+A pull request that changes a directory listed in `PR_AREAS` in that script
+also runs every test under it, slow files included
+(`.github/workflows/tests-areas.yml`); a `SLOW` file in no area must be in
+`MAIN_ONLY` with a reason.
 Wall-clock limits in tests are opt-in: the delivery-monitor scale test asserts
 its elapsed time only under `BENCH=1 node --test <file>`.
 
