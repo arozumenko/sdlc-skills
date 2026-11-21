@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -165,15 +165,24 @@ test('a corrupt calibration file does not disable the check on any hook path',()
  const c=child(f,'b',1);assert.equal(denied(hook(f,c.payload)),true);
  assert.deepEqual(readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')),[]);
 });
-// The hook is wired with matcher *, so it starts for every tool call of every session. A copy of the entry file with no engine
-// module beside it proves which payloads are answered before the engine is loaded.
-test('an uninteresting call is answered before any engine module is loaded; an interesting one loads the engine',async()=>{
- const dir=mkdtempSync(join(tmpdir(),'dm-budget-lone-')),lone=join(dir,'budget-hook.mjs');copyFileSync(SCRIPT,lone);
- const run=payload=>spawnSync(process.execPath,[lone],{input:typeof payload==='string'?payload:JSON.stringify(payload),encoding:'utf8',cwd:dir,env:{...process.env,CLAUDE_PROJECT_DIR:dir}});
+// The hook is wired with matcher *, so it starts for every tool call of every session. A copy of the entry file runs beside a
+// stub engine whose modules leave a marker file when they are imported, so the test sees whether a call loaded the engine.
+test('an uninteresting call does not load the engine; an interesting call does',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dm-budget-stub-')),hooks=join(dir,'hooks'),lib=join(dir,'scripts','lib'),marker=join(dir,'engine-loaded');
+ mkdirSync(hooks);mkdirSync(lib,{recursive:true});copyFileSync(SCRIPT,join(hooks,'budget-hook.mjs'));
+ const stub=name=>`import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(marker)}, ${JSON.stringify(name+'\n')});\n`;
+ writeFileSync(join(hooks,'dispatch-hook.mjs'),stub('dispatch-hook'));
+ for(const name of ['budget','paths','task-costs','transcript-usage']) writeFileSync(join(lib,`${name}.mjs`),stub(name));
+ const run=payload=>{rmSync(marker,{force:true});const p=spawnSync(process.execPath,[join(hooks,'budget-hook.mjs')],{input:typeof payload==='string'?payload:JSON.stringify(payload),encoding:'utf8',cwd:dir,env:{...process.env,CLAUDE_PROJECT_DIR:dir}});
+  assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));return existsSync(marker)?readFileSync(marker,'utf8').trim().split('\n'):[];};
  const quiet=[{tool_name:'Bash',session_id:'s'},{tool_name:'Read',session_id:'s',tool_input:{file_path:'x'}},{tool_name:'Agent',session_id:'s',host:'codex'},{tool_name:'Bash',agent_id:'a',session_id:'s',host:'codex'},{tool_name:'Agent'},{tool_name:'Bash',agent_id:'a'},'not json',''];
- for(const payload of quiet){const p=run(payload);assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));}
- // With the engine missing, an interesting call fails to load it and still makes no decision and exits 0.
- for(const payload of [{tool_name:'Agent',session_id:'s'},{tool_name:'Task',session_id:'s'},{tool_name:'Bash',agent_id:'a',session_id:'s'}]){const p=run(payload);assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));}
+ for(const payload of quiet) assert.deepEqual(run(payload),[],`engine loaded for ${JSON.stringify(payload)}`);
+ for(const payload of [{tool_name:'Agent',session_id:'s'},{tool_name:'Task',session_id:'s'},{tool_name:'Bash',agent_id:'a',session_id:'s'},{tool_name:'Agent',session_id:'s',host:'claude'}])
+  assert.deepEqual(run(payload),['dispatch-hook','budget','paths','task-costs','transcript-usage'],`engine not loaded for ${JSON.stringify(payload)}`);
+ // With no engine beside it at all, an interesting call cannot load it: still no decision, exit 0.
+ const alone=mkdtempSync(join(tmpdir(),'dm-budget-lone-')),lone=join(alone,'budget-hook.mjs');copyFileSync(SCRIPT,lone);
+ const p=spawnSync(process.execPath,[lone],{input:JSON.stringify({tool_name:'Agent',session_id:'s'}),encoding:'utf8',cwd:alone,env:{...process.env,CLAUDE_PROJECT_DIR:alone}});
+ assert.deepEqual([p.status,p.stdout,p.stderr],[0,'','']);
  // The real file, imported: handleBudget is ready and synchronous, with the same guards.
  const {handleBudget}=await import('./budget-hook.mjs');
  assert.deepEqual(handleBudget({tool_name:'Bash',session_id:'s'}),{});assert.deepEqual(handleBudget({tool_name:'Agent',session_id:'s',host:'codex'}),{});
