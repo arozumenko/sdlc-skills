@@ -33,7 +33,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
-import { join, basename, dirname, sep } from 'node:path';
+import { join, basename, dirname, sep, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 
@@ -1456,6 +1456,42 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
 }
 
 /**
+ * An unfinished merge must never reach `git add -A`: staging a conflicted tree
+ * commits its conflict markers into shared telemetry files. Abort it, so the
+ * tree returns to the last local commit. `merge --abort` resets a conflicted
+ * file to its committed version — which would drop a line a capture appended
+ * to it while the merge sat open — so the conflicted working copies are saved
+ * first, inside the git dir (outside the tree: never staged, never pushed).
+ * Untracked files and edits to files the merge did not touch survive an abort
+ * as they are. Returns false when the tree is still unmerged afterwards; the
+ * caller then skips its commit and leaves every local file alone.
+ * `git(args)` runs git inside `dir` and throws on a non-zero exit.
+ */
+export function settleUnfinishedMerge(dir, git) {
+  const midMerge = () => { try { git(['rev-parse', '-q', '--verify', 'MERGE_HEAD']); return true; } catch { return false; } };
+  const unmerged = () => [...new Set(git(['ls-files', '-u', '-z']).split('\0').filter(Boolean).map((e) => e.slice(e.indexOf('\t') + 1)))];
+  const open = unmerged();
+  if (!midMerge() && !open.length) return true;
+  let rescue;
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    rescue = join(resolve(dir, git(['rev-parse', '--git-dir']).trim()), 'tokenomics-rescue', stamp);
+    for (const p of open) {
+      if (!existsSync(join(dir, p))) continue;
+      mkdirSync(dirname(join(rescue, p)), { recursive: true });
+      copyFileSync(join(dir, p), join(rescue, p));
+    }
+  } catch { return false; } // could not save the conflicted copies → do not reset them
+  try { git(['merge', '--abort']); } catch { /* no merge to abort, or git refused — re-checked below */ }
+  if (midMerge() || unmerged().length) {
+    try { rmSync(rescue, { recursive: true, force: true }); } catch { /* fine */ } // nothing was reset
+    return false;
+  }
+  if (existsSync(rescue)) process.stderr.write(`tokenomics: unfinished telemetry merge aborted — conflicted working copies saved in ${rescue}\n`);
+  return true;
+}
+
+/**
  * Share what was just captured: commit + push INSIDE the telemetry submodule.
  * Its own branch — the main tree never moves. Best-effort by design: no
  * submodule (plain-dir fallback), no git, no network — silently skip; the
@@ -1470,6 +1506,10 @@ export function syncTelemetry(repo, env = process.env) {
   const git = (args, timeout = 15000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout });
   try {
+    if (!settleUnfinishedMerge(dir, git)) {
+      process.stderr.write('tokenomics: telemetry sync skipped — .agents/telemetry has an unfinished merge that could not be aborted; local files left as they are, resolve it by hand\n');
+      return false;
+    }
     git(['add', '-A']);
     const dirty = git(['status', '--porcelain']).trim();
     if (dirty) git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
@@ -1483,7 +1523,16 @@ export function syncTelemetry(repo, env = process.env) {
       // Per-user/per-session files make the merge conflict-free by design.
       try {
         git(['fetch', 'origin', 'telemetry'], 20000);
-        git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+        try {
+          git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+        } catch (err) {
+          // A merge that stopped (conflict) must not stay open — the next
+          // capture's `git add -A` would commit its conflict markers. Back to
+          // the last local commit: everything local was committed just above.
+          try { git(['merge', '--abort']); } catch { /* nothing to abort */ }
+          process.stderr.write('tokenomics: telemetry merge with the remote did not complete (conflict?) — aborted; captures stay committed locally, unpushed, until it is resolved by hand\n');
+          throw err;
+        }
         git(['push', 'origin', 'HEAD:telemetry'], 20000);
       } catch { /* offline or a real race — the next capture moment retries */ }
     }

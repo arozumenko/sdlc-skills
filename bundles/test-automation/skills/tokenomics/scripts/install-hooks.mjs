@@ -29,6 +29,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, r
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { settleUnfinishedMerge } from '../hooks/telemetry-capture.mjs';
 
 const MARKER = '_tokenomics';
 const TASK_LABEL = 'tokenomics: telemetry sweep';
@@ -474,13 +475,24 @@ export function pullTelemetry(repo) {
   const git = (args, timeout = 20000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
   try {
+    // Same rule as the capture sync: an unfinished merge is aborted before
+    // anything is staged, and a merge that stops is aborted on the spot —
+    // conflict markers must never be committed into shared telemetry files.
+    if (!settleUnfinishedMerge(dir, git)) {
+      return { status: 'failed', error: 'unfinished merge in .agents/telemetry that could not be aborted; local files left as they are, resolve it by hand' };
+    }
     git(['add', '-A']);
     if (git(['status', '--porcelain']).trim()) {
       git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
     }
     if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
     git(['fetch', 'origin', 'telemetry']);
-    git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+    try {
+      git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+    } catch (err) {
+      try { git(['merge', '--abort']); } catch { /* nothing to abort */ }
+      throw err;
+    }
     try { git(['push', 'origin', 'HEAD:telemetry']); } catch { /* offline push-back — next sync retries */ }
     return { status: 'pulled' };
   } catch (err) {
