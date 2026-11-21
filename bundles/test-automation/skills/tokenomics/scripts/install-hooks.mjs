@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, r
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acquireSyncLock, hasUnfinishedMerge } from '../hooks/telemetry-capture.mjs';
+import { acquireSyncLock, hasUnfinishedMerge, mergeFetchedTelemetry } from '../hooks/telemetry-capture.mjs';
 
 const MARKER = '_tokenomics';
 const TASK_LABEL = 'tokenomics: telemetry sweep';
@@ -510,12 +510,13 @@ export function pullTelemetry(repo) {
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
   // Same lock and same merge rule as the capture sync (telemetry-capture.mjs):
   // one sync at a time; a merge that was already open is not ours and is left
-  // exactly as it is; a merge THIS pull starts and that stops is aborted on
-  // the spot — conflict markers are never committed into shared files.
+  // exactly as it is; a merge that would conflict is found by a dry run and
+  // never started — conflict markers are never committed into shared files.
   let release = null;
   try {
-    release = acquireSyncLock(dir, git);
-    if (!release) return { status: 'busy' };
+    const held = acquireSyncLock(dir, git);
+    release = held.release;
+    if (!release) return { status: 'busy', lock: held.lock, abandoned: held.abandoned };
     if (hasUnfinishedMerge(git)) {
       return { status: 'failed', error: 'an unfinished merge is open in .agents/telemetry — left exactly as it is; finish or abort it there, then pull again' };
     }
@@ -527,16 +528,13 @@ export function pullTelemetry(repo) {
     try { git(['fetch', 'origin', 'telemetry']); } catch {
       return { status: 'failed', error: 'could not fetch the remote telemetry branch — offline, or no telemetry branch on the remote yet' };
     }
-    try {
-      git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
-    } catch (err) {
-      let conflict = false;
-      try { conflict = git(['ls-files', '-u']).trim() !== ''; } catch { /* reported as a plain failure below */ }
-      try { git(['merge', '--abort']); } catch { /* the merge never started — nothing to abort */ }
-      if (conflict) {
-        return { status: 'failed', error: 'merge conflict with the remote telemetry branch — merge aborted, local captures stay committed and unpushed; resolve it by hand in .agents/telemetry' };
-      }
-      throw err;
+    const merge = mergeFetchedTelemetry(git);
+    if (merge !== 'merged') {
+      return { status: 'failed', error: {
+        conflict: 'merge conflict with the remote telemetry branch — merge not started, nothing was touched; local captures stay committed and unpushed; resolve it by hand in .agents/telemetry',
+        aborted: 'merge conflict with the remote telemetry branch — merge aborted, local captures stay committed and unpushed; resolve it by hand in .agents/telemetry',
+        'not-started': 'the merge could not start — a telemetry file changed while pulling, or git could not test the merge; nothing was touched, run --pull again',
+      }[merge] };
     }
     try { git(['push', 'origin', 'HEAD:telemetry']); } catch { /* offline push-back — next sync retries */ }
     return { status: 'pulled' };
@@ -796,7 +794,9 @@ export async function main(argv = process.argv.slice(2)) {
     const note = {
       pulled: 'telemetry pulled — the team\'s pushes are merged in; reports now see everyone',
       'no-submodule': 'no telemetry submodule here — nothing to pull (plain-dir mode is local-only)',
-      busy: 'another telemetry sync is running here — nothing pulled; run --pull again in a moment',
+      busy: r.abandoned
+        ? `the telemetry sync lock ${r.lock} is more than 10 minutes old and looks abandoned — nothing pulled; if no sync is running, remove it by hand and pull again`
+        : 'another telemetry sync is running here — nothing pulled; run --pull again in a moment',
       failed: `pull failed — ${r.error}`,
     }[r.status];
     process.stderr.write(`tokenomics: ${note}\n`);

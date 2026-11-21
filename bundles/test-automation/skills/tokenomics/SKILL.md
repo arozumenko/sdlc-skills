@@ -313,17 +313,30 @@ disables). Because of `ignore = all` and the separate branch, the main working
 tree never gets dirty and a branch switch never stashes a record. A teammate
 gets everything with `git clone --recurse-submodules` (forgot? — `git
 submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
-before a team report to merge in everyone's pushes. **A merge that stops with
-a conflict is never committed** (for example one git user name capturing in
+before a team report to merge in everyone's pushes. **A merge that would
+conflict is never committed** (for example one git user name capturing in
 two clones, so both append to the same `usage-<user>.jsonl`): the sync and
-`--pull` abort the merge they started, this clone's captures stay committed
-locally and unpushed, and stderr says so — resolve it by hand inside
+`--pull` do not merge, this clone's captures stay committed locally and
+unpushed, and stderr says so — resolve it by hand inside
 `.agents/telemetry`. A merge that is **already open** there (someone
 resolving by hand) is never touched: the sync skips, stages nothing, and
 captures wait in the working tree until it is finished or aborted. Syncs are
 serialized by a lock directory in the submodule's git dir; a capture that
-finds it held skips its sync and the next one catches up. A repo with **no remote at
-all** works too — everything accumulates in the local `telemetry` branch; when
+finds it held skips its sync and the next one catches up. Known limits:
+
+- A merge that would conflict is found by a dry run (`git merge-tree
+  --write-tree`) and never started, so nothing in the tree is touched. **On
+  git older than 2.38** there is no dry run: the merge is started and aborted,
+  and a capture another process appends to a conflicted file in that moment
+  can be lost.
+- Other writers to `.agents/telemetry` — another skill's sync, a person's git
+  commands — do not take this lock.
+- A merge left open by a killed process is left untouched like any other open
+  merge: finish or abort it by hand, syncs skip until then.
+- The lock is never taken over. One older than 10 minutes is reported with
+  its path; if no sync is running, remove it by hand.
+
+A repo with **no remote at all** works too — everything accumulates in the local `telemetry` branch; when
 a real remote appears later, run `git submodule sync .agents/telemetry` once
 so pushes start reaching it (`--doctor` detects the un-synced state and prints
 exactly that command).
