@@ -4,11 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SLOW, discoverTests, selectFast } from "./fast-tests.mjs";
+import { SLOW, PR_AREAS, MAIN_ONLY, discoverTests, selectFast, changedAreas, testsInArea, slowWithoutPullRequestRun } from "./fast-tests.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -74,4 +74,62 @@ test("--list prints the fast set and runs nothing", () => {
   const r = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--list"], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.stdout.trim().split("\n"), selectFast(REPO, SLOW).fast);
+});
+
+// A file in SLOW is not in the fast set, so a pull request would not run it at
+// all. PR_AREAS closes that: a pull request that changes a file under one of
+// those directories runs every test in it (.github/workflows/tests-areas.yml).
+test("a slow file outside every area and off the main-only list is reported", () => {
+  const slow = ["a/x/slow.test.mjs", "b/slow.test.mjs", "c/slow.test.mjs", "ab/slow.test.mjs"];
+  assert.deepEqual(slowWithoutPullRequestRun(slow, ["a"], { "b/slow.test.mjs": "needs the network" }), [
+    "c/slow.test.mjs",
+    "ab/slow.test.mjs",
+  ]);
+  assert.deepEqual(slowWithoutPullRequestRun(slow, ["a"], { "b/slow.test.mjs": "" }).includes("b/slow.test.mjs"), true, "a main-only entry needs a reason");
+});
+
+test("every SLOW file runs on pull requests to its area, or is main-only with a reason", () => {
+  const uncovered = slowWithoutPullRequestRun(SLOW, PR_AREAS, MAIN_ONLY);
+  assert.deepEqual(uncovered, [], `add an area to PR_AREAS, or a reason to MAIN_ONLY, for: ${uncovered.join(", ")}`);
+  for (const file of Object.keys(MAIN_ONLY)) assert.ok(SLOW.includes(file), `${file} is main-only but not in SLOW`);
+  for (const area of PR_AREAS) assert.ok(testsInArea(REPO, area).length > 0, `${area} holds no test file`);
+});
+
+test("changed files select their areas, by directory and not by name prefix", () => {
+  const areas = ["hooks", "skills/delivery-monitor"];
+  assert.deepEqual(changedAreas(["README.md", "bin/init.mjs"], areas), []);
+  assert.deepEqual(changedAreas(["skills/delivery-monitor/scripts/lib/report.mjs", "README.md"], areas), ["skills/delivery-monitor"]);
+  assert.deepEqual(changedAreas(["hooks/agent-brief.sh", "skills/delivery-monitor/SKILL.md"], areas), areas);
+  assert.deepEqual(changedAreas(["hooks-old/x.sh", "skills/delivery-monitor-v2/SKILL.md"], areas), []);
+});
+
+test("an area run is every test file under that directory, slow ones included", () => {
+  const root = tree(["a/one.test.mjs", "a/b/slow.test.mjs", "ab/other.test.mjs", "c/three.test.mjs"]);
+  assert.deepEqual(testsInArea(root, "a"), ["a/b/slow.test.mjs", "a/one.test.mjs"]);
+  const real = testsInArea(REPO, "hooks");
+  assert.ok(real.includes("hooks/agent-brief.test.mjs") && SLOW.includes("hooks/agent-brief.test.mjs"));
+});
+
+test("--changed-areas reads changed paths on stdin and prints the areas as JSON", () => {
+  const run = (input) => spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--changed-areas"], { input, encoding: "utf8" });
+  const none = run("README.md\nbin/init.mjs\n");
+  assert.equal(none.status, 0, none.stderr);
+  assert.equal(none.stdout.trim(), "[]");
+  const some = run("evals/run.mjs\nhooks/agent-start.sh\n");
+  assert.deepEqual(JSON.parse(some.stdout), ["hooks", "evals"]);
+});
+
+test("--area lists the files it would run, and refuses a directory that is not an area", () => {
+  const list = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--area", "hooks", "--list"], { encoding: "utf8" });
+  assert.equal(list.status, 0, list.stderr);
+  assert.deepEqual(list.stdout.trim().split("\n"), testsInArea(REPO, "hooks"));
+  const bad = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--area", "bin", "--list"], { encoding: "utf8" });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /not an area in PR_AREAS/);
+});
+
+test("the pull-request area workflow takes its areas from this script", () => {
+  const yml = readFileSync(join(REPO, ".github/workflows/tests-areas.yml"), "utf8");
+  assert.match(yml, /node bin\/fast-tests\.mjs --changed-areas/);
+  assert.match(yml, /node bin\/fast-tests\.mjs --area /);
 });

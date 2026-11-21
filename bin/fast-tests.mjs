@@ -10,11 +10,18 @@
  *   node bin/fast-tests.mjs            # run the fast set (npm run test:fast)
  *   node bin/fast-tests.mjs --list     # print the selected files, run nothing
  *
+ * The slow files still run on a pull request that changes their own area (see
+ * PR_AREAS below; .github/workflows/tests-areas.yml calls these two):
+ *
+ *   node bin/fast-tests.mjs --area <dir>      # run every test file under <dir>
+ *   node bin/fast-tests.mjs --changed-areas   # changed paths on stdin, one per
+ *                                             # line -> JSON list of areas
+ *
  * Any other `--option` is passed to `node --test`, for example
  * `npm run test:fast -- --test-reporter=dot`.
  */
 
-import { readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
@@ -46,6 +53,28 @@ export const SLOW = [
   "skills/delivery-monitor/scripts/install-hooks.test.mjs", // 13 s
   "bundles/security-testing/skills/secure-code-review/scripts/verify.test.mjs", // 13 s
 ];
+
+/**
+ * Directories whose whole test set runs on a pull request that changes a file
+ * under them. This is how a SLOW file gets pull-request coverage: every SLOW
+ * entry must sit under one of these, or be in MAIN_ONLY. The workflow reads
+ * this list through `--changed-areas`, so this is the only place to edit.
+ */
+export const PR_AREAS = [
+  "skills/delivery-monitor", // 9 SLOW files
+  "hooks", // agent-brief
+  "bundles/security-testing/skills/secure-code-review", // cite, verify
+  "evals", // graders
+];
+
+/**
+ * SLOW files that no pull request runs: they run on push to main and nightly
+ * only. Each entry needs the reason, and what would let it leave this list.
+ */
+export const MAIN_ONLY = {
+  "bin/lib/shared-sections.test.mjs":
+    "its factory installs fetch external skills over the network; give it the isolation bin/role-sections.test.mjs has, then drop it from SLOW",
+};
 
 // The file names `node --test` runs when it is given no path, for .js, .cjs
 // and .mjs: *.test.*, *-test.*, *_test.*, test-*.*, test.*, and every such
@@ -82,8 +111,52 @@ export function selectFast(root, slow) {
   };
 }
 
+const under = (file, dir) => file.startsWith(`${dir}/`);
+
+/** Every test file under the directory `area`, slow ones included. */
+export function testsInArea(root, area) {
+  return discoverTests(root).filter((f) => under(f, area));
+}
+
+/** The areas that hold at least one of the changed files, in `areas` order. */
+export function changedAreas(changedFiles, areas = PR_AREAS) {
+  return areas.filter((area) => changedFiles.some((f) => under(f, area)));
+}
+
+/** The slow files no pull request would run: under no area, and not on the
+ *  main-only list with a reason. */
+export function slowWithoutPullRequestRun(slow, areas, mainOnly) {
+  return slow.filter((f) => !areas.some((area) => under(f, area)) && !mainOnly[f]);
+}
+
+function runTests(args, files) {
+  const r = spawnSync(process.execPath, ["--test", ...args, ...files], { cwd: PKG_ROOT, stdio: "inherit" });
+  if (r.error) throw r.error;
+  process.exit(r.status === null ? 1 : r.status);
+}
+
 function main() {
   const args = process.argv.slice(2);
+  if (args.includes("--changed-areas")) {
+    const changed = readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+    console.log(JSON.stringify(changedAreas(changed)));
+    return;
+  }
+  const areaAt = args.indexOf("--area");
+  if (areaAt !== -1) {
+    const area = (args[areaAt + 1] || "").replace(/\/+$/, "");
+    args.splice(areaAt, 2);
+    if (!PR_AREAS.includes(area)) {
+      console.error(`  ! bin/fast-tests.mjs: "${area}" is not an area in PR_AREAS (${PR_AREAS.join(", ")})`);
+      process.exit(1);
+    }
+    const files = testsInArea(PKG_ROOT, area);
+    if (args.includes("--list")) {
+      console.log(files.join("\n"));
+      return;
+    }
+    runTests(args, files);
+  }
   const { fast, stale } = selectFast(PKG_ROOT, SLOW);
   if (stale.length) {
     console.error("  ! bin/fast-tests.mjs: SLOW lists files that are not test files in this repository:");
@@ -95,9 +168,7 @@ function main() {
     console.log(fast.join("\n"));
     return;
   }
-  const r = spawnSync(process.execPath, ["--test", ...args, ...fast], { cwd: PKG_ROOT, stdio: "inherit" });
-  if (r.error) throw r.error;
-  process.exit(r.status === null ? 1 : r.status);
+  runTests(args, fast);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
