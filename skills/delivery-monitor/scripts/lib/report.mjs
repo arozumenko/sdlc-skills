@@ -59,13 +59,15 @@ function readAllRunFiles(repo) {
   });
 }
 
-const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'budget-check-unavailable', 'malformed'];
+const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'budget-check-unavailable', 'stop-hook-failed', 'malformed'];
+// Kinds added after the first report format: the Markdown line shows them only when counted, so older output keeps its bytes.
+const DIAG_WHEN_COUNTED = new Set(['budget-check-unavailable', 'stop-hook-failed']);
 /** F19: hook capture-loss diagnostics — `.agents/telemetry/delivery/diagnostics-*.jsonl`, one JSON
  * object per line, `{at, kind, session, agent_id, detail}`. Never landed as a writer in this task; this
  * is a read-only, best-effort reader — a missing directory/file is zero counts, not an error, and any
  * line that isn't parseable JSON naming a known `kind` is folded into the `malformed` bucket rather
  * than thrown. */
-function readDiagnostics(repo) {
+export function readDiagnostics(repo) {
   const dir = deliveryDir(repo);
   const counts = Object.fromEntries(DIAG_KINDS.map((k) => [k, 0]));
   if (!existsSync(dir)) return counts;
@@ -496,7 +498,7 @@ export function renderMarkdown(doc) {
   L.push(`- capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}`);
   const da = e.coverage.dispatch_agents;
   L.push(`- agents: n=${da.agents} resumed=${da.resumed} compacted=${da.compacted} max_follow_ups=${da.max_follow_ups ?? '—'} turns=${da.turns} over_500k=${pct(da.over_500k_share)}`);
-  L.push(`- diagnostics: ${DIAG_KINDS.filter(k => k !== 'budget-check-unavailable' || e.coverage.diagnostics[k]).map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
+  L.push(`- diagnostics: ${DIAG_KINDS.filter(k => !DIAG_WHEN_COUNTED.has(k) || e.coverage.diagnostics[k]).map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
   L.push(`- baselines: ${Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', ')}`);
   for (const c of e.caveats) L.push(`- caveat: ${c}`);
   L.push(`- policy: weeks ${e.policy.weeks}, percentiles ${e.policy.percentile} (floors median≥5 P85≥7 P90≥10), estimate base ${e.policy.estimate_base}, ${e.policy.durations}, tokenomics ${e.sources.tokenomics}, sources hashed as read`);

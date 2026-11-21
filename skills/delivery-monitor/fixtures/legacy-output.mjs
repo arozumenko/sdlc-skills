@@ -7,6 +7,7 @@ export function legacyCommand(command) {
       delete doc.budget;
       for (const plan of doc.plans) delete plan.budget;
       delete doc.envelope.coverage?.diagnostics?.['budget-check-unavailable'];
+      delete doc.envelope.coverage?.diagnostics?.['stop-hook-failed'];
       stdout = `${JSON.stringify(doc, null, 2)}\n`;
     }
   } catch { /* text output */ }

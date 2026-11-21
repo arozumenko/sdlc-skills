@@ -414,3 +414,14 @@ test('doctor reports a settings file that does not parse as a warning finding an
   assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN);
   const clean = stubHooks(tmp()); assert.ok(!doctorFindings(clean, REL).some((x) => /^settings:/.test(x.line)), 'a missing settings file is no finding');
 });
+
+test('doctor: the diagnostics line counts stop-hook-failed lines when there are any, and is unchanged when there are none', () => {
+  const repo = tmp(); const dir = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(dir, { recursive: true });
+  const line = (kind, agent) => `${JSON.stringify({ at: '2026-11-20T10:00:00.000Z', kind, session: 's', agent_id: agent, detail: 'x' })}\n`;
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('unbound-session', 'a'));
+  assert.ok(doctorReport(repo, REL).lines.includes('diagnostics: 1 line(s)'));
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('unbound-session', 'a') + line('stop-hook-failed', 'a') + line('stop-hook-failed', 'b'));
+  const f = doctorFindings(repo, REL).find((x) => x.line.startsWith('diagnostics:'));
+  assert.equal(f.line, 'diagnostics: 3 line(s), stop-hook-failed=2 (the stop hook failed for 2 subagent(s): their spend may be missing from the totals, not zero)');
+  assert.equal(f.severity, 'info');
+});

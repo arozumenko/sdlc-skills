@@ -192,3 +192,8 @@ occurrence selection, then map renamed ids; retracted or conflicted observations
 plans, events, dispatches, profile, prices or a live transcript make the budget check unavailable. The check does not read
 calibration: a task's budget is the USD range saved on its plan item, so a missing or damaged calibration file changes
 nothing here. A task without a USD range remains unbudgeted.
+
+`stop-hook-failed` is in the same vocabulary, with the same shape: one line per session and agent when the SubagentStop
+handler itself throws. `detail` is the first line of the error. The hook still returns normally. That subagent's dispatch
+may not be in the ledger, so its spend can be missing from the totals. `doctor` prints the count on its `diagnostics:` line,
+and the report counts it in `coverage.diagnostics`.

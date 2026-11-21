@@ -8,7 +8,7 @@ import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
 import { validRoster } from './lib/roster.mjs';
-import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
+import { UNCONDITIONAL_CAVEATS, readDiagnostics } from './lib/report.mjs';
 
 export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
@@ -255,7 +255,9 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
     const s = gitState(tel, git); add(s.unmerged.length || s.merging ? 'warning' : 'ok', `telemetry git: unmerged=${s.unmerged.length} merging=${s.merging} dirty=${s.dirty} unpushed=${s.unpushed ?? 'no upstream'}`);
   }
   const diag = existsSync(deliveryDir(repo)) ? readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')) : [];
-  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)`);
+  // A stop hook that failed captured nothing for that subagent; the count is said here because nothing else shows it.
+  let stopFailed = 0; try { stopFailed = readDiagnostics(repo)['stop-hook-failed']; } catch { /* the line count below still prints */ }
+  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)${stopFailed ? `, stop-hook-failed=${stopFailed} (the stop hook failed for ${stopFailed} subagent(s): their spend may be missing from the totals, not zero)` : ''}`);
   for (const r of runs.filter((r) => r.status === 'open')) {
     const rosterOk = validRoster(r.roster);
     add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`);
