@@ -177,6 +177,16 @@ function isWithinDir(dir, path) {
   }
 }
 
+// What is at `path` itself, without following a link: a symlink counts as
+// present even when its target is gone. undefined when nothing is there.
+function entryAt(path) {
+  try {
+    return lstatSync(path, { throwIfNoEntry: false });
+  } catch {
+    return undefined; // ENOTDIR: a parent is a file
+  }
+}
+
 function copyTreeWithin(src, dest, force, allowed, ancestors) {
   let stat;
   try { stat = lstatSync(src); } catch { return; }
@@ -1886,21 +1896,37 @@ function backupDirForRun() {
 function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
   if (forceReplace || writtenThisRun.has(dest)) return true;
   const rel = dest.slice(CWD.length + 1);
-  const keep = () => {
-    console.log(`      ! ${label} kept: ${rel} has uncommitted local changes. Commit or stash them, or pass --force to replace it.`);
+  const keep = (why) => {
+    console.log(`      ! ${label} kept: ${rel} ${why}`);
     keptThisRun.add(dest);
     return false;
   };
+  const localChanges = "has uncommitted local changes. Commit or stash them, or pass --force to replace it.";
+  // Presence is judged without following links: a symlink at the destination,
+  // dangling or not, is something the user put there.
+  const entry = entryAt(dest);
   // Not on disk: a new install, unless git reports that the user deleted it.
-  if (!existsSync(dest)) return gitReportsDeletionOf(dest) ? keep() : true;
+  if (!entry) return gitReportsDeletionOf(dest) ? keep(localChanges) : true;
   const state = gitStateOf(dest);
-  if (state === "clean" || isInstallerOutput()) return true;
-  if (state === "changed") return keep();
+  let ownOutput = false;
+  try { ownOutput = isInstallerOutput(); } catch { /* unreadable (a dangling link): not ours */ }
+  if (state === "clean" || ownOutput) return true;
+  if (state === "changed") return keep(localChanges);
+  // Git cannot restore it. A link is not backed up (a copy would follow it or
+  // fail on a dangling one) and not replaced: it stays until the user decides.
+  if (entry.isSymbolicLink()) return keep("is a symbolic link and git cannot restore it. Remove the link, or pass --force to replace it.");
   const backupRel = join(backupDirForRun(), rel.replace(/^\./, ""));
   mkdirSync(dirname(join(CWD, backupRel)), { recursive: true });
   cpSync(dest, join(CWD, backupRel), { recursive: true });
   console.log(`      ℹ ${label}: previous copy saved to ${backupRel}`);
   return true;
+}
+
+// Write an installed single-file agent at `dest` itself. A symlink there is
+// removed first, so the content never lands on the link's target.
+function writeInstalledFile(dest, text) {
+  if (entryAt(dest)?.isSymbolicLink()) rmSync(dest);
+  writeFileSync(dest, text);
 }
 
 // Printed once, as the last thing a run prints, when an update kept at least
@@ -1913,8 +1939,8 @@ function printKeptSummary() {
   const paths = [...keptThisRun].map((dest) => dest.slice(CWD.length + 1));
   keptThisRun.clear();
   console.log(
-    `  ! ${paths.length} item(s) NOT updated: they have uncommitted local changes (${paths.join(", ")}).\n` +
-      `    Commit or stash the changes and run the update again, or add --force to replace them.\n`
+    `  ! ${paths.length} item(s) NOT updated: they have local changes (${paths.join(", ")}).\n` +
+      `    Each has a "kept:" line above. Commit or stash the changes and run the update again, or add --force to replace them.\n`
   );
 }
 
@@ -1936,11 +1962,11 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   }
 
   const dest = join(CWD, target.dir, kind, name);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
   if (update && !mayReplaceOnUpdate(dest, `${kind.slice(0, -1)}  ${name}`, () => isShippedCopy(kind, name, dest)))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+  if (update && entryAt(dest)) rmSync(dest, { recursive: true, force: true });
   // Deep-dereferenced copy — factory-local agents/skills may be symlinks back
   // into this repo's agents/ or skills/ (the symlink pattern lets a factory
   // "own" a shared item without forking it), and the source tree may contain
@@ -2336,7 +2362,7 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
   const agentFile = join(src, "AGENT.md");
   if (!existsSync(agentFile)) return { status: "missing" };
   const dest = join(CWD, targetDir, "agents", `${name}.agent.md`);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
 
   const soulFile = join(src, "SOUL.md");
   const { agent, soul } = transformAgentForCopilot(
@@ -2349,7 +2375,7 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
   if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === agent))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, agent);
+  writeInstalledFile(dest, agent);
   writtenThisRun.add(dest);
 
   // With memory mode (the default), SOUL.md is relocated to the
@@ -2447,7 +2473,7 @@ function writeCodexAgent(src, name, targetDir, update) {
   const agentFile = join(src, "AGENT.md");
   if (!existsSync(agentFile)) return { status: "missing" };
   const dest = join(CWD, targetDir, "agents", `${name}.toml`);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
   const soulFile = join(src, "SOUL.md");
   const toml = transformAgentForCodex(
     readFileSync(agentFile, "utf8"),
@@ -2457,7 +2483,7 @@ function writeCodexAgent(src, name, targetDir, update) {
   if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, toml);
+  writeInstalledFile(dest, toml);
   writtenThisRun.add(dest);
   return { status: "installed", dest };
 }

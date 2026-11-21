@@ -86,7 +86,7 @@ test("--update keeps an edited seed file and a user's own file, and adds a file 
 
 const shipped = (rel) => readFileSync(join(REPO, rel), "utf8");
 const KEPT = (kind, name) => new RegExp(`! ${kind}\\s+${name} kept: \\S+ has uncommitted local changes\\. Commit or stash them, or pass --force to replace it\\.`);
-const SUMMARY = /! (\d+) item\(s\) NOT updated: they have uncommitted local changes/;
+const SUMMARY = /! (\d+) item\(s\) NOT updated: they have local changes/;
 const BACKUP_ROOT = ".sdlc-skills-backup";
 
 // A git project where `memory` and `knowledge-curation` are installed and
@@ -132,7 +132,7 @@ for (const [what, mutate] of [
     assert.match(r.out, KEPT("skill", "memory"));
     assert.equal(readFileSync(s.p(".claude/skills/knowledge-curation/SKILL.md"), "utf8"), shipped("skills/knowledge-curation/SKILL.md"), "the clean item is updated");
     assert.equal(r.out.match(SUMMARY)?.[1], "1", r.out);
-    assert.match(r.out, /NOT updated: they have uncommitted local changes \(\.claude\/skills\/memory\)\./, "the summary names the kept path");
+    assert.match(r.out, /NOT updated: they have local changes \(\.claude\/skills\/memory\)\./, "the summary names the kept path");
     assert.ok(r.out.indexOf("NOT updated") > r.out.indexOf("Done:"), "the summary is the last thing printed");
   });
 }
@@ -843,4 +843,82 @@ test("GIT_CEILING_DIRECTORIES that hides the outer repository is respected: back
   assert.ok(m, r.out);
   assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "old memory\n");
   assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+});
+
+const isLink = (p) => lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() === true;
+const LINK_KEPT = (name) => new RegExp(`! \\w+\\s+${name} kept: \\S+ is a symbolic link and git cannot restore it\\. Remove the link, or pass --force to replace it\\.`);
+
+for (const [target, file] of [["copilot", ".github/agents/personal-assistant.agent.md"], ["codex", ".codex/agents/personal-assistant.toml"]]) {
+  const args = ["--agents", "personal-assistant", "--skills", "memory", "--target", target];
+
+  test(`${target} agent replaced by a dangling link, tracked: kept, and nothing is written through the link`, () => {
+    const s = sandbox({ git: true });
+    assert.equal(s.init(...args).status, 0);
+    s.commitAll("install");
+    const outside = join(s.base, "outside-target");
+    rmSync(s.p(file));
+    symlinkSync(outside, s.p(file));
+    const r = s.init(...args, "--update");
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, KEPT("agent", "personal-assistant"));
+    assert.ok(isLink(s.p(file)), "the link is still the user's link");
+    assert.ok(!existsSync(outside), "the installer did not create the link's target");
+  });
+
+  test(`${target} agent replaced by a dangling link, no git: kept with a reason; --force replaces the link itself`, () => {
+    const s = sandbox();
+    assert.equal(s.init(...args).status, 0);
+    const outside = join(s.base, "outside-target");
+    rmSync(s.p(file));
+    symlinkSync(outside, s.p(file));
+    const r = s.init(...args, "--update");
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, LINK_KEPT("personal-assistant"));
+    assert.match(r.out, SUMMARY);
+    assert.ok(isLink(s.p(file)));
+    assert.ok(!existsSync(outside), "nothing is written through the link");
+    assert.ok(!existsSync(s.p(BACKUP_ROOT)), "no backup that follows the link");
+    const forced = s.init(...args, "--update", "--force");
+    assert.equal(forced.status, 0, forced.out);
+    assert.ok(!isLink(s.p(file)) && existsSync(s.p(file)), "--force puts a regular file where the link was");
+    assert.ok(!existsSync(outside), "still nothing behind the old link");
+  });
+}
+
+test("agent file that is a live link to a file outside the project, no git: kept, the target is untouched", () => {
+  const s = sandbox();
+  const args = ["--agents", "personal-assistant", "--skills", "memory", "--target", "copilot"];
+  const file = s.p(".github/agents/personal-assistant.agent.md");
+  assert.equal(s.init(...args).status, 0);
+  const outside = join(s.base, "shared-agent.md");
+  writeFileSync(outside, "shared, not the installer's\n");
+  rmSync(file);
+  symlinkSync(outside, file);
+  const r = s.init(...args, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, LINK_KEPT("personal-assistant"));
+  assert.equal(readFileSync(outside, "utf8"), "shared, not the installer's\n");
+  const forced = s.init(...args, "--update", "--force");
+  assert.equal(forced.status, 0, forced.out);
+  assert.ok(!isLink(file), "--force replaces the link");
+  assert.equal(readFileSync(outside, "utf8"), "shared, not the installer's\n", "and still does not write through it");
+});
+
+test("skill folder replaced by a dangling link, no git: kept with a reason; --force replaces the link itself", () => {
+  const s = sandbox();
+  assert.equal(s.init("--skills", "memory").status, 0);
+  const dest = s.p(".claude/skills/memory");
+  const outside = join(s.base, "outside-skill");
+  rmSync(dest, { recursive: true });
+  symlinkSync(outside, dest);
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, LINK_KEPT("memory"));
+  assert.ok(isLink(dest));
+  assert.ok(!existsSync(outside));
+  const forced = s.init("--skills", "memory", "--update", "--force");
+  assert.equal(forced.status, 0, forced.out);
+  assert.ok(!isLink(dest));
+  assert.equal(readFileSync(join(dest, "SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+  assert.ok(!existsSync(outside));
 });
