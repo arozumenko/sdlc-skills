@@ -2,9 +2,10 @@
 //
 // Every case runs the real installer (bin/init.mjs) in a throwaway project.
 // HOME, the installer's cache dir and the global git config are pinned to the
-// sandbox, and GIT_* variables a calling git hook may have set are dropped, so
-// nothing here reads or writes the developer's home, cache, git config or
-// repository, and nothing reaches the network (same fixture as
+// sandbox, and every inherited GIT_* variable is dropped first (a calling git
+// hook sets GIT_DIR and friends; GIT_CONFIG_COUNT / GIT_CONFIG_KEY_* inject
+// configuration), so nothing here reads or writes the developer's home, cache,
+// git config or repository, and nothing reaches the network (same fixture as
 // security-testing-e2e.test.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,10 +13,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 import { copyTreeDereferenced, mergeClaudeSettingsHooks, mergeVersionedHooks } from "./init.mjs";
 
-const REPO = new URL("..", import.meta.url).pathname;
+const REPO = fileURLToPath(new URL("..", import.meta.url));
 const INIT = join(REPO, "bin/init.mjs");
 const NO_NETWORK = join(REPO, "bin/fixtures/security-testing-e2e/no-network.gitconfig");
 
@@ -25,20 +27,22 @@ function sandbox({ git = false } = {}) {
   const project = join(base, "project");
   mkdirSync(home);
   mkdirSync(project);
-  const env = { ...process.env, HOME: home, SDLC_SKILLS_CACHE_DIR: join(home, ".cache"), GIT_CONFIG_GLOBAL: NO_NETWORK, GIT_CONFIG_NOSYSTEM: "1" };
-  for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR"]) delete env[k];
-  const run = (cmd, args) => spawnSync(cmd, args, { cwd: project, encoding: "utf8", env });
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_")) env[k] = v;
+  Object.assign(env, { HOME: home, SDLC_SKILLS_CACHE_DIR: join(home, ".cache"), GIT_CONFIG_GLOBAL: NO_NETWORK, GIT_CONFIG_NOSYSTEM: "1" });
+  const run = (cmd, args, extraEnv = {}) => spawnSync(cmd, args, { cwd: project, encoding: "utf8", env: { ...env, ...extraEnv } });
   const git_ = (...args) => {
     const r = run("git", args);
     assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
     return r.stdout;
   };
-  const init = (...args) => {
+  const initEnv = (extraEnv, ...args) => {
     const withTarget = args.includes("--target") ? args : [...args, "--target", "claude"];
-    const r = run(process.execPath, [INIT, "init", ...withTarget, "--yes"]);
+    const r = run(process.execPath, [INIT, "init", ...withTarget, "--yes"], extraEnv);
     r.out = r.stdout + r.stderr;
     return r;
   };
+  const init = (...args) => initEnv({}, ...args);
   if (git) {
     git_("init", "-q", ...(git === "parent" ? [base] : [])); // "parent": the project is a subfolder of the repository
     git_("config", "user.email", "t@example.invalid");
@@ -49,7 +53,7 @@ function sandbox({ git = false } = {}) {
     git_("add", "-A");
     git_("commit", "-qm", msg);
   };
-  return { base, home, project, run, init, git: git_, commitAll, p: (...parts) => join(project, ...parts) };
+  return { base, home, project, run, init, initEnv, git: git_, commitAll, p: (...parts) => join(project, ...parts) };
 }
 
 // ── Item 1: seeds are create-only ───────────────────────────────────────────
