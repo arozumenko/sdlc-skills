@@ -350,3 +350,67 @@ test('--remove still works when the target no longer has the hook files', () => 
   const r = runScript(['--remove', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
   assert.equal(r.code, 0, r.err); assert.ok(!JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8')).hooks);
 });
+
+// A settings file that does not parse is never replaced: every other key in it would be lost.
+const BROKEN = '{\n  "permissions": { "allow": ["Bash(npm test)"] },\n  "hooks": {},\n}\n';
+const brokenSettings = (name = 'settings.json') => { const repo = stubHooks(tmp()); g(repo, 'add', '-A'); g(repo, 'commit', '-q', '-m', 'skill'); mkdirSync(join(repo, '.claude'), { recursive: true }); writeFileSync(join(repo, '.claude', name), BROKEN); return repo; };
+
+test('install on a settings file that does not parse exits 2 naming the file and writes nothing', () => {
+  const repo = brokenSettings(); const before = g(repo, 'status', '--porcelain', '--untracked-files=all');
+  const r = runScript(['--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.err, /^USAGE\(.*\.claude\/settings\.json is not valid JSON.*\)\n$/, r.err);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN, 'settings file replaced');
+  assert.ok(!existsSync(join(repo, '.gitignore')), '.gitignore written'); assert.ok(!existsSync(join(repo, '.agents')), 'telemetry bootstrapped'); assert.ok(!existsSync(join(repo, '.gitmodules')), '.gitmodules written');
+  assert.equal(g(repo, 'status', '--porcelain', '--untracked-files=all'), before);
+  assert.throws(() => g(repo, 'rev-parse', '--verify', 'refs/heads/telemetry'), 'telemetry branch created');
+});
+
+test('--remove on a settings file that does not parse exits 2 and writes nothing', () => {
+  const repo = brokenSettings(); writeFileSync(join(repo, '.gitignore'), 'node_modules/\n# >>> delivery-monitor (managed)\n.agents/telemetry/delivery/.lock/\n# <<< delivery-monitor\n');
+  const ignore = readFileSync(join(repo, '.gitignore'), 'utf8');
+  const r = runScript(['--remove', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /^USAGE\(.*\.claude\/settings\.json is not valid JSON.*\)\n$/, r.err);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN); assert.equal(readFileSync(join(repo, '.gitignore'), 'utf8'), ignore, 'ignore block removed');
+});
+
+test('--local checks settings.local.json: a broken one is refused, a broken settings.json beside it is left alone', () => {
+  const local = brokenSettings('settings.local.json');
+  const r = runScript(['--no-submodule', '--local', '--repo', local], { cwd: local, env: { ...process.env, CLAUDE_PROJECT_DIR: local } });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /^USAGE\(.*settings\.local\.json is not valid JSON/, r.err);
+  assert.equal(readFileSync(join(local, '.claude', 'settings.local.json'), 'utf8'), BROKEN); assert.ok(!existsSync(join(local, '.gitignore')));
+  const shared = brokenSettings();
+  const ok = runScript(['--no-submodule', '--local', '--repo', shared], { cwd: shared, env: { ...process.env, CLAUDE_PROJECT_DIR: shared } });
+  assert.equal(ok.code, 0, ok.err); assert.equal(readFileSync(join(shared, '.claude', 'settings.json'), 'utf8'), BROKEN, 'the file not being written is untouched');
+  assert.ok(JSON.parse(readFileSync(join(shared, '.claude', 'settings.local.json'), 'utf8')).hooks.SubagentStop.some((e) => e[MARKER]));
+});
+
+test('a settings file whose top level is not an object is refused; a missing or empty one still installs', () => {
+  for (const body of ['[]', 'null', '"x"']) {
+    const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true }); writeFileSync(join(repo, '.claude', 'settings.json'), body);
+    const r = runScript(['--no-submodule', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+    assert.equal(r.code, 2, `${body}: ${r.out}`); assert.match(r.err, /^USAGE\(.*settings\.json is not a JSON object/, r.err);
+    assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), body);
+  }
+  for (const body of [null, '', ' \n']) {
+    const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true }); if (body != null) writeFileSync(join(repo, '.claude', 'settings.json'), body);
+    const r = runScript(['--no-submodule', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+    assert.equal(r.code, 0, r.err); assert.equal(hookCommands(repo).length, 2);
+  }
+});
+
+test('installClaude itself refuses to replace a settings file that does not parse', () => {
+  const repo = brokenSettings();
+  for (const opts of [{}, { remove: true }]) assert.throws(() => installClaude(repo, REL, opts), /settings\.json is not valid JSON/);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN);
+});
+
+test('doctor reports a settings file that does not parse as a warning finding and still exits 0', () => {
+  const repo = brokenSettings();
+  const f = doctorFindings(repo, REL).find((x) => /^settings:/.test(x.line));
+  assert.ok(f, 'no settings finding'); assert.equal(f.severity, 'warning'); assert.match(f.line, /^settings: \.claude\/settings\.json is not valid JSON/);
+  const r = runScript(['--doctor', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /^settings: \.claude\/settings\.json is not valid JSON/m); assert.match(r.out, /doctor: attention/);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN);
+  const clean = stubHooks(tmp()); assert.ok(!doctorFindings(clean, REL).some((x) => /^settings:/.test(x.line)), 'a missing settings file is no finding');
+});

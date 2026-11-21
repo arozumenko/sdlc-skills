@@ -14,6 +14,16 @@ export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
 const posix = (p) => p.split('\\').join('/');
 const readJson = (p, fb) => { if (!existsSync(p)) return fb; try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return fb; } };
+/** Why a settings file cannot be read as settings, or null. Writing it back would drop every key it holds, so install and
+ * --remove stop on this instead. A missing or empty file holds nothing to lose and is not a problem. */
+export function settingsProblem(file) {
+  if (!existsSync(file)) return null;
+  let text; try { text = readFileSync(file, 'utf8'); } catch (e) { return `cannot be read (${e.code ?? 'error'})`; }
+  if (!text.trim()) return null;
+  let parsed; try { parsed = JSON.parse(text); } catch (e) { return `is not valid JSON (${String(e.message).split('\n')[0]})`; }
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? null : 'is not a JSON object';
+}
+const settingsFile = (repo, local) => join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
 const HOOK_FILES = ['dispatch-hook.mjs', 'budget-hook.mjs'];
 const DEFAULT_REL = '.claude/skills/delivery-monitor';
 const inside = (rel) => rel !== '' && rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel);
@@ -42,7 +52,8 @@ function explicitRepoProblem(dir) {
 const writeJson = (p, o) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, `${JSON.stringify(o, null, 2)}\n`); };
 
 export function installClaude(repo, rel, { local = false, remove = false } = {}) {
-  const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
+  const file = settingsFile(repo, local);
+  const problem = settingsProblem(file); if (problem) throw new Error(`${file} ${problem}`);
   const existed = existsSync(file);
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   for (const [event, script, flag] of [['SubagentStop', 'dispatch-hook.mjs', ' --stop'], ['PreToolUse', 'budget-hook.mjs', '']]) {
@@ -194,7 +205,13 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   const checkout = asked === physical(repo) ? 'main' : 'linked';
   const findings = [];
   const add = (severity, line, fix = null) => findings.push({ severity, message: line, fix, checkout, line });
-  const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
+  // A settings file that does not parse reads as "no hooks" below; say why, so "not wired" is not taken for "never installed".
+  for (const name of ['settings.json', 'settings.local.json']) {
+    const problem = settingsProblem(join(repo, '.claude', name));
+    if (problem) add('warning', `settings: .claude/${name} ${problem} — its hooks are not read and install-hooks.mjs will not replace it; fix the file by hand`);
+  }
+  const asObject = (v) => (v && typeof v === 'object' ? v : {});
+  const settings = asObject(readJson(join(repo, '.claude', 'settings.json'), {})), local = asObject(readJson(join(repo, '.claude', 'settings.local.json'), {}));
   const entries = (event, script, flag = '') => [...(settings.hooks?.[event] ?? []), ...(local.hooks?.[event] ?? [])].flatMap(e =>
     e?.matcher === '*' ? (e.hooks ?? []).filter(h => h.type === 'command' && h.command?.includes(`${posix(join(rel, 'hooks', script))}"${flag}`)) : []);
   const fix = `node ${rel}/scripts/install-hooks.mjs --no-submodule`;
@@ -278,6 +295,9 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   if (has('--doctor')) { const d = doctorReport(repo, rel ?? posix(relative(repo, skillRootOf())), { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
   if (!remove && rel == null) { process.stderr.write(`USAGE(no copy of the delivery-monitor hooks inside ${repo}; install the skill there first, then run its own install-hooks.mjs)\n`); return 2; }
+  // Checked before the first write: a settings file that does not parse is never replaced, and nothing else is written either.
+  const target = settingsFile(repo, has('--local')), unreadable = settingsProblem(target);
+  if (unreadable) { process.stderr.write(`USAGE(${target} ${unreadable}; fix or delete the file, then run this again — nothing was written)\n`); return 2; }
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);
