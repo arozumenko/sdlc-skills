@@ -229,6 +229,11 @@ that don't follow symlinks all work). Pass **`--symlink`** to symlink from
 the cache instead (a live link, dedups across projects) when your runtime
 handles symlinks and you'd rather not duplicate the content.
 
+**Where it installs.** The installer writes into the current directory, so
+run it from the root of the project you want to set up. It refuses to run in
+your home directory or inside a checkout of this package, and exits without
+writing anything.
+
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
 ### Check an install — `init doctor`

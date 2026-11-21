@@ -80,7 +80,7 @@ import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-r
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 import { CORE_HOOK_FILES, CORE_HOOK_EXE, expectedCoreHookSpec } from "./lib/core-hook-spec.mjs";
 import { execSync, execFileSync } from "child_process";
-import { homedir } from "os";
+import { homedir, userInfo } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -2811,6 +2811,23 @@ async function runInteractive(qa) {
   return { removeSet, mcpIds };
 }
 
+// The installer writes into the current directory. Two directories are never
+// a project root: the account's home directory (a pasted command in a fresh
+// terminal) and this package's own checkout. Returns what the directory is, or
+// null when it is safe. Home comes from the user database, not $HOME: sandboxes
+// and this repo's own tests point $HOME at a throwaway project directory, and
+// those installs keep working. $HOME is the fallback for an account with no entry.
+function unsafeProjectRoot(cwd = CWD, pkgRoot = PKG_ROOT) {
+  const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  let home = null;
+  try { home = userInfo().homedir; } catch { /* no user-database entry */ }
+  if (!home) home = homedir();
+  const here = real(cwd);
+  if (home && here === real(home)) return `your home directory (${here})`;
+  if (here === real(pkgRoot)) return `the sdlc-skills package itself (${here})`;
+  return null;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
 
@@ -2836,6 +2853,16 @@ async function main() {
     console.error(`    Known flags: --agents <list> | --skills <list> | --factory <id> | --target <list> | --all | --update | --symlink | --yes`);
     console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--factory feature-development\`, not \`"--factory feature-development"\`).`);
     console.error(`    To install the entire catalog on purpose, use --all.\n`);
+    process.exit(1);
+  }
+
+  // Guard: an install into the home directory or into this package is a
+  // mistake, never a choice. Refuse before anything is read or written.
+  const unsafeRoot = unsafeProjectRoot();
+  if (unsafeRoot) {
+    console.error(`\n  ! Refusing to install into ${unsafeRoot}.`);
+    console.error(`    The installer writes into the current directory, which must be the project you want to set up.`);
+    console.error(`    cd into that project and run the same command again.\n`);
     process.exit(1);
   }
 
