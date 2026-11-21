@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-import { copyTreeDereferenced, mergeClaudeSettingsHooks, mergeVersionedHooks } from "./init.mjs";
+import { copyTreeDereferenced, mergeClaudeSettingsHooks, mergeVersionedHooks, seedMissingFiles } from "./init.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const INIT = join(REPO, "bin/init.mjs");
@@ -429,4 +429,71 @@ test("external skill: a link inside the fetched checkout is materialized, one th
   assert.ok(!lstatSync(join(installed, "references")).isSymbolicLink());
   assert.ok(!existsSync(join(installed, "leak.txt")), "a link out of the checkout is not copied");
   assert.match(r.out, /skipped symlink .*leak\.txt/);
+});
+
+// ── Rework: seed type conflicts and links in a scaffold ─────────────────────
+
+test("seed destination is a file where the scaffold has a folder: kept, reported, install continues", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents/security-testing"), { recursive: true });
+  writeFileSync(s.p(".agents/security-testing/knowledge"), "my file\n");
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".agents/security-testing/knowledge"), "utf8"), "my file\n");
+  assert.equal((r.out.match(/! seed \.agents\/security-testing\/knowledge: the project has a file where the factory has a folder; kept/g) || []).length, 1, r.out);
+  assert.match(r.out, /Done: /);
+});
+
+test("seed destination has a folder where the scaffold has a file: kept, reported, the rest is added", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents/security-testing/knowledge/finding-schema.md"), { recursive: true });
+  writeFileSync(s.p(".agents/security-testing/knowledge/finding-schema.md/mine.md"), "mine\n");
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".agents/security-testing/knowledge/finding-schema.md/mine.md"), "utf8"), "mine\n");
+  assert.ok(existsSync(s.p(".agents/security-testing/knowledge/report-template.md")), "the other scaffold files still arrive");
+  assert.equal((r.out.match(/! seed \.agents\/security-testing\/knowledge\/finding-schema\.md: the project has a folder where the factory has a file; kept/g) || []).length, 1, r.out);
+});
+
+test("a file where the seed's parent folder goes: kept, reported, install continues", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents"));
+  writeFileSync(s.p(".agents/security-testing"), "my file\n");
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".agents/security-testing"), "utf8"), "my file\n");
+  assert.match(r.out, /! seed \.agents\/security-testing\/knowledge: the project has a file where one of its parent folders goes; kept, nothing seeded/);
+  assert.match(r.out, /Done: /);
+});
+
+test("seedMissingFiles checks links before following them and stops on a cycle", () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "safe-update-seed-")));
+  const scaffold = join(base, "pkg", "scaffold");
+  const dest = join(base, "project", "docs");
+  mkdirSync(join(scaffold, "sub"), { recursive: true });
+  mkdirSync(join(base, "pkg", "shared"));
+  mkdirSync(join(base, "outside"));
+  mkdirSync(dest, { recursive: true });
+  writeFileSync(join(scaffold, "sub", "inner.md"), "inner\n");
+  writeFileSync(join(base, "pkg", "shared", "guide.md"), "guide\n");
+  writeFileSync(join(base, "outside", "secret.txt"), "secret\n");
+  symlinkSync(join(base, "outside"), join(scaffold, "leak-dir"));
+  symlinkSync(join(base, "outside", "secret.txt"), join(scaffold, "leak.txt"));
+  symlinkSync("..", join(scaffold, "sub", "loop"));
+  symlinkSync(join("..", "shared"), join(scaffold, "references"));
+
+  const warnings = [];
+  const original = console.error;
+  console.error = (...a) => warnings.push(a.join(" "));
+  let added;
+  try {
+    added = seedMissingFiles(scaffold, dest, join(base, "pkg"));
+  } finally {
+    console.error = original;
+  }
+  assert.equal(added, 2, "inner.md and the linked guide.md");
+  assert.deepEqual(readdirSync(dest).sort(), ["references", "sub"]);
+  assert.deepEqual(readdirSync(join(dest, "sub")), ["inner.md"], "the cycle is not followed");
+  assert.equal(readFileSync(join(dest, "references", "guide.md"), "utf8"), "guide\n", "a link inside the root is still followed");
+  assert.equal(warnings.length, 3, warnings.join("\n"));
 });

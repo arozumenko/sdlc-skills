@@ -562,12 +562,19 @@ function installSeed(factory, update) {
     }
     const destPath = join(CWD, dest);
     if (existsSync(destPath)) {
-      const added = seedMissingFiles(srcPath, destPath);
+      const added = seedMissingFiles(srcPath, destPath, PKG_ROOT);
       console.log(`      — seed ${dest} (exists; existing files kept)${added ? ` — added ${added} new file(s)` : ""}`);
       skipped++;
       continue;
     }
-    mkdirSync(dirname(destPath), { recursive: true });
+    try {
+      mkdirSync(dirname(destPath), { recursive: true });
+    } catch (err) {
+      if (err.code !== "EEXIST" && err.code !== "ENOTDIR") throw err;
+      console.log(`      ! seed ${dest}: the project has a file where one of its parent folders goes; kept, nothing seeded`);
+      skipped++;
+      continue;
+    }
     copyTreeDereferenced(srcPath, destPath, { force: true, root: PKG_ROOT });
     console.log(`      ✓ seed ${dest}`);
     installed++;
@@ -579,18 +586,62 @@ function installSeed(factory, update) {
 // overwrites. A factory can move text out of its instructions into a new seeded
 // doc, and the refreshed instructions point at it, so the doc must arrive even
 // on runs that otherwise leave an existing seed directory alone.
-export function seedMissingFiles(srcPath, destPath) {
-  let added = 0;
-  let st;
-  try { st = statSync(srcPath); } catch { return 0; }
-  if (!st.isDirectory()) {
-    if (existsSync(destPath)) return 0;
-    mkdirSync(dirname(destPath), { recursive: true });
-    copyTreeDereferenced(srcPath, destPath, { force: false });
-    return 1;
+//
+// Source links are checked before they are followed, under the same rules as
+// copyTreeDereferenced: a link that leaves `root` (default: the seed source
+// itself) or points back at a folder already being walked is skipped with a
+// warning. Where the project has a file and the factory a folder, or the
+// reverse, the project's entry is kept and one line says so.
+export function seedMissingFiles(srcPath, destPath, root) {
+  let stat;
+  try { stat = lstatSync(srcPath); } catch { return 0; }
+  const isLink = stat.isSymbolicLink();
+  let allowed, start;
+  try {
+    allowed = realpathSync(root ?? (isLink ? dirname(srcPath) : srcPath));
+    start = isLink ? srcPath : realpathSync(srcPath);
+  } catch { return 0; }
+  return seedMissingWithin(start, destPath, allowed, new Set());
+}
+
+function seedMissingWithin(src, dest, allowed, ancestors) {
+  let stat;
+  try { stat = lstatSync(src); } catch { return 0; }
+  if (stat.isSymbolicLink()) {
+    let real;
+    try { real = realpathSync(src); } catch { return 0; } // dangling link: nothing to seed
+    if (!isWithinDir(allowed, real)) {
+      console.error(`  ! skipped symlink ${src} → ${real} (outside ${allowed}; not copied)`);
+      return 0;
+    }
+    return seedMissingWithin(real, dest, allowed, ancestors);
   }
-  for (const name of readdirSync(srcPath)) added += seedMissingFiles(join(srcPath, name), join(destPath, name));
-  return added;
+  const have = statSync(dest, { throwIfNoEntry: false });
+  if (!have && lstatSync(dest, { throwIfNoEntry: false })) return 0; // a dangling link of the user's: kept
+  const shown = dest.startsWith(CWD) ? dest.slice(CWD.length + 1) : dest;
+  if (stat.isDirectory()) {
+    if (have && !have.isDirectory()) {
+      console.log(`      ! seed ${shown}: the project has a file where the factory has a folder; kept`);
+      return 0;
+    }
+    if (ancestors.has(src)) {
+      console.error(`  ! skipped symlink back to ${src} (a directory cycle; not copied again)`);
+      return 0;
+    }
+    ancestors.add(src);
+    let added = 0;
+    for (const name of readdirSync(src)) added += seedMissingWithin(join(src, name), join(dest, name), allowed, ancestors);
+    ancestors.delete(src);
+    return added;
+  }
+  if (!stat.isFile()) return 0;
+  if (have) {
+    if (have.isDirectory()) console.log(`      ! seed ${shown}: the project has a folder where the factory has a file; kept`);
+    return 0;
+  }
+  mkdirSync(dirname(dest), { recursive: true });
+  copyFileSync(src, dest);
+  return 1;
 }
 
 // Splice a factory's instructions.md into the project's root context files
