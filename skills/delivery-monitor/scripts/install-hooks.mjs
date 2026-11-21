@@ -17,10 +17,11 @@ export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToP
 const posix = (p) => p.split('\\').join('/');
 const readJson = (p, fb) => { if (!existsSync(p)) return fb; try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return fb; } };
 /** Why a settings file cannot be read as settings, or null. Writing it back would drop every key it holds, so install and
- * --remove stop on this instead. A missing or empty file holds nothing to lose and is not a problem. */
+ * --remove stop on this instead. A missing or empty file holds nothing to lose and is not a problem. The file is read
+ * directly and only "no such file" means missing: `existsSync` is false for a permission error too (a folder on the way
+ * with no search permission), and that file is there. */
 export function settingsProblem(file) {
-  if (!existsSync(file)) return null;
-  let text; try { text = readFileSync(file, 'utf8'); } catch (e) { return `cannot be read (${e.code ?? 'error'})`; }
+  let text; try { text = readFileSync(file, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; return `cannot be read (${e.code ?? 'error'})`; }
   if (!text.trim()) return null;
   let parsed; try { parsed = JSON.parse(text); } catch (e) { return `is not valid JSON (${String(e.message).split('\n')[0]})`; }
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? null : 'is not a JSON object';
