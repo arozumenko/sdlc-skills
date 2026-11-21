@@ -188,6 +188,7 @@ The entire budget evidence object is part of semantic identity. Status/report co
 occurrence selection, then map renamed ids; retracted or conflicted observations do not count.
 
 `budget-check-unavailable` joins the fixed diagnostics vocabulary. Its shape is the existing
-`{at, kind, session, agent_id, detail}`; one line per session, with no permission decision. Invalid/unreadable calibration,
-plans, events, dispatches, prices or a live transcript make the budget check unavailable. Missing calibration is normal
-for a new project; a task without a USD range remains unbudgeted.
+`{at, kind, session, agent_id, detail}`; one line per session, with no permission decision. Invalid/unreadable
+plans, events, dispatches, profile, prices or a live transcript make the budget check unavailable. The check does not read
+calibration: a task's budget is the USD range saved on its plan item, so a missing or damaged calibration file changes
+nothing here. A task without a USD range remains unbudgeted.

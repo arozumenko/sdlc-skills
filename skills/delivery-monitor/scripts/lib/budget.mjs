@@ -1,7 +1,6 @@
 // STDLIB ONLY. Per-task budget policy and ledger writes. taskCosts is the sole task-cost projection.
 import { readFileSync } from 'node:fs';
 import { loadRunsChecked } from './attribution.mjs';
-import { readCalibration } from './calibrate.mjs';
 import { appendObservation, makeObservation, resolveObservations, validateEstimate } from './events.mjs';
 import { loadPricesChecked } from './cost.mjs';
 import { nowIso, profilePath } from './paths.mjs';
@@ -27,9 +26,10 @@ export function budgetedItem(item) {
   return item?.level === 'task' && !item.cancelled && item.estimate?.unit === 'usd' && validateEstimate(item.estimate).length === 0;
 }
 /** Fail closed on the check's evidence, fail open at the hook boundary. Unlike report readers, a hook must not silently
- * discard a broken line and then refuse work on an undercounted total. Missing calibration is normal for a new project. */
+ * discard a broken line and then refuse work on an undercounted total. The evidence is the run files, the events ledger, the
+ * profile and the price table. Calibration is not read: a task's budget is the USD range saved on its plan item at registration,
+ * so a missing or damaged calibration file does not change the check. */
 export function budgetInputs(repo) {
-  readCalibration(repo);
   const { runs } = loadRunsChecked(repo), resolved = resolveObservations(repo);
   if (resolved.counts.malformed || resolved.counts.unknownVersion || resolved.conflicts.length) throw new Error('events ledger is unreadable or conflicted');
   const profile = budgetProfile(repo), loaded = loadPricesChecked(repo);

@@ -102,7 +102,7 @@ test('streaming repeated IDs take max, partial last lines wait; existing key is 
  usage(c.path,1,'b','');assert.equal(denied(hook(f,c.payload)),false);assert.equal(budgets(f).length,0);
  appendFileSync(c.path,'\n');hook(f,c.payload);assert.equal(budgets(f)[0].meta.budget.cost_at_crossing,3.5);
 });
-for(const broken of ['calibration.json','plan','events']) test(`fail open ${broken}: one diagnostic per session on all hook paths`,()=>{
+for(const broken of ['prices.json','profile.json','plan','events']) test(`fail open ${broken}: one diagnostic per session on all hook paths`,()=>{
  const f=fixture();stop(f,child(f,'a',2.5));const c=child(f,'b',10);
  const path=broken==='plan'?join(f.d,'plans',`${encodeURIComponent(R)}.json`):broken==='events'?join(f.d,readdirSync(f.d).find(n=>n.startsWith('events-'))):join(f.d,broken);
  writeFileSync(path,'{broken');
@@ -110,9 +110,9 @@ for(const broken of ['calibration.json','plan','events']) test(`fail open ${brok
  const ds=readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')).flatMap(n=>readFileSync(join(f.d,n),'utf8').trim().split('\n').map(JSON.parse));
  assert.equal(ds.filter(d=>d.kind==='budget-check-unavailable').length,1);
 });
-test('broken calibration after caching overrides any cached deny',()=>{
+test('a broken profile after caching overrides any cached deny',()=>{
  const f=fixture();const c=child(f,'a',10);assert.equal(denied(hook(f,c.payload)),true);
- writeFileSync(join(f.d,'calibration.json'),'{broken');assert.deepEqual(hook(f,c.payload),{});
+ writeFileSync(join(f.d,'profile.json'),'{broken');assert.deepEqual(hook(f,c.payload),{});
 });
 test('profile overrides thresholds and report/status show coverage and resolved counts',()=>{
  const f=fixture();writeFileSync(join(f.d,'profile.json'),JSON.stringify({budgetSoftMultiplier:2,budgetHardMultiplier:4}));
@@ -130,7 +130,7 @@ test('retracting a budget event removes its count and does not re-fire the trans
 test('unattributed dispatches remain in their open plan coverage, and diagnostics vocabulary accepts unavailable',()=>{
  const f=fixture();stop(f,child(f,'a',4,'unknown'));
  const doc=assemble(f.repo,{now:NOW});assert.equal(doc.plans[0].budget.coverage.unbudgeted.count,1);assert.equal(doc.plans[0].budget.coverage.all.usd,4);
- writeFileSync(join(f.d,'calibration.json'),'{broken');hook(f,pre());
+ writeFileSync(join(f.d,'profile.json'),'{broken');hook(f,pre());
  const after=assemble(f.repo,{now:NOW});assert.equal(after.envelope.coverage.diagnostics['budget-check-unavailable'],1);assert.equal(after.envelope.coverage.diagnostics.malformed,0);
 });
 test('in-run cache keeps prior task cost fixed when other dispatches arrive',()=>{
@@ -143,7 +143,7 @@ test('in-run cache keeps prior task cost fixed when other dispatches arrive',()=
  assert.equal(denied(hook(f,c.payload)),false);
 });
 test('diagnostic remains once per session beyond the existing 1 MiB diagnostic tail',()=>{
- const f=fixture();writeFileSync(join(f.d,'calibration.json'),'{broken');hook(f,pre());
+ const f=fixture();writeFileSync(join(f.d,'profile.json'),'{broken');hook(f,pre());
  const path=join(f.d,readdirSync(f.d).find(n=>n.startsWith('diagnostics-')));appendFileSync(path,' '.repeat(1024*1024)+'\n');hook(f,pre());
  const rows=readFileSync(path,'utf8').split('\n').filter(l=>l.trim()).map(JSON.parse);assert.equal(rows.filter(d=>d.kind==='budget-check-unavailable').length,1);
 });
@@ -156,4 +156,12 @@ test('a nested Agent call checks the requested task as well as the running calle
  const f=fixture();stop(f,child(f,'u',10,'U'));const c=child(f,'t',0.5,'T');
  const result=hook(f,{...c.payload,tool_name:'Agent',tool_use_id:'nested',tool_input:{description:'Build U',subagent_type:'js-dev'}});
  assert.equal(denied(result),true);assert.match(result.hookSpecificOutput.permissionDecisionReason,/U.*10.*9/);
+});
+// The check never reads calibration: a task's budget is the USD range saved on the plan item at registration.
+test('a corrupt calibration file does not disable the check on any hook path',()=>{
+ const f=fixture();writeFileSync(join(f.d,'calibration.json'),'{broken');
+ stop(f,child(f,'a',9.01));assert.equal(budgets(f).filter(o=>o.meta.budget.source==='subagent-stop').length,2);
+ assert.equal(denied(hook(f,pre())),true);
+ const c=child(f,'b',1);assert.equal(denied(hook(f,c.payload)),true);
+ assert.deepEqual(readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')),[]);
 });
