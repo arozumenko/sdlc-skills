@@ -173,11 +173,12 @@ npx github:arozumenko/sdlc-skills init --all --update
 ```
 
 **What `--update` replaces.** An update replaces each installed agent and
-skill with the new version. It does not replace an item that has uncommitted
-changes in git: it keeps the item, names it, and updates the rest. Commit or
-stash your changes and run the update again, or add `--force` to replace the
-item anyway. In a project without git, the installer first copies the old
-item to `.sdlc-skills-backup/<date-time>/`. Files a factory seeded
+skill with the new version, external skills included. It does not replace an
+item that has uncommitted changes in git: it keeps the item, names it, and
+updates the rest. An item you deleted and did not commit stays deleted.
+Commit or stash your changes and run the update again, or add `--force` to
+replace the item anyway. In a project without git, the installer first copies
+the old item to `.sdlc-skills-backup/<date-time>/`. Files a factory seeded
 (`docs/discovery/`, `.agents/<factory>/knowledge/`) and role briefings are
 never overwritten. See [`MAINTENANCE.md`](MAINTENANCE.md) for the full rules.
 

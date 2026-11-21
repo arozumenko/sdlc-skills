@@ -55,11 +55,19 @@ to decide whether an update can replace an agent or a skill:
 - **Git reports a change in the item** (a modified, deleted or untracked
   file). The update keeps the item and prints its name. The other items
   are still updated. A summary at the end of the run lists every kept
-  item. The exit code stays 0.
+  item. The exit code stays 0. A factory's skill overlay does not rewrite
+  a kept agent.
+- **You deleted the item and did not commit that.** It stays deleted. An
+  item that git never tracked is installed as new.
 - **Git cannot restore the item** (the project has no git, or git ignores
   the path). The update copies the old item to
   `.sdlc-skills-backup/<date-time>/` in the project, prints the path, and
-  then replaces the item. Delete that folder when you no longer need it.
+  then replaces the item. Each run gets its own backup folder. Delete the
+  folders when you no longer need them.
+
+The same rules apply to skills fetched from another repository (external
+skills). The installer cannot tell your edit from an older upstream
+version, so outside git it makes a backup each time upstream changed.
 
 An item whose content is identical to a copy in this package is never
 treated as a local change. So you can update two factories one after the
@@ -76,11 +84,8 @@ again. Or add `--force`:
 npx github:arozumenko/sdlc-skills init --factory feature-development --update --force
 ```
 
-`--force` replaces every selected agent and skill. It does not check git
-and it does not make a backup.
-
-Skills fetched from another repository (external skills) do not have
-this protection yet. `--update` replaces them.
+`--force` replaces every selected agent and skill, and installs again an
+item you deleted. It does not check git and it does not make a backup.
 
 ## Updating a factory install
 
@@ -101,7 +106,9 @@ What `--update` does for a factory:
   get the factory default again, delete the file and run the install again.
 - **Seeded files** (for example `docs/discovery/` or
   `.agents/<factory>/knowledge/`) — never removed and never overwritten.
-  The update adds the files the factory has and your project lacks.
+  The update adds the files the factory has and your project lacks. Where
+  your project has a file and the factory has a folder of the same name
+  (or the reverse), your entry is kept and the installer prints one line.
 - **Instructions** — the `<!-- FACTORY:<id> -->` block in `AGENTS.md` /
   `CLAUDE.md` is refreshed in place regardless of `--update` (idempotent).
 - **Hooks** — the factory's `_factory`-tagged entries in

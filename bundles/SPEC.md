@@ -220,7 +220,9 @@ leaves the item discoverable.
    dest; copied into the project once at install. Seeds are create-only. When
    the dest exists, the installer never removes or overwrites anything in it,
    with or without `--update`; it only adds the files the factory has and the
-   project lacks. Seed folders hold documents the user writes. Use for
+   project lacks. Where the project has a file and the factory a folder of
+   the same name (or the reverse), the project's entry is kept and one line
+   says so. Seed folders hold documents the user writes. Use for
    reference docs agents read at runtime (a subagent's cwd is the project
    root). Example:
    `"seed": { "knowledge": ".agents/manual-qa/knowledge" }`.
@@ -267,10 +269,15 @@ With `--update`, the installer replaces it, under these rules:
   that is committed and unchanged is replaced; git history is the backup.
 - An item that `git status` reports on (a modified, deleted or untracked file
   inside it) is kept. The installer names it, updates the other items, and
-  lists the kept items at the end of the run. The exit code stays 0.
+  lists the kept items at the end of the run. The exit code stays 0. Skill
+  overlays (step 2b) are not applied to a kept agent.
+- An item the user deleted without a commit stays deleted. An item git never
+  tracked is installed as new.
 - When git cannot restore the item (no git, or the path is ignored), the old
   item is copied to `.sdlc-skills-backup/<date-time>/` in the project before
-  it is replaced.
+  it is replaced. Each run uses its own backup folder.
+- External skills follow the same rules. Their content is compared with the
+  fetched copy, so outside git a backup is made each time upstream changed.
 - An item identical to a copy this package ships, in any factory, is not a
   local change. Two factories can be updated one after the other without a
   commit between the runs. The check does not cover an agent file the
@@ -278,8 +285,7 @@ With `--update`, the installer replaces it, under these rules:
   written for non-Claude hosts); commit between the runs or use `--force`.
 - `--force` replaces every selected item without a check and without a backup.
 - Briefings and seed files are never overwritten (steps 2 and 2a). Instruction
-  blocks are refreshed in place (step 3). External skills are replaced; they
-  do not have this protection yet.
+  blocks are refreshed in place (step 3).
 
 ## Hooks (`hooks/hooks.json`)
 
