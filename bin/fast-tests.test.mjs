@@ -194,4 +194,7 @@ test("the pull-request area workflow takes its areas from this script", () => {
   const yml = readFileSync(join(REPO, ".github/workflows/tests-areas.yml"), "utf8");
   assert.match(yml, /node bin\/fast-tests\.mjs --changed-areas/);
   assert.match(yml, /node bin\/fast-tests\.mjs --area /);
+  // A file renamed out of an area must still count as a change to that area:
+  // with rename detection the diff lists only the new path.
+  assert.match(yml, /git diff --no-renames --name-only /);
 });
