@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +84,9 @@ test('Claude Code is unchanged: CLAUDE_PROJECT_DIR wins over COPILOT_PROJECT_DIR
     const out = run('agent-start', { root: p.root, cwd: p.other, payload: { agent_type: 'qa-engineer' }, env });
     assert.match(out, /sentinel-own/);
     assert.doesNotMatch(out, /sentinel-other/);
+    // Claude Code's agent-start makes a brief spool under TMPDIR; it must land in
+    // the fixture, not in the developer's temp directory.
+    assert.ok(readdirSync(join(p.root, 'tmp')).some((n) => n.startsWith('sdlc-skills-briefs-')), 'no brief spool under the fixture tmp');
     // session-start writes no instruction files under Claude Code, in either project.
     run('session-start', { root: p.root, cwd: p.other, env });
     assert.ok(untouched(p.own) && untouched(p.other));
