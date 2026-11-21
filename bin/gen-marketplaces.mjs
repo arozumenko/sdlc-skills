@@ -14,7 +14,10 @@
  * Claude Code's .claude-plugin/marketplace.json is hand-curated and left alone.
  *
  *   node bin/gen-marketplaces.mjs            # write the files
- *   node bin/gen-marketplaces.mjs --check    # fail if any file is stale (CI)
+ *   node bin/gen-marketplaces.mjs --check    # fail if any file is stale, or if
+ *                                            # any manifest (the Claude one too)
+ *                                            # lists a local source that is not
+ *                                            # in this repository (CI)
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -139,23 +142,7 @@ function resolvedSource(resolved, kind) {
   return `./bundles/${resolved.factory}/${kind}/${resolved.name}`;
 }
 
-/** External (repo:) skill entries from skills.json, keyed by id. */
-function externalSkills() {
-  const out = {};
-  const reg = join(PKG_ROOT, "skills.json");
-  if (existsSync(reg)) {
-    try {
-      for (const s of JSON.parse(readFileSync(reg, "utf8")).skills || []) {
-        if (s.id && s.repo) out[s.id] = s;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return out;
-}
-
-function buildPlugins(rt, index, externals) {
+function buildPlugins(rt, index) {
   const plugins = [UMBRELLA];
 
   if (rt.agents) {
@@ -191,30 +178,74 @@ function buildPlugins(rt, index, externals) {
       });
     }
 
-    // External (repo:) skills — only those NOT already covered by a dir-backed entry.
-    for (const id of Object.keys(externals).sort()) {
-      if (dirIds.has(id)) continue; // dir-backed takes precedence
-      const s = externals[id];
-      plugins.push({
-        name: id,
-        source: `./skills/${id}`,
-        description: s.description || `${id} skill`,
-        version: VERSION,
-      });
-    }
+    // External (repo:) skills from skills.json are NOT listed. They live in
+    // other repositories and are fetched by the npx installer, so a local
+    // `./skills/<id>` source for them points at nothing (this generator used to
+    // emit exactly that). Nothing in this repository establishes how these
+    // three manifest formats reference a plugin in another git repository;
+    // list them again only with that form, never with a local path.
   }
 
   return plugins;
 }
 
+/** Every manifest whose local sources `--check` verifies: the three generated
+ *  ones and the hand-curated Claude one (read, never written). */
+const MANIFESTS = [...RUNTIMES.map((rt) => rt.out), ".claude-plugin/marketplace.json"];
+
+function* localSources(node) {
+  if (Array.isArray(node)) for (const x of node) yield* localSources(x);
+  else if (node && typeof node === "object") {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "source" && typeof v === "string" && v.startsWith("./")) yield v;
+      else yield* localSources(v);
+    }
+  }
+}
+
+/**
+ * A plugin entry with a local `./…` source is installed from that directory of
+ * this repository, so the directory must exist. Reads each manifest present
+ * under `root` and returns how many local sources it checked and the ones that
+ * are missing, as `{ file, name, source }`.
+ */
+export function checkLocalSources(root, files = MANIFESTS) {
+  let checked = 0;
+  let manifests = 0;
+  const missing = [];
+  for (const file of files) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    manifests++;
+    const manifest = JSON.parse(readFileSync(path, "utf8"));
+    for (const plugin of manifest.plugins || []) {
+      for (const source of localSources(plugin)) {
+        checked++;
+        if (!existsSync(join(root, source))) missing.push({ file, name: plugin.name, source });
+      }
+    }
+  }
+  return { checked, manifests, missing };
+}
+
+/** Failure text for `checkLocalSources().missing`, grouped by manifest file. */
+export function missingSourcesReport(missing) {
+  const lines = [];
+  for (const file of [...new Set(missing.map((m) => m.file))]) {
+    const own = missing.filter((m) => m.file === file);
+    lines.push(`  ! ${file}: ${own.length} local source(s) do not exist in this repository:`);
+    for (const m of own) lines.push(`      ${m.name} -> ${m.source}`);
+  }
+  return lines.join("\n");
+}
+
 function main() {
   const check = process.argv.includes("--check");
   const index = buildItemIndex(PKG_ROOT);
-  const externals = externalSkills();
 
   let stale = 0;
   for (const rt of RUNTIMES) {
-    const manifest = { name: "sdlc-skills", owner: OWNER, plugins: buildPlugins(rt, index, externals) };
+    const manifest = { name: "sdlc-skills", owner: OWNER, plugins: buildPlugins(rt, index) };
     const text = JSON.stringify(manifest, null, 2) + "\n";
     const path = join(PKG_ROOT, rt.out);
     const current = existsSync(path) ? readFileSync(path, "utf8") : null;
@@ -231,7 +262,15 @@ function main() {
     writeFileSync(path, text);
     console.log(`  ✓ ${rt.out} (${manifest.plugins.length} entries)`);
   }
-  if (check && stale) process.exit(1);
+  if (!check) return;
+  const { checked, manifests, missing } = checkLocalSources(PKG_ROOT);
+  if (missing.length) {
+    console.error(missingSourcesReport(missing));
+    console.error("    A local ./ source must be a directory in this repository.");
+  } else {
+    console.log(`  = local sources: ${checked} checked in ${manifests} manifests, all exist`);
+  }
+  if (stale || missing.length) process.exit(1);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
