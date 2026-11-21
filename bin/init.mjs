@@ -1800,13 +1800,26 @@ function loadGitSnapshot() {
   const tracked = gitOutput(["ls-files", "-z", "--full-name", "--", ...dirs]);
   if (status === null || tracked === null) return null;
   const changed = [];
+  const deleted = []; // paths git reports as gone: a deletion, or the old side of a rename
   const entries = status.split("\0");
   for (let i = 0; i < entries.length; i++) {
     if (entries[i].length < 4) continue; // "XY path"
+    const xy = entries[i].slice(0, 2);
     changed.push(entries[i].slice(3));
-    if (/[RC]/.test(entries[i].slice(0, 2))) changed.push(entries[++i] || ""); // a rename also lists the old path
+    if (xy.includes("D")) deleted.push(entries[i].slice(3));
+    if (/[RC]/.test(xy)) {
+      const from = entries[++i] || ""; // a rename or copy also lists the old path
+      changed.push(from);
+      if (xy.includes("R")) deleted.push(from);
+    }
   }
-  return { prefix: prefix.trim(), changed, tracked: tracked.split("\0").filter(Boolean) };
+  return { prefix: prefix.trim(), changed, deleted, tracked: tracked.split("\0").filter(Boolean) };
+}
+
+// Where `dest` sits in the repository, and a test for "this path or below it".
+function gitKeyOf(dest) {
+  const key = gitSnapshot.prefix + dest.slice(CWD.length + 1).replace(/\\/g, "/");
+  return { key, within: (p) => p === key || p.startsWith(key + "/") };
 }
 
 // "clean" (tracked, nothing to commit), "changed" (git status reports
@@ -1814,11 +1827,19 @@ function loadGitSnapshot() {
 function gitStateOf(dest) {
   if (gitSnapshot === undefined) gitSnapshot = loadGitSnapshot();
   if (!gitSnapshot) return "none";
-  const key = gitSnapshot.prefix + dest.slice(CWD.length + 1).replace(/\\/g, "/");
-  const within = (p) => p === key || p.startsWith(key + "/");
+  const { key, within } = gitKeyOf(dest);
   // A path ending in "/" is a whole untracked directory (a nested repository).
   if (gitSnapshot.changed.some((p) => within(p) || (p.endsWith("/") && key.startsWith(p)))) return "changed";
   return gitSnapshot.tracked.some(within) ? "clean" : "none";
+}
+
+// For a destination that is not on disk: did the user delete it and not commit
+// that? Only a deletion (or the old side of a rename) at or below the
+// destination is evidence. An untracked or ignored folder above it is not —
+// the item was never there, so it is a new install.
+function gitReportsDeletionOf(dest) {
+  if (gitSnapshot === undefined) gitSnapshot = loadGitSnapshot();
+  return !!gitSnapshot && gitSnapshot.deleted.some(gitKeyOf(dest).within);
 }
 
 function sameTree(a, b) {
@@ -1859,19 +1880,20 @@ function backupDirForRun() {
 
 // May an update write `dest`? `label` names the item in messages;
 // `isInstallerOutput` says whether the content now there is known to be the
-// installer's own. Returns false when the item must be kept as it is. A
-// destination that is gone is a new install, unless git reports its deletion.
+// installer's own. Returns false when the item must be kept as it is.
 function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
   if (forceReplace || writtenThisRun.has(dest)) return true;
-  const state = gitStateOf(dest);
-  if (state === "clean") return true;
-  if (existsSync(dest) ? isInstallerOutput() : state !== "changed") return true;
   const rel = dest.slice(CWD.length + 1);
-  if (state === "changed") {
+  const keep = () => {
     console.log(`      ! ${label} kept: ${rel} has uncommitted local changes. Commit or stash them, or pass --force to replace it.`);
     keptThisRun.add(dest);
     return false;
-  }
+  };
+  // Not on disk: a new install, unless git reports that the user deleted it.
+  if (!existsSync(dest)) return gitReportsDeletionOf(dest) ? keep() : true;
+  const state = gitStateOf(dest);
+  if (state === "clean" || isInstallerOutput()) return true;
+  if (state === "changed") return keep();
   const backupRel = join(backupDirForRun(), rel.replace(/^\./, ""));
   mkdirSync(dirname(join(CWD, backupRel)), { recursive: true });
   cpSync(dest, join(CWD, backupRel), { recursive: true });

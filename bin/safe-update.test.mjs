@@ -777,3 +777,51 @@ test("the git snapshot honours the caller's GIT_CONFIG_GLOBAL", () => {
   assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "my local edit\n");
   assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
 });
+
+test("a new skill installs under --update when .claude is an untracked nested repository", () => {
+  // The outer repository reports `?? .claude/` for the whole folder. That is
+  // not a deletion of a skill that never existed.
+  const s = sandbox({ git: true });
+  writeFileSync(s.p("README.md"), "project\n");
+  s.commitAll("project");
+  mkdirSync(s.p(".claude"));
+  s.git("init", "-q", s.p(".claude"));
+  writeFileSync(s.p(".claude/notes.md"), "mine\n");
+  assert.equal(s.git("status", "--porcelain", "--untracked-files=all"), "?? .claude/\n", "fixture: git reports the ancestor only");
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+  assert.match(r.out, /Done: 1 installed, 0 skipped\./);
+});
+
+test("first-ever install with --update in a repository with no commits", () => {
+  const s = sandbox({ git: true });
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+});
+
+test("a new skill installs under --update when its parent folder is untracked", () => {
+  const s = sandbox({ git: true });
+  writeFileSync(s.p("README.md"), "project\n");
+  s.commitAll("project");
+  mkdirSync(s.p(".claude/skills/mine"), { recursive: true });
+  writeFileSync(s.p(".claude/skills/mine/SKILL.md"), "mine\n");
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(existsSync(s.p(".claude/skills/memory/SKILL.md")));
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+});
+
+test("a staged rename out of a skill folder counts as its deletion", () => {
+  const s = sandbox({ git: true });
+  assert.equal(s.init("--skills", "memory").status, 0);
+  s.commitAll("install");
+  s.git("mv", ".claude/skills/memory", ".claude/skills/memory-old");
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(!existsSync(s.p(".claude/skills/memory")), "the user moved it away; it is not recreated");
+  assert.match(r.out, KEPT("skill", "memory"));
+});
