@@ -5,7 +5,11 @@ name: tests-areas
 # test in that area here, slow files included, so it does not have to wait for
 # the full run on main (tests-full.yml).
 #
-# The areas are not listed in this file. They are PR_AREAS in
+# A change under bin/ or hooks/ also runs the two offline install tests that
+# live under skills/delivery-monitor, as the entry "installer-integration"
+# (left out when the delivery-monitor area runs anyway).
+#
+# Neither list is in this file. They are PR_AREAS and PR_GROUPS in
 # bin/fast-tests.mjs, next to the SLOW list; bin/fast-tests.test.mjs fails when
 # a SLOW file is in no area and not on that script's MAIN_ONLY list.
 on:
@@ -25,7 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: package.json
-      - name: Areas this pull request changes
+      - name: Areas and groups this pull request changes
         id: areas
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -61,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: package.json
-      - name: Every test in the area
+      - name: Every test in the area, or the files of the group
         # Not `node --test <dir>/`: Node 24 takes a directory argument as a
         # file to run and fails. The script passes the files one by one.
         run: node bin/fast-tests.mjs --area "$AREA"

@@ -10,12 +10,14 @@
  *   node bin/fast-tests.mjs            # run the fast set (npm run test:fast)
  *   node bin/fast-tests.mjs --list     # print the selected files, run nothing
  *
- * The slow files still run on a pull request that changes their own area (see
- * PR_AREAS below; .github/workflows/tests-areas.yml calls these two):
+ * The slow files still run on a pull request that changes their own area, or
+ * code they guard elsewhere (see PR_AREAS and PR_GROUPS below;
+ * .github/workflows/tests-areas.yml calls these two):
  *
- *   node bin/fast-tests.mjs --area <dir>      # run every test file under <dir>
+ *   node bin/fast-tests.mjs --area <name>     # an area: every test file under
+ *                                             # that directory; a group: its files
  *   node bin/fast-tests.mjs --changed-areas   # changed paths on stdin, one per
- *                                             # line -> JSON list of areas
+ *                                             # line -> JSON list of names to run
  *
  * Any other `--option` is passed to `node --test`, for example
  * `npm run test:fast -- --test-reporter=dot`.
@@ -66,6 +68,28 @@ export const PR_AREAS = [
   "bundles/security-testing/skills/secure-code-review", // cite, verify
   "evals", // graders
 ];
+
+/**
+ * Named groups of test files that guard code in another directory. A pull
+ * request that changes a file under one of `when` runs exactly `files`, as one
+ * extra entry with the group's name. The entry is left out when the areas
+ * already in the list cover every file (a delivery-monitor change runs the
+ * whole delivery-monitor area, which includes both files below).
+ *
+ * installer-integration: both files are offline. installed.test.mjs drives
+ * bin/init.mjs for two factories and three hosts against local git mirrors,
+ * with its own cache and git config. install-hooks.test.mjs runs the skill's
+ * own hook installer in temp repositories.
+ */
+export const PR_GROUPS = {
+  "installer-integration": {
+    when: ["bin", "hooks"],
+    files: [
+      "skills/delivery-monitor/scripts/installed.test.mjs",
+      "skills/delivery-monitor/scripts/install-hooks.test.mjs",
+    ],
+  },
+};
 
 /**
  * SLOW files that no pull request runs: they run on push to main and nightly
@@ -137,9 +161,16 @@ export function testsInArea(root, area) {
   return discoverTests(root).filter((f) => under(f, area));
 }
 
-/** The areas that hold at least one of the changed files, in `areas` order. */
-export function changedAreas(changedFiles, areas = PR_AREAS) {
-  return areas.filter((area) => changedFiles.some((f) => under(f, area)));
+/** What a pull request with these changed files runs: the areas that hold at
+ *  least one of them, in `areas` order, then each group whose trigger
+ *  directories hold one and whose files those areas do not all cover. */
+export function changedAreas(changedFiles, areas = PR_AREAS, groups = PR_GROUPS) {
+  const changedUnder = (dir) => changedFiles.some((f) => under(f, dir));
+  const hit = areas.filter(changedUnder);
+  const extra = Object.entries(groups)
+    .filter(([, group]) => group.when.some(changedUnder) && !group.files.every((f) => hit.some((area) => under(f, area))))
+    .map(([name]) => name);
+  return [...hit, ...extra];
 }
 
 /** The slow files no pull request would run: under no area, and not on the
@@ -169,11 +200,13 @@ function main() {
   if (areaAt !== -1) {
     const area = (args[areaAt + 1] || "").replace(/\/+$/, "");
     args.splice(areaAt, 2);
-    if (!PR_AREAS.includes(area)) {
-      console.error(`  ! bin/fast-tests.mjs: "${area}" is not an area in PR_AREAS (${PR_AREAS.join(", ")})`);
+    if (!PR_AREAS.includes(area) && !PR_GROUPS[area]) {
+      console.error(
+        `  ! bin/fast-tests.mjs: "${area}" is not an area in PR_AREAS or a group in PR_GROUPS (${[...PR_AREAS, ...Object.keys(PR_GROUPS)].join(", ")})`,
+      );
       process.exit(1);
     }
-    const files = testsInArea(PKG_ROOT, area);
+    const files = PR_GROUPS[area] ? PR_GROUPS[area].files : testsInArea(PKG_ROOT, area);
     if (args.includes("--list")) {
       console.log(files.join("\n"));
       return;

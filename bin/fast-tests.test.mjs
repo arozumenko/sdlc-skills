@@ -4,11 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SLOW, PR_AREAS, MAIN_ONLY, discoverTests, testsMissedByDiscovery, selectFast, changedAreas, testsInArea, slowWithoutPullRequestRun } from "./fast-tests.mjs";
+import { SLOW, PR_AREAS, PR_GROUPS, MAIN_ONLY, discoverTests, testsMissedByDiscovery, selectFast, changedAreas, testsInArea, slowWithoutPullRequestRun } from "./fast-tests.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -159,10 +159,55 @@ test("every SLOW file runs on pull requests to its area, or is main-only with a 
 
 test("changed files select their areas, by directory and not by name prefix", () => {
   const areas = ["hooks", "skills/delivery-monitor"];
-  assert.deepEqual(changedAreas(["README.md", "bin/init.mjs"], areas), []);
-  assert.deepEqual(changedAreas(["skills/delivery-monitor/scripts/lib/report.mjs", "README.md"], areas), ["skills/delivery-monitor"]);
-  assert.deepEqual(changedAreas(["hooks/agent-brief.sh", "skills/delivery-monitor/SKILL.md"], areas), areas);
-  assert.deepEqual(changedAreas(["hooks-old/x.sh", "skills/delivery-monitor-v2/SKILL.md"], areas), []);
+  assert.deepEqual(changedAreas(["README.md", "bin/init.mjs"], areas, {}), []);
+  assert.deepEqual(changedAreas(["skills/delivery-monitor/scripts/lib/report.mjs", "README.md"], areas, {}), ["skills/delivery-monitor"]);
+  assert.deepEqual(changedAreas(["hooks/agent-brief.sh", "skills/delivery-monitor/SKILL.md"], areas, {}), areas);
+  assert.deepEqual(changedAreas(["hooks-old/x.sh", "skills/delivery-monitor-v2/SKILL.md"], areas, {}), []);
+});
+
+// Some tests guard code that lives in another directory. The installer (bin/)
+// and the shared hooks (hooks/) are exercised by two install tests that sit
+// under skills/delivery-monitor, so a pull request that changes bin/ or hooks/
+// runs those two files as the extra entry "installer-integration".
+const INSTALL_TESTS = ["skills/delivery-monitor/scripts/installed.test.mjs", "skills/delivery-monitor/scripts/install-hooks.test.mjs"];
+
+test("a change under bin/ alone runs the installer-integration tests", () => {
+  assert.deepEqual(changedAreas(["bin/init.mjs"]), ["installer-integration"]);
+  assert.deepEqual(changedAreas(["bin/lib/doctor/git.mjs", "README.md"]), ["installer-integration"]);
+});
+
+test("a change under hooks/ alone runs the hooks area and the installer-integration tests", () => {
+  assert.deepEqual(changedAreas(["hooks/agent-start.sh"]), ["hooks", "installer-integration"]);
+});
+
+test("bin/ plus delivery-monitor runs the delivery-monitor area only: it already covers both install tests", () => {
+  assert.deepEqual(changedAreas(["bin/init.mjs", "skills/delivery-monitor/scripts/delivery.mjs"]), ["skills/delivery-monitor"]);
+  assert.deepEqual(changedAreas(["hooks/agent-start.sh", "skills/delivery-monitor/SKILL.md"]), ["skills/delivery-monitor", "hooks"]);
+});
+
+test("an unrelated change runs nothing extra, and a name that only starts like bin or hooks does not count", () => {
+  assert.deepEqual(changedAreas(["README.md", "docs/notes.md", "bundles/manual-qa/FACTORY.md"]), []);
+  assert.deepEqual(changedAreas(["binary/x.mjs", "hooks-old/y.sh", "bin.md"]), []);
+});
+
+test("a group is added only when an area in the list does not already cover all of its files", () => {
+  const groups = { extra: { when: ["src"], files: ["a/one.test.mjs", "b/two.test.mjs"] } };
+  assert.deepEqual(changedAreas(["src/x.mjs"], ["a", "b"], groups), ["extra"]);
+  assert.deepEqual(changedAreas(["src/x.mjs", "a/y.mjs"], ["a", "b"], groups), ["a", "extra"], "area a covers one of the two files only");
+  assert.deepEqual(changedAreas(["src/x.mjs", "a/y.mjs", "b/z.mjs"], ["a", "b"], groups), ["a", "b"]);
+  assert.deepEqual(changedAreas(["a/y.mjs"], ["a", "b"], groups), ["a"]);
+});
+
+test("every file a group names is an existing test file, and its trigger directories exist", () => {
+  const all = discoverTests(REPO);
+  assert.deepEqual(Object.keys(PR_GROUPS), ["installer-integration"]);
+  assert.deepEqual(PR_GROUPS["installer-integration"].files, INSTALL_TESTS);
+  for (const [name, group] of Object.entries(PR_GROUPS)) {
+    assert.ok(!PR_AREAS.includes(name), `${name} is also a directory area`);
+    assert.ok(group.files.length > 0, `${name} names no file`);
+    for (const file of group.files) assert.ok(all.includes(file), `${name}: ${file} is not a test file in this repository`);
+    for (const dir of group.when) assert.ok(existsSync(join(REPO, dir)), `${name}: trigger directory ${dir} does not exist`);
+  }
 });
 
 test("an area run is every test file under that directory, slow ones included", () => {
@@ -174,11 +219,12 @@ test("an area run is every test file under that directory, slow ones included", 
 
 test("--changed-areas reads changed paths on stdin and prints the areas as JSON", () => {
   const run = (input) => spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--changed-areas"], { input, encoding: "utf8" });
-  const none = run("README.md\nbin/init.mjs\n");
+  const none = run("README.md\ndocs/notes.md\n");
   assert.equal(none.status, 0, none.stderr);
   assert.equal(none.stdout.trim(), "[]");
   const some = run("evals/run.mjs\nhooks/agent-start.sh\n");
-  assert.deepEqual(JSON.parse(some.stdout), ["hooks", "evals"]);
+  assert.deepEqual(JSON.parse(some.stdout), ["hooks", "evals", "installer-integration"]);
+  assert.deepEqual(JSON.parse(run("bin/init.mjs\n").stdout), ["installer-integration"]);
 });
 
 test("--area lists the files it would run, and refuses a directory that is not an area", () => {
@@ -187,7 +233,13 @@ test("--area lists the files it would run, and refuses a directory that is not a
   assert.deepEqual(list.stdout.trim().split("\n"), testsInArea(REPO, "hooks"));
   const bad = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--area", "bin", "--list"], { encoding: "utf8" });
   assert.equal(bad.status, 1);
-  assert.match(bad.stderr, /not an area in PR_AREAS/);
+  assert.match(bad.stderr, /not an area in PR_AREAS or a group in PR_GROUPS/);
+});
+
+test("--area installer-integration runs exactly the two install tests", () => {
+  const r = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--area", "installer-integration", "--list"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split("\n"), INSTALL_TESTS);
 });
 
 test("the pull-request area workflow takes its areas from this script", () => {
