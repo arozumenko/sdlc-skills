@@ -2876,7 +2876,8 @@ async function runInteractive(qa) {
 // and this repo's own tests point $HOME at a throwaway project directory, and
 // those installs keep working. $HOME is the fallback for an account with no entry.
 function unsafeProjectRoot(cwd = CWD, pkgRoot = PKG_ROOT) {
-  const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  // .native also settles the spelling on a case-insensitive file system.
+  const real = (p) => { try { return realpathSync.native(p); } catch { return resolve(p); } };
   let home = null;
   try { home = userInfo().homedir; } catch { /* no user-database entry */ }
   if (!home) home = homedir();
@@ -2915,7 +2916,7 @@ async function main() {
   }
 
   // Guard: an install into the home directory or into this package is a
-  // mistake, never a choice. Refuse before anything is read or written.
+  // mistake, never a choice. Refuse before anything is written.
   const unsafeRoot = unsafeProjectRoot();
   if (unsafeRoot) {
     console.error(`\n  ! Refusing to install into ${unsafeRoot}.`);

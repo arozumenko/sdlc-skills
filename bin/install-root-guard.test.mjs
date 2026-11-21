@@ -62,6 +62,21 @@ test("refuses the package's own root and writes nothing", () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// On a case-insensitive file system (the macOS default) one directory has many
+// spellings; the comparison must not depend on which one the command used.
+test("refuses the package's own root when it is reached through another spelling", (t) => {
+  const { root, env } = sandbox();
+  try {
+    const pkg = packageCopy(root);
+    const spelled = join(root, "PKG");
+    if (!existsSync(spelled)) return t.skip("case-sensitive file system");
+    const r = install(join(spelled, "bin/init.mjs"), pkg, env);
+    assert.notEqual(r.status, 0, r.stdout);
+    assert.match(r.stderr, /Refusing to install into the sdlc-skills package itself/);
+    assert.deepEqual(readdirSync(pkg).sort(), ["bin", "skills"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("the same package copy installs into a separate project", () => {
   const { root, proj, env } = sandbox();
   try {
