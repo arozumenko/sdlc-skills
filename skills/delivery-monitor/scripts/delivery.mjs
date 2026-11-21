@@ -16,7 +16,7 @@ import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, budgetCheckText, SCHEMA } from './lib/report.mjs';
 import { doctorReport, hookRel, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
-import { loadPricesChecked } from './lib/cost.mjs';
+import { loadPricesChecked, pricesAge, pricesStaleText } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
 import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
 import { budgetCheckState, budgetSummary } from './lib/budget.mjs';
@@ -548,6 +548,7 @@ function cmdReport(repo, p, io, now) {
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
   // Unreadable input is a soft line; a programming error is INTERNAL, as in every command.
+  const pricesLine = () => { const stale = pricesStaleText(pricesAge(repo, { now })); if (stale) out(io, `PRICES stale: ${stale}`); };
   const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { if (!isInputError(e)) throw e; out(io, `SPEND unavailable: ${e.message}`); } };
   try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now, costs: false }))); }
   catch (e) {
@@ -557,6 +558,7 @@ function cmdStatus(repo, p, io, now) {
       try { out(io, renderBudgetCoverage(budgetSummary(repo))); }
       catch (problem) { if (!isInputError(problem)) throw problem; out(io, renderBudgetCoverage({ unavailable: problem.message })); }
       out(io, `BUDGET check: ${budgetCheckText(budgetCheckState(repo, { now }))}`);
+      pricesLine();
     }
     throw e;
   }
@@ -566,6 +568,7 @@ function cmdStatus(repo, p, io, now) {
     if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
     else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
   } catch (e) { if (!isInputError(e)) throw e; out(io, `CALIBRATION invalid: ${e.message}`); }
+  pricesLine();
   spendLine();
   return 0;
 }

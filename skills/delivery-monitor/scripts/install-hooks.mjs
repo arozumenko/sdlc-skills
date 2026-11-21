@@ -10,6 +10,7 @@ import { git as gitq, gitState } from './lib/git.mjs';
 import { validRoster } from './lib/roster.mjs';
 import { UNCONDITIONAL_CAVEATS, budgetCheckText, readDiagnostics } from './lib/report.mjs';
 import { budgetCheckState } from './lib/budget.mjs';
+import { pricesAge, pricesStaleText } from './lib/cost.mjs';
 
 export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
@@ -262,6 +263,9 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   // A stop hook that failed captured nothing for that subagent; the count is said here because nothing else shows it.
   let stopFailed = 0; try { stopFailed = readDiagnostics(repo)['stop-hook-failed']; } catch { /* the line count below still prints */ }
   add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)${stopFailed ? `, stop-hook-failed=${stopFailed} (the stop hook failed for ${stopFailed} subagent(s): their spend may be missing from the totals, not zero)` : ''}`);
+  // Printed only when stale: a model missing from an old table is unpriced, and nothing else says so.
+  const stalePrices = pricesStaleText(pricesAge(repo, { now }));
+  if (stalePrices) add('warning', `prices: stale — ${stalePrices}`);
   for (const r of runs.filter((r) => r.status === 'open')) {
     const rosterOk = validRoster(r.roster);
     add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`);

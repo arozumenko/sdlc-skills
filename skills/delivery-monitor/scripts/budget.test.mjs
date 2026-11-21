@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import { main } from './delivery.mjs';
 import { deliveryDir } from './lib/paths.mjs';
 import { budgetCheckState, budgetSummary } from './lib/budget.mjs';
+import { PRICES_MAX_AGE_DAYS, pricesAge } from './lib/cost.mjs';
 const now=Date.parse('2026-11-20T12:00:00Z');
 const repo=()=>mkdtempSync(join(tmpdir(),'dm-budget-cli-'));
-async function cli(r,args) {let stdout='',stderr='';const code=await main(args,{repo:r,now,env:{DELIVERY_NO_SYNC:'1'},stdout:{write:s=>stdout+=s},stderr:{write:s=>stderr+=s}});return {code,stdout,stderr};}
+async function cli(r,args,at=now) {let stdout='',stderr='';const code=await main(args,{repo:r,now:at,env:{DELIVERY_NO_SYNC:'1'},stdout:{write:s=>stdout+=s},stderr:{write:s=>stderr+=s}});return {code,stdout,stderr};}
 test('plan template leaves all 3 task estimates empty and registration fills USD on every task',async()=>{
  const r=repo(),d=deliveryDir(r);mkdirSync(d,{recursive:true});
  const text=readFileSync(new URL('../templates/plan-block.template.md',import.meta.url),'utf8').replaceAll('<campaign-id>','budget');
@@ -104,4 +105,35 @@ test('status with no plan still shows the budget check line before it fails with
  const r=repo();let out=await cli(r,['status']);assert.equal(out.code,3);assert.match(out.stdout,OK_LINE);
  diag(r,'2026-11-20T11:00:00.000Z','RUN-UNREADABLE(plans/x.json)');
  out=await cli(r,['status']);assert.equal(out.code,3);assert.match(out.stdout,/^BUDGET check: OFF since 2026-11-20T11:00:00\.000Z — RUN-UNREADABLE\(plans\/x\.json\) \(session s1; 1 session\(s\)/m);
+});
+
+// A model id missing from the price table is unpriced, and its tasks drop out of calibration without notice.
+// The clock is set from the shipped table's own date, so these tests do not expire when the table is updated.
+const DAY=86_400_000,SHIPPED=JSON.parse(readFileSync(new URL('../references/prices.json',import.meta.url),'utf8')).as_of,T0=Date.parse(SHIPPED);
+const STALE=/^PRICES stale: /m;
+test('pricesAge: whole days since as_of; stale only when more than 45 days; the override date wins when it has one',()=>{
+ assert.equal(PRICES_MAX_AGE_DAYS,45);const r=repo();
+ assert.deepEqual(pricesAge(r,{now:T0+45*DAY+DAY-1}),{as_of:SHIPPED,source:'builtin',age_days:45,stale:false});
+ assert.deepEqual(pricesAge(r,{now:T0+46*DAY}),{as_of:SHIPPED,source:'builtin',age_days:46,stale:true});
+ assert.equal(pricesAge(r,{now:T0-10*DAY}).stale,false,'a clock before the table date is not stale');
+ const d=deliveryDir(r);mkdirSync(d,{recursive:true});
+ writeFileSync(join(d,'prices.json'),JSON.stringify({models:{}}));assert.equal(pricesAge(r,{now:T0+46*DAY}).source,'builtin','an override without a date leaves the built-in date');
+ writeFileSync(join(d,'prices.json'),JSON.stringify({as_of:'2026-01-10',models:{}}));
+ assert.deepEqual(pricesAge(r,{now:Date.parse('2026-03-01T12:00:00Z')}),{as_of:'2026-01-10',source:'override',age_days:50,stale:true});
+ writeFileSync(join(d,'prices.json'),JSON.stringify({as_of:'not a date',models:{}}));assert.equal(pricesAge(r,{now:T0}),null,'no usable date, no age');
+});
+test('status warns when the price table is more than 45 days old, naming the date and the file, and is silent when fresh',async()=>{
+ const r=await registered();
+ let out=await cli(r,['status'],T0+45*DAY);assert.equal(out.code,0,out.stderr);assert.doesNotMatch(out.stdout,STALE);
+ out=await cli(r,['status'],T0+50*DAY);assert.equal(out.code,0,out.stderr);
+ assert.ok(out.stdout.includes(`PRICES stale: price table as of ${SHIPPED} is 50 days old (limit 45): a model released since then is unpriced and its tasks are left out of calibration — update the delivery-monitor skill (references/prices.json), or price newer models in .agents/telemetry/delivery/prices.json\n`),out.stdout);
+ writeFileSync(join(deliveryDir(r),'prices.json'),JSON.stringify({as_of:new Date(T0+40*DAY).toISOString().slice(0,10),models:{}}));
+ assert.doesNotMatch((await cli(r,['status'],T0+50*DAY)).stdout,STALE,'a project override with a recent date clears it');
+ writeFileSync(join(deliveryDir(r),'prices.json'),JSON.stringify({as_of:'2026-01-10',models:{}}));
+ out=await cli(r,['status'],Date.parse('2026-03-01T12:00:00Z'));
+ assert.ok(out.stdout.includes('PRICES stale: price table as of 2026-01-10 is 50 days old (limit 45): a model released since then is unpriced and its tasks are left out of calibration — update .agents/telemetry/delivery/prices.json (its models and its as_of date)\n'),out.stdout);
+});
+test('status with no plan warns about an old price table too',async()=>{
+ const r=repo();assert.doesNotMatch((await cli(r,['status'],T0+45*DAY)).stdout,STALE);
+ const out=await cli(r,['status'],T0+46*DAY);assert.equal(out.code,3);assert.match(out.stdout,STALE);
 });

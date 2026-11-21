@@ -170,7 +170,10 @@ an invalid model entry. `plan register` warns with `WARN PRICES-INVALID` and use
 While prices are broken, the hook marks each dispatch unpriced (`<prices-unreadable>`), and `report` falls back to the
 hook-time task costs (see "Task cost in the report"). An override entry replaces a
 built-in model whole, so it needs all four rates (`input`, `output`, `cache_write`, `cache_read`); it may price a
-`<model>#fast` id itself, otherwise fast mode is the base model at double every rate. `calibrate` says `NO-EVENTS` until a
+`<model>#fast` id itself, otherwise fast mode is the base model at double every rate. A model id missing from the table is
+unpriced, and its tasks are left out of calibration. When the table's `as_of` date (the override's when it has one, else the
+built-in one) is more than 45 days old, `status` prints `PRICES stale: …` and `doctor` a `prices: stale` warning, with the date
+and the file to update. `calibrate` says `NO-EVENTS` until a
 landed task has a complete measured cost, and says how many it left out. Use `calibrate` for an optional manual rebuild
 or `calibrate --dry-run` to inspect the table and `OUTLIER` lines. `status` shows sample count and age; `doctor` warns
 about missing or stale calibration. `report` scores those ranges against measured cost in `usd:` strata.

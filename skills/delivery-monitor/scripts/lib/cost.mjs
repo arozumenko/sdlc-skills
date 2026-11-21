@@ -30,19 +30,36 @@ export function loadPricesChecked(repo) {
   const base = builtinBad ? {} : builtin.models;
   const problem = builtinBad ? `built-in ${BUILTIN} ${builtinBad}` : null;
   const path = repo ? join(deliveryDir(repo), 'prices.json') : null;
-  if (!path) return { prices: base, asOf: builtin?.as_of ?? null, problem };
+  if (!path) return { prices: base, asOf: builtin?.as_of ?? null, asOfSource: 'builtin', problem };
   // Read directly: only "no such file" means no override. existsSync is false for a permission error too (e.g. a symlink
   // into a restricted directory), which would silently fall back to list prices.
   let text;
   try { text = readFileSync(path, 'utf8'); } catch (e) {
-    if (e.code === 'ENOENT') return { prices: base, asOf: builtin?.as_of ?? null, problem };
-    return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} unreadable (${e.code ?? e.message})` };
+    if (e.code === 'ENOENT') return { prices: base, asOf: builtin?.as_of ?? null, asOfSource: 'builtin', problem };
+    return { prices: base, asOf: builtin?.as_of ?? null, asOfSource: 'builtin', problem: `project override ${path} unreadable (${e.code ?? e.message})` };
   }
   let local = null; try { local = JSON.parse(text); } catch { local = null; }
-  if (!isPriceTable(local)) return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path} is not valid JSON with a "models" object` };
+  if (!isPriceTable(local)) return { prices: base, asOf: builtin?.as_of ?? null, asOfSource: 'builtin', problem: `project override ${path} is not valid JSON with a "models" object` };
   const bad = entryProblem(local.models);
-  if (bad) return { prices: base, asOf: builtin?.as_of ?? null, problem: `project override ${path}: ${bad}` };
-  return { prices: { ...base, ...local.models }, asOf: local.as_of ?? builtin?.as_of ?? null, problem };
+  if (bad) return { prices: base, asOf: builtin?.as_of ?? null, asOfSource: 'builtin', problem: `project override ${path}: ${bad}` };
+  return { prices: { ...base, ...local.models }, asOf: local.as_of ?? builtin?.as_of ?? null, asOfSource: local.as_of != null ? 'override' : 'builtin', problem };
+}
+export const PRICES_MAX_AGE_DAYS = 45;
+/** How old the price table in use is, in whole days since its `as_of` date (the project override's date when it has one,
+ * else the built-in table's). Null when that date is missing or not a date. Stale = more than 45 days: a model released
+ * since then has no price, and its tasks are left out of calibration. */
+export function pricesAge(repo, { now = Date.now() } = {}) {
+  const { asOf, asOfSource } = loadPricesChecked(repo), t = typeof asOf === 'string' ? Date.parse(asOf) : NaN;
+  if (Number.isNaN(t)) return null;
+  const age = Math.floor((now - t) / 86_400_000);
+  return { as_of: asOf, source: asOfSource, age_days: age, stale: age > PRICES_MAX_AGE_DAYS };
+}
+/** The warning `status` and `doctor` print for a stale table, naming its date and the file to update; null when not stale. */
+export function pricesStaleText(age) {
+  if (!age?.stale) return null;
+  const fix = age.source === 'override' ? 'update .agents/telemetry/delivery/prices.json (its models and its as_of date)'
+    : 'update the delivery-monitor skill (references/prices.json), or price newer models in .agents/telemetry/delivery/prices.json';
+  return `price table as of ${age.as_of} is ${age.age_days} days old (limit ${PRICES_MAX_AGE_DAYS}): a model released since then is unpriced and its tasks are left out of calibration — ${fix}`;
 }
 /** Prices only (the checked loader without the problem report). */
 export const loadPrices = (repo) => loadPricesChecked(repo).prices;
