@@ -123,6 +123,8 @@ USD ranges. Keep human effort in the board's `tokenomics.effort_days`. A missing
 check `CALIBRATED ... no-cell=0` before dispatching. In-flight hours estimates remain valid and unbudgeted.
 
 Run `install-hooks.mjs` to install both synchronous hooks (only in a consumer project you are authorized to configure).
+`--repo <root>` wins over the current folder and `CLAUDE_PROJECT_DIR`, and must name a repository root (a folder inside a
+repository is refused). The hooks are always wired to the target's own copy of the skill; a target without one is refused.
 PreToolUse checks Agent/Task dispatches before they start and subagents before each tool call. SubagentStop captures and
 records crossings; it never refuses work. Task cost comes from `taskCosts`, including prior dispatches, fix rounds and
 recovered attribution. In-run checks cache prior task cost once per agent and add incremental child-transcript usage.
