@@ -6,10 +6,11 @@
 // the local capture data.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, appendFileSync, rmSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, appendFileSync, rmSync, utimesSync, realpathSync, cpSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir, devNull } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { syncTelemetry } from './telemetry-capture.mjs';
 import { pullTelemetry } from '../scripts/install-hooks.mjs';
 
@@ -24,7 +25,7 @@ const tel = (repo) => join(repo, '.agents', 'telemetry');
 
 /** A bare remote with a `telemetry` branch + two repos whose .agents/telemetry is a clone of it. */
 function world() {
-  const root = mkdtempSync(join(tmpdir(), 'tokenomics-sync-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tokenomics-sync-')));
   const remote = join(root, 'remote.git');
   g(root, 'init', '-q', '--bare', remote);
   const clone = (name, ...args) => {
@@ -36,6 +37,7 @@ function world() {
   const a = clone('a');
   g(tel(a), 'checkout', '-q', '-b', 'telemetry');
   writeFileSync(join(tel(a), 'README.md'), 'seed\n');
+  writeFileSync(join(tel(a), '.gitignore'), '*/live/\n'); // transient state, as the installer seeds it
   g(tel(a), 'add', '-A');
   g(tel(a), 'commit', '-q', '-m', 'telemetry: seed');
   g(tel(a), 'push', '-q', 'origin', 'HEAD:telemetry');
@@ -52,46 +54,72 @@ const write = (repo, name, text) => {
 const readAuto = (repo, name) => readFileSync(join(tel(repo), 'automation', name), 'utf8');
 
 const MARKERS = /^(<{7}|>{7}) /m;
-/** Every working-tree file (outside .git) that holds a conflict marker. */
-function filesWithMarkers(dir, out = []) {
+/** Every working-tree file outside .git, path → content. */
+function treeFiles(dir, root = dir, out = {}) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name === '.git') continue;
     const p = join(dir, e.name);
-    if (e.isDirectory()) filesWithMarkers(p, out);
-    else if (MARKERS.test(readFileSync(p, 'utf8'))) out.push(p);
+    if (e.isDirectory()) treeFiles(p, root, out);
+    else out[relative(root, p)] = readFileSync(p, 'utf8');
   }
   return out;
 }
+const filesWithMarkers = (dir) => Object.entries(treeFiles(dir)).filter(([, text]) => MARKERS.test(text)).map(([p]) => p);
 /** Files of the HEAD commit that hold a conflict marker ('' = none). */
 const committedMarkers = (repo) => { try { return g(tel(repo), 'grep', '-l', '-e', '^<<<<<<< ', 'HEAD'); } catch { return ''; } };
-const midMerge = (repo) => { try { g(tel(repo), 'rev-parse', '-q', '--verify', 'MERGE_HEAD'); return true; } catch { return false; } };
+const rev = (repo, name) => { try { return g(tel(repo), 'rev-parse', '-q', '--verify', name); } catch { return null; } };
+const midMerge = (repo) => rev(repo, 'MERGE_HEAD') !== null;
 const unmerged = (repo) => g(tel(repo), 'ls-files', '-u');
+const remoteHead = (repo) => g(tel(repo), 'ls-remote', 'origin', 'refs/heads/telemetry').split(/\s/)[0];
+const lockDir = (repo) => join(resolve(tel(repo), g(tel(repo), 'rev-parse', '--git-dir')), 'tokenomics-sync.lock');
+/** Everything a sync could disturb: commits, the open merge, the index (every stage), every working file. */
+const snapshot = (repo) => ({
+  head: rev(repo, 'HEAD'),
+  mergeHead: rev(repo, 'MERGE_HEAD'),
+  index: g(tel(repo), 'ls-files', '-s'),
+  status: g(tel(repo), 'status', '--porcelain'),
+  files: treeFiles(tel(repo)),
+});
 const assertSettled = (repo, what) => {
   assert.equal(midMerge(repo), false, `${what}: the tree is not left mid-merge`);
   assert.equal(unmerged(repo), '', `${what}: no unmerged paths`);
   assert.deepEqual(filesWithMarkers(tel(repo)), [], `${what}: no conflict markers in the telemetry tree`);
   assert.equal(committedMarkers(repo), '', `${what}: no conflict markers committed`);
+  assert.ok(!existsSync(lockDir(repo)), `${what}: the sync lock is released`);
 };
 
-/** Both teammates changed the same shared file; `a` already pushed its version. */
+/** Both teammates changed the same two shared files; `a` already pushed its versions. */
 function conflictingWorld(sync) {
   const { a, b } = world();
   write(a, 'config.json', '{"maxSweep":1}\n');
+  write(a, 'factory-profile.json', '{"factory_id":"a"}\n');
   sync(a);
-  assert.equal(g(tel(a), 'rev-parse', 'HEAD'), g(tel(a), 'rev-parse', 'origin/telemetry'), 'fixture: a pushed');
+  assert.equal(rev(a, 'HEAD'), remoteHead(a), 'fixture: a pushed');
   write(b, 'config.json', '{"maxSweep":2}\n');
+  write(b, 'factory-profile.json', '{"factory_id":"b"}\n');
   write(b, 'usage-b.jsonl', '{"id":"b1"}\n');
+  write(b, 'live/sess-1.jsonl', '{"dispatch":1}\n'); // ignored working state
   return { a, b };
 }
 
-/** The state an older version left behind: a conflicted merge, still open. */
-function leaveUnfinishedMerge(repo) {
+/**
+ * A merge someone else left open in the telemetry tree — a person resolving a
+ * conflict by hand: one file already resolved and staged, one still unmerged,
+ * and captures that kept writing meanwhile.
+ */
+function openMergeByHand(repo) {
   g(tel(repo), 'add', '-A');
   g(tel(repo), 'commit', '-q', '-m', 'telemetry: capture');
   g(tel(repo), 'fetch', '-q', 'origin', 'telemetry');
   try { g(tel(repo), 'merge', '--no-edit', 'FETCH_HEAD'); } catch { /* the conflict is the fixture */ }
-  assert.equal(midMerge(repo), true, 'fixture: merge left open');
-  assert.notEqual(unmerged(repo), '', 'fixture: unmerged paths');
+  write(repo, 'factory-profile.json', '{"factory_id":"resolved-by-hand"}\n');
+  g(tel(repo), 'add', 'automation/factory-profile.json');
+  write(repo, 'scopes/sess-1.json', '{"intent":"automation"}\n');                    // new, untracked
+  appendFileSync(join(tel(repo), 'automation', 'usage-b.jsonl'), '{"id":"b2"}\n');   // tracked, uncommitted
+  appendFileSync(join(tel(repo), 'automation', 'config.json'), '{"late":"line"}\n'); // into the conflicted file
+  assert.equal(midMerge(repo), true, 'fixture: merge open');
+  assert.match(unmerged(repo), /config\.json/, 'fixture: one file still unmerged');
+  assert.doesNotMatch(unmerged(repo), /factory-profile\.json/, 'fixture: one file resolved and staged');
 }
 
 const hookSync = (repo) => syncTelemetry(repo, {});
@@ -103,73 +131,81 @@ test('syncTelemetry: distinct per-user files still converge through fetch + merg
   write(b, 'usage-b.jsonl', '{"id":"b1"}\n');
   hookSync(b);
   assert.match(g(tel(b), 'ls-files'), /usage-a\.jsonl[\s\S]*usage-b\.jsonl/);
-  assert.equal(g(tel(b), 'rev-parse', 'HEAD'), g(tel(b), 'ls-remote', 'origin', 'refs/heads/telemetry').split(/\s/)[0], 'merge pushed back');
+  assert.equal(rev(b, 'HEAD'), remoteHead(b), 'merge pushed back');
   assertSettled(b, 'clean merge');
 });
 
-test('syncTelemetry: a conflicting merge is aborted — no markers, not mid-merge, local data kept, next sync commits no markers', () => {
+test('syncTelemetry: a merge this sync started and that conflicts is aborted — no markers, not mid-merge, local data kept, next sync commits no markers', () => {
   const { b } = conflictingWorld(hookSync);
   hookSync(b);
   assertSettled(b, 'after the conflicting sync');
   assert.equal(readAuto(b, 'config.json'), '{"maxSweep":2}\n', 'the local version of the conflicted file is intact');
   assert.equal(readAuto(b, 'usage-b.jsonl'), '{"id":"b1"}\n', 'local capture data is intact');
+  assert.equal(readAuto(b, 'live/sess-1.jsonl'), '{"dispatch":1}\n', 'ignored working state is intact');
   assert.equal(g(tel(b), 'show', 'HEAD:automation/usage-b.jsonl'), '{"id":"b1"}', 'and committed locally');
 
   appendFileSync(join(tel(b), 'automation', 'usage-b.jsonl'), '{"id":"b2"}\n'); // the next capture
+  write(b, 'scopes/sess-2.json', '{"intent":"other"}\n');
   hookSync(b);
   assertSettled(b, 'after the next sync');
   assert.equal(g(tel(b), 'show', 'HEAD:automation/usage-b.jsonl'), '{"id":"b1"}\n{"id":"b2"}', 'the next capture is committed, clean');
+  assert.equal(g(tel(b), 'show', 'HEAD:automation/scopes/sess-2.json'), '{"intent":"other"}');
   assert.equal(g(tel(b), 'show', 'HEAD:automation/config.json'), '{"maxSweep":2}');
+  assert.equal(readAuto(b, 'live/sess-1.jsonl'), '{"dispatch":1}\n');
 });
 
-test('syncTelemetry: an unfinished merge found before staging is aborted first; data written meanwhile survives', () => {
+// A merge that was already open is not ours — a person may be resolving it by
+// hand. A file they already resolved and staged is not even listed as
+// unmerged, so nothing a sync could do to "clean up" is safe. Hands off.
+test('syncTelemetry: a merge that was already open is left exactly as it was — index and working tree unchanged, nothing committed', () => {
   const { b } = conflictingWorld(hookSync);
-  leaveUnfinishedMerge(b);
-  // captures kept writing while the merge sat open: a new record, and a line
-  // appended to the conflicted file itself
-  write(b, 'scopes/sess-1.json', '{"intent":"automation"}\n');
-  appendFileSync(join(tel(b), 'automation', 'config.json'), '{"late":"line"}\n');
-
-  hookSync(b);
-  assertSettled(b, 'after the sync');
-  assert.equal(readAuto(b, 'scopes/sess-1.json'), '{"intent":"automation"}\n', 'new record still on disk');
-  assert.equal(g(tel(b), 'show', 'HEAD:automation/scopes/sess-1.json'), '{"intent":"automation"}', 'and committed');
-  assert.equal(readAuto(b, 'config.json'), '{"maxSweep":2}\n', 'conflicted file is back at the last local commit');
-  // the abort resets the conflicted file, so its working copy (with the late
-  // line) is saved outside the tree first — inside the git dir, never committed
-  const rescueRoot = join(resolve(tel(b), g(tel(b), 'rev-parse', '--git-dir')), 'tokenomics-rescue');
-  const stamps = readdirSync(rescueRoot);
-  assert.equal(stamps.length, 1);
-  assert.match(readFileSync(join(rescueRoot, stamps[0], 'automation', 'config.json'), 'utf8'), /\{"late":"line"\}/,
-    'the line appended to the conflicted file is not lost');
-});
-
-test('syncTelemetry: unmerged paths that cannot be aborted → no commit, local files untouched', () => {
-  const { b } = conflictingWorld(hookSync);
-  leaveUnfinishedMerge(b);
-  rmSync(join(resolve(tel(b), g(tel(b), 'rev-parse', '--git-dir')), 'MERGE_HEAD')); // `merge --abort` now refuses
-  write(b, 'usage-b.jsonl', '{"id":"b1"}\n{"id":"b2"}\n');
-  const head = g(tel(b), 'rev-parse', 'HEAD');
-  const conflicted = readAuto(b, 'config.json');
-  const statusBefore = g(tel(b), 'status', '--porcelain');
-
+  openMergeByHand(b);
+  const before = snapshot(b);
   assert.equal(hookSync(b), false);
-  assert.equal(g(tel(b), 'rev-parse', 'HEAD'), head, 'nothing committed');
-  assert.equal(g(tel(b), 'status', '--porcelain'), statusBefore, 'index untouched — nothing staged');
-  assert.equal(readAuto(b, 'config.json'), conflicted, 'conflicted file left exactly as it was');
-  assert.equal(readAuto(b, 'usage-b.jsonl'), '{"id":"b1"}\n{"id":"b2"}\n', 'local capture data untouched');
+  assert.deepEqual(snapshot(b), before, 'HEAD, MERGE_HEAD, every index stage and every working file are unchanged');
   assert.equal(committedMarkers(b), '', 'no conflict markers committed');
-  const rescueRoot = join(resolve(tel(b), g(tel(b), 'rev-parse', '--git-dir')), 'tokenomics-rescue');
-  assert.ok(!existsSync(rescueRoot) || readdirSync(rescueRoot).length === 0,
-    'nothing was reset, so no rescue copy piles up on every capture');
+  assert.ok(!existsSync(lockDir(b)), 'the sync lock is released');
 });
 
-test('pullTelemetry: a conflicting merge is aborted — failed status, no markers, local data kept, next pull commits no markers', () => {
+test('syncTelemetry: unmerged paths with no merge to conclude → no commit, local files untouched', () => {
+  const { b } = conflictingWorld(hookSync);
+  openMergeByHand(b);
+  rmSync(join(resolve(tel(b), g(tel(b), 'rev-parse', '--git-dir')), 'MERGE_HEAD'));
+  const before = snapshot(b);
+  assert.equal(hookSync(b), false);
+  assert.deepEqual(snapshot(b), before);
+  assert.equal(committedMarkers(b), '', 'no conflict markers committed');
+});
+
+// Two captures must not interleave: A's merge stops with a conflict, B stages
+// and commits the markers before A aborts. One lock around the whole sequence.
+test('sync lock: while it is held a sync stages and commits nothing and is not an error; a stale lock is taken over', () => {
+  const { b } = world();
+  write(b, 'usage-b.jsonl', '{"id":"b1"}\n');
+  mkdirSync(lockDir(b)); // another sync is running
+  const before = snapshot(b);
+  assert.equal(hookSync(b), false, 'skipped — the data waits in the working tree for the next sync');
+  assert.equal(pullTelemetry(b).status, 'busy');
+  assert.deepEqual(snapshot(b), before, 'nothing staged, nothing committed');
+  assert.ok(existsSync(lockDir(b)), 'the holder\'s lock is not removed by the run that skipped');
+
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000); // its holder died an hour ago
+  utimesSync(lockDir(b), longAgo, longAgo);
+  assert.equal(hookSync(b), true, 'stale lock taken over');
+  assert.equal(g(tel(b), 'show', 'HEAD:automation/usage-b.jsonl'), '{"id":"b1"}');
+  assert.equal(rev(b, 'HEAD'), remoteHead(b), 'pushed');
+  assert.ok(!existsSync(lockDir(b)), 'and released afterwards');
+});
+
+test('pullTelemetry: a merge this pull started and that conflicts is aborted — failed status naming the conflict, no markers, local data kept, next pull commits no markers', () => {
   const { b } = conflictingWorld(hookSync);
   const r = pullTelemetry(b);
   assert.equal(r.status, 'failed');
+  assert.match(r.error, /merge conflict/);
+  assert.doesNotMatch(r.error, /offline/, 'a conflict is not blamed on the network');
   assertSettled(b, 'after the conflicting pull');
   assert.equal(readAuto(b, 'config.json'), '{"maxSweep":2}\n');
+  assert.equal(readAuto(b, 'live/sess-1.jsonl'), '{"dispatch":1}\n', 'ignored working state is intact');
   assert.equal(g(tel(b), 'show', 'HEAD:automation/usage-b.jsonl'), '{"id":"b1"}', 'local capture data committed locally');
 
   appendFileSync(join(tel(b), 'automation', 'usage-b.jsonl'), '{"id":"b2"}\n');
@@ -178,24 +214,24 @@ test('pullTelemetry: a conflicting merge is aborted — failed status, no marker
   assert.equal(g(tel(b), 'show', 'HEAD:automation/usage-b.jsonl'), '{"id":"b1"}\n{"id":"b2"}');
 });
 
-test('pullTelemetry: an unfinished merge is aborted before staging; one that cannot be aborted stops the pull', () => {
+test('pullTelemetry: a merge that was already open is left exactly as it was; the pull says so', () => {
   const { b } = conflictingWorld(hookSync);
-  leaveUnfinishedMerge(b);
-  write(b, 'scopes/sess-1.json', '{"intent":"automation"}\n');
-  pullTelemetry(b);
-  assertSettled(b, 'after the pull');
-  assert.equal(g(tel(b), 'show', 'HEAD:automation/scopes/sess-1.json'), '{"intent":"automation"}');
-
-  const { b: stuck } = conflictingWorld(hookSync);
-  leaveUnfinishedMerge(stuck);
-  rmSync(join(resolve(tel(stuck), g(tel(stuck), 'rev-parse', '--git-dir')), 'MERGE_HEAD'));
-  const head = g(tel(stuck), 'rev-parse', 'HEAD');
-  const conflicted = readAuto(stuck, 'config.json');
-  const r = pullTelemetry(stuck);
+  openMergeByHand(b);
+  const before = snapshot(b);
+  const r = pullTelemetry(b);
   assert.equal(r.status, 'failed');
   assert.match(r.error, /unfinished merge/);
-  assert.equal(g(tel(stuck), 'rev-parse', 'HEAD'), head, 'nothing committed');
-  assert.equal(readAuto(stuck, 'config.json'), conflicted, 'local files untouched');
+  assert.deepEqual(snapshot(b), before, 'HEAD, MERGE_HEAD, every index stage and every working file are unchanged');
+  assert.ok(!existsSync(lockDir(b)), 'the sync lock is released');
+});
+
+test('pullTelemetry: a fetch that fails is reported as a fetch failure', () => {
+  const { b } = world();
+  g(tel(b), 'remote', 'set-url', 'origin', join(tel(b), 'no-such-remote.git'));
+  const r = pullTelemetry(b);
+  assert.equal(r.status, 'failed');
+  assert.match(r.error, /could not fetch the remote telemetry branch/);
+  assert.doesNotMatch(r.error, /merge conflict/);
 });
 
 test('pullTelemetry: still merges a teammate\'s distinct files and pushes the merge back', () => {
@@ -205,5 +241,21 @@ test('pullTelemetry: still merges a teammate\'s distinct files and pushes the me
   write(b, 'usage-b.jsonl', '{"id":"b1"}\n');
   assert.equal(pullTelemetry(b).status, 'pulled');
   assert.match(g(tel(b), 'ls-files'), /usage-a\.jsonl[\s\S]*usage-b\.jsonl/);
+  assert.equal(remoteHead(b), rev(b, 'HEAD'), 'the bare remote\'s telemetry ref is the local merge commit');
+  assert.equal(g(tel(b), 'rev-list', '--count', '--merges', 'HEAD'), '1', 'and that commit is the merge');
   assertSettled(b, 'clean pull');
+});
+
+// End to end through the CLI (main() refuses a repo that does not contain the
+// installed skill, so the skill is copied into the repo and run from there).
+test('CLI --pull: a conflict exits 1 and names the conflict, not "offline"', () => {
+  const { b } = conflictingWorld(hookSync);
+  const dest = join(b, '.claude', 'skills', 'tokenomics');
+  cpSync(fileURLToPath(new URL('..', import.meta.url)), dest, { recursive: true });
+  const r = spawnSync(process.execPath, [join(dest, 'scripts', 'install-hooks.mjs'), '--repo', b, '--pull'], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /pull failed/);
+  assert.match(r.stderr, /merge conflict/);
+  assert.doesNotMatch(r.stderr, /offline/);
+  assertSettled(b, 'after the CLI pull');
 });

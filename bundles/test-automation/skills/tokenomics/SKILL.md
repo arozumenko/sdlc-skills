@@ -315,11 +315,13 @@ submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
 before a team report to merge in everyone's pushes. **A merge that stops with
 a conflict is never committed** (for example one git user name capturing in
 two clones, so both append to the same `usage-<user>.jsonl`): the sync and
-`--pull` abort it, this clone's captures stay committed locally and unpushed,
-and stderr says so — resolve it by hand inside `.agents/telemetry`. A merge
-found already open is aborted before anything is staged; conflicted working
-copies are first saved under the submodule's git dir (`tokenomics-rescue/`),
-so a line appended meanwhile is not lost. A repo with **no remote at
+`--pull` abort the merge they started, this clone's captures stay committed
+locally and unpushed, and stderr says so — resolve it by hand inside
+`.agents/telemetry`. A merge that is **already open** there (someone
+resolving by hand) is never touched: the sync skips, stages nothing, and
+captures wait in the working tree until it is finished or aborted. Syncs are
+serialized by a lock directory in the submodule's git dir; a capture that
+finds it held skips its sync and the next one catches up. A repo with **no remote at
 all** works too — everything accumulates in the local `telemetry` branch; when
 a real remote appears later, run `git submodule sync .agents/telemetry` once
 so pushes start reaching it (`--doctor` detects the un-synced state and prints

@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, r
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { settleUnfinishedMerge } from '../hooks/telemetry-capture.mjs';
+import { acquireSyncLock, hasUnfinishedMerge } from '../hooks/telemetry-capture.mjs';
 
 const MARKER = '_tokenomics';
 const TASK_LABEL = 'tokenomics: telemetry sweep';
@@ -506,30 +506,41 @@ export function pullTelemetry(repo) {
   if (!existsSync(join(dir, '.git'))) return { status: 'no-submodule' };
   const git = (args, timeout = 20000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
+  // Same lock and same merge rule as the capture sync (telemetry-capture.mjs):
+  // one sync at a time; a merge that was already open is not ours and is left
+  // exactly as it is; a merge THIS pull starts and that stops is aborted on
+  // the spot — conflict markers are never committed into shared files.
+  let release = null;
   try {
-    // Same rule as the capture sync: an unfinished merge is aborted before
-    // anything is staged, and a merge that stops is aborted on the spot —
-    // conflict markers must never be committed into shared telemetry files.
-    if (!settleUnfinishedMerge(dir, git)) {
-      return { status: 'failed', error: 'unfinished merge in .agents/telemetry that could not be aborted; local files left as they are, resolve it by hand' };
+    release = acquireSyncLock(dir, git);
+    if (!release) return { status: 'busy' };
+    if (hasUnfinishedMerge(git)) {
+      return { status: 'failed', error: 'an unfinished merge is open in .agents/telemetry — left exactly as it is; finish or abort it there, then pull again' };
     }
     git(['add', '-A']);
     if (git(['status', '--porcelain']).trim()) {
       git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
     }
     if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
-    git(['fetch', 'origin', 'telemetry']);
+    try { git(['fetch', 'origin', 'telemetry']); } catch {
+      return { status: 'failed', error: 'could not fetch the remote telemetry branch — offline, or no telemetry branch on the remote yet' };
+    }
     try {
       git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
     } catch (err) {
-      try { git(['merge', '--abort']); } catch { /* nothing to abort */ }
+      let conflict = false;
+      try { conflict = git(['ls-files', '-u']).trim() !== ''; } catch { /* reported as a plain failure below */ }
+      try { git(['merge', '--abort']); } catch { /* the merge never started — nothing to abort */ }
+      if (conflict) {
+        return { status: 'failed', error: 'merge conflict with the remote telemetry branch — merge aborted, local captures stay committed and unpushed; resolve it by hand in .agents/telemetry' };
+      }
       throw err;
     }
     try { git(['push', 'origin', 'HEAD:telemetry']); } catch { /* offline push-back — next sync retries */ }
     return { status: 'pulled' };
   } catch (err) {
     return { status: 'failed', error: String(err?.message ?? err).split('\n')[0] };
-  }
+  } finally { if (release) release(); }
 }
 
 /**
@@ -762,10 +773,11 @@ export async function main(argv = process.argv.slice(2)) {
     const note = {
       pulled: 'telemetry pulled — the team\'s pushes are merged in; reports now see everyone',
       'no-submodule': 'no telemetry submodule here — nothing to pull (plain-dir mode is local-only)',
-      failed: `pull failed (${r.error}) — offline, or no telemetry branch on the remote yet`,
+      busy: 'another telemetry sync is running here — nothing pulled; run --pull again in a moment',
+      failed: `pull failed — ${r.error}`,
     }[r.status];
     process.stderr.write(`tokenomics: ${note}\n`);
-    return r.status === 'failed' ? 1 : 0;
+    return r.status === 'failed' || r.status === 'busy' ? 1 : 0;
   }
 
   // A user-owned JSON file that exists but does not parse stops the run:
