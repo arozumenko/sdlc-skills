@@ -313,13 +313,13 @@ tree never gets dirty and a branch switch never stashes a record. A teammate
 gets everything with `git clone --recurse-submodules` (forgot? — `git
 submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
 before a team report to merge in everyone's pushes. **A merge that stops with
-a conflict is never committed** (the usual cause: one git user name capturing
-on two machines, so both append to the same `usage-<user>.jsonl`): the sync
-and `--pull` abort it, this machine's captures stay committed locally and
-unpushed, and stderr says so — resolve it by hand inside `.agents/telemetry`.
-A merge found already open is aborted before anything is staged; conflicted
-working copies are first saved under the submodule's git dir
-(`tokenomics-rescue/`), so a line appended meanwhile is not lost. A repo with **no remote at
+a conflict is never committed** (for example one git user name capturing in
+two clones, so both append to the same `usage-<user>.jsonl`): the sync and
+`--pull` abort it, this clone's captures stay committed locally and unpushed,
+and stderr says so — resolve it by hand inside `.agents/telemetry`. A merge
+found already open is aborted before anything is staged; conflicted working
+copies are first saved under the submodule's git dir (`tokenomics-rescue/`),
+so a line appended meanwhile is not lost. A repo with **no remote at
 all** works too — everything accumulates in the local `telemetry` branch; when
 a real remote appears later, run `git submodule sync .agents/telemetry` once
 so pushes start reaching it (`--doctor` detects the un-synced state and prints
