@@ -1681,7 +1681,7 @@ function printHelp() {
 const BACKUP_DIR = ".sdlc-skills-backup"; // top-level and dot-free below: no AI host scans it for skills or agents
 let forceReplace = false; // --force
 const writtenThisRun = new Set(); // destinations this process created or replaced
-const keptWithLocalChanges = []; // items an update left alone, for the end-of-run summary
+const keptWithLocalChanges = []; // project-relative paths an update left alone, for the end-of-run summary
 let backupStamp = null; // one dated backup folder per run
 let gitSnapshot; // undefined until first asked; null when git cannot help
 
@@ -1753,7 +1753,7 @@ function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
   if (state === "changed") {
     console.log(`      ! ${label} kept: ${rel} has uncommitted local changes. Commit or stash them, or pass --force to replace it.`);
     if (!keptWithLocalChanges.length) process.once("beforeExit", printKeptSummary);
-    keptWithLocalChanges.push(label.replace(/\s+/, " "));
+    keptWithLocalChanges.push(rel);
     return false;
   }
   if (!backupStamp) backupStamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);

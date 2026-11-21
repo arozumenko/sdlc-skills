@@ -128,6 +128,7 @@ for (const [what, mutate] of [
     assert.match(r.out, KEPT("skill", "memory"));
     assert.equal(readFileSync(s.p(".claude/skills/knowledge-curation/SKILL.md"), "utf8"), shipped("skills/knowledge-curation/SKILL.md"), "the clean item is updated");
     assert.equal(r.out.match(SUMMARY)?.[1], "1", r.out);
+    assert.match(r.out, /NOT updated: they have uncommitted local changes \(\.claude\/skills\/memory\)\./, "the summary names the kept path");
     assert.ok(r.out.indexOf("NOT updated") > r.out.indexOf("Done:"), "the summary is the last thing printed");
   });
 }
