@@ -1767,11 +1767,15 @@ const keptThisRun = new Set(); // destinations an update left alone (overlays sk
 let backupDir = null; // this run's backup folder, project-relative; made on first need
 let gitSnapshot; // undefined until first asked; null when git cannot help
 
-// Variables that tell git which repository or configuration to use. A caller
-// can leave them set (a git hook exports GIT_DIR), and git would then answer
-// for some other checkout. The snapshot always asks about the repository the
-// project folder is in. Same list as bin/lib/doctor/git.mjs.
-const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CEILING_DIRECTORIES|GIT_DISCOVERY_ACROSS_FILESYSTEM|GIT_CONFIG.*|GIT_EXEC_PATH|GIT_SSH.*|GIT_ASKPASS|GIT_EXTERNAL_DIFF|GIT_PAGER|GIT_EDITOR)$/;
+// Variables that tell git WHICH repository to answer for: its git dir, work
+// tree, index, object store, namespace, and how far up to look for it. A
+// caller can leave them set (a git hook exports GIT_DIR), and git would then
+// describe some other checkout. The snapshot always asks about the repository
+// the project folder is in. The caller's configuration (GIT_CONFIG_GLOBAL,
+// GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT/KEY_n/VALUE_n) is
+// kept: it decides what counts as changed or ignored (core.autocrlf,
+// core.excludesFile), so dropping it would change git's answer.
+const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CEILING_DIRECTORIES|GIT_DISCOVERY_ACROSS_FILESYSTEM)$/;
 
 function gitOutput(args) {
   const env = { GIT_OPTIONAL_LOCKS: "0" }; // read-only: no index refresh write

@@ -29,7 +29,7 @@ function sandbox({ git = false } = {}) {
   mkdirSync(project);
   const env = {};
   for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_")) env[k] = v;
-  Object.assign(env, { HOME: home, SDLC_SKILLS_CACHE_DIR: join(home, ".cache"), GIT_CONFIG_GLOBAL: NO_NETWORK, GIT_CONFIG_NOSYSTEM: "1" });
+  Object.assign(env, { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), SDLC_SKILLS_CACHE_DIR: join(home, ".cache"), GIT_CONFIG_GLOBAL: NO_NETWORK, GIT_CONFIG_NOSYSTEM: "1" });
   const run = (cmd, args, extraEnv = {}) => spawnSync(cmd, args, { cwd: project, encoding: "utf8", env: { ...env, ...extraEnv } });
   const git_ = (...args) => {
     const r = run("git", args);
@@ -755,4 +755,25 @@ test("a file where an installed factory's seed parent goes does not abort a late
   assert.equal(readFileSync(s.p(".agents/security-testing"), "utf8"), "my file\n");
   assert.equal((r.out.match(/! seed \.agents\/security-testing\/knowledge: the project has a file where one of its parent folders goes; kept, nothing seeded/g) || []).length, 1, r.out);
   assert.match(r.out, /Done: /);
+});
+
+test("the git snapshot honours the caller's GIT_CONFIG_GLOBAL", () => {
+  // The caller's global config ignores .claude/ through core.excludesFile. With
+  // it, git cannot restore the destination: backup, then replace. Without it,
+  // git would report the folder untracked and the update would keep it.
+  const s = sandbox({ git: true });
+  const excludes = join(s.home, "ignore");
+  const config = join(s.home, "gitconfig");
+  writeFileSync(excludes, ".claude/\n.sdlc-skills-backup/\n");
+  writeFileSync(config, `${readFileSync(NO_NETWORK, "utf8")}[core]\n\texcludesFile = ${excludes}\n`);
+  const env = { GIT_CONFIG_GLOBAL: config };
+  assert.equal(s.initEnv(env, "--skills", "memory").status, 0);
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "my local edit\n");
+  const r = s.initEnv(env, "--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+  const m = r.out.match(/previous copy saved to (\S+)/);
+  assert.ok(m, r.out);
+  assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "my local edit\n");
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
 });
