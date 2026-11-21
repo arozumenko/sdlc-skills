@@ -1880,13 +1880,13 @@ export function applySkillOverlayToText(text, overlay) {
 function applySkillOverlay(target, name, overlay, registry) {
   if (target.id === "codex") {
     // A Codex agent is a generated .toml with no skill lines to rewrite: apply
-    // the overlay to the AGENT.md text this run built it from and transform
-    // again. A file this run did not write (exists, no --update) is left alone.
-    const dest = join(CWD, target.dir, "agents", `${name}.toml`);
-    const built = codexAgentSources.get(dest);
+    // the overlay to the AGENT.md text this run built it from; the .toml is
+    // rebuilt from that text once the skills are copied (finalizeCodexAgents).
+    // A file this run did not write (exists, no --update) is left alone.
+    const built = codexAgentSources.get(join(CWD, target.dir, "agents", `${name}.toml`));
     const overlaid = built ? applySkillOverlayToText(built.agentText, overlay) : null;
     if (overlaid === null) return false;
-    writeFileSync(dest, transformAgentForCodex(overlaid, built.soulText, name, built.skillRoots));
+    built.agentText = overlaid;
     return true;
   }
   const agentFile =
@@ -2099,10 +2099,9 @@ function tomlMultiline(s) {
   return '"""\n' + body.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"') + '\n"""';
 }
 
-// `skillRoots` are the package directories whose skills count as shipped with
-// this agent: the top-level skills/ and, for a factory's agent, that factory's
-// own skills/ (see writeCodexAgent).
-function transformAgentForCodex(agentText, soulText, name, skillRoots = [join(PKG_ROOT, "skills")]) {
+// `canEnable(id)` decides which of the agent's `skills:` entries get a
+// [[skills.config]] block (see writeCodexAgent).
+function transformAgentForCodex(agentText, soulText, name, canEnable) {
   const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
   const frontmatter = fm ? fm[1] : "";
   let body = fm ? agentText.slice(fm.index + fm[0].length) : agentText;
@@ -2141,18 +2140,26 @@ function transformAgentForCodex(agentText, soulText, name, skillRoots = [join(PK
   // Enable only the `skills:` list — the standing-context set. On-demand
   // skills are installed under .codex/skills/ but not enabled here; the
   // agent body's prose points at them when they apply.
-  const skills = parseAgentSkillSplit(agentText).preload.filter((id) =>
-    skillRoots.some((root) => existsSync(join(root, id)))
-  );
+  const skills = parseAgentSkillSplit(agentText).preload.filter(canEnable);
   for (const id of skills) {
     lines.push("", "[[skills.config]]", `path = ${tomlBasicString(`.codex/skills/${id}/SKILL.md`)}`, "enabled = true");
   }
   return lines.join("\n") + "\n";
 }
 
-// What each Codex agent written by this run was built from (dest path → source
-// texts), so applySkillOverlay can rebuild the .toml with the overlay applied.
+// What each Codex agent written by this run is built from (dest path → source
+// texts and the enablement rule). A .toml is not final when it is first
+// written: a skill overlay may still change its skill lines, and the skills it
+// enables are copied after the agents.
 const codexAgentSources = new Map();
+
+// Rebuild every .toml this run wrote. Called once the target's skills are on
+// disk, so the enablement matches what is installed.
+function finalizeCodexAgents() {
+  for (const [dest, b] of codexAgentSources) {
+    writeFileSync(dest, transformAgentForCodex(b.agentText, b.soulText, b.name, b.canEnable));
+  }
+}
 
 function writeCodexAgent(src, name, targetDir, update) {
   const agentFile = join(src, "AGENT.md");
@@ -2163,12 +2170,17 @@ function writeCodexAgent(src, name, targetDir, update) {
   // src is <owner>/agents/<name>; the owner (a factory, or the package root)
   // keeps its skills beside its agents.
   const skillRoots = [join(PKG_ROOT, "skills"), join(dirname(dirname(src)), "skills")];
+  // Enabled: a skill the package ships for this agent whose SKILL.md is on
+  // disk in this project. An agent can be installed without its skills, and
+  // an enabled path that does not exist is a broken reference.
+  const canEnable = (id) =>
+    skillRoots.some((root) => existsSync(join(root, id))) &&
+    existsSync(join(CWD, targetDir, "skills", id, "SKILL.md"));
   const agentText = readFileSync(agentFile, "utf8");
   const soulText = existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null;
-  const toml = transformAgentForCodex(agentText, soulText, name, skillRoots);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, toml);
-  codexAgentSources.set(dest, { agentText, soulText, skillRoots });
+  writeFileSync(dest, transformAgentForCodex(agentText, soulText, name, canEnable));
+  codexAgentSources.set(dest, { agentText, soulText, name, canEnable });
   return { status: "installed", dest };
 }
 
@@ -3111,6 +3123,8 @@ async function main() {
         console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
     }
+    // Codex agents were written before these skills; settle their enablement.
+    if (t.id === "codex") finalizeCodexAgents();
   }
 
   // Apply interactive QA picks: trim quality-architect to the chosen

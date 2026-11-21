@@ -56,6 +56,28 @@ test("a factory-owned skill is enabled in the installed Codex agent", () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// Enablement follows what is on disk, not what the package ships: an agent can
+// be installed without the skills it declares.
+test("a declared skill that is not installed is not enabled", () => {
+  const { root, proj, env } = sandbox();
+  try {
+    const r = install(join(REPO, "bin/init.mjs"), proj, env, "--agents", "security-lead", "--skills", "memory");
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    assert.ok(!existsSync(join(proj, ".codex/skills/security-engagement")));
+    assert.deepEqual(enabled(readFileSync(join(proj, ".codex/agents/security-lead.toml"), "utf8")), ["memory"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the same holds for a top-level skill: declared, not installed, not enabled", () => {
+  const { root, proj, env } = sandbox();
+  try {
+    const r = install(join(REPO, "bin/init.mjs"), proj, env, "--agents", "security-lead", "--skills", "security-testing/security-engagement");
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    assert.ok(!existsSync(join(proj, ".codex/skills/memory")));
+    assert.deepEqual(enabled(readFileSync(join(proj, ".codex/agents/security-lead.toml"), "utf8")), ["security-engagement"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("a skill overlay reaches the installed Codex agent", () => {
   const { root, proj, env } = sandbox();
   try {
