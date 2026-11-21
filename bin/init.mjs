@@ -571,7 +571,7 @@ function installSeed(factory, update) {
       continue;
     }
     const destPath = join(CWD, dest);
-    if (existsSync(destPath)) {
+    if (entryAt(destPath)) { // a link counts, dangling or not: it is the user's
       const added = seedMissingFiles(srcPath, destPath, PKG_ROOT);
       console.log(`      — seed ${dest} (exists; existing files kept)${added ? ` — added ${added} new file(s)` : ""}`);
       skipped++;
@@ -624,15 +624,19 @@ function reportSeedClash(dest, what) {
   console.log(line);
 }
 
-// True when a regular file sits where one of the seed destination's parent
-// folders goes. Nothing can be seeded there; the file is the user's and stays.
+// True when something other than a folder sits where one of the seed
+// destination's parent folders goes: a regular file, or a link that leads to
+// no folder (dangling, or to a file). Nothing can be seeded there; the entry is
+// the user's and stays. A link to a real folder is a folder.
 function seedParentBlocked(destPath) {
   for (let dir = dirname(destPath); ; dir = dirname(dir)) {
-    let st;
-    try { st = statSync(dir, { throwIfNoEntry: false }); } catch { st = undefined; } // ENOTDIR: look further up
-    if (st) {
-      if (st.isDirectory()) return false;
-      reportSeedClash(destPath, "the project has a file where one of its parent folders goes; kept, nothing seeded");
+    const entry = entryAt(dir);
+    if (entry) {
+      let leadsTo;
+      try { leadsTo = statSync(dir, { throwIfNoEntry: false }); } catch { /* a link loop: no folder */ }
+      if (leadsTo?.isDirectory()) return false;
+      const what = entry.isSymbolicLink() ? "a link that leads to no folder" : "a file";
+      reportSeedClash(destPath, `the project has ${what} where one of its parent folders goes; kept, nothing seeded`);
       return true;
     }
     if (dirname(dir) === dir) return false;

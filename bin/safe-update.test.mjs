@@ -922,3 +922,38 @@ test("skill folder replaced by a dangling link, no git: kept with a reason; --fo
   assert.equal(readFileSync(join(dest, "SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
   assert.ok(!existsSync(outside));
 });
+
+test("a dangling link where a seed's parent folder goes: reported, install continues", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents"));
+  symlinkSync(join(s.base, "nowhere"), s.p(".agents/security-testing"));
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(isLink(s.p(".agents/security-testing")));
+  assert.ok(!existsSync(join(s.base, "nowhere")));
+  assert.equal((r.out.match(/! seed \.agents\/security-testing\/knowledge: the project has a link that leads to no folder where one of its parent folders goes; kept, nothing seeded/g) || []).length, 1, r.out);
+  assert.match(r.out, /Done: /);
+});
+
+test("a dangling link at the seed destination itself: kept, install continues", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents/security-testing"), { recursive: true });
+  symlinkSync(join(s.base, "nowhere"), s.p(".agents/security-testing/knowledge"));
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(isLink(s.p(".agents/security-testing/knowledge")));
+  assert.ok(!existsSync(join(s.base, "nowhere")));
+  assert.match(r.out, /Done: /);
+});
+
+test("a healthy folder link as the seed's parent still seeds", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".agents"));
+  mkdirSync(s.p("shared-agents"));
+  symlinkSync(join("..", "shared-agents"), s.p(".agents/security-testing"));
+  const r = s.init("--factory", "security-testing");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /✓ seed \.agents\/security-testing\/knowledge/);
+  assert.ok(existsSync(s.p("shared-agents/knowledge/finding-schema.md")), "seeded through the link");
+  assert.ok(isLink(s.p(".agents/security-testing")));
+});
