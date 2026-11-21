@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -164,4 +164,18 @@ test('a corrupt calibration file does not disable the check on any hook path',()
  assert.equal(denied(hook(f,pre())),true);
  const c=child(f,'b',1);assert.equal(denied(hook(f,c.payload)),true);
  assert.deepEqual(readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')),[]);
+});
+// The hook is wired with matcher *, so it starts for every tool call of every session. A copy of the entry file with no engine
+// module beside it proves which payloads are answered before the engine is loaded.
+test('an uninteresting call is answered before any engine module is loaded; an interesting one loads the engine',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dm-budget-lone-')),lone=join(dir,'budget-hook.mjs');copyFileSync(SCRIPT,lone);
+ const run=payload=>spawnSync(process.execPath,[lone],{input:typeof payload==='string'?payload:JSON.stringify(payload),encoding:'utf8',cwd:dir,env:{...process.env,CLAUDE_PROJECT_DIR:dir}});
+ const quiet=[{tool_name:'Bash',session_id:'s'},{tool_name:'Read',session_id:'s',tool_input:{file_path:'x'}},{tool_name:'Agent',session_id:'s',host:'codex'},{tool_name:'Bash',agent_id:'a',session_id:'s',host:'codex'},{tool_name:'Agent'},{tool_name:'Bash',agent_id:'a'},'not json',''];
+ for(const payload of quiet){const p=run(payload);assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));}
+ // With the engine missing, an interesting call fails to load it and still makes no decision and exits 0.
+ for(const payload of [{tool_name:'Agent',session_id:'s'},{tool_name:'Task',session_id:'s'},{tool_name:'Bash',agent_id:'a',session_id:'s'}]){const p=run(payload);assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));}
+ // The real file, imported: handleBudget is ready and synchronous, with the same guards.
+ const {handleBudget}=await import('./budget-hook.mjs');
+ assert.deepEqual(handleBudget({tool_name:'Bash',session_id:'s'}),{});assert.deepEqual(handleBudget({tool_name:'Agent',session_id:'s',host:'codex'}),{});
+ const f=fixture();stop(f,child(f,'a',9.01));assert.equal(denied(handleBudget(pre(),{repo:f.repo,now:NOW})),true);
 });
