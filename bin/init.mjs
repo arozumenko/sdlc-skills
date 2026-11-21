@@ -509,11 +509,13 @@ function installBriefings(factory) {
 
 // Seed loose reference files/dirs a factory ships into the project at a fixed
 // path. factory.seed maps a factory-relative source → a project-relative dest.
-// Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
-// left intact unless --update. On --update the dest is removed first (clean
-// replace), so files deleted from the factory don't linger. Used for reference
-// docs agents read at runtime: a subagent's cwd is the project root, so a
-// fixed project path is resolvable.
+// Create-only (IDE-neutral, like briefings): a missing dest is copied in; an
+// existing dest is never removed or overwritten, with or without --update,
+// because seed folders hold the user's own working documents. Files the
+// factory has and the project lacks are still added. Used for reference docs
+// agents read at runtime: a subagent's cwd is the project root, so a fixed
+// project path is resolvable. `update` is accepted for the caller's sake and
+// changes nothing here.
 function installSeed(factory, update) {
   let installed = 0;
   let skipped = 0;
@@ -524,14 +526,13 @@ function installSeed(factory, update) {
       continue;
     }
     const destPath = join(CWD, dest);
-    if (existsSync(destPath) && !update) {
+    if (existsSync(destPath)) {
       const added = seedMissingFiles(srcPath, destPath);
-      console.log(`      — seed ${dest} (exists; use --update)${added ? ` — added ${added} new file(s)` : ""}`);
+      console.log(`      — seed ${dest} (exists; existing files kept)${added ? ` — added ${added} new file(s)` : ""}`);
       skipped++;
       continue;
     }
     mkdirSync(dirname(destPath), { recursive: true });
-    if (update && existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
     copyTreeDereferenced(srcPath, destPath, { force: true });
     console.log(`      ✓ seed ${dest}`);
     installed++;
