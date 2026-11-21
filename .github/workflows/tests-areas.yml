@@ -35,9 +35,10 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         # Two commands, not a pipe: a failed `git diff` must fail the step, not
         # read as "nothing changed". --no-renames lists both paths of a moved
-        # file, so moving a file out of an area still counts as changing it.
+        # file, so moving a file out of an area still counts as changing it. -z
+        # separates paths with NUL and never quotes a name.
         run: |
-          git diff --no-renames --name-only "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/changed.txt"
+          git diff --no-renames --name-only -z "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/changed.txt"
           areas=$(node bin/fast-tests.mjs --changed-areas < "$RUNNER_TEMP/changed.txt")
           echo "changed areas: $areas"
           echo "areas=$areas" >> "$GITHUB_OUTPUT"

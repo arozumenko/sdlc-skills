@@ -227,6 +227,15 @@ test("--changed-areas reads changed paths on stdin and prints the areas as JSON"
   assert.deepEqual(JSON.parse(run("bin/init.mjs\n").stdout), ["installer-integration"]);
 });
 
+test("--changed-areas reads NUL-separated paths, so a name git would quote still counts", () => {
+  // Without -z, git prints a non-ASCII or odd name quoted and escaped
+  // ("bin/\303\251.mjs"); the leading quote hid the path from its area.
+  const run = (input) => spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--changed-areas"], { input, encoding: "utf8" });
+  assert.deepEqual(JSON.parse(run("bin/\u00e9.mjs\0").stdout), ["installer-integration"]);
+  assert.deepEqual(JSON.parse(run("README.md\0evals/a b.mjs\0hooks/tab\there.sh\0").stdout), ["hooks", "evals", "installer-integration"]);
+  assert.equal(run("").stdout.trim(), "[]");
+});
+
 test("--area lists the files it would run, and refuses a directory that is not an area", () => {
   const list = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--area", "hooks", "--list"], { encoding: "utf8" });
   assert.equal(list.status, 0, list.stderr);
@@ -248,5 +257,6 @@ test("the pull-request area workflow takes its areas from this script", () => {
   assert.match(yml, /node bin\/fast-tests\.mjs --area /);
   // A file renamed out of an area must still count as a change to that area:
   // with rename detection the diff lists only the new path.
-  assert.match(yml, /git diff --no-renames --name-only /);
+  // -z: NUL-separated and never quoted, whatever the file is called.
+  assert.match(yml, /git diff --no-renames --name-only -z /);
 });

@@ -16,8 +16,8 @@
  *
  *   node bin/fast-tests.mjs --area <name>     # an area: every test file under
  *                                             # that directory; a group: its files
- *   node bin/fast-tests.mjs --changed-areas   # changed paths on stdin, one per
- *                                             # line -> JSON list of names to run
+ *   node bin/fast-tests.mjs --changed-areas   # changed paths on stdin, NUL-separated
+ *                                             # or one per line -> JSON list of names to run
  *
  * Any other `--option` is passed to `node --test`, for example
  * `npm run test:fast -- --test-reporter=dot`.
@@ -192,7 +192,9 @@ function runTests(args, files) {
 function main() {
   const args = process.argv.slice(2);
   if (args.includes("--changed-areas")) {
-    const changed = readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+    // NUL-separated (`git diff -z`, what the workflow sends: git never quotes
+    // a name there) or one path per line.
+    const changed = readFileSync(0, "utf8").split(/\0|\r?\n/).filter(Boolean);
     console.log(JSON.stringify(changedAreas(changed)));
     return;
   }
