@@ -35,6 +35,15 @@ automatically (readers look only there; un-migrated history would silently
 drop out of every report). Same-named newer data in `automation/` wins —
 nothing is ever clobbered.
 
+**The installer never replaces a settings file it cannot parse.** If
+`.claude/settings.json` (or `settings.local.json`), `.vscode/tasks.json`,
+`.vscode/settings.json` or the telemetry `config.json` exists but is not
+strict JSON (a syntax error, comments, a trailing comma), install, `--remove`
+and `--otel` stop with exit 1 and a message naming the file, and write nothing
+to it — fix the file and re-run. One exception keeps uninstall usable:
+`--remove` / `--otel-remove` skip an unparseable VS Code file that holds
+nothing of ours.
+
 ## Quick start
 
 ```bash
