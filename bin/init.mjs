@@ -152,18 +152,53 @@ function listDirs(parent) {
 // content sometimes ships intra-skill symlinks (e.g. twostraws' Swift skills
 // have a `skills/<name>/references → ../../references` symlink to satisfy
 // multiple plugin layouts) — those need to be materialized.
-function copyTreeDereferenced(src, dest, { force = false } = {}) {
-  // Resolve any top-level symlink to its real target.
+//
+// The copy stays inside one allowed root: a symlink whose real target is
+// outside it is skipped with a warning, so a link cannot pull a file from
+// elsewhere on the machine into the project. Callers name the root — the
+// package root for in-repo content, the fetched checkout for an external
+// skill. With no root, it is the tree being copied (for a top-level symlink,
+// the folder that holds the link). A link back to a folder already being
+// copied (a cycle) is skipped too.
+export function copyTreeDereferenced(src, dest, { force = false, root } = {}) {
+  let stat;
+  try { stat = lstatSync(src); } catch { return; }
+  const isLink = stat.isSymbolicLink();
+  const allowed = realpathSync(root ?? (isLink ? dirname(src) : src));
+  // Start from a real path so every folder on the way down is one: the cycle
+  // check compares real paths. A top-level link is resolved, and checked, below.
+  copyTreeWithin(isLink ? src : realpathSync(src), dest, force, allowed, new Set());
+}
+
+function isWithinDir(dir, path) {
+  for (let cur = path; ; cur = dirname(cur)) {
+    if (cur === dir) return true;
+    if (dirname(cur) === cur) return false;
+  }
+}
+
+function copyTreeWithin(src, dest, force, allowed, ancestors) {
   let stat;
   try { stat = lstatSync(src); } catch { return; }
   if (stat.isSymbolicLink()) {
-    return copyTreeDereferenced(realpathSync(src), dest, { force });
+    const real = realpathSync(src);
+    if (!isWithinDir(allowed, real)) {
+      console.error(`  ! skipped symlink ${src} → ${real} (outside ${allowed}; not copied)`);
+      return;
+    }
+    return copyTreeWithin(real, dest, force, allowed, ancestors);
   }
   if (stat.isDirectory()) {
+    if (ancestors.has(src)) {
+      console.error(`  ! skipped symlink back to ${src} (a directory cycle; not copied again)`);
+      return;
+    }
+    ancestors.add(src);
     mkdirSync(dest, { recursive: true });
     for (const entry of readdirSync(src)) {
-      copyTreeDereferenced(join(src, entry), join(dest, entry), { force });
+      copyTreeWithin(join(src, entry), join(dest, entry), force, allowed, ancestors);
     }
+    ancestors.delete(src);
     return;
   }
   if (stat.isFile()) {
@@ -533,7 +568,7 @@ function installSeed(factory, update) {
       continue;
     }
     mkdirSync(dirname(destPath), { recursive: true });
-    copyTreeDereferenced(srcPath, destPath, { force: true });
+    copyTreeDereferenced(srcPath, destPath, { force: true, root: PKG_ROOT });
     console.log(`      ✓ seed ${dest}`);
     installed++;
   }
@@ -1462,7 +1497,7 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
       // upstream skills (e.g. twostraws/Swift-*-Agent-Skill) ship nested
       // relative symlinks — copyTreeDereferenced materializes those into
       // real content so the install survives transport off this machine.
-      copyTreeDereferenced(src, dest, { force: true });
+      copyTreeDereferenced(src, dest, { force: true, root: clone }); // links may reach anywhere in the checkout, not beyond
     }
     return { status: "installed", name: skillName };
   } catch (err) {
@@ -1766,7 +1801,7 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // into this repo's agents/ or skills/ (the symlink pattern lets a factory
   // "own" a shared item without forking it), and the source tree may contain
   // nested symlinks too (Node's cpSync({dereference:true}) doesn't recurse).
-  copyTreeDereferenced(src, dest, { force: true });
+  copyTreeDereferenced(src, dest, { force: true, root: PKG_ROOT });
   writtenThisRun.add(dest);
 
   // Inject a skills-inventory section into the installed agent body —

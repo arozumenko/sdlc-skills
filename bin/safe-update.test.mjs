@@ -9,11 +9,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { mergeClaudeSettingsHooks, mergeVersionedHooks } from "./init.mjs";
+import { copyTreeDereferenced, mergeClaudeSettingsHooks, mergeVersionedHooks } from "./init.mjs";
 
 const REPO = new URL("..", import.meta.url).pathname;
 const INIT = join(REPO, "bin/init.mjs");
@@ -49,7 +49,7 @@ function sandbox({ git = false } = {}) {
     git_("add", "-A");
     git_("commit", "-qm", msg);
   };
-  return { project, init, git: git_, commitAll, p: (...parts) => join(project, ...parts) };
+  return { base, home, project, run, init, git: git_, commitAll, p: (...parts) => join(project, ...parts) };
 }
 
 // ── Item 1: seeds are create-only ───────────────────────────────────────────
@@ -301,4 +301,127 @@ test("mergeVersionedHooks: two merges in one process write the backup once", () 
   assert.equal(mergeVersionedHooks(file, { sessionStart: [{ command: "./two/run.sh" }] }, "/two/"), true);
   assert.equal(readFileSync(file + ".bak", "utf8"), original);
   assert.equal(JSON.parse(readFileSync(file, "utf8")).hooks.sessionStart.length, 3, "both merges still land, the user's hook stays");
+});
+
+// ── Item 3: copyTreeDereferenced stays inside its source tree ───────────────
+
+// A package-like tree: pkg/skills/demo is what gets copied; pkg/shared is
+// inside the package but outside the skill; outside/ is outside the package.
+function linkFixture() {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "safe-update-links-")));
+  const pkg = join(base, "pkg");
+  const src = join(pkg, "skills", "demo");
+  mkdirSync(join(src, "sub"), { recursive: true });
+  mkdirSync(join(pkg, "shared"));
+  mkdirSync(join(base, "outside"));
+  writeFileSync(join(src, "SKILL.md"), "skill\n");
+  writeFileSync(join(src, "sub", "inner.md"), "inner\n");
+  writeFileSync(join(pkg, "shared", "guide.md"), "guide\n");
+  writeFileSync(join(base, "outside", "secret.txt"), "secret\n");
+  return { base, pkg, src, dest: join(base, "dest") };
+}
+
+// Runs the copy with console.error captured; returns the warnings.
+function copyQuietly(src, dest, opts) {
+  const warnings = [];
+  const original = console.error;
+  console.error = (...a) => warnings.push(a.join(" "));
+  try {
+    copyTreeDereferenced(src, dest, opts);
+  } finally {
+    console.error = original;
+  }
+  return warnings;
+}
+
+test("a link whose target is outside the allowed root is skipped with a warning", () => {
+  const f = linkFixture();
+  symlinkSync(join(f.base, "outside", "secret.txt"), join(f.src, "leak.txt"));
+  symlinkSync(join(f.base, "outside"), join(f.src, "leak-dir"));
+  const warnings = copyQuietly(f.src, f.dest, { force: true, root: f.pkg });
+  assert.deepEqual(readdirSync(f.dest).sort(), ["SKILL.md", "sub"], "nothing from outside the root is copied");
+  assert.equal(warnings.length, 2, warnings.join("\n"));
+  for (const w of warnings) assert.match(w, /skipped symlink .*leak.* \(outside /);
+});
+
+test("a link whose target is inside the allowed root is copied as real content, as before", () => {
+  const f = linkFixture();
+  symlinkSync(join("..", "..", "shared"), join(f.src, "references")); // out of the skill, inside the package
+  symlinkSync(join("sub", "inner.md"), join(f.src, "alias.md"));
+  symlinkSync("sub", join(f.src, "sub-again")); // the same folder twice is not a cycle
+  const warnings = copyQuietly(f.src, f.dest, { force: true, root: f.pkg });
+  assert.deepEqual(warnings, []);
+  assert.equal(readFileSync(join(f.dest, "references", "guide.md"), "utf8"), "guide\n");
+  assert.equal(readFileSync(join(f.dest, "alias.md"), "utf8"), "inner\n");
+  assert.equal(readFileSync(join(f.dest, "sub-again", "inner.md"), "utf8"), "inner\n");
+  for (const name of ["references", "alias.md", "sub-again"]) assert.ok(!lstatSync(join(f.dest, name)).isSymbolicLink(), `${name} is materialized`);
+});
+
+test("with no root given, the allowed root is the tree being copied", () => {
+  const f = linkFixture();
+  symlinkSync(join("sub", "inner.md"), join(f.src, "alias.md"));
+  symlinkSync(join("..", "..", "shared"), join(f.src, "references"));
+  const warnings = copyQuietly(f.src, f.dest, { force: true });
+  assert.equal(readFileSync(join(f.dest, "alias.md"), "utf8"), "inner\n", "a link inside the tree is copied");
+  assert.ok(!existsSync(join(f.dest, "references")), "a link out of the tree is not");
+  assert.equal(warnings.length, 1, warnings.join("\n"));
+});
+
+test("a top-level link is checked against the root the caller names", () => {
+  const f = linkFixture();
+  const inside = join(f.pkg, "skills", "linked");
+  const outside = join(f.pkg, "skills", "escaped");
+  symlinkSync(f.src, inside);
+  symlinkSync(join(f.base, "outside"), outside);
+  assert.deepEqual(copyQuietly(inside, f.dest, { force: true, root: f.pkg }), []);
+  assert.equal(readFileSync(join(f.dest, "SKILL.md"), "utf8"), "skill\n");
+  const dest2 = join(f.base, "dest2");
+  assert.equal(copyQuietly(outside, dest2, { force: true, root: f.pkg }).length, 1);
+  assert.ok(!existsSync(dest2));
+});
+
+test("a directory cycle is detected and the copy terminates", () => {
+  const f = linkFixture();
+  symlinkSync("..", join(f.src, "sub", "loop")); // sub/loop → the skill folder itself
+  const warnings = copyQuietly(f.src, f.dest, { force: true, root: f.pkg });
+  assert.equal(readFileSync(join(f.dest, "sub", "inner.md"), "utf8"), "inner\n");
+  assert.ok(!existsSync(join(f.dest, "sub", "loop")), "the cycle is not followed");
+  assert.equal(warnings.length, 1, warnings.join("\n"));
+  assert.match(warnings[0], /cycle/);
+});
+
+test("external skill: a link inside the fetched checkout is materialized, one that leaves it is skipped", () => {
+  const s = sandbox();
+  // A local stand-in for the upstream repository, cloned into the installer's
+  // cache where it looks for chrisbanes/skills. Its `origin` is a local path,
+  // so the installer's fetch never leaves the sandbox.
+  const upstream = join(s.base, "upstream");
+  const skill = join(upstream, "skills", "compose-state-and-effects");
+  mkdirSync(skill, { recursive: true });
+  mkdirSync(join(upstream, "references"));
+  mkdirSync(join(s.base, "outside"));
+  writeFileSync(join(upstream, "references", "guide.md"), "guide\n");
+  writeFileSync(join(s.base, "outside", "secret.txt"), "secret\n");
+  writeFileSync(join(skill, "SKILL.md"), "---\nname: compose-state-and-effects\ndescription: stand-in\n---\n");
+  symlinkSync(join("..", "..", "references"), join(skill, "references"));
+  symlinkSync(join(s.base, "outside", "secret.txt"), join(skill, "leak.txt"));
+  const git = (...args) => {
+    const r = s.run("git", args);
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  };
+  git("init", "-q", "--initial-branch=main", upstream);
+  git("-C", upstream, "add", "-A");
+  git("-C", upstream, "-c", "user.email=t@example.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-qm", "upstream");
+  const cache = join(s.home, ".cache", "sdlc-skills", "registry");
+  mkdirSync(cache, { recursive: true });
+  git("clone", "-q", upstream, join(cache, "chrisbanes__skills"));
+
+  const r = s.init("--skills", "compose-state-and-effects");
+  assert.equal(r.status, 0, r.out);
+  const installed = s.p(".claude/skills/compose-state-and-effects");
+  assert.ok(existsSync(join(installed, "SKILL.md")), r.out);
+  assert.equal(readFileSync(join(installed, "references", "guide.md"), "utf8"), "guide\n", "a link to a sibling folder of the checkout still installs");
+  assert.ok(!lstatSync(join(installed, "references")).isSymbolicLink());
+  assert.ok(!existsSync(join(installed, "leak.txt")), "a link out of the checkout is not copied");
+  assert.match(r.out, /skipped symlink .*leak\.txt/);
 });
