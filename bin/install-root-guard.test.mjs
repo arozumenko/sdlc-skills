@@ -15,6 +15,7 @@ const REPO = fileURLToPath(new URL("..", import.meta.url));
 const INIT = join(REPO, "bin/init.mjs");
 const NO_NETWORK = join(REPO, "bin/fixtures/security-testing-e2e/no-network.gitconfig");
 const ACCOUNT_HOME = join(REPO, "bin/fixtures/install-root-guard/account-home.cjs");
+const NO_USER_ENTRY = join(REPO, "bin/fixtures/install-root-guard/no-user-entry.cjs");
 
 // A sandbox: <root>/home is HOME, <root>/cache the installer cache, <root>/proj the project.
 function sandbox() {
@@ -48,6 +49,19 @@ test("refuses the account's home directory and writes nothing", () => {
     assert.match(r.stderr, /Refusing to install into your home directory/);
     assert.match(r.stderr, /cd into that project/);
     assert.deepEqual(readdirSync(proj), ["notes.txt"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// Where the account has no user-database entry the real os.userInfo() throws.
+// The home preload must not depend on it: it still reports the fixture home,
+// and the install is still refused.
+test("home refusal holds where the real os.userInfo() throws", () => {
+  const { root, proj, env } = sandbox();
+  try {
+    const r = install(INIT, proj, { ...env, SDLC_TEST_ACCOUNT_HOME: proj }, ["--require", NO_USER_ENTRY, "--require", ACCOUNT_HOME]);
+    assert.notEqual(r.status, 0, r.stdout);
+    assert.match(r.stderr, /Refusing to install into your home directory/);
+    assert.deepEqual(readdirSync(proj), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
