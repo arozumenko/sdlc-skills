@@ -11,7 +11,7 @@ export function legacyCommand(command) {
       stdout = `${JSON.stringify(doc, null, 2)}\n`;
     }
   } catch { /* text output */ }
-  stdout = stdout.replace(/^BUDGET[^\n]*\n/gm, '').replace(/^budget hook:[^\n]*\n/gm, '');
+  stdout = stdout.replace(/^BUDGET[^\n]*\n/gm, '').replace(/^budget (hook|check):[^\n]*\n/gm, '');
   return { ...command, stdout };
 }
 export function legacyScenario(scenario) {

@@ -8,7 +8,8 @@ import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
 import { validRoster } from './lib/roster.mjs';
-import { UNCONDITIONAL_CAVEATS, readDiagnostics } from './lib/report.mjs';
+import { UNCONDITIONAL_CAVEATS, budgetCheckText, readDiagnostics } from './lib/report.mjs';
+import { budgetCheckState } from './lib/budget.mjs';
 
 export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
@@ -198,7 +199,7 @@ function stagingLeaks(tel, git) {
 
 /** One structured finding per doctor line. `git(cwd, args) → string|null` (lib/git.mjs `git` contract) and
  * `gitExec(cwd, args) → { ok, status, reason? }` default to direct spawns; doctor injects its hardened runner. */
-export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitExec = gitExecq } = {}) {
+export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitExec = gitExecq, now = Date.now() } = {}) {
   const physical = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
   const asked = physical(repo);
   repo = resolveOwnerRepo(repo, git);
@@ -222,6 +223,9 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   // The budget hook must be synchronous to deny, so an async entry does not count.
   const budget = entries('PreToolUse', 'budget-hook.mjs').some(h => h.async !== true);
   add(budget ? 'ok' : 'warning', `budget hook: ${budget ? 'wired' : 'MISSING'} (Claude PreToolUse, synchronous Agent|Task + subagent calls)`, budget ? null : fix);
+  // Wired is not the same as working: the hook allows what it cannot evaluate, and says so only in the diagnostics file.
+  const check = budgetCheckState(repo, { now });
+  add(check.off || check.unreadable ? 'warning' : 'ok', `budget check: ${budgetCheckText(check)}`);
   const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   // The count alone hid that the orchestrating session was never bound — say so for THIS session.

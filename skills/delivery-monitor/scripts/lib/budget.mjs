@@ -1,9 +1,10 @@
 // STDLIB ONLY. Per-task budget policy and ledger writes. taskCosts is the sole task-cost projection.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadRunsChecked } from './attribution.mjs';
 import { appendObservation, makeObservation, resolveObservations, validateEstimate } from './events.mjs';
 import { loadPricesChecked } from './cost.mjs';
-import { nowIso, profilePath } from './paths.mjs';
+import { deliveryDir, nowIso, profilePath } from './paths.mjs';
 import { taskCosts, taskKey } from './task-costs.mjs';
 import { selectOccurrences } from './timeline.mjs';
 
@@ -35,6 +36,29 @@ export function budgetInputs(repo) {
   const profile = budgetProfile(repo), loaded = loadPricesChecked(repo);
   if (loaded.problem) throw new Error(loaded.problem);
   return { runs, resolved, profile, prices: loaded.prices };
+}
+export const BUDGET_CHECK_WINDOW_DAYS = 7;
+/** Whether the hook recently allowed work it could not evaluate. The hook writes one `budget-check-unavailable` diagnostic per
+ * session and nothing when it works, so this reports the latest such line of the last 7 days (its time, reason and session)
+ * and how many sessions wrote one. It cannot tell that the cause was repaired since: the state clears when 7 days pass
+ * without a new line. Never throws; diagnostics that cannot be read give `unreadable`. */
+export function budgetCheckState(repo, { now = Date.now() } = {}) {
+  const state = { window_days: BUDGET_CHECK_WINDOW_DAYS, off: null }, from = now - BUDGET_CHECK_WINDOW_DAYS * 86_400_000;
+  try {
+    const dir = deliveryDir(repo); if (!existsSync(dir)) return state;
+    let latest = null; const sessions = new Set();
+    for (const f of readdirSync(dir).filter((n) => /^diagnostics-.*\.jsonl$/.test(n)).sort()) {
+      for (const line of readFileSync(join(dir, f), 'utf8').split('\n')) {
+        if (!line.includes('budget-check-unavailable')) continue;
+        let d; try { d = JSON.parse(line); } catch { continue; }
+        if (d?.kind !== 'budget-check-unavailable' || !(Date.parse(d.at) >= from)) continue;
+        sessions.add(d.session ?? null);
+        if (!latest || d.at > latest.at) latest = d;
+      }
+    }
+    if (latest) state.off = { since: latest.at, reason: String(latest.detail ?? 'unknown').split('\n')[0].slice(0, 200), session: latest.session ?? null, sessions: sessions.size };
+  } catch (e) { state.unreadable = String(e.code ?? e.message).split('\n')[0]; }
+  return state;
 }
 /** The lock covers the first-writer test AND append. The original transition survives a rename; later writers never revise
  * cost_at_crossing. Retraction withdraws the observation for counts without causing automatic re-emission. */

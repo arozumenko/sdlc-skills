@@ -136,6 +136,9 @@ Profile settings `budgetSoftMultiplier` (default 1) and `budgetHardMultiplier` (
 hard must be at least soft. Crossings are recorded once per task/threshold, including across `supersedes.item_map`
 renames. The first writer's `cost_at_crossing` stays unchanged. Details: `references/event-model.md`, "Budget events".
 Unreadable evidence lets work proceed and writes one `budget-check-unavailable` diagnostic per session.
+While the latest such diagnostic is at most 7 days old, `status` prints `BUDGET check: OFF since <time> — <reason>` and
+`doctor` prints `budget check: OFF …` as a warning; otherwise both print `ok`. The line clears 7 days after the last failure,
+not when the cause is repaired.
 
 `status` adds BUDGET lines and `report --json` adds `budget`: resolved exceeded/stopped counts per open plan, and
 current lifetime coverage as dispatch counts and USD (`budgeted`, `all`, `unbudgeted`, `codex`). A dispatch without a

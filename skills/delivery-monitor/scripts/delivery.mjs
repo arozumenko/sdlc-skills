@@ -13,13 +13,13 @@ import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
-import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, SCHEMA } from './lib/report.mjs';
+import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, budgetCheckText, SCHEMA } from './lib/report.mjs';
 import { doctorReport, hookRel, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
 import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
-import { budgetSummary } from './lib/budget.mjs';
+import { budgetCheckState, budgetSummary } from './lib/budget.mjs';
 import { tombstone } from './lib/dispatches.mjs';
 import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
@@ -556,6 +556,7 @@ function cmdStatus(repo, p, io, now) {
       spendLine();
       try { out(io, renderBudgetCoverage(budgetSummary(repo))); }
       catch (problem) { if (!isInputError(problem)) throw problem; out(io, renderBudgetCoverage({ unavailable: problem.message })); }
+      out(io, `BUDGET check: ${budgetCheckText(budgetCheckState(repo, { now }))}`);
     }
     throw e;
   }
@@ -656,7 +657,7 @@ function cmdBackfill(repo, p, io, now) {
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io, now) {
   repo = resolveOwnerRepo(repo);
-  const d = doctorReport(repo, hookRel(repo, skillRootOf(import.meta.url)) ?? relative(repo, skillRootOf(import.meta.url)), { env: io.env });
+  const d = doctorReport(repo, hookRel(repo, skillRootOf(import.meta.url)) ?? relative(repo, skillRootOf(import.meta.url)), { env: io.env, now });
   try {
     const counts = coverage(repo, { env: io.env });
     const fields = ['identities', 'in_store', 'missing_from_store', 'gaps_resolved', 'gaps_unresolved', 'interrupted', 'unreadable_children', 'oldest_transcript_date'];

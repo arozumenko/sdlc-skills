@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from './delivery.mjs';
 import { deliveryDir } from './lib/paths.mjs';
-import { budgetSummary } from './lib/budget.mjs';
+import { budgetCheckState, budgetSummary } from './lib/budget.mjs';
 const now=Date.parse('2026-11-20T12:00:00Z');
 const repo=()=>mkdtempSync(join(tmpdir(),'dm-budget-cli-'));
 async function cli(r,args) {let stdout='',stderr='';const code=await main(args,{repo:r,now,env:{DELIVERY_NO_SYNC:'1'},stdout:{write:s=>stdout+=s},stderr:{write:s=>stderr+=s}});return {code,stdout,stderr};}
@@ -69,4 +69,39 @@ test('status shows global unbudgeted coverage even without a plan',async()=>{
 test('a fractional high multiplied by three still permits the exact cap',async()=>{
  const {recordBudget}=await import('./lib/budget.mjs'),r=repo(),item={item_id:'x/r/t',ref:'T',level:'task',estimate:{high:0.29}};
  const result=recordBudget(r,{run:{run:'x/r',version:1,items:[item]},item,cost:0.87,dispatchKey:'claude:s:a',source:'pre-dispatch',session:'s',profile:{budgetSoftMultiplier:1,budgetHardMultiplier:3},now});assert.equal(result.stopped,false);
+});
+
+// The hook allows what it cannot evaluate and writes one diagnostic per session; status must show that state.
+const diag=(r,at,detail,session='s1',kind='budget-check-unavailable')=>{const d=deliveryDir(r);mkdirSync(d,{recursive:true});appendFileSync(join(d,'diagnostics-u.jsonl'),JSON.stringify({at,kind,session,agent_id:null,detail})+'\n');};
+async function registered() {
+ const r=repo(),text=readFileSync(new URL('../templates/plan-block.template.md',import.meta.url),'utf8').replaceAll('<campaign-id>','budget');
+ writeFileSync(join(r,'plan.md'),text);const out=await cli(r,['plan','register','--from','plan.md','--id','reg','--no-calibrate']);assert.equal(out.code,0,out.stderr);return r;
+}
+const OK_LINE=/^BUDGET check: ok \(no budget-check-unavailable diagnostic in the last 7 days\)$/m;
+test('budgetCheckState: the latest diagnostic within 7 days, with its reason; older, other-kind and malformed lines are ignored',()=>{
+ const r=repo();assert.deepEqual(budgetCheckState(r,{now}),{window_days:7,off:null});
+ diag(r,'2026-11-13T11:59:59.999Z','just outside the window','old');diag(r,'2026-11-19T10:00:00.000Z','not a budget line','x','unbound-session');
+ appendFileSync(join(deliveryDir(r),'diagnostics-u.jsonl'),'{broken\n');
+ assert.deepEqual(budgetCheckState(r,{now}),{window_days:7,off:null});
+ diag(r,'2026-11-13T12:00:00.000Z','exactly seven days ago','edge');
+ assert.deepEqual(budgetCheckState(r,{now}).off,{since:'2026-11-13T12:00:00.000Z',reason:'exactly seven days ago',session:'edge',sessions:1});
+ diag(r,'2026-11-19T10:00:00.000Z','events ledger is unreadable or conflicted\nsecond line','s3');diag(r,'2026-11-18T09:00:00.000Z','earlier','s2');
+ assert.deepEqual(budgetCheckState(r,{now}).off,{since:'2026-11-19T10:00:00.000Z',reason:'events ledger is unreadable or conflicted',session:'s3',sessions:3});
+});
+test('status and report --json show the budget check as ok with no recent diagnostic and OFF with one',async()=>{
+ const r=await registered();
+ let out=await cli(r,['status']);assert.equal(out.code,0,out.stderr);assert.match(out.stdout,OK_LINE);
+ diag(r,'2026-11-01T00:00:00.000Z','long ago','old');
+ assert.match((await cli(r,['status'])).stdout,OK_LINE);
+ diag(r,'2026-11-18T09:00:00.000Z','invalid budgetSoftMultiplier','s2');diag(r,'2026-11-19T10:00:00.000Z','events ledger is unreadable or conflicted','s3');
+ out=await cli(r,['status']);assert.equal(out.code,0,out.stderr);
+ assert.match(out.stdout,/^BUDGET check: OFF since 2026-11-19T10:00:00\.000Z — events ledger is unreadable or conflicted \(session s3; 2 session\(s\) could not evaluate in the last 7 days; their calls were allowed\)$/m);
+ assert.doesNotMatch(out.stdout,OK_LINE);
+ const doc=JSON.parse((await cli(r,['report','--json'])).stdout);
+ assert.deepEqual(doc.budget.check,{window_days:7,off:{since:'2026-11-19T10:00:00.000Z',reason:'events ledger is unreadable or conflicted',session:'s3',sessions:2}});
+});
+test('status with no plan still shows the budget check line before it fails with NO-PLAN',async()=>{
+ const r=repo();let out=await cli(r,['status']);assert.equal(out.code,3);assert.match(out.stdout,OK_LINE);
+ diag(r,'2026-11-20T11:00:00.000Z','RUN-UNREADABLE(plans/x.json)');
+ out=await cli(r,['status']);assert.equal(out.code,3);assert.match(out.stdout,/^BUDGET check: OFF since 2026-11-20T11:00:00\.000Z — RUN-UNREADABLE\(plans\/x\.json\) \(session s1; 1 session\(s\)/m);
 });

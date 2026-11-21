@@ -15,7 +15,7 @@ import { readCalibration, classOf } from './calibrate.mjs';
 import { computeMetrics, estimateBands, planCost, plannerSizeBands, toHours, usableCost, validBounds } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256, isInputError } from './paths.mjs';
 import { costView, taskCosts } from './task-costs.mjs';
-import { budgetSummary } from './budget.mjs';
+import { budgetCheckState, budgetSummary } from './budget.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -198,6 +198,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   let budget;
   try { budget = budgetSummary(repo, { resolved: res }); }
   catch (e) { if (!COST_FALLBACK.has(e.code) && !isInputError(e)) throw e; budget = { unavailable: e.message }; }
+  budget.check = budgetCheckState(repo, { now });
 
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
@@ -736,6 +737,13 @@ export function renderBudgetCoverage(budget) {
   return `BUDGET unavailable: ${budget?.unavailable ?? 'unknown'}`;
 }
 
+/** One line for status and doctor: whether the hook recently allowed work it could not evaluate (`budgetCheckState`). */
+export function budgetCheckText(check) {
+  if (check?.off) return `OFF since ${check.off.since} — ${check.off.reason} (session ${check.off.session ?? 'unknown'}; ${check.off.sessions} session(s) could not evaluate in the last ${check.window_days} days; their calls were allowed)`;
+  if (check?.unreadable) return `unknown (diagnostics unreadable: ${check.unreadable})`;
+  return `ok (no budget-check-unavailable diagnostic in the last ${check?.window_days ?? 7} days)`;
+}
+
 export function renderStatus(doc) {
   const e = doc.envelope; const L = [];
   for (const p of doc.plans) {
@@ -749,6 +757,7 @@ export function renderStatus(doc) {
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
   if (doc.budget) L.push(renderBudgetCoverage(doc.budget));
+  if (doc.budget?.check) L.push(`BUDGET check: ${budgetCheckText(doc.budget.check)}`);
   L.push(`  ledger: occurrence_conflicts=${e.coverage.occurrence_conflicts} ledger_conflicts=${e.coverage.ledger_conflicts} unregistered=${e.coverage.unregistered} malformed=${e.coverage.malformed_lines} malformed_runs=${e.coverage.malformed_runs}`);
   // Minor (f): `e.caveats` is `[...UNCONDITIONAL_CAVEATS, ...derived]` (assemble) — printing the
   // whole array, in that order, surfaces the derived count-bearing caveats (malformed lines,

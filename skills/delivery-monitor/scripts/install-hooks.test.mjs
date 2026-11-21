@@ -425,3 +425,22 @@ test('doctor: the diagnostics line counts stop-hook-failed lines when there are 
   assert.equal(f.line, 'diagnostics: 3 line(s), stop-hook-failed=2 (the stop hook failed for 2 subagent(s): their spend may be missing from the totals, not zero)');
   assert.equal(f.severity, 'info');
 });
+
+test('doctor: a recent budget-check-unavailable diagnostic is a warning finding with its reason; none is an ok line; exit stays 0', () => {
+  const repo = stubHooks(tmp()); const dir = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(dir, { recursive: true });
+  const now = Date.parse('2026-11-20T12:00:00Z');
+  const check = () => doctorFindings(repo, REL, { now }).find((x) => x.line.startsWith('budget check:'));
+  assert.deepEqual([check().severity, check().line], ['ok', 'budget check: ok (no budget-check-unavailable diagnostic in the last 7 days)']);
+  const line = (at, detail, session) => `${JSON.stringify({ at, kind: 'budget-check-unavailable', session, agent_id: null, detail })}\n`;
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('2026-11-01T00:00:00.000Z', 'long ago', 'old'));
+  assert.equal(check().severity, 'ok');
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('2026-11-01T00:00:00.000Z', 'long ago', 'old') + line('2026-11-19T10:00:00.000Z', 'invalid budgetSoftMultiplier', 's3'));
+  assert.deepEqual([check().severity, check().line], ['warning', 'budget check: OFF since 2026-11-19T10:00:00.000Z — invalid budgetSoftMultiplier (session s3; 1 session(s) could not evaluate in the last 7 days; their calls were allowed)']);
+  assert.equal(doctorReport(repo, REL, { now }).ok, false);
+  // The scripts take the real clock: a diagnostic written now is inside the window.
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line(new Date().toISOString(), 'child transcript unavailable', 'live'));
+  for (const [script, args] of [[SCRIPT, ['--doctor']], [DELIVERY, ['doctor']]]) {
+    const out = execFileSync('node', [script, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo, DELIVERY_NO_SYNC: '1' } });
+    assert.match(out, /^budget check: OFF since .* — child transcript unavailable \(session live;/m); assert.match(out, /doctor: attention/);
+  }
+});
