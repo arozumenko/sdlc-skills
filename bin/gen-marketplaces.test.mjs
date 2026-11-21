@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,6 +114,18 @@ test("checkLocalSources: every local source in the four real manifests exists", 
 
 test("--check runs the local-source check on the real manifests and passes", () => {
   const r = spawnSync(process.execPath, [join(REPO, "bin/gen-marketplaces.mjs"), "--check"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /local sources: \d+ checked in 4 manifests, all exist/);
+});
+
+test("--check still runs when the script is started through a symlink in a directory with a space", () => {
+  // The old entry-point guard compared an encoded file URL with the raw
+  // argv path. Through a link, or from a path with a space, main() was
+  // skipped and the check passed (exit 0) without checking anything.
+  const dir = mkdtempSync(join(tmpdir(), "gen mkt link-"));
+  const link = join(dir, "gen-marketplaces.mjs");
+  symlinkSync(join(REPO, "bin/gen-marketplaces.mjs"), link);
+  const r = spawnSync(process.execPath, [link, "--check"], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /local sources: \d+ checked in 4 manifests, all exist/);
 });

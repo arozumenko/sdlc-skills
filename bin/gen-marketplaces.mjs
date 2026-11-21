@@ -20,7 +20,7 @@
  *                                            # in this repository (CI)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { buildItemIndex, resolveItem, catalogIds } from "./lib/item-resolver.mjs";
@@ -273,6 +273,18 @@ function main() {
   if (stale || missing.length) process.exit(1);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare real filesystem paths, not a file URL with the raw argv path: the
+// URL is percent-encoded and resolved through links, so the old comparison
+// skipped main() (exit 0, nothing checked) from a path with a space or a link.
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   main();
 }
