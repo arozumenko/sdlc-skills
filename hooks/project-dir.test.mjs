@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 
 const HOOK = (name) => fileURLToPath(new URL(`./${name}`, import.meta.url));
 // Host markers and hook tunables from the developer's own shell must not decide
-// the outcome; HOME is a temp dir so no real ~/.copilot state is read.
+// the outcome; HOME is a temp dir so no real ~/.copilot state is read, and TMPDIR
+// is one too so the Claude-side brief spool is created inside the fixture.
 const HOST_ENV = /^(CLAUDE_.*|CLAUDECODE|COPILOT_.*|SDLC_.*|CODEX_HOOK|CURSOR_.*|PLUGIN_ROOT)$/;
 
 // Two throwaway projects: `own` is the one the session runs in, `other` is the
@@ -29,14 +30,14 @@ function projects() {
     writeFileSync(join(dir, '.github', 'instructions', 'sdlc-shared.instructions.md'), 'old combined file\n');
     return dir;
   };
-  mkdirSync(join(root, 'home'));
+  for (const d of ['home', 'tmp']) mkdirSync(join(root, d));
   return { root, own: make('own'), other: make('other') };
 }
 function run(hook, { root, cwd, env, payload = {} }) {
   const base = Object.fromEntries(Object.entries(process.env).filter(([k]) => !HOST_ENV.test(k)));
   const r = spawnSync('bash', [HOOK(hook)], {
     cwd, input: JSON.stringify(payload), encoding: 'utf8',
-    env: { ...base, HOME: join(root, 'home'), SDLC_CONFIG_DIR: join(root, 'home'), ...env },
+    env: { ...base, HOME: join(root, 'home'), TMPDIR: join(root, 'tmp'), SDLC_CONFIG_DIR: join(root, 'home'), ...env },
   });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout;
