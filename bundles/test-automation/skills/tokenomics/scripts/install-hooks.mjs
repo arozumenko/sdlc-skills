@@ -604,8 +604,11 @@ function preflightJson(repo, { host, local, remove }) {
     if (!(remove && unparseableWithout(tasks, TASK_LABEL))) readJson(tasks, {});
   }
   if (!remove) {
-    readJson(join(repo, '.agents', 'telemetry', 'automation', 'config.json'), {});
-    readJson(join(repo, '.agents', 'telemetry', 'config.json'), {}); // flat-era: this run migrates it into automation/
+    const cfg = join(repo, '.agents', 'telemetry', 'automation', 'config.json');
+    // A flat-era config at the telemetry root only matters when this run will
+    // migrate it INTO automation/. With a config already there, the migration
+    // keeps both and readers use the newer one — the old file is not ours to judge.
+    readJson(existsSync(cfg) ? cfg : join(repo, '.agents', 'telemetry', 'config.json'), {});
   }
 }
 

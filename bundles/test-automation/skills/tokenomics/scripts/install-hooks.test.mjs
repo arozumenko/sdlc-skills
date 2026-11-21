@@ -444,3 +444,17 @@ test('CLI: an existing telemetry config.json that does not parse refuses the ins
   assert.ok(existsSync(flat) && !existsSync(join(old.repo, '.agents', 'telemetry', 'automation')), 'not migrated, nothing seeded');
   assert.ok(!existsSync(join(old.repo, '.claude', 'settings.json')), 'no hooks wired');
 });
+
+// ...but when automation/config.json already exists, the migration keeps both
+// files and readers use the newer one: a broken leftover at the root changes
+// nothing, and such an install works today — it must keep working.
+test('CLI: a valid automation/config.json next to a malformed flat-era root config.json still installs; both files untouched', () => {
+  const { repo, run } = installedCopy();
+  const cfg = put(repo, '.agents/telemetry/automation/config.json', '{ "capturePrompts": true }');
+  const flat = put(repo, '.agents/telemetry/config.json', '{ "maxSweep": 5, }');
+  const r = run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(cfg, 'utf8'), '{ "capturePrompts": true }');
+  assert.equal(readFileSync(flat, 'utf8'), '{ "maxSweep": 5, }');
+  assert.equal(read(join(repo, '.claude', 'settings.json')).hooks.SessionEnd.length, 1, 'hooks wired');
+});
