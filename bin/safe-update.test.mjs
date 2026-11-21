@@ -212,12 +212,23 @@ test("uncommitted content identical to a copy this package ships is not a local 
   assert.ok(!existsSync(s.p(BACKUP_ROOT)));
 });
 
-test("a destination the same run already replaced is replaced again, not kept", () => {
-  const s = committedOldInstall();
-  const r = s.init("--skills", "memory,memory", "--update");
+test("a destination the same run already replaced is not backed up or judged a second time", () => {
+  // Outside git, with an agent the installer rewrites after the copy (Cursor
+  // gets a skills list), named twice in one run. The second pass meets the
+  // run's own output: it differs from every shipped copy, so only the record
+  // of what this run wrote stops a second backup over the first.
+  const s = sandbox();
+  const args = ["--agents", "personal-assistant,personal-assistant", "--skills", "memory", "--target", "cursor"];
+  assert.equal(s.init(...args).status, 0);
+  const agent = s.p(".cursor/agents/personal-assistant/AGENT.md");
+  assert.match(readFileSync(agent, "utf8"), /SKILLS-INJECTED/, "fixture: the installed agent is not a plain copy");
+  writeFileSync(agent, "my local edit\n");
+  const r = s.init(...args, "--update");
   assert.equal(r.status, 0, r.out);
-  assert.doesNotMatch(r.out, /kept:|NOT updated/);
-  assert.match(r.out, /Done: 2 installed, 0 skipped\./);
+  const saved = [...r.out.matchAll(/previous copy saved to (\S+)/g)].map((m) => m[1]);
+  assert.equal(saved.length, 1, r.out);
+  assert.equal(readFileSync(s.p(saved[0], "AGENT.md"), "utf8"), "my local edit\n", "the one backup holds the original content");
+  assert.match(r.out, /Done: 3 installed, 0 skipped\./);
 });
 
 for (const [target, file] of [["copilot", ".github/agents/personal-assistant.agent.md"], ["codex", ".codex/agents/personal-assistant.toml"]]) {
@@ -496,4 +507,237 @@ test("seedMissingFiles checks links before following them and stops on a cycle",
   assert.deepEqual(readdirSync(join(dest, "sub")), ["inner.md"], "the cycle is not followed");
   assert.equal(readFileSync(join(dest, "references", "guide.md"), "utf8"), "guide\n", "a link inside the root is still followed");
   assert.equal(warnings.length, 3, warnings.join("\n"));
+});
+
+// ── Rework: the update guard ────────────────────────────────────────────────
+
+const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+
+test("an agent the update kept is not rewritten by the factory's skill overlay", () => {
+  // The iOS overlay removes playwright-testing from qa-engineer. The user put
+  // it back and has not committed that.
+  const s = sandbox({ git: true });
+  const args = ["--factory", "feature-development", "--agents", "ios-dev"];
+  assert.equal(s.init(...args).status, 0);
+  const agent = s.p(".claude/agents/qa-engineer/AGENT.md");
+  const installed = readFileSync(agent, "utf8");
+  const onDemand = (text) => text.match(/^skills-on-demand: \[.*\]$/m)[0];
+  assert.doesNotMatch(onDemand(installed), /playwright-testing/, "fixture: the overlay removed it at install");
+  s.commitAll("install");
+  const restored = installed.replace(/^skills-on-demand: \[/m, "skills-on-demand: [playwright-testing, ");
+  assert.notEqual(restored, installed);
+  writeFileSync(agent, restored);
+
+  const r = s.init(...args, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, KEPT("agent", "qa-engineer"));
+  assert.equal(readFileSync(agent, "utf8"), restored, "the kept agent is byte-for-byte the user's");
+  assert.doesNotMatch(r.out, /↻ skills\s+qa-engineer/);
+  assert.match(r.out, /↻ skills\s+tech-lead/, "agents the run did replace are still tuned");
+});
+
+test("a plain re-run that adds a role still tunes the agents already installed", () => {
+  const s = sandbox();
+  assert.equal(s.init("--factory", "feature-development", "--agents", "python-dev").status, 0);
+  const agent = s.p(".claude/agents/tech-lead/AGENT.md");
+  assert.doesNotMatch(readFileSync(agent, "utf8"), /swiftui-pro/);
+  const r = s.init("--factory", "feature-development", "--agents", "python-dev,ios-dev");
+  assert.equal(r.status, 0, r.out);
+  assert.match(readFileSync(agent, "utf8"), /^skills-on-demand: \[.*swiftui-pro/m);
+});
+
+test("a tracked skill the user deleted without committing stays deleted; --force installs it", () => {
+  const s = committedOldInstall();
+  rmSync(s.p(".claude/skills/memory"), { recursive: true });
+  const r = s.init("--skills", "memory,knowledge-curation", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(!existsSync(s.p(".claude/skills/memory")), "the deletion is a local change; nothing is recreated");
+  assert.match(r.out, KEPT("skill", "memory"));
+  assert.equal(r.out.match(SUMMARY)?.[1], "1", r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/knowledge-curation/SKILL.md"), "utf8"), shipped("skills/knowledge-curation/SKILL.md"));
+  const forced = s.init("--skills", "memory", "--update", "--force");
+  assert.equal(forced.status, 0, forced.out);
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+});
+
+test("a destination git never tracked is a new install under --update, as before", () => {
+  const s = committedOldInstall();
+  const r = s.init("--skills", "memory,verifying-outcomes", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/verifying-outcomes/SKILL.md"), "utf8"), shipped("skills/verifying-outcomes/SKILL.md"));
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+});
+
+for (const [target, file] of [["copilot", ".github/agents/personal-assistant.agent.md"], ["codex", ".codex/agents/personal-assistant.toml"]]) {
+  test(`${target} single-file agent deleted without committing stays deleted`, () => {
+    const s = sandbox({ git: true });
+    const args = ["--agents", "personal-assistant", "--skills", "memory", "--target", target];
+    assert.equal(s.init(...args).status, 0);
+    s.commitAll("install");
+    rmSync(s.p(file));
+    const r = s.init(...args, "--update");
+    assert.equal(r.status, 0, r.out);
+    assert.ok(!existsSync(s.p(file)));
+    assert.match(r.out, KEPT("agent", "personal-assistant"));
+  });
+}
+
+test("GIT_DIR and GIT_WORK_TREE aimed at another clean checkout do not hide a local edit", () => {
+  const s = committedOldInstall();
+  const other = join(s.base, "other");
+  s.git("clone", "-q", s.project, other); // same paths, nothing to commit
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "my local edit\n");
+  const r = s.initEnv({ GIT_DIR: join(other, ".git"), GIT_WORK_TREE: other }, "--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), "my local edit\n");
+  assert.match(r.out, KEPT("skill", "memory"));
+  assert.ok(!existsSync(s.p(BACKUP_ROOT)));
+});
+
+test("a destination that is a submodule with ignore=all still shows its local change", () => {
+  const s = sandbox({ git: true });
+  const upstream = join(s.base, "skill-repo");
+  mkdirSync(upstream);
+  writeFileSync(join(upstream, "SKILL.md"), "old memory\n");
+  const g = (...args) => {
+    const r = s.run("git", ["-c", "user.email=t@example.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", "-c", "protocol.file.allow=always", ...args]);
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  };
+  g("init", "-q", upstream);
+  g("-C", upstream, "add", "-A");
+  g("-C", upstream, "commit", "-qm", "skill");
+  g("submodule", "add", "-q", upstream, ".claude/skills/memory");
+  g("config", "submodule..claude/skills/memory.ignore", "all");
+  s.commitAll("project with a submodule skill");
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "my local edit\n");
+  assert.equal(s.git("status", "--porcelain"), "", "fixture: plain git status hides the change");
+
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), "my local edit\n");
+  assert.match(r.out, KEPT("skill", "memory"));
+});
+
+test("two backups in the same second both survive", () => {
+  const s = sandbox();
+  assert.equal(s.init("--skills", "memory").status, 0);
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "second edit\n");
+  // Stand-ins for a backup an earlier run made in the second this run will hit.
+  const earlier = [];
+  for (let i = 0; i < 20; i++) {
+    const f = s.p(BACKUP_ROOT, stamp(Date.now() + i * 1000), "claude/skills/memory/SKILL.md");
+    mkdirSync(join(f, ".."), { recursive: true });
+    writeFileSync(f, "first backup\n");
+    earlier.push(f);
+  }
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  const m = r.out.match(/previous copy saved to (\S+)/);
+  assert.ok(m, r.out);
+  assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "second edit\n");
+  for (const f of earlier) assert.equal(readFileSync(f, "utf8"), "first backup\n", "an earlier backup is not overwritten");
+});
+
+// A local stand-in for chrisbanes/skills, cloned into the installer's cache.
+// Its `origin` is a local path, so the installer's fetch never leaves the sandbox.
+const EXTERNAL = "compose-state-and-effects";
+function externalFixture(s, body = "upstream v1\n") {
+  const upstream = join(s.base, "upstream");
+  const skill = join(upstream, "skills", EXTERNAL);
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(skill, "SKILL.md"), `---\nname: ${EXTERNAL}\ndescription: stand-in\n---\n${body}`);
+  const g = (...args) => {
+    const r = s.run("git", ["-c", "user.email=t@example.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  };
+  g("init", "-q", "--initial-branch=main", upstream);
+  g("-C", upstream, "add", "-A");
+  g("-C", upstream, "commit", "-qm", "upstream");
+  const cache = join(s.home, ".cache", "sdlc-skills", "registry");
+  mkdirSync(cache, { recursive: true });
+  g("clone", "-q", upstream, join(cache, "chrisbanes__skills"));
+  return {
+    publish(text) {
+      writeFileSync(join(skill, "SKILL.md"), `---\nname: ${EXTERNAL}\ndescription: stand-in\n---\n${text}`);
+      g("-C", upstream, "commit", "-qam", "upstream change");
+    },
+  };
+}
+const externalFile = (s) => s.p(".claude/skills", EXTERNAL, "SKILL.md");
+
+test("external skill, clean and tracked: --update replaces it with the new upstream content, as before", () => {
+  const s = sandbox({ git: true });
+  const up = externalFixture(s);
+  assert.equal(s.init("--skills", EXTERNAL).status, 0);
+  s.commitAll("install");
+  up.publish("upstream v2\n");
+  const r = s.init("--skills", EXTERNAL, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(readFileSync(externalFile(s), "utf8"), /upstream v2/);
+  assert.doesNotMatch(r.out, /kept:|NOT updated/);
+  assert.ok(!existsSync(s.p(BACKUP_ROOT)));
+});
+
+test("external skill with an uncommitted edit: kept; --force replaces", () => {
+  const s = sandbox({ git: true });
+  const up = externalFixture(s);
+  assert.equal(s.init("--skills", EXTERNAL).status, 0);
+  s.commitAll("install");
+  up.publish("upstream v2\n");
+  writeFileSync(externalFile(s), "my local edit\n");
+  const r = s.init("--skills", EXTERNAL, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(externalFile(s), "utf8"), "my local edit\n");
+  assert.match(r.out, KEPT("skill", EXTERNAL));
+  assert.match(r.out, SUMMARY);
+  const forced = s.init("--skills", EXTERNAL, "--update", "--force");
+  assert.equal(forced.status, 0, forced.out);
+  assert.match(readFileSync(externalFile(s), "utf8"), /upstream v2/);
+});
+
+test("external skill deleted without committing stays deleted", () => {
+  const s = sandbox({ git: true });
+  externalFixture(s);
+  assert.equal(s.init("--skills", EXTERNAL).status, 0);
+  s.commitAll("install");
+  rmSync(s.p(".claude/skills", EXTERNAL), { recursive: true });
+  const r = s.init("--skills", EXTERNAL, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(!existsSync(s.p(".claude/skills", EXTERNAL)));
+  assert.match(r.out, KEPT("skill", EXTERNAL));
+});
+
+test("external skill outside git: the old folder is copied to a backup before it is replaced", () => {
+  const s = sandbox();
+  const up = externalFixture(s);
+  assert.equal(s.init("--skills", EXTERNAL).status, 0);
+  up.publish("upstream v2\n");
+  writeFileSync(externalFile(s), "my local edit\n");
+  const r = s.init("--skills", EXTERNAL, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(readFileSync(externalFile(s), "utf8"), /upstream v2/);
+  const m = r.out.match(/previous copy saved to (\S+)/);
+  assert.ok(m, r.out);
+  assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "my local edit\n");
+});
+
+test("external skill unchanged since install is replaced without a backup outside git", () => {
+  const s = sandbox();
+  externalFixture(s);
+  assert.equal(s.init("--skills", EXTERNAL).status, 0);
+  const r = s.init("--skills", EXTERNAL, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(!existsSync(s.p(BACKUP_ROOT)), "identical to the fetched copy: nothing to save");
+});
+
+test("the NOT updated summary is printed even when the run fails later", () => {
+  const s = committedOldInstall();
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "my local edit\n");
+  rmSync(s.p(".claude/hooks"), { recursive: true });
+  writeFileSync(s.p(".claude/hooks"), "a file where the hook scripts folder goes\n"); // makes the hooks step throw
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /Install failed:/);
+  assert.match(r.out, KEPT("skill", "memory"));
+  assert.equal(r.out.match(SUMMARY)?.[1], "1", r.out);
 });

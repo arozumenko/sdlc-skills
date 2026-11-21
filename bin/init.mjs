@@ -1535,6 +1535,10 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
   const dest = join(skillsDir, skillName);
   const present = existsSync(dest) || lstatSync(dest, { throwIfNoEntry: false });
   if (present && !update) return { status: "exists", name: skillName };
+  // Same replacement rule as in-repo items. Content identical to the fetched
+  // copy (or a link to it) is the installer's own output.
+  if (update && !mayReplaceOnUpdate(dest, `skill  ${skillName}`, () => sameTree(src, dest)))
+    return { status: "exists", name: skillName };
   if (present && update) rmSync(dest, { recursive: true, force: true }); // clear prior symlink or copy
   try {
     if (useSymlink) {
@@ -1550,6 +1554,7 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
       // real content so the install survives transport off this machine.
       copyTreeDereferenced(src, dest, { force: true, root: clone }); // links may reach anywhere in the checkout, not beyond
     }
+    writtenThisRun.add(dest);
     return { status: "installed", name: skillName };
   } catch (err) {
     console.error(`  ! ${useSymlink ? "symlink" : "copy"} ${src} → ${dest} failed: ${err.message}`);
@@ -1717,12 +1722,14 @@ function printHelp() {
 // Install logic
 // ---------------------------------------------------------------------------
 
-// Safe update. `--update` replaces an installed agent or skill, and the
-// installer keeps no record of what it shipped last time, so it cannot tell a
-// user's edit from an old version by itself. Git is the baseline instead:
+// Safe update. `--update` replaces an installed agent or skill (in-repo or
+// external), and the installer keeps no record of what it shipped last time,
+// so it cannot tell a user's edit from an old version by itself. Git is the
+// baseline instead:
 //   - destination clean and tracked in git → replace (git history is the backup);
 //   - git reports anything for it (modified, deleted, untracked) → keep it,
-//     say so, and carry on with the other items;
+//     say so, and carry on with the other items. That includes a destination
+//     the user deleted and has not committed: it stays deleted;
 //   - git cannot restore it (no git, not a repository, or the path is ignored)
 //     → copy it to BACKUP_DIR first, then replace.
 // Two cases are never local changes: a destination this same run wrote, and
@@ -1732,13 +1739,21 @@ function printHelp() {
 const BACKUP_DIR = ".sdlc-skills-backup"; // top-level and dot-free below: no AI host scans it for skills or agents
 let forceReplace = false; // --force
 const writtenThisRun = new Set(); // destinations this process created or replaced
-const keptWithLocalChanges = []; // project-relative paths an update left alone, for the end-of-run summary
-let backupStamp = null; // one dated backup folder per run
+const keptThisRun = new Set(); // destinations an update left alone (overlays skip them; listed in the end-of-run summary)
+let backupDir = null; // this run's backup folder, project-relative; made on first need
 let gitSnapshot; // undefined until first asked; null when git cannot help
 
+// Variables that tell git which repository or configuration to use. A caller
+// can leave them set (a git hook exports GIT_DIR), and git would then answer
+// for some other checkout. The snapshot always asks about the repository the
+// project folder is in. Same list as bin/lib/doctor/git.mjs.
+const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CEILING_DIRECTORIES|GIT_DISCOVERY_ACROSS_FILESYSTEM|GIT_CONFIG.*|GIT_EXEC_PATH|GIT_SSH.*|GIT_ASKPASS|GIT_EXTERNAL_DIFF|GIT_PAGER|GIT_EDITOR)$/;
+
 function gitOutput(args) {
+  const env = { GIT_OPTIONAL_LOCKS: "0" }; // read-only: no index refresh write
+  for (const [k, v] of Object.entries(process.env)) if (!GIT_ENV_DROP.test(k)) env[k] = v;
   try {
-    return execFileSync("git", args, { cwd: CWD, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
+    return execFileSync("git", args, { cwd: CWD, env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
   } catch {
     return null; // git not installed, not a repository, or the command failed
   }
@@ -1751,7 +1766,9 @@ function loadGitSnapshot() {
   const prefix = gitOutput(["rev-parse", "--show-prefix"]); // CWD below the repository top: "" or "sub/dir/"
   if (prefix === null) return null;
   const dirs = TARGETS.map((t) => t.dir);
-  const status = gitOutput(["status", "--porcelain", "-z", "--untracked-files=all", "--", ...dirs]);
+  // --ignore-submodules=none: a destination that is a submodule must show its
+  // changes whatever `submodule.<name>.ignore` says.
+  const status = gitOutput(["status", "--porcelain", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", ...dirs]);
   const tracked = gitOutput(["ls-files", "-z", "--full-name", "--", ...dirs]);
   if (status === null || tracked === null) return null;
   const changed = [];
@@ -1793,34 +1810,58 @@ function isShippedCopy(kind, name, dest) {
   return roots.some((root) => sameTree(join(root, kind, name), dest));
 }
 
-// May an update replace the existing `dest`? `label` names the item in
-// messages; `isInstallerOutput` says whether its content is known to be the
-// installer's own. Returns false when the item must be kept.
+// This run's own backup folder: `<BACKUP_DIR>/<UTC date-time>`, with a counter
+// added when that name is taken, so a second update in the same second never
+// writes into the first one's backup. mkdir without `recursive` fails on an
+// existing folder, which makes the claim atomic.
+function backupDirForRun() {
+  if (backupDir) return backupDir;
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  mkdirSync(join(CWD, BACKUP_DIR), { recursive: true });
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? stamp : `${stamp}-${n}`;
+    try {
+      mkdirSync(join(CWD, BACKUP_DIR, name));
+      return (backupDir = join(BACKUP_DIR, name));
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+  }
+}
+
+// May an update write `dest`? `label` names the item in messages;
+// `isInstallerOutput` says whether the content now there is known to be the
+// installer's own. Returns false when the item must be kept as it is. A
+// destination that is gone is a new install, unless git reports its deletion.
 function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
   if (forceReplace || writtenThisRun.has(dest)) return true;
   const state = gitStateOf(dest);
-  if (state === "clean" || isInstallerOutput()) return true;
+  if (state === "clean") return true;
+  if (existsSync(dest) ? isInstallerOutput() : state !== "changed") return true;
   const rel = dest.slice(CWD.length + 1);
   if (state === "changed") {
     console.log(`      ! ${label} kept: ${rel} has uncommitted local changes. Commit or stash them, or pass --force to replace it.`);
-    if (!keptWithLocalChanges.length) process.once("beforeExit", printKeptSummary);
-    keptWithLocalChanges.push(rel);
+    keptThisRun.add(dest);
     return false;
   }
-  if (!backupStamp) backupStamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  const backupRel = join(BACKUP_DIR, backupStamp, rel.replace(/^\./, ""));
+  const backupRel = join(backupDirForRun(), rel.replace(/^\./, ""));
   mkdirSync(dirname(join(CWD, backupRel)), { recursive: true });
   cpSync(dest, join(CWD, backupRel), { recursive: true });
   console.log(`      ℹ ${label}: previous copy saved to ${backupRel}`);
   return true;
 }
 
-// Printed once, after everything else, when an update kept at least one item.
-// The run still exits 0: the rest of the install completed, and a kept item
-// can be the installer's own uncommitted output from an earlier run.
+// Printed once, as the last thing a run prints, when an update kept at least
+// one item — on normal completion and on the failure exit alike (see the
+// bottom of this file). The run still exits 0 when it completes: the rest of
+// the install was done, and a kept item can be the installer's own uncommitted
+// output from an earlier run.
 function printKeptSummary() {
+  if (!keptThisRun.size) return;
+  const paths = [...keptThisRun].map((dest) => dest.slice(CWD.length + 1));
+  keptThisRun.clear();
   console.log(
-    `  ! ${keptWithLocalChanges.length} item(s) NOT updated: they have uncommitted local changes (${keptWithLocalChanges.join(", ")}).\n` +
+    `  ! ${paths.length} item(s) NOT updated: they have uncommitted local changes (${paths.join(", ")}).\n` +
       `    Commit or stash the changes and run the update again, or add --force to replace them.\n`
   );
 }
@@ -1844,7 +1885,7 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
 
   const dest = join(CWD, target.dir, kind, name);
   if (existsSync(dest) && !update) return { status: "exists", dest };
-  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `${kind.slice(0, -1)}  ${name}`, () => isShippedCopy(kind, name, dest)))
+  if (update && !mayReplaceOnUpdate(dest, `${kind.slice(0, -1)}  ${name}`, () => isShippedCopy(kind, name, dest)))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
@@ -2092,6 +2133,8 @@ function applySkillOverlay(target, name, overlay, registry) {
       ? join(CWD, target.dir, "agents", `${name}.agent.md`)
       : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(agentFile)) return false;
+  // An agent this update kept is the user's version: tuning it would rewrite it.
+  if (keptThisRun.has(target.id === "copilot" ? agentFile : dirname(agentFile))) return false;
   const text = readFileSync(agentFile, "utf8");
   const rewritten = applySkillOverlayToText(text, overlay);
   if (rewritten === null) return false;
@@ -2251,7 +2294,7 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
     { soulMode: "memory", normalizeModel: true, registry },
   );
 
-  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === agent))
+  if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === agent))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, agent);
@@ -2359,7 +2402,7 @@ function writeCodexAgent(src, name, targetDir, update) {
     existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
     name
   );
-  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
+  if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, toml);
@@ -2983,6 +3026,7 @@ function trimInstalledAgentSkills(target, name, removeSet) {
     ? join(CWD, target.dir, "agents", `${name}.agent.md`)
     : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(f)) return;
+  if (keptThisRun.has(target.id === "copilot" ? f : dirname(f))) return; // kept by this update: left as the user has it
   const text = readFileSync(f, "utf8");
   const rewritten = applySkillOverlayToText(text, { remove: [...removeSet] });
   if (rewritten !== null && rewritten !== text) writeFileSync(f, rewritten);
@@ -3349,8 +3393,11 @@ function isMainModule() {
 }
 
 if (isMainModule()) {
-  main().catch((err) => {
+  // One way out for a run that reached the install: the summary of kept items
+  // is printed last, whether the run completed or failed part-way.
+  main().then(printKeptSummary, (err) => {
     console.error("Install failed:", err.message);
+    printKeptSummary();
     process.exit(1);
   });
 }
