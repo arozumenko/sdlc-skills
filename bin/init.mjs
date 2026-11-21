@@ -3018,13 +3018,17 @@ async function main() {
     }
   }
 
+  // Several factories may own one id, and every copy installs to one folder.
+  const existsNote = (kind, name) =>
+    (catalog.index[kind][name] || []).filter((o) => o.factory).length > 1 ? "exists, maybe another factory's copy; use --update to replace it" : "exists; use --update";
+
   for (const t of targets) {
     console.log(`  → ${t.label} (${t.dir}/)`);
     for (const name of agentsSelection) {
       const r = agentSrc[name];
       const res = copyItem("agents", r.name, t, args.update, catalog.registry, r.dir);
       if (res.status === "installed") { console.log(`      ✓ agent  ${r.name}`); installed++; }
-      else if (res.status === "exists") { console.log(`      — agent  ${r.name} (exists; use --update)`); skipped++; }
+      else if (res.status === "exists") { console.log(`      — agent  ${r.name} (${existsNote("agents", r.name)})`); skipped++; }
       else { console.log(`      ! agent  ${r.name} (missing)`); }
     }
     if (factoryPlan) {
@@ -3041,7 +3045,7 @@ async function main() {
           console.log(`      ✓ agent  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
-          console.log(`      — agent  ${name} (exists; use --update)`);
+          console.log(`      — agent  ${name} (${existsNote("agents", name)})`);
           skipped++;
         } else {
           console.log(`      ! agent  ${name} (missing in factory)`);
@@ -3060,7 +3064,7 @@ async function main() {
           console.log(`      ✓ skill  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
-          console.log(`      — skill  ${name} (exists; use --update)`);
+          console.log(`      — skill  ${name} (${existsNote("skills", name)})`);
           skipped++;
         } else {
           console.log(`      ! skill  ${name} (missing in factory)`);
@@ -3091,7 +3095,7 @@ async function main() {
       const r = skillSrc[name];
       const res = copyItem("skills", r.name, t, args.update, catalog.registry, r.dir);
       if (res.status === "installed") { console.log(`      ✓ skill  ${r.name}`); installed++; }
-      else if (res.status === "exists") { console.log(`      — skill  ${r.name} (exists; use --update)`); skipped++; }
+      else if (res.status === "exists") { console.log(`      — skill  ${r.name} (${existsNote("skills", r.name)})`); skipped++; }
       else { console.log(`      ! skill  ${r.name} (missing)`); }
     }
     for (const entry of externalSkills) {
