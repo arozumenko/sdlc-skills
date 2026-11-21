@@ -290,15 +290,17 @@ const OTEL_VSCODE_KEYS = (endpoint) => ({
  */
 export function configureOtel(repo, { endpoint = 'http://localhost:4318', remove = false, local = false } = {}) {
   const touched = [];
-  const cfgPath = seedConfig(repo);
-  // Read all three BEFORE writing any: one that does not parse stops the run
-  // with nothing half-applied (readJson throws).
-  const cfg = readJson(cfgPath, {});
+  // Read all three BEFORE writing anything — the config seed included: one
+  // that does not parse stops the run with nothing applied (readJson throws).
+  const cfgPath = join(repo, '.agents', 'telemetry', 'automation', 'config.json');
+  readJson(cfgPath, {});
   const sPath = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
   const settings = readJson(sPath, {});
   const vPath = join(repo, '.vscode', 'settings.json');
   const vs = remove && unparseableWithout(vPath, 'github.copilot.chat.otel.') ? null : readJson(vPath, {});
 
+  seedConfig(repo);
+  const cfg = readJson(cfgPath, {});
   cfg.otel = remove ? { enabled: false } : { enabled: true, endpoint };
   writeJson(cfgPath, cfg);
   touched.push(cfgPath);
@@ -588,6 +590,27 @@ export function installGitignore(repo, { remove = false } = {}) {
   return file;
 }
 
+/**
+ * Every JSON file a default install / --remove will rewrite or build on is
+ * read BEFORE the first write: one that exists but does not parse stops the
+ * whole run (readJson throws, naming it) with nothing changed anywhere — not
+ * after the hooks of another host are already wired or removed.
+ * The telemetry config is never rewritten by an install, but the capture hook
+ * falls back to defaults when it cannot parse it, so wiring capture on top of
+ * a broken one would silently ignore the team's settings.
+ */
+function preflightJson(repo, { host, local, remove }) {
+  if (host === 'all' || host === 'claude') readJson(join(repo, '.claude', local ? 'settings.local.json' : 'settings.json'), {});
+  if (host === 'vscode' || (remove && host === 'all')) {
+    const tasks = join(repo, '.vscode', 'tasks.json');
+    if (!(remove && unparseableWithout(tasks, TASK_LABEL))) readJson(tasks, {});
+  }
+  if (!remove) {
+    readJson(join(repo, '.agents', 'telemetry', 'automation', 'config.json'), {});
+    readJson(join(repo, '.agents', 'telemetry', 'config.json'), {}); // flat-era: this run migrates it into automation/
+  }
+}
+
 /** Seed the telemetry dir + default config (never overwrites an existing one). */
 export function seedConfig(repo) {
   const dir = join(repo, '.agents', 'telemetry', 'automation');
@@ -813,6 +836,7 @@ export async function main(argv = process.argv.slice(2)) {
   const host = arg('--host') || 'all';
   const touched = [];
   try {
+    preflightJson(repo, { host, local, remove });
     if (host === 'all' || host === 'claude') touched.push(installClaude(repo, rel, { local, remove }));
     if (host === 'all' || host === 'copilot') touched.push(installCopilot(repo, rel, { remove }));
     // vscode is opt-in only (see installVsCode) — but --remove still strips it

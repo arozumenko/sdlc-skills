@@ -39,8 +39,9 @@ nothing is ever clobbered.
 `.claude/settings.json` (or `settings.local.json`), `.vscode/tasks.json`,
 `.vscode/settings.json` or the telemetry `config.json` exists but is not
 strict JSON (a syntax error, comments, a trailing comma), install, `--remove`
-and `--otel` stop with exit 1 and a message naming the file, and write nothing
-to it — fix the file and re-run. One exception keeps uninstall usable:
+and `--otel` stop with exit 1 and a message naming the file — every such file
+is checked before the first write, so nothing is half-applied. Fix the file
+and re-run. One exception keeps uninstall usable:
 `--remove` / `--otel-remove` skip an unparseable VS Code file that holds
 nothing of ours.
 

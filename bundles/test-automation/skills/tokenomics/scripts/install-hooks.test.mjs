@@ -327,7 +327,7 @@ test('configureOtel: any of its three files failing to parse stops it before any
   assert.throws(() => configureOtel(repo, {}), refusal(sFile));
   assert.equal(readFileSync(sFile, 'utf8'), BROKEN);
   assert.deepEqual(read(vFile), { 'editor.fontSize': 14 }, 'the other surfaces were not half-written');
-  assert.ok(!('otel' in read(join(repo, '.agents', 'telemetry', 'automation', 'config.json'))));
+  assert.ok(!existsSync(join(repo, '.agents')), 'the telemetry config was not even seeded');
 
   // VS Code settings with comments
   const repo2 = tmp();
@@ -337,6 +337,7 @@ test('configureOtel: any of its three files failing to parse stops it before any
   assert.throws(() => configureOtel(repo2, {}), refusal(v2));
   assert.equal(readFileSync(v2, 'utf8'), before);
   assert.deepEqual(read(s2), { model: 'sonnet' }, 'Claude settings not touched either');
+  assert.ok(!existsSync(join(repo2, '.agents')), 'the telemetry config was not even seeded');
   // --otel-remove: that file holds none of our keys, so it is left alone and the rest is stripped
   configureOtel(repo2, { remove: true });
   assert.equal(readFileSync(v2, 'utf8'), before, 'remove never rewrote the unparseable file');
@@ -371,6 +372,7 @@ test('CLI: a settings file that does not parse → exit 1, the file named, nothi
   }
   assert.ok(!existsSync(join(repo, '.github', 'hooks', 'tokenomics.json')), 'the run stopped — no half install');
   assert.ok(!existsSync(join(repo, '.gitignore')));
+  assert.ok(!existsSync(join(repo, '.agents')), 'no telemetry config seeded by a refused run');
 
   writeFileSync(file, JSON.stringify({ model: 'sonnet' }));
   const ok = run();
@@ -388,4 +390,57 @@ test('CLI --remove: a commented tasks.json with nothing of ours does not block t
   assert.equal(r.status, 0, r.stderr);
   assert.equal(readFileSync(tasks, 'utf8'), JSONC);
   assert.ok(!existsSync(join(repo, '.github', 'hooks', 'tokenomics.json')), 'the rest of the uninstall ran');
+});
+
+// "Before anything is written" has to hold for the whole run, not per file:
+// every JSON file the run will rewrite is read first.
+test('CLI --remove: a tasks.json that holds our task but no longer parses stops the run before anything is removed', () => {
+  const { repo, run } = installedCopy();
+  assert.equal(run().status, 0);
+  assert.equal(run('--host', 'vscode').status, 0);
+  const tasks = join(repo, '.vscode', 'tasks.json');
+  const owned = `// edited by hand\n${readFileSync(tasks, 'utf8')}`;
+  writeFileSync(tasks, owned);
+  const settings = readFileSync(join(repo, '.claude', 'settings.json'), 'utf8');
+  const gitignore = readFileSync(join(repo, '.gitignore'), 'utf8');
+
+  const r = run('--remove');
+  assert.equal(r.status, 1, r.stderr);
+  assert.ok(r.stderr.includes(tasks) && /does not parse/.test(r.stderr), r.stderr);
+  assert.equal(readFileSync(tasks, 'utf8'), owned, 'tasks.json untouched');
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), settings, 'Claude entries not removed');
+  assert.ok(existsSync(join(repo, '.github', 'hooks', 'tokenomics.json')), 'Copilot hooks file not removed');
+  assert.equal(readFileSync(join(repo, '.gitignore'), 'utf8'), gitignore, '.gitignore block not stripped');
+});
+
+// An install leaves an existing telemetry config alone — but the capture hook
+// silently falls back to defaults when it cannot parse it, so wiring hooks on
+// top of a broken one would look fine and ignore the team's settings.
+test('CLI: an existing telemetry config.json that does not parse refuses the install before any mutation; --remove is not affected', () => {
+  const { repo, run } = installedCopy();
+  const cfg = put(repo, '.agents/telemetry/automation/config.json', '{ "capturePrompts": true, }');
+  const r = run();
+  assert.equal(r.status, 1, r.stderr);
+  assert.ok(r.stderr.includes(cfg) && /does not parse/.test(r.stderr), r.stderr);
+  assert.equal(readFileSync(cfg, 'utf8'), '{ "capturePrompts": true, }', 'config untouched');
+  assert.ok(!existsSync(join(repo, '.claude', 'settings.json')), 'no hooks wired');
+  assert.ok(!existsSync(join(repo, '.github', 'hooks', 'tokenomics.json')));
+  assert.ok(!existsSync(join(repo, '.gitignore')));
+  assert.equal(run('--remove').status, 0, 'uninstall never reads the config');
+
+  writeFileSync(cfg, '{ "capturePrompts": true }');
+  const ok = run();
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(read(cfg).capturePrompts, true, 'a valid config is kept as it is');
+  assert.equal(read(join(repo, '.claude', 'settings.json')).hooks.SessionEnd.length, 1);
+
+  // a flat-era config at the telemetry root is about to BECOME automation/config.json
+  // (layout migration, same run) — the same rule applies to it
+  const old = installedCopy();
+  const flat = put(old.repo, '.agents/telemetry/config.json', '{ "maxSweep": 5, }');
+  const r2 = old.run();
+  assert.equal(r2.status, 1, r2.stderr);
+  assert.ok(r2.stderr.includes(flat), r2.stderr);
+  assert.ok(existsSync(flat) && !existsSync(join(old.repo, '.agents', 'telemetry', 'automation')), 'not migrated, nothing seeded');
+  assert.ok(!existsSync(join(old.repo, '.claude', 'settings.json')), 'no hooks wired');
 });
