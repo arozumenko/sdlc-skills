@@ -957,3 +957,76 @@ test("a healthy folder link as the seed's parent still seeds", () => {
   assert.ok(existsSync(s.p("shared-agents/knowledge/finding-schema.md")), "seeded through the link");
   assert.ok(isLink(s.p(".agents/security-testing")));
 });
+
+// ── Follow-up: --symlink external installs after the cache is gone ──────────
+
+// A local upstream for chrisbanes/skills that the installer clones itself:
+// the sandbox git config rewrites the GitHub URL to a file:// path, so a wiped
+// cache is fetched again without the network.
+function mirrorFixture(s) {
+  const upstream = join(s.base, "upstream");
+  const skill = join(upstream, "skills", EXTERNAL);
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(skill, "SKILL.md"), `---\nname: ${EXTERNAL}\ndescription: stand-in\n---\nupstream v1\n`);
+  const g = (...args) => {
+    const r = s.run("git", ["-c", "user.email=t@example.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  };
+  g("init", "-q", "--initial-branch=main", upstream);
+  g("-C", upstream, "add", "-A");
+  g("-C", upstream, "commit", "-qm", "upstream");
+  const config = join(s.home, "mirror.gitconfig");
+  writeFileSync(config, `[url "file://${realpathSync(upstream)}"]\n\tinsteadOf = https://github.com/chrisbanes/skills\n${readFileSync(NO_NETWORK, "utf8")}`);
+  const env = { GIT_CONFIG_GLOBAL: config };
+  const cache = join(s.home, ".cache", "sdlc-skills", "registry");
+  return { env, cache, link: s.p(".claude/skills", EXTERNAL), symlinkInstall: (...more) => s.initEnv(env, "--skills", EXTERNAL, "--symlink", ...more) };
+}
+const resolves = (link) => isLink(link) && existsSync(join(link, "SKILL.md"));
+
+for (const [state, git, commit] of [["no git", false, false], ["git, link untracked", true, false], ["git, link committed", true, true]]) {
+  test(`--symlink external skill, cache wiped, ${state}: --update re-creates the link`, () => {
+    const s = sandbox({ git });
+    const m = mirrorFixture(s);
+    const first = m.symlinkInstall();
+    assert.equal(first.status, 0, first.out);
+    assert.ok(resolves(m.link), first.out);
+    if (commit) s.commitAll("install with links");
+    rmSync(m.cache, { recursive: true });
+    assert.ok(isLink(m.link) && !existsSync(m.link), "fixture: the link dangles once the cache is gone");
+    const r = m.symlinkInstall("--update");
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(r.out, /kept:|NOT updated/);
+    assert.ok(resolves(m.link), "the link is back and leads to the fetched skill");
+    assert.ok(!existsSync(s.p(BACKUP_ROOT)));
+  });
+
+  test(`--symlink external skill whose link leads to a folder the cache no longer has, ${state}: --update re-links it`, () => {
+    // The link text is inside the installer's cache, but that folder is not in
+    // the fresh checkout (upstream moved it, or the registry subdir changed).
+    const s = sandbox({ git });
+    const m = mirrorFixture(s);
+    assert.equal(m.symlinkInstall().status, 0);
+    rmSync(m.link);
+    symlinkSync(join(m.cache, "chrisbanes__skills", "skills", "old-name"), m.link);
+    if (commit) s.commitAll("install with links");
+    const r = m.symlinkInstall("--update");
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(r.out, /kept:|NOT updated/);
+    assert.ok(resolves(m.link));
+  });
+
+  if (commit) continue; // a committed link is replaced whatever it points to: git has it
+  test(`--symlink external skill replaced by a dangling link out of the cache, ${state}: kept`, () => {
+    const s = sandbox({ git });
+    const m = mirrorFixture(s);
+    assert.equal(m.symlinkInstall().status, 0);
+    const outside = join(s.base, "elsewhere", EXTERNAL);
+    rmSync(m.link);
+    symlinkSync(outside, m.link);
+    const r = m.symlinkInstall("--update");
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, git ? KEPT("skill", EXTERNAL) : LINK_KEPT(EXTERNAL));
+    assert.ok(isLink(m.link) && !existsSync(m.link), "still the user's link");
+    assert.ok(!existsSync(outside));
+  });
+}

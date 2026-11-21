@@ -55,6 +55,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -1518,6 +1519,22 @@ export function isBarePathSegment(name) {
   return basename(name) === name;
 }
 
+// True when `dest` is a symlink whose link text leads into the installer's own
+// cache (the folder external skills are cloned into, SDLC_SKILLS_CACHE_DIR
+// included). Only `--symlink` installs make such links, so one is the
+// installer's output whether or not its target still exists: the cache may
+// have been wiped, or the folder may be gone from the fresh checkout. The text
+// is resolved against the link's folder, not with realpath, because the
+// target may be missing.
+function linksIntoCache(dest) {
+  if (!entryAt(dest)?.isSymbolicLink()) return false;
+  const target = resolve(dirname(dest), readlinkSync(dest));
+  const cache = resolve(cacheRoot());
+  let realCache = cache;
+  try { realCache = realpathSync(cache); } catch { /* keep the plain path */ }
+  return isWithinDir(cache, target) || isWithinDir(realCache, target);
+}
+
 function installExternalSkill(entry, targetDir, useSymlink, update) {
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
@@ -1573,9 +1590,9 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
   const dest = join(skillsDir, skillName);
   const present = existsSync(dest) || lstatSync(dest, { throwIfNoEntry: false });
   if (present && !update) return { status: "exists", name: skillName };
-  // Same replacement rule as in-repo items. Content identical to the fetched
-  // copy (or a link to it) is the installer's own output.
-  if (update && !mayReplaceOnUpdate(dest, `skill  ${skillName}`, () => sameTree(src, dest)))
+  // Same replacement rule as in-repo items. The installer's own output is
+  // content identical to the fetched copy, or a link into the cache.
+  if (update && !mayReplaceOnUpdate(dest, `skill  ${skillName}`, () => linksIntoCache(dest) || sameTree(src, dest)))
     return { status: "exists", name: skillName };
   if (present && update) rmSync(dest, { recursive: true, force: true }); // clear prior symlink or copy
   try {

@@ -80,7 +80,9 @@ package, and a missing item is installed, even if you deleted it there.
 A symbolic link where an item goes is treated as yours. In git it is kept
 like any other local change. Without git the installer cannot back it up,
 so it keeps the link and prints the reason. `--force` replaces the link
-itself; nothing is written to the place the link points to.
+itself; nothing is written to the place the link points to. A link the
+installer made with `--symlink` points into its cache folder. The update
+replaces such a link as usual, also after you deleted the cache.
 
 An item whose content is identical to a copy in this package is never
 treated as a local change. So you can update two factories one after the
