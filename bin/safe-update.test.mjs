@@ -741,3 +741,18 @@ test("the NOT updated summary is printed even when the run fails later", () => {
   assert.match(r.out, KEPT("skill", "memory"));
   assert.equal(r.out.match(SUMMARY)?.[1], "1", r.out);
 });
+
+// ── Round 2 ─────────────────────────────────────────────────────────────────
+
+test("a file where an installed factory's seed parent goes does not abort a later update", () => {
+  const s = sandbox();
+  writeFileSync(s.p("CLAUDE.md"), "# Project\n"); // the block lands in AGENTS.md and CLAUDE.md: two refresh passes
+  assert.equal(s.init("--factory", "security-testing").status, 0);
+  rmSync(s.p(".agents/security-testing"), { recursive: true });
+  writeFileSync(s.p(".agents/security-testing"), "my file\n");
+  const r = s.init("--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.equal(readFileSync(s.p(".agents/security-testing"), "utf8"), "my file\n");
+  assert.equal((r.out.match(/! seed \.agents\/security-testing\/knowledge: the project has a file where one of its parent folders goes; kept, nothing seeded/g) || []).length, 1, r.out);
+  assert.match(r.out, /Done: /);
+});

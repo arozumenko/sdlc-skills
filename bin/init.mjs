@@ -567,14 +567,11 @@ function installSeed(factory, update) {
       skipped++;
       continue;
     }
-    try {
-      mkdirSync(dirname(destPath), { recursive: true });
-    } catch (err) {
-      if (err.code !== "EEXIST" && err.code !== "ENOTDIR") throw err;
-      console.log(`      ! seed ${dest}: the project has a file where one of its parent folders goes; kept, nothing seeded`);
+    if (seedParentBlocked(destPath)) {
       skipped++;
       continue;
     }
+    mkdirSync(dirname(destPath), { recursive: true });
     copyTreeDereferenced(srcPath, destPath, { force: true, root: PKG_ROOT });
     console.log(`      ✓ seed ${dest}`);
     installed++;
@@ -591,10 +588,12 @@ function installSeed(factory, update) {
 // copyTreeDereferenced: a link that leaves `root` (default: the seed source
 // itself) or points back at a folder already being walked is skipped with a
 // warning. Where the project has a file and the factory a folder, or the
-// reverse, the project's entry is kept and one line says so.
+// reverse, or a file where a parent folder of the destination goes, the
+// project's entry is kept and one line says so.
 export function seedMissingFiles(srcPath, destPath, root) {
   let stat;
   try { stat = lstatSync(srcPath); } catch { return 0; }
+  if (seedParentBlocked(destPath)) return 0;
   const isLink = stat.isSymbolicLink();
   let allowed, start;
   try {
@@ -602,6 +601,32 @@ export function seedMissingFiles(srcPath, destPath, root) {
     start = isLink ? srcPath : realpathSync(srcPath);
   } catch { return 0; }
   return seedMissingWithin(start, destPath, allowed, new Set());
+}
+
+// One line per clash per run: an update can walk the same seed more than once
+// (once for each root context file that carries the factory's block).
+const seedClashesReported = new Set();
+function reportSeedClash(dest, what) {
+  const shown = dest.startsWith(CWD) ? dest.slice(CWD.length + 1) : dest;
+  const line = `      ! seed ${shown}: ${what}`;
+  if (seedClashesReported.has(line)) return;
+  seedClashesReported.add(line);
+  console.log(line);
+}
+
+// True when a regular file sits where one of the seed destination's parent
+// folders goes. Nothing can be seeded there; the file is the user's and stays.
+function seedParentBlocked(destPath) {
+  for (let dir = dirname(destPath); ; dir = dirname(dir)) {
+    let st;
+    try { st = statSync(dir, { throwIfNoEntry: false }); } catch { st = undefined; } // ENOTDIR: look further up
+    if (st) {
+      if (st.isDirectory()) return false;
+      reportSeedClash(destPath, "the project has a file where one of its parent folders goes; kept, nothing seeded");
+      return true;
+    }
+    if (dirname(dir) === dir) return false;
+  }
 }
 
 function seedMissingWithin(src, dest, allowed, ancestors) {
@@ -618,10 +643,9 @@ function seedMissingWithin(src, dest, allowed, ancestors) {
   }
   const have = statSync(dest, { throwIfNoEntry: false });
   if (!have && lstatSync(dest, { throwIfNoEntry: false })) return 0; // a dangling link of the user's: kept
-  const shown = dest.startsWith(CWD) ? dest.slice(CWD.length + 1) : dest;
   if (stat.isDirectory()) {
     if (have && !have.isDirectory()) {
-      console.log(`      ! seed ${shown}: the project has a file where the factory has a folder; kept`);
+      reportSeedClash(dest, "the project has a file where the factory has a folder; kept");
       return 0;
     }
     if (ancestors.has(src)) {
@@ -636,7 +660,7 @@ function seedMissingWithin(src, dest, allowed, ancestors) {
   }
   if (!stat.isFile()) return 0;
   if (have) {
-    if (have.isDirectory()) console.log(`      ! seed ${shown}: the project has a folder where the factory has a file; kept`);
+    if (have.isDirectory()) reportSeedClash(dest, "the project has a folder where the factory has a file; kept");
     return 0;
   }
   mkdirSync(dirname(dest), { recursive: true });
