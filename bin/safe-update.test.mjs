@@ -13,6 +13,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { mergeClaudeSettingsHooks, mergeVersionedHooks } from "./init.mjs";
+
 const REPO = new URL("..", import.meta.url).pathname;
 const INIT = join(REPO, "bin/init.mjs");
 const NO_NETWORK = join(REPO, "bin/fixtures/security-testing-e2e/no-network.gitconfig");
@@ -256,3 +258,47 @@ for (const [target, file] of [["copilot", ".github/agents/personal-assistant.age
     assert.equal(readFileSync(s.p(m[1]), "utf8"), "old agent file\n");
   });
 }
+
+// ── Item 4: one backup per run for settings files ───────────────────────────
+
+const USER_SETTINGS = '{\n  "permissions": { "allow": ["Bash(ls)"] }\n}\n';
+
+test("a factory install merges settings.json twice; the backup holds the file as it was before the run", () => {
+  const s = sandbox();
+  mkdirSync(s.p(".claude"));
+  writeFileSync(s.p(".claude/settings.json"), USER_SETTINGS);
+  const r = s.init("--factory", "manual-qa");
+  assert.equal(r.status, 0, r.out);
+  const merged = JSON.parse(readFileSync(s.p(".claude/settings.json"), "utf8"));
+  const tags = new Set(Object.values(merged.hooks).flat().map((g) => g._factory));
+  assert.ok(tags.has("sdlc-core") && tags.has("manual-qa"), "fixture: both merges ran in this one run");
+  assert.equal(readFileSync(s.p(".claude/settings.json.bak"), "utf8"), USER_SETTINGS);
+});
+
+test("a settings file the run itself created is not backed up by the run's second merge", () => {
+  const s = sandbox();
+  const r = s.init("--factory", "manual-qa");
+  assert.equal(r.status, 0, r.out);
+  assert.ok(existsSync(s.p(".claude/settings.json")));
+  assert.ok(!existsSync(s.p(".claude/settings.json.bak")), "nothing of the user's existed to back up");
+});
+
+test("mergeClaudeSettingsHooks: two merges in one process write the backup once", () => {
+  const file = join(mkdtempSync(join(tmpdir(), "safe-update-")), "settings.json");
+  writeFileSync(file, USER_SETTINGS);
+  const spec = { SessionStart: [{ hooks: [{ type: "command", command: "true" }] }] };
+  assert.equal(mergeClaudeSettingsHooks(file, spec, "one"), true);
+  assert.equal(mergeClaudeSettingsHooks(file, spec, "two"), true);
+  assert.equal(readFileSync(file + ".bak", "utf8"), USER_SETTINGS);
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).hooks.SessionStart.length, 2, "both merges still land");
+});
+
+test("mergeVersionedHooks: two merges in one process write the backup once", () => {
+  const file = join(mkdtempSync(join(tmpdir(), "safe-update-")), "hooks.json");
+  const original = '{ "version": 1, "hooks": { "sessionStart": [{ "command": "./mine.sh" }] } }\n';
+  writeFileSync(file, original);
+  assert.equal(mergeVersionedHooks(file, { sessionStart: [{ command: "./one/run.sh" }] }, "/one/"), true);
+  assert.equal(mergeVersionedHooks(file, { sessionStart: [{ command: "./two/run.sh" }] }, "/two/"), true);
+  assert.equal(readFileSync(file + ".bak", "utf8"), original);
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).hooks.sessionStart.length, 3, "both merges still land, the user's hook stays");
+});

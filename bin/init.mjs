@@ -882,7 +882,14 @@ function installHooks(factory, targets) {
   }
 }
 
-function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
+// Settings files this run has already merged into. One install can merge the
+// same file more than once (core hooks, then a factory's hooks); only the first
+// merge writes `<file>.bak`, so the backup holds the content the file had
+// before this run, not the installer's own earlier edit. A file the run itself
+// created gets no backup.
+const settingsMergedThisRun = new Set();
+
+export function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
   let settings = {};
   if (existsSync(settingsPath)) {
     const raw = readFileSync(settingsPath, "utf8");
@@ -892,8 +899,9 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
       console.log(`      ! ${basename(settingsPath)} parse failed; left untouched: ${err.message}`);
       return false;
     }
-    writeFileSync(settingsPath + ".bak", raw); // back up before we touch it
+    if (!settingsMergedThisRun.has(settingsPath)) writeFileSync(settingsPath + ".bak", raw); // back up before we touch it
   }
+  settingsMergedThisRun.add(settingsPath);
   settings.hooks = settings.hooks && typeof settings.hooks === "object" ? settings.hooks : {};
   for (const [event, groups] of Object.entries(hookSpec)) {
     if (!Array.isArray(groups)) continue;
@@ -1148,8 +1156,8 @@ function copyHookScripts(destDir, agentsDir = null) {
 
 // Merge our entries into a version-1 hooks.json (Cursor / SDK shape),
 // replacing only the entries that reference our scripts dir (idempotent) and
-// leaving the user's other hooks intact. Backs up before writing.
-function mergeVersionedHooks(path, spec, markerSubstr) {
+// leaving the user's other hooks intact. Backs up before the run's first write.
+export function mergeVersionedHooks(path, spec, markerSubstr) {
   let cfg = { version: 1, hooks: {} };
   if (existsSync(path)) {
     const raw = readFileSync(path, "utf8");
@@ -1159,10 +1167,11 @@ function mergeVersionedHooks(path, spec, markerSubstr) {
       console.log(`      ! ${basename(path)} parse failed; left untouched: ${err.message}`);
       return false;
     }
-    writeFileSync(path + ".bak", raw);
+    if (!settingsMergedThisRun.has(path)) writeFileSync(path + ".bak", raw); // once per run, see settingsMergedThisRun
     if (!cfg.hooks || typeof cfg.hooks !== "object") cfg.hooks = {};
     if (!cfg.version) cfg.version = 1;
   }
+  settingsMergedThisRun.add(path);
   for (const [event, entries] of Object.entries(spec)) {
     const existing = Array.isArray(cfg.hooks[event]) ? cfg.hooks[event] : [];
     const kept = existing.filter(
