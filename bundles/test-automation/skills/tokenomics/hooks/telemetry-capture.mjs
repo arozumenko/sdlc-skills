@@ -45,6 +45,16 @@ const LIVE_GRACE_MS = 2 * 60 * 1000;  // a transcript touched this recently is l
 const RECAPTURE_MARGIN_MS = 5 * 60 * 1000; // source-file growth beyond the recorded end that means "the session continued"
 export const USD_PER_CREDIT = 0.01;   // GitHub's published AI-credit conversion
 
+// The ccusage release the default metering path fetches through npx (see
+// meterSession). PINNED to one exact version on purpose: with `@latest` a
+// different program could run on every capture, inside a hook, with nobody
+// having looked at it. To bump: read the new release's changelog
+// (`npm view ccusage version` shows the newest), set that exact version here
+// — never a tag or a range — then run this file's tests and one real capture
+// and check the line still carries `costSource: ccusage-metered`.
+// TOKENOMICS_CCUSAGE_BIN skips the npx fetch entirely (a ccusage you installed).
+export const CCUSAGE_VERSION = '20.0.51';
+
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
@@ -565,10 +575,11 @@ export function meterSession(files, { env = process.env } = {}) {
       linkOrCopy(f, join(proj, basename(f)));
     }
     // TOKENOMICS_CCUSAGE_BIN: an explicit binary (a ccusage on PATH, or a test
-    // double). Default stays the npx fetch, so nothing needs installing.
+    // double). Default stays the npx fetch, so nothing needs installing — of
+    // the one pinned version (CCUSAGE_VERSION), never `@latest`.
     const bin = env.TOKENOMICS_CCUSAGE_BIN || 'npx';
     const args = bin === 'npx'
-      ? ['--yes', 'ccusage@latest', 'claude', 'session', '--json', '--offline']
+      ? ['--yes', `ccusage@${CCUSAGE_VERSION}`, 'claude', 'session', '--json', '--offline']
       : ['claude', 'session', '--json', '--offline'];
     const out = execFileSync(bin, args, {
       env: { ...env, CLAUDE_CONFIG_DIR: stage },

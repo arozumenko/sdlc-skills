@@ -202,7 +202,8 @@ treats the declared batch/cases as the strongest membership surface.
 ## How capture works on each host
 
 - **Claude Code** — a SessionEnd hook captures each ending session (dollars
-  metered by ccusage at capture time, best-effort via npx) plus a SessionStart
+  metered by ccusage at capture time, best-effort via npx, one pinned
+  version — § Config) plus a SessionStart
   async sweep for sessions that never reached their end hook, and a
   **SubagentStop hook that measures each dispatch as it finishes**
   (§ Live measurements).
@@ -371,7 +372,12 @@ shared piece: per-factory subfolders, one branch, one sync.
   prompt text to the repo; decide as a team, mind client-data rules.
 - `priceAtCapture` — Claude only: meter the session with `npx ccusage` when it
   ends (adds seconds to the hook; on failure the line says `costUsd: null`,
-  never a guess). `TOKENOMICS_NO_CCUSAGE=1` disables it too.
+  never a guess). `TOKENOMICS_NO_CCUSAGE=1` disables it too. The npx fetch is
+  **pinned to one exact ccusage version** — the `CCUSAGE_VERSION` constant at
+  the top of `hooks/telemetry-capture.mjs`, never `@latest` — so the same
+  program runs on every capture; bumping it is a reviewed one-line change
+  (steps in the comment there). `TOKENOMICS_CCUSAGE_BIN=<path>` runs a ccusage
+  you installed instead, with no download at all.
 - `maxSweep` — new sessions harvested per hook run; the rest wait for the next
   run (a first sweep can face a month of history — `--sweep --all` does it in
   one go, run that manually).
