@@ -261,9 +261,10 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
     const s = gitState(tel, git); add(s.unmerged.length || s.merging ? 'warning' : 'ok', `telemetry git: unmerged=${s.unmerged.length} merging=${s.merging} dirty=${s.dirty} unpushed=${s.unpushed ?? 'no upstream'}`);
   }
   const diag = existsSync(deliveryDir(repo)) ? readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')) : [];
-  // A stop hook that failed captured nothing for that subagent; the count is said here because nothing else shows it.
+  // A stop hook that failed captured nothing for that dispatch; the count is said here because nothing else shows it. It counts
+  // lines, not subagents: the hook writes at most one line per session and agent within its recent diagnostics window.
   let stopFailed = 0; try { stopFailed = readDiagnostics(repo)['stop-hook-failed']; } catch { /* the line count below still prints */ }
-  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)${stopFailed ? `, stop-hook-failed=${stopFailed} (the stop hook failed for ${stopFailed} subagent(s): their spend may be missing from the totals, not zero)` : ''}`);
+  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)${stopFailed ? `, stop-hook-failed=${stopFailed} (${stopFailed} stop hook failure(s) on record: the spend of those dispatches may be missing from the totals, not zero)` : ''}`);
   // Printed only when stale: a model missing from an old table is unpriced, and nothing else says so.
   const stalePrices = pricesStaleText(pricesAge(repo, { now }));
   if (stalePrices) add('warning', `prices: stale — ${stalePrices}`);

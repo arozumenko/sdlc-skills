@@ -430,7 +430,7 @@ test('doctor: the diagnostics line counts stop-hook-failed lines when there are 
   assert.ok(doctorReport(repo, REL).lines.includes('diagnostics: 1 line(s)'));
   writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('unbound-session', 'a') + line('stop-hook-failed', 'a') + line('stop-hook-failed', 'b'));
   const f = doctorFindings(repo, REL).find((x) => x.line.startsWith('diagnostics:'));
-  assert.equal(f.line, 'diagnostics: 3 line(s), stop-hook-failed=2 (the stop hook failed for 2 subagent(s): their spend may be missing from the totals, not zero)');
+  assert.equal(f.line, 'diagnostics: 3 line(s), stop-hook-failed=2 (2 stop hook failure(s) on record: the spend of those dispatches may be missing from the totals, not zero)');
   assert.equal(f.severity, 'info');
 });
 

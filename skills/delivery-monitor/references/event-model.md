@@ -195,7 +195,9 @@ plans, events, dispatches, profile, prices or a live transcript make the budget 
 calibration: a task's budget is the USD range saved on its plan item, so a missing or damaged calibration file changes
 nothing here. A task without a USD range remains unbudgeted.
 
-`stop-hook-failed` is in the same vocabulary, with the same shape: one line per session and agent when the SubagentStop
-handler itself throws. `detail` is the first line of the error. The hook still returns normally. That subagent's dispatch
+`stop-hook-failed` is in the same vocabulary, with the same shape: at most one line per session and agent within the recent
+diagnostics window, when the SubagentStop handler itself throws. The window is the last 1 MiB of the diagnostics file; past
+it, a repeated failure of the same agent is written again, so the count can be higher than the number of agents.
+`detail` is the first line of the error. The hook still returns normally. That subagent's dispatch
 may not be in the ledger, so its spend can be missing from the totals. `doctor` prints the count on its `diagnostics:` line,
 and the report counts it in `coverage.diagnostics`.

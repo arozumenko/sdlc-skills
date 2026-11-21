@@ -213,6 +213,9 @@ function alreadyDiagnosed(file, kind, session, agentId) {
 // `task-crossing` describes one agent and is re-checked on every stop of a resumed agent — one line per (session, agent).
 const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster', 'budget-check-unavailable']);
 // `stop-hook-failed` is the stop handler's own failure for one agent: a resumed agent stops again and fails the same way.
+// For both kinds "once" means at most once within the recent diagnostics window: `alreadyDiagnosed` scans only the last 1 MiB
+// of the file, so after more than that of other lines the same agent's line is written again. No marker is kept on disk for
+// this rare case; a repeated line only raises a count.
 const ONCE_PER_AGENT = new Set(['task-crossing', 'stop-hook-failed']);
 export function diagnose(repo, slug, kind, payload, detail, now) {
   try {
