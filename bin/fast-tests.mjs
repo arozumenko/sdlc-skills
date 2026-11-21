@@ -21,7 +21,7 @@
  * `npm run test:fast -- --test-reporter=dot`.
  */
 
-import { readdirSync, readFileSync } from "fs";
+import { readdirSync, readFileSync, realpathSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
@@ -130,7 +130,11 @@ export function slowWithoutPullRequestRun(slow, areas, mainOnly) {
 }
 
 function runTests(args, files) {
-  const r = spawnSync(process.execPath, ["--test", ...args, ...files], { cwd: PKG_ROOT, stdio: "inherit" });
+  // Node marks the children of a test run with NODE_TEST_CONTEXT. A
+  // `node --test` that inherits it skips every file and exits 0, so drop it:
+  // this run must report its own failures even when a test started it.
+  const { NODE_TEST_CONTEXT, ...env } = process.env;
+  const r = spawnSync(process.execPath, ["--test", ...args, ...files], { cwd: PKG_ROOT, stdio: "inherit", env });
   if (r.error) throw r.error;
   process.exit(r.status === null ? 1 : r.status);
 }
@@ -171,6 +175,19 @@ function main() {
   runTests(args, fast);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run only as the entry point, not when a test imports this file. Compare real
+// filesystem paths: a file URL and a raw path differ whenever the path has a
+// space or goes through a symlink, and a mismatch here would skip main() and
+// exit 0 with no test run.
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   main();
 }

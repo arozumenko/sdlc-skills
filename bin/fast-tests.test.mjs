@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +74,33 @@ test("--list prints the fast set and runs nothing", () => {
   const r = spawnSync(process.execPath, [join(REPO, "bin/fast-tests.mjs"), "--list"], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.stdout.trim().split("\n"), selectFast(REPO, SLOW).fast);
+});
+
+// The script once decided "am I the entry point" by comparing a file URL with
+// a raw path. They differ when the path has a space (the URL encodes it) or
+// when the script is reached through a symlink, and then it ran nothing and
+// exited 0: a green run with no tests.
+test("the script runs when it is started through a symlink in a directory with a space", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fast tests "));
+  const link = join(dir, "linked fast-tests.mjs");
+  symlinkSync(join(REPO, "bin/fast-tests.mjs"), link);
+  const r = spawnSync(process.execPath, [link, "--list"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split("\n"), selectFast(REPO, SLOW).fast);
+});
+
+test("a copy in a checkout whose path has a space lists and runs its tests: a failing test fails the run", () => {
+  const root = mkdtempSync(join(tmpdir(), "fast tests "));
+  for (const f of [...SLOW, "a/failing.test.mjs", "bin/fast-tests.mjs"]) mkdirSync(dirname(join(root, f)), { recursive: true });
+  for (const f of SLOW) writeFileSync(join(root, f), "");
+  writeFileSync(join(root, "a/failing.test.mjs"), 'import { test } from "node:test";\ntest("fails on purpose", () => { throw new Error("ran"); });\n');
+  copyFileSync(join(REPO, "bin/fast-tests.mjs"), join(root, "bin/fast-tests.mjs"));
+  const script = join(root, "bin/fast-tests.mjs");
+  const list = spawnSync(process.execPath, [script, "--list"], { encoding: "utf8" });
+  assert.equal(list.stdout.trim(), "a/failing.test.mjs", list.stderr);
+  const run = spawnSync(process.execPath, [script], { encoding: "utf8" });
+  assert.equal(run.status, 1, "the failing test must fail the run");
+  assert.match(run.stdout, /fails on purpose/);
 });
 
 // A file in SLOW is not in the fast set, so a pull request would not run it at
