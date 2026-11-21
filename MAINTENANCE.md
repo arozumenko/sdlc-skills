@@ -45,6 +45,43 @@ install so you don't accidentally drop a role or skill. Pin to a
 specific commit with `github:arozumenko/sdlc-skills#<sha>` when you
 want to control rollout timing.
 
+## Local changes are kept
+
+The installer does not record what it installed last time. It uses git
+to decide whether an update can replace an agent or a skill:
+
+- **The item is committed and has no changes.** The update replaces it.
+  Git history is your backup.
+- **Git reports a change in the item** (a modified, deleted or untracked
+  file). The update keeps the item and prints its name. The other items
+  are still updated. A summary at the end of the run lists every kept
+  item. The exit code stays 0.
+- **Git cannot restore the item** (the project has no git, or git ignores
+  the path). The update copies the old item to
+  `.sdlc-skills-backup/<date-time>/` in the project, prints the path, and
+  then replaces the item. Delete that folder when you no longer need it.
+
+An item whose content is identical to a copy in this package is never
+treated as a local change. So you can update two factories one after the
+other without a commit between the runs. This check cannot see through
+the changes the installer makes to an agent file (a skill overlay, the
+skills list written for Cursor, Windsurf, Copilot and Codex). If a
+second run keeps an agent that only the installer changed, commit first
+or use `--force`.
+
+To replace a kept item, commit or stash your changes and run the update
+again. Or add `--force`:
+
+```bash
+npx github:arozumenko/sdlc-skills init --factory feature-development --update --force
+```
+
+`--force` replaces every selected agent and skill. It does not check git
+and it does not make a backup.
+
+Skills fetched from another repository (external skills) do not have
+this protection yet. `--update` replaces them.
+
 ## Updating a factory install
 
 If you installed a **team factory** (e.g. `--factory feature-development`),
@@ -56,36 +93,43 @@ npx github:arozumenko/sdlc-skills init --factory feature-development --update --
 
 What `--update` does for a factory:
 
-- **Agents & skills** — overwritten in place (same as a plain install).
-- **Briefings** (`.agents/memory/<role>/project_briefing.md`) — overwritten
-  with the factory's defaults. **Without `--update` they're preserved**, so
-  scout's project-specific refinements survive a normal re-run.
+- **Agents & skills** — replaced in place, unless they have local changes
+  (see "Local changes are kept" above).
+- **Briefings** (`.agents/memory/<role>/project_briefing.md`) — written only
+  when the file does not exist. An existing briefing is kept, with or
+  without `--update`, so scout's project-specific refinements survive. To
+  get the factory default again, delete the file and run the install again.
+- **Seeded files** (for example `docs/discovery/` or
+  `.agents/<factory>/knowledge/`) — never removed and never overwritten.
+  The update adds the files the factory has and your project lacks.
 - **Instructions** — the `<!-- FACTORY:<id> -->` block in `AGENTS.md` /
   `CLAUDE.md` is refreshed in place regardless of `--update` (idempotent).
 - **Hooks** — the factory's `_factory`-tagged entries in
   `.claude/settings.json` are replaced; your own hooks are untouched.
-  `settings.json` is backed up to `settings.json.bak` first.
+  `settings.json` is backed up to `settings.json.bak` once per run, before
+  the first change.
 
 Factory authors: run `npm run validate:factories` before publishing (CI runs
-it on every push/PR). See [`factories/SPEC.md`](factories/SPEC.md).
+it on every push/PR). See [`bundles/SPEC.md`](bundles/SPEC.md).
 
 ## What `--update` rewrites vs what it preserves
 
-**Overwritten in place:**
+**Replaced in place** (unless the item has local changes, see above):
 
 - `.github/agents/<name>.agent.md` (Copilot) or
   `.claude/agents/<name>/` (Claude Code) — agent definitions
 - `.github/skills/<name>/` / `.claude/skills/<name>/` — skill
   `SKILL.md`, `references/`, `scripts/`
-- `CLAUDE.md` / `AGENTS.md` at project root if they were
-  installer-generated (scout's outputs won't be touched by the
-  installer — only scout overwrites those)
+- The `<!-- FACTORY:<id> -->` blocks in `CLAUDE.md` / `AGENTS.md` at the
+  project root. The text outside those blocks is not changed.
 
 **Preserved:**
 
 - `.agents/*` — scout's emitted content docs (`testing.md`,
   `architecture.md`, `workflow.md`, `profile.md`,
-  `test-automation.yaml`, per-role memory). These are yours.
+  `test-automation.yaml`, per-role memory, role briefings) and the
+  files a factory seeded. These are yours.
+- Seeded folders outside `.agents/`, such as `docs/discovery/`.
 - `test-specs/`, `test-results/`, your application and framework
   code — the installer never touches these.
 

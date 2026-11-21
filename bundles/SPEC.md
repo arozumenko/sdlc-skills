@@ -14,8 +14,8 @@ A factory composes five things:
 
 | Layer | Where it comes from |
 |---|---|
-| **Agents** | owned by the factory under `factories/<id>/agents/` |
-| **Skills** | auto-pulled from each agent's `skills:` + `skills-on-demand:` frontmatter (both install; only `skills:` enters standing context — on-demand entries are installed on disk only and loaded when the agent's prose calls for one), plus any team-wide extras the factory declares; factory-local skills live under `factories/<id>/skills/` |
+| **Agents** | owned by the factory under `bundles/<id>/agents/` |
+| **Skills** | auto-pulled from each agent's `skills:` + `skills-on-demand:` frontmatter (both install; only `skills:` enters standing context — on-demand entries are installed on disk only and loaded when the agent's prose calls for one), plus any team-wide extras the factory declares; factory-local skills live under `bundles/<id>/skills/` |
 | **Instructions** | a team-level guidance file the factory ships |
 | **Briefings** | per-role *stack overlays* the factory seeds into each role's memory |
 | **Hooks** | IDE automation (Claude `settings.json`), v1 Claude-only |
@@ -76,8 +76,8 @@ behavior.
 ## Factory-owned content
 
 Each factory physically owns its `agents/` and `skills/` directories — real
-files, authored and maintained directly under `factories/<id>/agents/<name>/`
-and `factories/<id>/skills/<name>/`. The same agent or skill id may appear in
+files, authored and maintained directly under `bundles/<id>/agents/<name>/`
+and `bundles/<id>/skills/<name>/`. The same agent or skill id may appear in
 several factories with different content; divergence across factories is allowed
 and expected (hand-editing a factory's copy to suit the team is normal).
 
@@ -86,7 +86,7 @@ is the source of truth for its content.
 
 Agents and skills are declared in the manifest via `localAgents` /
 `localSkills`. The factory's own dir is self-documenting —
-`ls factories/feature-development/agents/` shows the full roster as real
+`ls bundles/feature-development/agents/` shows the full roster as real
 directories, indexable by tools that don't follow symlinks.
 
 **Standalone install resolution.** `--agents <name>` / `--skills <id>` check,
@@ -98,7 +98,7 @@ qualified form `--agents <factory>/<name>` or `--skills <factory>/<id>`.
 ## Directory layout
 
 ```
-factories/<id>/
+bundles/<id>/
 ├── FACTORY.md                required — structured catalog descriptor (name/description/owner frontmatter)
 ├── README.md                required — the team's front-door doc (roster, install, how it works)
 ├── factory.json              required — the manifest
@@ -195,30 +195,34 @@ leaves the item discoverable.
   "seed": { "knowledge": ".agents/manual-qa/knowledge" }, // optional, factory-relative src → project-relative dest
   "instructions": "instructions.md",         // optional, relative path
   "hooks": "hooks/hooks.json",               // optional, relative path
-  "localAgents": [],                         // agents this factory owns (under factories/<id>/agents/)
-  "localSkills": [],                         // skills this factory owns (under factories/<id>/skills/; no skills.json entry needed)
+  "localAgents": [],                         // agents this factory owns (under bundles/<id>/agents/)
+  "localSkills": [],                         // skills this factory owns (under bundles/<id>/skills/; no skills.json entry needed)
   "targets": ["claude"]                      // IDE targets that get HOOKS (agents/skills/briefings install everywhere)
 }
 ```
 
 ## Install behavior (`bin/init.mjs`)
 
-1. **Resolve** — read `factories/<id>/factory.json`; merge `agents[]` into the
+1. **Resolve** — read `bundles/<id>/factory.json`; merge `agents[]` into the
    agent install list (existing logic auto-pulls each agent's declared
    skills); append `skills[]`; install `localAgents` from
-   `factories/<id>/agents/`; install `localSkills` from
-   `factories/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
+   `bundles/<id>/agents/`; install `localSkills` from
+   `bundles/<id>/skills/` like monorepo skills. A `localSkills` id satisfies
    any agent in the factory that declares it in `skills:` frontmatter, with no
    `skills.json` entry needed — the description is read from each
    `SKILL.md` so non-Claude targets still get a populated SKILLS section.
 2. **Briefings** — write each `briefings/<role>.md` to
    `.agents/memory/<role>/project_briefing.md` and add a `MEMORY.md` index
    line. Skip if a `project_briefing.md` already exists (scout may have
-   written one) unless `--update`.
+   written one). `--update` does not change this: an existing briefing is
+   never overwritten.
 2a. **Seed files** — `seed` maps a factory-relative source → a project-relative
-   dest; copied into the project once at install (idempotent; `--update` does a
-   clean replace). Use for reference docs agents read at runtime (a subagent's
-   cwd is the project root). Example:
+   dest; copied into the project once at install. Seeds are create-only. When
+   the dest exists, the installer never removes or overwrites anything in it,
+   with or without `--update`; it only adds the files the factory has and the
+   project lacks. Seed folders hold documents the user writes. Use for
+   reference docs agents read at runtime (a subagent's cwd is the project
+   root). Example:
    `"seed": { "knowledge": ".agents/manual-qa/knowledge" }`.
 2b. **Skill overlays** — for each `skillOverlays[<role>]`, rewrite the
    *installed* agent's skill frontmatter to `(declared − remove) + add`.
@@ -254,6 +258,29 @@ leaves the item discoverable.
    entries, merge-not-clobber, back up first); copy `hooks/scripts/` and
    `chmod +x`. Non-Claude targets are skipped with a notice (v1).
 
+## Update behavior (`--update`)
+
+Without `--update`, an agent or skill that is already installed is skipped.
+With `--update`, the installer replaces it, under these rules:
+
+- The installer keeps no record of what it shipped, so it uses git. An item
+  that is committed and unchanged is replaced; git history is the backup.
+- An item that `git status` reports on (a modified, deleted or untracked file
+  inside it) is kept. The installer names it, updates the other items, and
+  lists the kept items at the end of the run. The exit code stays 0.
+- When git cannot restore the item (no git, or the path is ignored), the old
+  item is copied to `.sdlc-skills-backup/<date-time>/` in the project before
+  it is replaced.
+- An item identical to a copy this package ships, in any factory, is not a
+  local change. Two factories can be updated one after the other without a
+  commit between the runs. The check does not cover an agent file the
+  installer changed after the copy (a skill overlay, or the skills list
+  written for non-Claude hosts); commit between the runs or use `--force`.
+- `--force` replaces every selected item without a check and without a backup.
+- Briefings and seed files are never overwritten (steps 2 and 2a). Instruction
+  blocks are refreshed in place (step 3). External skills are replaced; they
+  do not have this protection yet.
+
 ## Hooks (`hooks/hooks.json`)
 
 v1 is **Claude-only** (Cursor/Windsurf/Copilot hook formats differ and are
@@ -284,8 +311,10 @@ On install:
   re-merge the installer drops only groups tagged with this factory's id and
   re-appends the current ones — so the user's hooks and other factories'
   hooks are preserved (merge-not-clobber), and re-running is idempotent.
-- `settings.json` is backed up to `settings.json.bak` before any change. If
-  it fails to parse, it's left untouched and the merge is skipped.
+- `settings.json` is backed up to `settings.json.bak` before the first change
+  in a run. Later merges in the same run leave the backup alone, so it holds
+  the file as it was before the install. If the file fails to parse, it's
+  left untouched and the merge is skipped.
 
 The `feature-development` factory does not ship hooks yet — the merge
 machinery is in place; concrete hooks (format-on-edit, etc.) come later.
@@ -321,12 +350,15 @@ order. Three conventions keep it that way:
   `delivery-monitor` skill writes `delivery/`). A factory adopting durable
   telemetry later adds its own subfolder and rides the same branch and sync
   machinery — never a second submodule or a second branch. Setup and
-  mechanics: `factories/test-automation/skills/tokenomics/`.
+  mechanics: `bundles/test-automation/skills/tokenomics/`.
 
 ## Idempotency & validation
 
 - Marked instruction blocks and tagged hook entries make re-install a
-  no-op (or a clean refresh with `--update`) and allow clean removal.
+  no-op (or a clean refresh with `--update`). The installer has no uninstall
+  command. To remove a factory, delete its marked block, its tagged hook
+  entries and its installed files by hand; the markers and tags show which
+  parts it owns.
 - **`npm run validate:factories`** (`bin/validate-factories.mjs`, run in CI via
   `.github/workflows/validate.yml`) checks each factory: dir name matches
   `id`, a `README.md` exists, a `FACTORY.md` exists with non-empty
@@ -336,7 +368,7 @@ order. Three conventions keep it that way:
   one of `agents` or `localAgents` is non-empty, and every `agents[]` entry
   has a top-level `agents/<name>/AGENT.md`. Every `briefings` role is in the
   combined `agents[]` + `localAgents[]` roster and its file exists. Every
-  `skills[]` id resolves in `skills.json`/`factories/<id>/skills/`,
+  `skills[]` id resolves in `skills.json`/`bundles/<id>/skills/`,
   `instructions` (if set) exists, `hooks` (if set) parses, each
   `localAgents` entry has an `AGENT.md`, each `localSkills` entry has a
   `SKILL.md`, and every `seed` source path exists.
