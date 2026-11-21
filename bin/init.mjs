@@ -1878,6 +1878,17 @@ export function applySkillOverlayToText(text, overlay) {
 // Cursor/Windsurf we also regenerate the injected `skills:` inventory so it
 // matches. Returns true if rewritten.
 function applySkillOverlay(target, name, overlay, registry) {
+  if (target.id === "codex") {
+    // A Codex agent is a generated .toml with no skill lines to rewrite: apply
+    // the overlay to the AGENT.md text this run built it from and transform
+    // again. A file this run did not write (exists, no --update) is left alone.
+    const dest = join(CWD, target.dir, "agents", `${name}.toml`);
+    const built = codexAgentSources.get(dest);
+    const overlaid = built ? applySkillOverlayToText(built.agentText, overlay) : null;
+    if (overlaid === null) return false;
+    writeFileSync(dest, transformAgentForCodex(overlaid, built.soulText, name, built.skillRoots));
+    return true;
+  }
   const agentFile =
     target.id === "copilot"
       ? join(CWD, target.dir, "agents", `${name}.agent.md`)
@@ -2088,7 +2099,10 @@ function tomlMultiline(s) {
   return '"""\n' + body.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"') + '\n"""';
 }
 
-function transformAgentForCodex(agentText, soulText, name) {
+// `skillRoots` are the package directories whose skills count as shipped with
+// this agent: the top-level skills/ and, for a factory's agent, that factory's
+// own skills/ (see writeCodexAgent).
+function transformAgentForCodex(agentText, soulText, name, skillRoots = [join(PKG_ROOT, "skills")]) {
   const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
   const frontmatter = fm ? fm[1] : "";
   let body = fm ? agentText.slice(fm.index + fm[0].length) : agentText;
@@ -2128,7 +2142,7 @@ function transformAgentForCodex(agentText, soulText, name) {
   // skills are installed under .codex/skills/ but not enabled here; the
   // agent body's prose points at them when they apply.
   const skills = parseAgentSkillSplit(agentText).preload.filter((id) =>
-    existsSync(join(PKG_ROOT, "skills", id))
+    skillRoots.some((root) => existsSync(join(root, id)))
   );
   for (const id of skills) {
     lines.push("", "[[skills.config]]", `path = ${tomlBasicString(`.codex/skills/${id}/SKILL.md`)}`, "enabled = true");
@@ -2136,19 +2150,25 @@ function transformAgentForCodex(agentText, soulText, name) {
   return lines.join("\n") + "\n";
 }
 
+// What each Codex agent written by this run was built from (dest path → source
+// texts), so applySkillOverlay can rebuild the .toml with the overlay applied.
+const codexAgentSources = new Map();
+
 function writeCodexAgent(src, name, targetDir, update) {
   const agentFile = join(src, "AGENT.md");
   if (!existsSync(agentFile)) return { status: "missing" };
   const dest = join(CWD, targetDir, "agents", `${name}.toml`);
   if (existsSync(dest) && !update) return { status: "exists", dest };
   const soulFile = join(src, "SOUL.md");
-  const toml = transformAgentForCodex(
-    readFileSync(agentFile, "utf8"),
-    existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
-    name
-  );
+  // src is <owner>/agents/<name>; the owner (a factory, or the package root)
+  // keeps its skills beside its agents.
+  const skillRoots = [join(PKG_ROOT, "skills"), join(dirname(dirname(src)), "skills")];
+  const agentText = readFileSync(agentFile, "utf8");
+  const soulText = existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null;
+  const toml = transformAgentForCodex(agentText, soulText, name, skillRoots);
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, toml);
+  codexAgentSources.set(dest, { agentText, soulText, skillRoots });
   return { status: "installed", dest };
 }
 
