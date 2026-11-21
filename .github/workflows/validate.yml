@@ -9,7 +9,8 @@ jobs:
   # The fast test set (bin/fast-tests.mjs: every test file minus a short list
   # of slow ones) and the two checks no other job here runs. `npm run validate`
   # is not used: it would repeat the `factories` and `externals` jobs below.
-  # The full test run is in tests-full.yml (push to main and nightly).
+  # The slow files run in tests-areas.yml when a pull request changes their
+  # area, and in tests-full.yml (push to main and nightly).
   tests-fast:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -81,7 +82,7 @@ jobs:
 
   externals:
     runs-on: ubuntu-latest
-    # 28 entries × (10s timeout + one retry) is ~9.5 min worst case if every
+    # 30 entries × (10s timeout + one retry) is ~10 min worst case if every
     # request hangs. Cap the job so a wedged network fails fast and visibly.
     timeout-minutes: 5
     steps:
