@@ -8,7 +8,7 @@ import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeF
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SLOW, PR_AREAS, MAIN_ONLY, discoverTests, selectFast, changedAreas, testsInArea, slowWithoutPullRequestRun } from "./fast-tests.mjs";
+import { SLOW, PR_AREAS, MAIN_ONLY, discoverTests, testsMissedByDiscovery, selectFast, changedAreas, testsInArea, slowWithoutPullRequestRun } from "./fast-tests.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -43,6 +43,41 @@ test("discovery finds what `node --test` finds: test-named files, not helpers, d
     "c/test-three.mjs",
     "d/test/six.mjs",
   ]);
+});
+
+// discoverTests is a copy of one Node version's rules, and Node versions
+// differ: newer ones also run TypeScript test files, older ones also walk dot
+// directories. A file that some supported Node runs under `npm test` but that
+// discoverTests does not select is in neither the fast set nor an area run, so
+// no pull request would run it.
+function assertNothingMissed(root) {
+  const missed = testsMissedByDiscovery(root);
+  assert.deepEqual(
+    missed,
+    [],
+    `${missed.join(", ")}: this file would be run by \`node --test\` on some supported Node but is not in the fast or area sets: move it, or extend discoverTests in bin/fast-tests.mjs`,
+  );
+}
+
+test("a TypeScript test or a test under a dot directory is caught as missed by discovery", () => {
+  const root = tree([
+    "a/one.test.mjs",
+    "a/two.test.ts",
+    "a/three.test.mts",
+    "a/helper.ts",
+    "t/test/four.cts",
+    ".hidden/five.test.mjs",
+    ".git/six.test.mjs",
+    ".claude/worktrees/x/seven.test.mjs",
+    "node_modules/pkg/eight.test.ts",
+  ]);
+  assert.deepEqual(discoverTests(root), ["a/one.test.mjs"]);
+  assert.deepEqual(testsMissedByDiscovery(root), [".hidden/five.test.mjs", "a/three.test.mts", "a/two.test.ts", "t/test/four.cts"]);
+  assert.throws(() => assertNothingMissed(root), /a\/two\.test\.ts.*would be run by `node --test` on some supported Node but is not in the fast or area sets: move it, or extend discoverTests/);
+});
+
+test("discovery misses no test file in this repository under the widest rule", () => {
+  assertNothingMissed(REPO);
 });
 
 test("a new test file is in the fast set without being listed anywhere", () => {

@@ -76,29 +76,48 @@ export const MAIN_ONLY = {
     "its factory installs fetch external skills over the network; give it the isolation bin/role-sections.test.mjs has, then drop it from SLOW",
 };
 
-// The file names `node --test` runs when it is given no path, for .js, .cjs
-// and .mjs: *.test.*, *-test.*, *_test.*, test-*.*, test.*, and every such
-// file under a directory named `test`.
-const TEST_NAME = /^(test|test-.*|.*[._-]test)\.[cm]?js$/;
-const SCRIPT = /\.[cm]?js$/;
+// The file names `node --test` runs when it is given no path: *.test.*,
+// *-test.*, *_test.*, test-*.*, test.*, and every script under a directory
+// named `test`.
+const TEST_STEM = /^(test|test-.*|.*[._-]test)$/;
 
-/** Every test file under `root`, as sorted `/`-separated relative paths. Like
- *  `node --test`, it skips node_modules and directories that start with a dot. */
-export function discoverTests(root) {
+// What this script selects: the rule of the Node versions it was checked
+// against (24 and 26) for .js, .cjs and .mjs, skipping node_modules and
+// directories that start with a dot. It leaves out two things some supported
+// Node runs: TypeScript test files (.ts, .cts, .mts; seen on Node 24 and 26),
+// and tests under dot directories (reported for Node 20, not checked here).
+// WIDEST adds both back, and testsMissedByDiscovery reports any file only it
+// finds.
+const SELECTED = { ext: /\.[cm]?js$/, skipDir: (name) => name === "node_modules" || name.startsWith(".") };
+const WIDEST = { ext: /\.[cm]?[jt]s$/, skipDir: (name) => name === "node_modules" || name === ".git" || name === ".claude" };
+
+function walkTests(root, { ext, skipDir }) {
   const found = [];
   const walk = (rel, inTestDir) => {
     for (const entry of readdirSync(join(root, rel), { withFileTypes: true })) {
       const path = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
-        if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-        walk(path, inTestDir || entry.name === "test");
-      } else if (entry.isFile() && (TEST_NAME.test(entry.name) || (inTestDir && SCRIPT.test(entry.name)))) {
+        if (!skipDir(entry.name)) walk(path, inTestDir || entry.name === "test");
+      } else if (entry.isFile() && ext.test(entry.name) && (inTestDir || TEST_STEM.test(entry.name.replace(ext, "")))) {
         found.push(path);
       }
     }
   };
   walk("", false);
   return found.sort();
+}
+
+/** Every test file under `root`, as sorted `/`-separated relative paths. Like
+ *  `node --test`, it skips node_modules and directories that start with a dot. */
+export function discoverTests(root) {
+  return walkTests(root, SELECTED);
+}
+
+/** Test files under `root` that some supported Node would run but that
+ *  discoverTests does not select, so no fast or area run includes them. */
+export function testsMissedByDiscovery(root) {
+  const selected = new Set(discoverTests(root));
+  return walkTests(root, WIDEST).filter((f) => !selected.has(f));
 }
 
 /** The fast set under `root` for an exclude list, plus the exclude entries
