@@ -57,6 +57,9 @@ to decide whether an update can replace an agent or a skill:
   are still updated. A summary at the end of the run lists every kept
   item. The exit code stays 0. A factory's skill overlay does not rewrite
   a kept agent.
+- **You installed the item and never committed it.** Git reports it as
+  untracked. If it differs from the copy in this package, the update keeps
+  it, the same as an edited committed item. Commit it or pass `--force`.
 - **You deleted the item and did not commit that.** It stays deleted. An
   item that git never tracked is installed as new.
 - **Git cannot restore the item** (the project has no git, or git ignores
@@ -68,6 +71,16 @@ to decide whether an update can replace an agent or a skill:
 The same rules apply to skills fetched from another repository (external
 skills). The installer cannot tell your edit from an older upstream
 version, so outside git it makes a backup each time upstream changed.
+
+The installer asks only the project's own repository. An item inside a
+nested repository (for example `.claude` is its own repository) is treated
+as untracked: an existing item is kept when it differs from the copy in this
+package, and a missing item is installed, even if you deleted it there.
+
+A symbolic link where an item goes is treated as yours. In git it is kept
+like any other local change. Without git the installer cannot back it up,
+so it keeps the link and prints the reason. `--force` replaces the link
+itself; nothing is written to the place the link points to.
 
 An item whose content is identical to a copy in this package is never
 treated as a local change. So you can update two factories one after the
