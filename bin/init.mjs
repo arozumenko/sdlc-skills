@@ -1767,15 +1767,17 @@ const keptThisRun = new Set(); // destinations an update left alone (overlays sk
 let backupDir = null; // this run's backup folder, project-relative; made on first need
 let gitSnapshot; // undefined until first asked; null when git cannot help
 
-// Variables that tell git WHICH repository to answer for: its git dir, work
-// tree, index, object store, namespace, and how far up to look for it. A
+// Variables that point git at a repository other than the one the project
+// folder is in: its git dir, work tree, index, object store, namespace. A
 // caller can leave them set (a git hook exports GIT_DIR), and git would then
-// describe some other checkout. The snapshot always asks about the repository
-// the project folder is in. The caller's configuration (GIT_CONFIG_GLOBAL,
-// GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT/KEY_n/VALUE_n) is
-// kept: it decides what counts as changed or ignored (core.autocrlf,
-// core.excludesFile), so dropping it would change git's answer.
-const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CEILING_DIRECTORIES|GIT_DISCOVERY_ACROSS_FILESYSTEM)$/;
+// describe some other checkout. Two kinds of variable are kept on purpose:
+//   - the caller's configuration (GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM,
+//     GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT/KEY_n/VALUE_n): it decides what
+//     counts as changed or ignored (core.autocrlf, core.excludesFile);
+//   - GIT_CEILING_DIRECTORIES: it fences discovery. If the caller hides an
+//     outer repository, the project is in no repository for this run, and an
+//     item there is backed up, not trusted to that repository's history.
+const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_DISCOVERY_ACROSS_FILESYSTEM)$/;
 
 function gitOutput(args) {
   const env = { GIT_OPTIONAL_LOCKS: "0" }; // read-only: no index refresh write

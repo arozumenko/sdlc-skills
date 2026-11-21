@@ -825,3 +825,22 @@ test("a staged rename out of a skill folder counts as its deletion", () => {
   assert.ok(!existsSync(s.p(".claude/skills/memory")), "the user moved it away; it is not recreated");
   assert.match(r.out, KEPT("skill", "memory"));
 });
+
+// ── Round 3 ─────────────────────────────────────────────────────────────────
+
+test("GIT_CEILING_DIRECTORIES that hides the outer repository is respected: backup, then replace", () => {
+  // The caller fenced discovery off below the outer repository, so for this
+  // run the project is in no repository. A tracked, clean item there must not
+  // be trusted to git history: it is backed up like any item git cannot restore.
+  const s = sandbox({ git: "parent" });
+  assert.equal(s.init("--skills", "memory").status, 0);
+  writeFileSync(s.p(".claude/skills/memory/SKILL.md"), "old memory\n");
+  s.commitAll("old install");
+  assert.equal(s.git("status", "--porcelain", "--", ".claude"), "", "fixture: tracked and clean in the outer repository");
+  const r = s.initEnv({ GIT_CEILING_DIRECTORIES: realpathSync(s.base) }, "--skills", "memory", "--update");
+  assert.equal(r.status, 0, r.out);
+  const m = r.out.match(/previous copy saved to (\S+)/);
+  assert.ok(m, r.out);
+  assert.equal(readFileSync(s.p(m[1], "SKILL.md"), "utf8"), "old memory\n");
+  assert.equal(readFileSync(s.p(".claude/skills/memory/SKILL.md"), "utf8"), shipped("skills/memory/SKILL.md"));
+});
