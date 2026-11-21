@@ -1488,19 +1488,26 @@ const SYNC_LOCK_OLD_MS = 10 * 60 * 1000;
  * both inside), the caller only tells the user where it is.
  * `release()` removes the lock only while it still holds THIS run's token, so
  * a run that outlived a by-hand removal cannot delete its successor's lock.
- * `git(args)` runs git inside `dir` and throws on a non-zero exit.
+ * `git(args)` runs git inside `dir` and throws on a non-zero exit. The third
+ * argument only exists so tests can make token generation or the owner-file
+ * write fail.
  */
-export function acquireSyncLock(dir, git) {
+export function acquireSyncLock(dir, git, { newToken = () => randomBytes(16).toString('hex'), writeOwner = writeFileSync } = {}) {
   const lock = join(resolve(dir, git(['rev-parse', '--git-dir']).trim()), 'tokenomics-sync.lock');
+  // Everything that can fail and needs no lock happens BEFORE the mkdir: a
+  // throw between creating the directory and returning `release` would leave
+  // a lock nobody can release.
+  const token = newToken();
   try { mkdirSync(lock); } catch {
     let abandoned = false;
     try { abandoned = Date.now() - statSync(lock).mtimeMs > SYNC_LOCK_OLD_MS; } catch { /* released just now — the next capture syncs */ }
     return { lock, release: null, abandoned };
   }
   const owner = join(lock, 'owner');
-  const token = randomBytes(16).toString('hex');
-  try { writeFileSync(owner, token); } catch (err) {
-    try { rmSync(lock, { recursive: true, force: true }); } catch { /* fine */ } // created a moment ago by this run, nobody else can hold it
+  try { writeOwner(owner, token); } catch (err) {
+    // Created a moment ago by this run — nobody else can hold it. Remove it
+    // before the caller sees the error, or it would stay forever.
+    try { rmSync(lock, { recursive: true, force: true }); } catch { /* fine */ }
     throw err;
   }
   const release = () => {

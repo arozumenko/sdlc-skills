@@ -280,6 +280,21 @@ test('sync lock: release removes only a lock that still holds this run\'s token'
   assert.ok(!existsSync(lockDir(b)));
 });
 
+// A failure between creating the lock directory and handing back `release`
+// would leave a lock nobody can release — every later sync would skip.
+test('sync lock: a failure while acquiring leaves no lock directory behind', () => {
+  const { b } = world();
+  const boom = () => { throw new Error('injected failure'); };
+  assert.throws(() => acquireSyncLock(tel(b), runner(b), { newToken: boom }), /injected failure/);
+  assert.ok(!existsSync(lockDir(b)), 'token generation failed → no lock left');
+  assert.throws(() => acquireSyncLock(tel(b), runner(b), { writeOwner: boom }), /injected failure/);
+  assert.ok(!existsSync(lockDir(b)), 'owner-file write failed → the just-created lock is removed');
+  const next = acquireSyncLock(tel(b), runner(b));
+  assert.equal(typeof next.release, 'function', 'the next sync can still take the lock');
+  next.release();
+  assert.ok(!existsSync(lockDir(b)));
+});
+
 // A merge that will conflict is never started: the conflict is found with a
 // dry run that touches neither the index nor the working tree, so a capture
 // another process appends at that very moment cannot be lost to an abort.

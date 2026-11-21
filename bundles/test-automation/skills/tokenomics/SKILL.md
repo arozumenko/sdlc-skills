@@ -329,6 +329,9 @@ finds it held skips its sync and the next one catches up. Known limits:
   git older than 2.38** there is no dry run: the merge is started and aborted,
   and a capture another process appends to a conflicted file in that moment
   can be lost.
+- Captures are not locked while a clean merge runs: an append that lands
+  between git's overwrite check and its replacement of that file can still be
+  lost (this race is older than the lock).
 - Other writers to `.agents/telemetry` — another skill's sync, a person's git
   commands — do not take this lock.
 - A merge left open by a killed process is left untouched like any other open
