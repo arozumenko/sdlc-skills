@@ -137,3 +137,14 @@ test('status with no plan warns about an old price table too',async()=>{
  const r=repo();assert.doesNotMatch((await cli(r,['status'],T0+45*DAY)).stdout,STALE);
  const out=await cli(r,['status'],T0+46*DAY);assert.equal(out.code,3);assert.match(out.stdout,STALE);
 });
+test('budgetCheckState: a diagnostic dated after now is not recent; the latest is picked by time, not by string order',async()=>{
+ // A clock that was ahead and then corrected leaves lines dated in the future. They are not evidence of a recent failure.
+ const r=repo();diag(r,'2026-11-20T12:00:00.001Z','one millisecond after now','future');diag(r,'2026-12-25T00:00:00.000Z','far ahead','future2');
+ assert.deepEqual(budgetCheckState(r,{now}),{window_days:7,off:null});
+ assert.match((await cli(r,['status'])).stdout,OK_LINE);
+ diag(r,'2026-11-20T12:00:00.000Z','exactly now','edge');
+ assert.deepEqual(budgetCheckState(r,{now}).off,{since:'2026-11-20T12:00:00.000Z',reason:'exactly now',session:'edge',sessions:1});
+ // 10:00+02:00 is 08:00Z, earlier than 09:00Z, although it sorts later as text.
+ const s=repo();diag(s,'2026-11-19T10:00:00+02:00','earlier, written with an offset','a');diag(s,'2026-11-19T09:00:00.000Z','later','b');
+ assert.deepEqual(budgetCheckState(s,{now}).off,{since:'2026-11-19T09:00:00.000Z',reason:'later',session:'b',sessions:2});
+});
