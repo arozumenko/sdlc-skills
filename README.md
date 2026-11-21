@@ -234,6 +234,12 @@ run it from the root of the project you want to set up. It refuses to run in
 your home directory or inside a checkout of this package, and exits without
 writing anything.
 
+**Name the host in scripts.** A run that cannot ask (`--yes`, `--all`, or no
+terminal) and has no `--target` still picks the hosts from the folders it
+finds, and prints a warning: a future version will require `--target` there.
+The same warning covers GitHub Copilot picked only because a `.github/`
+directory exists with no Copilot files in it.
+
 Run `npx github:arozumenko/sdlc-skills init --help` for the full flag list.
 
 ### Check an install — `init doctor`

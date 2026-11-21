@@ -2173,9 +2173,41 @@ function writeCodexAgent(src, name, targetDir, update) {
 }
 
 
+// Copilot's own files under .github/: what this installer's Copilot target
+// creates (agents/, skills/, hooks/, and instructions/ through the session
+// hook) plus Copilot's instruction file. A .github/ with none of them holds
+// workflows or issue templates and says nothing about Copilot.
+const COPILOT_SIGNALS = ["agents", "skills", "hooks", "instructions", "copilot-instructions.md"];
+
+// Two target inferences still work but are due to need an explicit --target:
+// an unattended run (--yes, --all, or no terminal) that takes its hosts from
+// the folders present, and Copilot taken from a .github/ with no Copilot files.
+// Returns the two-line warning for stderr, or null. Called only when the
+// targets were not named by --target or by a single pick in the menu.
+export function inferredTargetWarning(targets, detected, unattended, cwd = CWD) {
+  const guess =
+    targets.some((t) => t.id === "copilot") &&
+    detected.some((t) => t.id === "copilot") &&
+    !COPILOT_SIGNALS.some((f) => existsSync(join(cwd, ".github", f)));
+  if (!unattended && !guess) return null;
+  const guessNote = "GitHub Copilot is a guess: .github/ exists here but holds no Copilot files.";
+  if (!unattended) {
+    return `  ! ${guessNote}\n    A future version will require an explicit --target copilot to install it from a bare .github/.`;
+  }
+  const labels = targets.map((t) => t.label).join(", ");
+  const first = detected.length
+    ? `No --target given: installing for ${labels}, chosen from the folders present here.${guess ? " " + guessNote : ""}`
+    : `No --target given and no host folder found here: installing for ${labels} by default.`;
+  return `  ! ${first}\n    A future version will require an explicit --target for unattended runs (--yes, --all, or no terminal on stdin).`;
+}
+
 async function interactivePick(catalog, args) {
   const detected = TARGETS.filter((t) => existsSync(join(CWD, t.dir)));
   let targets;
+  // How the targets were inferred when nobody named them: "unattended" (no
+  // prompt was shown) or "menu" (the menu's "All of the above"). Stays null
+  // for --target and for a single pick in the menu.
+  let inferred = null;
   if (args.targets) {
     targets = TARGETS.filter((t) => args.targets.includes(t.id));
     if (args.targets.includes("kiro")) {
@@ -2189,6 +2221,7 @@ async function interactivePick(catalog, args) {
     }
   } else if (args.all || args.yes) {
     targets = detected.length > 0 ? detected : [TARGETS[0]];
+    inferred = "unattended";
   } else if (detected.length === 0) {
     // Nothing on disk to infer from — ask which runtime to set up rather than
     // silently assuming Claude. Same arrow-key picker as the role selection,
@@ -2202,6 +2235,7 @@ async function interactivePick(catalog, args) {
       TARGETS[0].id,
     );
     targets = choice === "__all__" ? TARGETS.slice() : TARGETS.filter((t) => t.id === choice);
+    if (!process.stdin.isTTY) inferred = "unattended"; // selectOne returned its default unasked
   } else {
     // One or more IDE directories already exist — pick among the detected ones.
     const choice = await selectOne(
@@ -2213,7 +2247,11 @@ async function interactivePick(catalog, args) {
       "__all__",
     );
     targets = choice === "__all__" ? detected : detected.filter((t) => t.id === choice);
+    if (!process.stdin.isTTY) inferred = "unattended"; // selectOne returned its default unasked
+    else if (choice === "__all__") inferred = "menu";
   }
+  const targetWarning = inferred && inferredTargetWarning(targets, detected, inferred === "unattended");
+  if (targetWarning) console.error(targetWarning);
 
   // Resolve agents (bare ids and qualified `factory/name`), resolver-aware.
   let agentsSelection;
