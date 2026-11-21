@@ -1542,6 +1542,7 @@ export function parseArgs(argv) {
     if (a === "--all") out.all = true;
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
+    else if (a === "--force") forceReplace = true; // with --update: replace items that have local changes too
     else if (a === "--symlink") out.symlink = true;
     else if (a === "--interactive" || a === "-i") out.interactive = true;
     // --bundle is a silent back-compat alias for --factory (pre-rename flag
@@ -1592,6 +1593,7 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected)
     --update                   Overwrite existing installs
+    --force                    With --update: also replace items that have local changes
     --interactive, -i          Menu to pick optional MCP servers (and, for
                                quality-architect, its QA specialists/connectors).
                                Applies to the quality-architect agent and the
@@ -1620,6 +1622,114 @@ function printHelp() {
 // Install logic
 // ---------------------------------------------------------------------------
 
+// Safe update. `--update` replaces an installed agent or skill, and the
+// installer keeps no record of what it shipped last time, so it cannot tell a
+// user's edit from an old version by itself. Git is the baseline instead:
+//   - destination clean and tracked in git → replace (git history is the backup);
+//   - git reports anything for it (modified, deleted, untracked) → keep it,
+//     say so, and carry on with the other items;
+//   - git cannot restore it (no git, not a repository, or the path is ignored)
+//     → copy it to BACKUP_DIR first, then replace.
+// Two cases are never local changes: a destination this same run wrote, and
+// content identical to a copy this package ships (the installer's own output
+// from an earlier run, e.g. two factories updated back to back before a
+// commit). `--force` replaces without any check or backup.
+const BACKUP_DIR = ".sdlc-skills-backup"; // top-level and dot-free below: no AI host scans it for skills or agents
+let forceReplace = false; // --force
+const writtenThisRun = new Set(); // destinations this process created or replaced
+const keptWithLocalChanges = []; // items an update left alone, for the end-of-run summary
+let backupStamp = null; // one dated backup folder per run
+let gitSnapshot; // undefined until first asked; null when git cannot help
+
+function gitOutput(args) {
+  try {
+    return execFileSync("git", args, { cwd: CWD, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
+  } catch {
+    return null; // git not installed, not a repository, or the command failed
+  }
+}
+
+// What git knows about the install dirs, read once per run and before the run
+// replaces anything: the paths `git status` reports and the paths it tracks,
+// both relative to the repository top. null outside a git work tree.
+function loadGitSnapshot() {
+  const prefix = gitOutput(["rev-parse", "--show-prefix"]); // CWD below the repository top: "" or "sub/dir/"
+  if (prefix === null) return null;
+  const dirs = TARGETS.map((t) => t.dir);
+  const status = gitOutput(["status", "--porcelain", "-z", "--untracked-files=all", "--", ...dirs]);
+  const tracked = gitOutput(["ls-files", "-z", "--full-name", "--", ...dirs]);
+  if (status === null || tracked === null) return null;
+  const changed = [];
+  const entries = status.split("\0");
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].length < 4) continue; // "XY path"
+    changed.push(entries[i].slice(3));
+    if (/[RC]/.test(entries[i].slice(0, 2))) changed.push(entries[++i] || ""); // a rename also lists the old path
+  }
+  return { prefix: prefix.trim(), changed, tracked: tracked.split("\0").filter(Boolean) };
+}
+
+// "clean" (tracked, nothing to commit), "changed" (git status reports
+// something), or "none" (git has no copy to restore the destination from).
+function gitStateOf(dest) {
+  if (gitSnapshot === undefined) gitSnapshot = loadGitSnapshot();
+  if (!gitSnapshot) return "none";
+  const key = gitSnapshot.prefix + dest.slice(CWD.length + 1).replace(/\\/g, "/");
+  const within = (p) => p === key || p.startsWith(key + "/");
+  // A path ending in "/" is a whole untracked directory (a nested repository).
+  if (gitSnapshot.changed.some((p) => within(p) || (p.endsWith("/") && key.startsWith(p)))) return "changed";
+  return gitSnapshot.tracked.some(within) ? "clean" : "none";
+}
+
+function sameTree(a, b) {
+  let sa, sb;
+  try { sa = statSync(a); sb = statSync(b); } catch { return false; }
+  if (sa.isDirectory() !== sb.isDirectory()) return false;
+  if (!sa.isDirectory()) return sa.size === sb.size && readFileSync(a).equals(readFileSync(b));
+  const names = readdirSync(a).sort();
+  const other = readdirSync(b).sort();
+  return names.length === other.length && names.every((n, i) => n === other[i] && sameTree(join(a, n), join(b, n)));
+}
+
+// True when `dest` is byte-for-byte a copy of <kind>/<name> this package ships,
+// from the top-level orphans or from any factory.
+function isShippedCopy(kind, name, dest) {
+  const roots = [PKG_ROOT, ...listFactories().map((id) => join(PKG_ROOT, FACTORIES_DIR, id))];
+  return roots.some((root) => sameTree(join(root, kind, name), dest));
+}
+
+// May an update replace the existing `dest`? `label` names the item in
+// messages; `isInstallerOutput` says whether its content is known to be the
+// installer's own. Returns false when the item must be kept.
+function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
+  if (forceReplace || writtenThisRun.has(dest)) return true;
+  const state = gitStateOf(dest);
+  if (state === "clean" || isInstallerOutput()) return true;
+  const rel = dest.slice(CWD.length + 1);
+  if (state === "changed") {
+    console.log(`      ! ${label} kept: ${rel} has uncommitted local changes. Commit or stash them, or pass --force to replace it.`);
+    if (!keptWithLocalChanges.length) process.once("beforeExit", printKeptSummary);
+    keptWithLocalChanges.push(label.replace(/\s+/, " "));
+    return false;
+  }
+  if (!backupStamp) backupStamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  const backupRel = join(BACKUP_DIR, backupStamp, rel.replace(/^\./, ""));
+  mkdirSync(dirname(join(CWD, backupRel)), { recursive: true });
+  cpSync(dest, join(CWD, backupRel), { recursive: true });
+  console.log(`      ℹ ${label}: previous copy saved to ${backupRel}`);
+  return true;
+}
+
+// Printed once, after everything else, when an update kept at least one item.
+// The run still exits 0: the rest of the install completed, and a kept item
+// can be the installer's own uncommitted output from an earlier run.
+function printKeptSummary() {
+  console.log(
+    `  ! ${keptWithLocalChanges.length} item(s) NOT updated: they have uncommitted local changes (${keptWithLocalChanges.join(", ")}).\n` +
+      `    Commit or stash the changes and run the update again, or add --force to replace them.\n`
+  );
+}
+
 function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // kind: "agents" | "skills"; target: {id, dir, label}
   // srcRoot defaults to the monorepo; factory-local agents pass their own dir.
@@ -1639,6 +1749,8 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
 
   const dest = join(CWD, target.dir, kind, name);
   if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `${kind.slice(0, -1)}  ${name}`, () => isShippedCopy(kind, name, dest)))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
   // Deep-dereferenced copy — factory-local agents/skills may be symlinks back
@@ -1646,6 +1758,7 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // "own" a shared item without forking it), and the source tree may contain
   // nested symlinks too (Node's cpSync({dereference:true}) doesn't recurse).
   copyTreeDereferenced(src, dest, { force: true });
+  writtenThisRun.add(dest);
 
   // Inject a skills-inventory section into the installed agent body —
   // but only for hosts that don't preload the `skills:` frontmatter
@@ -2043,8 +2156,11 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
     { soulMode: "memory", normalizeModel: true, registry },
   );
 
+  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === agent))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, agent);
+  writtenThisRun.add(dest);
 
   // With memory mode (the default), SOUL.md is relocated to the
   // IDE-neutral per-role dir under .agents/memory/<name>/SOUL.md so the
@@ -2148,8 +2264,11 @@ function writeCodexAgent(src, name, targetDir, update) {
     existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
     name
   );
+  if (existsSync(dest) && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, toml);
+  writtenThisRun.add(dest);
   return { status: "installed", dest };
 }
 
