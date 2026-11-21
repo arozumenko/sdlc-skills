@@ -1030,3 +1030,17 @@ for (const [state, git, commit] of [["no git", false, false], ["git, link untrac
     assert.ok(!existsSync(outside));
   });
 }
+
+test("--symlink external skill replaced by a link to the cache root itself, no git: kept", () => {
+  // The installer never links a skill to the cache root, only to a folder
+  // inside it, so this link is the user's.
+  const s = sandbox({ git: false });
+  const m = mirrorFixture(s);
+  assert.equal(m.symlinkInstall().status, 0);
+  rmSync(m.link);
+  symlinkSync(m.cache, m.link);
+  const r = m.symlinkInstall("--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, LINK_KEPT(EXTERNAL));
+  assert.equal(realpathSync(m.link), realpathSync(m.cache), "still the user's link to the cache root");
+});

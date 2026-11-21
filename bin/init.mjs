@@ -1532,7 +1532,10 @@ function linksIntoCache(dest) {
   const cache = resolve(cacheRoot());
   let realCache = cache;
   try { realCache = realpathSync(cache); } catch { /* keep the plain path */ }
-  return isWithinDir(cache, target) || isWithinDir(realCache, target);
+  // Strictly inside: the installer links to a folder in the cache, never to
+  // the cache root, so a link to the root itself is the user's.
+  const inside = (root) => target !== root && isWithinDir(root, target);
+  return inside(cache) || inside(realCache);
 }
 
 function installExternalSkill(entry, targetDir, useSymlink, update) {
