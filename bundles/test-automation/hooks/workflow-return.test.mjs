@@ -129,8 +129,11 @@ test('every bad input is a silent no-op, never a throw', () => {
     const empty = fixture({ recs: '' });
     try { assert.equal(run({ transcript_path: empty.tp }, { projectDir: empty.root }), null); }
     finally { empty.cleanup(); }
-    // an unwritable destination must not throw either
-    assert.doesNotThrow(() => run({ transcript_path: f.tp }, { projectDir: '/proc/nonexistent-xyz' }));
+    // an unwritable destination must not throw either. A folder below a
+    // regular file fails the same way on every system (ENOTDIR). Not a path
+    // under /proc: that exists on Linux, where a recursive mkdir below it
+    // never returns, and the whole test run hangs.
+    assert.equal(run({ transcript_path: f.tp }, { projectDir: join(f.tp, 'below-a-file') }), null);
   } finally { f.cleanup(); }
 });
 
