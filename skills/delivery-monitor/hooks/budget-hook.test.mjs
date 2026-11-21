@@ -179,3 +179,7 @@ test('an uninteresting call is answered before any engine module is loaded; an i
  assert.deepEqual(handleBudget({tool_name:'Bash',session_id:'s'}),{});assert.deepEqual(handleBudget({tool_name:'Agent',session_id:'s',host:'codex'}),{});
  const f=fixture();stop(f,child(f,'a',9.01));assert.equal(denied(handleBudget(pre(),{repo:f.repo,now:NOW})),true);
 });
+test('the denial names a guard threshold, not a cap or a limit',()=>{
+ const f=fixture();stop(f,child(f,'a',9.01));const r=hook(f,pre());
+ assert.equal(r.hookSpecificOutput.permissionDecisionReason,'T: task cost USD 9.01 exceeds the budget guard threshold USD 9');
+});

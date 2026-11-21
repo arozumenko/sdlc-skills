@@ -547,7 +547,7 @@ test('blocked time, flow efficiency and DORA: JSON fields, Markdown rows and sec
   assert.ok(md.includes('- task: blocked records on 1 of 1 done task(s)'));
   assert.ok(md.includes('- caveat: 1 unblocked event(s) with no open block — ignored'));
   const html = renderHtml(doc);
-  assert.ok(html.includes('<h2>DORA</h2>'), 'DORA panel'); assert.ok(html.includes('1 of 1 <span class="stat-sub">tasks landed in the window (100%)</span>'));
+  assert.ok(html.includes('<h2>DORA (task-level proxies)</h2>'), 'DORA panel'); assert.ok(html.includes('1 of 1 <span class="stat-sub">tasks landed in the window (100%)</span>'));
   assert.ok(html.includes('in progress <span class="sub">(blocked since 12 Sep 2026 08:00 UTC)</span>'));
   assert.ok(html.includes('<br>Time blocked: median') && html.includes('<br>Flow efficiency <span class="sub">(agent time ÷ cycle time, a lower bound)</span>: median — (needs ≥5, have 1) · min 50%'), 'spread lines when measured');
   assert.match(renderStatus(doc), /open TASK-B \(task\) started=[^\n]* blocked_since=2026-09-12T08:00:00.000Z/);
@@ -563,7 +563,7 @@ test('no defect and no block recorded: DORA says so in one line (no 0%), no bloc
   assert.ok(!md.includes('time_blocked |') && !md.includes('flow_efficiency |'));
   assert.ok(md.includes('- task: no blocked records — time_blocked not measured (not zero)'));
   assert.ok(!md.includes('unblocked event(s)') && !md.includes('blocked since'));
-  assert.ok(html.includes('<h2>DORA</h2>') && html.includes('No defects recorded') && !html.includes('Time blocked:'));
+  assert.ok(html.includes('<h2>DORA (task-level proxies)</h2>') && html.includes('No defects recorded') && !html.includes('Time blocked:'));
 });
 
 test('--from-json of an archive made before DORA existed still renders (no dora block, no crash)', () => {
@@ -571,7 +571,7 @@ test('--from-json of an archive made before DORA existed still renders (no dora 
   const doc = JSON.parse(JSON.stringify(assemble(repo, { now: NOW })));
   delete doc.plans[0].metrics.dora; delete doc.envelope.policy.labels.deployment_frequency; delete doc.envelope.policy.labels.lead_time_for_changes;
   for (const i of doc.plans[0].items) { delete i.blocked_since; delete i.defects; }
-  const md = renderMarkdown(doc); assert.ok(!md.includes('## DORA')); assert.ok(!renderHtml(doc).includes('<h2>DORA</h2>'));
+  const md = renderMarkdown(doc); assert.ok(!md.includes('## DORA')); assert.ok(!renderHtml(doc).includes('<h2>DORA'));
 });
 
 test('review fixes: non-task block caveat, blocked-but-unmeasured reason, planned-and-blocked open item, HTML excluded/none-found lines', () => {
@@ -597,4 +597,37 @@ test('review fixes: non-task block caveat, blocked-but-unmeasured reason, planne
   assert.ok(html.includes('planned <span class="sub">(blocked since 10 Sep 2026 08:00 UTC)</span>'));
   assert.ok(html.includes('No defect found in the window.'), 'HTML says none found, like Markdown');
   assert.ok(html.includes('1 defect(s) on tasks with a quarantined or proxy completion — escape not judged.'), 'HTML shows excluded defects');
+});
+
+// Honest names: the DORA-style figures are task-level proxies, and every cost is the cost of subagent dispatches only.
+test('DORA block is labelled as task-level proxies in Markdown, HTML and the JSON labels; JSON keys keep their names', () => {
+  const repo = tmp(); seedDora(repo);
+  const doc = assemble(repo, { now: NOW }), md = renderMarkdown(doc), html = renderHtml(doc);
+  assert.ok(md.includes('## DORA (task-level proxies)\n\nTask-level proxies, not the four DORA measures: a task "deploys" when it merges to the integration branch; change failure rate is done tasks with a defect found after the task was done, over done tasks; time to restore is defect repair time, from found to fixed.\n\n- deployment frequency:'), md.split('## DORA')[1].slice(0, 400));
+  assert.ok(!/^## DORA$/m.test(md), 'no bare DORA heading');
+  assert.ok(html.includes('<h2>DORA (task-level proxies)</h2><p class="panel-sub">Task-level proxies, not the four DORA measures. A task "deploys" when it merges'), 'HTML heading and caption');
+  assert.ok(html.includes('Time to restore = defect repair time, from found to fixed.'));
+  assert.ok(!html.includes('<h2>DORA</h2>'));
+  const labels = doc.envelope.policy.labels;
+  assert.equal(labels.change_failure_rate, 'task-level proxy: done tasks with a defect found after the task was done, over done tasks');
+  assert.equal(labels.time_to_restore, 'task-level proxy: defect repair time, from found to fixed');
+  assert.deepEqual(Object.keys(doc.plans[0].metrics.dora), ['recorded', 'change_failure_rate', 'time_to_restore', 'defects_by_stage', 'untraced', 'excluded_defects'], 'no key renamed or removed');
+  // An archive written before these labels existed re-renders with the same heading and caption.
+  const old = JSON.parse(JSON.stringify(doc)); delete old.envelope.policy.labels.change_failure_rate; delete old.envelope.policy.labels.time_to_restore; delete old.envelope.policy.labels.spend;
+  assert.ok(renderMarkdown(old).includes('## DORA (task-level proxies)')); assert.ok(renderHtml(old).includes('<h2>DORA (task-level proxies)</h2>'));
+});
+test('report costs say they cover subagent dispatches only: Markdown Cost section, HTML Cost panel and a JSON label', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW });
+  assert.equal(doc.envelope.policy.labels.spend, 'subagent dispatches only; the orchestrating session is not counted');
+  assert.ok(renderMarkdown(doc).includes('## Cost\n\n- basis: '));
+  assert.match(renderMarkdown(doc), /## Cost\n\n- basis: [^\n]*\n- scope: subagent dispatches only; the orchestrating session is not counted\n/);
+  assert.ok(renderHtml(doc).includes('Subagent dispatches only; the orchestrating session is not counted.'));
+});
+test('status prints the budget guard note with its four limits; report --json carries it as budget.guard', () => {
+  const repo = tmp(); seed(repo);
+  const doc = assemble(repo, { now: NOW, costs: false });
+  const NOTE = 'best effort, not a ceiling: it fails open when it cannot read its evidence; it counts subagent dispatches only, not the orchestrating session; subagents working on the same task at the same time do not see each other\'s live spend; a refused tool call is not verified to end all spending';
+  assert.equal(doc.budget.guard, NOTE);
+  assert.ok(renderStatus(doc).split('\n').includes(`BUDGET guard: ${NOTE}`));
 });

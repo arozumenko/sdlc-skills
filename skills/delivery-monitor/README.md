@@ -95,10 +95,19 @@ the report/status output where it applies, never silently dropped.
   ordinary forward correction.
 - No claim of host completeness, full review/block history, origin tracking,
   or cross-team comparability.
-- DORA is partial and labelled: change failure rate and time to restore come from
-  recorded defect pairs (nothing recorded → the report says so, never 0%);
-  deployment frequency and lead time for changes reuse task throughput and cycle
-  time — a merge to the integration branch, not a production deploy. Flow
+- No DORA measures. The report's "DORA (task-level proxies)" block holds proxies
+  and labels them: change failure rate is computed from defects found after a
+  task was done, and time to restore from defect repair time (nothing recorded →
+  the report says so, never 0%); deployment frequency and lead time for changes
+  reuse task throughput and cycle time — a merge to the integration branch, not
+  a production deploy.
+- No spending limit. The task budget is a best-effort budget guard, not a
+  ceiling. It fails open when it cannot read its evidence. It counts subagent
+  dispatches only, not the orchestrating session. Two subagents working on the
+  same task at the same time do not see each other's live spend. A refused tool
+  call is not verified on a real host to end all spending.
+- No cost of the orchestrating session. Spend totals and task costs cover
+  subagent dispatches only. Flow
   efficiency (agent time ÷ cycle time) is a lower bound; time blocked counts
   only recorded blocks.
 - Out of scope entirely: benefit ROI,

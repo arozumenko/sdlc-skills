@@ -2,6 +2,8 @@
 // golden.json was produced by running runScenario with `main` from the last version that kept no history, so the
 // history tests compare against an independent baseline and never against the code under test. To regenerate after
 // an intended output change, run runScenario(main) and write its result to golden.json.
+// It has been regenerated since for intended label changes, through legacyScenario (the tests compare through it). Each
+// time, the new file was checked to differ from the old one only in those label lines.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

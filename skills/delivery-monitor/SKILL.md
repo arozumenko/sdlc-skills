@@ -38,7 +38,8 @@ node .claude/skills/delivery-monitor/scripts/delivery.mjs event INFRA-2 done --i
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 blocked --id blk-023-1 --note "waits on API team"
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 unblocked --id unblk-023-1
 #    A bug is filed in your tracker and traced to the plan item that caused it: record it on that item (any id your tracker uses),
-#    with the stage where it was found. When the fix lands, record the fix. These feed change failure rate and time to restore.
+#    with the stage where it was found. When the fix lands, record the fix. These feed the task-level proxies for change failure
+#    rate and time to restore.
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_found --defect BUG-7 --found-stage qa [--severity major] [--found-by <who>] [--at <iso>]
 node .claude/skills/delivery-monitor/scripts/delivery.mjs event TASK-023 defect_fixed --defect BUG-7 [--sha <fix merge sha>]
 # 3. Fill in history that predates the ledger
@@ -75,8 +76,9 @@ record: a crash, two writers at the same time, or an older installed copy can le
 changes what a command or hook does. A command prints one `WARN history not recorded: <reason>` line on stderr. Nothing reads
 the file yet. After upgrading, run `history snapshot` once to log the files as they are now.
 
-`spend` works without a plan. It counts each dispatch once, using the greater of captured usage cost and active legacy
-`dispatch_ended` usage cost, repriced with the current price table. Its classes are `item` (allocated to a task or other item),
+`spend` works without a plan. Every total covers subagent dispatches only: the orchestrating session's own usage is not
+captured and not counted, and `spend`, `status` and the report say so next to the total. It counts each dispatch once, using
+the greater of captured usage cost and active legacy `dispatch_ended` usage cost, repriced with the current price table. Its classes are `item` (allocated to a task or other item),
 `plan` (allocated without an item), and `not-in-ledger` (captured with no active allocation). Withdrawing an observation
 removes that allocation; captured spend remains visible as unattributed. Output includes unpriced dispatches (including partly
 priced ones), store/legacy discrepancies, inconsistent legacy allocations, observation conflicts and legacy starts without an end.
@@ -118,19 +120,32 @@ Profile `captureRefs: false` disables identifier refs and follow-up refs; `captu
 Both default to true. Refs use a capped identifier grammar, which can still capture sensitive identifiers.
 Description text is stored only with the existing `capturePrompts: true` switch (default false).
 
-**Task USD budgets (Claude Code).** Leave task estimates empty in the plan block so `plan register` fills calibrated
+**Task USD budget guard (Claude Code, best effort).** The budget is a best-effort guard, not a ceiling and not a spending
+limit. It refuses tool calls when it can show that a task's recorded cost is over a threshold. Its limits:
+
+- It fails open. When it cannot read its evidence (run files, events ledger, profile, price table, a live transcript), the
+  work proceeds.
+- It counts subagent dispatches only. The orchestrating session's own usage is not counted.
+- Two subagents working on the same task at the same time do not see each other's live spend. Each adds only its own live
+  usage to the task cost recorded at its first tool call.
+- A refused tool call is not verified on a real host to end all spending. The refused subagent still writes a final message,
+  and the orchestrator continues.
+
+Leave task estimates empty in the plan block so `plan register` fills calibrated
 USD ranges. Keep human effort in the board's `tokenomics.effort_days`. A missing calibration cell is a planning gap;
 check `CALIBRATED ... no-cell=0` before dispatching. In-flight hours estimates remain valid and unbudgeted.
 
 Run `install-hooks.mjs` to install both synchronous hooks (only in a consumer project you are authorized to configure).
+A settings file that does not parse is never replaced: install and `--remove` stop with `USAGE` (exit 2) and write nothing.
 `--repo <root>` wins over the current folder and `CLAUDE_PROJECT_DIR`, and must name a repository root (a folder inside a
 repository is refused). The hooks are always wired to the target's own copy of the skill; a target without one is refused.
 PreToolUse checks Agent/Task dispatches before they start and subagents before each tool call. SubagentStop captures and
 records crossings; it never refuses work. Task cost comes from `taskCosts`, including prior dispatches, fix rounds and
 recovered attribution. In-run checks cache prior task cost once per agent and add incremental child-transcript usage.
 At strictly more than the range's high end, `budget_exceeded` flags the task. At strictly more than three times high,
-`budget_stopped` refuses the dispatch or every later tool call of that running subagent. The denial names the task,
-its cost and cap. The orchestrator treats the task as blocked and decides the next action.
+`budget_stopped` is recorded and the guard refuses the dispatch, or every later tool call of that running subagent that it
+can evaluate. The denial names the task, its cost and the threshold. The orchestrator treats the task as blocked and decides
+the next action.
 
 Profile settings `budgetSoftMultiplier` (default 1) and `budgetHardMultiplier` (default 3) are finite positive numbers;
 hard must be at least soft. Crossings are recorded once per task/threshold, including across `supersedes.item_map`
@@ -141,8 +156,9 @@ While the latest such diagnostic is at most 7 days old, `status` prints `BUDGET 
 not when the cause is repaired.
 
 `status` adds BUDGET lines and `report --json` adds `budget`: resolved exceeded/stopped counts per open plan, and
-current lifetime coverage as dispatch counts and USD (`budgeted`, `all`, `unbudgeted`, `codex`). A dispatch without a
-named USD task, outside an open plan, or from Codex is unbudgeted and is never stopped. Codex coverage includes only
+current lifetime coverage as dispatch counts and USD (`budgeted`, `all`, `unbudgeted`, `codex`). `status` also prints
+`BUDGET guard: best effort, not a ceiling: …` with the limits above (`budget.guard` in JSON). A dispatch without a
+named USD task, outside an open plan, or from Codex is unbudgeted and is never refused. Codex coverage includes only
 keys available to the cost projection; this skill does not capture Codex spend. The project total includes ownerless
 work; a plan's coverage includes work allocated or attributed to that plan. Coverage ignores report window/item filters.
 Transient per-agent cursors are `.pending-budget-*.json` (ignored by the existing transient patterns).
@@ -209,7 +225,9 @@ moment it happens, or the orchestrating session when no project manager runs; pa
 found time defaults to now and decides whether it escaped and how long it took to fix). Work that landed no commit is recorded without `--sha`, never with
 another commit's sha. Read `delivery.mjs report` at mission close, before the next mission is planned.
 A defect goes on the item that caused it (a mission, campaign or case ref when the cause is not traced to a task), with
-`--found-stage build|review|qa|gate|demo|user`; the report's DORA block reads these pairs (`references/metrics.md`, "DORA").
+`--found-stage build|review|qa|gate|demo|user`; the report's DORA-style block reads these pairs. Its figures are task-level
+proxies, and the report labels them so: change failure rate is computed from defects found after a task was done, and time to
+restore from defect repair time (`references/metrics.md`, "DORA (task-level proxies)").
 
 **Lifecycle rules.** Bind before dispatching to record task cycle time. Transcript recovery preserves usage and start evidence
 in the dispatch store; it does not create task observations. Git/PR backfill gives created/first-commit/done only.

@@ -219,8 +219,10 @@ test('brief-only text is a heuristic unless the branch confirms it',t=>{
 
 test('B2 an unreadable plans directory makes attribution unavailable, never an empty catalogue',t=>{const r=repo(t);store(r,[snap()]);rmSync(plansDir(r),{recursive:true});const locked=join(r,'locked');mkdirSync(join(locked,'inner'),{recursive:true});symlinkSync(join(locked,'inner'),plansDir(r));chmodSync(locked,0o000);t.after(()=>{try{chmodSync(locked,0o755);}catch{}});if(process.getuid?.()===0){t.skip('root reads anything');return;}assert.throws(()=>call('loadRunsChecked',r),/plans/);assert.match(enriched(r).attribution.unavailable,/plans/);chmodSync(locked,0o755);rmSync(plansDir(r));assert.deepEqual(call('loadRunsChecked',r).runs,[]);});
 // Frozen output of the base `spend` command before attribution existed (origin/main 415fbe1), for this fixture.
+// One line was added since: `scope:`, which says the total covers subagent dispatches only.
 const PRE_CHANGE_SPEND=`SPEND spend of dispatches started in [since, until) (all starts, including unknown-start)
   total_usd=3.000000 exact_usd=3.000000 estimated_usd=0.000000
+  scope: subagent dispatches only; the orchestrating session is not counted
   item: usd=0.000000 count=0
   plan: usd=0.000000 count=0
   not-in-ledger: usd=3.000000 count=1

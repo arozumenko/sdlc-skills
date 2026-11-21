@@ -19,7 +19,7 @@ import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibra
 import { loadPricesChecked, pricesAge, pricesStaleText } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
 import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
-import { budgetCheckState, budgetSummary } from './lib/budget.mjs';
+import { BUDGET_GUARD_NOTE, budgetCheckState, budgetSummary } from './lib/budget.mjs';
 import { tombstone } from './lib/dispatches.mjs';
 import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
@@ -560,6 +560,7 @@ function cmdStatus(repo, p, io, now) {
       try { out(io, renderBudgetCoverage(budgetSummary(repo))); }
       catch (problem) { if (!isInputError(problem)) throw problem; out(io, renderBudgetCoverage({ unavailable: problem.message })); }
       out(io, `BUDGET check: ${budgetCheckText(budgetCheckState(repo, { now }))}`);
+      out(io, `BUDGET guard: ${BUDGET_GUARD_NOTE}`);
       pricesLine();
     }
     throw e;

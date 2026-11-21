@@ -37,6 +37,8 @@ export function budgetInputs(repo) {
   if (loaded.problem) throw new Error(loaded.problem);
   return { runs, resolved, profile, prices: loaded.prices };
 }
+/** What the budget feature is, printed wherever a budget line is: a guard that works when it can, not a spending limit. */
+export const BUDGET_GUARD_NOTE = 'best effort, not a ceiling: it fails open when it cannot read its evidence; it counts subagent dispatches only, not the orchestrating session; subagents working on the same task at the same time do not see each other\'s live spend; a refused tool call is not verified to end all spending';
 export const BUDGET_CHECK_WINDOW_DAYS = 7;
 /** Whether the hook recently allowed work it could not evaluate. The hook writes one `budget-check-unavailable` diagnostic per
  * session and nothing when it works, so this reports the latest such line of the last 7 days (its time, reason and session)
@@ -76,7 +78,7 @@ export function recordBudget(repo, { run, item, cost, dispatchKey, source, sessi
         cap_usd: cap, cost_at_crossing: cost, dispatch_key: dispatchKey, source } } }, { now });
     wrote.push(appendObservation(repo, rec, { now, firstFor: existing }));
   }
-  return { wrote, stopped: over(cap), reason: `${item.ref}: task cost USD ${Number(cost.toFixed(6))} exceeds budget cap USD ${Number(cap.toFixed(6))}` };
+  return { wrote, stopped: over(cap), reason: `${item.ref}: task cost USD ${Number(cost.toFixed(6))} exceeds the budget guard threshold USD ${Number(cap.toFixed(6))}` };
 }
 const empty = () => ({ count: 0, usd: 0 });
 const coverage = () => ({ budgeted: empty(), all: empty(), unbudgeted: empty(), codex: empty() });

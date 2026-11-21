@@ -163,7 +163,9 @@ With `--since`/`--cutoff` the window is partial, so reconciliation is skipped wi
 
 ## Budget events
 
+The task budget is a best-effort guard, not a ceiling (its limits: SKILL.md, "Task USD budget guard").
 `budget_exceeded` and `budget_stopped` are hook observations on task items. They do not change task state.
+`budget_stopped` records that the guard began refusing calls for the task. It does not show that spending ended.
 The enclosing fields retain ledger v2. `meta.budget` is required:
 
 ```json
