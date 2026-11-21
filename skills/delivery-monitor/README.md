@@ -66,6 +66,12 @@ assert it, they don't set it arbitrarily; an unknown factory or a role outside e
 factory's map fails `USAGE`. The Claude hook reads this saved, already-validated roster snapshot
 only — it never re-walks installed agent directories or any source-checkout manifest itself.
 
+The map covers `feature-development`, `test-automation` and `manual-qa`. A plan from
+`product-management` or `security-testing` registers and prints `WARN ROSTER-UNMAPPED(<factory>)`:
+its roster holds none of that factory's roles, so the hook records no dispatch of its agents and
+the budget guard does not check them. Record such a plan's transitions with the CLI or a backfill;
+`doctor` repeats the note on the run's `roster:` line.
+
 ## What it does not do
 
 This is an honest derivation from readable, local evidence — not a durability,

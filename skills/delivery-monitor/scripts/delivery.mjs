@@ -12,7 +12,7 @@ import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
-import { makeRoster } from './lib/roster.mjs';
+import { makeRoster, unmappedFactories } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, budgetCheckText, SCHEMA } from './lib/report.mjs';
 import { doctorReport, hookRel, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
@@ -247,6 +247,8 @@ function cmdPlanRegister(repo, f, io, now) {
   if (calibrationNote) out(io, calibrationNote);
   if (calib || fill.kept) out(io, `CALIBRATED filled=${fill.filled} kept=${fill.kept} planner=${fill.planner} no-cell=${fill.no_cell} samples=${calib?.cal.samples ?? 0} (${calib ? `${CALIBRATION_FILE} ${calib.sha256.slice(0, 12)}` : 'no calibration table'})`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
+  // Not an error: the plan is tracked with the CLI. Said once per registration, because the hooks stay silent about it.
+  for (const factory of unmappedFactories(roster)) io.stderr.write(`WARN ROSTER-UNMAPPED(${factory}): this skill has no role map for that factory. The plan is registered; record its transitions with the CLI or a backfill. The dispatch hook records no dispatch of its agents and the budget guard does not check them; their usage is still captured for spend.\n`);
   bindCaller(repo, runId, f, io, now, 'register');
   return 0;
 }

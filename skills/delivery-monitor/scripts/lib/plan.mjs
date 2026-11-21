@@ -17,10 +17,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { makeObservation, validateEstimate } from './events.mjs';
 import { decodeSegment, plansDir, runPath, sha256 } from './paths.mjs';
 import { logWrite, readPrev, runSummary } from './history.mjs';
+import { FACTORIES } from './roster.mjs';
 
 export { validateEstimate };
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
-const FACTORIES = ['feature-development', 'test-automation', 'manual-qa'];
 const MISSION_KINDS = ['group', 'milestone', 'wave', 'batch', 'run'];
 export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'test', 'infra', 'docs'];
 const iso = (s) => typeof s === 'string' && !Number.isNaN(Date.parse(s));
@@ -41,7 +41,7 @@ export function validatePlan(p) {
   if (!ID_RE.test(p.campaign_id ?? '')) errs.push('campaign_id must match ^[a-z0-9][a-z0-9-]*$');
   if (!ID_RE.test(p.run_id ?? '')) errs.push('run_id must match ^[a-z0-9][a-z0-9-]*$');
   if (!Number.isInteger(p.version) || p.version < 1) errs.push('version must be a positive integer');
-  if (!FACTORIES.includes(p.factory)) errs.push('factory must be feature-development|test-automation|manual-qa');
+  if (!FACTORIES.includes(p.factory)) errs.push(`factory must be ${FACTORIES.join('|')}`);
   if (!iso(p.observation_start)) errs.push('observation_start must be ISO');
   if (p.source_epoch != null && !isPlainObject(p.source_epoch)) errs.push('source_epoch must be an object');
   const ep = isPlainObject(p.source_epoch) ? p.source_epoch : {};

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
-import { validRoster } from './lib/roster.mjs';
+import { unmappedFactories, validRoster } from './lib/roster.mjs';
 import { UNCONDITIONAL_CAVEATS, budgetCheckText, readDiagnostics } from './lib/report.mjs';
 import { budgetCheckState } from './lib/budget.mjs';
 import { pricesAge, pricesStaleText } from './lib/cost.mjs';
@@ -268,7 +268,8 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   if (stalePrices) add('warning', `prices: stale — ${stalePrices}`);
   for (const r of runs.filter((r) => r.status === 'open')) {
     const rosterOk = validRoster(r.roster);
-    add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`);
+    const unmapped = rosterOk ? unmappedFactories(r.roster) : [];
+    add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}${unmapped.length ? ` (no role map for ${unmapped.join(', ')}: the hook records no dispatch of its agents)` : ''}`);
   }
   if (existsSync(sessionsDir(repo))) {
     for (const f of readdirSync(sessionsDir(repo)).filter((n) => n.endsWith('.json')).sort()) {

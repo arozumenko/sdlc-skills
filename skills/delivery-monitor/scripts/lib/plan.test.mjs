@@ -204,3 +204,13 @@ test('planDelta and registrationObservations: created/estimated/cancelled/reopen
   const same = registrationObservations({ run, version: 1, delta: planDelta([], prev, {}), token: 'reg-1', at: '2026-09-16T09:00:00Z', createdAtOf: () => ({ at: '2026-09-15T12:00:00Z', sha: 'abc' }), now: 99 });
   assert.equal(same[0].observation_id, recs[0].observation_id);
 });
+
+// The repository ships five factories; a plan from any of them passes validation. An id it does not ship is still refused.
+test('validatePlan: all five shipped factories are accepted; an unknown id is refused and the message lists the five', () => {
+  for (const factory of ['feature-development', 'test-automation', 'manual-qa', 'product-management', 'security-testing']) {
+    const p = PLAN(); p.factory = factory;
+    assert.deepEqual(validatePlan(p).filter((e) => /factory/.test(e)), [], factory);
+  }
+  const p = PLAN(); p.factory = 'ops';
+  assert.deepEqual(validatePlan(p).filter((e) => /factory/.test(e)), ['factory must be feature-development|test-automation|manual-qa|product-management|security-testing']);
+});

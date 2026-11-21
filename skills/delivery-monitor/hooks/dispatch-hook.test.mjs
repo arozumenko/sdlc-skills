@@ -462,3 +462,14 @@ test('script: a failing stop handler exits 0 with no output and leaves the diagn
   assert.equal(out, '');
   assert.equal(diagLines(repo).filter((d) => d.kind === 'stop-hook-failed').length, 1);
 });
+
+test('a run of a factory with no role map: a named role is not recorded and no invalid-roster diagnostic is written; the dispatch is still captured', () => {
+  const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true });
+  const d = join(repo, '.claude', 'agents', 'security-lead'); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'AGENT.md'), 'role');
+  saveRun(repo, { ...run, roster: makeRoster(repo, ['security-testing']) });
+  mkdirSync(sessionsDir(repo), { recursive: true }); writeFileSync(sessionPath(repo, 'claude', 'sess-1'), JSON.stringify({ host: 'claude', session: 'sess-1', plan: R }));
+  assert.deepEqual(handleStop(payload(transcripts({ agentType: 'security-lead' })), { repo, now: NOW }), { wrote: [], diagnostic: null });
+  assert.equal(resolveObservations(repo).active.length, 0);
+  assert.deepEqual(readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')), []);
+  assert.ok(readdirSync(deliveryDir(repo)).some((f) => f.startsWith('dispatches-')));
+});
