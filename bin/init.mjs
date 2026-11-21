@@ -1589,7 +1589,7 @@ function printHelp() {
     --all                      Install every agent and every skill (no prompts)
     --agents <a,b,c|all>       Install only these agents (or all)
     --skills  <a,b,c|all>      Install only these skills (or all)
-    --target <claude,cursor,…> Limit IDE targets (default: all detected)
+    --target <claude,cursor,…> Limit IDE targets (default: all detected; unattended runs warn without it, a future version will require it)
     --update                   Overwrite existing installs
     --interactive, -i          Menu to pick optional MCP servers (and, for
                                quality-architect, its QA specialists/connectors).

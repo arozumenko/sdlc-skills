@@ -142,7 +142,7 @@ want to be happy).
 
 One command installs agents, their declared monorepo skills, and their
 external skills together. Works for Claude Code, Cursor, Windsurf, GitHub
-Copilot, and Codex (IDE targets detected automatically). Agents install in
+Copilot, and Codex (IDE targets detected automatically; an unattended run without `--target` warns now and will require it in a future version). Agents install in
 each host's native form — directories for Claude/Cursor/Windsurf, flat
 `.agent.md` for Copilot, TOML for Codex.
 
@@ -155,7 +155,7 @@ npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven a
 npx github:arozumenko/sdlc-skills init --factory product-management  # PO discovery pipeline (raw ask → verified, prioritized hypotheses)
 npx github:arozumenko/sdlc-skills init --factory security-testing  # threat-led, read-only security testing team (led by Rasmus; threat-modeler Ilse, security-reviewer Vera)
 
-# Full catalog, all detected IDEs
+# Full catalog, all detected IDEs (without --target this warns now; a future version will require --target)
 npx github:arozumenko/sdlc-skills init --all
 
 # A specific team — every declared skill comes along automatically

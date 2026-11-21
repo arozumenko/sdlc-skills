@@ -36,8 +36,8 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 # Run a single test file
 node --test bin/lib/item-resolver.test.mjs
 
-# Exercise the installer against a throwaway dir
-node bin/init.mjs init --factory feature-development --target claude --yes
+# Exercise the installer against a throwaway dir (it refuses to run inside this checkout)
+REPO=$PWD; (cd "$(mktemp -d)" && node "$REPO/bin/init.mjs" init --factory feature-development --target claude --yes)
 # --bundle is a silent back-compat alias for --factory (pre-rename flag name)
 ```
 
