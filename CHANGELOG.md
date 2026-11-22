@@ -22,7 +22,8 @@ The first tagged version. Install it with `npx github:arozumenko/sdlc-skills#v0.
   changed is kept and listed under "NOT updated". That includes one that was installed and never committed, unless
   it is identical to a copy this installer ships. Commit first, or pass `--force`, which replaces without a backup.
   An item git cannot restore (no git, or an ignored path) is copied to a backup folder and then replaced. Two
-  exceptions: a symbolic link there is kept, and content identical to a copy this installer ships is replaced
+  exceptions: a symbolic link there is kept, unless it is the link a `--symlink` install made into the
+  installer's cache, which is re-linked; and content identical to a copy this installer ships is replaced
   without a backup.
   Seeded folders are create-only: files are added, never removed or overwritten.
 - The installer refuses to run with the home directory or the package itself as the project root (#127).
@@ -48,7 +49,8 @@ Installer
   own repository: an item inside a nested repository counts as changed and is kept until `--force`.
 - When git cannot restore an item (a project without git, or an ignored path), an update that replaces a changed
   item first copies it to `.sdlc-skills-backup/<date-time>/`. Nothing prunes these folders. `--force` skips the
-  backup. A symbolic link in that position is kept, not replaced.
+  backup. A symbolic link in that position is kept, not replaced, except the link a `--symlink` install made
+  into the installer's cache.
 - An installed skill includes its tests and fixtures.
 - CI runs the tests on one current Node release. `engines.node` says `>=18`; versions 18 to 22 are not tested.
 
