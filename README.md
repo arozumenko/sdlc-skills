@@ -170,7 +170,13 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 
 # Update an existing install
 npx github:arozumenko/sdlc-skills init --all --update
+
+# Install a released version instead of the tip of main
+npx github:arozumenko/sdlc-skills#v0.3.0 init --factory feature-development
 ```
+
+Released versions, what changed in each, and the known limits are in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 **What `--update` replaces.** An update replaces each installed agent and
 skill with the new version, external skills included. It does not replace an

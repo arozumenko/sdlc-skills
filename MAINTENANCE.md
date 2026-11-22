@@ -8,15 +8,23 @@ the installer pointing at the newer ref and let it overwrite.
 ## Where updates come from
 
 Canonical upstream is `github:arozumenko/sdlc-skills`. The installer
-defaults to `main`; pin to a known-good commit with `#<sha>`:
+defaults to `main`; pin to a released version with `#v<version>`, or to
+a known-good commit with `#<sha>`:
 
 ```bash
 # Track the tip of main (default)
 npx github:arozumenko/sdlc-skills init --update ...
 
+# Pin to a released version (see CHANGELOG.md for what each one contains)
+npx github:arozumenko/sdlc-skills#v0.3.0 init --update ...
+
 # Pin to a specific commit
 npx github:arozumenko/sdlc-skills#<sha> init --update ...
 ```
+
+A pinned version fixes this repository's content. The external skills
+listed in `skills.json` are still fetched from their upstream default
+branch at install time (see "Known limits" in `CHANGELOG.md`).
 
 Check what's live:
 
