@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isDiscoverable, parseFrontmatterField, parseMetaField } from "./gen-marketplaces.mjs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { isDiscoverable, parseFrontmatterField, parseMetaField, checkLocalSources, missingSourcesReport } from "./gen-marketplaces.mjs";
+
+const REPO = fileURLToPath(new URL("..", import.meta.url));
 
 test("excludes items marked discoverable: false", () => {
   assert.equal(isDiscoverable({ discoverable: false }), false);
@@ -74,4 +81,51 @@ test("isDiscoverable + parseMetaField: metadata.discoverable:false excludes an i
   assert.equal(isDiscoverable({ discoverable: parseFrontmatterField(fm, "discoverable") ?? parseMetaField(fm, "discoverable") }), false);
   const fm2 = "name: keep\nmetadata:\n  user-invocable: false\n";
   assert.equal(isDiscoverable({ discoverable: parseFrontmatterField(fm2, "discoverable") ?? parseMetaField(fm2, "discoverable") }), true);
+});
+
+// A marketplace entry whose local `./…` source is not in the repository cannot
+// be installed. The generator once listed the 30 external (repo:) skills that
+// way, and nothing failed.
+test("checkLocalSources: reports a local source that does not exist, and only that", () => {
+  const root = mkdtempSync(join(tmpdir(), "mkt-sources-"));
+  mkdirSync(join(root, "skills/here"), { recursive: true });
+  mkdirSync(join(root, ".codex-plugin"));
+  const plugins = [
+    { name: "toolkit", source: "./" },
+    { name: "here", source: "./skills/here" },
+    { name: "gone", source: "./skills/gone" },
+    { name: "not-a-local-path", source: "owner/repo" },
+  ];
+  writeFileSync(join(root, ".codex-plugin/marketplace.json"), JSON.stringify({ name: "fixture", plugins }));
+  const { checked, missing } = checkLocalSources(root);
+  assert.equal(checked, 3, "the three ./ sources are checked; other manifests are absent from the fixture");
+  assert.deepEqual(missing, [{ file: ".codex-plugin/marketplace.json", name: "gone", source: "./skills/gone" }]);
+  const report = missingSourcesReport(missing);
+  assert.match(report, /\.codex-plugin\/marketplace\.json/);
+  assert.match(report, /gone/);
+  assert.match(report, /\.\/skills\/gone/);
+});
+
+test("checkLocalSources: every local source in the four real manifests exists", () => {
+  const { checked, missing } = checkLocalSources(REPO);
+  assert.ok(checked > 0, "expected local sources in the real manifests");
+  assert.deepEqual(missing, [], missingSourcesReport(missing));
+});
+
+test("--check runs the local-source check on the real manifests and passes", () => {
+  const r = spawnSync(process.execPath, [join(REPO, "bin/gen-marketplaces.mjs"), "--check"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /local sources: \d+ checked in 4 manifests, all exist/);
+});
+
+test("--check still runs when the script is started through a symlink in a directory with a space", () => {
+  // The old entry-point guard compared an encoded file URL with the raw
+  // argv path. Through a link, or from a path with a space, main() was
+  // skipped and the check passed (exit 0) without checking anything.
+  const dir = mkdtempSync(join(tmpdir(), "gen mkt link-"));
+  const link = join(dir, "gen-marketplaces.mjs");
+  symlinkSync(join(REPO, "bin/gen-marketplaces.mjs"), link);
+  const r = spawnSync(process.execPath, [link, "--check"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /local sources: \d+ checked in 4 manifests, all exist/);
 });

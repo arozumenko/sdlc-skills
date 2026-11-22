@@ -6,6 +6,36 @@ on:
   pull_request:
 
 jobs:
+  # The fast test set (bin/fast-tests.mjs: every test file minus a short list
+  # of slow ones) and the two checks no other job here runs. `npm run validate`
+  # is not used: it would repeat the `factories` and `externals` jobs below.
+  # The slow files run in tests-areas.yml when a pull request changes their
+  # area, and in tests-full.yml (push to main and nightly).
+  tests-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Tests create throwaway git repositories and commit in them. The runner
+      # has no git identity, so give every test one.
+      GIT_AUTHOR_NAME: ci
+      GIT_AUTHOR_EMAIL: ci@example.invalid
+      GIT_COMMITTER_NAME: ci
+      GIT_COMMITTER_EMAIL: ci@example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The range declared in package.json `engines.node`.
+          node-version-file: package.json
+      - name: Marketplace manifests are current and list only sources that exist
+        run: npm run validate:marketplaces
+      - name: Intentionally duplicated files have not drifted
+        if: ${{ !cancelled() }}
+        run: npm run validate:dupes
+      - name: Fast test set
+        if: ${{ !cancelled() }}
+        run: npm run test:fast
+
   factories:
     runs-on: ubuntu-latest
     steps:
@@ -52,7 +82,7 @@ jobs:
 
   externals:
     runs-on: ubuntu-latest
-    # 28 entries × (10s timeout + one retry) is ~9.5 min worst case if every
+    # 30 entries × (10s timeout + one retry) is ~10 min worst case if every
     # request hangs. Cap the job so a wedged network fails fast and visibly.
     timeout-minutes: 5
     steps:
