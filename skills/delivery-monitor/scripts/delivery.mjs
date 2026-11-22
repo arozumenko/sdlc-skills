@@ -14,7 +14,7 @@ import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill
 import { bestEffortSync } from './lib/sync.mjs';
 import { makeRoster } from './lib/roster.mjs';
 import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, SCHEMA } from './lib/report.mjs';
-import { doctorReport, skillRootOf } from './install-hooks.mjs';
+import { doctorReport, hookRel, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
 import { loadPricesChecked } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
@@ -656,7 +656,7 @@ function cmdBackfill(repo, p, io, now) {
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io, now) {
   repo = resolveOwnerRepo(repo);
-  const d = doctorReport(repo, relative(repo, skillRootOf(import.meta.url)), { env: io.env });
+  const d = doctorReport(repo, hookRel(repo, skillRootOf(import.meta.url)) ?? relative(repo, skillRootOf(import.meta.url)), { env: io.env });
   try {
     const counts = coverage(repo, { env: io.env });
     const fields = ['identities', 'in_store', 'missing_from_store', 'gaps_resolved', 'gaps_unresolved', 'interrupted', 'unreadable_children', 'oldest_transcript_date'];

@@ -15,6 +15,10 @@ const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME:
 const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV } }).trim();
 const tmp = () => { const r = mkdtempSync(join(tmpdir(), 'dm-install-')); g(r, 'init', '-q', '-b', 'main'); g(r, 'commit', '-q', '--allow-empty', '-m', 'root'); return r; };
 const REL = '.claude/skills/delivery-monitor';
+/** Gives a fixture its own installed copy of the two hook files, so the installer has something inside the target to wire. */
+const stubHooks = (repo) => { mkdirSync(join(repo, REL, 'hooks'), { recursive: true }); for (const h of ['dispatch-hook.mjs', 'budget-hook.mjs']) writeFileSync(join(repo, REL, 'hooks', h), ''); return repo; };
+const hookCommands = (repo) => Object.values(JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8')).hooks).flat().filter((e) => e[MARKER]).map((e) => e.hooks[0].command);
+const runScript = (args, opts) => { try { return { code: 0, out: execFileSync('node', [SCRIPT, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }) }; } catch (e) { return { code: e.status, out: e.stdout, err: e.stderr }; } };
 /** Seeds the telemetry branch (via plumbing, no checkout) with a single file at `name` — used to
  * force a stash collision in bootstrapTelemetry without an actual clone. */
 const seedTelemetryBranchFile = (repo, name, content) => {
@@ -67,7 +71,7 @@ test('bootstrapTelemetry: creates the self-referential submodule on the telemetr
 
 test('installer and doctor use the same main owner from a linked worktree', () => {
   const repo = tmp();
-  const wt = join(mkdtempSync(join(tmpdir(), 'dm-linked-')), 'linked'); g(repo, 'commit', '-q', '--allow-empty', '-m', 'init'); g(repo, 'worktree', 'add', '-q', '-b', 'linked', wt);
+  const wt = join(mkdtempSync(join(tmpdir(), 'dm-linked-')), 'linked'); g(repo, 'commit', '-q', '--allow-empty', '-m', 'init'); g(repo, 'worktree', 'add', '-q', '-b', 'linked', wt); stubHooks(repo);
   execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: wt, env: { ...process.env, CLAUDE_PROJECT_DIR: wt } });
   assert.equal(existsSync(join(repo, '.claude', 'settings.json')), true);
   assert.equal(existsSync(join(wt, '.claude', 'settings.json')), false);
@@ -188,7 +192,7 @@ test('installClaude --remove never creates settings.json (or settings.local.json
 // informational, surfaced as the trailing `doctor: ok`/`doctor: attention` line. This replaces the
 // earlier "doctor exits 1 when not ok" contract.
 test('doctor always exits 0, not ok — both the standalone script and `delivery.mjs doctor` — with an informational doctor: ok/attention line', () => {
-  const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
+  const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true });
   const notOk = execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
   assert.match(notOk, /doctor: attention/);
   const dNotOk = execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
@@ -245,7 +249,7 @@ test('doctorReport: per-open-run roster validity (tampered map_sha256 → INVALI
 });
 
 test('script: --host copilot exits 2 UNSUPPORTED-HOST; default installs and prints INSTALLED', () => {
-  const repo = tmp(); mkdirSync(join(repo, '.claude'), { recursive: true });
+  const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true });
   let code = 0, err = ''; try { execFileSync('node', [SCRIPT, '--host', 'copilot'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { code = e.status; err = e.stderr; }
   assert.equal(code, 2); assert.match(err, /^UNSUPPORTED-HOST\(copilot\)/);
   const out = execFileSync('node', [SCRIPT, '--no-submodule'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
@@ -280,7 +284,7 @@ test('doctor: says whether THIS session is bound; a binding to a closed plan is 
  });
 
  test('delivery doctor resolves an aliased repository before deriving hook script paths', () => {
-  const repo=tmp(), base=mkdtempSync(join(tmpdir(),'dm-doctor-alias-')), alias=join(base,'a/b/c/d/e/alias');
+  const repo=stubHooks(tmp()), base=mkdtempSync(join(tmpdir(),'dm-doctor-alias-')), alias=join(base,'a/b/c/d/e/alias');
   mkdirSync(join(base,'a/b/c/d/e'),{recursive:true});symlinkSync(repo,alias,'dir');
   execFileSync('node',[SCRIPT,'--no-submodule'],{cwd:repo,env:{...process.env,CLAUDE_PROJECT_DIR:repo,DELIVERY_NO_SYNC:'1'}});
   const output=execFileSync('node',[DELIVERY,'doctor'],{cwd:alias,encoding:'utf8',env:{...process.env,CLAUDE_PROJECT_DIR:alias,DELIVERY_NO_SYNC:'1',CLAUDE_CODE_SESSION_ID:''}});
@@ -304,7 +308,7 @@ test('doctor: every SubagentStop/budget fix hint carries --no-submodule', () => 
 });
 
 test('install/--remove honour an explicit --repo over cwd and CLAUDE_PROJECT_DIR', () => {
-  const c1 = tmp(), c2 = tmp(); const env = { ...process.env, CLAUDE_PROJECT_DIR: c2 };
+  const c1 = stubHooks(tmp()), c2 = stubHooks(tmp()); const env = { ...process.env, CLAUDE_PROJECT_DIR: c2 };
   const settings = (r) => join(r, '.claude', 'settings.json');
   execFileSync('node', [SCRIPT, '--no-submodule', '--repo', c1], { cwd: c2, env, encoding: 'utf8' });
   assert.ok(existsSync(settings(c1)), 'c1 written'); assert.ok(!existsSync(settings(c2)), 'c2 untouched');
@@ -312,4 +316,37 @@ test('install/--remove honour an explicit --repo over cwd and CLAUDE_PROJECT_DIR
   execFileSync('node', [SCRIPT, '--no-submodule', '--repo', c2], { cwd: c2, env, encoding: 'utf8' });
   execFileSync('node', [SCRIPT, '--remove', '--repo', c1], { cwd: c2, env, encoding: 'utf8' });
   assert.ok(!JSON.parse(readFileSync(settings(c1), 'utf8')).hooks, 'c1 stripped'); assert.ok(JSON.parse(readFileSync(settings(c2), 'utf8')).hooks.SubagentStop.some((e) => e[MARKER]), 'c2 still installed');
+});
+
+test('an explicit --repo that is a folder inside another repository is refused; the enclosing repository is not written', () => {
+  const outer = stubHooks(tmp()); const inner = join(outer, 'fixture'); mkdirSync(inner);
+  const r = runScript(['--no-submodule', '--repo', inner], { cwd: outer, env: { ...process.env, CLAUDE_PROJECT_DIR: outer } });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /USAGE/);
+  for (const f of ['.claude/settings.json', '.gitignore', 'fixture/.claude', 'fixture/.gitignore']) assert.ok(!existsSync(join(outer, f)), `${f} written`);
+});
+
+test('run from a linked worktree, the hook command points at the main checkout\'s own copy, never into the worktree', () => {
+  const repo = stubHooks(tmp()); g(repo, 'add', '-A'); g(repo, 'commit', '-q', '-m', 'skill');
+  const wt = join(mkdtempSync(join(tmpdir(), 'dm-linked-')), 'linked'); g(repo, 'worktree', 'add', '-q', '-b', 'linked', wt);
+  // The worktree's own installed copy of the real skill runs the install, as an agent in that worktree would.
+  execFileSync('cp', ['-R', `${fileURLToPath(new URL('..', import.meta.url))}/.`, join(wt, REL)]);
+  execFileSync('node', [join(wt, REL, 'scripts', 'install-hooks.mjs'), '--no-submodule'], { cwd: wt, env: { ...process.env, CLAUDE_PROJECT_DIR: wt } });
+  const cmds = hookCommands(repo); assert.equal(cmds.length, 2);
+  for (const c of cmds) { assert.ok(c.includes(`\${CLAUDE_PROJECT_DIR}/${REL}/hooks/`), c); assert.ok(!c.includes('..'), c); }
+});
+
+test('a target with no installed copy of the hooks is refused and nothing is written', () => {
+  const repo = tmp();
+  const r = runScript(['--no-submodule', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /USAGE/);
+  assert.ok(!existsSync(join(repo, '.claude', 'settings.json'))); assert.ok(!existsSync(join(repo, '.gitignore')));
+  assert.equal(g(repo, 'status', '--porcelain'), '');
+});
+
+test('--remove still works when the target no longer has the hook files', () => {
+  const repo = stubHooks(tmp());
+  execFileSync('node', [SCRIPT, '--no-submodule', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  execFileSync('rm', ['-rf', join(repo, '.claude', 'skills')]);
+  const r = runScript(['--remove', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
+  assert.equal(r.code, 0, r.err); assert.ok(!JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8')).hooks);
 });

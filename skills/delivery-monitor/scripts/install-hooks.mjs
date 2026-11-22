@@ -2,7 +2,7 @@
 // STDLIB ONLY. Opt-in Claude SubagentStop capture + shared telemetry submodule (spec §6.1, §6.6, D15). Installing the skill never wires this.
 import { realpathSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
@@ -14,6 +14,31 @@ export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
 const posix = (p) => p.split('\\').join('/');
 const readJson = (p, fb) => { if (!existsSync(p)) return fb; try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return fb; } };
+const HOOK_FILES = ['dispatch-hook.mjs', 'budget-hook.mjs'];
+const DEFAULT_REL = '.claude/skills/delivery-monitor';
+const inside = (rel) => rel !== '' && rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel);
+const gitTop = (dir) => { try { return realpathSync(execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000 }).trim()); } catch { return null; } };
+
+/** Where, relative to the target, the hook commands point. Always a copy INSIDE the target: a copy in another checkout or a
+ * linked worktree would wire the target to files it does not own, and every SubagentStop fails once that worktree is gone.
+ * The running copy is used when it lives in the target; otherwise the target's copy at the same place in its checkout, else
+ * at the default install place. Null when the target has no copy of the hooks. */
+export function hookRel(target, root = skillRootOf()) {
+  const t = realpathSync(target), r = realpathSync(root);
+  const own = posix(relative(t, r)); if (inside(own)) return own;
+  const top = gitTop(r);
+  for (const rel of [top && posix(relative(top, r)), DEFAULT_REL]) if (rel && inside(rel) && HOOK_FILES.every((h) => existsSync(join(t, rel, 'hooks', h)))) return rel;
+  return null;
+}
+
+/** An explicit --repo must name a repository root, a linked worktree root, or a folder outside any repository. A folder
+ * inside a repository would otherwise resolve to that repository, and the install would write a project nobody named. */
+function explicitRepoProblem(dir) {
+  if (!existsSync(dir)) return `--repo ${dir} does not exist`;
+  const top = gitTop(dir);
+  return top && top !== realpathSync(dir) ? `--repo ${dir} is inside the repository ${top}, not its root; pass the root` : null;
+}
+
 const writeJson = (p, o) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, `${JSON.stringify(o, null, 2)}\n`); };
 
 export function installClaude(repo, rel, { local = false, remove = false } = {}) {
@@ -242,14 +267,17 @@ export function doctorReport(repo, rel, opts = {}) {
 
 export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()) {
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
-  // An explicit --repo wins over cwd and CLAUDE_PROJECT_DIR.
-  repo = resolveOwnerRepo(val('--repo') ?? repo);
+  // An explicit --repo wins over cwd and CLAUDE_PROJECT_DIR, and must name the root it means.
+  const explicit = val('--repo'); const problem = explicit != null && explicitRepoProblem(explicit);
+  if (problem) { process.stderr.write(`USAGE(${problem})\n`); return 2; }
+  repo = resolveOwnerRepo(explicit ?? repo);
   const host = val('--host') ?? 'claude'; if (host !== 'claude') { process.stderr.write(`UNSUPPORTED-HOST(${host})\n`); return 2; }
-  const rel = posix(relative(repo, skillRootOf()));
+  const rel = hookRel(repo);
   // Review fix (spec §6.5/D21): doctor always exits 0 — `ok` is informational only, printed as the
   // final `doctor: ok`/`doctor: attention` line (doctorReport), never mapped to a nonzero exit.
-  if (has('--doctor')) { const d = doctorReport(repo, rel, { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
+  if (has('--doctor')) { const d = doctorReport(repo, rel ?? posix(relative(repo, skillRootOf())), { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
+  if (!remove && rel == null) { process.stderr.write(`USAGE(no copy of the delivery-monitor hooks inside ${repo}; install the skill there first, then run its own install-hooks.mjs)\n`); return 2; }
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);
