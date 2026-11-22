@@ -11,6 +11,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:fast": "node bin/fast-tests.mjs",
     "validate:factories": "node bin/validate-factories.mjs",
     "validate:marketplaces": "node bin/gen-marketplaces.mjs --check",
     "validate:externals": "node bin/validate-factories.mjs --check-externals",

@@ -4,11 +4,28 @@
 // the iOS and Android rules in its always-loaded CLAUDE.md (solo, 2026-11-10).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { filterRoleSections } from "./lib/factory-selection.mjs";
 import { installedRoleNames, refreshInstalledFactoryBlocks } from "./init.mjs";
+
+// The cases below that run the installer must not reach the network or the
+// developer's real ~/.cache. python-dev declares external (repo:) skills, so a
+// factory install tries to clone them: the clone cache it creates must be the
+// one inside the temp project, and it must stay empty because git is offline.
+// The role sections under test come from this repository, not from a clone.
+//
+// Same isolation as bin/security-testing-e2e.test.mjs: HOME and the installer
+// cache (SDLC_SKILLS_CACHE_DIR) point into the temp project, and the global git
+// config rewrites https://github.com/ to a path that does not exist.
+const NO_NETWORK = new URL("./fixtures/security-testing-e2e/no-network.gitconfig", import.meta.url).pathname;
+const isolated = (cwd) => ({ ...process.env, HOME: cwd, SDLC_SKILLS_CACHE_DIR: join(cwd, ".cache"), GIT_CONFIG_GLOBAL: NO_NETWORK });
+function assertNothingCloned(cwd) {
+  const registry = join(cwd, ".cache/sdlc-skills/registry");
+  assert.ok(existsSync(registry), "the installer's clone cache is inside the temp project");
+  assert.deepEqual(readdirSync(registry), [], "no external repository was cloned");
+}
 
 const BODY = [
   "# Team",
@@ -95,15 +112,16 @@ test("installing a new role without --update restores its sections in existing b
   const { spawnSync } = await import("node:child_process");
   const INIT = new URL("./init.mjs", import.meta.url).pathname;
   const cwd = mkdtempSync(join(tmpdir(), "role-add-"));
-  spawnSync("git", ["init", "-q"], { cwd });
+  spawnSync("git", ["init", "-q"], { cwd, env: isolated(cwd) });
   writeFileSync(join(cwd, "CLAUDE.md"), "# CLAUDE\n");
-  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8", env: isolated(cwd) });
   assert.equal(run("--factory", "feature-development", "--agents", "python-dev").status, 0);
   assert.doesNotMatch(readFileSync(join(cwd, "CLAUDE.md"), "utf8"), /## Android stack/);
   assert.equal(run("--agents", "feature-development/android-dev").status, 0);
   const text = readFileSync(join(cwd, "CLAUDE.md"), "utf8");
   assert.match(text, /## Android stack/);
   assert.match(text, /Not verified:/);
+  assertNothingCloned(cwd);
 });
 
 test("fences follow CommonMark: longer openers, info-string lines and indented code", () => {
@@ -120,10 +138,10 @@ test("a plain install that changes nothing else leaves other factory blocks alon
   const { spawnSync } = await import("node:child_process");
   const INIT = new URL("./init.mjs", import.meta.url).pathname;
   const cwd = mkdtempSync(join(tmpdir(), "role-untouched-"));
-  spawnSync("git", ["init", "-q"], { cwd });
+  spawnSync("git", ["init", "-q"], { cwd, env: isolated(cwd) });
   const local = "<!-- FACTORY:manual-qa START -->\nlocally adapted\n<!-- FACTORY:manual-qa END -->";
   writeFileSync(join(cwd, "CLAUDE.md"), `# CLAUDE\n\n${local}\n`);
-  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8", env: isolated(cwd) });
   assert.equal(run("--agents", "personal-assistant").status, 0);
   assert.ok(readFileSync(join(cwd, "CLAUDE.md"), "utf8").includes(local), "manual-qa block has no role markers, so it is not refreshed");
 });
@@ -132,10 +150,11 @@ test("--all without --agents also restores sections for newly added roles", asyn
   const { spawnSync } = await import("node:child_process");
   const INIT = new URL("./init.mjs", import.meta.url).pathname;
   const cwd = mkdtempSync(join(tmpdir(), "role-all-"));
-  spawnSync("git", ["init", "-q"], { cwd });
+  spawnSync("git", ["init", "-q"], { cwd, env: isolated(cwd) });
   writeFileSync(join(cwd, "CLAUDE.md"), "# CLAUDE\n");
-  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8" });
+  const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a, "--target", "claude", "--yes"], { cwd, encoding: "utf8", env: isolated(cwd) });
   assert.equal(run("--factory", "feature-development", "--agents", "python-dev").status, 0);
   assert.equal(run("--all").status, 0);
   assert.match(readFileSync(join(cwd, "CLAUDE.md"), "utf8"), /## Android stack/);
+  assertNothingCloned(cwd);
 });
