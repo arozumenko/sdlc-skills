@@ -458,3 +458,28 @@ test('CLI: a valid automation/config.json next to a malformed flat-era root conf
   assert.equal(readFileSync(flat, 'utf8'), '{ "maxSweep": 5, }');
   assert.equal(read(join(repo, '.claude', 'settings.json')).hooks.SessionEnd.length, 1, 'hooks wired');
 });
+
+/** Everything in the repo outside the installed skill copy, so a test can show a run wrote nothing. */
+const outsideSkill = (repo) => execFileSync('find', [repo, '-path', join(repo, '.claude', 'skills'), '-prune', '-o', '-type', 'f', '-print'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
+
+test('CLI: --help and -h print the usage, exit 0 and write nothing, whatever else is on the line', () => {
+  for (const args of [['--help'], ['-h'], ['--host', 'claude', '--help'], ['--otel', '-h'], ['--remove', '--help']]) {
+    const { repo, run } = installedCopy();
+    const before = outsideSkill(repo);
+    const r = run(...args);
+    assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
+    assert.match(r.stdout, /^Usage: .*install-hooks\.mjs/); assert.match(r.stdout, /--host/); assert.match(r.stdout, /--otel/); assert.match(r.stdout, /--pull/);
+    assert.deepEqual(outsideSkill(repo), before, `${args.join(' ')}: nothing written`);
+  }
+});
+
+test('CLI: an unknown flag, a stray argument, an unknown host or a value flag without its value → exit 1, named, nothing written', () => {
+  for (const [args, named] of [[['--remov'], '--remov'], [['--dry-run'], '--dry-run'], [['install'], 'install'], [['--host', 'cursor'], 'cursor'], [['--host'], '--host'], [['--otel', '--endpoint'], '--endpoint']]) {
+    const { repo, run } = installedCopy();
+    const before = outsideSkill(repo);
+    const r = run(...args);
+    assert.equal(r.status, 1, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.ok(r.stderr.includes(named), `${args.join(' ')}: names ${named}: ${r.stderr}`);
+    assert.deepEqual(outsideSkill(repo), before, `${args.join(' ')}: nothing written`);
+  }
+});

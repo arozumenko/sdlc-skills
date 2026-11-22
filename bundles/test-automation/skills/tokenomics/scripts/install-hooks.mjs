@@ -772,7 +772,48 @@ export async function doctor(repo, { fix = false } = {}) {
   return warns;
 }
 
+const SWITCHES = ['--remove', '--local', '--doctor', '--fix', '--strict', '--pull', '--otel', '--otel-remove', '--git-hook'];
+const VALUE_FLAGS = ['--repo', '--host', '--endpoint'];
+const HOSTS = ['all', 'claude', 'copilot', 'vscode'];
+const USAGE_TEXT = `Usage: node install-hooks.mjs [--host all|claude|copilot|vscode] [--local] [--remove] [--repo <root>]
+       node install-hooks.mjs --doctor [--fix] [--strict]
+       node install-hooks.mjs --pull
+       node install-hooks.mjs --otel [--endpoint <url>] [--local] | --otel-remove
+       node install-hooks.mjs --git-hook [--remove]
+
+With no flag: wires the capture hooks for Claude Code and Copilot CLI, adds the ignore rules, and sets up the
+telemetry submodule.
+
+  --host <h>       all (default), claude, copilot, or vscode (the folder-open task; opt-in)
+  --local          write .claude/settings.local.json instead of .claude/settings.json
+  --remove         take the hooks out again
+  --repo <root>    the project to write to (default: the working directory)
+  --doctor         check the whole telemetry path; --fix starts the sink, --strict exits 1 on a warning
+  --pull           merge the team's pushed telemetry into this clone
+  --otel           write the OpenTelemetry opt-in; --endpoint <url> (default http://localhost:4318); --otel-remove undoes it
+  --git-hook       add a post-commit sweep; with --remove, take it out
+  --help, -h       print this text; writes nothing
+`;
+/** The first thing wrong with the command line, or null. An argument this script does not know is refused, never
+ * ignored: a mistyped --remove must not run a full install. */
+function argvProblem(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (SWITCHES.includes(a)) continue;
+    if (!VALUE_FLAGS.includes(a)) return `unknown argument ${a}; run with --help for the flags`;
+    const v = argv[i + 1];
+    if (v == null || v.startsWith('--')) return `${a} needs a value`;
+    if (a === '--host' && !HOSTS.includes(v)) return `unknown host ${v}; use one of ${HOSTS.join(', ')}`;
+    i++;
+  }
+  return null;
+}
+
 export async function main(argv = process.argv.slice(2)) {
+  // Help and a refused command line come before anything is resolved or written.
+  if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(USAGE_TEXT); return 0; }
+  const bad = argvProblem(argv);
+  if (bad) { process.stderr.write(`tokenomics: ${bad}\n`); return 1; }
   const arg = (name) => {
     const i = argv.indexOf(name);
     return i >= 0 && argv[i + 1] ? argv[i + 1] : null;

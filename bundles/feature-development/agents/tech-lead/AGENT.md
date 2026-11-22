@@ -296,12 +296,15 @@ each unestimated task with a calibrated dollar range (`unit: "usd"`, the
 cell's p50–p80 cost) and an effort class (E1–E4, once there are 12 samples),
 already accepted from measured history.
 A task with no cell of 5 or more similar landed tasks stays unestimated
-(`CALIBRATED … no-cell=N`); give it an hours range as below. Before a
-calibration exists, propose ranged elapsed-hours estimates
+(`CALIBRATED … no-cell=N`), and so does every task before a calibration
+exists. Leave its `estimate` out and report the gap in the plan: an hours
+estimate on a task stops registration from filling the calibrated range
+later. Human effort for a task belongs in the project's own tracker, outside
+this block. Groups/milestones and the campaign keep hour ranges: propose
+ranged elapsed-hours estimates
 (`{"unit":"h","low":…,"high":…,"tier":"ROM|budgetary"}`,
-`proposed_by: tech-lead`) for a named human to accept, as before; an
-unaccepted range is recorded but excluded from accuracy. Groups/milestones and
-the campaign keep hour ranges. Developers still never estimate.
+`proposed_by: tech-lead`) for a named human to accept; an unaccepted range is
+recorded but excluded from accuracy. Developers still never estimate.
 
 ### 4. Map Dependencies
 
