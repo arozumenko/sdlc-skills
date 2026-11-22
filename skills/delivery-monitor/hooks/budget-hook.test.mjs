@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -95,6 +95,27 @@ test('unbudgeted refs, hours, missing estimates and Codex never denied or record
  const doc=assemble(f.repo,{now:NOW});assert.equal(doc.budget.coverage.unbudgeted.count,1);assert.equal(doc.budget.coverage.unbudgeted.usd,100);
  }
  const f=fixture();assert.deepEqual(hook(f,{...pre(),host:'codex'}),{});assert.equal(budgets(f).length,0);
+});
+const cacheFile=f=>join(f.d,readdirSync(f.d).find(n=>/^\.pending-budget-[0-9a-f]+\.json$/.test(n)));
+test('a torn cache file does not switch the check off: the next call re-evaluates and still denies',()=>{
+ // Parallel tool calls of one subagent used to rewrite the cache in place; a reader could find it cut short, and
+ // every later call for that dispatch then failed open, so a recorded stop was no longer enforced.
+ const f=fixture();stop(f,child(f,'a',2.5));const c=child(f,'b',1);
+ assert.equal(denied(hook(f,c.payload)),false);usage(c.path,7,'next');assert.equal(denied(hook(f,c.payload)),true);
+ const whole=readFileSync(cacheFile(f),'utf8');writeFileSync(cacheFile(f),whole.slice(0,Math.floor(whole.length/2)));
+ assert.equal(denied(hook(f,c.payload)),true,'the stop is enforced again from the ledger and the live usage');
+ assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).stopped,true,'and the cache is whole again');
+ assert.equal(budgets(f).filter(o=>o.event==='budget_stopped').length,1,'no second stop record');
+ const ds=readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')).flatMap(n=>readFileSync(join(f.d,n),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse));
+ assert.equal(ds.filter(d=>d.kind==='budget-check-unavailable').length,0);
+});
+test('the cache is replaced by rename, never rewritten in place, and leaves no temp file',{skip:process.platform==='win32'||process.getuid?.()===0},()=>{
+ // A read-only cache file cannot be rewritten in place but can be replaced by a rename in its folder.
+ const f=fixture();stop(f,child(f,'a',2.5));const c=child(f,'b',1);
+ assert.equal(denied(hook(f,c.payload)),false);chmodSync(cacheFile(f),0o444);
+ usage(c.path,7,'next');assert.equal(denied(hook(f,c.payload)),true);
+ assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).stopped,true);
+ assert.deepEqual(readdirSync(f.d).filter(n=>n.startsWith('.pending-budget-')&&!n.endsWith('.json')),[]);
 });
 test('streaming repeated IDs take max, partial last lines wait; existing key is not double counted',()=>{
  const f=fixture();const c=child(f,'a',2);stop(f,c);
