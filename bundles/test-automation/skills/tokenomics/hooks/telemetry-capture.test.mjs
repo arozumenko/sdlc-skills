@@ -349,6 +349,34 @@ test('meterSession: per-file dollars join on the file stem, with the folder shap
   assert.deepEqual(r.perFileUsd, [1, 0.5, 2], 'each staged file gets ITS OWN dollar, in order');
 });
 
+// The default metering path downloads its helper through npx inside a hook.
+// `ccusage@latest` let a different program run on every capture — the default
+// must name ONE exact version. A fake `npx` first on PATH records what the
+// hook would have run; nothing is fetched.
+test('meterSession: the default npx fetch names one exact pinned ccusage version, never @latest', async () => {
+  const { meterSession, CCUSAGE_VERSION } = await import('./telemetry-capture.mjs');
+  assert.match(String(CCUSAGE_VERSION), /^\d+\.\d+\.\d+$/, 'an exact version — no tag, no range');
+  const dir = tmp();
+  const file = join(dir, 'sess-1.jsonl');
+  writeFileSync(file, '');
+  const payload = JSON.stringify({ session: [{ sessionId: 'sess-1', totalCost: 1 }] });
+  const double = (name) => {
+    const argsFile = join(dir, `${name}.args`);
+    writeFileSync(join(dir, name), `#!/bin/sh\nprintf '%s\\n' "$@" > '${argsFile}'\ncat <<'EOF'\n${payload}\nEOF\n`, { mode: 0o755 });
+    return () => readFileSync(argsFile, 'utf8').trim().split('\n');
+  };
+  const npxArgs = double('npx');
+  const r = meterSession([file], { env: { PATH: `${dir}:/usr/bin:/bin` } });
+  assert.equal(r.totalUsd, 1, 'the default path ran the npx on PATH');
+  assert.deepEqual(npxArgs(), ['--yes', `ccusage@${CCUSAGE_VERSION}`, 'claude', 'session', '--json', '--offline']);
+  assert.ok(!npxArgs().join(' ').includes('latest'));
+  // the override still bypasses npx: the named binary is run directly
+  const binArgs = double('my-ccusage');
+  const o = meterSession([file], { env: { PATH: '/usr/bin:/bin', TOKENOMICS_CCUSAGE_BIN: join(dir, 'my-ccusage') } });
+  assert.equal(o.totalUsd, 1);
+  assert.deepEqual(binArgs(), ['claude', 'session', '--json', '--offline']);
+});
+
 // A Workflow run spawns its agents through the workflow runtime, so the parent
 // transcript holds ZERO Agent tool_use blocks — counting those reported
 // `dispatches: 0` for a whole batch (found on a live workflow session).

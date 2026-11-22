@@ -174,7 +174,9 @@ specific patterns above instead.)
 - **Several batches in one session?** Handled — each batch gets its share,
   nothing double-counted, the report says when a session was shared.
 - **Where do dollars come from?** Claude: ccusage metering (live model prices
-  applied to each request *record* — exact model + cache split). Copilot: its
+  applied to each request *record* — exact model + cache split; fetched via
+  npx at one pinned version, `CCUSAGE_VERSION` in `hooks/telemetry-capture.mjs`,
+  or your own binary via `TOKENOMICS_CCUSAGE_BIN`). Copilot: its
   billed credits × the published $0.01. Both are real. What we refuse:
   guessing dollars from token *totals* when no record/billed figure exists —
   that number looks plausible and quietly corrupts every comparison.

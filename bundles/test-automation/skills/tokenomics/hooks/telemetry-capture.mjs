@@ -33,9 +33,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
-import { join, basename, dirname, sep } from 'node:path';
+import { join, basename, dirname, sep, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 const LEDGER_VERSION = 1;
 const IDLE_GAP_MS = 30 * 60 * 1000;   // same active-time rule as efficiency-audit
@@ -44,6 +45,16 @@ const PROMPT_MAX_COUNT = 100;
 const LIVE_GRACE_MS = 2 * 60 * 1000;  // a transcript touched this recently is likely still running
 const RECAPTURE_MARGIN_MS = 5 * 60 * 1000; // source-file growth beyond the recorded end that means "the session continued"
 export const USD_PER_CREDIT = 0.01;   // GitHub's published AI-credit conversion
+
+// The ccusage release the default metering path fetches through npx (see
+// meterSession). PINNED to one exact version on purpose: with `@latest` a
+// different program could run on every capture, inside a hook, with nobody
+// having looked at it. To bump: read the new release's changelog
+// (`npm view ccusage version` shows the newest), set that exact version here
+// — never a tag or a range — then run this file's tests and one real capture
+// and check the line still carries `costSource: ccusage-metered`.
+// TOKENOMICS_CCUSAGE_BIN skips the npx fetch entirely (a ccusage you installed).
+export const CCUSAGE_VERSION = '20.0.51';
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
@@ -565,10 +576,11 @@ export function meterSession(files, { env = process.env } = {}) {
       linkOrCopy(f, join(proj, basename(f)));
     }
     // TOKENOMICS_CCUSAGE_BIN: an explicit binary (a ccusage on PATH, or a test
-    // double). Default stays the npx fetch, so nothing needs installing.
+    // double). Default stays the npx fetch, so nothing needs installing — of
+    // the one pinned version (CCUSAGE_VERSION), never `@latest`.
     const bin = env.TOKENOMICS_CCUSAGE_BIN || 'npx';
     const args = bin === 'npx'
-      ? ['--yes', 'ccusage@latest', 'claude', 'session', '--json', '--offline']
+      ? ['--yes', `ccusage@${CCUSAGE_VERSION}`, 'claude', 'session', '--json', '--offline']
       : ['claude', 'session', '--json', '--offline'];
     const out = execFileSync(bin, args, {
       env: { ...env, CLAUDE_CONFIG_DIR: stage },
@@ -1455,6 +1467,127 @@ export async function renderLiveReport(repo, sessionId, env = process.env) {
   } catch { return null; }
 }
 
+// Longer than one whole sync can take with every git call at its timeout
+// (about 3.5 minutes). A lock older than this LOOKS abandoned — but age alone
+// cannot prove its holder is dead (a sleeping machine, a suspended process),
+// so it is reported, never taken over.
+const SYNC_LOCK_OLD_MS = 10 * 60 * 1000;
+
+/**
+ * One advisory lock around a whole telemetry sync (check → add → commit →
+ * push → fetch → merge), shared by syncTelemetry and the installer's --pull.
+ * Without it two captures interleave: A's merge stops with a conflict, and B
+ * stages and commits the conflict markers before A aborts.
+ *
+ * An exclusive mkdir inside the telemetry git dir (never in the tree, never
+ * staged), holding a random owner token. Returns `{ lock, release, abandoned }`:
+ * `release` is null when the lock is held by someone else — the caller skips,
+ * and what it captured stays in the working tree for the next sync.
+ * `abandoned` says the held lock is older than SYNC_LOCK_OLD_MS; it is still
+ * held (no takeover: two runs "replacing" the same old lock would end up
+ * both inside), the caller only tells the user where it is.
+ * `release()` removes the lock only while it still holds THIS run's token, so
+ * a run that outlived a by-hand removal cannot delete its successor's lock.
+ * `git(args)` runs git inside `dir` and throws on a non-zero exit. The third
+ * argument only exists so tests can make token generation or the owner-file
+ * write fail.
+ */
+export function acquireSyncLock(dir, git, { newToken = () => randomBytes(16).toString('hex'), writeOwner = writeFileSync } = {}) {
+  const lock = join(resolve(dir, git(['rev-parse', '--git-dir']).trim()), 'tokenomics-sync.lock');
+  // Everything that can fail and needs no lock happens BEFORE the mkdir: a
+  // throw between creating the directory and returning `release` would leave
+  // a lock nobody can release.
+  const token = newToken();
+  try { mkdirSync(lock); } catch {
+    let abandoned = false;
+    try { abandoned = Date.now() - statSync(lock).mtimeMs > SYNC_LOCK_OLD_MS; } catch { /* released just now — the next capture syncs */ }
+    return { lock, release: null, abandoned };
+  }
+  const owner = join(lock, 'owner');
+  try { writeOwner(owner, token); } catch (err) {
+    // Created a moment ago by this run — nobody else can hold it. Remove it
+    // before the caller sees the error, or it would stay forever.
+    try { rmSync(lock, { recursive: true, force: true }); } catch { /* fine */ }
+    throw err;
+  }
+  const release = () => {
+    try { if (readFileSync(owner, 'utf8') === token) rmSync(lock, { recursive: true, force: true }); } catch { /* gone, or not ours */ }
+  };
+  return { lock, release, abandoned: false };
+}
+
+/**
+ * A merge that is open when a sync starts is NOT ours — a person may be
+ * resolving it by hand, and a file they already resolved and staged is no
+ * longer even listed as unmerged. The sync must neither stage it (`git add
+ * -A` would commit the conflict markers) nor abort it (that would discard
+ * their work): the caller skips and leaves index and working tree alone.
+ */
+export function hasUnfinishedMerge(git) {
+  try { git(['rev-parse', '-q', '--verify', 'MERGE_HEAD']); return true; } catch { /* no merge in progress */ }
+  return git(['ls-files', '-u']).trim() !== '';
+}
+
+/**
+ * Would merging FETCH_HEAD into HEAD conflict? Asked WITHOUT touching the
+ * index or the working tree: `git merge-tree --write-tree` (git 2.38+) does
+ * the merge in memory. Its documented exit status: 0 = clean, 1 = conflicts,
+ * anything else = it could not complete. Older git has no such mode — there
+ * `--write-tree` is a usage error (129), or is taken for a revision name —
+ * so the version is checked first. Returns 'clean' | 'conflict' |
+ * 'unsupported' | 'error'.
+ */
+function dryRunMerge(git) {
+  let version = null;
+  try { version = /(\d+)\.(\d+)/.exec(git(['version'])); } catch { /* treated as unsupported */ }
+  if (!version || Number(version[1]) < 2 || (Number(version[1]) === 2 && Number(version[2]) < 38)) return 'unsupported';
+  try {
+    git(['merge-tree', '--write-tree', '--no-messages', 'HEAD', 'FETCH_HEAD']);
+    return 'clean';
+  } catch (err) {
+    if (err?.status === 1) return 'conflict';
+    return err?.status === 129 ? 'unsupported' : 'error';
+  }
+}
+
+/**
+ * Merge the fetched remote branch (FETCH_HEAD) into the local one — without
+ * ever STARTING a merge that will conflict. A started merge that stops has to
+ * be aborted, and the abort resets the conflicted files: a line another
+ * process appended to one of them in that moment (captures append without
+ * this sync's lock) would be gone. So the conflict is found with a dry run
+ * first (dryRunMerge), and then nothing is touched at all.
+ *
+ *   'merged'       the merge commit exists
+ *   'conflict'     the dry run found conflicts — no merge was started, index
+ *                  and working tree are exactly as they were
+ *   'not-started'  git refused to start the merge (an uncommitted local
+ *                  change would be overwritten — git checks before it touches
+ *                  anything), or the dry run itself failed: nothing touched,
+ *                  not a conflict state, the next sync tries again
+ *   'aborted'      the real merge started and stopped, and was aborted on the
+ *                  spot, back to the last local commit. Only on git older
+ *                  than 2.38 (no dry run — there the lost-append window
+ *                  above still exists), or when the remote branch moved
+ *                  between the dry run and the merge.
+ * `git(args)` runs git inside the telemetry tree and throws on non-zero.
+ */
+export function mergeFetchedTelemetry(git) {
+  const verdict = dryRunMerge(git);
+  if (verdict === 'conflict') return 'conflict';
+  if (verdict === 'error') return 'not-started';
+  try {
+    git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+    return 'merged';
+  } catch {
+    if (!hasUnfinishedMerge(git)) return 'not-started';
+    // OUR merge stopped: it must not stay open — the next sync would find it
+    // and, not knowing whose it is, never sync again.
+    try { git(['merge', '--abort']); } catch { /* reported as aborted; the next sync finds what is left */ }
+    return 'aborted';
+  }
+}
+
 /**
  * Share what was just captured: commit + push INSIDE the telemetry submodule.
  * Its own branch — the main tree never moves. Best-effort by design: no
@@ -1469,7 +1602,19 @@ export function syncTelemetry(repo, env = process.env) {
   if (!existsSync(join(dir, '.git'))) return false;   // not a submodule — nothing to sync
   const git = (args, timeout = 15000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout });
+  let release = null;
   try {
+    const held = acquireSyncLock(dir, git);
+    release = held.release;
+    if (!release) {
+      // Another sync is running — not an error, the next capture catches up.
+      if (held.abandoned) process.stderr.write(`tokenomics: telemetry sync skipped — the sync lock ${held.lock} is more than ${SYNC_LOCK_OLD_MS / 60000} minutes old and looks abandoned; if no sync is running, remove it by hand\n`);
+      return false;
+    }
+    if (hasUnfinishedMerge(git)) {
+      process.stderr.write('tokenomics: telemetry sync skipped — .agents/telemetry has an unfinished merge; left exactly as it is (finish or abort it there), captures stay in the working tree until then\n');
+      return false;
+    }
     git(['add', '-A']);
     const dirty = git(['status', '--porcelain']).trim();
     if (dirty) git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
@@ -1483,12 +1628,18 @@ export function syncTelemetry(repo, env = process.env) {
       // Per-user/per-session files make the merge conflict-free by design.
       try {
         git(['fetch', 'origin', 'telemetry'], 20000);
-        git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
-        git(['push', 'origin', 'HEAD:telemetry'], 20000);
+        const merge = mergeFetchedTelemetry(git);
+        if (merge === 'conflict') {
+          process.stderr.write('tokenomics: telemetry merge with the remote would conflict — not started, nothing was touched; captures stay committed locally, unpushed, until it is resolved by hand\n');
+        } else if (merge === 'aborted') {
+          process.stderr.write('tokenomics: telemetry merge with the remote stopped (conflict) — aborted; captures stay committed locally, unpushed, until it is resolved by hand\n');
+        } else if (merge === 'merged') {
+          git(['push', 'origin', 'HEAD:telemetry'], 20000);
+        } // 'not-started': nothing touched — the next capture moment retries
       } catch { /* offline or a real race — the next capture moment retries */ }
     }
     return true;
-  } catch { return false; }
+  } catch { return false; } finally { if (release) release(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

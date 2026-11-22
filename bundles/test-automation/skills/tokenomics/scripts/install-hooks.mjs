@@ -29,6 +29,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, r
 import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { acquireSyncLock, hasUnfinishedMerge, mergeFetchedTelemetry } from '../hooks/telemetry-capture.mjs';
 
 const MARKER = '_tokenomics';
 const TASK_LABEL = 'tokenomics: telemetry sweep';
@@ -40,9 +41,36 @@ export function skillRootOf(scriptUrl = import.meta.url) {
 
 const posix = (p) => p.split('\\').join('/');
 
+const BAD_JSON = 'TOKENOMICS_BAD_JSON';
+
+/**
+ * Read a JSON file this script is about to rewrite. Missing (or empty — no
+ * key to lose) → the fallback. Present but unparseable → THROW: writing the
+ * fallback back would silently drop every other key the user has in it.
+ * main() turns the throw into a message naming the file and a non-zero exit.
+ */
 function readJson(path, fallback) {
   if (!existsSync(path)) return fallback;
-  try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return fallback; }
+  const text = readFileSync(path, 'utf8');
+  if (!text.trim()) return fallback;
+  try { return JSON.parse(text); } catch (err) {
+    throw Object.assign(
+      new Error(`${path} exists but does not parse as JSON (${err.message}) — left untouched. Fix it (strict JSON: no comments, no trailing commas) and re-run, or make this change by hand.`),
+      { code: BAD_JSON, path },
+    );
+  }
+}
+
+/**
+ * --remove only: a file that does not parse AND holds no trace of ours has
+ * nothing for us to strip — leave it alone rather than refuse the uninstall
+ * (VS Code's own files are routinely JSON-with-comments).
+ */
+function unparseableWithout(path, needle) {
+  if (!existsSync(path)) return false;
+  const text = readFileSync(path, 'utf8');
+  if (!text.trim() || text.includes(needle)) return false;
+  try { JSON.parse(text); return false; } catch { return true; }
 }
 
 function writeJson(path, obj) {
@@ -176,6 +204,7 @@ export function installCopilot(repo, rel, { remove = false } = {}) {
  */
 export function installVsCode(repo, rel, { remove = false } = {}) {
   const file = join(repo, '.vscode', 'tasks.json');
+  if (remove && unparseableWithout(file, TASK_LABEL)) return file;
   const cfg = readJson(file, { version: '2.0.0', tasks: [] });
   const kept = (Array.isArray(cfg.tasks) ? cfg.tasks : []).filter((t) => !t || t.label !== TASK_LABEL);
   if (remove) {
@@ -261,14 +290,21 @@ const OTEL_VSCODE_KEYS = (endpoint) => ({
  */
 export function configureOtel(repo, { endpoint = 'http://localhost:4318', remove = false, local = false } = {}) {
   const touched = [];
-  const cfgPath = seedConfig(repo);
+  // Read all three BEFORE writing anything — the config seed included: one
+  // that does not parse stops the run with nothing applied (readJson throws).
+  const cfgPath = join(repo, '.agents', 'telemetry', 'automation', 'config.json');
+  readJson(cfgPath, {});
+  const sPath = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
+  const settings = readJson(sPath, {});
+  const vPath = join(repo, '.vscode', 'settings.json');
+  const vs = remove && unparseableWithout(vPath, 'github.copilot.chat.otel.') ? null : readJson(vPath, {});
+
+  seedConfig(repo);
   const cfg = readJson(cfgPath, {});
   cfg.otel = remove ? { enabled: false } : { enabled: true, endpoint };
   writeJson(cfgPath, cfg);
   touched.push(cfgPath);
 
-  const sPath = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
-  const settings = readJson(sPath, {});
   settings.env = settings.env && typeof settings.env === 'object' ? settings.env : {};
   for (const [k, v] of Object.entries(OTEL_CLAUDE_ENV(endpoint))) {
     if (remove) delete settings.env[k]; else settings.env[k] = v;
@@ -277,8 +313,7 @@ export function configureOtel(repo, { endpoint = 'http://localhost:4318', remove
   writeJson(sPath, settings);
   touched.push(sPath);
 
-  const vPath = join(repo, '.vscode', 'settings.json');
-  const vs = readJson(vPath, {});
+  if (!vs) return touched; // --otel-remove: unparseable, none of our keys in it — nothing to strip
   for (const [k, v] of Object.entries(OTEL_VSCODE_KEYS(endpoint))) {
     if (remove) delete vs[k]; else vs[k] = v;
   }
@@ -473,19 +508,39 @@ export function pullTelemetry(repo) {
   if (!existsSync(join(dir, '.git'))) return { status: 'no-submodule' };
   const git = (args, timeout = 20000) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout });
+  // Same lock and same merge rule as the capture sync (telemetry-capture.mjs):
+  // one sync at a time; a merge that was already open is not ours and is left
+  // exactly as it is; a merge that would conflict is found by a dry run and
+  // never started — conflict markers are never committed into shared files.
+  let release = null;
   try {
+    const held = acquireSyncLock(dir, git);
+    release = held.release;
+    if (!release) return { status: 'busy', lock: held.lock, abandoned: held.abandoned };
+    if (hasUnfinishedMerge(git)) {
+      return { status: 'failed', error: 'an unfinished merge is open in .agents/telemetry — left exactly as it is; finish or abort it there, then pull again' };
+    }
     git(['add', '-A']);
     if (git(['status', '--porcelain']).trim()) {
       git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'commit', '-m', 'telemetry: capture']);
     }
     if (git(['branch', '--show-current']).trim() !== 'telemetry') git(['checkout', '-B', 'telemetry']);
-    git(['fetch', 'origin', 'telemetry']);
-    git(['-c', 'user.email=telemetry@local', '-c', 'user.name=telemetry', 'merge', '--no-edit', 'FETCH_HEAD']);
+    try { git(['fetch', 'origin', 'telemetry']); } catch {
+      return { status: 'failed', error: 'could not fetch the remote telemetry branch — offline, or no telemetry branch on the remote yet' };
+    }
+    const merge = mergeFetchedTelemetry(git);
+    if (merge !== 'merged') {
+      return { status: 'failed', error: {
+        conflict: 'merge conflict with the remote telemetry branch — merge not started, nothing was touched; local captures stay committed and unpushed; resolve it by hand in .agents/telemetry',
+        aborted: 'merge conflict with the remote telemetry branch — merge aborted, local captures stay committed and unpushed; resolve it by hand in .agents/telemetry',
+        'not-started': 'the merge could not start — a telemetry file changed while pulling, or git could not test the merge; nothing was touched, run --pull again',
+      }[merge] };
+    }
     try { git(['push', 'origin', 'HEAD:telemetry']); } catch { /* offline push-back — next sync retries */ }
     return { status: 'pulled' };
   } catch (err) {
     return { status: 'failed', error: String(err?.message ?? err).split('\n')[0] };
-  }
+  } finally { if (release) release(); }
 }
 
 /**
@@ -533,6 +588,30 @@ export function installGitignore(repo, { remove = false } = {}) {
   return file;
 }
 
+/**
+ * Every JSON file a default install / --remove will rewrite or build on is
+ * read BEFORE the first write: one that exists but does not parse stops the
+ * whole run (readJson throws, naming it) with nothing changed anywhere — not
+ * after the hooks of another host are already wired or removed.
+ * The telemetry config is never rewritten by an install, but the capture hook
+ * falls back to defaults when it cannot parse it, so wiring capture on top of
+ * a broken one would silently ignore the team's settings.
+ */
+function preflightJson(repo, { host, local, remove }) {
+  if (host === 'all' || host === 'claude') readJson(join(repo, '.claude', local ? 'settings.local.json' : 'settings.json'), {});
+  if (host === 'vscode' || (remove && host === 'all')) {
+    const tasks = join(repo, '.vscode', 'tasks.json');
+    if (!(remove && unparseableWithout(tasks, TASK_LABEL))) readJson(tasks, {});
+  }
+  if (!remove) {
+    const cfg = join(repo, '.agents', 'telemetry', 'automation', 'config.json');
+    // A flat-era config at the telemetry root only matters when this run will
+    // migrate it INTO automation/. With a config already there, the migration
+    // keeps both and readers use the newer one — the old file is not ours to judge.
+    readJson(existsSync(cfg) ? cfg : join(repo, '.agents', 'telemetry', 'config.json'), {});
+  }
+}
+
 /** Seed the telemetry dir + default config (never overwrites an existing one). */
 export function seedConfig(repo) {
   const dir = join(repo, '.agents', 'telemetry', 'automation');
@@ -560,7 +639,8 @@ export async function doctor(repo, { fix = false } = {}) {
   };
   process.stderr.write(`tokenomics doctor — ${repo}\n`);
 
-  const readJ = (p) => readJson(p, {});
+  // Read-only here, so a file that does not parse is just "nothing wired".
+  const readJ = (p) => { try { return readJson(p, {}); } catch { return {}; } };
   const claudeSettings = ['settings.json', 'settings.local.json'].map((f) => readJ(join(repo, '.claude', f)).hooks ?? {});
   const claudeHas = (event) => claudeSettings.some((h) => (h[event] ?? []).some((e) => e && e[MARKER]));
   const claudeWired = claudeHas('SessionEnd') || claudeHas('SessionStart');
@@ -717,16 +797,28 @@ export async function main(argv = process.argv.slice(2)) {
     const note = {
       pulled: 'telemetry pulled — the team\'s pushes are merged in; reports now see everyone',
       'no-submodule': 'no telemetry submodule here — nothing to pull (plain-dir mode is local-only)',
-      failed: `pull failed (${r.error}) — offline, or no telemetry branch on the remote yet`,
+      busy: r.abandoned
+        ? `the telemetry sync lock ${r.lock} is more than 10 minutes old and looks abandoned — nothing pulled; if no sync is running, remove it by hand and pull again`
+        : 'another telemetry sync is running here — nothing pulled; run --pull again in a moment',
+      failed: `pull failed — ${r.error}`,
     }[r.status];
     process.stderr.write(`tokenomics: ${note}\n`);
-    return r.status === 'failed' ? 1 : 0;
+    return r.status === 'failed' || r.status === 'busy' ? 1 : 0;
   }
+
+  // A user-owned JSON file that exists but does not parse stops the run:
+  // the file is named, the exit is non-zero, nothing is written to it.
+  const refuse = (err) => {
+    if (err?.code !== BAD_JSON) throw err;
+    process.stderr.write(`tokenomics: ${err.message}\n`);
+    return 1;
+  };
 
   if (argv.includes('--otel') || argv.includes('--otel-remove')) {
     const off = argv.includes('--otel-remove');
     const endpoint = arg('--endpoint') || 'http://localhost:4318';
-    const touched = configureOtel(repo, { endpoint, remove: off, local });
+    let touched;
+    try { touched = configureOtel(repo, { endpoint, remove: off, local }); } catch (err) { return refuse(err); }
     process.stderr.write(`tokenomics: OTel ${off ? 'disabled' : `enabled → ${endpoint}`}\n${touched.map((f) => `  ${relative(repo, f)}`).join('\n')}\n`);
     if (!off) {
       process.stderr.write('for STANDALONE Copilot CLI terminals also export (shell profile):\n'
@@ -746,11 +838,14 @@ export async function main(argv = process.argv.slice(2)) {
 
   const host = arg('--host') || 'all';
   const touched = [];
-  if (host === 'all' || host === 'claude') touched.push(installClaude(repo, rel, { local, remove }));
-  if (host === 'all' || host === 'copilot') touched.push(installCopilot(repo, rel, { remove }));
-  // vscode is opt-in only (see installVsCode) — but --remove still strips it
-  // from `all`, so uninstalling never leaves our task behind.
-  if (host === 'vscode' || (remove && host === 'all')) touched.push(installVsCode(repo, rel, { remove }));
+  try {
+    preflightJson(repo, { host, local, remove });
+    if (host === 'all' || host === 'claude') touched.push(installClaude(repo, rel, { local, remove }));
+    if (host === 'all' || host === 'copilot') touched.push(installCopilot(repo, rel, { remove }));
+    // vscode is opt-in only (see installVsCode) — but --remove still strips it
+    // from `all`, so uninstalling never leaves our task behind.
+    if (host === 'vscode' || (remove && host === 'all')) touched.push(installVsCode(repo, rel, { remove }));
+  } catch (err) { return refuse(err); }
   // Always: without it, the transient files this skill writes would block the
   // pipeline's gate (dirty tree) the first time a batch runs.
   touched.push(installGitignore(repo, { remove }));
