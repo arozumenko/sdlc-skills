@@ -23,7 +23,7 @@ The first tagged version. Install it with `npx github:arozumenko/sdlc-skills#v0.
   it is identical to a copy this installer ships. Commit first, or pass `--force`, which replaces without a backup.
   An item git cannot restore (no git, or an ignored path) is copied to a backup folder and then replaced. Two
   exceptions: a symbolic link there is kept, unless it is the link a `--symlink` install made into the
-  installer's cache, which is re-linked; and content identical to a copy this installer ships is replaced
+  installer's cache, which is replaced; and content identical to a copy this installer ships is replaced
   without a backup.
   Seeded folders are create-only: files are added, never removed or overwritten.
 - The installer refuses to run with the home directory or the package itself as the project root (#127).
