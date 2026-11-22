@@ -213,3 +213,47 @@ test('the denial names a guard threshold, not a cap or a limit',()=>{
  const f=fixture();stop(f,child(f,'a',9.01));const r=hook(f,pre());
  assert.equal(r.hookSpecificOutput.permissionDecisionReason,'T: task cost USD 9.01 exceeds the budget guard threshold USD 9');
 });
+const unavailable=f=>existsSync(f.d)?readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')).flatMap(n=>readFileSync(join(f.d,n),'utf8').split('\n').filter(l=>l.includes('budget-check-unavailable'))).length:0;
+const breakLedger=f=>writeFileSync(join(f.d,'events-broken.jsonl'),'{not json\n');
+test('a call the hook does not budget never reads the events ledger; a budgeted one still reports a ledger it cannot read',()=>{
+ // No open plan.
+ let f=fixture();f.run.status='closed';f.run.updated_at='2026-11-19T00:00:00Z';saveRun(f.repo,f.run);breakLedger(f);
+ assert.deepEqual(hook(f,child(f,'a',100).payload),{});assert.deepEqual(hook(f,pre()),{});assert.equal(unavailable(f),0,'no open plan');
+ // A session bound to no plan.
+ f=fixture();rmSync(sessionPath(f.repo,'claude','s'));breakLedger(f);
+ assert.deepEqual(hook(f,child(f,'a',100).payload),{});assert.equal(unavailable(f),0,'unbound session');
+ // A role outside the roster, a task in hours, a task without an estimate, a description that names no task.
+ f=fixture();breakLedger(f);const other=child(f,'r',100);writeFileSync(other.path.replace('.jsonl','.meta.json'),JSON.stringify({description:'Build T',agentType:'not-installed',toolUseId:'tool-r'}));
+ assert.deepEqual(hook(f,{...other.payload,agent_type:'not-installed'}),{});
+ delete f.run.items.find(i=>i.ref==='U').estimate;saveRun(f.repo,f.run);
+ for(const ref of ['H','U','unknown']) {assert.deepEqual(hook(f,child(f,`a-${ref}`,100,ref).payload),{});assert.deepEqual(hook(f,pre(ref)),{});}
+ assert.equal(unavailable(f),0,'unbudgeted calls');
+ // The same broken ledger and a budgeted task: allowed, and the reason is on record.
+ assert.deepEqual(hook(f,child(f,'b',100).payload),{});assert.equal(unavailable(f),1,'budgeted call');
+});
+test('a subagent the hook does not budget is evaluated once: later calls need neither its transcript nor its metadata',()=>{
+ const f=fixture(),c=child(f,'a',100,'H');
+ assert.deepEqual(hook(f,c.payload),{});
+ const state=JSON.parse(readFileSync(cacheFile(f),'utf8'));assert.equal(state.unbudgeted,true);assert.equal(state.run,R);
+ rmSync(c.path);rmSync(c.path.replace('.jsonl','.meta.json'));
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(unavailable(f),0,'no re-evaluation, so nothing to fail on');
+ assert.equal(budgets(f).length,0);
+});
+test('a plan that changes after a subagent was found unbudgeted is evaluated again, and a stop is enforced',()=>{
+ const f=fixture(),c=child(f,'a',100,'H');
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,true);
+ f.run.items.find(i=>i.ref==='H').estimate=est;f.run.version=2;saveRun(f.repo,f.run);
+ assert.equal(denied(hook(f,c.payload)),true);assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,undefined);
+ assert.equal(denied(hook(f,c.payload)),true);
+});
+test('an unbudgeted verdict is not kept while the subagent has no first message yet',()=>{
+ const f=fixture(),c=child(f,'a',0,'unknown');
+ writeFileSync(c.path,'');writeFileSync(c.path.replace('.jsonl','.meta.json'),JSON.stringify({description:'',agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),false,'nothing cached');
+ writeFileSync(c.path,JSON.stringify({type:'user',timestamp:'2026-11-20T10:00:00Z',message:{content:'Build T'}})+'\n');usage(c.path,100,'a');
+ assert.equal(denied(hook(f,c.payload)),true,'the task named by the first message is checked');
+});
+test('SubagentStop removes the cache of an unbudgeted subagent too',()=>{
+ const f=fixture(),c=child(f,'a',1,'H');hook(f,c.payload);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),true);
+ stop(f,c);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),false);
+});

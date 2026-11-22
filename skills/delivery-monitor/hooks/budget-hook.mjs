@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 // subagent's own calls can concern a budget, so the engine (the dispatch hook and scripts/lib) is loaded after that is known.
 // Run as the hook, the entry reads the payload first and loads the engine only for such a call. Imported as a module, the
 // engine is loaded at once, so `handleBudget` is ready and synchronous for its caller.
-let bindByBranch, diagnose, findChildTranscript, resolveRefs, sessionRun, rosterOf, budgetedItem, budgetInputs, canonicalBudgetItem, recordBudget,
+let bindByBranch, diagnose, findChildTranscript, resolveRefs, sessionRun, rosterOf, budgetedItem, budgetInputs, budgetRuns, canonicalBudgetItem, recordBudget,
   deliveryDir, ownerRepo, sha256, whoAmI, nowIso, taskCosts, taskKey, liveTaskCost, priorTaskCost, incrementalUsage;
 async function loadEngine() {
   ({ bindByBranch, diagnose, findChildTranscript, resolveRefs, sessionRun, rosterOf } = await import('./dispatch-hook.mjs'));
-  ({ budgetedItem, budgetInputs, canonicalBudgetItem, recordBudget } = await import('../scripts/lib/budget.mjs'));
+  ({ budgetedItem, budgetInputs, budgetRuns, canonicalBudgetItem, recordBudget } = await import('../scripts/lib/budget.mjs'));
   ({ deliveryDir, ownerRepo, sha256, whoAmI, nowIso } = await import('../scripts/lib/paths.mjs'));
   ({ taskCosts, taskKey, liveTaskCost, priorTaskCost } = await import('../scripts/lib/task-costs.mjs'));
   ({ incrementalUsage } = await import('../scripts/lib/transcript-usage.mjs'));
@@ -27,37 +27,55 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
   let slug;
   try {
     repo ??= ownerRepo(payload, process.env); slug = whoAmI(repo).slug;
-    const inputs = budgetInputs(repo), { runs, profile, prices } = inputs;
+    const runs = budgetRuns(repo);
     if (!runs.some(r => r.status === 'open')) return {};
     const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now, slug);
     if (!run) return {};
+    // The events ledger, the profile and the prices are read only for a call that is budgeted: every return above and
+    // every "not budgeted" return below costs no ledger read. A budgeted call still fails open, on record, when one of
+    // them cannot be read.
+    let loaded; const inputs = () => loaded ??= budgetInputs(repo, { runs });
     let item, dispatchKey, cost, state = null, cache = null;
+    // A rename replaces the cache whole, so a reader never finds it half written and two writers cannot interleave
+    // (parallel tool calls of one subagent run this hook at the same time).
+    const writeCache = (value) => { const tmp = `${cache}.${process.pid}.tmp`; try { writeFileSync(tmp, JSON.stringify(value)); renameSync(tmp, cache); } catch (e) { rmSync(tmp, { force: true }); throw e; } };
+    // The plan as it is now. An "unbudgeted" verdict holds only for this exact plan: a re-cut, a new estimate or a
+    // refreshed roster changes the mark and the subagent is evaluated again.
+    const planMark = sha256(JSON.stringify(run));
     if (payload.agent_id) {
       dispatchKey = `claude:${payload.session_id}:${payload.agent_id}`;
       cache = join(deliveryDir(repo), `.pending-budget-${sha256(dispatchKey)}.json`);
       // A cache that does not parse (cut short by a crash, or written by a version that rewrote it in place) counts as
       // absent: the dispatch is evaluated again from the ledger and its live usage, so a stop is enforced again.
       try { state = JSON.parse(readFileSync(cache, 'utf8')); } catch (e) { if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; }
+      if (state?.unbudgeted) {
+        if (state.v === 1 && state.dispatchKey === dispatchKey && state.run === run.run && state.plan === planMark) return {};
+        state = null;
+      }
+      // Remembers that this subagent is not budgeted, so its later calls stop at the line above. Kept only once the
+      // evidence is complete; a failed write is harmless, the next call evaluates again.
+      const unbudgeted = (complete = true) => { if (complete) try { writeCache({ v: 1, dispatchKey, run: run.run, plan: planMark, unbudgeted: true }); } catch { /* evaluated again next call */ } return {}; };
       const child = findChildTranscript(payload);
       if (!child) throw new Error('child transcript unavailable');
       if (!state) {
         const meta = JSON.parse(readFileSync(child.metaPath, 'utf8'));
         if (typeof meta.toolUseId !== 'string' || !meta.toolUseId) throw new Error('dispatch metadata toolUseId unavailable');
         const role = meta.agentType ?? payload.agent_type;
-        if (role && !rosterOf(run).has(role)) return {};
+        if (role && !rosterOf(run).has(role)) return unbudgeted();
         const live = incrementalUsage(child.path);
         const match = resolveRefs(run, { description: meta.description ?? '', firstUserText: live.cursor.firstUserText, role });
         item = match.items.length === 1 && match.how !== 'role' ? match.items[0] : null;
-        if (!budgetedItem(item)) return {};
+        // Without its first message the subagent may still name a task on a later call.
+        if (!budgetedItem(item)) return unbudgeted(Boolean(live.cursor.firstUserText));
         state = { v: 1, dispatchKey, toolUseId: meta.toolUseId, run: run.run, item_id: item.item_id, computed_at: nowIso(now),
-          prior: priorTaskCost(taskCosts(repo, { resolved: inputs.resolved }), run, item, dispatchKey), cursor: live.cursor, stopped: false };
-        cost = liveTaskCost(state.prior, live.usage, prices);
+          prior: priorTaskCost(taskCosts(repo, { resolved: inputs().resolved }), run, item, dispatchKey), cursor: live.cursor, stopped: false };
+        cost = liveTaskCost(state.prior, live.usage, inputs().prices);
       } else {
         if (state.v !== 1 || state.dispatchKey !== dispatchKey || state.run !== run.run) throw new Error('invalid budget cache');
         item = run.items.find(i => i.item_id === canonicalBudgetItem(run, state.item_id));
         if (!budgetedItem(item)) return {};
         const live = incrementalUsage(child.path, state.cursor); state.cursor = live.cursor;
-        cost = liveTaskCost(state.prior, live.usage, prices);
+        cost = liveTaskCost(state.prior, live.usage, inputs().prices);
       }
     } else {
       const input = payload.tool_input ?? {}, role = input.subagent_type;
@@ -66,16 +84,13 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
       item = match.items.length === 1 && match.how !== 'role' ? match.items[0] : null;
       if (!budgetedItem(item)) return {};
       dispatchKey = `claude:${payload.session_id}:${payload.tool_use_id ?? 'pre-dispatch'}`;
-      cost = taskCosts(repo, { resolved: inputs.resolved }).tasks.get(taskKey(run.run, item.item_id))?.cost_usd ?? 0;
+      cost = taskCosts(repo, { resolved: inputs().resolved }).tasks.get(taskKey(run.run, item.item_id))?.cost_usd ?? 0;
     }
     if (!Number.isFinite(cost) || cost < 0) throw new Error('invalid task cost');
-    const result = recordBudget(repo, { run, item, cost, dispatchKey, source: state ? 'in-run' : 'pre-dispatch', profile, session: payload.session_id, agentId: payload.agent_id, now });
+    const result = recordBudget(repo, { run, item, cost, dispatchKey, source: state ? 'in-run' : 'pre-dispatch', profile: inputs().profile, session: payload.session_id, agentId: payload.agent_id, now });
     if (state) {
       state.stopped ||= result.stopped; state.reason ??= result.stopped ? result.reason : null;
-      // Parallel tool calls of one subagent run this hook at the same time. A rename replaces the file whole, so a reader
-      // never finds it half written and two writers cannot interleave.
-      const tmp = `${cache}.${process.pid}.tmp`;
-      try { writeFileSync(tmp, JSON.stringify(state)); renameSync(tmp, cache); } catch (e) { rmSync(tmp, { force: true }); throw e; }
+      writeCache(state);
     }
     if (result.stopped || state?.stopped) return decision(state?.reason ?? result.reason);
     if (state && ['Agent', 'Task'].includes(payload.tool_name)) return handleBudget({ ...payload, agent_id: null, agent_type: null }, { repo, now });
