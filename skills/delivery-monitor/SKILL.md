@@ -130,6 +130,11 @@ limit. It refuses tool calls when it can show that a task's recorded cost is ove
   usage to the task cost recorded at its first tool call.
 - A refused tool call is not verified on a real host to end all spending. The refused subagent still writes a final message,
   and the orchestrator continues.
+- It judges the task's whole recorded cost, whichever host produced it. A key recorded for another host and attributed to
+  the task (a `codex:` key, for example) counts toward the threshold, although a Codex dispatch is itself never refused.
+- It is not a security control. A subagent's transcript is the evidence for its own live usage, so a subagent that writes
+  usage lines into its transcript raises its own task's cost. That can only refuse later work on that task, and a
+  retraction removes it.
 
 Leave task estimates empty in the plan block so `plan register` fills calibrated
 USD ranges. Keep human effort in the board's `tokenomics.effort_days`. A missing calibration cell is a planning gap;
@@ -161,7 +166,8 @@ current lifetime coverage as dispatch counts and USD (`budgeted`, `all`, `unbudg
 named USD task, outside an open plan, or from Codex is unbudgeted and is never refused. Codex coverage includes only
 keys available to the cost projection; this skill does not capture Codex spend. The project total includes ownerless
 work; a plan's coverage includes work allocated or attributed to that plan. Coverage ignores report window/item filters.
-Transient per-agent cursors are `.pending-budget-*.json` (ignored by the existing transient patterns).
+Transient per-agent cursors are `.pending-budget-*.json` (ignored by the existing transient patterns). Each is replaced
+by a rename, never rewritten in place; one that does not parse is treated as absent and the dispatch is evaluated again.
 
 **Effort calibration (estimate → actual → calibrate).** On Claude Code the dispatch hook prices every finished subagent's tokens
 per model (`references/prices.json`; a project `.agents/telemetry/delivery/prices.json` overrides it) and records the dollar cost
