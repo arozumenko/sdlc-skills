@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Synchronous Claude PreToolUse: pre-dispatch and subagent tool calls. No decision on any unavailable input.
-import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,7 +35,9 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
     if (payload.agent_id) {
       dispatchKey = `claude:${payload.session_id}:${payload.agent_id}`;
       cache = join(deliveryDir(repo), `.pending-budget-${sha256(dispatchKey)}.json`);
-      try { state = JSON.parse(readFileSync(cache, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      // A cache that does not parse (cut short by a crash, or written by a version that rewrote it in place) counts as
+      // absent: the dispatch is evaluated again from the ledger and its live usage, so a stop is enforced again.
+      try { state = JSON.parse(readFileSync(cache, 'utf8')); } catch (e) { if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; }
       const child = findChildTranscript(payload);
       if (!child) throw new Error('child transcript unavailable');
       if (!state) {
@@ -70,7 +72,10 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
     const result = recordBudget(repo, { run, item, cost, dispatchKey, source: state ? 'in-run' : 'pre-dispatch', profile, session: payload.session_id, agentId: payload.agent_id, now });
     if (state) {
       state.stopped ||= result.stopped; state.reason ??= result.stopped ? result.reason : null;
-      writeFileSync(cache, JSON.stringify(state));
+      // Parallel tool calls of one subagent run this hook at the same time. A rename replaces the file whole, so a reader
+      // never finds it half written and two writers cannot interleave.
+      const tmp = `${cache}.${process.pid}.tmp`;
+      try { writeFileSync(tmp, JSON.stringify(state)); renameSync(tmp, cache); } catch (e) { rmSync(tmp, { force: true }); throw e; }
     }
     if (result.stopped || state?.stopped) return decision(state?.reason ?? result.reason);
     if (state && ['Agent', 'Task'].includes(payload.tool_name)) return handleBudget({ ...payload, agent_id: null, agent_type: null }, { repo, now });
