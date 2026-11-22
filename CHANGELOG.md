@@ -21,7 +21,9 @@ The first tagged version. Install it with `npx github:arozumenko/sdlc-skills#v0.
 - `init --update` keeps local work (#131). In a git project, an installed agent or skill that git reports as
   changed is kept and listed under "NOT updated". That includes one that was installed and never committed, unless
   it is identical to a copy this installer ships. Commit first, or pass `--force`, which replaces without a backup.
-  An item git cannot restore (no git, or an ignored path) is copied to a backup folder and then replaced.
+  An item git cannot restore (no git, or an ignored path) is copied to a backup folder and then replaced. Two
+  exceptions: a symbolic link there is kept, and content identical to a copy this installer ships is replaced
+  without a backup.
   Seeded folders are create-only: files are added, never removed or overwritten.
 - The installer refuses to run with the home directory or the package itself as the project root (#127).
 - The hook installers of `delivery-monitor` and `tokenomics` stop with an error on a settings file that does not
@@ -46,7 +48,7 @@ Installer
   own repository: an item inside a nested repository counts as changed and is kept until `--force`.
 - When git cannot restore an item (a project without git, or an ignored path), an update that replaces a changed
   item first copies it to `.sdlc-skills-backup/<date-time>/`. Nothing prunes these folders. `--force` skips the
-  backup.
+  backup. A symbolic link in that position is kept, not replaced.
 - An installed skill includes its tests and fixtures.
 - CI runs the tests on one current Node release. `engines.node` says `>=18`; versions 18 to 22 are not tested.
 
@@ -61,8 +63,9 @@ Telemetry
 - The DORA figures of `delivery-monitor` are task-level proxies, and every spend total covers subagent
   dispatches only.
 - `delivery-monitor` has a role map for three of the five factories. `product-management` and
-  `security-testing` register with `WARN ROSTER-UNMAPPED`: the hooks record no dispatch of their agents and the
-  budget guard does not check them. Record their transitions with the CLI.
+  `security-testing` register with `WARN ROSTER-UNMAPPED`: the dispatch hook records no task transitions for
+  their agents and the budget guard does not check them. Their usage is still captured for spend. Record their
+  transitions with the CLI.
 - `tokenomics` meters cost with one pinned version of `ccusage`, downloaded through `npx` at capture time unless a
   binary is configured. It syncs only where `.agents/telemetry` is an initialised submodule, so a capture in a
   linked git worktree without one stays in that worktree. Its `SKILL.md` lists the limits of the sync lock.
