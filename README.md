@@ -16,7 +16,7 @@ GitHub Copilot CLI, Windsurf, Codex).
 flowchart TB
     subgraph sdlc["sdlc-skills — content + install resolution"]
         direction TB
-        agents[/"factories/<br/>agent + skill content"/]
+        agents[/"bundles/<br/>agent + skill content"/]
         skills[/"orphan skills/<br/>standalone-only content"/]
         registry[("skills.json<br/>catalog: orphan + external")]
         installer(["bin/init.mjs<br/>npx installer"])
@@ -55,8 +55,8 @@ Agents are **self-describing** — each `AGENT.md` carries its own metadata
 (role, group, theme, aliases, skills, model). IDE plugin systems read it at
 install time. Nothing duplicated.
 
-Most agents and skills live inside factories (`factories/<id>/agents/` and
-`factories/<id>/skills/`). The top-level `agents/` and `skills/` directories
+Most agents and skills live inside factories (`bundles/<id>/agents/` and
+`bundles/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
 and twelve skills (`deep-research`, `delivery-monitor`, `gathering-context`,
 `knowledge-curation`, `memory`, `microsoft-365`, `obsidian-vault`,
@@ -148,7 +148,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 
 ```bash
 # A team factory — the whole team in one shot (agents, their skills,
-# per-role stack briefings, and team conventions). See factories/SPEC.md.
+# per-role stack briefings, and team conventions). See bundles/SPEC.md.
 npx github:arozumenko/sdlc-skills init --factory feature-development   # cross-platform delivery: pick python-dev, js-dev, test-automation-engineer, ios-dev, android-dev
 npx github:arozumenko/sdlc-skills init --factory manual-qa     # manual-QA team (live browser testing via Playwright MCP)
 npx github:arozumenko/sdlc-skills init --factory test-automation  # TMS-driven automation pipeline (analyst → implementer → reviewer, led by Tal)
@@ -172,6 +172,16 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 npx github:arozumenko/sdlc-skills init --all --update
 ```
 
+**What `--update` replaces.** An update replaces each installed agent and
+skill with the new version, external skills included. It does not replace an
+item that has uncommitted changes in git: it keeps the item, names it, and
+updates the rest. An item you deleted and did not commit stays deleted.
+Commit or stash your changes and run the update again, or add `--force` to
+replace the item anyway. In a project without git, the installer first copies
+the old item to `.sdlc-skills-backup/<date-time>/`. Files a factory seeded
+(`docs/discovery/`, `.agents/<factory>/knowledge/`) and role briefings are
+never overwritten. See [`MAINTENANCE.md`](MAINTENANCE.md) for the full rules.
+
 **Team factories.** A factory is a named team preset that installs a curated
 set of agents (with their skills), seeds per-role stack briefings into
 `.agents/memory/<role>/`, splices team conventions into `AGENTS.md` /
@@ -187,7 +197,7 @@ ship today:
 | `product-management` | 2 factory-local agents (product-owner, discovery-researcher) | PO discovery pipeline — `product-owner` (Priya) drives intake triage, persona/outcome framing, opportunity-tree mapping, and prioritization end to end; `discovery-researcher` (Sam) is dispatched for stakeholder interviews and evidence verification. Ships 10 factory-local skills and seeds an empty `docs/discovery/` scaffold. |
 | `security-testing` | 3 factory-local agents (`security-lead` (Rasmus), `threat-modeler` (Ilse), `security-reviewer` (Vera)) + 5 factory-local skills (`secure-code-review`, `threat-modeling`, `security-test-planning`, `risk-register`, `security-engagement`) | Threat-led, read-only security testing team — Rasmus runs the engagement and is the only role you talk to, dispatching Ilse for the threat model and Vera for code review. Code-derived STRIDE threat model, evidence-gated secure code review with re-checkable citations, passive security cases for the manual-qa and test-automation bundles, fix verification from a validated test-start snapshot, and a residual-risk register. See [`bundles/security-testing/README.md`](bundles/security-testing/README.md). |
 
-See [`factories/SPEC.md`](factories/SPEC.md) and each factory's `README.md` to
+See [`bundles/SPEC.md`](bundles/SPEC.md) and each factory's `README.md` to
 author your own. (`--bundle` still works as a silent back-compat alias for
 `--factory` — the flag used before this repo's factories rename.)
 
@@ -329,7 +339,7 @@ cloned into your project.
 ### 3. agentskills.io / third-party consumption
 
 Every `SKILL.md` in this repo — the orphans under `skills/<name>/` and the
-factory-owned skills under `factories/<id>/skills/<name>/` — follows the
+factory-owned skills under `bundles/<id>/skills/<name>/` — follows the
 [agentskills.io](https://agentskills.io) spec (`name` + `description`
 frontmatter). Any skill runtime (Vercel, custom frameworks, other IDEs) can
 point directly at a `SKILL.md` directory.
@@ -374,7 +384,7 @@ roles rather than named personas), all driving a running app via Playwright MCP:
 
 ### Skills
 
-Most skills are factory-owned (under `factories/<id>/skills/`). Twelve orphan skills
+Most skills are factory-owned (under `bundles/<id>/skills/`). Twelve orphan skills
 live in the top-level `skills/` dir and are available standalone. The full set
 installable via factories is listed below.
 
@@ -539,7 +549,7 @@ sdlc-skills/
 ├── bin/
 │   ├── init.mjs                # npx installer — resolves + fetches externals
 │   └── validate-factories.mjs    # factory manifest validator (CI + npm run validate:factories)
-├── factories/                    # team presets — one command installs a whole team
+├── bundles/                      # team presets — one command installs a whole team
 │   ├── SPEC.md                 # factory manifest spec
 │   └── <factory-id>/            # feature-development, manual-qa, test-automation, product-management, security-testing
 │       ├── factory.json         # roster, briefings, skillOverlays, seed, instructions
@@ -560,11 +570,11 @@ sdlc-skills/
 
 ## Adding content
 
-1. **New factory agent** → create `factories/<factory-id>/agents/<name>/AGENT.md`
+1. **New factory agent** → create `bundles/<factory-id>/agents/<name>/AGENT.md`
    (with YAML frontmatter: `name`, `description`, `model`, `color`, `group`,
    `theme`, `aliases`, `skills`) and a `SOUL.md`. Declare it in `factory.json`
    under `localAgents`. No separate registry needed.
-2. **New factory skill** → create `factories/<factory-id>/skills/<name>/SKILL.md`
+2. **New factory skill** → create `bundles/<factory-id>/skills/<name>/SKILL.md`
    with agentskills.io frontmatter (`name`, `description`). Declare it in
    `factory.json` under `localSkills`. No `skills.json` entry needed.
 3. **New orphan monorepo skill** (standalone, no factory) → create
@@ -579,7 +589,7 @@ sdlc-skills/
 Every factory ships a `FACTORY.md` catalog descriptor (YAML frontmatter:
 `name`, `description`, `owner`, `authors`, `sdlc_phase`, `support_level`,
 `use_cases`, optional `project_deployments`) — see
-[`factories/SPEC.md`](factories/SPEC.md) for the schema. Any agent or skill
+[`bundles/SPEC.md`](bundles/SPEC.md) for the schema. Any agent or skill
 can opt out of the generated marketplace catalogs with `discoverable: false`
 in its own frontmatter; it still installs normally, it's just not listed.
 

@@ -55,6 +55,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -152,18 +153,63 @@ function listDirs(parent) {
 // content sometimes ships intra-skill symlinks (e.g. twostraws' Swift skills
 // have a `skills/<name>/references → ../../references` symlink to satisfy
 // multiple plugin layouts) — those need to be materialized.
-function copyTreeDereferenced(src, dest, { force = false } = {}) {
-  // Resolve any top-level symlink to its real target.
+//
+// The copy stays inside one allowed root: a symlink whose real target is
+// outside it is skipped with a warning, so a link cannot pull a file from
+// elsewhere on the machine into the project. Callers name the root — the
+// package root for in-repo content, the fetched checkout for an external
+// skill. With no root, it is the tree being copied (for a top-level symlink,
+// the folder that holds the link). A link back to a folder already being
+// copied (a cycle) is skipped too.
+export function copyTreeDereferenced(src, dest, { force = false, root } = {}) {
+  let stat;
+  try { stat = lstatSync(src); } catch { return; }
+  const isLink = stat.isSymbolicLink();
+  const allowed = realpathSync(root ?? (isLink ? dirname(src) : src));
+  // Start from a real path so every folder on the way down is one: the cycle
+  // check compares real paths. A top-level link is resolved, and checked, below.
+  copyTreeWithin(isLink ? src : realpathSync(src), dest, force, allowed, new Set());
+}
+
+function isWithinDir(dir, path) {
+  for (let cur = path; ; cur = dirname(cur)) {
+    if (cur === dir) return true;
+    if (dirname(cur) === cur) return false;
+  }
+}
+
+// What is at `path` itself, without following a link: a symlink counts as
+// present even when its target is gone. undefined when nothing is there.
+function entryAt(path) {
+  try {
+    return lstatSync(path, { throwIfNoEntry: false });
+  } catch {
+    return undefined; // ENOTDIR: a parent is a file
+  }
+}
+
+function copyTreeWithin(src, dest, force, allowed, ancestors) {
   let stat;
   try { stat = lstatSync(src); } catch { return; }
   if (stat.isSymbolicLink()) {
-    return copyTreeDereferenced(realpathSync(src), dest, { force });
+    const real = realpathSync(src);
+    if (!isWithinDir(allowed, real)) {
+      console.error(`  ! skipped symlink ${src} → ${real} (outside ${allowed}; not copied)`);
+      return;
+    }
+    return copyTreeWithin(real, dest, force, allowed, ancestors);
   }
   if (stat.isDirectory()) {
+    if (ancestors.has(src)) {
+      console.error(`  ! skipped symlink back to ${src} (a directory cycle; not copied again)`);
+      return;
+    }
+    ancestors.add(src);
     mkdirSync(dest, { recursive: true });
     for (const entry of readdirSync(src)) {
-      copyTreeDereferenced(join(src, entry), join(dest, entry), { force });
+      copyTreeWithin(join(src, entry), join(dest, entry), force, allowed, ancestors);
     }
+    ancestors.delete(src);
     return;
   }
   if (stat.isFile()) {
@@ -509,11 +555,13 @@ function installBriefings(factory) {
 
 // Seed loose reference files/dirs a factory ships into the project at a fixed
 // path. factory.seed maps a factory-relative source → a project-relative dest.
-// Copied once (IDE-neutral, like briefings); idempotent — an existing dest is
-// left intact unless --update. On --update the dest is removed first (clean
-// replace), so files deleted from the factory don't linger. Used for reference
-// docs agents read at runtime: a subagent's cwd is the project root, so a
-// fixed project path is resolvable.
+// Create-only (IDE-neutral, like briefings): a missing dest is copied in; an
+// existing dest is never removed or overwritten, with or without --update,
+// because seed folders hold the user's own working documents. Files the
+// factory has and the project lacks are still added. Used for reference docs
+// agents read at runtime: a subagent's cwd is the project root, so a fixed
+// project path is resolvable. `update` is accepted for the caller's sake and
+// changes nothing here.
 function installSeed(factory, update) {
   let installed = 0;
   let skipped = 0;
@@ -524,15 +572,18 @@ function installSeed(factory, update) {
       continue;
     }
     const destPath = join(CWD, dest);
-    if (existsSync(destPath) && !update) {
-      const added = seedMissingFiles(srcPath, destPath);
-      console.log(`      — seed ${dest} (exists; use --update)${added ? ` — added ${added} new file(s)` : ""}`);
+    if (entryAt(destPath)) { // a link counts, dangling or not: it is the user's
+      const added = seedMissingFiles(srcPath, destPath, PKG_ROOT);
+      console.log(`      — seed ${dest} (exists; existing files kept)${added ? ` — added ${added} new file(s)` : ""}`);
+      skipped++;
+      continue;
+    }
+    if (seedParentBlocked(destPath)) {
       skipped++;
       continue;
     }
     mkdirSync(dirname(destPath), { recursive: true });
-    if (update && existsSync(destPath)) rmSync(destPath, { recursive: true, force: true });
-    copyTreeDereferenced(srcPath, destPath, { force: true });
+    copyTreeDereferenced(srcPath, destPath, { force: true, root: PKG_ROOT });
     console.log(`      ✓ seed ${dest}`);
     installed++;
   }
@@ -543,18 +594,93 @@ function installSeed(factory, update) {
 // overwrites. A factory can move text out of its instructions into a new seeded
 // doc, and the refreshed instructions point at it, so the doc must arrive even
 // on runs that otherwise leave an existing seed directory alone.
-export function seedMissingFiles(srcPath, destPath) {
-  let added = 0;
-  let st;
-  try { st = statSync(srcPath); } catch { return 0; }
-  if (!st.isDirectory()) {
-    if (existsSync(destPath)) return 0;
-    mkdirSync(dirname(destPath), { recursive: true });
-    copyTreeDereferenced(srcPath, destPath, { force: false });
-    return 1;
+//
+// Source links are checked before they are followed, under the same rules as
+// copyTreeDereferenced: a link that leaves `root` (default: the seed source
+// itself) or points back at a folder already being walked is skipped with a
+// warning. Where the project has a file and the factory a folder, or the
+// reverse, or a file where a parent folder of the destination goes, the
+// project's entry is kept and one line says so.
+export function seedMissingFiles(srcPath, destPath, root) {
+  let stat;
+  try { stat = lstatSync(srcPath); } catch { return 0; }
+  if (seedParentBlocked(destPath)) return 0;
+  const isLink = stat.isSymbolicLink();
+  let allowed, start;
+  try {
+    allowed = realpathSync(root ?? (isLink ? dirname(srcPath) : srcPath));
+    start = isLink ? srcPath : realpathSync(srcPath);
+  } catch { return 0; }
+  return seedMissingWithin(start, destPath, allowed, new Set());
+}
+
+// One line per clash per run: an update can walk the same seed more than once
+// (once for each root context file that carries the factory's block).
+const seedClashesReported = new Set();
+function reportSeedClash(dest, what) {
+  const shown = dest.startsWith(CWD) ? dest.slice(CWD.length + 1) : dest;
+  const line = `      ! seed ${shown}: ${what}`;
+  if (seedClashesReported.has(line)) return;
+  seedClashesReported.add(line);
+  console.log(line);
+}
+
+// True when something other than a folder sits where one of the seed
+// destination's parent folders goes: a regular file, or a link that leads to
+// no folder (dangling, or to a file). Nothing can be seeded there; the entry is
+// the user's and stays. A link to a real folder is a folder.
+function seedParentBlocked(destPath) {
+  for (let dir = dirname(destPath); ; dir = dirname(dir)) {
+    const entry = entryAt(dir);
+    if (entry) {
+      let leadsTo;
+      try { leadsTo = statSync(dir, { throwIfNoEntry: false }); } catch { /* a link loop: no folder */ }
+      if (leadsTo?.isDirectory()) return false;
+      const what = entry.isSymbolicLink() ? "a link that leads to no folder" : "a file";
+      reportSeedClash(destPath, `the project has ${what} where one of its parent folders goes; kept, nothing seeded`);
+      return true;
+    }
+    if (dirname(dir) === dir) return false;
   }
-  for (const name of readdirSync(srcPath)) added += seedMissingFiles(join(srcPath, name), join(destPath, name));
-  return added;
+}
+
+function seedMissingWithin(src, dest, allowed, ancestors) {
+  let stat;
+  try { stat = lstatSync(src); } catch { return 0; }
+  if (stat.isSymbolicLink()) {
+    let real;
+    try { real = realpathSync(src); } catch { return 0; } // dangling link: nothing to seed
+    if (!isWithinDir(allowed, real)) {
+      console.error(`  ! skipped symlink ${src} → ${real} (outside ${allowed}; not copied)`);
+      return 0;
+    }
+    return seedMissingWithin(real, dest, allowed, ancestors);
+  }
+  const have = statSync(dest, { throwIfNoEntry: false });
+  if (!have && lstatSync(dest, { throwIfNoEntry: false })) return 0; // a dangling link of the user's: kept
+  if (stat.isDirectory()) {
+    if (have && !have.isDirectory()) {
+      reportSeedClash(dest, "the project has a file where the factory has a folder; kept");
+      return 0;
+    }
+    if (ancestors.has(src)) {
+      console.error(`  ! skipped symlink back to ${src} (a directory cycle; not copied again)`);
+      return 0;
+    }
+    ancestors.add(src);
+    let added = 0;
+    for (const name of readdirSync(src)) added += seedMissingWithin(join(src, name), join(dest, name), allowed, ancestors);
+    ancestors.delete(src);
+    return added;
+  }
+  if (!stat.isFile()) return 0;
+  if (have) {
+    if (have.isDirectory()) reportSeedClash(dest, "the project has a folder where the factory has a file; kept");
+    return 0;
+  }
+  mkdirSync(dirname(dest), { recursive: true });
+  copyFileSync(src, dest);
+  return 1;
 }
 
 // Splice a factory's instructions.md into the project's root context files
@@ -881,7 +1007,14 @@ function installHooks(factory, targets) {
   }
 }
 
-function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
+// Settings files this run has already merged into. One install can merge the
+// same file more than once (core hooks, then a factory's hooks); only the first
+// merge writes `<file>.bak`, so the backup holds the content the file had
+// before this run, not the installer's own earlier edit. A file the run itself
+// created gets no backup.
+const settingsMergedThisRun = new Set();
+
+export function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
   let settings = {};
   if (existsSync(settingsPath)) {
     const raw = readFileSync(settingsPath, "utf8");
@@ -891,8 +1024,9 @@ function mergeClaudeSettingsHooks(settingsPath, hookSpec, factoryId) {
       console.log(`      ! ${basename(settingsPath)} parse failed; left untouched: ${err.message}`);
       return false;
     }
-    writeFileSync(settingsPath + ".bak", raw); // back up before we touch it
+    if (!settingsMergedThisRun.has(settingsPath)) writeFileSync(settingsPath + ".bak", raw); // back up before we touch it
   }
+  settingsMergedThisRun.add(settingsPath);
   settings.hooks = settings.hooks && typeof settings.hooks === "object" ? settings.hooks : {};
   for (const [event, groups] of Object.entries(hookSpec)) {
     if (!Array.isArray(groups)) continue;
@@ -1147,8 +1281,8 @@ function copyHookScripts(destDir, agentsDir = null) {
 
 // Merge our entries into a version-1 hooks.json (Cursor / SDK shape),
 // replacing only the entries that reference our scripts dir (idempotent) and
-// leaving the user's other hooks intact. Backs up before writing.
-function mergeVersionedHooks(path, spec, markerSubstr) {
+// leaving the user's other hooks intact. Backs up before the run's first write.
+export function mergeVersionedHooks(path, spec, markerSubstr) {
   let cfg = { version: 1, hooks: {} };
   if (existsSync(path)) {
     const raw = readFileSync(path, "utf8");
@@ -1158,10 +1292,11 @@ function mergeVersionedHooks(path, spec, markerSubstr) {
       console.log(`      ! ${basename(path)} parse failed; left untouched: ${err.message}`);
       return false;
     }
-    writeFileSync(path + ".bak", raw);
+    if (!settingsMergedThisRun.has(path)) writeFileSync(path + ".bak", raw); // once per run, see settingsMergedThisRun
     if (!cfg.hooks || typeof cfg.hooks !== "object") cfg.hooks = {};
     if (!cfg.version) cfg.version = 1;
   }
+  settingsMergedThisRun.add(path);
   for (const [event, entries] of Object.entries(spec)) {
     const existing = Array.isArray(cfg.hooks[event]) ? cfg.hooks[event] : [];
     const kept = existing.filter(
@@ -1384,6 +1519,25 @@ export function isBarePathSegment(name) {
   return basename(name) === name;
 }
 
+// True when `dest` is a symlink whose link text leads into the installer's own
+// cache (the folder external skills are cloned into, SDLC_SKILLS_CACHE_DIR
+// included). Only `--symlink` installs make such links, so one is the
+// installer's output whether or not its target still exists: the cache may
+// have been wiped, or the folder may be gone from the fresh checkout. The text
+// is resolved against the link's folder, not with realpath, because the
+// target may be missing.
+function linksIntoCache(dest) {
+  if (!entryAt(dest)?.isSymbolicLink()) return false;
+  const target = resolve(dirname(dest), readlinkSync(dest));
+  const cache = resolve(cacheRoot());
+  let realCache = cache;
+  try { realCache = realpathSync(cache); } catch { /* keep the plain path */ }
+  // Strictly inside: the installer links to a folder in the cache, never to
+  // the cache root, so a link to the root itself is the user's.
+  const inside = (root) => target !== root && isWithinDir(root, target);
+  return inside(cache) || inside(realCache);
+}
+
 function installExternalSkill(entry, targetDir, useSymlink, update) {
   const ref = entry.ref || "main";
   const clone = shallowClone(entry.repo, ref);
@@ -1439,6 +1593,10 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
   const dest = join(skillsDir, skillName);
   const present = existsSync(dest) || lstatSync(dest, { throwIfNoEntry: false });
   if (present && !update) return { status: "exists", name: skillName };
+  // Same replacement rule as in-repo items. The installer's own output is
+  // content identical to the fetched copy, or a link into the cache.
+  if (update && !mayReplaceOnUpdate(dest, `skill  ${skillName}`, () => linksIntoCache(dest) || sameTree(src, dest)))
+    return { status: "exists", name: skillName };
   if (present && update) rmSync(dest, { recursive: true, force: true }); // clear prior symlink or copy
   try {
     if (useSymlink) {
@@ -1452,8 +1610,9 @@ function installExternalSkill(entry, targetDir, useSymlink, update) {
       // upstream skills (e.g. twostraws/Swift-*-Agent-Skill) ship nested
       // relative symlinks — copyTreeDereferenced materializes those into
       // real content so the install survives transport off this machine.
-      copyTreeDereferenced(src, dest, { force: true });
+      copyTreeDereferenced(src, dest, { force: true, root: clone }); // links may reach anywhere in the checkout, not beyond
     }
+    writtenThisRun.add(dest);
     return { status: "installed", name: skillName };
   } catch (err) {
     console.error(`  ! ${useSymlink ? "symlink" : "copy"} ${src} → ${dest} failed: ${err.message}`);
@@ -1541,6 +1700,7 @@ export function parseArgs(argv) {
     if (a === "--all") out.all = true;
     else if (a === "--yes") out.yes = true;
     else if (a === "--update") out.update = true;
+    else if (a === "--force") forceReplace = true; // with --update: replace items that have local changes too
     else if (a === "--symlink") out.symlink = true;
     else if (a === "--interactive" || a === "-i") out.interactive = true;
     // --bundle is a silent back-compat alias for --factory (pre-rename flag
@@ -1591,6 +1751,7 @@ function printHelp() {
     --skills  <a,b,c|all>      Install only these skills (or all)
     --target <claude,cursor,…> Limit IDE targets (default: all detected; unattended runs warn without it, a future version will require it)
     --update                   Overwrite existing installs
+    --force                    With --update: also replace items that have local changes
     --interactive, -i          Menu to pick optional MCP servers (and, for
                                quality-architect, its QA specialists/connectors).
                                Applies to the quality-architect agent and the
@@ -1619,6 +1780,194 @@ function printHelp() {
 // Install logic
 // ---------------------------------------------------------------------------
 
+// Safe update. `--update` replaces an installed agent or skill (in-repo or
+// external), and the installer keeps no record of what it shipped last time,
+// so it cannot tell a user's edit from an old version by itself. Git is the
+// baseline instead:
+//   - destination clean and tracked in git → replace (git history is the backup);
+//   - git reports anything for it (modified, deleted, untracked) → keep it,
+//     say so, and carry on with the other items. That includes a destination
+//     the user deleted and has not committed: it stays deleted;
+//   - git cannot restore it (no git, not a repository, or the path is ignored)
+//     → copy it to BACKUP_DIR first, then replace.
+// Two cases are never local changes: a destination this same run wrote, and
+// content identical to a copy this package ships (the installer's own output
+// from an earlier run, e.g. two factories updated back to back before a
+// commit). `--force` replaces without any check or backup.
+const BACKUP_DIR = ".sdlc-skills-backup"; // top-level and dot-free below: no AI host scans it for skills or agents
+let forceReplace = false; // --force
+const writtenThisRun = new Set(); // destinations this process created or replaced
+const keptThisRun = new Set(); // destinations an update left alone (overlays skip them; listed in the end-of-run summary)
+let backupDir = null; // this run's backup folder, project-relative; made on first need
+let gitSnapshot; // undefined until first asked; null when git cannot help
+
+// Variables that point git at a repository other than the one the project
+// folder is in: its git dir, work tree, index, object store, namespace. A
+// caller can leave them set (a git hook exports GIT_DIR), and git would then
+// describe some other checkout. Two kinds of variable are kept on purpose:
+//   - the caller's configuration (GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM,
+//     GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT/KEY_n/VALUE_n): it decides what
+//     counts as changed or ignored (core.autocrlf, core.excludesFile);
+//   - GIT_CEILING_DIRECTORIES: it fences discovery. If the caller hides an
+//     outer repository, the project is in no repository for this run, and an
+//     item there is backed up, not trusted to that repository's history.
+const GIT_ENV_DROP = /^(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_DISCOVERY_ACROSS_FILESYSTEM)$/;
+
+function gitOutput(args) {
+  const env = { GIT_OPTIONAL_LOCKS: "0" }; // read-only: no index refresh write
+  for (const [k, v] of Object.entries(process.env)) if (!GIT_ENV_DROP.test(k)) env[k] = v;
+  try {
+    return execFileSync("git", args, { cwd: CWD, env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 });
+  } catch {
+    return null; // git not installed, not a repository, or the command failed
+  }
+}
+
+// What git knows about the install dirs, read once per run and before the run
+// replaces anything: the paths `git status` reports and the paths it tracks,
+// both relative to the repository top. null outside a git work tree.
+function loadGitSnapshot() {
+  const prefix = gitOutput(["rev-parse", "--show-prefix"]); // CWD below the repository top: "" or "sub/dir/"
+  if (prefix === null) return null;
+  const dirs = TARGETS.map((t) => t.dir);
+  // --ignore-submodules=none: a destination that is a submodule must show its
+  // changes whatever `submodule.<name>.ignore` says.
+  const status = gitOutput(["status", "--porcelain", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", ...dirs]);
+  const tracked = gitOutput(["ls-files", "-z", "--full-name", "--", ...dirs]);
+  if (status === null || tracked === null) return null;
+  const changed = [];
+  const deleted = []; // paths git reports as gone: a deletion, or the old side of a rename
+  const entries = status.split("\0");
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].length < 4) continue; // "XY path"
+    const xy = entries[i].slice(0, 2);
+    changed.push(entries[i].slice(3));
+    if (xy.includes("D")) deleted.push(entries[i].slice(3));
+    if (/[RC]/.test(xy)) {
+      const from = entries[++i] || ""; // a rename or copy also lists the old path
+      changed.push(from);
+      if (xy.includes("R")) deleted.push(from);
+    }
+  }
+  return { prefix: prefix.trim(), changed, deleted, tracked: tracked.split("\0").filter(Boolean) };
+}
+
+// Where `dest` sits in the repository, and a test for "this path or below it".
+function gitKeyOf(dest) {
+  const key = gitSnapshot.prefix + dest.slice(CWD.length + 1).replace(/\\/g, "/");
+  return { key, within: (p) => p === key || p.startsWith(key + "/") };
+}
+
+// "clean" (tracked, nothing to commit), "changed" (git status reports
+// something), or "none" (git has no copy to restore the destination from).
+function gitStateOf(dest) {
+  if (gitSnapshot === undefined) gitSnapshot = loadGitSnapshot();
+  if (!gitSnapshot) return "none";
+  const { key, within } = gitKeyOf(dest);
+  // A path ending in "/" is a whole untracked directory (a nested repository).
+  if (gitSnapshot.changed.some((p) => within(p) || (p.endsWith("/") && key.startsWith(p)))) return "changed";
+  return gitSnapshot.tracked.some(within) ? "clean" : "none";
+}
+
+// For a destination that is not on disk: did the user delete it and not commit
+// that? Only a deletion (or the old side of a rename) at or below the
+// destination is evidence. An untracked or ignored folder above it is not —
+// the item was never there, so it is a new install.
+function gitReportsDeletionOf(dest) {
+  if (gitSnapshot === undefined) gitSnapshot = loadGitSnapshot();
+  return !!gitSnapshot && gitSnapshot.deleted.some(gitKeyOf(dest).within);
+}
+
+function sameTree(a, b) {
+  let sa, sb;
+  try { sa = statSync(a); sb = statSync(b); } catch { return false; }
+  if (sa.isDirectory() !== sb.isDirectory()) return false;
+  if (!sa.isDirectory()) return sa.size === sb.size && readFileSync(a).equals(readFileSync(b));
+  const names = readdirSync(a).sort();
+  const other = readdirSync(b).sort();
+  return names.length === other.length && names.every((n, i) => n === other[i] && sameTree(join(a, n), join(b, n)));
+}
+
+// True when `dest` is byte-for-byte a copy of <kind>/<name> this package ships,
+// from the top-level orphans or from any factory.
+function isShippedCopy(kind, name, dest) {
+  const roots = [PKG_ROOT, ...listFactories().map((id) => join(PKG_ROOT, FACTORIES_DIR, id))];
+  return roots.some((root) => sameTree(join(root, kind, name), dest));
+}
+
+// This run's own backup folder: `<BACKUP_DIR>/<UTC date-time>`, with a counter
+// added when that name is taken, so a second update in the same second never
+// writes into the first one's backup. mkdir without `recursive` fails on an
+// existing folder, which makes the claim atomic.
+function backupDirForRun() {
+  if (backupDir) return backupDir;
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  mkdirSync(join(CWD, BACKUP_DIR), { recursive: true });
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? stamp : `${stamp}-${n}`;
+    try {
+      mkdirSync(join(CWD, BACKUP_DIR, name));
+      return (backupDir = join(BACKUP_DIR, name));
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+  }
+}
+
+// May an update write `dest`? `label` names the item in messages;
+// `isInstallerOutput` says whether the content now there is known to be the
+// installer's own. Returns false when the item must be kept as it is.
+function mayReplaceOnUpdate(dest, label, isInstallerOutput) {
+  if (forceReplace || writtenThisRun.has(dest)) return true;
+  const rel = dest.slice(CWD.length + 1);
+  const keep = (why) => {
+    console.log(`      ! ${label} kept: ${rel} ${why}`);
+    keptThisRun.add(dest);
+    return false;
+  };
+  const localChanges = "has uncommitted local changes. Commit or stash them, or pass --force to replace it.";
+  // Presence is judged without following links: a symlink at the destination,
+  // dangling or not, is something the user put there.
+  const entry = entryAt(dest);
+  // Not on disk: a new install, unless git reports that the user deleted it.
+  if (!entry) return gitReportsDeletionOf(dest) ? keep(localChanges) : true;
+  const state = gitStateOf(dest);
+  let ownOutput = false;
+  try { ownOutput = isInstallerOutput(); } catch { /* unreadable (a dangling link): not ours */ }
+  if (state === "clean" || ownOutput) return true;
+  if (state === "changed") return keep(localChanges);
+  // Git cannot restore it. A link is not backed up (a copy would follow it or
+  // fail on a dangling one) and not replaced: it stays until the user decides.
+  if (entry.isSymbolicLink()) return keep("is a symbolic link and git cannot restore it. Remove the link, or pass --force to replace it.");
+  const backupRel = join(backupDirForRun(), rel.replace(/^\./, ""));
+  mkdirSync(dirname(join(CWD, backupRel)), { recursive: true });
+  cpSync(dest, join(CWD, backupRel), { recursive: true });
+  console.log(`      ℹ ${label}: previous copy saved to ${backupRel}`);
+  return true;
+}
+
+// Write an installed single-file agent at `dest` itself. A symlink there is
+// removed first, so the content never lands on the link's target.
+function writeInstalledFile(dest, text) {
+  if (entryAt(dest)?.isSymbolicLink()) rmSync(dest);
+  writeFileSync(dest, text);
+}
+
+// Printed once, as the last thing a run prints, when an update kept at least
+// one item — on normal completion and on the failure exit alike (see the
+// bottom of this file). The run still exits 0 when it completes: the rest of
+// the install was done, and a kept item can be the installer's own uncommitted
+// output from an earlier run.
+function printKeptSummary() {
+  if (!keptThisRun.size) return;
+  const paths = [...keptThisRun].map((dest) => dest.slice(CWD.length + 1));
+  keptThisRun.clear();
+  console.log(
+    `  ! ${paths.length} item(s) NOT updated: they have local changes (${paths.join(", ")}).\n` +
+      `    Each has a "kept:" line above. Commit or stash the changes and run the update again, or add --force to replace them.\n`
+  );
+}
+
 function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   // kind: "agents" | "skills"; target: {id, dir, label}
   // srcRoot defaults to the monorepo; factory-local agents pass their own dir.
@@ -1637,14 +1986,17 @@ function copyItem(kind, name, target, update, registry, srcRoot = PKG_ROOT) {
   }
 
   const dest = join(CWD, target.dir, kind, name);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
+  if (update && !mayReplaceOnUpdate(dest, `${kind.slice(0, -1)}  ${name}`, () => isShippedCopy(kind, name, dest)))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  if (update && existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+  if (update && entryAt(dest)) rmSync(dest, { recursive: true, force: true });
   // Deep-dereferenced copy — factory-local agents/skills may be symlinks back
   // into this repo's agents/ or skills/ (the symlink pattern lets a factory
   // "own" a shared item without forking it), and the source tree may contain
   // nested symlinks too (Node's cpSync({dereference:true}) doesn't recurse).
-  copyTreeDereferenced(src, dest, { force: true });
+  copyTreeDereferenced(src, dest, { force: true, root: PKG_ROOT });
+  writtenThisRun.add(dest);
 
   // Inject a skills-inventory section into the installed agent body —
   // but only for hosts that don't preload the `skills:` frontmatter
@@ -1894,6 +2246,8 @@ function applySkillOverlay(target, name, overlay, registry) {
       ? join(CWD, target.dir, "agents", `${name}.agent.md`)
       : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(agentFile)) return false;
+  // An agent this update kept is the user's version: tuning it would rewrite it.
+  if (keptThisRun.has(target.id === "copilot" ? agentFile : dirname(agentFile))) return false;
   const text = readFileSync(agentFile, "utf8");
   const rewritten = applySkillOverlayToText(text, overlay);
   if (rewritten === null) return false;
@@ -2043,7 +2397,7 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
   const agentFile = join(src, "AGENT.md");
   if (!existsSync(agentFile)) return { status: "missing" };
   const dest = join(CWD, targetDir, "agents", `${name}.agent.md`);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
 
   const soulFile = join(src, "SOUL.md");
   const { agent, soul } = transformAgentForCopilot(
@@ -2053,8 +2407,11 @@ function flattenAgentForCopilot(src, name, targetDir, update, registry) {
     { soulMode: "memory", normalizeModel: true, registry },
   );
 
+  if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === agent))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, agent);
+  writeInstalledFile(dest, agent);
+  writtenThisRun.add(dest);
 
   // With memory mode (the default), SOUL.md is relocated to the
   // IDE-neutral per-role dir under .agents/memory/<name>/SOUL.md so the
@@ -2165,7 +2522,7 @@ function writeCodexAgent(src, name, targetDir, update) {
   const agentFile = join(src, "AGENT.md");
   if (!existsSync(agentFile)) return { status: "missing" };
   const dest = join(CWD, targetDir, "agents", `${name}.toml`);
-  if (existsSync(dest) && !update) return { status: "exists", dest };
+  if (entryAt(dest) && !update) return { status: "exists", dest };
   const soulFile = join(src, "SOUL.md");
   // src is <owner>/agents/<name>; the owner (a factory, or the package root)
   // keeps its skills beside its agents.
@@ -2178,8 +2535,14 @@ function writeCodexAgent(src, name, targetDir, update) {
     existsSync(join(CWD, targetDir, "skills", id, "SKILL.md"));
   const agentText = readFileSync(agentFile, "utf8");
   const soulText = existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null;
+  const toml = transformAgentForCodex(agentText, soulText, name, canEnable);
+  if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
+    return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, transformAgentForCodex(agentText, soulText, name, canEnable));
+  writeInstalledFile(dest, toml);
+  writtenThisRun.add(dest);
+  // Only an agent written in this run is finalized: a kept one is not listed
+  // here, so finalizeCodexAgents leaves it as the user has it.
   codexAgentSources.set(dest, { agentText, soulText, name, canEnable });
   return { status: "installed", dest };
 }
@@ -2838,6 +3201,7 @@ function trimInstalledAgentSkills(target, name, removeSet) {
     ? join(CWD, target.dir, "agents", `${name}.agent.md`)
     : join(CWD, target.dir, "agents", name, "AGENT.md");
   if (!existsSync(f)) return;
+  if (keptThisRun.has(target.id === "copilot" ? f : dirname(f))) return; // kept by this update: left as the user has it
   const text = readFileSync(f, "utf8");
   const rewritten = applySkillOverlayToText(text, { remove: [...removeSet] });
   if (rewritten !== null && rewritten !== text) writeFileSync(f, rewritten);
@@ -3238,8 +3602,11 @@ function isMainModule() {
 }
 
 if (isMainModule()) {
-  main().catch((err) => {
+  // One way out for a run that reached the install: the summary of kept items
+  // is printed last, whether the run completed or failed part-way.
+  main().then(printKeptSummary, (err) => {
     console.error("Install failed:", err.message);
+    printKeptSummary();
     process.exit(1);
   });
 }
