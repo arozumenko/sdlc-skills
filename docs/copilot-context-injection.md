@@ -309,7 +309,11 @@ A listed doc/file that doesn't exist is simply skipped.
   is O(n²) (→ `is_blank`/`case`); `read -t` loses partial input (→ `read_stdin_payload`
   backgrounds `cat <&0`); `BASH_SOURCE` is available (→ `config.sh` sourcing). Scripts
   avoid heredocs (bash 5.3 heredoc hang) and use `printf`.
-- **Project root:** `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}"`.
+- **Project root:** `PROJECT_DIR="$(hook_project_dir)"` (`lib.sh`). Under Copilot
+  (`COPILOT_CLI` or `SDLC_VSCODE` set) it is `${COPILOT_PROJECT_DIR:-$PWD}`;
+  `CLAUDE_PROJECT_DIR` is ignored there, because a Copilot session started from a
+  Claude Code terminal inherits it and it names the other project. On every other
+  host it is `${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}`.
   The Copilot CLI sets **`COPILOT_PROJECT_DIR`** (not `CLAUDE_PROJECT_DIR`); using it is
   essential or a CLI run resolves `.agents/` against the wrong dir and injects nothing.
 - **`~/.copilot/session-state`:** `$HOME/.copilot` on all platforms (Git Bash maps

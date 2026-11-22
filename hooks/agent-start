@@ -28,8 +28,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project root: Claude Code sets CLAUDE_PROJECT_DIR; Copilot (CLI + VS Code) sets
 # COPILOT_PROJECT_DIR; fall back to PWD. Using COPILOT_PROJECT_DIR is essential —
 # without it a real Copilot CLI subagent dispatch resolves .agents/memory against
-# the wrong dir and injects nothing (the worker gets no memory).
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}"
+# the wrong dir and injects nothing (the worker gets no memory). Under Copilot a
+# leaked CLAUDE_PROJECT_DIR is ignored (see hook_project_dir in lib.sh).
+PROJECT_DIR="$(hook_project_dir)"
 
 # Role from explicit arg (Kiro) or parsed from the SubagentStart payload (CC).
 agent="${1:-}"
