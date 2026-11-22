@@ -86,10 +86,16 @@ Block records on a mission, campaign or case open a span (so open items show the
 `coverage.non_task_blocks` with the caveat `N block record(s) on non-task items — not in time_blocked`. A done task with block
 records but no observed start has no cycle to clip them to; the coverage line says how many (`blocked_no_start`).
 
-## DORA
+## DORA (task-level proxies)
 
-`metrics.dora` (per plan, task level), rendered as `## DORA` after Quality in Markdown, a DORA panel in HTML, and in
-`--json` through the metrics object. It reads the defect pair (`defect_found`/`defect_fixed`, `references/event-model.md`),
+These figures are task-level proxies, not the four DORA measures. A task "deploys" when it merges to the integration branch.
+`change_failure_rate` is computed from defects found after a task was done. `time_to_restore` is defect repair time, from
+found to fixed. The JSON keys keep the DORA names; `envelope.policy.labels.change_failure_rate` and
+`envelope.policy.labels.time_to_restore` carry the proxy labels, and the Markdown and HTML headings say "DORA (task-level
+proxies)" with a caption.
+
+`metrics.dora` (per plan, task level), rendered as `## DORA (task-level proxies)` after Quality in Markdown, a panel with the
+same heading in HTML, and in `--json` through the metrics object. It reads the defect pair (`defect_found`/`defect_fixed`, `references/event-model.md`),
 recorded on the item that caused each defect. The figures take the already filtered item list: `--level task` hides
 `untraced`, any other `--level` leaves the change failure rate empty, and `--class` filters the cohort. `recorded` (below) is
 neither filtered nor windowed.
@@ -98,8 +104,8 @@ neither filtered nor windowed.
 |---|---|---|---|
 | deployment frequency | not recomputed: points at task `velocity` and the weekly throughput (Throughput section) | throughput cohort | labelled `envelope.policy.labels.deployment_frequency` = **"merge to the integration branch, not a production deploy"** |
 | lead time for changes | not recomputed: points at task `cycle_time` median (and `commit_to_done` when starts were not observed) | flow-time cohort | same label, `envelope.policy.labels.lead_time_for_changes` |
-| `change_failure_rate` | tasks with ≥1 **escaped** defect ÷ tasks in the cohort; `by_severity` counts each failed task once, by the worst severity among its escaped defects (`critical > major > minor > unrated`) | tasks whose first completion is in `[since, end)`, minus `throughputExcluded` (invalid-chain, proxy completion) — the throughput cohort | defects are found later, so recent tasks are undercounted; `— (n=0 completed in window)` when the cohort is empty |
-| `time_to_restore` | `stats()` of `fixed_at − found_at` (same floors as flow time); `open` = escaped defects with no fix, `oldest_open_s` = the oldest one's age at the window end | escaped defects found in `[since, end)` on tasks not `throughputExcluded` | a fix is the moment the fix landed (`defect_fixed`), not a production restore |
+| `change_failure_rate` (proxy) | tasks with ≥1 **escaped** defect ÷ tasks in the cohort; `by_severity` counts each failed task once, by the worst severity among its escaped defects (`critical > major > minor > unrated`) | tasks whose first completion is in `[since, end)`, minus `throughputExcluded` (invalid-chain, proxy completion) — the throughput cohort | defects are found later, so recent tasks are undercounted; `— (n=0 completed in window)` when the cohort is empty |
+| `time_to_restore` (proxy: defect repair time) | `stats()` of `fixed_at − found_at` (same floors as flow time); `open` = escaped defects with no fix, `oldest_open_s` = the oldest one's age at the window end | escaped defects found in `[since, end)` on tasks not `throughputExcluded` | a fix is the moment the fix landed (`defect_fixed`), not a production restore |
 | `defects_by_stage` | per `found_stage` (`build, review, qa, gate, demo, user`): `escaped` vs `before_landing` | defects found in `[since, end)` on tasks not `throughputExcluded` | "where do we catch defects"; rows with no defect are not printed |
 | `untraced` | count (and per stage) of defects recorded on a mission, campaign or case — the cause is not traced to a task | found in `[since, end)` | never in the change failure numerator |
 | `excluded_defects` | defects on tasks whose completion is quarantined or a proxy | found in `[since, end)` | escape cannot be judged without a trustworthy landing clock |
@@ -163,6 +169,11 @@ estimate's version.
 dispatch's priced cost, and a task's cost is the sum of its share of every dispatch (fix rounds included). It feeds `usd`
 estimate accuracy (above) and `delivery.mjs calibrate` (`references/plan-block.md` "Calibrated estimates"). Hosts without
 the hook record no cost. `active_min` is still not computed; `envelope.sources.tokenomics` always reads `"absent"`.
+
+Every cost and every spend total covers subagent dispatches only. The orchestrating session's own usage is not captured and
+not counted. The outputs say so where a total is shown: a `scope:` line in `spend` (`scope` in its JSON), the end of the
+`SPEND 7d` line in `status`, a `- scope:` line under `## Cost` in the Markdown report, a sentence in the HTML Cost panel, and
+`envelope.policy.labels.spend`.
 
 ## Outputs
 

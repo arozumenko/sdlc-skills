@@ -6,6 +6,8 @@ import { resolveObservations } from './events.mjs';
 import { readDispatches, reduce } from './dispatches.mjs';
 import { costOf, loadPricesChecked } from './cost.mjs';
 import { cliError, deliveryDir, sha256 } from './paths.mjs';
+/** What every total in this skill covers. The hook and the transcript backfill capture subagent transcripts only. */
+export const SPEND_SCOPE = 'subagent dispatches only; the orchestrating session is not counted';
 const round = (n) => Math.round(n * 1e6) / 1e6;
 const canonical = (v) => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
 const COUNTERS = new Set(['input', 'output', 'cache_write', 'cache_write_1h', 'cache_read']);
@@ -43,7 +45,7 @@ export function spendReport(repo, { since = null, until = null } = {}) {
   const window = {since: since ? new Date(since).toISOString():null, until:until ? new Date(until).toISOString():null};
   const raw = readDispatches(repo), stored = reduce(raw), resolved = resolveObservations(repo), loaded = loadPricesChecked(repo);
   const legacy = legacyBridge(resolved, loaded.prices, Boolean(loaded.problem));
-  const doc = { cohort: 'spend of dispatches started in [since, until)', window, total_usd:0, exact_usd:0, estimated_usd:0,
+  const doc = { cohort: 'spend of dispatches started in [since, until)', scope: SPEND_SCOPE, window, total_usd:0, exact_usd:0, estimated_usd:0,
     by_class:Object.fromEntries(['item','plan','not-in-ledger'].map(c=>[c,{usd:0,count:0}])), unpriced:0, discrepancy:{count:0,usd:0},
     legacy_inconsistent:0, observation_conflicts:resolved.conflicts.length, legacy_start_only:0, unknown_start:0,
     identity_uncertain:0, model_conflict:0, evidence_conflict:0, unattributed_share:null, flag:false, inputs:[...resolved.files,...raw.files], keys:[] };
@@ -90,7 +92,8 @@ export function spendReport(repo, { since = null, until = null } = {}) {
 }
 export function renderSpend(doc) {
   const out=[`SPEND spend of dispatches started in [${doc.window.since ?? 'since'}, ${doc.window.until ?? 'until'})${!doc.window.since&&!doc.window.until?' (all starts, including unknown-start)':''}`,
-    `  total_usd=${doc.total_usd.toFixed(6)} exact_usd=${doc.exact_usd.toFixed(6)} estimated_usd=${doc.estimated_usd.toFixed(6)}`];
+    `  total_usd=${doc.total_usd.toFixed(6)} exact_usd=${doc.exact_usd.toFixed(6)} estimated_usd=${doc.estimated_usd.toFixed(6)}`,
+    `  scope: ${SPEND_SCOPE}`];
   for(const [c,v] of Object.entries(doc.by_class)) out.push(`  ${c}: usd=${v.usd.toFixed(6)} count=${v.count}`);
   out.push(`  unpriced=${doc.unpriced} discrepancy=${doc.discrepancy.count} discrepancy_usd=${doc.discrepancy.usd.toFixed(6)} legacy_inconsistent=${doc.legacy_inconsistent} observation_conflicts=${doc.observation_conflicts}`,
     `  legacy-start-only=${doc.legacy_start_only} unknown-start=${doc.unknown_start} identity-uncertain=${doc.identity_uncertain} model-conflict=${doc.model_conflict} evidence-conflict=${doc.evidence_conflict}`,
@@ -102,5 +105,5 @@ export function renderSpend(doc) {
 }
 export function statusSpend(repo,{now=Date.now()}={}) {
   const d=spendReport(repo,{since:new Date(now-7*86400000).toISOString(),until:new Date(now).toISOString()});
-  return `SPEND 7d: total_usd=${d.total_usd.toFixed(6)} unattributed_share=${d.unattributed_share??'null'} unpriced=${d.unpriced}${d.flag?' FLAG unattributed spend exceeds 10%':''}\n`;
+  return `SPEND 7d: total_usd=${d.total_usd.toFixed(6)} unattributed_share=${d.unattributed_share??'null'} unpriced=${d.unpriced}${d.flag?' FLAG unattributed spend exceeds 10%':''} (${SPEND_SCOPE})\n`;
 }

@@ -34,3 +34,11 @@ test('spend: legacy allocation without usage does not flag a dispatch the store 
   // An unknown model on either side still flags it; legacy alone without usage stays unpriced.
   snapshot(r,1,'b',{messages:{x:{model:'unknown',...usage(1).m}}});allocation(r,{id:'b',n:null});allocation(r,{id:'c',n:null});d=report(r);assert.equal(d.unpriced,2);
   const s=repo();snapshot(s,3);const o=allocation(s);appendObservation(s,{...o,revision:1,meta:{agent:{usage:{...usage(2),missing:{input:100}}}}});assert.equal(report(s).unpriced,1);});
+
+test('spend: the report and its text say the total covers subagent dispatches only',()=>{const r=repo();snapshot(r,3);const d=report(r);
+  assert.equal(d.scope,'subagent dispatches only; the orchestrating session is not counted');
+  const lines=module.renderSpend(d).split('\n');assert.equal(lines[1],'  total_usd=3.000000 exact_usd=3.000000 estimated_usd=0.000000');
+  assert.equal(lines[2],'  scope: subagent dispatches only; the orchestrating session is not counted');
+  assert.match(module.statusSpend(r,{now:Date.parse('2026-11-02T00:00:00Z')}),/^SPEND 7d: total_usd=3\.000000 unattributed_share=1 unpriced=0 FLAG unattributed spend exceeds 10% \(subagent dispatches only; the orchestrating session is not counted\)\n$/);
+  // An archived spend document from before the field renders the same line.
+  const old={...d};delete old.scope;assert.equal(module.renderSpend(old),module.renderSpend(d));});

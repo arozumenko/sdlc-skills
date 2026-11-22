@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,11 +12,19 @@ import { runPath, sessionPath, sessionsDir } from './lib/paths.mjs';
 const SCRIPT = fileURLToPath(new URL('./install-hooks.mjs', import.meta.url));
 const DELIVERY = fileURLToPath(new URL('./delivery.mjs', import.meta.url));
 const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
-const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV } }).trim();
+/** No real home and no real git configuration for fixture creation (`g`, `tmp`) and for the scripts run with `isolated`:
+ * a global `commit.gpgsign=true` with no key, or any other personal setting, must not reach them. */
+const SANDBOX = mkdtempSync(join(tmpdir(), 'dm-install-home-'));
+const ISOLATED = { HOME: SANDBOX, XDG_CONFIG_HOME: join(SANDBOX, '.config'), XDG_CACHE_HOME: join(SANDBOX, '.cache'), SDLC_SKILLS_CACHE_DIR: join(SANDBOX, '.cache', 'sdlc-skills'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+const isolated = (repo) => ({ ...process.env, ...ENV, ...ISOLATED, CLAUDE_PROJECT_DIR: repo, DELIVERY_NO_SYNC: '1' });
+const g = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...ENV, ...ISOLATED } }).trim();
 const tmp = () => { const r = mkdtempSync(join(tmpdir(), 'dm-install-')); g(r, 'init', '-q', '-b', 'main'); g(r, 'commit', '-q', '--allow-empty', '-m', 'root'); return r; };
 const REL = '.claude/skills/delivery-monitor';
 /** Gives a fixture its own installed copy of the two hook files, so the installer has something inside the target to wire. */
 const stubHooks = (repo) => { mkdirSync(join(repo, REL, 'hooks'), { recursive: true }); for (const h of ['dispatch-hook.mjs', 'budget-hook.mjs']) writeFileSync(join(repo, REL, 'hooks', h), ''); return repo; };
+/** A doctor run as a script takes the real clock. A project price table dated today keeps `doctor: ok` independent of the age
+ * of the shipped table (older than 45 days, it is a warning finding). */
+const freshPrices = (repo) => { const d = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'prices.json'), JSON.stringify({ as_of: new Date().toISOString().slice(0, 10), models: {} })); return repo; };
 const hookCommands = (repo) => Object.values(JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8')).hooks).flat().filter((e) => e[MARKER]).map((e) => e.hooks[0].command);
 const runScript = (args, opts) => { try { return { code: 0, out: execFileSync('node', [SCRIPT, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }) }; } catch (e) { return { code: e.status, out: e.stdout, err: e.stderr }; } };
 /** Seeds the telemetry branch (via plumbing, no checkout) with a single file at `name` — used to
@@ -192,7 +200,7 @@ test('installClaude --remove never creates settings.json (or settings.local.json
 // informational, surfaced as the trailing `doctor: ok`/`doctor: attention` line. This replaces the
 // earlier "doctor exits 1 when not ok" contract.
 test('doctor always exits 0, not ok — both the standalone script and `delivery.mjs doctor` — with an informational doctor: ok/attention line', () => {
-  const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true });
+  const repo = freshPrices(stubHooks(tmp())); mkdirSync(join(repo, '.claude'), { recursive: true });
   const notOk = execFileSync('node', [SCRIPT, '--doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
   assert.match(notOk, /doctor: attention/);
   const dNotOk = execFileSync('node', [DELIVERY, 'doctor'], { cwd: repo, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
@@ -284,7 +292,7 @@ test('doctor: says whether THIS session is bound; a binding to a closed plan is 
  });
 
  test('delivery doctor resolves an aliased repository before deriving hook script paths', () => {
-  const repo=stubHooks(tmp()), base=mkdtempSync(join(tmpdir(),'dm-doctor-alias-')), alias=join(base,'a/b/c/d/e/alias');
+  const repo=freshPrices(stubHooks(tmp())), base=mkdtempSync(join(tmpdir(),'dm-doctor-alias-')), alias=join(base,'a/b/c/d/e/alias');
   mkdirSync(join(base,'a/b/c/d/e'),{recursive:true});symlinkSync(repo,alias,'dir');
   execFileSync('node',[SCRIPT,'--no-submodule'],{cwd:repo,env:{...process.env,CLAUDE_PROJECT_DIR:repo,DELIVERY_NO_SYNC:'1'}});
   const output=execFileSync('node',[DELIVERY,'doctor'],{cwd:alias,encoding:'utf8',env:{...process.env,CLAUDE_PROJECT_DIR:alias,DELIVERY_NO_SYNC:'1',CLAUDE_CODE_SESSION_ID:''}});
@@ -349,4 +357,142 @@ test('--remove still works when the target no longer has the hook files', () => 
   execFileSync('rm', ['-rf', join(repo, '.claude', 'skills')]);
   const r = runScript(['--remove', '--repo', repo], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo } });
   assert.equal(r.code, 0, r.err); assert.ok(!JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8')).hooks);
+});
+
+// A settings file that does not parse is never replaced: every other key in it would be lost.
+const BROKEN = '{\n  "permissions": { "allow": ["Bash(npm test)"] },\n  "hooks": {},\n}\n';
+const brokenSettings = (name = 'settings.json') => { const repo = stubHooks(tmp()); g(repo, 'add', '-A'); g(repo, 'commit', '-q', '-m', 'skill'); mkdirSync(join(repo, '.claude'), { recursive: true }); writeFileSync(join(repo, '.claude', name), BROKEN); return repo; };
+
+test('install on a settings file that does not parse exits 2 naming the file and writes nothing', () => {
+  const repo = brokenSettings(); const before = g(repo, 'status', '--porcelain', '--untracked-files=all');
+  const r = runScript(['--repo', repo], { cwd: repo, env: isolated(repo) });
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.err, /^USAGE\(.*\.claude\/settings\.json is not valid JSON.*\)\n$/, r.err);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN, 'settings file replaced');
+  assert.ok(!existsSync(join(repo, '.gitignore')), '.gitignore written'); assert.ok(!existsSync(join(repo, '.agents')), 'telemetry bootstrapped'); assert.ok(!existsSync(join(repo, '.gitmodules')), '.gitmodules written');
+  assert.equal(g(repo, 'status', '--porcelain', '--untracked-files=all'), before);
+  assert.throws(() => g(repo, 'rev-parse', '--verify', 'refs/heads/telemetry'), 'telemetry branch created');
+});
+
+test('--remove on a settings file that does not parse exits 2 and writes nothing', () => {
+  const repo = brokenSettings(); writeFileSync(join(repo, '.gitignore'), 'node_modules/\n# >>> delivery-monitor (managed)\n.agents/telemetry/delivery/.lock/\n# <<< delivery-monitor\n');
+  const ignore = readFileSync(join(repo, '.gitignore'), 'utf8');
+  const r = runScript(['--remove', '--repo', repo], { cwd: repo, env: isolated(repo) });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /^USAGE\(.*\.claude\/settings\.json is not valid JSON.*\)\n$/, r.err);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN); assert.equal(readFileSync(join(repo, '.gitignore'), 'utf8'), ignore, 'ignore block removed');
+});
+
+test('--local checks settings.local.json: a broken one is refused, a broken settings.json beside it is left alone', () => {
+  const local = brokenSettings('settings.local.json');
+  const r = runScript(['--no-submodule', '--local', '--repo', local], { cwd: local, env: isolated(local) });
+  assert.equal(r.code, 2, r.out); assert.match(r.err, /^USAGE\(.*settings\.local\.json is not valid JSON/, r.err);
+  assert.equal(readFileSync(join(local, '.claude', 'settings.local.json'), 'utf8'), BROKEN); assert.ok(!existsSync(join(local, '.gitignore')));
+  const shared = brokenSettings();
+  const ok = runScript(['--no-submodule', '--local', '--repo', shared], { cwd: shared, env: isolated(shared) });
+  assert.equal(ok.code, 0, ok.err); assert.equal(readFileSync(join(shared, '.claude', 'settings.json'), 'utf8'), BROKEN, 'the file not being written is untouched');
+  assert.ok(JSON.parse(readFileSync(join(shared, '.claude', 'settings.local.json'), 'utf8')).hooks.SubagentStop.some((e) => e[MARKER]));
+});
+
+test('a settings file whose top level is not an object is refused; a missing or empty one still installs', () => {
+  for (const body of ['[]', 'null', '"x"']) {
+    const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true }); writeFileSync(join(repo, '.claude', 'settings.json'), body);
+    const r = runScript(['--no-submodule', '--repo', repo], { cwd: repo, env: isolated(repo) });
+    assert.equal(r.code, 2, `${body}: ${r.out}`); assert.match(r.err, /^USAGE\(.*settings\.json is not a JSON object/, r.err);
+    assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), body);
+  }
+  for (const body of [null, '', ' \n']) {
+    const repo = stubHooks(tmp()); mkdirSync(join(repo, '.claude'), { recursive: true }); if (body != null) writeFileSync(join(repo, '.claude', 'settings.json'), body);
+    const r = runScript(['--no-submodule', '--repo', repo], { cwd: repo, env: isolated(repo) });
+    assert.equal(r.code, 0, r.err); assert.equal(hookCommands(repo).length, 2);
+  }
+});
+
+test('installClaude itself refuses to replace a settings file that does not parse', () => {
+  const repo = brokenSettings();
+  for (const opts of [{}, { remove: true }]) assert.throws(() => installClaude(repo, REL, opts), /settings\.json is not valid JSON/);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN);
+});
+
+test('doctor reports a settings file that does not parse as a warning finding and still exits 0', () => {
+  const repo = brokenSettings();
+  const f = doctorFindings(repo, REL).find((x) => /^settings:/.test(x.line));
+  assert.ok(f, 'no settings finding'); assert.equal(f.severity, 'warning'); assert.match(f.line, /^settings: \.claude\/settings\.json is not valid JSON/);
+  const r = runScript(['--doctor', '--repo', repo], { cwd: repo, env: isolated(repo) });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /^settings: \.claude\/settings\.json is not valid JSON/m); assert.match(r.out, /doctor: attention/);
+  assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), BROKEN);
+  const clean = stubHooks(tmp()); assert.ok(!doctorFindings(clean, REL).some((x) => /^settings:/.test(x.line)), 'a missing settings file is no finding');
+});
+
+test('doctor: the diagnostics line counts stop-hook-failed lines when there are any, and is unchanged when there are none', () => {
+  const repo = tmp(); const dir = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(dir, { recursive: true });
+  const line = (kind, agent) => `${JSON.stringify({ at: '2026-11-20T10:00:00.000Z', kind, session: 's', agent_id: agent, detail: 'x' })}\n`;
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('unbound-session', 'a'));
+  assert.ok(doctorReport(repo, REL).lines.includes('diagnostics: 1 line(s)'));
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('unbound-session', 'a') + line('stop-hook-failed', 'a') + line('stop-hook-failed', 'b'));
+  const f = doctorFindings(repo, REL).find((x) => x.line.startsWith('diagnostics:'));
+  assert.equal(f.line, 'diagnostics: 3 line(s), stop-hook-failed=2 (2 stop hook failure(s) on record: the spend of those dispatches may be missing from the totals, not zero)');
+  assert.equal(f.severity, 'info');
+});
+
+test('doctor: a recent budget-check-unavailable diagnostic is a warning finding with its reason; none is an ok line; exit stays 0', () => {
+  const repo = stubHooks(tmp()); const dir = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(dir, { recursive: true });
+  const now = Date.parse('2026-11-20T12:00:00Z');
+  const check = () => doctorFindings(repo, REL, { now }).find((x) => x.line.startsWith('budget check:'));
+  assert.deepEqual([check().severity, check().line], ['ok', 'budget check: ok (no budget-check-unavailable diagnostic in the last 7 days)']);
+  const line = (at, detail, session) => `${JSON.stringify({ at, kind: 'budget-check-unavailable', session, agent_id: null, detail })}\n`;
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('2026-11-01T00:00:00.000Z', 'long ago', 'old'));
+  assert.equal(check().severity, 'ok');
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line('2026-11-01T00:00:00.000Z', 'long ago', 'old') + line('2026-11-19T10:00:00.000Z', 'invalid budgetSoftMultiplier', 's3'));
+  assert.deepEqual([check().severity, check().line], ['warning', 'budget check: OFF since 2026-11-19T10:00:00.000Z — invalid budgetSoftMultiplier (session s3; 1 session(s) could not evaluate in the last 7 days; their calls were allowed)']);
+  assert.equal(doctorReport(repo, REL, { now }).ok, false);
+  // The scripts take the real clock: a diagnostic written now is inside the window.
+  writeFileSync(join(dir, 'diagnostics-u.jsonl'), line(new Date().toISOString(), 'child transcript unavailable', 'live'));
+  for (const [script, args] of [[SCRIPT, ['--doctor']], [DELIVERY, ['doctor']]]) {
+    const out = execFileSync('node', [script, ...args], { cwd: repo, encoding: 'utf8', env: isolated(repo) });
+    assert.match(out, /^budget check: OFF since .* — child transcript unavailable \(session live;/m); assert.match(out, /doctor: attention/);
+  }
+});
+
+test('doctor: a price table more than 45 days old is a warning finding naming the date and the file; a fresh one adds no line; exit stays 0', () => {
+  const repo = stubHooks(tmp()); const dir = join(repo, '.agents', 'telemetry', 'delivery'); mkdirSync(dir, { recursive: true });
+  const DAY = 86_400_000, shipped = JSON.parse(readFileSync(new URL('../references/prices.json', import.meta.url), 'utf8')).as_of, t0 = Date.parse(shipped);
+  const prices = (now) => doctorFindings(repo, REL, { now }).find((x) => x.line.startsWith('prices:'));
+  assert.equal(prices(t0 + 45 * DAY), undefined);
+  const f = prices(t0 + 46 * DAY);
+  assert.equal(f.severity, 'warning');
+  assert.equal(f.line, `prices: stale — price table as of ${shipped} is 46 days old (limit 45): a model released since then is unpriced and its tasks are left out of calibration — update the delivery-monitor skill (references/prices.json), or price newer models in .agents/telemetry/delivery/prices.json`);
+  assert.equal(doctorReport(repo, REL, { now: t0 + 46 * DAY }).ok, false);
+  // The scripts take the real clock: a project table dated long ago is stale whenever this runs.
+  writeFileSync(join(dir, 'prices.json'), JSON.stringify({ as_of: '2020-01-01', models: {} }));
+  for (const [script, args] of [[SCRIPT, ['--doctor']], [DELIVERY, ['doctor']]]) {
+    const out = execFileSync('node', [script, ...args], { cwd: repo, encoding: 'utf8', env: isolated(repo) });
+    assert.match(out, /^prices: stale — price table as of 2020-01-01 is \d+ days old \(limit 45\): .* update \.agents\/telemetry\/delivery\/prices\.json \(its models and its as_of date\)$/m); assert.match(out, /doctor: attention/);
+  }
+});
+
+// A settings file that exists but cannot be read is not a missing file. `existsSync` says false for it when a folder on the way
+// has no search permission, so the check must read the file and take only ENOENT for "missing".
+test('install and --remove on a settings file that cannot be read exit 2 naming the file and write nothing', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, (t) => {
+  for (const args of [[], ['--remove']]) {
+    const repo = stubHooks(tmp()); g(repo, 'add', '-A'); g(repo, 'commit', '-q', '-m', 'skill');
+    // The settings file is a link into a folder with no search permission: it is there, and nothing can read it.
+    const locked = mkdtempSync(join(tmpdir(), 'dm-install-locked-')); mkdirSync(join(locked, 'inner'));
+    writeFileSync(join(locked, 'inner', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } }));
+    symlinkSync(join(locked, 'inner', 'settings.json'), join(repo, '.claude', 'settings.json'));
+    g(repo, 'add', '-A'); g(repo, 'commit', '-q', '-m', 'settings link');
+    chmodSync(locked, 0o000); t.after(() => { try { chmodSync(locked, 0o755); } catch { /* already restored */ } });
+    assert.equal(existsSync(join(repo, '.claude', 'settings.json')), false, 'the fixture is the case existsSync gets wrong');
+    const before = g(repo, 'status', '--porcelain', '--untracked-files=all');
+    const r = runScript([...args, '--repo', repo], { cwd: repo, env: isolated(repo) });
+    assert.equal(r.code, 2, `${args}: ${r.out}${r.err}`);
+    assert.match(r.err, /^USAGE\(.*\.claude\/settings\.json cannot be read \(EACCES\); .*nothing was written\)\n$/, r.err);
+    for (const f of ['.gitignore', '.agents', '.gitmodules']) assert.ok(!existsSync(join(repo, f)), `${args}: ${f} written`);
+    assert.throws(() => g(repo, 'rev-parse', '--verify', 'refs/heads/telemetry'), 'telemetry branch created');
+    assert.equal(g(repo, 'status', '--porcelain', '--untracked-files=all'), before);
+    assert.throws(() => installClaude(repo, REL, args.length ? { remove: true } : {}), /settings\.json cannot be read \(EACCES\)/);
+    const f = doctorFindings(repo, REL).find((x) => /^settings:/.test(x.line));
+    assert.ok(f, 'doctor: no settings finding'); assert.equal(f.severity, 'warning'); assert.match(f.line, /^settings: \.claude\/settings\.json cannot be read \(EACCES\)/);
+    chmodSync(locked, 0o755);
+    assert.deepEqual(JSON.parse(readFileSync(join(locked, 'inner', 'settings.json'), 'utf8')), { permissions: { allow: ['Bash(npm test)'] } }, 'the linked file is untouched');
+  }
 });

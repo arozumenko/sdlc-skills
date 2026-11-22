@@ -66,6 +66,12 @@ assert it, they don't set it arbitrarily; an unknown factory or a role outside e
 factory's map fails `USAGE`. The Claude hook reads this saved, already-validated roster snapshot
 only — it never re-walks installed agent directories or any source-checkout manifest itself.
 
+The map covers `feature-development`, `test-automation` and `manual-qa`. A plan from
+`product-management` or `security-testing` registers and prints `WARN ROSTER-UNMAPPED(<factory>)`:
+its roster holds none of that factory's roles, so the hook records no dispatch of its agents and
+the budget guard does not check them. Record such a plan's transitions with the CLI or a backfill;
+`doctor` repeats the note on the run's `roster:` line.
+
 ## What it does not do
 
 This is an honest derivation from readable, local evidence — not a durability,
@@ -89,10 +95,19 @@ the report/status output where it applies, never silently dropped.
   ordinary forward correction.
 - No claim of host completeness, full review/block history, origin tracking,
   or cross-team comparability.
-- DORA is partial and labelled: change failure rate and time to restore come from
-  recorded defect pairs (nothing recorded → the report says so, never 0%);
-  deployment frequency and lead time for changes reuse task throughput and cycle
-  time — a merge to the integration branch, not a production deploy. Flow
+- No DORA measures. The report's "DORA (task-level proxies)" block holds proxies
+  and labels them: change failure rate is computed from defects found after a
+  task was done, and time to restore from defect repair time (nothing recorded →
+  the report says so, never 0%); deployment frequency and lead time for changes
+  reuse task throughput and cycle time — a merge to the integration branch, not
+  a production deploy.
+- No spending limit. The task budget is a best-effort budget guard, not a
+  ceiling. It fails open when it cannot read its evidence. It counts subagent
+  dispatches only, not the orchestrating session. Two subagents working on the
+  same task at the same time do not see each other's live spend. A refused tool
+  call is not verified on a real host to end all spending.
+- No cost of the orchestrating session. Spend totals and task costs cover
+  subagent dispatches only. Flow
   efficiency (agent time ÷ cycle time) is a lower bound; time blocked counts
   only recorded blocks.
 - Out of scope entirely: benefit ROI,

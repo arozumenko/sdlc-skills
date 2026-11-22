@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -9,7 +9,7 @@ import { classifyStage, crossedTasks, resolveRefs, handleStop, ownerRepo, parseT
 import { loadRun, saveRun } from '../scripts/lib/plan.mjs';
 import { makeRoster } from '../scripts/lib/roster.mjs';
 import { resolveObservations } from '../scripts/lib/events.mjs';
-import { deliveryDir, sessionsDir, sessionPath, sha256 } from '../scripts/lib/paths.mjs';
+import { deliveryDir, plansDir, sessionsDir, sessionPath, sha256 } from '../scripts/lib/paths.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./dispatch-hook.mjs', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-hook-'));
@@ -425,4 +425,51 @@ test('handleStop: deletes that agent\'s .pending-budget file and leaves other ag
   writeFileSync(mine, '{}'); writeFileSync(other, '{}');
   handleStop(payload(t), { repo, now: NOW });
   assert.equal(existsSync(mine), false, 'own cursor removed'); assert.equal(existsSync(other), true, 'other agent cursor kept');
+});
+
+// A capture that fails must leave a trace: with none, a lost dispatch reads as no spend.
+/** Injected failure: the plans folder is replaced by a file, so reading the runs throws inside the stop handler. */
+const breakPlans = (repo) => { rmSync(plansDir(repo), { recursive: true }); writeFileSync(plansDir(repo), 'not a folder'); };
+
+test('handleStop: a failure inside the stop handler writes one stop-hook-failed diagnostic per agent and returns normally', () => {
+  const repo = setup(); const t = transcripts(); breakPlans(repo);
+  const first = handleStop(payload(t), { repo, now: NOW });
+  assert.deepEqual(first, { wrote: [], diagnostic: null }, 'same result as before the diagnostic existed');
+  let failed = diagLines(repo).filter((d) => d.kind === 'stop-hook-failed');
+  assert.equal(failed.length, 1);
+  assert.deepEqual(Object.keys(failed[0]).sort(), ['agent_id', 'at', 'detail', 'kind', 'session']);
+  assert.equal(failed[0].session, 'sess-1'); assert.equal(failed[0].agent_id, 'agent-1'); assert.match(failed[0].detail, /ENOTDIR/);
+  assert.ok(!failed[0].detail.includes('\n') && failed[0].detail.length <= 300);
+  assert.deepEqual(handleStop(payload(t), { repo, now: NOW }), { wrote: [], diagnostic: null });
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'stop-hook-failed').length, 1, 'a second stop of the same agent adds no line');
+  handleStop(payload(transcripts({ agentId: 'agent-2' }), { agent_id: 'agent-2' }), { repo, now: NOW });
+  failed = diagLines(repo).filter((d) => d.kind === 'stop-hook-failed');
+  assert.deepEqual(failed.map((d) => d.agent_id), ['agent-1', 'agent-2']);
+});
+
+test('handleStop: when the failure diagnostic cannot be written either, the hook still returns normally', () => {
+  const repo = setup(); const t = transcripts(); breakPlans(repo);
+  // The diagnostics file path is taken by a folder, so the append fails too.
+  handleStop(payload(t), { repo, now: NOW });
+  const file = readdirSync(deliveryDir(repo)).find((f) => f.startsWith('diagnostics-'));
+  rmSync(join(deliveryDir(repo), file)); mkdirSync(join(deliveryDir(repo), file));
+  assert.deepEqual(handleStop(payload(transcripts({ agentId: 'agent-3' }), { agent_id: 'agent-3' }), { repo, now: NOW }), { wrote: [], diagnostic: null });
+});
+
+test('script: a failing stop handler exits 0 with no output and leaves the diagnostic', () => {
+  const repo = setup(); const t = transcripts(); breakPlans(repo);
+  const out = execFileSync('node', [SCRIPT, '--stop'], { input: JSON.stringify(payload(t, { cwd: repo })), encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_PROJECT_DIR: repo }, stdio: ['pipe', 'pipe', 'pipe'] });
+  assert.equal(out, '');
+  assert.equal(diagLines(repo).filter((d) => d.kind === 'stop-hook-failed').length, 1);
+});
+
+test('a run of a factory with no role map: a named role is not recorded and no invalid-roster diagnostic is written; the dispatch is still captured', () => {
+  const repo = tmp(); mkdirSync(deliveryDir(repo), { recursive: true });
+  const d = join(repo, '.claude', 'agents', 'security-lead'); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'AGENT.md'), 'role');
+  saveRun(repo, { ...run, roster: makeRoster(repo, ['security-testing']) });
+  mkdirSync(sessionsDir(repo), { recursive: true }); writeFileSync(sessionPath(repo, 'claude', 'sess-1'), JSON.stringify({ host: 'claude', session: 'sess-1', plan: R }));
+  assert.deepEqual(handleStop(payload(transcripts({ agentType: 'security-lead' })), { repo, now: NOW }), { wrote: [], diagnostic: null });
+  assert.equal(resolveObservations(repo).active.length, 0);
+  assert.deepEqual(readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')), []);
+  assert.ok(readdirSync(deliveryDir(repo)).some((f) => f.startsWith('dispatches-')));
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -102,7 +102,7 @@ test('streaming repeated IDs take max, partial last lines wait; existing key is 
  usage(c.path,1,'b','');assert.equal(denied(hook(f,c.payload)),false);assert.equal(budgets(f).length,0);
  appendFileSync(c.path,'\n');hook(f,c.payload);assert.equal(budgets(f)[0].meta.budget.cost_at_crossing,3.5);
 });
-for(const broken of ['calibration.json','plan','events']) test(`fail open ${broken}: one diagnostic per session on all hook paths`,()=>{
+for(const broken of ['prices.json','profile.json','plan','events']) test(`fail open ${broken}: one diagnostic per session on all hook paths`,()=>{
  const f=fixture();stop(f,child(f,'a',2.5));const c=child(f,'b',10);
  const path=broken==='plan'?join(f.d,'plans',`${encodeURIComponent(R)}.json`):broken==='events'?join(f.d,readdirSync(f.d).find(n=>n.startsWith('events-'))):join(f.d,broken);
  writeFileSync(path,'{broken');
@@ -110,9 +110,9 @@ for(const broken of ['calibration.json','plan','events']) test(`fail open ${brok
  const ds=readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')).flatMap(n=>readFileSync(join(f.d,n),'utf8').trim().split('\n').map(JSON.parse));
  assert.equal(ds.filter(d=>d.kind==='budget-check-unavailable').length,1);
 });
-test('broken calibration after caching overrides any cached deny',()=>{
+test('a broken profile after caching overrides any cached deny',()=>{
  const f=fixture();const c=child(f,'a',10);assert.equal(denied(hook(f,c.payload)),true);
- writeFileSync(join(f.d,'calibration.json'),'{broken');assert.deepEqual(hook(f,c.payload),{});
+ writeFileSync(join(f.d,'profile.json'),'{broken');assert.deepEqual(hook(f,c.payload),{});
 });
 test('profile overrides thresholds and report/status show coverage and resolved counts',()=>{
  const f=fixture();writeFileSync(join(f.d,'profile.json'),JSON.stringify({budgetSoftMultiplier:2,budgetHardMultiplier:4}));
@@ -130,7 +130,7 @@ test('retracting a budget event removes its count and does not re-fire the trans
 test('unattributed dispatches remain in their open plan coverage, and diagnostics vocabulary accepts unavailable',()=>{
  const f=fixture();stop(f,child(f,'a',4,'unknown'));
  const doc=assemble(f.repo,{now:NOW});assert.equal(doc.plans[0].budget.coverage.unbudgeted.count,1);assert.equal(doc.plans[0].budget.coverage.all.usd,4);
- writeFileSync(join(f.d,'calibration.json'),'{broken');hook(f,pre());
+ writeFileSync(join(f.d,'profile.json'),'{broken');hook(f,pre());
  const after=assemble(f.repo,{now:NOW});assert.equal(after.envelope.coverage.diagnostics['budget-check-unavailable'],1);assert.equal(after.envelope.coverage.diagnostics.malformed,0);
 });
 test('in-run cache keeps prior task cost fixed when other dispatches arrive',()=>{
@@ -143,7 +143,7 @@ test('in-run cache keeps prior task cost fixed when other dispatches arrive',()=
  assert.equal(denied(hook(f,c.payload)),false);
 });
 test('diagnostic remains once per session beyond the existing 1 MiB diagnostic tail',()=>{
- const f=fixture();writeFileSync(join(f.d,'calibration.json'),'{broken');hook(f,pre());
+ const f=fixture();writeFileSync(join(f.d,'profile.json'),'{broken');hook(f,pre());
  const path=join(f.d,readdirSync(f.d).find(n=>n.startsWith('diagnostics-')));appendFileSync(path,' '.repeat(1024*1024)+'\n');hook(f,pre());
  const rows=readFileSync(path,'utf8').split('\n').filter(l=>l.trim()).map(JSON.parse);assert.equal(rows.filter(d=>d.kind==='budget-check-unavailable').length,1);
 });
@@ -156,4 +156,39 @@ test('a nested Agent call checks the requested task as well as the running calle
  const f=fixture();stop(f,child(f,'u',10,'U'));const c=child(f,'t',0.5,'T');
  const result=hook(f,{...c.payload,tool_name:'Agent',tool_use_id:'nested',tool_input:{description:'Build U',subagent_type:'js-dev'}});
  assert.equal(denied(result),true);assert.match(result.hookSpecificOutput.permissionDecisionReason,/U.*10.*9/);
+});
+// The check never reads calibration: a task's budget is the USD range saved on the plan item at registration.
+test('a corrupt calibration file does not disable the check on any hook path',()=>{
+ const f=fixture();writeFileSync(join(f.d,'calibration.json'),'{broken');
+ stop(f,child(f,'a',9.01));assert.equal(budgets(f).filter(o=>o.meta.budget.source==='subagent-stop').length,2);
+ assert.equal(denied(hook(f,pre())),true);
+ const c=child(f,'b',1);assert.equal(denied(hook(f,c.payload)),true);
+ assert.deepEqual(readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')),[]);
+});
+// The hook is wired with matcher *, so it starts for every tool call of every session. A copy of the entry file runs beside a
+// stub engine whose modules leave a marker file when they are imported, so the test sees whether a call loaded the engine.
+test('an uninteresting call does not load the engine; an interesting call does',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dm-budget-stub-')),hooks=join(dir,'hooks'),lib=join(dir,'scripts','lib'),marker=join(dir,'engine-loaded');
+ mkdirSync(hooks);mkdirSync(lib,{recursive:true});copyFileSync(SCRIPT,join(hooks,'budget-hook.mjs'));
+ const stub=name=>`import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(marker)}, ${JSON.stringify(name+'\n')});\n`;
+ writeFileSync(join(hooks,'dispatch-hook.mjs'),stub('dispatch-hook'));
+ for(const name of ['budget','paths','task-costs','transcript-usage']) writeFileSync(join(lib,`${name}.mjs`),stub(name));
+ const run=payload=>{rmSync(marker,{force:true});const p=spawnSync(process.execPath,[join(hooks,'budget-hook.mjs')],{input:typeof payload==='string'?payload:JSON.stringify(payload),encoding:'utf8',cwd:dir,env:{...process.env,CLAUDE_PROJECT_DIR:dir}});
+  assert.deepEqual([p.status,p.stdout,p.stderr],[0,'',''],JSON.stringify(payload));return existsSync(marker)?readFileSync(marker,'utf8').trim().split('\n'):[];};
+ const quiet=[{tool_name:'Bash',session_id:'s'},{tool_name:'Read',session_id:'s',tool_input:{file_path:'x'}},{tool_name:'Agent',session_id:'s',host:'codex'},{tool_name:'Bash',agent_id:'a',session_id:'s',host:'codex'},{tool_name:'Agent'},{tool_name:'Bash',agent_id:'a'},'not json',''];
+ for(const payload of quiet) assert.deepEqual(run(payload),[],`engine loaded for ${JSON.stringify(payload)}`);
+ for(const payload of [{tool_name:'Agent',session_id:'s'},{tool_name:'Task',session_id:'s'},{tool_name:'Bash',agent_id:'a',session_id:'s'},{tool_name:'Agent',session_id:'s',host:'claude'}])
+  assert.deepEqual(run(payload),['dispatch-hook','budget','paths','task-costs','transcript-usage'],`engine not loaded for ${JSON.stringify(payload)}`);
+ // With no engine beside it at all, an interesting call cannot load it: still no decision, exit 0.
+ const alone=mkdtempSync(join(tmpdir(),'dm-budget-lone-')),lone=join(alone,'budget-hook.mjs');copyFileSync(SCRIPT,lone);
+ const p=spawnSync(process.execPath,[lone],{input:JSON.stringify({tool_name:'Agent',session_id:'s'}),encoding:'utf8',cwd:alone,env:{...process.env,CLAUDE_PROJECT_DIR:alone}});
+ assert.deepEqual([p.status,p.stdout,p.stderr],[0,'','']);
+ // The real file, imported: handleBudget is ready and synchronous, with the same guards.
+ const {handleBudget}=await import('./budget-hook.mjs');
+ assert.deepEqual(handleBudget({tool_name:'Bash',session_id:'s'}),{});assert.deepEqual(handleBudget({tool_name:'Agent',session_id:'s',host:'codex'}),{});
+ const f=fixture();stop(f,child(f,'a',9.01));assert.equal(denied(handleBudget(pre(),{repo:f.repo,now:NOW})),true);
+});
+test('the denial names a guard threshold, not a cap or a limit',()=>{
+ const f=fixture();stop(f,child(f,'a',9.01));const r=hook(f,pre());
+ assert.equal(r.hookSpecificOutput.permissionDecisionReason,'T: task cost USD 9.01 exceeds the budget guard threshold USD 9');
 });

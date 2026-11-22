@@ -7,13 +7,26 @@ import { fileURLToPath } from 'node:url';
 import { currentSession, deliveryDir, sessionPath, sessionsDir, resolveOwnerRepo } from './lib/paths.mjs';
 import { listRuns } from './lib/plan.mjs';
 import { git as gitq, gitState } from './lib/git.mjs';
-import { validRoster } from './lib/roster.mjs';
-import { UNCONDITIONAL_CAVEATS } from './lib/report.mjs';
+import { unmappedFactories, validRoster } from './lib/roster.mjs';
+import { UNCONDITIONAL_CAVEATS, budgetCheckText, readDiagnostics } from './lib/report.mjs';
+import { budgetCheckState } from './lib/budget.mjs';
+import { pricesAge, pricesStaleText } from './lib/cost.mjs';
 
 export const MARKER = '_delivery';
 export const skillRootOf = (url = import.meta.url) => dirname(dirname(fileURLToPath(url)));
 const posix = (p) => p.split('\\').join('/');
 const readJson = (p, fb) => { if (!existsSync(p)) return fb; try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return fb; } };
+/** Why a settings file cannot be read as settings, or null. Writing it back would drop every key it holds, so install and
+ * --remove stop on this instead. A missing or empty file holds nothing to lose and is not a problem. The file is read
+ * directly and only "no such file" means missing: `existsSync` is false for a permission error too (a folder on the way
+ * with no search permission), and that file is there. */
+export function settingsProblem(file) {
+  let text; try { text = readFileSync(file, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; return `cannot be read (${e.code ?? 'error'})`; }
+  if (!text.trim()) return null;
+  let parsed; try { parsed = JSON.parse(text); } catch (e) { return `is not valid JSON (${String(e.message).split('\n')[0]})`; }
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? null : 'is not a JSON object';
+}
+const settingsFile = (repo, local) => join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
 const HOOK_FILES = ['dispatch-hook.mjs', 'budget-hook.mjs'];
 const DEFAULT_REL = '.claude/skills/delivery-monitor';
 const inside = (rel) => rel !== '' && rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel);
@@ -42,7 +55,8 @@ function explicitRepoProblem(dir) {
 const writeJson = (p, o) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, `${JSON.stringify(o, null, 2)}\n`); };
 
 export function installClaude(repo, rel, { local = false, remove = false } = {}) {
-  const file = join(repo, '.claude', local ? 'settings.local.json' : 'settings.json');
+  const file = settingsFile(repo, local);
+  const problem = settingsProblem(file); if (problem) throw new Error(`${file} ${problem}`);
   const existed = existsSync(file);
   const settings = readJson(file, {}); settings.hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   for (const [event, script, flag] of [['SubagentStop', 'dispatch-hook.mjs', ' --stop'], ['PreToolUse', 'budget-hook.mjs', '']]) {
@@ -187,14 +201,20 @@ function stagingLeaks(tel, git) {
 
 /** One structured finding per doctor line. `git(cwd, args) → string|null` (lib/git.mjs `git` contract) and
  * `gitExec(cwd, args) → { ok, status, reason? }` default to direct spawns; doctor injects its hardened runner. */
-export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitExec = gitExecq } = {}) {
+export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitExec = gitExecq, now = Date.now() } = {}) {
   const physical = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
   const asked = physical(repo);
   repo = resolveOwnerRepo(repo, git);
   const checkout = asked === physical(repo) ? 'main' : 'linked';
   const findings = [];
   const add = (severity, line, fix = null) => findings.push({ severity, message: line, fix, checkout, line });
-  const settings = readJson(join(repo, '.claude', 'settings.json'), {}), local = readJson(join(repo, '.claude', 'settings.local.json'), {});
+  // A settings file that does not parse reads as "no hooks" below; say why, so "not wired" is not taken for "never installed".
+  for (const name of ['settings.json', 'settings.local.json']) {
+    const problem = settingsProblem(join(repo, '.claude', name));
+    if (problem) add('warning', `settings: .claude/${name} ${problem} — its hooks are not read and install-hooks.mjs will not replace it; fix the file by hand`);
+  }
+  const asObject = (v) => (v && typeof v === 'object' ? v : {});
+  const settings = asObject(readJson(join(repo, '.claude', 'settings.json'), {})), local = asObject(readJson(join(repo, '.claude', 'settings.local.json'), {}));
   const entries = (event, script, flag = '') => [...(settings.hooks?.[event] ?? []), ...(local.hooks?.[event] ?? [])].flatMap(e =>
     e?.matcher === '*' ? (e.hooks ?? []).filter(h => h.type === 'command' && h.command?.includes(`${posix(join(rel, 'hooks', script))}"${flag}`)) : []);
   const fix = `node ${rel}/scripts/install-hooks.mjs --no-submodule`;
@@ -205,6 +225,9 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
   // The budget hook must be synchronous to deny, so an async entry does not count.
   const budget = entries('PreToolUse', 'budget-hook.mjs').some(h => h.async !== true);
   add(budget ? 'ok' : 'warning', `budget hook: ${budget ? 'wired' : 'MISSING'} (Claude PreToolUse, synchronous Agent|Task + subagent calls)`, budget ? null : fix);
+  // Wired is not the same as working: the hook allows what it cannot evaluate, and says so only in the diagnostics file.
+  const check = budgetCheckState(repo, { now });
+  add(check.off || check.unreadable ? 'warning' : 'ok', `budget check: ${budgetCheckText(check)}`);
   const runs = listRuns(repo); add('info', `plans: ${runs.filter((r) => r.status === 'open').length} open, ${runs.length} total`);
   add('info', `sessions bound: ${existsSync(sessionsDir(repo)) ? readdirSync(sessionsDir(repo)).length : 0}`);
   // The count alone hid that the orchestrating session was never bound — say so for THIS session.
@@ -238,10 +261,17 @@ export function doctorFindings(repo, rel, { env = process.env, git = gitq, gitEx
     const s = gitState(tel, git); add(s.unmerged.length || s.merging ? 'warning' : 'ok', `telemetry git: unmerged=${s.unmerged.length} merging=${s.merging} dirty=${s.dirty} unpushed=${s.unpushed ?? 'no upstream'}`);
   }
   const diag = existsSync(deliveryDir(repo)) ? readdirSync(deliveryDir(repo)).filter((f) => f.startsWith('diagnostics-')) : [];
-  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)`);
+  // A stop hook that failed captured nothing for that dispatch; the count is said here because nothing else shows it. It counts
+  // lines, not subagents: the hook writes at most one line per session and agent within its recent diagnostics window.
+  let stopFailed = 0; try { stopFailed = readDiagnostics(repo)['stop-hook-failed']; } catch { /* the line count below still prints */ }
+  add('info', `diagnostics: ${diag.reduce((n, f) => n + readFileSync(join(deliveryDir(repo), f), 'utf8').split('\n').filter(Boolean).length, 0)} line(s)${stopFailed ? `, stop-hook-failed=${stopFailed} (${stopFailed} stop hook failure(s) on record: the spend of those dispatches may be missing from the totals, not zero)` : ''}`);
+  // Printed only when stale: a model missing from an old table is unpriced, and nothing else says so.
+  const stalePrices = pricesStaleText(pricesAge(repo, { now }));
+  if (stalePrices) add('warning', `prices: stale — ${stalePrices}`);
   for (const r of runs.filter((r) => r.status === 'open')) {
     const rosterOk = validRoster(r.roster);
-    add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}`);
+    const unmapped = rosterOk ? unmappedFactories(r.roster) : [];
+    add(rosterOk ? 'ok' : 'warning', `roster: ${r.run} ${rosterOk ? 'valid' : 'INVALID (refresh with plan roster)'}${unmapped.length ? ` (no role map for ${unmapped.join(', ')}: the hook records no dispatch of its agents)` : ''}`);
   }
   if (existsSync(sessionsDir(repo))) {
     for (const f of readdirSync(sessionsDir(repo)).filter((n) => n.endsWith('.json')).sort()) {
@@ -278,6 +308,9 @@ export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PRO
   if (has('--doctor')) { const d = doctorReport(repo, rel ?? posix(relative(repo, skillRootOf())), { env: process.env }); for (const l of d.lines) console.log(l); return 0; }
   const remove = has('--remove');
   if (!remove && rel == null) { process.stderr.write(`USAGE(no copy of the delivery-monitor hooks inside ${repo}; install the skill there first, then run its own install-hooks.mjs)\n`); return 2; }
+  // Checked before the first write: a settings file that does not parse is never replaced, and nothing else is written either.
+  const target = settingsFile(repo, has('--local')), unreadable = settingsProblem(target);
+  if (unreadable) { process.stderr.write(`USAGE(${target} ${unreadable}; fix or delete the file, then run this again — nothing was written)\n`); return 2; }
   let tel = { status: 'kept' }; if (!remove && !has('--no-submodule')) tel = bootstrapTelemetry(repo);
   const file = installClaude(repo, rel, { local: has('--local'), remove }); const ig = installIgnoreBlocks(repo, { remove });
   console.log(`${remove ? 'REMOVED' : 'INSTALLED'} ${file}`); console.log(`ignore blocks: root=${ig.root} inner=${ig.inner}`); console.log(`telemetry: ${telemetryMode(repo)} (${tel.status}${tel.reason ? `: ${tel.reason}` : ''})`);

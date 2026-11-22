@@ -12,14 +12,14 @@ import { commitTime, firstCommitContaining, git, relPath } from './lib/git.mjs';
 import { deriveGitObservations } from './lib/git-backfill.mjs';
 import { PR_LIMIT, derivePrObservations, readMergedPrs } from './lib/pr-backfill.mjs';
 import { bestEffortSync } from './lib/sync.mjs';
-import { makeRoster } from './lib/roster.mjs';
-import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, SCHEMA } from './lib/report.mjs';
+import { makeRoster, unmappedFactories } from './lib/roster.mjs';
+import { assemble, renderMarkdown, renderHtml, renderStatus, renderBudgetCoverage, budgetCheckText, SCHEMA } from './lib/report.mjs';
 import { doctorReport, hookRel, skillRootOf } from './install-hooks.mjs';
 import { CALIBRATION_FILE, buildCalibration, collect, fillEstimates, readCalibration } from './lib/calibrate.mjs';
-import { loadPricesChecked } from './lib/cost.mjs';
+import { loadPricesChecked, pricesAge, pricesStaleText } from './lib/cost.mjs';
 import { renderSpend, spendReport, statusSpend } from './lib/spend.mjs';
 import { attributeSpend, renderAttribution } from './lib/attribution.mjs';
-import { budgetSummary } from './lib/budget.mjs';
+import { BUDGET_GUARD_NOTE, budgetCheckState, budgetSummary } from './lib/budget.mjs';
 import { tombstone } from './lib/dispatches.mjs';
 import { backfillTranscripts, coverage } from './lib/transcript-backfill.mjs';
 
@@ -247,6 +247,8 @@ function cmdPlanRegister(repo, f, io, now) {
   if (calibrationNote) out(io, calibrationNote);
   if (calib || fill.kept) out(io, `CALIBRATED filled=${fill.filled} kept=${fill.kept} planner=${fill.planner} no-cell=${fill.no_cell} samples=${calib?.cal.samples ?? 0} (${calib ? `${CALIBRATION_FILE} ${calib.sha256.slice(0, 12)}` : 'no calibration table'})`);
   if (conflicts) throw cliError('ID-CONFLICT', `${conflicts} registration observation(s) conflict with existing records`);
+  // Not an error: the plan is tracked with the CLI. Said once per registration, because the hooks stay silent about it.
+  for (const factory of unmappedFactories(roster)) io.stderr.write(`WARN ROSTER-UNMAPPED(${factory}): this skill has no role map for that factory. The plan is registered; record its transitions with the CLI or a backfill. The dispatch hook records no dispatch of its agents and the budget guard does not check them; their usage is still captured for spend.\n`);
   bindCaller(repo, runId, f, io, now, 'register');
   return 0;
 }
@@ -548,6 +550,7 @@ function cmdReport(repo, p, io, now) {
 function cmdStatus(repo, p, io, now) {
   const planFlag = p.flags.plan != null ? requireValue(p.flags, 'plan') : null;
   // Unreadable input is a soft line; a programming error is INTERNAL, as in every command.
+  const pricesLine = () => { const stale = pricesStaleText(pricesAge(repo, { now })); if (stale) out(io, `PRICES stale: ${stale}`); };
   const spendLine = () => { try { io.stdout.write(statusSpend(repo, { now })); } catch (e) { if (!isInputError(e)) throw e; out(io, `SPEND unavailable: ${e.message}`); } };
   try { io.stdout.write(renderStatus(assemble(repo, { plans: planFlag ? [planFlag] : null, now, costs: false }))); }
   catch (e) {
@@ -556,6 +559,9 @@ function cmdStatus(repo, p, io, now) {
       spendLine();
       try { out(io, renderBudgetCoverage(budgetSummary(repo))); }
       catch (problem) { if (!isInputError(problem)) throw problem; out(io, renderBudgetCoverage({ unavailable: problem.message })); }
+      out(io, `BUDGET check: ${budgetCheckText(budgetCheckState(repo, { now }))}`);
+      out(io, `BUDGET guard: ${BUDGET_GUARD_NOTE}`);
+      pricesLine();
     }
     throw e;
   }
@@ -565,6 +571,7 @@ function cmdStatus(repo, p, io, now) {
     if (calib) out(io, `CALIBRATION samples=${calib.cal.samples} age=${Math.max(0, Math.floor((now - Date.parse(calib.cal.generated_at)) / 86_400_000))}d`);
     else out(io, `CALIBRATION none: ${collect(repo, { now }).samples.length ? 'not built yet: run plan register or calibrate' : 'no priced landed task yet'}`);
   } catch (e) { if (!isInputError(e)) throw e; out(io, `CALIBRATION invalid: ${e.message}`); }
+  pricesLine();
   spendLine();
   return 0;
 }
@@ -656,7 +663,7 @@ function cmdBackfill(repo, p, io, now) {
 // final `doctor: ok`/`doctor: attention` line doctorReport appends, never a nonzero exit code.
 function cmdDoctor(repo, p, io, now) {
   repo = resolveOwnerRepo(repo);
-  const d = doctorReport(repo, hookRel(repo, skillRootOf(import.meta.url)) ?? relative(repo, skillRootOf(import.meta.url)), { env: io.env });
+  const d = doctorReport(repo, hookRel(repo, skillRootOf(import.meta.url)) ?? relative(repo, skillRootOf(import.meta.url)), { env: io.env, now });
   try {
     const counts = coverage(repo, { env: io.env });
     const fields = ['identities', 'in_store', 'missing_from_store', 'gaps_resolved', 'gaps_unresolved', 'interrupted', 'unreadable_children', 'oldest_transcript_date'];

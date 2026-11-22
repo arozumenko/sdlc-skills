@@ -3,17 +3,27 @@
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bindByBranch, diagnose, findChildTranscript, readStdinBounded, resolveRefs, sessionRun, rosterOf } from './dispatch-hook.mjs';
-import { budgetedItem, budgetInputs, canonicalBudgetItem, recordBudget } from '../scripts/lib/budget.mjs';
-import { deliveryDir, ownerRepo, sha256, whoAmI, nowIso } from '../scripts/lib/paths.mjs';
-import { taskCosts, taskKey, liveTaskCost, priorTaskCost } from '../scripts/lib/task-costs.mjs';
-import { incrementalUsage } from '../scripts/lib/transcript-usage.mjs';
+
+// The hook is wired with matcher `*`: it starts for every tool call of every session. Only an Agent/Task dispatch and a
+// subagent's own calls can concern a budget, so the engine (the dispatch hook and scripts/lib) is loaded after that is known.
+// Run as the hook, the entry reads the payload first and loads the engine only for such a call. Imported as a module, the
+// engine is loaded at once, so `handleBudget` is ready and synchronous for its caller.
+let bindByBranch, diagnose, findChildTranscript, resolveRefs, sessionRun, rosterOf, budgetedItem, budgetInputs, canonicalBudgetItem, recordBudget,
+  deliveryDir, ownerRepo, sha256, whoAmI, nowIso, taskCosts, taskKey, liveTaskCost, priorTaskCost, incrementalUsage;
+async function loadEngine() {
+  ({ bindByBranch, diagnose, findChildTranscript, resolveRefs, sessionRun, rosterOf } = await import('./dispatch-hook.mjs'));
+  ({ budgetedItem, budgetInputs, canonicalBudgetItem, recordBudget } = await import('../scripts/lib/budget.mjs'));
+  ({ deliveryDir, ownerRepo, sha256, whoAmI, nowIso } = await import('../scripts/lib/paths.mjs'));
+  ({ taskCosts, taskKey, liveTaskCost, priorTaskCost } = await import('../scripts/lib/task-costs.mjs'));
+  ({ incrementalUsage } = await import('../scripts/lib/transcript-usage.mjs'));
+}
+/** The fast guard, from the payload alone: an Agent/Task dispatch or a subagent's call, on Claude, with a session. */
+const concernsBudget = (payload) => Boolean((payload?.agent_id || ['Agent', 'Task'].includes(payload?.tool_name)) && (!payload.host || payload.host === 'claude') && payload.session_id);
 
 const decision = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
 export function handleBudget(payload, { repo, now = Date.now() } = {}) {
   // This guard precedes owner resolution, filesystem reads and user lookup.
-  if (!payload?.agent_id && !['Agent', 'Task'].includes(payload?.tool_name)) return {};
-  if (payload.host && payload.host !== 'claude' || !payload.session_id) return {};
+  if (!concernsBudget(payload)) return {};
   let slug;
   try {
     repo ??= ownerRepo(payload, process.env); slug = whoAmI(repo).slug;
@@ -70,7 +80,21 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
     return {};
   }
 }
-async function main() {
-  try { const payload = JSON.parse(await readStdinBounded()); const result = handleBudget(payload); if (result.hookSpecificOutput) process.stdout.write(`${JSON.stringify(result)}\n`); } catch { /* malformed payload: no decision */ }
+/** The dispatch hook's `readStdinBounded`, repeated here: importing it would load the engine before the guard. */
+function readStdinBounded(ms = 2000, max = 65536) {
+  return new Promise((done) => {
+    let buf = '', finished = false; const finish = () => { if (!finished) { finished = true; clearTimeout(timer); done(buf); } }; const timer = setTimeout(finish, ms);
+    try { process.stdin.setEncoding('utf8'); process.stdin.on('data', (d) => { buf += d; if (buf.length > max) { buf = buf.slice(0, max); finish(); return; } try { JSON.parse(buf); finish(); } catch { /* incomplete */ } }); process.stdin.on('end', finish); process.stdin.on('error', finish); } catch { finish(); }
+  });
 }
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().then(() => process.exit(0), () => process.exit(0));
+async function main() {
+  try {
+    const payload = JSON.parse(await readStdinBounded());
+    if (!concernsBudget(payload)) return;
+    await loadEngine();
+    const result = handleBudget(payload); if (result.hookSpecificOutput) process.stdout.write(`${JSON.stringify(result)}\n`);
+  } catch { /* malformed payload or an engine that cannot load: no decision */ }
+}
+const isEntry = Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntry) main().then(() => process.exit(0), () => process.exit(0));
+else await loadEngine();

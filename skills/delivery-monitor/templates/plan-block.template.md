@@ -5,7 +5,10 @@ document, next to the task templates from § 3 "Create Technical Tasks". Fill in
   - campaign_id / run_id       — lowercase, ^[a-z0-9][a-z0-9-]*$; the registered run id is
                                   "<campaign_id>/<run_id>" (e.g. "sec/run-1") — that's what
                                   every --plan flag takes from here on.
-  - factory                    — feature-development | test-automation | manual-qa
+  - factory                    — feature-development | test-automation | manual-qa |
+                                  product-management | security-testing (the last two have no
+                                  role map here: the plan registers, the hook records nothing for
+                                  their agents; record transitions with the CLI)
   - observation_start          — the first instant evidence for this run should be trusted
   - source_epoch.integration_ref — the branch `backfill --git` is allowed to read
   - campaign.ref / missions[].ref / tasks[].ref — must stay unique within this plan
