@@ -1,0 +1,72 @@
+name: tests-areas
+
+# The fast test set (validate.yml) leaves out a short list of slow files. A
+# pull request that changes one of the areas those files belong to runs every
+# test in that area here, slow files included, so it does not have to wait for
+# the full run on main (tests-full.yml).
+#
+# A change under bin/ or hooks/ also runs the two offline install tests that
+# live under skills/delivery-monitor, as the entry "installer-integration"
+# (left out when the delivery-monitor area runs anyway).
+#
+# Neither list is in this file. They are PR_AREAS and PR_GROUPS in
+# bin/fast-tests.mjs, next to the SLOW list; bin/fast-tests.test.mjs fails when
+# a SLOW file is in no area and not on that script's MAIN_ONLY list.
+on:
+  pull_request:
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      areas: ${{ steps.areas.outputs.areas }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, so the diff against the base branch has a merge base.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+      - name: Areas and groups this pull request changes
+        id: areas
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        # Two commands, not a pipe: a failed `git diff` must fail the step, not
+        # read as "nothing changed". --no-renames lists both paths of a moved
+        # file, so moving a file out of an area still counts as changing it. -z
+        # separates paths with NUL and never quotes a name.
+        run: |
+          git diff --no-renames --name-only -z "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/changed.txt"
+          areas=$(node bin/fast-tests.mjs --changed-areas < "$RUNNER_TEMP/changed.txt")
+          echo "changed areas: $areas"
+          echo "areas=$areas" >> "$GITHUB_OUTPUT"
+
+  area:
+    needs: changed
+    if: needs.changed.outputs.areas != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        area: ${{ fromJson(needs.changed.outputs.areas) }}
+    name: ${{ matrix.area }}
+    env:
+      # Tests create throwaway git repositories and commit in them. The runner
+      # has no git identity, so give every test one.
+      GIT_AUTHOR_NAME: ci
+      GIT_AUTHOR_EMAIL: ci@example.invalid
+      GIT_COMMITTER_NAME: ci
+      GIT_COMMITTER_EMAIL: ci@example.invalid
+      AREA: ${{ matrix.area }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+      - name: Every test in the area, or the files of the group
+        # Not `node --test <dir>/`: Node 24 takes a directory argument as a
+        # file to run and fails. The script passes the files one by one.
+        run: node bin/fast-tests.mjs --area "$AREA"
