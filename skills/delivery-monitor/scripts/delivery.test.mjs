@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -879,4 +879,39 @@ test('defect review fixes: same-instant batch found+fixed is fixed (B1); a found
   assert.match(run(repo, ['event', 'TASK-002', 'done', '--id', 'z']).stderr, /--allow-cancelled/, 'other events still need the flag');
   const rm = run(repo, ['event', 'TASK-002', 'defect_found', '--defect', 'BUG-4', '--found-stage', 'user']);
   assert.equal(rm.code, 0, rm.stderr);
+});
+
+// The skill ships no role map for product-management and security-testing. Their plans register and can be tracked with the
+// CLI; one warning says the hook attributes nothing to them, and doctor repeats it for the open run.
+test('a plan from a factory with no role map registers with a warning and works end to end with the CLI', () => {
+  for (const factory of ['security-testing', 'product-management']) {
+    const repo = initRepo(); installAgent(repo, 'security-lead'); installAgent(repo, 'product-owner'); installAgent(repo, 'js-dev');
+    const p = plan(1, [{ ref: 'TASK-001' }]); p.factory = factory; writePlan(repo, p);
+    const reg = run(repo, ['plan', 'register', '--from', 'plan.md', '--id', 'reg-1', '--created-at', '2026-09-16T08:00:00Z']);
+    assert.equal(reg.code, 0, reg.stderr); assert.match(reg.stdout, /PLAN sec\/run-1/);
+    const show = JSON.parse(run(repo, ['plan', 'show', '--plan', 'sec/run-1']).stdout);
+    assert.deepEqual([show.factory, show.roster.factories, show.roster.agents], [factory, [factory], []]);
+    assert.equal(run(repo, ['event', 'TASK-001', 'dispatched', '--id', 'd1', '--at', '2026-09-16T09:00:00Z']).code, 0);
+    assert.equal(run(repo, ['event', 'TASK-001', 'done', '--id', 'f1', '--at', '2026-09-16T11:00:00Z']).code, 0);
+    const doc = JSON.parse(run(repo, ['report', '--json', '--cutoff', '2026-09-17T00:00:00Z']).stdout);
+    assert.equal(doc.plans[0].metrics.flow.task.strata.all.cycle_time.min, 7200);
+    assert.equal(run(repo, ['status']).code, 0);
+    const doctor = run(repo, ['doctor']); assert.equal(doctor.code, 0);
+    assert.ok(doctor.stdout.split('\n').includes(`roster: sec/run-1 valid (no role map for ${factory}: the hook records no dispatch of its agents)`), doctor.stdout);
+    assert.equal(run(repo, ['plan', 'roster', '--plan', 'sec/run-1', '--agents', 'security-lead']).code, 2, 'a role outside the map is still refused');
+  }
+});
+test('plan register: one WARN ROSTER-UNMAPPED line on stderr for a factory with no role map; none for a mapped factory', () => {
+  const register = (factory, extra = []) => {
+    const repo = initRepo(); installAgent(repo, 'js-dev'); installAgent(repo, 'security-lead');
+    const p = plan(1, [{ ref: 'TASK-001' }]); p.factory = factory; writePlan(repo, p);
+    const r = spawnSync('node', [CLI, 'plan', 'register', '--from', 'plan.md', '--id', 'reg-1', '--created-at', '2026-09-16T08:00:00Z', ...extra], { cwd: repo, encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' } });
+    return { ...r, roster: r.status === 0 ? JSON.parse(run(repo, ['plan', 'show', '--plan', 'sec/run-1']).stdout).roster : null };
+  };
+  const WARN = 'WARN ROSTER-UNMAPPED(security-testing): this skill has no role map for that factory. The plan is registered; record its transitions with the CLI or a backfill. The dispatch hook records no dispatch of its agents and the budget guard does not check them; their usage is still captured for spend.\n';
+  const alone = register('security-testing'); assert.equal(alone.status, 0, alone.stderr); assert.equal(alone.stderr, WARN);
+  const mixed = register('security-testing', ['--factories', 'security-testing,feature-development']);
+  assert.equal(mixed.status, 0, mixed.stderr); assert.equal(mixed.stderr, WARN); assert.deepEqual(mixed.roster.agents, ['js-dev']);
+  const mapped = register('feature-development'); assert.equal(mapped.status, 0, mapped.stderr); assert.equal(mapped.stderr, '');
+  const unknown = register('feature-development', ['--factories', 'feature-development,ops']); assert.equal(unknown.status, 2); assert.match(unknown.stderr, /^USAGE\(unknown participating factory\)/);
 });

@@ -35,6 +35,16 @@ automatically (readers look only there; un-migrated history would silently
 drop out of every report). Same-named newer data in `automation/` wins —
 nothing is ever clobbered.
 
+**The installer never replaces a settings file it cannot parse.** If
+`.claude/settings.json` (or `settings.local.json`), `.vscode/tasks.json`,
+`.vscode/settings.json` or the telemetry `config.json` exists but is not
+strict JSON (a syntax error, comments, a trailing comma), install, `--remove`
+and `--otel` stop with exit 1 and a message naming the file — every such file
+is checked before the first write, so nothing is half-applied. Fix the file
+and re-run. One exception keeps uninstall usable:
+`--remove` / `--otel-remove` skip an unparseable VS Code file that holds
+nothing of ours.
+
 ## Quick start
 
 ```bash
@@ -193,7 +203,8 @@ treats the declared batch/cases as the strongest membership surface.
 ## How capture works on each host
 
 - **Claude Code** — a SessionEnd hook captures each ending session (dollars
-  metered by ccusage at capture time, best-effort via npx) plus a SessionStart
+  metered by ccusage at capture time, best-effort via npx, one pinned
+  version — § Config) plus a SessionStart
   async sweep for sessions that never reached their end hook, and a
   **SubagentStop hook that measures each dispatch as it finishes**
   (§ Live measurements).
@@ -302,8 +313,33 @@ disables). Because of `ignore = all` and the separate branch, the main working
 tree never gets dirty and a branch switch never stashes a record. A teammate
 gets everything with `git clone --recurse-submodules` (forgot? — `git
 submodule update --init`); the chief lead runs `install-hooks.mjs --pull`
-before a team report to merge in everyone's pushes. A repo with **no remote at
-all** works too — everything accumulates in the local `telemetry` branch; when
+before a team report to merge in everyone's pushes. **A merge that would
+conflict is never committed** (for example one git user name capturing in
+two clones, so both append to the same `usage-<user>.jsonl`): the sync and
+`--pull` do not merge, this clone's captures stay committed locally and
+unpushed, and stderr says so — resolve it by hand inside
+`.agents/telemetry`. A merge that is **already open** there (someone
+resolving by hand) is never touched: the sync skips, stages nothing, and
+captures wait in the working tree until it is finished or aborted. Syncs are
+serialized by a lock directory in the submodule's git dir; a capture that
+finds it held skips its sync and the next one catches up. Known limits:
+
+- A merge that would conflict is found by a dry run (`git merge-tree
+  --write-tree`) and never started, so nothing in the tree is touched. **On
+  git older than 2.38** there is no dry run: the merge is started and aborted,
+  and a capture another process appends to a conflicted file in that moment
+  can be lost.
+- Captures are not locked while a clean merge runs: an append that lands
+  between git's overwrite check and its replacement of that file can still be
+  lost (this race is older than the lock).
+- Other writers to `.agents/telemetry` — another skill's sync, a person's git
+  commands — do not take this lock.
+- A merge left open by a killed process is left untouched like any other open
+  merge: finish or abort it by hand, syncs skip until then.
+- The lock is never taken over. One older than 10 minutes is reported with
+  its path; if no sync is running, remove it by hand.
+
+A repo with **no remote at all** works too — everything accumulates in the local `telemetry` branch; when
 a real remote appears later, run `git submodule sync .agents/telemetry` once
 so pushes start reaching it (`--doctor` detects the un-synced state and prints
 exactly that command).
@@ -355,7 +391,12 @@ shared piece: per-factory subfolders, one branch, one sync.
   prompt text to the repo; decide as a team, mind client-data rules.
 - `priceAtCapture` — Claude only: meter the session with `npx ccusage` when it
   ends (adds seconds to the hook; on failure the line says `costUsd: null`,
-  never a guess). `TOKENOMICS_NO_CCUSAGE=1` disables it too.
+  never a guess). `TOKENOMICS_NO_CCUSAGE=1` disables it too. The npx fetch is
+  **pinned to one exact ccusage version** — the `CCUSAGE_VERSION` constant at
+  the top of `hooks/telemetry-capture.mjs`, never `@latest` — so the same
+  program runs on every capture; bumping it is a reviewed one-line change
+  (steps in the comment there). `TOKENOMICS_CCUSAGE_BIN=<path>` runs a ccusage
+  you installed instead, with no download at all.
 - `maxSweep` — new sessions harvested per hook run; the rest wait for the next
   run (a first sweep can face a month of history — `--sweep --all` does it in
   one go, run that manually).

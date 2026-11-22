@@ -131,7 +131,7 @@ test('rules stay inline and an oversized briefing becomes required reading', () 
 test('Copilot keeps its own 10KB default', () => {
   const dir = project({ memory: { 'MEMORY.md': index(4000) } });
   try {
-    const out = run(dir, 'qa-engineer', { COPILOT_CLI: '1' });
+    const out = run(dir, 'qa-engineer', { COPILOT_CLI: '1', COPILOT_PROJECT_DIR: dir });
     assert.ok(out.length < 20000, `copilot payload should stay ~10KB, got ${out.length}`);
     assert.match(out, /REQUIRED READING/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -379,7 +379,7 @@ test('SOUL.md is injected on Claude, not only under Copilot', () => {
 test('SOUL.md is still injected under Copilot', () => {
   const dir = project({ role: 'tech-lead', memory: { 'SOUL.md': 'I am Rio, and I block on flaws.' } });
   try {
-    const out = run(dir, 'tech-lead', { SDLC_VSCODE: '1' });
+    const out = run(dir, 'tech-lead', { SDLC_VSCODE: '1', COPILOT_PROJECT_DIR: dir });
     assert.match(out, /I am Rio, and I block on flaws\./);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

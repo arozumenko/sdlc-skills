@@ -2,6 +2,8 @@
 // recovered dispatches. golden.json was produced by running runScenario with the `main`, `makeObservation` and
 // `snapshotFromTranscript` of the code from before that change, so the test compares against an independent baseline and never
 // against the code under test. To regenerate after an intended output change, run runScenario and write its result to golden.json.
+// It has been regenerated since for intended label changes, through legacyScenario (the tests compare through it). Each
+// time, the new file was checked to differ from the old one only in those label lines.
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';

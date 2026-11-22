@@ -27,7 +27,8 @@ consumer-facing summary, and `bundles/SPEC.md` before touching factories.
 ## Commands
 
 ```bash
-npm test                       # node --test (runs *.test.mjs anywhere in tree)
+npm test                       # node --test (runs *.test.mjs anywhere in tree) — the full run, several minutes
+npm run test:fast              # bin/fast-tests.mjs — every test file minus the SLOW list in that script
 npm run validate               # validate:factories + validate:marketplaces — run before committing
 npm run validate:factories       # bin/validate-factories.mjs — factory.json manifests
 npm run validate:marketplaces  # gen-marketplaces.mjs --check — fails if generated manifests are stale
@@ -36,14 +37,26 @@ npm run gen:marketplaces       # regenerate .cursor-plugin / .codex-plugin / .gi
 # Run a single test file
 node --test bin/lib/item-resolver.test.mjs
 
-# Exercise the installer against a throwaway dir
-node bin/init.mjs init --factory feature-development --target claude --yes
+# Exercise the installer against a throwaway dir (it refuses to run inside this checkout)
+REPO=$PWD; (cd "$(mktemp -d)" && node "$REPO/bin/init.mjs" init --factory feature-development --target claude --yes)
 # --bundle is a silent back-compat alias for --factory (pre-rename flag name)
 ```
 
 CI (`.github/workflows/validate.yml`) runs `validate-factories.mjs` and validates
 every `skills/*/SKILL.md` and `bundles/*/skills/*/SKILL.md` against the
-agentskills.io spec via `skills-ref`.
+agentskills.io spec via `skills-ref`. On every pull request and push to `main`
+it also runs `npm run test:fast`, `validate:marketplaces` and `validate:dupes`.
+`.github/workflows/tests-full.yml` runs the full `npm test` on push to `main`
+and nightly. A new test file is in the fast set by default; add it to `SLOW` in
+`bin/fast-tests.mjs` only if it alone takes more than about 10 seconds.
+A pull request that changes a directory listed in `PR_AREAS` in that script
+also runs every test under it, slow files included
+(`.github/workflows/tests-areas.yml`); a `SLOW` file in no area must be in
+`MAIN_ONLY` with a reason. A change under `bin/` or `hooks/` also runs the two
+offline delivery-monitor install tests (`PR_GROUPS`, entry
+`installer-integration`).
+Wall-clock limits in tests are opt-in: the delivery-monitor scale test asserts
+its elapsed time only under `BENCH=1 node --test <file>`.
 
 ## Architecture
 

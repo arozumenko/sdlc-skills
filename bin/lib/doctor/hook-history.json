@@ -1,8 +1,23 @@
 {
-  "generatedFrom": "fb635f7823ab",
+  "generatedFrom": "4e288e4e7e17",
   "versions": [
     {
-      "commit": "fb635f7823ab",
+      "commit": "60f848b03318",
+      "date": "2026-11-21",
+      "files": {
+        "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",
+        "session-start": "ccda0948529e4e84df2cbf35b940af93e74cf01f89c4ffd31e66bdd2381771bf",
+        "agent-start": "724452139d67651b2a08bc1502e8db8d87ba21434cfe522b294b064dbb8f5ff3",
+        "agent-brief": "f0b08cb6c6cf3dc8e9458ec6f8d180e92c7cb0d0f0025917409082ed9f1c766d",
+        "lib.sh": "8f8c948c908f4c014f10a6a3f6748065e9bd3e87a49a22ac8493214bf789d2f7"
+      },
+      "defaultBudget": {
+        "copilot": 10240,
+        "claude": 9000
+      }
+    },
+    {
+      "commit": "e49113eef097",
       "date": "2026-11-10",
       "files": {
         "run-hook.cmd": "c0e0e5e99146de1a5b791e9b6095d7ed3aba42624bddc94c15f0bcc7509cb41a",

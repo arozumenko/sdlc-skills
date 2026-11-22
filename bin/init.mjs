@@ -81,7 +81,7 @@ import { buildItemIndex, resolveItem, catalogIds, itemKnown } from "./lib/item-r
 import { extractSkillMdName } from "./lib/skill-md.mjs";
 import { CORE_HOOK_FILES, CORE_HOOK_EXE, expectedCoreHookSpec } from "./lib/core-hook-spec.mjs";
 import { execSync, execFileSync } from "child_process";
-import { homedir } from "os";
+import { homedir, userInfo } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -1749,7 +1749,7 @@ function printHelp() {
     --all                      Install every agent and every skill (no prompts)
     --agents <a,b,c|all>       Install only these agents (or all)
     --skills  <a,b,c|all>      Install only these skills (or all)
-    --target <claude,cursor,…> Limit IDE targets (default: all detected)
+    --target <claude,cursor,…> Limit IDE targets (default: all detected; unattended runs warn without it, a future version will require it)
     --update                   Overwrite existing installs
     --force                    With --update: also replace items that have local changes
     --interactive, -i          Menu to pick optional MCP servers (and, for
@@ -2230,6 +2230,17 @@ export function applySkillOverlayToText(text, overlay) {
 // Cursor/Windsurf we also regenerate the injected `skills:` inventory so it
 // matches. Returns true if rewritten.
 function applySkillOverlay(target, name, overlay, registry) {
+  if (target.id === "codex") {
+    // A Codex agent is a generated .toml with no skill lines to rewrite: apply
+    // the overlay to the AGENT.md text this run built it from; the .toml is
+    // rebuilt from that text once the skills are copied (finalizeCodexAgents).
+    // A file this run did not write (exists, no --update) is left alone.
+    const built = codexAgentSources.get(join(CWD, target.dir, "agents", `${name}.toml`));
+    const overlaid = built ? applySkillOverlayToText(built.agentText, overlay) : null;
+    if (overlaid === null) return false;
+    built.agentText = overlaid;
+    return true;
+  }
   const agentFile =
     target.id === "copilot"
       ? join(CWD, target.dir, "agents", `${name}.agent.md`)
@@ -2445,7 +2456,9 @@ function tomlMultiline(s) {
   return '"""\n' + body.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"') + '\n"""';
 }
 
-function transformAgentForCodex(agentText, soulText, name) {
+// `canEnable(id)` decides which of the agent's `skills:` entries get a
+// [[skills.config]] block (see writeCodexAgent).
+function transformAgentForCodex(agentText, soulText, name, canEnable) {
   const fm = agentText.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/m);
   const frontmatter = fm ? fm[1] : "";
   let body = fm ? agentText.slice(fm.index + fm[0].length) : agentText;
@@ -2484,13 +2497,25 @@ function transformAgentForCodex(agentText, soulText, name) {
   // Enable only the `skills:` list — the standing-context set. On-demand
   // skills are installed under .codex/skills/ but not enabled here; the
   // agent body's prose points at them when they apply.
-  const skills = parseAgentSkillSplit(agentText).preload.filter((id) =>
-    existsSync(join(PKG_ROOT, "skills", id))
-  );
+  const skills = parseAgentSkillSplit(agentText).preload.filter(canEnable);
   for (const id of skills) {
     lines.push("", "[[skills.config]]", `path = ${tomlBasicString(`.codex/skills/${id}/SKILL.md`)}`, "enabled = true");
   }
   return lines.join("\n") + "\n";
+}
+
+// What each Codex agent written by this run is built from (dest path → source
+// texts and the enablement rule). A .toml is not final when it is first
+// written: a skill overlay may still change its skill lines, and the skills it
+// enables are copied after the agents.
+const codexAgentSources = new Map();
+
+// Rebuild every .toml this run wrote. Called once the target's skills are on
+// disk, so the enablement matches what is installed.
+function finalizeCodexAgents() {
+  for (const [dest, b] of codexAgentSources) {
+    writeFileSync(dest, transformAgentForCodex(b.agentText, b.soulText, b.name, b.canEnable));
+  }
 }
 
 function writeCodexAgent(src, name, targetDir, update) {
@@ -2499,23 +2524,65 @@ function writeCodexAgent(src, name, targetDir, update) {
   const dest = join(CWD, targetDir, "agents", `${name}.toml`);
   if (entryAt(dest) && !update) return { status: "exists", dest };
   const soulFile = join(src, "SOUL.md");
-  const toml = transformAgentForCodex(
-    readFileSync(agentFile, "utf8"),
-    existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null,
-    name
-  );
+  // src is <owner>/agents/<name>; the owner (a factory, or the package root)
+  // keeps its skills beside its agents.
+  const skillRoots = [join(PKG_ROOT, "skills"), join(dirname(dirname(src)), "skills")];
+  // Enabled: a skill the package ships for this agent whose SKILL.md is on
+  // disk in this project. An agent can be installed without its skills, and
+  // an enabled path that does not exist is a broken reference.
+  const canEnable = (id) =>
+    skillRoots.some((root) => existsSync(join(root, id))) &&
+    existsSync(join(CWD, targetDir, "skills", id, "SKILL.md"));
+  const agentText = readFileSync(agentFile, "utf8");
+  const soulText = existsSync(soulFile) ? readFileSync(soulFile, "utf8") : null;
+  const toml = transformAgentForCodex(agentText, soulText, name, canEnable);
   if (update && !mayReplaceOnUpdate(dest, `agent  ${name}`, () => readFileSync(dest, "utf8") === toml))
     return { status: "exists", dest };
   mkdirSync(dirname(dest), { recursive: true });
   writeInstalledFile(dest, toml);
   writtenThisRun.add(dest);
+  // Only an agent written in this run is finalized: a kept one is not listed
+  // here, so finalizeCodexAgents leaves it as the user has it.
+  codexAgentSources.set(dest, { agentText, soulText, name, canEnable });
   return { status: "installed", dest };
 }
 
 
+// Copilot's own files under .github/: what this installer's Copilot target
+// creates (agents/, skills/, hooks/, and instructions/ through the session
+// hook) plus Copilot's instruction file. A .github/ with none of them holds
+// workflows or issue templates and says nothing about Copilot.
+const COPILOT_SIGNALS = ["agents", "skills", "hooks", "instructions", "copilot-instructions.md"];
+
+// Two target inferences still work but are due to need an explicit --target:
+// an unattended run (--yes, --all, or no terminal) that takes its hosts from
+// the folders present, and Copilot taken from a .github/ with no Copilot files.
+// Returns the two-line warning for stderr, or null. Called only when the
+// targets were not named by --target or by a single pick in the menu.
+export function inferredTargetWarning(targets, detected, unattended, cwd = CWD) {
+  const guess =
+    targets.some((t) => t.id === "copilot") &&
+    detected.some((t) => t.id === "copilot") &&
+    !COPILOT_SIGNALS.some((f) => existsSync(join(cwd, ".github", f)));
+  if (!unattended && !guess) return null;
+  const guessNote = "GitHub Copilot is a guess: .github/ exists here but holds no Copilot files.";
+  if (!unattended) {
+    return `  ! ${guessNote}\n    A future version will require an explicit --target copilot to install it from a bare .github/.`;
+  }
+  const labels = targets.map((t) => t.label).join(", ");
+  const first = detected.length
+    ? `No --target given: installing for ${labels}, chosen from the folders present here.${guess ? " " + guessNote : ""}`
+    : `No --target given and no host folder found here: installing for ${labels} by default.`;
+  return `  ! ${first}\n    A future version will require an explicit --target for unattended runs (--yes, --all, or no terminal on stdin).`;
+}
+
 async function interactivePick(catalog, args) {
   const detected = TARGETS.filter((t) => existsSync(join(CWD, t.dir)));
   let targets;
+  // How the targets were inferred when nobody named them: "unattended" (no
+  // prompt was shown) or "menu" (the menu's "All of the above"). Stays null
+  // for --target and for a single pick in the menu.
+  let inferred = null;
   if (args.targets) {
     targets = TARGETS.filter((t) => args.targets.includes(t.id));
     if (args.targets.includes("kiro")) {
@@ -2529,6 +2596,7 @@ async function interactivePick(catalog, args) {
     }
   } else if (args.all || args.yes) {
     targets = detected.length > 0 ? detected : [TARGETS[0]];
+    inferred = "unattended";
   } else if (detected.length === 0) {
     // Nothing on disk to infer from — ask which runtime to set up rather than
     // silently assuming Claude. Same arrow-key picker as the role selection,
@@ -2542,6 +2610,7 @@ async function interactivePick(catalog, args) {
       TARGETS[0].id,
     );
     targets = choice === "__all__" ? TARGETS.slice() : TARGETS.filter((t) => t.id === choice);
+    if (!process.stdin.isTTY) inferred = "unattended"; // selectOne returned its default unasked
   } else {
     // One or more IDE directories already exist — pick among the detected ones.
     const choice = await selectOne(
@@ -2553,7 +2622,11 @@ async function interactivePick(catalog, args) {
       "__all__",
     );
     targets = choice === "__all__" ? detected : detected.filter((t) => t.id === choice);
+    if (!process.stdin.isTTY) inferred = "unattended"; // selectOne returned its default unasked
+    else if (choice === "__all__") inferred = "menu";
   }
+  const targetWarning = inferred && inferredTargetWarning(targets, detected, inferred === "unattended");
+  if (targetWarning) console.error(targetWarning);
 
   // Resolve agents (bare ids and qualified `factory/name`), resolver-aware.
   let agentsSelection;
@@ -3172,6 +3245,24 @@ async function runInteractive(qa) {
   return { removeSet, mcpIds };
 }
 
+// The installer writes into the current directory. Two directories are never
+// a project root: the account's home directory (a pasted command in a fresh
+// terminal) and this package's own checkout. Returns what the directory is, or
+// null when it is safe. Home comes from the user database, not $HOME: sandboxes
+// and this repo's own tests point $HOME at a throwaway project directory, and
+// those installs keep working. $HOME is the fallback for an account with no entry.
+function unsafeProjectRoot(cwd = CWD, pkgRoot = PKG_ROOT) {
+  // .native also settles the spelling on a case-insensitive file system.
+  const real = (p) => { try { return realpathSync.native(p); } catch { return resolve(p); } };
+  let home = null;
+  try { home = userInfo().homedir; } catch { /* no user-database entry */ }
+  if (!home) home = homedir();
+  const here = real(cwd);
+  if (home && here === real(home)) return `your home directory (${here})`;
+  if (here === real(pkgRoot)) return `the sdlc-skills package itself (${here})`;
+  return null;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
 
@@ -3197,6 +3288,16 @@ async function main() {
     console.error(`    Known flags: --agents <list> | --skills <list> | --factory <id> | --target <list> | --all | --update | --symlink | --yes`);
     console.error(`    Pass each flag and its value as SEPARATE tokens (e.g. \`--factory feature-development\`, not \`"--factory feature-development"\`).`);
     console.error(`    To install the entire catalog on purpose, use --all.\n`);
+    process.exit(1);
+  }
+
+  // Guard: an install into the home directory or into this package is a
+  // mistake, never a choice. Refuse before anything is written.
+  const unsafeRoot = unsafeProjectRoot();
+  if (unsafeRoot) {
+    console.error(`\n  ! Refusing to install into ${unsafeRoot}.`);
+    console.error(`    The installer writes into the current directory, which must be the project you want to set up.`);
+    console.error(`    cd into that project and run the same command again.\n`);
     process.exit(1);
   }
 
@@ -3294,13 +3395,17 @@ async function main() {
     }
   }
 
+  // Several factories may own one id, and every copy installs to one folder.
+  const existsNote = (kind, name) =>
+    (catalog.index[kind][name] || []).filter((o) => o.factory).length > 1 ? "exists, maybe another factory's copy; use --update to replace it" : "exists; use --update";
+
   for (const t of targets) {
     console.log(`  → ${t.label} (${t.dir}/)`);
     for (const name of agentsSelection) {
       const r = agentSrc[name];
       const res = copyItem("agents", r.name, t, args.update, catalog.registry, r.dir);
       if (res.status === "installed") { console.log(`      ✓ agent  ${r.name}`); installed++; }
-      else if (res.status === "exists") { console.log(`      — agent  ${r.name} (exists; use --update)`); skipped++; }
+      else if (res.status === "exists") { console.log(`      — agent  ${r.name} (${existsNote("agents", r.name)})`); skipped++; }
       else { console.log(`      ! agent  ${r.name} (missing)`); }
     }
     if (factoryPlan) {
@@ -3317,7 +3422,7 @@ async function main() {
           console.log(`      ✓ agent  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
-          console.log(`      — agent  ${name} (exists; use --update)`);
+          console.log(`      — agent  ${name} (${existsNote("agents", name)})`);
           skipped++;
         } else {
           console.log(`      ! agent  ${name} (missing in factory)`);
@@ -3336,7 +3441,7 @@ async function main() {
           console.log(`      ✓ skill  ${name} (factory-local)`);
           installed++;
         } else if (r.status === "exists") {
-          console.log(`      — skill  ${name} (exists; use --update)`);
+          console.log(`      — skill  ${name} (${existsNote("skills", name)})`);
           skipped++;
         } else {
           console.log(`      ! skill  ${name} (missing in factory)`);
@@ -3367,7 +3472,7 @@ async function main() {
       const r = skillSrc[name];
       const res = copyItem("skills", r.name, t, args.update, catalog.registry, r.dir);
       if (res.status === "installed") { console.log(`      ✓ skill  ${r.name}`); installed++; }
-      else if (res.status === "exists") { console.log(`      — skill  ${r.name} (exists; use --update)`); skipped++; }
+      else if (res.status === "exists") { console.log(`      — skill  ${r.name} (${existsNote("skills", r.name)})`); skipped++; }
       else { console.log(`      ! skill  ${r.name} (missing)`); }
     }
     for (const entry of externalSkills) {
@@ -3382,6 +3487,8 @@ async function main() {
         console.log(`      ! skill  ${entry.id} (external fetch failed)`);
       }
     }
+    // Codex agents were written before these skills; settle their enablement.
+    if (t.id === "codex") finalizeCodexAgents();
   }
 
   // Apply interactive QA picks: trim quality-architect to the chosen

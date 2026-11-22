@@ -26,6 +26,8 @@ function installed(name = 'proj') {
   const d = join(root, name); mkdirSync(d);
   const env = envFor(root);
   g(d, 'init', '-q'); g(d, 'config', 'user.email', 't@t'); g(d, 'config', 'user.name', 't'); g(d, 'config', 'commit.gpgsign', 'false');
+  // No background repack: the commit below could start one, and it would change .git while a test hashes the tree.
+  g(d, 'config', 'maintenance.auto', 'false'); g(d, 'config', 'gc.auto', '0');
   execFileSync(process.execPath, [INIT, 'init', '--agents', 'personal-assistant', '--target', 'claude', '--yes'], { cwd: d, env, stdio: 'ignore' });
   g(d, 'add', '-A'); g(d, 'commit', '-qm', 'install');
   return { root, d };

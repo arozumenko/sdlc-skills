@@ -15,7 +15,8 @@ import { readCalibration, classOf } from './calibrate.mjs';
 import { computeMetrics, estimateBands, planCost, plannerSizeBands, toHours, usableCost, validBounds } from './metrics.mjs';
 import { cliError, decodeSegment, deliveryDir, nowIso, plansDir, profilePath, resolveOwnerRepo, sha256, isInputError } from './paths.mjs';
 import { costView, taskCosts } from './task-costs.mjs';
-import { budgetSummary } from './budget.mjs';
+import { BUDGET_GUARD_NOTE, budgetCheckState, budgetSummary } from './budget.mjs';
+import { SPEND_SCOPE } from './spend.mjs';
 import { buildTimelines, carriesCrossing, markCostGap, selectOccurrences } from './timeline.mjs';
 
 export const SCHEMA = { report: 1, ledger: 2, adapters: { git: 1, hook: 1 } };
@@ -28,6 +29,12 @@ export const UNCONDITIONAL_CAVEATS = [
   'producer-compatibility: unverified', 'association-history: not retained',
 ];
 const DEPLOY_LABEL = 'merge to the integration branch, not a production deploy';
+// The DORA-style block holds task-level proxies. `metrics.dora` computes change failure rate from defects found after a task
+// was done and time to restore from defect repair time; the JSON keys keep their names and these labels say what they are.
+const DORA_HEADING = 'DORA (task-level proxies)';
+const CFR_LABEL = 'task-level proxy: done tasks with a defect found after the task was done, over done tasks';
+const TTR_LABEL = 'task-level proxy: defect repair time, from found to fixed';
+const DORA_CAPTION = 'Task-level proxies, not the four DORA measures: a task "deploys" when it merges to the integration branch; change failure rate is done tasks with a defect found after the task was done, over done tasks; time to restore is defect repair time, from found to fixed.';
 const TEMPLATE = resolve(fileURLToPath(import.meta.url), '..', '..', '..', 'templates', 'profile.template.json');
 
 export function loadProfile(repo) {
@@ -59,13 +66,15 @@ function readAllRunFiles(repo) {
   });
 }
 
-const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'budget-check-unavailable', 'malformed'];
+const DIAG_KINDS = ['unbound-session', 'unknown-role', 'no-transcript', 'incomplete-transcript', 'invalid-roster', 'task-crossing', 'budget-check-unavailable', 'stop-hook-failed', 'malformed'];
+// Kinds added after the first report format: the Markdown line shows them only when counted, so older output keeps its bytes.
+const DIAG_WHEN_COUNTED = new Set(['budget-check-unavailable', 'stop-hook-failed']);
 /** F19: hook capture-loss diagnostics — `.agents/telemetry/delivery/diagnostics-*.jsonl`, one JSON
  * object per line, `{at, kind, session, agent_id, detail}`. Never landed as a writer in this task; this
  * is a read-only, best-effort reader — a missing directory/file is zero counts, not an error, and any
  * line that isn't parseable JSON naming a known `kind` is folded into the `malformed` bucket rather
  * than thrown. */
-function readDiagnostics(repo) {
+export function readDiagnostics(repo) {
   const dir = deliveryDir(repo);
   const counts = Object.fromEntries(DIAG_KINDS.map((k) => [k, 0]));
   if (!existsSync(dir)) return counts;
@@ -196,6 +205,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
   let budget;
   try { budget = budgetSummary(repo, { resolved: res }); }
   catch (e) { if (!COST_FALLBACK.has(e.code) && !isInputError(e)) throw e; budget = { unavailable: e.message }; }
+  budget.check = budgetCheckState(repo, { now }); budget.guard = BUDGET_GUARD_NOTE;
 
   const cov = { deferred_events: 0, deferred_episodes: 0, invalid_chains: 0, parent_incomplete: 0, awaiting_landing: 0, stray_unblocked: 0, orphan_defect_fixes: 0, non_task_blocks: 0 }; let gaps = 0; const docs = [];
   for (const f of selected) {
@@ -278,7 +288,7 @@ export function assemble(repo, { plans = null, since = null, until = null, cutof
       // now so both metrics carry the same honest caveat wherever they're read.
       // The DORA block reuses task throughput and cycle time for deployment frequency and lead time for changes; a task lands
       // when it merges to the plan's integration branch, which is not a production deploy.
-      labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time', deployment_frequency: DEPLOY_LABEL, lead_time_for_changes: DEPLOY_LABEL } },
+      labels: { lead_time: 'plan-tracked, not idea-to-done', time_to_merge: 'PR open to merge — not lead time, not cycle time', deployment_frequency: DEPLOY_LABEL, lead_time_for_changes: DEPLOY_LABEL, change_failure_rate: CFR_LABEL, time_to_restore: TTR_LABEL, spend: SPEND_SCOPE } },
     coverage: { malformed_lines: res.counts.malformed, malformed: res.malformed, unknown_version: res.counts.unknownVersion, retries: res.counts.retries, superseded: res.counts.superseded, retracted: res.counts.retracted, ledger_conflicts: res.conflicts.length, occurrence_conflicts: conflicts.length, conflict_list: conflicts, unregistered, registration_gaps: gaps, malformed_runs: malformedRuns, diagnostics: readDiagnostics(repo), unattributed_dispatches: unattributedDispatches, unattributed_share: unattributedShare, dispatch_agents: dispatchAgents, ...cov },
     caveats: [...UNCONDITIONAL_CAVEATS, ...derived], baselines: profile.baselines ?? {},
   };
@@ -400,7 +410,7 @@ const bandTable = (matrix, corner) => {
 const withBand = (v, band) => (v == null ? '—' : `$${Number(v.toPrecision(6))}${band ? ` ${band}` : ''}`);
 /** The `## Cost` section of one plan: basis, plan cost line, estimate bands, planner size × band, dollar detail, per-task costs. */
 function costLines(p, e) {
-  const m = p.metrics, L = ['## Cost', '', `- basis: ${costBasis(e)}`];
+  const m = p.metrics, L = ['## Cost', '', `- basis: ${costBasis(e)}`, `- scope: ${SPEND_SCOPE}`];
   if (p.cost) L.push(`- plan cost: done in window ${usd(p.cost.done_in_window_usd)} (${p.cost.done_in_window_n} tasks), done without a usable cost ${p.cost.done_without_cost}, all tasks ${usd(p.cost.all_tasks_usd)}`);
   const eb = e.estimate_bands, b = m.estimate_bands;
   if (b) {
@@ -467,7 +477,7 @@ export function renderMarkdown(doc) {
     L.push(`- cancelled_share: ${cs.denominator ? `${cs.numerator}/${cs.denominator} (${pct(cs.ratio)})` : '— (n=0 created in window)'}`);
     for (const lv of Object.keys(m.flow)) { const rows = p.items.filter((i) => i.level === lv); L.push(`- ${lv}: rework_proxy_items ${lv === 'task' ? m.rework_proxy_items : '—'}, deferred-episodes ${rows.filter((i) => i.reopened).length}, review rounds unknown (M2)`); }
     // An archive written before the DORA block existed has no `metrics.dora`; it re-renders without the section.
-    if (m.dora) L.push('', '## DORA', '', ...doraLines(m, e));
+    if (m.dora) L.push('', `## ${DORA_HEADING}`, '', DORA_CAPTION, '', ...doraLines(m, e));
     L.push('', '## Estimates', '', '| level | stratum | n | eligible | work_ratio median | MdMRE | PRED(25) | MAE | hit_rate | excluded |', '|---|---|---|---|---|---|---|---|---|---|');
     // Dollar strata and rows are cost output: they render under `## Cost` (dollar detail), so this table is hours only.
     for (const [lv, es] of Object.entries(m.estimates)) for (const [st, x] of Object.entries(es.strata)) if (!st.startsWith('usd:')) L.push(estimateStratumRow(lv, st, x));
@@ -496,7 +506,7 @@ export function renderMarkdown(doc) {
   L.push(`- capture: unattributed_dispatches=${e.coverage.unattributed_dispatches} unattributed_share=${e.coverage.unattributed_share == null ? '—' : pct(e.coverage.unattributed_share)}`);
   const da = e.coverage.dispatch_agents;
   L.push(`- agents: n=${da.agents} resumed=${da.resumed} compacted=${da.compacted} max_follow_ups=${da.max_follow_ups ?? '—'} turns=${da.turns} over_500k=${pct(da.over_500k_share)}`);
-  L.push(`- diagnostics: ${DIAG_KINDS.filter(k => k !== 'budget-check-unavailable' || e.coverage.diagnostics[k]).map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
+  L.push(`- diagnostics: ${DIAG_KINDS.filter(k => !DIAG_WHEN_COUNTED.has(k) || e.coverage.diagnostics[k]).map((k) => `${k}=${e.coverage.diagnostics[k]}`).join(' ')}`);
   L.push(`- baselines: ${Object.entries(e.baselines).map(([k, v]) => `${k}=${v ?? 'no baseline'}`).join(', ')}`);
   for (const c of e.caveats) L.push(`- caveat: ${c}`);
   L.push(`- policy: weeks ${e.policy.weeks}, percentiles ${e.policy.percentile} (floors median≥5 P85≥7 P90≥10), estimate base ${e.policy.estimate_base}, ${e.policy.durations}, tokenomics ${e.sources.tokenomics}, sources hashed as read`);
@@ -569,7 +579,7 @@ function doraPanel(m, e) {
     const stages = Object.entries(d.defects_by_stage).filter(([, v]) => v.escaped || v.before_landing);
     body = `${stages.length ? `<table><tr><th>found at</th><th>escaped (after landing)</th><th>before landing</th></tr>${stages.map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${v.escaped}</td><td>${v.before_landing}</td></tr>`).join('')}</table>` : '<p class="note">No defect found in the window.</p>'}${d.untraced.n ? `<p class="note">${d.untraced.n} defect(s) recorded on a mission, campaign or case, not traced to a task — not in the change failure rate.</p>` : ''}${d.excluded_defects ? `<p class="note">${d.excluded_defects} defect(s) on tasks with a quarantined or proxy completion — escape not judged.</p>` : ''}`;
   }
-  return `<section class="panel"><h2>DORA</h2><p class="panel-sub">A task "deploys" when it merges (${label}). Change failure rate = landed tasks with a defect found after they landed; defects are found later, so recent tasks are undercounted.</p><div class="kpi-grid">${cells.join('')}</div>${body}</section>`;
+  return `<section class="panel"><h2>${DORA_HEADING}</h2><p class="panel-sub">Task-level proxies, not the four DORA measures. A task "deploys" when it merges (${label}). Change failure rate = landed tasks with a defect found after they landed; defects are found later, so recent tasks are undercounted. Time to restore = defect repair time, from found to fixed.</p><div class="kpi-grid">${cells.join('')}</div>${body}</section>`;
 }
 
 /** The Cost panel: per-plan cost line, estimated × actual band table and planner size × band table. Nothing for an archived
@@ -581,8 +591,8 @@ function costPanel(p, e) {
     const rows = Object.keys(matrix), cols = [...new Set(rows.flatMap((r) => Object.keys(matrix[r])))].sort();
     return `<table><tr><th>${corner}</th>${cols.map((x) => `<th>${esc(x)}</th>`).join('')}</tr>${rows.map((r) => `<tr><td>${esc(r)}</td>${cols.map((x) => `<td>${matrix[r][x] ?? '—'}</td>`).join('')}</tr>`).join('')}</table>`;
   };
-  const basis = e.cost_basis === 'c1' ? `At current prices (as of ${esc(e.prices_as_of ?? 'unknown')}): the lifetime cost of dispatches started before the report's end, so a past report can be revised.`
-    : `Hook-time costs: current-price task costs were unavailable (${esc(e.cost_fallback?.code)}).`;
+  const basis = e.cost_basis === 'c1' ? `At current prices (as of ${esc(e.prices_as_of ?? 'unknown')}): the lifetime cost of dispatches started before the report's end, so a past report can be revised. Subagent dispatches only; the orchestrating session is not counted.`
+    : `Hook-time costs: current-price task costs were unavailable (${esc(e.cost_fallback?.code)}). Subagent dispatches only; the orchestrating session is not counted.`;
   const line = c ? `<p>Tasks done in the window: ${usd(c.done_in_window_usd)} <span class="sub">(${c.done_in_window_n} with a usable cost${c.done_without_cost ? `; ${c.done_without_cost} without` : ''})</span> · all tasks: ${usd(c.all_tasks_usd)}</p>` : '';
   const bands = b ? (b.n ? `<p>Estimated band (rows) against actual band (columns): ${b.same} same, ${b.one_off} one off, ${b.two_or_more_off} two or more off.</p>${table(b.matrix, 'estimated')}` : '')
     : `<p class="note">Effort bands not shown: ${esc(e.estimate_bands?.suppressed ?? 'unavailable')}.</p>`;
@@ -734,6 +744,13 @@ export function renderBudgetCoverage(budget) {
   return `BUDGET unavailable: ${budget?.unavailable ?? 'unknown'}`;
 }
 
+/** One line for status and doctor: whether the hook recently allowed work it could not evaluate (`budgetCheckState`). */
+export function budgetCheckText(check) {
+  if (check?.off) return `OFF since ${check.off.since} — ${check.off.reason} (session ${check.off.session ?? 'unknown'}; ${check.off.sessions} session(s) could not evaluate in the last ${check.window_days} days; their calls were allowed)`;
+  if (check?.unreadable) return `unknown (diagnostics unreadable: ${check.unreadable})`;
+  return `ok (no budget-check-unavailable diagnostic in the last ${check?.window_days ?? 7} days)`;
+}
+
 export function renderStatus(doc) {
   const e = doc.envelope; const L = [];
   for (const p of doc.plans) {
@@ -747,6 +764,8 @@ export function renderStatus(doc) {
     const fill = p.items.filter((i) => i.state === 'done' && i.level === 'task' && (!i.created_at || !i.first_commit_at)).length; if (fill) L.push(`  backfill --git could fill created/first_commit for ${fill} done task(s)`);
   }
   if (doc.budget) L.push(renderBudgetCoverage(doc.budget));
+  if (doc.budget?.check) L.push(`BUDGET check: ${budgetCheckText(doc.budget.check)}`);
+  if (doc.budget) L.push(`BUDGET guard: ${doc.budget.guard ?? BUDGET_GUARD_NOTE}`);
   L.push(`  ledger: occurrence_conflicts=${e.coverage.occurrence_conflicts} ledger_conflicts=${e.coverage.ledger_conflicts} unregistered=${e.coverage.unregistered} malformed=${e.coverage.malformed_lines} malformed_runs=${e.coverage.malformed_runs}`);
   // Minor (f): `e.caveats` is `[...UNCONDITIONAL_CAVEATS, ...derived]` (assemble) — printing the
   // whole array, in that order, surfaces the derived count-bearing caveats (malformed lines,

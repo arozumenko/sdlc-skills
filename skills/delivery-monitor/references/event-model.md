@@ -163,7 +163,9 @@ With `--since`/`--cutoff` the window is partial, so reconciliation is skipped wi
 
 ## Budget events
 
+The task budget is a best-effort guard, not a ceiling (its limits: SKILL.md, "Task USD budget guard").
 `budget_exceeded` and `budget_stopped` are hook observations on task items. They do not change task state.
+`budget_stopped` records that the guard began refusing calls for the task. It does not show that spending ended.
 The enclosing fields retain ledger v2. `meta.budget` is required:
 
 ```json
@@ -188,6 +190,14 @@ The entire budget evidence object is part of semantic identity. Status/report co
 occurrence selection, then map renamed ids; retracted or conflicted observations do not count.
 
 `budget-check-unavailable` joins the fixed diagnostics vocabulary. Its shape is the existing
-`{at, kind, session, agent_id, detail}`; one line per session, with no permission decision. Invalid/unreadable calibration,
-plans, events, dispatches, prices or a live transcript make the budget check unavailable. Missing calibration is normal
-for a new project; a task without a USD range remains unbudgeted.
+`{at, kind, session, agent_id, detail}`; one line per session, with no permission decision. Invalid/unreadable
+plans, events, dispatches, profile, prices or a live transcript make the budget check unavailable. The check does not read
+calibration: a task's budget is the USD range saved on its plan item, so a missing or damaged calibration file changes
+nothing here. A task without a USD range remains unbudgeted.
+
+`stop-hook-failed` is in the same vocabulary, with the same shape: at most one line per session and agent within the recent
+diagnostics window, when the SubagentStop handler itself throws. The window is the last 1 MiB of the diagnostics file; past
+it, a repeated failure of the same agent is written again, so the count can be higher than the number of agents.
+`detail` is the first line of the error. The hook still returns normally. That subagent's dispatch
+may not be in the ledger, so its spend can be missing from the totals. `doctor` prints the count on its `diagnostics:` line,
+and the report counts it in `coverage.diagnostics`.

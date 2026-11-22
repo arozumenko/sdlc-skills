@@ -536,6 +536,25 @@ test("an agent the update kept is not rewritten by the factory's skill overlay",
   assert.match(r.out, /↻ skills\s+tech-lead/, "agents the run did replace are still tuned");
 });
 
+test("a Codex agent the update kept is not rebuilt when the run finalizes its Codex agents", () => {
+  // Codex agents are generated .toml files that the run rebuilds at its end,
+  // once the skills are on disk and the overlays are known. A kept agent must
+  // not be part of that rebuild.
+  const s = sandbox({ git: true });
+  const args = ["--factory", "feature-development", "--agents", "ios-dev", "--target", "codex"];
+  assert.equal(s.init(...args).status, 0);
+  const agent = s.p(".codex/agents/qa-engineer.toml");
+  s.commitAll("install");
+  const edited = `${readFileSync(agent, "utf8")}\n# a local note\n`;
+  writeFileSync(agent, edited);
+
+  const r = s.init(...args, "--update");
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, KEPT("agent", "qa-engineer"));
+  assert.equal(readFileSync(agent, "utf8"), edited, "the kept agent is byte-for-byte the user's");
+  assert.doesNotMatch(readFileSync(s.p(".codex/agents/tech-lead.toml"), "utf8"), /a local note/);
+});
+
 test("a plain re-run that adds a role still tunes the agents already installed", () => {
   const s = sandbox();
   assert.equal(s.init("--factory", "feature-development", "--agents", "python-dev").status, 0);

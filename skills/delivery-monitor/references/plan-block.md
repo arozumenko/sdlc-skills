@@ -35,7 +35,7 @@ plan); a file that parses as neither is treated as a markdown import candidate (
 |---|---|
 | `campaign_id`, `run_id` | must match `^[a-z0-9][a-z0-9-]*$`; **the run id is `campaign_id/run_id`** (`runIdOf`) — the `plan` field on every ledger observation for this run, and the `--plan`/`--head` argument everywhere else (e.g. `--plan sec/run-1`) |
 | `version` | positive integer; the *first* registration of a run must be `version: 1`; a re-cut must strictly exceed the run's current stored version |
-| `factory` | `feature-development \| test-automation \| manual-qa` — must be included in `--factories` (defaults to just this plan's own factory) when `plan register` computes the roster |
+| `factory` | `feature-development \| test-automation \| manual-qa \| product-management \| security-testing` — must be included in `--factories` (defaults to just this plan's own factory) when `plan register` computes the roster. This skill has a role map for the first three only. A plan from `product-management` or `security-testing` registers with `WARN ROSTER-UNMAPPED(<factory>)`: its roster holds none of that factory's roles, so the dispatch hook records no dispatch of its agents and the budget guard does not check them. Record its transitions with the CLI or a backfill; their usage is still captured for `spend` |
 | `observation_start` | ISO — the earliest instant this plan's evidence should be trusted; also the report's default `--since` |
 | `source_epoch` | `{from: ISO, until: ISO|null, integration_ref: <branch>}` — the window and integration ref `backfill --git` is allowed to read |
 | `mission_kind` | `group \| milestone \| wave \| batch \| run` — cosmetic label for what a "mission" means on this plan |

@@ -2,6 +2,8 @@
 // golden.json was produced by running runScenario with `main` from the last version that kept no history, so the
 // history tests compare against an independent baseline and never against the code under test. To regenerate after
 // an intended output change, run runScenario(main) and write its result to golden.json.
+// It has been regenerated since for intended label changes, through legacyScenario (the tests compare through it). Each
+// time, the new file was checked to differ from the old one only in those label lines.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -26,13 +28,15 @@ export async function runScenario(main, { between = () => {}, skillDir = resolve
   const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' });
   git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@x'); git('config', 'user.name', 'Tester');
   for (const role of ['js-dev', 'tech-lead']) { const d = join(repo, '.claude', 'agents', role); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'AGENT.md'), '# role\n'); }
-  // The temp path is part of the run file, so the path and the run file's own hash are replaced by fixed tokens.
+  // The temp path is part of the run file, so the path and the run file's own hash and size are replaced by fixed tokens.
   // The price table is not part of this baseline either: its hash and size are replaced too, and so is its date in the report.
   const tokens = [[realpathSync(repo), '<REPO>'], [repo, '<REPO>'], [realpathSync(skillDir), '<SKILL>'], [skillDir, '<SKILL>']];
   const clean = (s) => tokens.reduce((t, [from, to]) => t.split(from).join(to), s)
     .replace(/(<SKILL>\/references\/prices\.json sha256=)[0-9a-f]{64}/g, '$1<PRICES>')
     .replace(/(<SKILL>\/references\/prices\.json",\s*"sha256": ")[0-9a-f]{64}(",\s*"bytes": )\d+/g, '$1<PRICES>$20')
-    .replace(/("prices_as_of": )"[^"]*"/g, '$1"<PRICES-DATE>"');
+    .replace(/("prices_as_of": )"[^"]*"/g, '$1"<PRICES-DATE>"')
+    // The run file holds the temp path, so its size depends on how long that path is on this machine.
+    .replace(/("sha256": "<RUN-FILE-SHA256>",\s*"bytes": )\d+/g, '$10');
   const cli = async (argv, now, env = {}) => {
     let stdout = '', stderr = '';
     const code = await main(argv, { repo, now, stdout: { write: (s) => { stdout += s; } }, stderr: { write: (s) => { stderr += s; } }, env: { DELIVERY_NO_SYNC: '1', ...env } });

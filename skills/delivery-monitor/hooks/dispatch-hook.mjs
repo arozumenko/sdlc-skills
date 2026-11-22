@@ -196,8 +196,8 @@ export function crossedTasks(run, { followUps, role, attributed }) {
 export function appendOrRevise(repo, rec, opts) { let r = rec; for (let k = 0; k < 10; k++) { const res = appendObservation(repo, r, opts); if (res.result !== 'ID-CONFLICT') return res; r = { ...r, revision: r.revision + 1 }; } return { result: 'ID-CONFLICT', observation_id: rec.observation_id, revision: rec.revision }; }
 // F19: diagnostics lines are exactly {at, kind, session, agent_id, detail} with `kind` drawn from the
 // fixed vocabulary the report reader (Task 8) recognises — unbound-session | unknown-role |
-// no-transcript | incomplete-transcript | invalid-roster | task-crossing. Any other shape/kind folds into that
-// reader's `malformed` bucket, so this writer never emits one.
+// no-transcript | incomplete-transcript | invalid-roster | task-crossing | budget-check-unavailable | stop-hook-failed. Any other
+// shape/kind folds into that reader's `malformed` bucket, so this writer never emits one.
 const DIAG_TAIL = 1024 * 1024;
 /** Bounded read: only the last 1 MiB of the diagnostics file is scanned (files can reach MBs), so "once" holds per (session, kind)
  * within that window — an entry older than the tail may be written again, never unboundedly. */
@@ -212,7 +212,11 @@ function alreadyDiagnosed(file, kind, session, agentId) {
 // `once` kinds (unbound-session, invalid-roster) describe the session, not the agent — one line per (session, kind), else a 100-subagent run floods the log.
 // `task-crossing` describes one agent and is re-checked on every stop of a resumed agent — one line per (session, agent).
 const ONCE_KINDS = new Set(['unbound-session', 'invalid-roster', 'budget-check-unavailable']);
-const ONCE_PER_AGENT = new Set(['task-crossing']);
+// `stop-hook-failed` is the stop handler's own failure for one agent: a resumed agent stops again and fails the same way.
+// For both kinds "once" means at most once within the recent diagnostics window: `alreadyDiagnosed` scans only the last 1 MiB
+// of the file, so after more than that of other lines the same agent's line is written again. No marker is kept on disk for
+// this rare case; a repeated line only raises a count.
+const ONCE_PER_AGENT = new Set(['task-crossing', 'stop-hook-failed']);
 export function diagnose(repo, slug, kind, payload, detail, now) {
   try {
     const write = () => {
@@ -305,7 +309,14 @@ function handleStopUnsafe(payload, { repo, now = Date.now() } = {}) {
 
 export function handleStop(payload, options = {}) {
   let result;
-  try { result = handleStopUnsafe(payload, options); } catch { result = { wrote: [], diagnostic: null }; }
+  try { result = handleStopUnsafe(payload, options); } catch (e) {
+    // The result is the same as before, but the failure leaves one line: without it a lost capture looks like no spend.
+    result = { wrote: [], diagnostic: null };
+    try {
+      const repo = resolveOwnerRepo(options.repo ?? ownerRepo(payload ?? {}));
+      diagnose(repo, whoAmI(repo).slug, 'stop-hook-failed', payload ?? {}, String(e?.message ?? e).split('\n')[0].slice(0, 300), options.now ?? Date.now());
+    } catch { /* diagnostics are best effort; hooks never fail the host */ }
+  }
   // Capture and legacy allocation happen first. The budget check is record-only, even above the hard cap.
   if (payload?.agent_id && payload?.session_id && (!payload.host || payload.host === 'claude')) {
     const repo = options.repo ?? ownerRepo(payload), now = options.now ?? Date.now();

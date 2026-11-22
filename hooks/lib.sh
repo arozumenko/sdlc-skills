@@ -762,6 +762,20 @@ resolve_cli_session_agent() {
   printf ''
 }
 
+# The project this hook run works in. Claude Code sets CLAUDE_PROJECT_DIR; Copilot
+# (CLI + VS Code) sets COPILOT_PROJECT_DIR; the fallback is the working directory.
+# Under Copilot (same markers as refresh_shared_instructions: COPILOT_CLI /
+# SDLC_VSCODE) CLAUDE_PROJECT_DIR is ignored: a Copilot session started from a
+# Claude Code terminal inherits it, and it names that OTHER project — session-start
+# would then write and delete .github/instructions/ files there.
+hook_project_dir() {
+  if [ -n "${COPILOT_CLI:-}${SDLC_VSCODE:-}" ]; then
+    printf '%s' "${COPILOT_PROJECT_DIR:-$PWD}"
+  else
+    printf '%s' "${CLAUDE_PROJECT_DIR:-${COPILOT_PROJECT_DIR:-$PWD}}"
+  fi
+}
+
 # True under Cursor — the plugin path sets CURSOR_PLUGIN_ROOT; the `npx … init`
 # project install sets CURSOR_HOOK=1 in the generated .cursor/hooks.json command
 # (mirrors CODEX_HOOK below).
