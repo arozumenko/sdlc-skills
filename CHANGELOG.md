@@ -18,8 +18,10 @@ The first tagged version. Install it with `npx github:arozumenko/sdlc-skills#v0.
 
 ### Changes that need attention when you update
 
-- `init --update` keeps local work (#131). An installed agent or skill with uncommitted changes is kept and listed
-  under "NOT updated"; so is one that was installed and never committed. Commit first, or pass `--force`.
+- `init --update` keeps local work (#131). In a git project, an installed agent or skill that git reports as
+  changed is kept and listed under "NOT updated". That includes one that was installed and never committed, unless
+  it is identical to a copy this installer ships. Commit first, or pass `--force`, which replaces without a backup.
+  An item git cannot restore (no git, or an ignored path) is copied to a backup folder and then replaced.
   Seeded folders are create-only: files are added, never removed or overwritten.
 - The installer refuses to run with the home directory or the package itself as the project root (#127).
 - The hook installers of `delivery-monitor` and `tokenomics` stop with an error on a settings file that does not
@@ -35,28 +37,38 @@ The first tagged version. Install it with `npx github:arozumenko/sdlc-skills#v0.
 
 Installer
 
-- The 30 external skills are not pinned. The installer fetches each one from its upstream default branch at
-  install time, so two installs of `v0.3.0` on different days can differ in those skills.
+- The 30 external skills are not pinned. The installer fetches each one from the branch `skills.json` names for it
+  (a moving branch such as `main`) at install time, so two installs of `v0.3.0` on different days can differ in
+  those skills.
+- A failed fetch of an external skill does not fail the install. The run prints `! skill <id> (external fetch
+  failed)`, still ends with `Done`, and exits 0, so the install can be incomplete. Read the output.
 - The installer keeps no record of what it installed. `--update` uses git as its baseline, and only the project's
-  own repository: an item inside a nested repository is treated as untracked and kept.
-- In a project without git, each update that replaces a changed item writes a
-  `.sdlc-skills-backup/<date-time>/` folder. Nothing prunes these folders.
+  own repository: an item inside a nested repository counts as changed and is kept until `--force`.
+- When git cannot restore an item (a project without git, or an ignored path), an update that replaces a changed
+  item first copies it to `.sdlc-skills-backup/<date-time>/`. Nothing prunes these folders. `--force` skips the
+  backup.
 - An installed skill includes its tests and fixtures.
 - CI runs the tests on one current Node release. `engines.node` says `>=18`; versions 18 to 22 are not tested.
 
 Telemetry
 
+- `delivery-monitor` captures dispatches and enforces the budget on Claude Code only. A dispatch from another
+  host is never refused.
 - The `delivery-monitor` budget is a best-effort guard, not a ceiling and not a security control. It counts
-  subagent dispatches only, and when it cannot evaluate it lets the call through and shows `BUDGET check: OFF`.
-  The skill's `SKILL.md` lists the full limits.
+  subagent dispatches only and it fails open: when it cannot evaluate, the call goes through. Most such failures
+  show as `BUDGET check: OFF` in `status`, but not all leave a trace, and the `OFF` line clears by age (7 days),
+  not by repair. The skill's `SKILL.md` lists the full limits.
 - The DORA figures of `delivery-monitor` are task-level proxies, and every spend total covers subagent
   dispatches only.
 - `delivery-monitor` has a role map for three of the five factories. `product-management` and
-  `security-testing` register with `WARN ROSTER-UNMAPPED`, and their agents are not attributed.
-- `tokenomics` downloads one pinned version of `ccusage` through `npx` at capture time. From a linked git
-  worktree a capture stays in that worktree and is not synced. Its `SKILL.md` lists the limits of the sync lock.
-- Two other scripts still download an unpinned `@latest` package when they run:
-  `efficiency-audit/scripts/usage-rollup.mjs` and `visual-testing/scripts/visual-diff.mjs`.
+  `security-testing` register with `WARN ROSTER-UNMAPPED`: the hooks record no dispatch of their agents and the
+  budget guard does not check them. Record their transitions with the CLI.
+- `tokenomics` meters cost with one pinned version of `ccusage`, downloaded through `npx` at capture time unless a
+  binary is configured. It syncs only where `.agents/telemetry` is an initialised submodule, so a capture in a
+  linked git worktree without one stays in that worktree. Its `SKILL.md` lists the limits of the sync lock.
+- Two other scripts fall back to an unpinned `@latest` download when no local binary is given:
+  `efficiency-audit/scripts/usage-rollup.mjs` (`ccusage`) and `visual-testing/scripts/visual-diff.mjs`
+  (`reg-cli`).
 
 ### November 2026
 
