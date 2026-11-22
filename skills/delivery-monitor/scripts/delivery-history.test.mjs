@@ -34,6 +34,8 @@ const summaryOf = (o) => ({ status: o.status, version: o.version, registered_at:
 
 test('G1/G2: writers each append one record with kind, key, by, prev and next; no-op writes keep pre-write timestamps in prev', async () => {
   const repo = initRepo(); const f = writePlan(repo, plan());
+  // One installed agent of the plan's factory: a register with an empty roster prints a warning, and this test wants a quiet one.
+  mkdirSync(join(repo, '.claude', 'agents', 'js-dev'), { recursive: true }); writeFileSync(join(repo, '.claude', 'agents', 'js-dev', 'AGENT.md'), '# role\n');
   let r = await cli(repo, ['plan', 'register', '--from', f, '--id', 'reg-1'], { env: S1 });
   assert.equal(r.code, 0, r.stderr); assert.equal(r.stderr, '');
   let l = lines(repo);

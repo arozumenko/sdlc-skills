@@ -901,6 +901,20 @@ test('a plan from a factory with no role map registers with a warning and works 
     assert.equal(run(repo, ['plan', 'roster', '--plan', 'sec/run-1', '--agents', 'security-lead']).code, 2, 'a role outside the map is still refused');
   }
 });
+test('plan register: one WARN ROSTER-EMPTY line when no agent of a mapped participating factory is installed; none when one is', () => {
+  // With an empty roster the dispatch hook records nothing and the budget guard checks nothing, and neither says so.
+  const register = (agents, factory = 'feature-development') => {
+    const repo = initRepo(); for (const a of agents) installAgent(repo, a);
+    const p = plan(1, [{ ref: 'TASK-001' }]); p.factory = factory; writePlan(repo, p);
+    return spawnSync('node', [CLI, 'plan', 'register', '--from', 'plan.md', '--id', 'reg-1', '--created-at', '2026-09-16T08:00:00Z'], { cwd: repo, encoding: 'utf8', env: { ...process.env, DELIVERY_NO_SYNC: '1', CLAUDE_CODE_SESSION_ID: '' } });
+  };
+  const WARN = "WARN ROSTER-EMPTY: no agent of feature-development is installed in this project. The plan is registered; the dispatch hook records no dispatch and the budget guard checks none until agents are installed and `plan roster` is run again.\n";
+  const none = register([]); assert.equal(none.status, 0, none.stderr); assert.equal(none.stderr, WARN);
+  const other = register(['security-lead']); assert.equal(other.status, 0, other.stderr); assert.equal(other.stderr, WARN, 'an agent of another factory does not count');
+  const one = register(['js-dev']); assert.equal(one.status, 0, one.stderr); assert.equal(one.stderr, '');
+  const unmapped = register([], 'security-testing'); assert.equal(unmapped.status, 0, unmapped.stderr);
+  assert.doesNotMatch(unmapped.stderr, /ROSTER-EMPTY/, 'a factory with no role map already has its own warning');
+});
 test('plan register: one WARN ROSTER-UNMAPPED line on stderr for a factory with no role map; none for a mapped factory', () => {
   const register = (factory, extra = []) => {
     const repo = initRepo(); installAgent(repo, 'js-dev'); installAgent(repo, 'security-lead');

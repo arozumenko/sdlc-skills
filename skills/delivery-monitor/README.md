@@ -72,6 +72,10 @@ its roster holds none of that factory's roles, so the hook records no dispatch o
 the budget guard does not check them. Record such a plan's transitions with the CLI or a backfill;
 `doctor` repeats the note on the run's `roster:` line.
 
+A plan whose mapped factories have no agent installed in the project registers and prints
+`WARN ROSTER-EMPTY`: with an empty roster the hook records no dispatch and the budget guard
+checks none. Install the agents, then refresh the roster with `plan roster --plan <run> --agents …`.
+
 ## What it does not do
 
 This is an honest derivation from readable, local evidence — not a durability,
