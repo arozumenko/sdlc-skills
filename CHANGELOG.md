@@ -3,11 +3,41 @@
 All notable changes to this repository are listed here, newest first.
 Each line is one merged pull request.
 
-The version in `package.json` and the plugin manifests is `0.3.0`, tagged `v0.3.0`.
+The version in `package.json` and the plugin manifests is `0.3.1`, tagged `v0.3.1`.
 Earlier states are pinned by commit, as `MAINTENANCE.md` describes.
 
-## Unreleased
+## 0.3.1 - 2026-11-23
 
+Install it with `npx github:arozumenko/sdlc-skills#v0.3.1 init …`. Three fixes found while the first tagged version
+was rolled out to two projects.
+
+### Changes that need attention when you update
+
+- npm 12 (it ships with Node 26) refuses a package fetched from git, so `npx github:arozumenko/sdlc-skills …`
+  stops with `EALLOWGIT` under npm's default setting. Add `--allow-git=all` after `npx`. The fix hints of
+  `init doctor` and the commands in `init --help` now carry the flag; `README.md`, `MAINTENANCE.md` and
+  `AGENTS.md` have a note. npm 11 accepts the flag too.
+- `install-hooks.mjs --help` of `delivery-monitor` and `tokenomics` prints the usage. Before, it ran an install.
+  An unknown argument is refused (#135).
+- The `delivery-monitor` price table had Fable 5.1 cache reads at four times the published price (#136). The
+  spend report, task costs, the budget check and calibration price the recorded token usage with the current
+  table, so after the update their figures for past Fable 5.1 dispatches are lower by the cache-read part, and
+  the next `calibrate` moves the cells built from them. The cost stored in each ledger event is not rewritten.
+
+### Known limits
+
+The limits of 0.3.0 below still hold. New or changed:
+
+- The install commands in the factory, agent and skill READMEs and in `docs/onboarding/` still show the form
+  without `--allow-git=all`.
+- The `delivery-monitor` price table does not model the higher Claude Haiku 5.5 rates for a prompt over 100,000
+  tokens, so such a request is under-priced.
+- A nested `Agent` call made by a subagent that `delivery-monitor` found unbudgeted is not checked against the
+  budget.
+
+### November 2026
+
+- Release 0.3.1: version, changelog, npm 12 install note (#137, 2026-11-23)
 - delivery-monitor: price table matches the published list (Fable 5.1 cache reads, two missing models) (#136, 2026-11-23)
 - Hook installers honour --help, tech-lead leaves task estimates out, budget hook reads the ledger only when it must (#135, 2026-11-23)
 

@@ -53,6 +53,10 @@ npx github:arozumenko/sdlc-skills init --agents ba,tech-lead,ios-dev,android-dev
 npx github:arozumenko/sdlc-skills init --all
 ```
 
+On npm 12 and later (it ships with Node 26) these commands stop with
+`EALLOWGIT`, because npm refuses a package fetched from git by default. Add
+`--allow-git=all` after `npx`: `npx --allow-git=all github:arozumenko/sdlc-skills init --all`.
+
 The installer reads each agent's `skills:` frontmatter, copies monorepo
 skills into `.claude/skills/` (and/or `.cursor/`, `.windsurf/`,
 `.github/`), and clones external skill repos into a shared cache

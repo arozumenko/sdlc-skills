@@ -1,6 +1,6 @@
 {
   "name": "sdlc-skills",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Role-based SDLC skills with session/subagent hooks that inject per-role memory and lean .agents/*.md project context.",
   "author": {
     "name": "Artem Rozumenko",

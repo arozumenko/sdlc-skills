@@ -1737,11 +1737,14 @@ function printHelp() {
   sdlc-skills installer
 
   Usage:
-    npx github:arozumenko/sdlc-skills init [options]
-    npx github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
+    npx --allow-git=all github:arozumenko/sdlc-skills init [options]
+    npx --allow-git=all github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
                                Read-only health check of this project's install
                                (hook wiring, persistence, hook version, context
                                budget, skill drift). Never runs project code.
+
+  --allow-git=all is for npm 12 and later (Node 26), which refuses a package
+  fetched from git without it (EALLOWGIT). npm 11 accepts the flag too.
 
   Options:
     --factory <id>             Install a team factory (a curated set of agents,
@@ -1768,11 +1771,11 @@ function printHelp() {
     -h, --help                 Show this help
 
   Examples:
-    npx github:arozumenko/sdlc-skills init --factory feature-development
-    npx github:arozumenko/sdlc-skills init --factory feature-development --target claude
-    npx github:arozumenko/sdlc-skills init --all
-    npx github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
-    npx github:arozumenko/sdlc-skills init --agents all --target claude --update
+    npx --allow-git=all github:arozumenko/sdlc-skills init --factory feature-development
+    npx --allow-git=all github:arozumenko/sdlc-skills init --factory feature-development --target claude
+    npx --allow-git=all github:arozumenko/sdlc-skills init --all
+    npx --allow-git=all github:arozumenko/sdlc-skills init --agents ba,tech-lead --skills bugfix-workflow
+    npx --allow-git=all github:arozumenko/sdlc-skills init --agents all --target claude --update
 `);
 }
 

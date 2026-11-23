@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORE_HOOK_FILES, expectedCoreHookSpec } from '../../core-hook-spec.mjs';
-import { finding } from '../finding.mjs';
+import { finding, INIT } from '../finding.mjs';
 import { sha256, parseShellLiterals, literalDefaultCap } from '../shell-literals.mjs';
 
 const HISTORY = JSON.parse(readFileSync(new URL('../hook-history.json', import.meta.url), 'utf8'));
@@ -43,14 +43,14 @@ export const hookversionCheck = {
       const i = hookVersionInfo(ctx, t.target);
       ctx.hookInfo = { ...(ctx.hookInfo || {}), [t.target]: i };
       const budgetRisk = i.configKnown && i.budget != null && t.target !== 'copilot' && i.budget > 10000;
-      if (i.match === 'historical' && !(budgetRisk && i.budgetSource === 'lib.sh')) out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks match an earlier sdlc-skills version (${i.version.commit}, ${i.version.date})`, fix: 'npx github:arozumenko/sdlc-skills init <your usual flags> --update' }));
-      if (i.match === 'unrecognized') out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: 'unrecognized hook version: installed core hook scripts match no known sdlc-skills version', fix: 'npx github:arozumenko/sdlc-skills init <your usual flags> --update' }));
+      if (i.match === 'historical' && !(budgetRisk && i.budgetSource === 'lib.sh')) out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks match an earlier sdlc-skills version (${i.version.commit}, ${i.version.date})`, fix: `${INIT} <your usual flags> --update` }));
+      if (i.match === 'unrecognized') out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: 'unrecognized hook version: installed core hook scripts match no known sdlc-skills version', fix: `${INIT} <your usual flags> --update` }));
       if (!i.configKnown) out.push(finding({ check: 'hookversion', target: t.target, severity: 'unknown', message: 'context budget unknown: config.sh or config-defaults.sh uses syntax doctor does not evaluate' }));
       else if (i.budget == null) out.push(finding({ check: 'hookversion', target: t.target, severity: 'unknown', message: 'context budget unknown for this hook version' }));
       else if (budgetRisk) {
         const where = i.budgetSource === 'lib.sh' && i.match === 'historical' ? `match an earlier sdlc-skills version (${i.version.commit}, ${i.version.date}) whose default Claude budget was ${fmt(i.budget)} bytes` : `budget is ${fmt(i.budget)} bytes (from ${i.budgetSource})`;
         const limit = t.target === 'claude' ? "Claude's 10,000-character limit" : '10,000 bytes';
-        out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks ${where}, which exceeds ${limit}: truncation risk`, fix: i.budgetSource === 'lib.sh' ? 'npx github:arozumenko/sdlc-skills init <your usual flags> --update' : `lower SDLC_CTX_CAP in ${expectedCoreHookSpec(t.target).scriptsDir}/${i.budgetSource} to 9000 or less` }));
+        out.push(finding({ check: 'hookversion', target: t.target, severity: 'warning', message: `installed hooks ${where}, which exceeds ${limit}: truncation risk`, fix: i.budgetSource === 'lib.sh' ? `${INIT} <your usual flags> --update` : `lower SDLC_CTX_CAP in ${expectedCoreHookSpec(t.target).scriptsDir}/${i.budgetSource} to 9000 or less` }));
       }
       if (!out.some((f) => f.target === t.target)) out.push(finding({ check: 'hookversion', target: t.target, severity: 'ok', message: `core hooks match the running package; budget ${fmt(i.budget)} bytes` }));
     }

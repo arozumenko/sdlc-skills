@@ -1,9 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { expectedCoreHookSpec } from '../../core-hook-spec.mjs';
-import { finding } from '../finding.mjs';
+import { finding, INIT } from '../finding.mjs';
 import { readJson, hookEntries } from './common.mjs';
 
-export const fixCommand = (target) => `npx github:arozumenko/sdlc-skills init <your usual --factory/--agents flags> --target ${target} --update`;
+export const fixCommand = (target) => `${INIT} <your usual --factory/--agents flags> --target ${target} --update`;
 const strip = (e) => { if (!e || typeof e !== 'object') return e; const { _factory, _bundle, ...rest } = e; return rest; };
 const VERB = /run-hook\.cmd"?\s+([a-z-]+)/g;
 // Verbs come from the entry's parsed string values (command, bash, powershell, ...): JSON text escapes the quotes.

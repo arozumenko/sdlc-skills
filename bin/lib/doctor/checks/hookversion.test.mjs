@@ -38,6 +38,8 @@ test('complete-set match of an earlier version: warning with the version fact', 
   try {
     const f = run(d, { versions: [{ commit: 'abc123', date: '2026-08-21', files, defaultBudget: { claude: 32768, copilot: 10240 } }] });
     assert.ok(f.some((x) => x.severity === 'warning' && /match an earlier sdlc-skills version \(abc123, 2026-08-21\).*32,768 bytes/.test(x.message)));
+    for (const x of f.filter((x) => /sdlc-skills init/.test(x.fix ?? ''))) assert.match(x.fix, /^npx --allow-git=all github:/);
+    assert.ok(f.some((x) => /sdlc-skills init/.test(x.fix ?? '')));
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
@@ -48,7 +50,7 @@ test('unknown config syntax: budget unknown', () => {
 
 test('unrecognized hook set: warning', () => {
   const d = project({ '.claude/hooks/sdlc-skills/agent-start': '#!/bin/sh\necho patched\n' });
-  try { assert.ok(run(d, { versions: [] }).some((f) => f.severity === 'warning' && /unrecognized hook version/.test(f.message))); } finally { rmSync(d, { recursive: true, force: true }); }
+  try { assert.ok(run(d, { versions: [] }).some((f) => f.severity === 'warning' && /unrecognized hook version/.test(f.message) && /^npx --allow-git=all github:/.test(f.fix))); } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
 test('hook-history.json is current: the package hook set is a recorded complete-set version', () => {

@@ -31,6 +31,7 @@ test('drift: straight copies compared; externals, symlinks and ambiguous origins
     const w = f.find((x) => x.severity === 'warning');
     assert.match(w.message, /memory: differs from the running package: 1 file/);
     assert.deepEqual(w.data.files, ['SKILL.md']);
+    assert.match(w.fix, /^npx --allow-git=all github:/, 'npm 12 refuses a git package without the flag');
     assert.ok(f.some((x) => x.severity === 'skipped' && /ext: not compared: external skill/.test(x.message)));
     assert.ok(f.some((x) => x.severity === 'skipped' && /dup: not compared: ambiguous origin \(2 package copies\)/.test(x.message)));
     assert.ok(f.some((x) => x.severity === 'skipped' && /linked: not compared: symlinked skill/.test(x.message)));

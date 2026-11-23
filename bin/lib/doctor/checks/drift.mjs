@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { finding } from '../finding.mjs';
+import { finding, INIT } from '../finding.mjs';
 
 // Where init copies skills, per target (`<target dir>/skills/<id>`, a straight copy for every target).
 const SKILL_DIRS = { claude: '.claude/skills', cursor: '.cursor/skills', windsurf: '.windsurf/skills', copilot: '.github/skills', codex: '.codex/skills' };
@@ -50,7 +50,7 @@ export const driftCheck = {
           const mine = ctx.fs.read(`${base}/${id}/${rel}`);
           if (mine.status !== 'ok' || !mine.content.equals(readFileSync(join(src[0], rel)))) differing.push(rel);
         }
-        if (differing.length) out.push(finding({ check: 'drift', target: t.target, severity: 'warning', message: `${id}: differs from the running package: ${differing.length} file${differing.length === 1 ? '' : 's'}`, fix: 'npx github:arozumenko/sdlc-skills init <your usual flags> --update (overwrites local edits)', data: { files: differing } }));
+        if (differing.length) out.push(finding({ check: 'drift', target: t.target, severity: 'warning', message: `${id}: differs from the running package: ${differing.length} file${differing.length === 1 ? '' : 's'}`, fix: `${INIT} <your usual flags> --update (overwrites local edits)`, data: { files: differing } }));
         else same++;
       }
       if (same) out.push(finding({ check: 'drift', target: t.target, severity: 'ok', message: `${same} skill${same === 1 ? '' : 's'} match the running package` }));

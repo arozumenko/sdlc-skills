@@ -146,6 +146,11 @@ Copilot, and Codex (IDE targets detected automatically; an unattended run withou
 each host's native form — directories for Claude/Cursor/Windsurf, flat
 `.agent.md` for Copilot, TOML for Codex.
 
+**npm 12 and later.** npm 12 (it ships with Node 26) refuses a package fetched
+from git by default, so each command below stops with `EALLOWGIT`. Add `--allow-git=all`
+after `npx`, for example `npx --allow-git=all github:arozumenko/sdlc-skills init --all`.
+npm 11 accepts the flag too.
+
 ```bash
 # A team factory — the whole team in one shot (agents, their skills,
 # per-role stack briefings, and team conventions). See bundles/SPEC.md.
@@ -172,7 +177,7 @@ npx github:arozumenko/sdlc-skills init --agents ios-dev --target claude
 npx github:arozumenko/sdlc-skills init --all --update
 
 # Install a released version instead of the tip of main
-npx github:arozumenko/sdlc-skills#v0.3.0 init --factory feature-development
+npx github:arozumenko/sdlc-skills#v0.3.1 init --factory feature-development
 ```
 
 Released versions, what changed in each, and the known limits are in
