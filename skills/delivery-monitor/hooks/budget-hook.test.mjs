@@ -282,3 +282,14 @@ test('a call in a bound session that the hook does not budget does not ask git w
  const calls=existsSync(marker)?readFileSync(marker,'utf8'):'';
  assert.doesNotMatch(calls,/config|branch/,calls);
 });
+test('a bound session with a plan file or a ledger that cannot be read: a dispatch for a budgeted task is allowed, with one diagnostic per session',()=>{
+ // The plan file itself is broken: the hook cannot know what is budgeted, so every concerned call counts.
+ let f=fixture();writeFileSync(join(f.d,'plans',readdirSync(join(f.d,'plans'))[0]),'{broken');
+ assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,child(f,'a',100).payload),{});
+ assert.equal(unavailable(f),1,'broken plan file');
+ // The ledger is broken and the dispatch names a budgeted task.
+ f=fixture();breakLedger(f);
+ assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,{...pre(),tool_name:'Task'}),{});
+ assert.equal(unavailable(f),1,'broken ledger');
+ assert.equal(budgets(f).length,0);
+});
