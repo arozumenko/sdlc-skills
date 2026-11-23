@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -245,6 +245,12 @@ test('dispatch metadata that changes after a subagent was found unbudgeted makes
  assert.deepEqual(hook(f,c.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,true);
  writeFileSync(meta,JSON.stringify({description:'Build T',agentType:'js-dev',toolUseId:'tool-a'}));
  assert.equal(denied(hook(f,c.payload)),true,'the task the metadata now names is checked');
+ // Same size, modification time set back, other content: still a change.
+ const h=fixture(),e=child(h,'a',100,'H'),m=e.path.replace('.jsonl','.meta.json'),at=statSync(m);
+ assert.deepEqual(hook(h,e.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(h),'utf8')).unbudgeted,true);
+ writeFileSync(m,readFileSync(m,'utf8').replace('Build H','Build T'));utimesSync(m,at.atime,at.mtime);
+ assert.equal(statSync(m).size,at.size);
+ assert.equal(denied(hook(h,e.payload)),true,'content decides, not size and time');
  // Metadata that is gone is a change too: the call is evaluated, cannot be, and that is on record.
  const g=fixture(),d=child(g,'a',100,'H');assert.deepEqual(hook(g,d.payload),{});rmSync(d.path.replace('.jsonl','.meta.json'));
  assert.deepEqual(hook(g,d.payload),{});assert.equal(unavailable(g),1);
