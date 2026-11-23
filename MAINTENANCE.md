@@ -23,7 +23,7 @@ npx github:arozumenko/sdlc-skills#<sha> init --update ...
 ```
 
 On npm 12 and later (it ships with Node 26) each of these commands stops with
-`EALLOWGIT`, because npm refuses a package fetched from git. Add
+`EALLOWGIT`, because npm refuses a package fetched from git by default. Add
 `--allow-git=all` after `npx`: `npx --allow-git=all github:arozumenko/sdlc-skills init --update ...`.
 
 A pinned version fixes this repository's content. The external skills

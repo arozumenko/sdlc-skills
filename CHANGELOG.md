@@ -14,13 +14,15 @@ was rolled out to two projects.
 ### Changes that need attention when you update
 
 - npm 12 (it ships with Node 26) refuses a package fetched from git, so `npx github:arozumenko/sdlc-skills …`
-  stops with `EALLOWGIT`. Add `--allow-git=all` after `npx`. The fix hints of `init doctor`, `init --help`,
-  `README.md`, `MAINTENANCE.md` and `AGENTS.md` now say so. npm 11 accepts the flag too.
+  stops with `EALLOWGIT` under npm's default setting. Add `--allow-git=all` after `npx`. The fix hints of
+  `init doctor` and the commands in `init --help` now carry the flag; `README.md`, `MAINTENANCE.md` and
+  `AGENTS.md` have a note. npm 11 accepts the flag too.
 - `install-hooks.mjs --help` of `delivery-monitor` and `tokenomics` prints the usage. Before, it ran an install.
   An unknown argument is refused (#135).
-- The `delivery-monitor` price table had Fable 5.1 cache reads at four times the published price (#136). A
-  dispatch is priced when it is recorded, so costs already in a ledger do not change; later Fable 5.1 dispatches
-  cost less, and calibration follows as they arrive.
+- The `delivery-monitor` price table had Fable 5.1 cache reads at four times the published price (#136). The
+  spend report, task costs, the budget check and calibration price the recorded token usage with the current
+  table, so after the update their figures for past Fable 5.1 dispatches are lower by the cache-read part, and
+  the next `calibrate` moves the cells built from them. The cost stored in each ledger event is not rewritten.
 
 ### Known limits
 

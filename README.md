@@ -147,7 +147,7 @@ each host's native form — directories for Claude/Cursor/Windsurf, flat
 `.agent.md` for Copilot, TOML for Codex.
 
 **npm 12 and later.** npm 12 (it ships with Node 26) refuses a package fetched
-from git, so each command below stops with `EALLOWGIT`. Add `--allow-git=all`
+from git by default, so each command below stops with `EALLOWGIT`. Add `--allow-git=all`
 after `npx`, for example `npx --allow-git=all github:arozumenko/sdlc-skills init --all`.
 npm 11 accepts the flag too.
 

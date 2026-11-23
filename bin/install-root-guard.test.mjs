@@ -130,3 +130,15 @@ test("read-only commands are not refused", () => {
     assert.deepEqual(readdirSync(proj), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("every installer command in the help text carries --allow-git=all (npm 12 refuses a git package without it)", () => {
+  const { root, proj, env } = sandbox();
+  try {
+    const run = (...a) => spawnSync(process.execPath, [INIT, "init", ...a], { cwd: proj, env, encoding: "utf8" });
+    for (const args of [["--help"], ["doctor", "--help"]]) {
+      const out = run(...args).stdout, commands = out.split("\n").filter((l) => /\bnpx\b.*github:arozumenko\/sdlc-skills/.test(l));
+      assert.ok(commands.length > 0, `no installer command in: init ${args.join(" ")}`);
+      for (const line of commands) assert.match(line, /npx --allow-git=all github:/, line.trim());
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
