@@ -1,6 +1,6 @@
 import { createGitRunner } from './git.mjs';
 import { createSafeFs } from './fsx.mjs';
-import { finding } from './finding.mjs';
+import { finding, INIT } from './finding.mjs';
 import { targetsCheck, KNOWN_TARGETS } from './checks/targets.mjs';
 import { wiringCheck } from './checks/wiring.mjs';
 import { persistCheck } from './checks/persist.mjs';
@@ -14,7 +14,7 @@ import { deliveryMonitorCheck, preloadDeliveryMonitor } from './checks/delivery-
 export const DEFAULT_CHECKS = [targetsCheck, wiringCheck, persistCheck, hookversionCheck, payloadCheck, driftCheck, rolesCheck, deliveryMonitorCheck];
 
 export const DOCTOR_USAGE = `
-  Usage: npx github:arozumenko/sdlc-skills init doctor [--json] [--strict] [--target <list>]
+  Usage: ${INIT} doctor [--json] [--strict] [--target <list>]
 
   Read-only, offline health check of this project's sdlc-skills install. Never runs project code.
 
@@ -92,7 +92,7 @@ export function formatText({ facts, findings, summary }) {
 export async function doctorMain(argv, { cwd, pkgRoot, checks = DEFAULT_CHECKS, prepare = DEFAULT_PREPARE, format = formatText }) {
   const args = parseDoctorArgs(argv);
   if (args.help) { console.log(DOCTOR_USAGE); return 0; }
-  if (args.unknown.length) { console.error(`  ! Invalid doctor argument(s): ${args.unknown.join(', ')}\n    run: npx github:arozumenko/sdlc-skills init doctor --help`); return 2; }
+  if (args.unknown.length) { console.error(`  ! Invalid doctor argument(s): ${args.unknown.join(', ')}\n    run: ${INIT} doctor --help`); return 2; }
   let output, result;
   try {
     const base = makeContext({ projectDir: cwd, pkgRoot, targets: args.targets });

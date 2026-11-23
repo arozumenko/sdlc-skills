@@ -28,7 +28,7 @@ test('scripts installed but SubagentStart unwired is an error with a fix', () =>
   const d = project({ ...SCRIPTS(s.scriptsDir), '.claude/settings.json': claudeSettings({ SessionStart: s.events.SessionStart }) });
   try {
     const e = run(d).find((x) => x.severity === 'error');
-    assert.match(e.message, /SubagentStart not wired/); assert.match(e.fix, /init .*--target claude --update/);
+    assert.match(e.message, /SubagentStart not wired/); assert.match(e.fix, /^npx --allow-git=all github:.* init .*--target claude --update/);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 

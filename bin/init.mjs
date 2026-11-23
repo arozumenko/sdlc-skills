@@ -1743,6 +1743,10 @@ function printHelp() {
                                (hook wiring, persistence, hook version, context
                                budget, skill drift). Never runs project code.
 
+  npm 12 and later (Node 26) refuses a package fetched from git and stops with
+  EALLOWGIT. Add --allow-git=all after npx:
+    npx --allow-git=all github:arozumenko/sdlc-skills init [options]
+
   Options:
     --factory <id>             Install a team factory (a curated set of agents,
                                skills, briefings, instructions, and hooks)
