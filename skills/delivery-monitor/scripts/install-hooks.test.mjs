@@ -496,3 +496,24 @@ test('install and --remove on a settings file that cannot be read exit 2 naming 
     assert.deepEqual(JSON.parse(readFileSync(join(locked, 'inner', 'settings.json'), 'utf8')), { permissions: { allow: ['Bash(npm test)'] } }, 'the linked file is untouched');
   }
 });
+
+test('--help and -h print the usage, exit 0 and write nothing, whatever else is on the line', () => {
+  for (const args of [['--help'], ['-h'], ['--no-submodule', '--help'], ['--remove', '-h']]) {
+    const repo = stubHooks(tmp());
+    const r = runScript(args, { cwd: repo, env: isolated(repo) });
+    assert.equal(r.code, 0, args.join(' ')); assert.match(r.out, /^Usage: .*install-hooks\.mjs/); assert.match(r.out, /--no-submodule/); assert.match(r.out, /--remove/);
+    assert.ok(!existsSync(join(repo, '.claude', 'settings.json')), `${args.join(' ')}: no settings written`);
+    assert.ok(!existsSync(join(repo, '.gitignore')), `${args.join(' ')}: no .gitignore written`);
+    assert.ok(!existsSync(join(repo, '.agents')), `${args.join(' ')}: no telemetry bootstrap`);
+  }
+});
+
+test('an unknown flag, a stray argument or a value flag without its value is refused: exit 2, nothing written', () => {
+  for (const [args, named] of [[['--no-submodul'], '--no-submodul'], [['--dry-run', '--no-submodule'], '--dry-run'], [['install'], 'install'], [['--no-submodule', '--repo'], '--repo'], [['--host'], '--host']]) {
+    const repo = stubHooks(tmp());
+    const r = runScript(args, { cwd: repo, env: isolated(repo) });
+    assert.equal(r.code, 2, args.join(' ')); assert.match(r.err, /^USAGE\(/); assert.ok(r.err.includes(named), `${args.join(' ')}: names ${named}`);
+    assert.ok(!existsSync(join(repo, '.claude', 'settings.json')), `${args.join(' ')}: no settings written`);
+    assert.ok(!existsSync(join(repo, '.gitignore')), `${args.join(' ')}: no .gitignore written`);
+  }
+});

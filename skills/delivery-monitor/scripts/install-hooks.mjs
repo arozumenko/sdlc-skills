@@ -295,7 +295,36 @@ export function doctorReport(repo, rel, opts = {}) {
   return { lines, ok };
 }
 
+const SWITCHES = ['--doctor', '--local', '--no-submodule', '--remove'], VALUE_FLAGS = ['--repo', '--host'];
+const USAGE_TEXT = `Usage: node install-hooks.mjs [--repo <dir>] [--local] [--no-submodule] [--remove] [--doctor]
+
+With no flag: wires the SubagentStop capture hook and the PreToolUse budget hook into .claude/settings.json of the
+project, adds the managed .gitignore blocks, and sets up the shared telemetry submodule.
+
+  --repo <dir>     the project to write to (default: CLAUDE_PROJECT_DIR, else the working directory)
+  --local          write .claude/settings.local.json instead of .claude/settings.json
+  --no-submodule   leave .agents/telemetry as it is; do not create the telemetry submodule
+  --remove         take this skill's hook entries and ignore blocks out again
+  --doctor         report the wiring and the telemetry state; writes nothing, always exits 0
+  --host claude    the only supported host
+  --help, -h       print this text; writes nothing
+`;
+/** The first thing wrong with the command line, or null. A flag this script does not know is refused, never ignored: a
+ * mistyped --no-submodule must not run a full install. */
+function argvProblem(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (SWITCHES.includes(a)) continue;
+    if (!VALUE_FLAGS.includes(a)) return `unknown argument ${a}; run with --help for the flags`;
+    if (argv[i + 1] == null || argv[i + 1].startsWith('--')) return `${a} needs a value`;
+    i++;
+  }
+  return null;
+}
 export function main(argv = process.argv.slice(2), repo = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()) {
+  // Help and a refused command line come before anything is resolved or written.
+  if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(USAGE_TEXT); return 0; }
+  const bad = argvProblem(argv); if (bad) { process.stderr.write(`USAGE(${bad})\n`); return 2; }
   const has = (f) => argv.includes(f); const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
   // An explicit --repo wins over cwd and CLAUDE_PROJECT_DIR, and must name the root it means.
   const explicit = val('--repo'); const problem = explicit != null && explicitRepoProblem(explicit);

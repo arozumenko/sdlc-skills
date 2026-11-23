@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -212,4 +212,84 @@ test('an uninteresting call does not load the engine; an interesting call does',
 test('the denial names a guard threshold, not a cap or a limit',()=>{
  const f=fixture();stop(f,child(f,'a',9.01));const r=hook(f,pre());
  assert.equal(r.hookSpecificOutput.permissionDecisionReason,'T: task cost USD 9.01 exceeds the budget guard threshold USD 9');
+});
+const unavailable=f=>existsSync(f.d)?readdirSync(f.d).filter(n=>n.startsWith('diagnostics-')).flatMap(n=>readFileSync(join(f.d,n),'utf8').split('\n').filter(l=>l.includes('budget-check-unavailable'))).length:0;
+const breakLedger=f=>writeFileSync(join(f.d,'events-broken.jsonl'),'{not json\n');
+test('a call the hook does not budget never reads the events ledger; a budgeted one still reports a ledger it cannot read',()=>{
+ // No open plan.
+ let f=fixture();f.run.status='closed';f.run.updated_at='2026-11-19T00:00:00Z';saveRun(f.repo,f.run);breakLedger(f);
+ assert.deepEqual(hook(f,child(f,'a',100).payload),{});assert.deepEqual(hook(f,pre()),{});assert.equal(unavailable(f),0,'no open plan');
+ // A session bound to no plan.
+ f=fixture();rmSync(sessionPath(f.repo,'claude','s'));breakLedger(f);
+ assert.deepEqual(hook(f,child(f,'a',100).payload),{});assert.equal(unavailable(f),0,'unbound session');
+ // A role outside the roster, a task in hours, a task without an estimate, a description that names no task.
+ f=fixture();breakLedger(f);const other=child(f,'r',100);writeFileSync(other.path.replace('.jsonl','.meta.json'),JSON.stringify({description:'Build T',agentType:'not-installed',toolUseId:'tool-r'}));
+ assert.deepEqual(hook(f,{...other.payload,agent_type:'not-installed'}),{});
+ delete f.run.items.find(i=>i.ref==='U').estimate;saveRun(f.repo,f.run);
+ for(const ref of ['H','U','unknown']) {assert.deepEqual(hook(f,child(f,`a-${ref}`,100,ref).payload),{});assert.deepEqual(hook(f,pre(ref)),{});}
+ assert.equal(unavailable(f),0,'unbudgeted calls');
+ // The same broken ledger and a budgeted task: allowed, and the reason is on record.
+ assert.deepEqual(hook(f,child(f,'b',100).payload),{});assert.equal(unavailable(f),1,'budgeted call');
+});
+test('a subagent the hook does not budget is evaluated once: later calls do not read its transcript',()=>{
+ const f=fixture(),c=child(f,'a',100,'H');
+ assert.deepEqual(hook(f,c.payload),{});
+ const state=JSON.parse(readFileSync(cacheFile(f),'utf8'));assert.equal(state.unbudgeted,true);assert.equal(state.run,R);
+ rmSync(c.path);
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(unavailable(f),0,'no re-evaluation, so nothing to fail on');
+ assert.equal(budgets(f).length,0);
+});
+test('dispatch metadata that changes after a subagent was found unbudgeted makes the hook evaluate it again',()=>{
+ const f=fixture(),c=child(f,'a',100,'unknown'),meta=c.path.replace('.jsonl','.meta.json');
+ writeFileSync(meta,JSON.stringify({agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,true);
+ writeFileSync(meta,JSON.stringify({description:'Build T',agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.equal(denied(hook(f,c.payload)),true,'the task the metadata now names is checked');
+ // Same size, modification time set back, other content: still a change.
+ const h=fixture(),e=child(h,'a',100,'H'),m=e.path.replace('.jsonl','.meta.json'),at=statSync(m);
+ assert.deepEqual(hook(h,e.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(h),'utf8')).unbudgeted,true);
+ writeFileSync(m,readFileSync(m,'utf8').replace('Build H','Build T'));utimesSync(m,at.atime,at.mtime);
+ assert.equal(statSync(m).size,at.size);
+ assert.equal(denied(hook(h,e.payload)),true,'content decides, not size and time');
+ // Metadata that is gone is a change too: the call is evaluated, cannot be, and that is on record.
+ const g=fixture(),d=child(g,'a',100,'H');assert.deepEqual(hook(g,d.payload),{});rmSync(d.path.replace('.jsonl','.meta.json'));
+ assert.deepEqual(hook(g,d.payload),{});assert.equal(unavailable(g),1);
+});
+test('a plan that changes after a subagent was found unbudgeted is evaluated again, and a stop is enforced',()=>{
+ const f=fixture(),c=child(f,'a',100,'H');
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,true);
+ f.run.items.find(i=>i.ref==='H').estimate=est;f.run.version=2;saveRun(f.repo,f.run);
+ assert.equal(denied(hook(f,c.payload)),true);assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,undefined);
+ assert.equal(denied(hook(f,c.payload)),true);
+});
+test('an unbudgeted verdict is not kept while the subagent has no first message yet',()=>{
+ const f=fixture(),c=child(f,'a',0,'unknown');
+ writeFileSync(c.path,'');writeFileSync(c.path.replace('.jsonl','.meta.json'),JSON.stringify({description:'',agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),false,'nothing cached');
+ writeFileSync(c.path,JSON.stringify({type:'user',timestamp:'2026-11-20T10:00:00Z',message:{content:'Build T'}})+'\n');usage(c.path,100,'a');
+ assert.equal(denied(hook(f,c.payload)),true,'the task named by the first message is checked');
+});
+test('SubagentStop removes the cache of an unbudgeted subagent too',()=>{
+ const f=fixture(),c=child(f,'a',1,'H');hook(f,c.payload);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),true);
+ stop(f,c);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),false);
+});
+test('a call in a bound session that the hook does not budget does not ask git who the user is',{skip:process.platform==='win32'},()=>{
+ const f=fixture(),bin=mkdtempSync(join(tmpdir(),'dm-budget-git-')),marker=join(bin,'git-ran');
+ writeFileSync(join(bin,'git'),`#!/bin/sh\necho "$@" >> ${JSON.stringify(marker)}\nexit 1\n`);chmodSync(join(bin,'git'),0o755);
+ const run=payload=>{const p=spawnSync(process.execPath,[SCRIPT],{input:JSON.stringify(payload),encoding:'utf8',env:{...process.env,PATH:`${bin}:${process.env.PATH}`,DELIVERY_NO_SYNC:'1',CLAUDE_PROJECT_DIR:f.repo}});assert.equal(p.status,0,p.stderr);return p.stdout.trim()?JSON.parse(p.stdout):{};};
+ const c=child(f,'a',100,'H');
+ assert.deepEqual(run(c.payload),{});assert.deepEqual(run(c.payload),{});assert.deepEqual(run(pre('H')),{});
+ const calls=existsSync(marker)?readFileSync(marker,'utf8'):'';
+ assert.doesNotMatch(calls,/config|branch/,calls);
+});
+test('a bound session with a plan file or a ledger that cannot be read: a dispatch for a budgeted task is allowed, with one diagnostic per session',()=>{
+ // The plan file itself is broken: the hook cannot know what is budgeted, so every concerned call counts.
+ let f=fixture();writeFileSync(join(f.d,'plans',readdirSync(join(f.d,'plans'))[0]),'{broken');
+ assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,child(f,'a',100).payload),{});
+ assert.equal(unavailable(f),1,'broken plan file');
+ // The ledger is broken and the dispatch names a budgeted task.
+ f=fixture();breakLedger(f);
+ assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,pre()),{});assert.deepEqual(hook(f,{...pre(),tool_name:'Task'}),{});
+ assert.equal(unavailable(f),1,'broken ledger');
+ assert.equal(budgets(f).length,0);
 });

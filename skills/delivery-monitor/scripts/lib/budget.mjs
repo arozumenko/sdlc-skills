@@ -30,8 +30,10 @@ export function budgetedItem(item) {
  * discard a broken line and then refuse work on an undercounted total. The evidence is the run files, the events ledger, the
  * profile and the price table. Calibration is not read: a task's budget is the USD range saved on its plan item at registration,
  * so a missing or damaged calibration file does not change the check. */
-export function budgetInputs(repo) {
-  const { runs } = loadRunsChecked(repo), resolved = resolveObservations(repo);
+/** The registered plans, without the ledger: enough for the hook to see that a call is not budgeted. */
+export const budgetRuns = (repo) => loadRunsChecked(repo).runs;
+export function budgetInputs(repo, { runs = budgetRuns(repo) } = {}) {
+  const resolved = resolveObservations(repo);
   if (resolved.counts.malformed || resolved.counts.unknownVersion || resolved.conflicts.length) throw new Error('events ledger is unreadable or conflicted');
   const profile = budgetProfile(repo), loaded = loadPricesChecked(repo);
   if (loaded.problem) throw new Error(loaded.problem);

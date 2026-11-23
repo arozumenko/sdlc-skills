@@ -147,6 +147,10 @@ repository is refused). The hooks are always wired to the target's own copy of t
 PreToolUse checks Agent/Task dispatches before they start and subagents before each tool call. SubagentStop captures and
 records crossings; it never refuses work. Task cost comes from `taskCosts`, including prior dispatches, fix rounds and
 recovered attribution. In-run checks cache prior task cost once per agent and add incremental child-transcript usage.
+The hook reads the events ledger, the profile and the prices only for a call that is budgeted. A subagent found unbudgeted
+(a role outside the roster, a task without a USD range, a description that names no task) is remembered until it stops, so
+its later tool calls cost one small file read; a change to the plan or to the dispatch's metadata makes the hook evaluate
+it again.
 At strictly more than the range's high end, `budget_exceeded` flags the task. At strictly more than three times high,
 `budget_stopped` is recorded and the guard refuses the dispatch, or every later tool call of that running subagent that it
 can evaluate. The denial names the task, its cost and the threshold. The orchestrator treats the task as blocked and decides
