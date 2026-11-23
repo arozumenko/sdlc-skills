@@ -37,6 +37,7 @@ The limits of 0.3.0 below still hold. New or changed:
 
 ### November 2026
 
+- Release 0.3.1: version, changelog, npm 12 install note (#137, 2026-11-23)
 - delivery-monitor: price table matches the published list (Fable 5.1 cache reads, two missing models) (#136, 2026-11-23)
 - Hook installers honour --help, tech-lead leaves task estimates out, budget hook reads the ledger only when it must (#135, 2026-11-23)
 
