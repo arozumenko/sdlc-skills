@@ -1,6 +1,6 @@
 {
   "name": "sdlc-skills",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A bundled software delivery lifecycle toolkit for Claude Code: role-based agents (BA, Tech Lead, PM, Python dev, JS dev, QA, Personal Assistant) and composable skills (bug-fix workflow, feature planning, feature implementation, project seeding, code review, TDD, and more). Use when orchestrating an AI development team or when you want structured SDLC workflows inside a single project.",
   "author": {
     "name": "Artem Rozumenko",

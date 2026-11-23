@@ -1,6 +1,6 @@
 {
   "name": "sdlc-skills",
   "description": "Role-based agents and workflow skills for software delivery (BA, Tech Lead, PM, devs, QA, PA).",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "contextFileName": "GEMINI.md"
 }

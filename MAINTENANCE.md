@@ -16,11 +16,15 @@ a known-good commit with `#<sha>`:
 npx github:arozumenko/sdlc-skills init --update ...
 
 # Pin to a released version (see CHANGELOG.md for what each one contains)
-npx github:arozumenko/sdlc-skills#v0.3.0 init --update ...
+npx github:arozumenko/sdlc-skills#v0.3.1 init --update ...
 
 # Pin to a specific commit
 npx github:arozumenko/sdlc-skills#<sha> init --update ...
 ```
+
+On npm 12 and later (it ships with Node 26) each of these commands stops with
+`EALLOWGIT`, because npm refuses a package fetched from git. Add
+`--allow-git=all` after `npx`: `npx --allow-git=all github:arozumenko/sdlc-skills init --update ...`.
 
 A pinned version fixes this repository's content. The external skills
 listed in `skills.json` are still fetched from their upstream default
