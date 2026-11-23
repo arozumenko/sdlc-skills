@@ -8,6 +8,7 @@ Earlier states are pinned by commit, as `MAINTENANCE.md` describes.
 
 ## Unreleased
 
+- delivery-monitor: price table matches the published list (Fable 5.1 cache reads, two missing models) (#136, 2026-11-23)
 - Hook installers honour --help, tech-lead leaves task estimates out, budget hook reads the ledger only when it must (#135, 2026-11-23)
 
 ## 0.3.0 - 2026-11-23
