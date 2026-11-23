@@ -26,10 +26,11 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
   if (!concernsBudget(payload)) return {};
   let slug;
   try {
-    repo ??= ownerRepo(payload, process.env); slug = whoAmI(repo).slug;
+    repo ??= ownerRepo(payload, process.env);
     const runs = budgetRuns(repo);
     if (!runs.some(r => r.status === 'open')) return {};
-    const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now, slug);
+    // Who the user is costs two git processes. Only binding by branch and a diagnostic need it.
+    const run = sessionRun(repo, 'claude', payload.session_id) ?? bindByBranch(repo, payload, now, slug = whoAmI(repo).slug);
     if (!run) return {};
     // The events ledger, the profile and the prices are read only for a call that is budgeted: every return above and
     // every "not budgeted" return below costs no ledger read. A budgeted call still fails open, on record, when one of

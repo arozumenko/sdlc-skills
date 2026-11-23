@@ -257,3 +257,12 @@ test('SubagentStop removes the cache of an unbudgeted subagent too',()=>{
  const f=fixture(),c=child(f,'a',1,'H');hook(f,c.payload);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),true);
  stop(f,c);assert.equal(readdirSync(f.d).some(n=>n.startsWith('.pending-budget-')),false);
 });
+test('a call in a bound session that the hook does not budget does not ask git who the user is',{skip:process.platform==='win32'},()=>{
+ const f=fixture(),bin=mkdtempSync(join(tmpdir(),'dm-budget-git-')),marker=join(bin,'git-ran');
+ writeFileSync(join(bin,'git'),`#!/bin/sh\necho "$@" >> ${JSON.stringify(marker)}\nexit 1\n`);chmodSync(join(bin,'git'),0o755);
+ const run=payload=>{const p=spawnSync(process.execPath,[SCRIPT],{input:JSON.stringify(payload),encoding:'utf8',env:{...process.env,PATH:`${bin}:${process.env.PATH}`,DELIVERY_NO_SYNC:'1',CLAUDE_PROJECT_DIR:f.repo}});assert.equal(p.status,0,p.stderr);return p.stdout.trim()?JSON.parse(p.stdout):{};};
+ const c=child(f,'a',100,'H');
+ assert.deepEqual(run(c.payload),{});assert.deepEqual(run(c.payload),{});assert.deepEqual(run(pre('H')),{});
+ const calls=existsSync(marker)?readFileSync(marker,'utf8'):'';
+ assert.doesNotMatch(calls,/config|branch/,calls);
+});
