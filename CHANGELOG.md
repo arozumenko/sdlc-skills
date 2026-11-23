@@ -8,7 +8,7 @@ Earlier states are pinned by commit, as `MAINTENANCE.md` describes.
 
 ## Unreleased
 
-Nothing yet.
+- Hook installers honour --help, tech-lead leaves task estimates out, budget hook reads the ledger only when it must (#135, 2026-11-23)
 
 ## 0.3.0 - 2026-11-23
 
