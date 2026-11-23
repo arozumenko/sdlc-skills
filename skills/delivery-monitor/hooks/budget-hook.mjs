@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Synchronous Claude PreToolUse: pre-dispatch and subagent tool calls. No decision on any unavailable input.
-import { readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,9 +40,11 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
     // A rename replaces the cache whole, so a reader never finds it half written and two writers cannot interleave
     // (parallel tool calls of one subagent run this hook at the same time).
     const writeCache = (value) => { const tmp = `${cache}.${process.pid}.tmp`; try { writeFileSync(tmp, JSON.stringify(value)); renameSync(tmp, cache); } catch (e) { rmSync(tmp, { force: true }); throw e; } };
-    // The plan as it is now. An "unbudgeted" verdict holds only for this exact plan: a re-cut, a new estimate or a
-    // refreshed roster changes the mark and the subagent is evaluated again.
+    // The plan as it is now, and the dispatch metadata as it is on disk. An "unbudgeted" verdict holds only for this
+    // exact plan and this exact metadata: a re-cut, a new estimate, a refreshed roster, or metadata that gains a
+    // description changes a mark and the subagent is evaluated again.
     const planMark = sha256(JSON.stringify(run));
+    const fileMark = (path) => { const st = statSync(path); return `${st.size}:${st.mtimeMs}`; };
     if (payload.agent_id) {
       dispatchKey = `claude:${payload.session_id}:${payload.agent_id}`;
       cache = join(deliveryDir(repo), `.pending-budget-${sha256(dispatchKey)}.json`);
@@ -50,15 +52,19 @@ export function handleBudget(payload, { repo, now = Date.now() } = {}) {
       // absent: the dispatch is evaluated again from the ledger and its live usage, so a stop is enforced again.
       try { state = JSON.parse(readFileSync(cache, 'utf8')); } catch (e) { if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; }
       if (state?.unbudgeted) {
-        if (state.v === 1 && state.dispatchKey === dispatchKey && state.run === run.run && state.plan === planMark) return {};
+        let holds = false;
+        try { holds = state.v === 1 && state.dispatchKey === dispatchKey && state.run === run.run && state.plan === planMark && state.meta === fileMark(state.metaPath); } catch { /* metadata gone: evaluate again */ }
+        if (holds) return {};
         state = null;
       }
-      // Remembers that this subagent is not budgeted, so its later calls stop at the line above. Kept only once the
-      // evidence is complete; a failed write is harmless, the next call evaluates again.
-      const unbudgeted = (complete = true) => { if (complete) try { writeCache({ v: 1, dispatchKey, run: run.run, plan: planMark, unbudgeted: true }); } catch { /* evaluated again next call */ } return {}; };
       const child = findChildTranscript(payload);
       if (!child) throw new Error('child transcript unavailable');
       if (!state) {
+        // Taken before the metadata is read, so a write that lands in between shows as a change on the next call.
+        const metaMark = fileMark(child.metaPath);
+        // Remembers that this subagent is not budgeted, so its later calls stop at the check above. Kept only once the
+        // evidence is complete; a failed write is harmless, the next call evaluates again.
+        const unbudgeted = (complete = true) => { if (complete) try { writeCache({ v: 1, dispatchKey, run: run.run, plan: planMark, metaPath: child.metaPath, meta: metaMark, unbudgeted: true }); } catch { /* evaluated again next call */ } return {}; };
         const meta = JSON.parse(readFileSync(child.metaPath, 'utf8'));
         if (typeof meta.toolUseId !== 'string' || !meta.toolUseId) throw new Error('dispatch metadata toolUseId unavailable');
         const role = meta.agentType ?? payload.agent_type;

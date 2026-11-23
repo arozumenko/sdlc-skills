@@ -231,13 +231,23 @@ test('a call the hook does not budget never reads the events ledger; a budgeted 
  // The same broken ledger and a budgeted task: allowed, and the reason is on record.
  assert.deepEqual(hook(f,child(f,'b',100).payload),{});assert.equal(unavailable(f),1,'budgeted call');
 });
-test('a subagent the hook does not budget is evaluated once: later calls need neither its transcript nor its metadata',()=>{
+test('a subagent the hook does not budget is evaluated once: later calls do not read its transcript',()=>{
  const f=fixture(),c=child(f,'a',100,'H');
  assert.deepEqual(hook(f,c.payload),{});
  const state=JSON.parse(readFileSync(cacheFile(f),'utf8'));assert.equal(state.unbudgeted,true);assert.equal(state.run,R);
- rmSync(c.path);rmSync(c.path.replace('.jsonl','.meta.json'));
+ rmSync(c.path);
  assert.deepEqual(hook(f,c.payload),{});assert.equal(unavailable(f),0,'no re-evaluation, so nothing to fail on');
  assert.equal(budgets(f).length,0);
+});
+test('dispatch metadata that changes after a subagent was found unbudgeted makes the hook evaluate it again',()=>{
+ const f=fixture(),c=child(f,'a',100,'unknown'),meta=c.path.replace('.jsonl','.meta.json');
+ writeFileSync(meta,JSON.stringify({agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.deepEqual(hook(f,c.payload),{});assert.equal(JSON.parse(readFileSync(cacheFile(f),'utf8')).unbudgeted,true);
+ writeFileSync(meta,JSON.stringify({description:'Build T',agentType:'js-dev',toolUseId:'tool-a'}));
+ assert.equal(denied(hook(f,c.payload)),true,'the task the metadata now names is checked');
+ // Metadata that is gone is a change too: the call is evaluated, cannot be, and that is on record.
+ const g=fixture(),d=child(g,'a',100,'H');assert.deepEqual(hook(g,d.payload),{});rmSync(d.path.replace('.jsonl','.meta.json'));
+ assert.deepEqual(hook(g,d.payload),{});assert.equal(unavailable(g),1);
 });
 test('a plan that changes after a subagent was found unbudgeted is evaluated again, and a stop is enforced',()=>{
  const f=fixture(),c=child(f,'a',100,'H');

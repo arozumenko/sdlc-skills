@@ -459,12 +459,13 @@ test('CLI: a valid automation/config.json next to a malformed flat-era root conf
   assert.equal(read(join(repo, '.claude', 'settings.json')).hooks.SessionEnd.length, 1, 'hooks wired');
 });
 
-/** Everything in the repo outside the installed skill copy, so a test can show a run wrote nothing. */
-const outsideSkill = (repo) => execFileSync('find', [repo, '-path', join(repo, '.claude', 'skills'), '-prune', '-o', '-type', 'f', '-print'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
+/** Every file in the repo outside the installed skill copy, with its content, so a test can show a run wrote nothing. */
+const outsideSkill = (repo) => execFileSync('find', [repo, '-path', join(repo, '.claude', 'skills'), '-prune', '-o', '-type', 'f', '-print'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort().map((p) => [p, readFileSync(p, 'utf8')]);
 
 test('CLI: --help and -h print the usage, exit 0 and write nothing, whatever else is on the line', () => {
   for (const args of [['--help'], ['-h'], ['--host', 'claude', '--help'], ['--otel', '-h'], ['--remove', '--help']]) {
     const { repo, run } = installedCopy();
+    put(repo, '.claude/settings.json', '{"model":"sonnet"}'); put(repo, '.gitignore', 'node_modules/\n');
     const before = outsideSkill(repo);
     const r = run(...args);
     assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
@@ -476,6 +477,7 @@ test('CLI: --help and -h print the usage, exit 0 and write nothing, whatever els
 test('CLI: an unknown flag, a stray argument, an unknown host or a value flag without its value → exit 1, named, nothing written', () => {
   for (const [args, named] of [[['--remov'], '--remov'], [['--dry-run'], '--dry-run'], [['install'], 'install'], [['--host', 'cursor'], 'cursor'], [['--host'], '--host'], [['--otel', '--endpoint'], '--endpoint']]) {
     const { repo, run } = installedCopy();
+    put(repo, '.claude/settings.json', '{"model":"sonnet"}'); put(repo, '.gitignore', 'node_modules/\n');
     const before = outsideSkill(repo);
     const r = run(...args);
     assert.equal(r.status, 1, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
