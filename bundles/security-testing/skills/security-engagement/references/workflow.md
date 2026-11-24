@@ -99,7 +99,8 @@ node <skills>/secure-code-review/scripts/cite.mjs redact reports/security/<date>
 ```
 `REDACTED <file> hits=<n>`. `redact` strips secrets only — oids, sha256s and
 finding ids are identities this bundle prints everywhere and are left
-intact (rule 1, `high-entropy`).
+intact (rule 1, `high-entropy`); so is a path git tracks, now or at a commit
+the report names, so the pasted tables still hash to their `TABLES sha256`.
 
 ## 9. Fix and verify
 

@@ -1,5 +1,16 @@
 # Changelog — security-testing
 
+## Unreleased
+
+- Fix: `cite.mjs check` no longer redacts long tracked paths on write-back. A
+  path run of 40+ letters, digits and `/` matched the `high-entropy` rule, so
+  the first `check` passed and every later one failed and sign-off could not
+  be reached. `--md` tables, `cite.mjs redact`, `SHOW` / `DIRTY-SCOPE` lines
+  and `verify.mjs` output keep the path too. A file an earlier version already
+  damaged cannot be repaired from its own bytes: restore the paths from the
+  agent's source, strip what `check` wrote, and run `check` again (second
+  opinions must be redone against the new bytes).
+
 ## 1.0.0
 
 Full roster and skills land: `security-lead`, `threat-modeler` and

@@ -779,3 +779,155 @@ test("redact leaves the report's own identities (oids, sha256s, finding ids) int
   assert.ok(after.includes(digest));
   assert.ok(after.includes(findingId));
 });
+
+// ---------------------------------------------------------------- tracked paths survive redaction
+
+/** A path whose directory run is 40+ chars of [A-Za-z0-9+/] — what the high-entropy rule matches. */
+const LONG = "src/main/kotlin/com/example/widgets/screens/LongNamedWidget.kt";
+const LONG_DIR = LONG.slice(0, LONG.lastIndexOf("/"));
+const LONG_STEM = LONG.replace(/\.kt$/, "");
+const LONG_LINES = ["package com.example.widgets.screens", "", "class LongNamedWidget", "val answer = 42"];
+/** 44 chars of base64, assembled at runtime: a secret-shaped value no tracked path contains. */
+const BLOB = ["VGhlIHF1aWNr", "IGJyb3duIGZv", "eCBqdW1wcyBv", "dmVyIGxh"].join("");
+const gitIn = (root, ...argv) => {
+  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8" });
+  assert.equal(r.status, 0, `git ${argv.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+};
+/** Commit LONG on top of a built repo; returns the new head. */
+const addLong = (root) => {
+  mkdirSync(join(root, LONG, ".."), { recursive: true });
+  writeFileSync(join(root, LONG), `${LONG_LINES.join("\n")}\n`);
+  gitIn(root, "add", "-A", "src");
+  gitIn(root, "commit", "-qm", "long");
+  return gitIn(root, "rev-parse", "HEAD");
+};
+const longCitation = (extra = {}) => ({ path: LONG, lines: [1, 4], snippet: LONG_LINES.slice(2).join("\n"), ...extra });
+const longFinding = (extra = {}) => ({ title: "t", class: "idor", priority: "p1", confidence: "high", citations: [longCitation()], rationale: "…", fix: "…", ...extra });
+const longReview = (overrides = {}) => {
+  const r = review(agentDoc("$HEAD"));
+  const head = addLong(r.root);
+  writeDoc(r.file, agentDoc(head, { examined: [{ path: LONG }, { path: "src/app.js" }], findings: [longFinding()], ...overrides }));
+  return { ...r, head };
+};
+
+test("long tracked paths: check on findings re-runs on its own output and a second opinion stays valid", () => {
+  const { root, dir, head, file, rel } = longReview({ scope_paths: ["src/", LONG_DIR, `${LONG_DIR}/`] });
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const first = readFileSync(file, "utf8");
+  assert.ok(!first.includes("<REDACTED:high-entropy>"), first);
+  const f = JSON.parse(first);
+  assert.equal(f.findings[0].citations[0].path, LONG);
+  assert.deepEqual(f.examined.map((e) => e.path), [LONG, "src/app.js"]);
+  assert.ok(f.coverage.rows.some((x) => x.path === LONG && x.status === "examined"));
+  assert.deepEqual(f.scope_paths, ["src/", LONG_DIR, `${LONG_DIR}/`], "a tracked directory is a path too");
+  const { id } = f.findings[0];
+  writeFileSync(join(dir, `second-${id}.json`), fill("second-ok.json", { ID: id, HEAD: head, SHA: sha256(readFileSync(file)) }));
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes("CHECK verified=1 failed=0"), r.out.join("\n"));
+  assert.ok(r.out.includes(`SECOND ${id} confirmed`), r.out.join("\n"));
+  assert.equal(readFileSync(file, "utf8"), first, "byte-idempotent");
+});
+
+test("long tracked paths: check on a threat model re-runs on its own output", () => {
+  const t = model({});
+  const head = addLong(t.root);
+  const el = (id, citations) => ({ id, name: `Widget in ${LONG}`, kind: "process", citations });
+  writeDoc(t.file, {
+    head,
+    scope_paths: ["src/"],
+    elements: [el("E-001", [longCitation()])],
+    threats: [{ id: "T-001", element_id: "E-001", stride: "T", title: "t", mitigations: [{ id: "M-001", claim: "c", citations: [longCitation()] }], disposition: "mitigated(M-001)" }],
+  });
+  let r = run(t.root, "check", t.rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const first = readFileSync(t.file, "utf8");
+  assert.ok(!first.includes("<REDACTED:"), first);
+  r = run(t.root, "check", t.rel, "--md");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes("CHECK verified=2 failed=0"), r.out.join("\n"));
+  assert.equal(readFileSync(t.file, "utf8"), first, "byte-idempotent");
+  assert.equal(tablesOf(r.out).text.split(`${LONG}:1-4 @${head.slice(0, 7)} VERIFIED`).length - 1, 2, r.out.join("\n"));
+});
+
+test("long tracked paths: the exemption covers the path only — secrets beside it, in it, or longer than it still go", () => {
+  const { root, file, rel } = longReview({
+    findings: [
+      longFinding({ title: `leaks ${BLOB} in ${LONG}`, rationale: `${LONG_STEM}X`, fix: `password = ${BLOB}` }),
+      longFinding({ citations: [longCitation({ path: `src/${BLOB}` })] }),
+      longFinding({ citations: [longCitation({ path: `src/${LONG_STEM}/Missing.kt` })] }),
+    ],
+  });
+  const r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  const f = readDoc(file);
+  assert.ok(!JSON.stringify(f).includes(BLOB), "no secret-shaped value reaches disk");
+  assert.equal(f.findings[0].title, `leaks <REDACTED:high-entropy> in ${LONG}`);
+  assert.equal(f.findings[0].rationale, "<REDACTED:high-entropy>", "a longer run than the tracked path is not the tracked path");
+  assert.equal(f.findings[1].citations[0].path, "<REDACTED:high-entropy>", "a path git does not track is redacted as before");
+  assert.equal(f.findings[2].citations[0].path, "<REDACTED:high-entropy>.kt");
+  assert.deepEqual(f.findings.map((x) => x.citations[0].state), ["VERIFIED", "FAILED(not-in-tree)", "FAILED(not-in-tree)"]);
+});
+
+test("long tracked paths: a citation that FAILED for another reason keeps its path, also at its own older commit", () => {
+  const t = longReview();
+  gitIn(t.root, "rm", "-q", LONG);
+  gitIn(t.root, "commit", "-qm", "gone");
+  const head = gitIn(t.root, "rev-parse", "HEAD");
+  writeDoc(t.file, agentDoc(head, {
+    findings: [
+      longFinding({ citations: [longCitation({ oid: t.head })] }),
+      longFinding({ citations: [longCitation({ oid: t.head, snippet: "nope" })] }),
+      longFinding({ citations: [longCitation({ oid: t.head.slice(0, 10), lines: [1, 60] })] }),
+    ],
+  }));
+  const r = run(t.root, "check", t.rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  const f = readDoc(t.file);
+  assert.deepEqual(f.findings.map((x) => x.citations[0].state), ["VERIFIED", "FAILED(snippet-not-found)", "FAILED(range-over-40)"]);
+  assert.deepEqual(f.findings.map((x) => x.citations[0].path), [LONG, LONG, LONG]);
+});
+
+test("long tracked paths: the review head's own tree counts when the file is gone at HEAD", () => {
+  const t = longReview();
+  gitIn(t.root, "rm", "-q", LONG);
+  gitIn(t.root, "commit", "-qm", "gone");
+  // range-over-40 fails before an oid is resolved, so only `head` names the tree.
+  writeDoc(t.file, agentDoc(t.head, { findings: [longFinding({ citations: [longCitation({ lines: [1, 60] })] })] }));
+  const r = run(t.root, "check", t.rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.equal(readDoc(t.file).findings[0].citations[0].path, LONG);
+});
+
+test("long tracked paths: the pasted --md tables come through redact unchanged, also after the file is gone", () => {
+  const { root, head, rel } = longReview();
+  const r = run(root, "check", rel, "--md");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const { text, last } = tablesOf(r.out);
+  assert.ok(text.includes(`${LONG}:1-4 @${head.slice(0, 7)} VERIFIED`), text);
+  assert.ok(text.includes(`| ${LONG} | examined | 1-4 |  |`), text);
+  assert.equal(last, `TABLES sha256=${sha256(text)}`);
+  mkdirSync(join(root, "reports"), { recursive: true });
+  const report = join(root, "reports", "x.md");
+  const body = `# Report\n\n${text}\n${last}\n`;
+  writeFileSync(report, body);
+  assert.deepEqual(run(root, "redact", "reports/x.md").out, ["REDACTED reports/x.md hits=0"]);
+  assert.equal(readFileSync(report, "utf8"), body);
+  gitIn(root, "rm", "-q", LONG);
+  gitIn(root, "commit", "-qm", "gone");
+  assert.deepEqual(run(root, "redact", "reports/x.md").out, ["REDACTED reports/x.md hits=0"], "the report's own @oid names the tree");
+  writeFileSync(report, `${body}blob ${BLOB}\n`);
+  assert.deepEqual(run(root, "redact", "reports/x.md").out, ["REDACTED reports/x.md hits=1"]);
+  assert.equal(readFileSync(report, "utf8"), `${body}blob <REDACTED:high-entropy>\n`);
+});
+
+test("long tracked paths: SHOW and DIRTY-SCOPE name the file", () => {
+  const { root, head, rel } = longReview();
+  assert.equal(run(root, "show", LONG, "1", "2").out[0], `SHOW ${LONG} ${head.slice(0, 7)} 1-2`);
+  writeFileSync(join(root, LONG), "edited\n");
+  const r = run(root, "check", rel);
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.out, [`DIRTY-SCOPE ${LONG}`]);
+});
