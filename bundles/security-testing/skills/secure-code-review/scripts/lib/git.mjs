@@ -213,6 +213,16 @@ export function lsFiles(root, { stage = false, others = false, excludeStandard =
 }
 
 /**
+ * Every path in the tree of commit `oid`.
+ * @param {string} root
+ * @param {string} oid
+ * @returns {string[]}
+ */
+export function treePaths(root, oid) {
+  return splitZ(must(root, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", "--end-of-options", oid]).stdout);
+}
+
+/**
  * Paths changed between two commits.
  * @param {string} root
  * @param {string} base

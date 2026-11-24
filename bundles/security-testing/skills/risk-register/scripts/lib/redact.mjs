@@ -68,14 +68,19 @@ export const DEFAULT_RULES = loadRules();
  * Replace every match of every rule, in rule order.
  * @param {string} input
  * @param {{class: string, re: RegExp, replacement: string}[]} [rules]
+ * @param {(hit: {class: string, match: string, offset: number, text: string}) => boolean} [exempt]
+ *   true keeps that match as it is (`text` is the string as the earlier rules left it); default none
  * @returns {{text: string, hits: number}}
  */
-export function redactString(input, rules = DEFAULT_RULES) {
+export function redactString(input, rules = DEFAULT_RULES, exempt = undefined) {
   if (typeof input !== "string") throw new TypeError("redactString: input must be a string");
   let text = input;
   let hits = 0;
   for (const rule of rules) {
-    text = text.replace(rule.re, () => {
+    const before = text;
+    text = before.replace(rule.re, (match, ...rest) => {
+      const offset = rest.find((a) => typeof a === "number"); // after the capture groups, which are strings or undefined
+      if (exempt !== undefined && exempt({ class: rule.class, match, offset, text: before })) return match;
       hits++;
       return rule.replacement;
     });

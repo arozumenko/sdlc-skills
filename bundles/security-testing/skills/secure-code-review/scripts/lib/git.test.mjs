@@ -28,7 +28,7 @@ function fixtureRepo() {
 }
 
 test("the trimmed surface is exactly what the scripts import", () => {
-  assert.deepEqual(Object.keys(gitlib).sort(), ["GitError", "diffNameOnly", "diffUnified", "git", "gitEnv", "lsFiles", "mergeBaseIsAncestor", "must", "revParse", "showBytes", "statusPorcelain", "toplevel"]);
+  assert.deepEqual(Object.keys(gitlib).sort(), ["GitError", "diffNameOnly", "diffUnified", "git", "gitEnv", "lsFiles", "mergeBaseIsAncestor", "must", "revParse", "showBytes", "statusPorcelain", "toplevel", "treePaths"]);
 });
 
 test("git() returns non-zero exits as data and must() turns them into GitError", () => {

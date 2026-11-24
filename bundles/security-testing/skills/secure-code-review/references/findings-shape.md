@@ -50,7 +50,8 @@ blank lines, nothing else). A citation may carry its own `oid`; when absent
 `CHECK verified=2 failed=0`, then wrote the file back with its own keys —
 per citation `oid`, `state` and `snippet_redacted`; per finding `id`; at
 the top `coverage` and `check_stamp`. Everything the reviewer wrote is kept
-in place (strings pass through the redaction rules).
+in place (strings pass through the redaction rules; a path git tracks — now,
+at the head, or at a cited commit — is exempt from the `high-entropy` rule).
 
 ```json
 {

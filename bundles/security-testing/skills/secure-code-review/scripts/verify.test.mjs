@@ -229,3 +229,34 @@ test("an added suppression is an ADVISORY; a standalone install skips the regist
   assert.deepEqual(r.out, ["REGISTER: skipped (risk-register not installed)", `VERDICT VERIFIED finding=${t.id} base=${t.oid1} head=${head}`]);
   assert.ok(register(t.root, "status").out.includes("COUNT open=1"), "the row is untouched");
 });
+
+test("a long tracked path survives in DIRTY, ADVISORY, carried_dirt and verify.json", () => {
+  const LONG = "src/main/kotlin/com/example/widgets/screens/LongNamedWidget.kt";
+  const OTHER = "lib/main/kotlin/com/example/widgets/screens/OtherNamedWidget.kt";
+  const t = buildRepo();
+  checkout(t.root, t.oid2);
+  put(t.root, LONG, "class LongNamedWidget\n");
+  put(t.root, OTHER, "class OtherNamedWidget\n");
+  const base = commit(t.root, "long");
+  put(t.root, LONG, "class LongNamedWidget // eslint-disable-line\n");
+  const head = commit(t.root, "fix");
+  put(t.root, `${REVIEW}/findings.json`, JSON.stringify({ head: base, examined: [{ path: LONG }], findings: [{ class: "idor", title: "t", citations: [{ path: LONG, lines: [1, 1], snippet: "class LongNamedWidget" }] }] }));
+  const c = spawn(CITE, t.root, ["check", `${REVIEW}/findings.json`]);
+  assert.equal(c.code, 0, c.out.join("\n"));
+  const { id } = readJson(join(t.root, REVIEW, "findings.json")).findings[0];
+  const args = ["--finding", id, "--review", REVIEW, "--head", head];
+  put(t.root, LONG, "dirty\n");
+  assert.deepEqual(run(t.root, ...args).out, [`DIRTY ${LONG}`]);
+  put(t.root, LONG, "class LongNamedWidget // eslint-disable-line\n");
+  put(t.root, OTHER, "dirty\n");
+  let r = run(t.root, ...args);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes(`ADVISORY ${LONG}:1 inline-suppress`), r.out.join("\n"));
+  const verifyJson = () => readJson(join(runDir(t.root, id, head), "verify.json"));
+  assert.equal(verifyJson().diff.advisories[0].path, LONG);
+  assert.deepEqual(verifyJson().carried_dirt, [OTHER]);
+  r = run(t.root, ...args, "--assertion", "not-refound", "--by", "s1");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.equal(verifyJson().verdict, "VERIFIED");
+  assert.equal(verifyJson().diff.advisories[0].path, LONG, "the second invocation rewrites the file with the path intact");
+});

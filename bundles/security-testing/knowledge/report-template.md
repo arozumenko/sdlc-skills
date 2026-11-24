@@ -5,7 +5,8 @@
      print, record each run's `TABLES sha256` in Identity, fill Verification
      from `.agents/security-testing/verify/` — then, LAST, run
      `cite.mjs redact reports/security/<date>-assessment.md`. redact leaves
-     identities (oids, sha256s, finding ids) intact; it only strips secrets. -->
+     identities (oids, sha256s, finding ids, paths git tracks) intact; it only
+     strips secrets. -->
 
 ## Identity
 

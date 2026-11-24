@@ -43,6 +43,7 @@ import { UsageError, runCli } from "./lib/cli.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
 import { GitError, diffNameOnly, diffUnified, mergeBaseIsAncestor, revParse, statusPorcelain } from "./lib/git.mjs";
 import { redactString } from "./lib/redact.mjs";
+import { exemptPaths, trackedPaths } from "./lib/tracked-paths.mjs";
 import { ArgvError, DEFAULT_TIMEOUT_S, INLINE_SUPPRESS_RE, TEST_SKIP_RE, boundOutput, checkArgv, parseUnifiedDiff, runTests } from "./lib/verify-steps.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,9 +76,9 @@ const VERIFY_JSON = "verify.json";
 const TESTS_LOG = "tests.log";
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const clean = (s) => redactString(s).text;
-/** Redacted `out()`: nothing reaches stdout unredacted. */
-const say = (ctx, line) => ctx.out(clean(line));
+const clean = (s, exempt) => redactString(s, undefined, exempt).text;
+/** Redacted `out()`: nothing reaches stdout unredacted. `exempt` as `redactString` takes it. */
+const say = (ctx, line, exempt) => ctx.out(clean(line, exempt));
 const posix = (p) => p.split("\\").join("/");
 
 /** A record this script wrote cannot be read back: `CORRUPT <record>`, exit 5. The message names the file, never its bytes. */
@@ -89,13 +90,13 @@ class CorruptError extends Error {
   }
 }
 
-/** Deep copy with every string (keys included) redacted, except a full oid/id under one of `HEX_KEYS`. */
-function redactDeep(value, key) {
-  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : clean(value);
-  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+/** Deep copy with every string (keys included) redacted, except a full oid/id under one of `HEX_KEYS` and the paths `exempt` keeps. */
+function redactDeep(value, exempt, key) {
+  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : clean(value, exempt);
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, exempt));
   if (isObject(value)) {
     const out = {};
-    for (const [k, v] of Object.entries(value)) out[clean(k)] = redactDeep(v, k);
+    for (const [k, v] of Object.entries(value)) out[clean(k)] = redactDeep(v, exempt, k);
     return out;
   }
   return value;
@@ -149,7 +150,7 @@ const dirtOf = (root, paths) => statusPorcelain(root, { paths }).map((line) => l
 function conclude(ctx, run, doc, verdict) {
   doc.verdict = verdict;
   mkdirSync(run.dir, { recursive: true });
-  writeFileSync(join(run.dir, VERIFY_JSON), `${JSON.stringify(redactDeep(doc), null, 2)}\n`);
+  writeFileSync(join(run.dir, VERIFY_JSON), `${JSON.stringify(redactDeep(doc, run.exempt), null, 2)}\n`);
   if (verdict !== VERDICTS.pending) ctx.out(`VERDICT ${verdict} finding=${doc.finding_id} base=${doc.base} head=${doc.head}`);
   return 0;
 }
@@ -205,7 +206,7 @@ function firstRun(ctx, { root, record, run, id, base, head, paths, reviewRel, ca
   if (!mergeBaseIsAncestor(root, base, head) || diffNameOnly(root, base, head, { paths }).length === 0) return conclude(ctx, run, doc, VERDICTS.notAFix);
   doc.tests = testsStep(root, record, run.dir);
   doc.diff = diffStep(root, base, head, paths);
-  for (const a of doc.diff.advisories) say(ctx, `ADVISORY ${a.path}:${a.line} ${a.kind}`);
+  for (const a of doc.diff.advisories) say(ctx, `ADVISORY ${a.path}:${a.line} ${a.kind}`, run.exempt);
   const early = earlyVerdict(doc);
   if (early !== null) return conclude(ctx, run, doc, early);
   conclude(ctx, run, doc, VERDICTS.pending);
@@ -235,7 +236,7 @@ function decide(ctx, { root, run, id, head, assertion, by }) {
   const verdict = earlyVerdict(doc) ?? (assertion === "refound" ? VERDICTS.refound : VERDICTS.verified);
   doc.assertion = { value: assertion, by };
   doc.verdict = verdict;
-  writeFileSync(join(run.dir, VERIFY_JSON), `${JSON.stringify(redactDeep(doc), null, 2)}\n`);
+  writeFileSync(join(run.dir, VERIFY_JSON), `${JSON.stringify(redactDeep(doc, run.exempt), null, 2)}\n`);
   registerStep(ctx, root, id, verdict, run, by);
   ctx.out(`VERDICT ${verdict} finding=${id} base=${doc.base} head=${head}`);
   return 0;
@@ -271,14 +272,15 @@ function verify(args, ctx) {
     say(ctx, `NOT-AT-HEAD ${head.slice(0, 7)} (checkout is at ${current.slice(0, 7)})`);
     return 2;
   }
+  const exempt = exemptPaths(trackedPaths(root, [base, head]));
   const dirty = dirtOf(root, paths);
   if (dirty.length > 0) {
-    for (const p of dirty) say(ctx, `DIRTY ${p}`);
+    for (const p of dirty) say(ctx, `DIRTY ${p}`, exempt);
     return 2;
   }
   const carried = dirtOf(root, []).filter((p) => !paths.includes(p));
   const name = `${id.slice(0, 8)}-${head.slice(0, 7)}`;
-  const run = { name, dir: join(stDir(root), "verify", name), rel: posix(join(".agents", "security-testing", "verify", name, VERIFY_JSON)) };
+  const run = { name, dir: join(stDir(root), "verify", name), rel: posix(join(".agents", "security-testing", "verify", name, VERIFY_JSON)), exempt };
   if (assertion !== undefined) return decide(ctx, { root, run, id, head, assertion, by });
   return firstRun(ctx, { root, record, run, id, base, head, paths, reviewRel, carried });
 }

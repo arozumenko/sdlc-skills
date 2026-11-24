@@ -36,7 +36,8 @@
 // Every string printed or written passes through `redactString` first —
 // field-wise for JSON, because the `high-entropy` rule would otherwise eat
 // every 40-hex oid and 64-hex hash a serialised file carries (see `token`
-// and `redactDeep`). Line numbers are raw, as `git show` prints them (D3).
+// and `redactDeep`). A path git tracks is exempt from that one rule for the
+// same reason (lib/tracked-paths.mjs). Line numbers are raw, as `git show` prints them (D3).
 // Stdlib ESM only; every child process is an argv array with `shell: false`
 // (via lib/git.mjs); no network. Imports only from ./lib/.
 
@@ -54,6 +55,7 @@ import { GITIGNORE, probeTracked, readGitignore, upsertBlock } from "./lib/ignor
 import { coverageTable, elementsTable, findingsTable, mitigationsTable, tablesSha256, threatsTable } from "./lib/md.mjs";
 import { redactString } from "./lib/redact.mjs";
 import { countOpen, lintThreatModel } from "./lib/threat-model.mjs";
+import { exemptPaths, trackedPaths } from "./lib/tracked-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -63,8 +65,8 @@ export const MAX_RANGE_LINES = 40;
 const ENGAGEMENT_REL = ".agents/security-testing/engagement.md";
 const TEMPLATE_REL = join("knowledge", "engagement.md.template");
 
-/** Redacted `out()`: nothing reaches stdout unredacted. */
-const say = (ctx, line) => ctx.out(redactString(line).text);
+/** Redacted `out()`: nothing reaches stdout unredacted. `exempt` as `redactString` takes it. */
+const say = (ctx, line, exempt) => ctx.out(redactString(line, undefined, exempt).text);
 
 /**
  * A record another script wrote (the register log, the admitted-suite
@@ -219,7 +221,7 @@ function show(args, ctx) {
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   if (start > lines.length) throw new UsageError(`start ${start} is past the last line (${lines.length}) of ${path} at ${oid7}`);
   end = end === undefined ? lines.length : Math.min(end, lines.length);
-  say(ctx, `SHOW ${path} ${oid7} ${start}-${end}`);
+  say(ctx, `SHOW ${path} ${oid7} ${start}-${end}`, exemptPaths([path])); // read from the tree above
   for (let n = start; n <= end; n++) say(ctx, `${n}\t${lines[n - 1]}`);
   return 0;
 }
@@ -298,16 +300,18 @@ function parseStrict(bytes, what) {
 
 /**
  * Deep copy with every string (keys included) redacted, except a value under
- * one of `HEX_KEYS` that is a full oid/sha256. Arrays pass no key down.
+ * one of `HEX_KEYS` that is a full oid/sha256, and the paths `exempt` keeps.
+ * Arrays pass no key down.
  * @param {unknown} value
+ * @param {Parameters<typeof redactString>[2]} exempt
  * @param {string} [key] the property name `value` sits under
  */
-function redactDeep(value, key) {
-  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : redactString(value).text;
-  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+function redactDeep(value, exempt, key) {
+  if (typeof value === "string") return key !== undefined && HEX_KEYS.has(key) && HEX.test(value) ? value : redactString(value, undefined, exempt).text;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, exempt));
   if (isObject(value)) {
     const out = {};
-    for (const [k, v] of Object.entries(value)) out[redactString(k).text] = redactDeep(v, k);
+    for (const [k, v] of Object.entries(value)) out[redactString(k).text] = redactDeep(v, exempt, k);
     return out;
   }
   return value;
@@ -377,7 +381,8 @@ function refused(doc, mode, ctx) {
  */
 function dirtyScope(root, scope, ctx) {
   const dirty = [...new Set(statusPorcelain(root, { paths: scope }).map((l) => l.slice(3).split(" -> ").pop()))].sort();
-  for (const p of dirty) say(ctx, `DIRTY-SCOPE ${p}`);
+  const exempt = exemptPaths(dirty);
+  for (const p of dirty) say(ctx, `DIRTY-SCOPE ${p}`, exempt);
   return dirty.length > 0;
 }
 
@@ -414,9 +419,14 @@ function checkCitations(root, scope, head, citations, locus, failed) {
   return { verified, results };
 }
 
-/** Redact field-wise, stamp, write. Returns the document as written. */
-function writeBack(abs, doc, mode) {
-  const out = redactDeep(doc);
+/** The paths this document may keep: tracked now, at its head, or at a commit one of its citations names. */
+function documentPaths(root, head, citationLists) {
+  return exemptPaths(trackedPaths(root, [head, ...citationLists.flat().filter((c) => isObject(c) && typeof c.oid === "string").map((c) => c.oid)]));
+}
+
+/** Redact field-wise (`exempt` from `documentPaths`), stamp, write. Returns the document as written. */
+function writeBack(abs, doc, mode, exempt) {
+  const out = redactDeep(doc, exempt);
   out.check_stamp = stampOf(out, mode);
   writeFileSync(abs, `${JSON.stringify(out, null, 2)}\n`);
   return out;
@@ -495,9 +505,9 @@ function secondOpinions(dir, fileRe, byId, fileSha) {
 }
 
 /**
- * Findings mode. Returns `{code, written, seconds}`; `written` (the
- * document as written back) and `seconds` (the valid second opinions by
- * id) feed `--md`. Code 2 means nothing was written.
+ * Findings mode. Returns `{code, written, exempt, seconds}`; `written` (the
+ * document as written back), `exempt` (the paths it kept) and `seconds` (the
+ * valid second opinions by id) feed `--md`. Code 2 means nothing was written.
  */
 function checkFindings(doc, { root, bytes, abs }, ctx) {
   const mode = MODES.findings;
@@ -535,12 +545,13 @@ function checkFindings(doc, { root, bytes, abs }, ctx) {
   }
   doc.coverage = coverage;
   const seconds = secondOpinions(dirname(abs), SECOND_FINDING_FILE, findingsById(doc.findings), sha256Hex(bytes));
-  const written = writeBack(abs, doc, mode);
+  const exempt = documentPaths(root, head, doc.findings.map((f) => f.citations));
+  const written = writeBack(abs, doc, mode, exempt);
   for (const line of failed) say(ctx, line);
   for (const line of seconds.lines) ctx.out(line); // already token-redacted; the ids must survive
   say(ctx, `COVERAGE examined=${coverage.examined} partial=${coverage.partial} unexamined=${coverage.unexamined}`);
   say(ctx, `CHECK verified=${verified} failed=${failed.length}`);
-  return { code: failed.length > 0 || seconds.stale > 0 ? 4 : 0, written, seconds: seconds.valid };
+  return { code: failed.length > 0 || seconds.stale > 0 ? 4 : 0, written, exempt, seconds: seconds.valid };
 }
 
 const REGISTER_REL = join("register", "events.jsonl");
@@ -636,13 +647,14 @@ function checkThreatModel(doc, { root, abs, bytes, reviews }, ctx) {
     if (!existsSync(dir)) throw new UsageError(`${reviews} not found`);
     seconds = secondOpinions(dir, SECOND_MITIGATION_FILE, mitigationsById(doc), sha256Hex(bytes));
   }
-  const written = writeBack(abs, doc, mode);
+  const exempt = documentPaths(root, head, [...doc.elements, ...doc.threats.flatMap((t) => (isObject(t) && Array.isArray(t.mitigations) ? t.mitigations : []))].map(citationsOf));
+  const written = writeBack(abs, doc, mode, exempt);
   for (const line of failed) say(ctx, line);
   for (const { locus, why } of errors) say(ctx, `TM-INVALID ${locus}: ${why}`);
   for (const line of seconds.lines) ctx.out(line); // already token-redacted; the ids must survive
   say(ctx, `MODEL elements=${doc.elements.length} threats=${doc.threats.length} open=${countOpen(doc)}`);
   say(ctx, `CHECK verified=${verified} failed=${failed.length}`);
-  return { code: failed.length > 0 || errors.length > 0 || seconds.stale > 0 ? 4 : 0, written };
+  return { code: failed.length > 0 || errors.length > 0 || seconds.stale > 0 ? 4 : 0, written, exempt };
 }
 
 /**
@@ -651,9 +663,9 @@ function checkThreatModel(doc, { root, abs, bytes, reviews }, ctx) {
  * text is redacted as a whole before the hash so the hash covers what the
  * lead pastes; the hash line itself is printed raw (it is 64 hex).
  */
-function printTables({ mode, written, seconds }, { noSnippets }, ctx) {
+function printTables({ mode, written, exempt, seconds }, { noSnippets }, ctx) {
   const tables = mode === "findings" ? [findingsTable(written, { noSnippets, seconds }), coverageTable(written)] : [elementsTable(written), threatsTable(written), mitigationsTable(written)];
-  const text = redactString(tables.join("\n")).text;
+  const text = redactString(tables.join("\n"), undefined, exempt).text;
   for (const line of text.replace(/\n$/, "").split("\n")) ctx.out(line);
   ctx.out(`TABLES sha256=${tablesSha256(text)}`);
 }
@@ -683,8 +695,14 @@ function check(args, ctx) {
 // ---------------------------------------------------------------- redact
 
 const MD = /\.md$/i;
+/** The commits a report names: `@oid7` in a citation cell, a full oid anywhere. */
+const REPORT_OIDS = /(?<=@)[0-9a-f]{7}\b|\b[0-9a-f]{40}\b/g;
 
-/** `redact <file.md>`: rewrite through the rules; write back only on a hit. */
+/**
+ * `redact <file.md>`: rewrite through the rules; write back only on a hit. The
+ * pasted tables must keep hashing to their `TABLES sha256`, so paths tracked
+ * now or at a commit the report names stay, as they did in `check --md`.
+ */
 function redact(args, ctx) {
   const [file] = args._;
   if (file === undefined) throw new UsageError("usage: redact <file.md>");
@@ -696,7 +714,7 @@ function redact(args, ctx) {
   } catch {
     throw new UsageError(`${file} not found`);
   }
-  const { text: clean, hits } = redactString(text);
+  const { text: clean, hits } = redactString(text, undefined, exemptPaths(trackedPaths(ctx.root, text.match(REPORT_OIDS) ?? [])));
   // A rule can re-match its own placeholder (`token = <REDACTED:key-value>`
   // satisfies the key-value rule again), so `hits` on an already-clean file
   // is not zero while the bytes are unchanged: write, and count, only when
