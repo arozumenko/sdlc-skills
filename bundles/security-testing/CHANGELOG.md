@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fix: a wake-up is not a person. In a real run the security lead scheduled
+  itself a fallback wake-up ("continue security engagement"); it arrived as a
+  plain user message and the lead took it as permission to pass its mandatory
+  stop. On Claude Code the lead can no longer call `ScheduleWakeup`,
+  `CronCreate` or `RemoteTrigger` (`disallowedTools`), and its stop rule says
+  never to schedule anything. After this stop only returned suite results or
+  a human message that names the step to run ("write the report", "verify
+  commit <oid>") lifts it; a bare "continue" gets a question back, every
+  time.
 - Fix: the managed `.gitignore` block written by `init` now covers ten
   private paths under `.agents/`.
 

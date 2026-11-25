@@ -117,8 +117,9 @@ paths visible again. `init` does not detect that.
 Step 6 (Cases) ends with `cases.mjs verify-suite` printing `SUITE ok=<n>`
 and two prompts — one for `manual-qa`, one for `test-automation` — built
 from the admitted suite at `tasks/security-<slug>-admitted/`. The lead
-pastes both to the human and stops; nothing past that point runs until the
-suites come back or the human says to continue anyway.
+pastes both to the human and stops; nothing past that point runs until
+suite results come back or a human's message names the step to run; a bare
+"continue" gets a question back, every time.
 
 ## Out of scope (v2 candidates)
 
