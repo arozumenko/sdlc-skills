@@ -4,12 +4,15 @@
 
 - Fix: three usability gaps found in real runs. The audit guide's step now
   admits ("List the network requests"). The modeler re-checks its own
-  corrected model, and the guide says how. The test-case-format path is the
+  corrected model: it edits its unstamped source, or strips `state`,
+  `snippet_redacted` and `check_stamp` from the stamped file (`oid` may
+  stay), and the guide says so. The test-case-format path is the
   installed one. `register.mjs` and `cases.mjs` let a plain URL survive
   redaction: `https://host/` or `{{base_url}}/` followed by segments of up to
   20 lowercase letters, up to 8 digits or `v1`-style, with no `?`, `#` or `@`
   before the kept run. This knowingly lets short plain lowercase or digit
-  tokens in a path through. When `show` or `check` rejects a mistyped long
+  tokens in a path through. The assessment report still loses such links,
+  because `cite.mjs redact` does not have the plain-URL exemption. When `show` or `check` rejects a mistyped long
   path, which prints redacted, the message now ends with `; nearest tracked
   directory <dir>/` (and `check` adds `examined[<i>]`). Only a directory git
   tracks is named; the untracked text stays redacted.

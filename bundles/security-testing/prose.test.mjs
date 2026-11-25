@@ -227,6 +227,18 @@ test("threat-modeler assigns element/threat/mitigation ids itself and never writ
   }
 });
 
+test("the modeler's other files say how to correct a stamped model", () => {
+  const norm = (s) => s.replace(/\s+/g, " ");
+  for (const f of [`${AGENT10}/RULES.md`, `${AGENT10}/AGENT.md`, `${SKILL10}/references/dispositions.md`, "briefings/threat-modeler.md"]) {
+    const text = norm(read(f));
+    assert.ok(text.includes("check_stamp"), `${f}: names check_stamp`);
+    assert.ok(text.includes("strip"), `${f}: says to strip`);
+  }
+  for (const f of [`${AGENT10}/RULES.md`, `${AGENT10}/AGENT.md`]) {
+    assert.doesNotMatch(norm(read(f)), /`state`, `oid`, `snippet_redacted` or `check_stamp` from your hand is `REFUSED/, `${f}: oid is not a REFUSED key`);
+  }
+});
+
 test("threat-modeling SKILL.md starts 'Use when', names the shape and the five dispositions", () => {
   const s = read(`${SKILL10}/SKILL.md`);
   assert.match(s, /^description: "Use when /m);

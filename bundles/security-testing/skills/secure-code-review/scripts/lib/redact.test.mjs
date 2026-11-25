@@ -221,7 +221,7 @@ test("exemptPlainUrl: the path class and the token start are pinned", () => {
 });
 
 test("exemptPlainUrl: 400 KB of 45-letter runs joined by - finishes", () => {
-  const big = `https://h.example.com/${"a".repeat(45)}-`.repeat(1).concat(`${"b".repeat(45)}-`.repeat(9000));
+  const big = `https://h.example.com/${"a".repeat(45)}-`.concat(`${"b".repeat(45)}-`.repeat(9000));
   const t0 = Date.now();
   const out = keeps(big);
   assert.equal(typeof out, "string");

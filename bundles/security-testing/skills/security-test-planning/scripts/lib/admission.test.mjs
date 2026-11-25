@@ -103,5 +103,5 @@ test("the worked example in audit-branch.md admits with no hit", () => {
   const table = /```markdown\n(\| # \| Action[\s\S]*?)```/.exec(md)[1];
   const text = `---\nid: TC-001\n---\n\n# TC-001: x\n\n## Steps\n\n${table}`;
   assert.deepEqual(lintCase(text, { browser: [] }).hits, []);
-  assert.doesNotMatch(md, /collect the network/i);
+  assert.doesNotMatch(md, /collect\s+the\s+network/i);
 });

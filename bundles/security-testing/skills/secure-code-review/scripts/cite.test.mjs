@@ -948,6 +948,30 @@ test("a stamped threat model is corrected by stripping state, snippet_redacted a
   assert.equal(readDoc(file).threats[0].title, "A corrected title");
 });
 
+test("a stamped model that failed check is refused when edited unstripped, and passes once stripped", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  const bad = readDoc(file);
+  const good = bad.elements[0].citations[0].snippet;
+  bad.elements[0].citations[0].snippet = "nope";
+  writeDoc(file, bad);
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  const m = readDoc(file);
+  m.elements[0].citations[0].snippet = good;
+  writeDoc(file, m);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 2, r.out.join("\n"));
+  assert.match(r.out[0], /^REFUSED agent-written key /);
+  const s = readDoc(file);
+  delete s.check_stamp;
+  const strip = (cites) => cites.forEach((c) => { delete c.state; delete c.snippet_redacted; });
+  s.elements.forEach((e) => strip(e.citations ?? []));
+  s.threats.forEach((t) => (t.mitigations ?? []).forEach((x) => strip(x.citations ?? [])));
+  writeDoc(file, s);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+});
+
 test("a mistyped long path names the nearest tracked directory, never the untracked rest", () => {
   const { root, file, rel } = longReview();
   const typo = LONG.replace("LongNamedWidget", "LongNamedWidgt");

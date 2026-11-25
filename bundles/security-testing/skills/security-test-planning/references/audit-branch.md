@@ -21,7 +21,7 @@ X-Frame-Options, HSTS, cookies' flags) from that network list against
 the table in `security-audit/references/owasp-checklist.md` ("Security
 Headers to Check"). Nothing in that recipe opens a developer-tools
 panel, reloads a page or fills a form. A passive header check therefore
-says the same three things the auditor does: open the URL, collect the
+says the same three things the auditor does: open the URL, list the
 network requests, inspect one header of the document response.
 
 ## How to write it

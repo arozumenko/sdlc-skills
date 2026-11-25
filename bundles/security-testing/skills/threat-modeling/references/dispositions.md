@@ -52,7 +52,9 @@ fix what it names, `check` again:
    `MODEL_WRITTEN elements=<n> threats=<n> open=<n>` (the counts from the
    `MODEL elements=… threats=… open=…` line the script printed). Any
    `TM-INVALID` or `FAILED` line ⇒ fix the named element, threat,
-   mitigation or citation in `threat-model.json` and `check` again; your
+   mitigation or citation and `check` again (edit your unstamped source, or
+   strip `state`, `snippet_redacted` and `check_stamp` from the stamped
+   file; `oid` may stay); your
    return line is those `TM-INVALID` lines verbatim, unless you can fix
    and re-check before replying.
 3. A `mitigated(M-nnn)` disposition that passed `check` stands in the
