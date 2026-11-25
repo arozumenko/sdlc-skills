@@ -650,3 +650,14 @@ test("the lead cannot schedule itself past a stop", () => {
     assert.match(text, /names the step to run/);
   }
 });
+
+test("every statement of the stop rule says what lifts it", () => {
+  for (const p of ["agents/security-lead/AGENT.md", "agents/security-lead/RULES.md", "skills/security-engagement/references/workflow.md", "README.md"]) {
+    const t = read(p).replace(/\s+/g, " ");
+    assert.match(t, /names the step to run/, `${p}: says a named step lifts the stop`);
+    assert.doesNotMatch(t, /continue anyway/, `${p}: no plain continue lifts the stop`);
+  }
+  for (const p of ["agents/security-lead/AGENT.md", "agents/security-lead/RULES.md"]) {
+    assert.ok(read(p).replace(/\s+/g, " ").includes('After a stop, only returned suite results or a message that names the step to run ("write the report", "verify commit <oid>") lifts it; a bare "continue" gets one question back.'), `${p}: exact lifting sentence`);
+  }
+});
