@@ -243,5 +243,8 @@ test("a long {{base_url}} step is ADMITTED with its text intact; a webhook-shape
 
   writeFileSync(file, original.replace(stepLine, stepLine.replace("`{{base_url}}/login`", `\`{{base_url}}/hooks/T${"0".repeat(9)}/${rnd.slice(0, 24)}\``)));
   r = run(root, "admit", `${CANDIDATES}/TC-001_acme.md`);
-  assert.ok(!readFileSync(join(root, SUITE, "TC-001_acme.md"), "utf8").includes(rnd.slice(0, 24)), "the secret-shaped segment is redacted");
+  assert.equal(r.out[0], "ADMITTED tasks/security-acme-admitted/TC-001_acme.md", r.out.join("\n") + r.err);
+  const admitted = readFileSync(join(root, SUITE, "TC-001_acme.md"), "utf8");
+  assert.ok(admitted.includes("<REDACTED:"), "the webhook-shaped step is redacted in the suite file");
+  assert.ok(!admitted.includes(rnd.slice(0, 24)), "the secret-shaped segment is gone");
 });

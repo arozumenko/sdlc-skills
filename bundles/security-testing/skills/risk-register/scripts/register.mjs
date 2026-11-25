@@ -27,7 +27,9 @@
 // string (payload strings, the actor, an echoed --verify path) passes through
 // `lib/redact.mjs` before it is validated, appended or printed; `finding_id`
 // and `head` are identity, not content, and stay intact only when they are a
-// full 64-/40-hex value. Rendered cells and `status --json` rows pass through
+// full 64-/40-hex value. One exemption: the `high-entropy` rule keeps a plain URL
+// (`exemptPlainUrl` in lib/redact.mjs: short lowercase or numeric path words,
+// no query, fragment or userinfo), so a ticket link survives. Rendered cells and `status --json` rows pass through
 // it again, so a hand-edited log line never prints raw either.
 // Stdlib ESM only; no child process, no network. Imports only from ./lib/.
 
