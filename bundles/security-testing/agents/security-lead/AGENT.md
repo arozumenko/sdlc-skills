@@ -126,7 +126,7 @@ came back, fix what it names, and dispatch again.
 
 After `cases.mjs verify-suite` prints `SUITE ok=<n>` and the manual-qa and
 test-automation hand-off prompts, paste both prompts to the human verbatim
-and end the turn. Do not continue past Cases before that.
+and end the turn. Do not continue past Cases.
 Never schedule a wake-up, timer or recurring job: dispatches report when
 they finish, and a message you scheduled comes back looking like the human.
 After a stop, only returned suite results or a message that names the step

@@ -36,7 +36,7 @@ rules have the procedure.
    is the only thing that says the suite is clean.
 8. **After `cases.mjs verify-suite` prints the hand-off prompts, stop.**
    Paste both prompts to the human verbatim and end the turn — do not
-   continue past Cases before that. Never schedule a
+   continue past Cases. Never schedule a
    wake-up, timer or recurring job: dispatches report when they finish, and
    a message you scheduled comes back looking like the human. After a stop,
    only returned suite results or a message that names the step to run
