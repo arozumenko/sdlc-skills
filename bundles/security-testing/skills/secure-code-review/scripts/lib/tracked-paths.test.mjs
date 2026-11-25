@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { redactString } from "./redact.mjs";
-import { exemptPaths, trackedPaths } from "./tracked-paths.mjs";
+import { exemptPaths, nearestTrackedDir, trackedPaths } from "./tracked-paths.mjs";
 
 const P = "app/src/main/kotlin/com/example/widgets/screens/LongNamedWidget.kt";
 const STEM = P.replace(/\.kt$/, "");
@@ -58,4 +58,21 @@ test("trackedPaths is the index plus the trees of the refs that resolve", () => 
   writeFileSync(join(root, "untracked.txt"), "x\n");
   assert.deepEqual([...trackedPaths(root)], ["b \u00e9.txt"]);
   assert.deepEqual([...trackedPaths(root, [c1.slice(0, 7), c1, "0".repeat(40), "nope", "--help"])].sort(), [P, "b \u00e9.txt"].sort());
+});
+
+test("nearestTrackedDir: the longest whole-segment directory prefix that git tracks", () => {
+  const tracked = new Set(["a/b/c.kt", "a/bb/d.kt"]);
+  assert.equal(nearestTrackedDir("a/b/x", tracked), "a/b/");
+  assert.equal(nearestTrackedDir("a/b/x/y/z", tracked), "a/b/");
+  assert.equal(nearestTrackedDir("z/x", tracked), "");
+  assert.equal(nearestTrackedDir("../a/b/x", tracked), "");
+  assert.equal(nearestTrackedDir("/a/b/x", tracked), "");
+  assert.equal(nearestTrackedDir("a/b/../x", tracked), "", "a `..` anywhere means no hint");
+  assert.equal(nearestTrackedDir("a\\b/x", tracked), "");
+  assert.equal(nearestTrackedDir("a/b\n/x", tracked), "");
+  assert.equal(nearestTrackedDir("a/x", new Set(["a/b/c.kt"])), "a/", "a directory above a tracked file");
+  assert.equal(nearestTrackedDir("a/bx/y", new Set(["a/bxy/c"])), "a/", "whole segments only");
+  assert.equal(nearestTrackedDir("a/b/c.kt", tracked), "a/b/", "the file itself is not a directory");
+  assert.equal(nearestTrackedDir("", tracked), "");
+  assert.equal(nearestTrackedDir("a/b/x", new Set(["q/a/b/c.kt"])), "", "a prefix of the path, not a directory found mid-path");
 });

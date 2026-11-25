@@ -59,3 +59,25 @@ function insideOccurrence(path, { match, offset, text }) {
   }
   return false;
 }
+
+/**
+ * The longest whole-segment directory prefix of `path` that git tracks (a
+ * directory above some tracked path), ending in `/`; `""` when there is none.
+ * It is taken from `path` itself and printed only when a tracked path starts
+ * with it, so it never carries a character git does not know. A path with an
+ * empty, `.` or `..` segment, a backslash, a control character or a leading
+ * `/` has none.
+ * @param {string} path
+ * @param {Set<string>} tracked as `trackedPaths` returns it
+ * @returns {string}
+ */
+export function nearestTrackedDir(path, tracked) {
+  if (typeof path !== "string" || path.length === 0 || path.includes("\\") || /[\u0000-\u001f\u007f]/.test(path)) return "";
+  const segments = path.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) return "";
+  for (let k = segments.length - 1; k >= 1; k--) {
+    const dir = `${segments.slice(0, k).join("/")}/`;
+    for (const t of tracked) if (t.startsWith(dir)) return dir;
+  }
+  return "";
+}

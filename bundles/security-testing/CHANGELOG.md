@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fix: three usability gaps found in real runs. The audit guide's step now
+  admits ("List the network requests"). The modeler re-checks its own
+  corrected model, and the guide says how. The test-case-format path is the
+  installed one. `register.mjs` and `cases.mjs` let a plain URL survive
+  redaction: `https://host/` or `{{base_url}}/` followed by segments of up to
+  20 lowercase letters, up to 8 digits or `v1`-style, with no `?`, `#` or `@`
+  before the kept run. This knowingly lets short plain lowercase or digit
+  tokens in a path through. When `show` or `check` rejects a mistyped long
+  path, which prints redacted, the message now ends with `; nearest tracked
+  directory <dir>/` (and `check` adds `examined[<i>]`). Only a directory git
+  tracks is named; the untracked text stays redacted.
 - Fix: `cite.mjs check` no longer redacts long tracked paths on write-back. A
   path run of 40+ letters, digits and `/` matched the `high-entropy` rule, so
   the first `check` passed and every later one failed and sign-off could not
