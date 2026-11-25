@@ -111,8 +111,8 @@ const SCAN_LIMIT = 2048;
  *  - every `/`-separated segment of the match is empty, 1-20 lowercase
  *    letters, 1-8 digits, or `v` and 1-2 digits.
  * It knowingly lets through short plain lowercase or digit tokens in a URL path,
- * and a hostname or `host:port` as the host. Uppercase or mixed segments,
- * hex, long runs and webhook URLs stay redacted.
+ * and a hostname or `host:port` as the host. Uppercase or mixed segments and
+ * longer or hex-shaped segments stay redacted.
  * @param {{class: string, match: string, offset: number, text: string}} hit
  * @returns {boolean}
  */

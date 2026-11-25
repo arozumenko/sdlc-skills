@@ -26,9 +26,9 @@
 //
 // Redaction (lib/redact.mjs) runs on the case text before it is linted,
 // written or echoed, so a hit line never carries a secret (one exemption: the
-// `high-entropy` rule keeps a plain URL, `exemptPlainUrl`: short lowercase or
-// numeric path words, no query, fragment or userinfo, so `{{base_url}}/…` steps
-// survive); `.admitted.json`
+// `high-entropy` rule keeps a plain URL, `exemptPlainUrl`: no `?`, `#` or `@`
+// before the kept run, path segments of up to 20 lowercase letters or 8 digits,
+// or `v1`-style, so `{{base_url}}/…` steps survive); `.admitted.json`
 // holds only validated basenames and computed sha256 hex (the high-entropy
 // rule would eat the hashes, so the index is not re-redacted). Stdlib ESM
 // only; the one child process is `git rev-parse HEAD` (argv, shell:false);

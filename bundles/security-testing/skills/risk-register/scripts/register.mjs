@@ -27,10 +27,12 @@
 // string (payload strings, the actor, an echoed --verify path) passes through
 // `lib/redact.mjs` before it is validated, appended or printed; `finding_id`
 // and `head` are identity, not content, and stay intact only when they are a
-// full 64-/40-hex value. One exemption: the `high-entropy` rule keeps a plain URL
-// (`exemptPlainUrl` in lib/redact.mjs: short lowercase or numeric path words,
-// no query, fragment or userinfo), so a ticket link survives. Rendered cells and `status --json` rows pass through
-// it again, so a hand-edited log line never prints raw either.
+// full 64-/40-hex value. One exemption: the `high-entropy` rule keeps a
+// plain URL (`exemptPlainUrl` in lib/redact.mjs: no `?`, `#` or `@` before the
+// kept run, path segments of up to 20 lowercase letters or 8 digits, or
+// `v1`-style), so a ticket link survives; short lowercase or digit tokens in
+// such a path are not detected. Rendered cells and `status --json` rows pass
+// through it again, so a hand-edited log line never prints raw either.
 // Stdlib ESM only; no child process, no network. Imports only from ./lib/.
 
 import { createHash } from "node:crypto";

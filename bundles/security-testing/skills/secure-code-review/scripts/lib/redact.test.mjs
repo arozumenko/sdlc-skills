@@ -142,7 +142,7 @@ test("exemptPlainUrl edges: each unclear case stays redacted", () => {
     `ftp://gitlab.example.com/group/subgroup/project/backend/issues/123`,
     `${base}/issues/v123`,
   ]) assert.match(keep(s), /<REDACTED:/, s);
-  // kept: 30 letters, 12 digits, v1/v12, trailing slash, double slash
+  // kept: 20 letters, 8 digits, v1/v12, trailing slash, double slash
   for (const s of [
     `${base}/${"a".repeat(20)}/${"1".repeat(8)}/v12/`,
     `${base}//issues/v1/`,
@@ -159,8 +159,6 @@ test("exemptPlainUrl edges: each unclear case stays redacted", () => {
     assert.match(out, /<REDACTED:/, s);
     assert.ok(!out.includes(rnd.slice(0, 24)), s);
   }
-  // only the high-entropy class is exempt
-  assert.equal(exemptPlainUrl({ class: "bearer", match: "x", offset: 0, text: "https://a/b" }), false);
 });
 
 // Plain runs: every segment passes the segment rule, so only the URL conditions can catch them.
@@ -215,13 +213,18 @@ test("exemptPlainUrl: class, offset and the 2048 limits", () => {
   assert.ok(redacted(`${BASE}/${PLAIN_RUN}${".".repeat(2100)}`));
 });
 
-test("exemptPlainUrl: 400 KB of one unbroken token finishes", () => {
-  const big = `https://h.example.com/${"ab/".repeat(133333)}`;
+test("exemptPlainUrl: the path class and the token start are pinned", () => {
+  // a character outside [A-Za-z0-9._~{}/-] before the match ends redacts a plain run
+  for (const c of [";", "&", ",", ":", "%", ">", "!", "*"]) assert.ok(redacted(`${BASE}/a${c}${PLAIN_RUN}`), `path char ${c}`);
+  // a URL glued to a preceding word is not at a token start
+  for (const pre of ["k=", "x,", "x;", "x>"]) assert.ok(redacted(`${pre}${BASE}/issues/123`), `prefix ${pre}`);
+});
+
+test("exemptPlainUrl: 400 KB of 45-letter runs joined by - finishes", () => {
+  const big = `https://h.example.com/${"a".repeat(45)}-`.repeat(1).concat(`${"b".repeat(45)}-`.repeat(9000));
   const t0 = Date.now();
   const out = keeps(big);
   assert.equal(typeof out, "string");
+  assert.ok(out.length > 0);
   if (process.env.BENCH === "1") assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
-  const t1 = Date.now();
-  assert.match(keeps(`x ${"a".repeat(400000)}`), /<REDACTED:/);
-  if (process.env.BENCH === "1") assert.ok(Date.now() - t1 < 2000);
 });
