@@ -641,3 +641,11 @@ test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Veri
     assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
   }
 });
+
+test("every role's memory section allows no path or description of a finding or threat", () => {
+  for (const role of ["security-lead", "security-reviewer", "threat-modeler"]) {
+    const section = read(`agents/${role}/AGENT.md`).split("## Session End — Memory (MANDATORY)")[1].replace(/\s+/g, " ");
+    assert.match(section, /Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat/, role);
+    assert.doesNotMatch(section, /log ids, paths/i, role);
+  }
+});

@@ -6,6 +6,20 @@ Each line is one merged pull request.
 The version in `package.json` and the plugin manifests is `0.3.1`, tagged `v0.3.1`.
 Earlier states are pinned by commit, as `MAINTENANCE.md` describes.
 
+## Unreleased
+
+### security-testing
+
+- The managed `.gitignore` block of `init` now ignores ten private paths under `.agents/`: `reviews/`, `verify/`,
+  `register/`, `proposals/`, `cases/`, `threat-model.json` and `risk-register.md` in `security-testing/`, and the
+  daily logs of `security-lead`, `security-reviewer` and `threat-modeler` in `memory/`. Before, the threat model, the
+  cases, the register view and the daily logs were missing. `init` rewrites an older block in place.
+- A project that tracks one of these paths on purpose now makes `init` stop with `TRACKED <path>` (exit 4). Run
+  `git rm --cached <path>`, commit, and run `init` again. Git history keeps the old copies.
+- Daily logs no longer travel with git. The roles' memory sections now allow ids, counts, the review or run
+  directory and result lines only: no product file, line, title or description of a finding or threat. The
+  threat modeler logs how many scope files it left uncited, not which.
+
 ## 0.3.1 - 2026-11-23
 
 Install it with `npx github:arozumenko/sdlc-skills#v0.3.1 init …`. Three fixes found while the first tagged version

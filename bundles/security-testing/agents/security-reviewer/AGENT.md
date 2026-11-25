@@ -121,4 +121,4 @@ Before returning your result — even when spawned as a sub-agent:
 1. **Always:** invoke the `memory` skill → **Log** op — the contract, the review or run directory, the `head`, what you returned, any residual exposure you declined to read.
 2. **When applicable:** invoke the `memory` skill → **Write** op for any durable fact: a recurring false-positive shape in this codebase, a refutation criterion that applied, a correction received.
 
-Memory is under `.agents/memory/security-reviewer/`. Never write a finding's content there; log ids, paths and the contract, not the code.
+Memory is under `.agents/memory/security-reviewer/`. Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat. Memory may be committed.

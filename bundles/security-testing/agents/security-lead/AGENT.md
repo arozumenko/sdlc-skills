@@ -179,5 +179,4 @@ Before ending the session:
    durable fact — a recurring register decision, a hand-off prompt
    correction.
 
-Memory is under `.agents/memory/security-lead/`. Never write a finding's or
-a threat's content there; log ids, paths and result lines, not the code.
+Memory is under `.agents/memory/security-lead/`. Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat. Memory may be committed.
