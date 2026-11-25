@@ -641,3 +641,32 @@ test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Veri
     assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
   }
 });
+
+test("every role's memory section allows no path or description of a finding or threat", () => {
+  for (const role of ["security-lead", "security-reviewer", "threat-modeler"]) {
+    const section = read(`agents/${role}/AGENT.md`).split("## Session End — Memory (MANDATORY)")[1].replace(/\s+/g, " ");
+    assert.match(section, /Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat/, role);
+    assert.doesNotMatch(section, /log ids, paths/i, role);
+  }
+});
+
+test("the memory lists carry no weak file: result lines without detail, a range count, the engagement id", () => {
+  const section = (role) => read(`agents/${role}/AGENT.md`).split("## Session End — Memory (MANDATORY)")[1].replace(/\s+/g, " ");
+  assert.match(section("security-lead"), /every script result line, without its path, line or case text/);
+  assert.match(section("security-reviewer"), /how many ranges you declined to read/);
+  assert.doesNotMatch(section("security-reviewer"), /residual exposure/);
+  assert.match(section("threat-modeler"), /the engagement id, `head`/);
+  assert.doesNotMatch(section("threat-modeler"), /the scope,/);
+});
+
+test("the TRACKED entry carries the untrack steps itself and points to no changelog", () => {
+  const wf = read("skills/security-engagement/references/workflow.md");
+  assert.ok(wf.includes("git rm --cached"), "workflow.md states the untrack step");
+  const entry = (text) => text.split(/\n(?=- \*\*|\n)/).find((p) => p.includes("TRACKED <path>")) ?? "";
+  const doc = readFileSync(join(B, "../../docs/onboarding/security-testing.md"), "utf8");
+  for (const [n, t] of [["workflow.md", wf], ["onboarding doc", doc]]) {
+    const e = entry(t);
+    assert.ok(e, `${n}: has a TRACKED entry`);
+    assert.doesNotMatch(e, /CHANGELOG/i, n);
+  }
+});

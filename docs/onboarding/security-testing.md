@@ -159,8 +159,10 @@ it is the **only** thing the scripts read:
 | `base_url` | Stated in the manual-qa hand-off prompt. Optional. |
 | `execute_project_tests.argv` | The **only** source of a test command for fix verification. |
 
-Commit so the scope paths are clean, then tell Rasmus to continue. The second
-`init` prints `IGNORE-BLOCK: written|present` and `INIT ok`.
+Commit only `engagement.md` and any scope changes so the scope paths are
+clean. Never use `git add -A` here: a daily log would be committed and the
+second `init` would stop. Then tell Rasmus to continue. The second `init`
+prints `IGNORE-BLOCK: written|present` and `INIT ok`.
 
 ### 3. Let the review and the model run
 
@@ -274,6 +276,9 @@ tasks/security-<slug>-admitted/     # the hand-off suite — written only by cas
 reports/security/<date>-assessment.md
 ```
 
+Private to the machine (git-ignored): `reviews/`, `verify/`, `register/`,
+`proposals/`, `cases/`, `threat-model.json` and `risk-register.md`.
+
 Three rules the team obeys (full detail in the factory README and
 [`instructions.md`](../../bundles/security-testing/instructions.md)):
 
@@ -294,6 +299,10 @@ Three rules the team obeys (full detail in the factory README and
 - **`EDIT-ENGAGEMENT-AND-RERUN` (exit 2)** → expected on the first `init`. Fill
   the ` ```json engagement ` block, commit, re-run. If it repeats, the
   `engagement_id` is still the template's `my-product-2026-09` — rename it.
+- **`TRACKED <path>` (exit 4)** → git tracks a private path, so `init` wrote
+  nothing. A human untracks it with the steps in step 1 of `workflow.md`
+  (`security-engagement/references/workflow.md`). Rasmus stops until you
+  tell him it is done.
 - **`FAILED <locus>.<i> path-not-in-scope`** → the cited file isn't under
   `scope_paths`. Widen the scope in `engagement.md` (and commit), or let
   Rasmus send the finding back to Vera.
@@ -333,8 +342,8 @@ Re-run the same `init` command with `--update` to pull upstream fixes to the
 agents, skills and scripts. Your engagement record is **yours** and `--update`
 won't touch it: `engagement.md`, reviews, the threat model, cases, the
 register, verify runs, the admitted suite and the reports. Agents log the
-phase reached, the engagement id and every result line to
-`.agents/memory/<role>/` via the `memory` skill — never a finding's content.
+phase reached, the engagement id and every script result line, without its
+path, line or case text, to `.agents/memory/<role>/` via the `memory` skill — never a finding's content.
 
 ---
 
@@ -352,6 +361,10 @@ phase reached, the engagement id and every result line to
 ├── src/ app/ …                       # YOUR application code (read, never written)
 └── .claude/agents/<role>/            # or .github/agents/<role>.agent.md per host
 ```
+
+Private to the machine (git-ignored): `reviews/`, `verify/`, `cases/`,
+`threat-model.json`, `risk-register.md` and the `daily/` logs in
+`.agents/memory/<role>/`.
 
 The team owns `.agents/security-testing/`, `tasks/security-*/`,
 `reports/security/` and its own memory. Your application code is read at a

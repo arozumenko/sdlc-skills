@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { join } from "node:path";
 
 import { APP_LINES, buildRepo } from "./fixtures/cite/build-repo.mjs";
-import { BLOCK_BEGIN, BLOCK_END } from "./lib/ignore-block.mjs";
+import { BLOCK_BEGIN, BLOCK_END, renderBlock } from "./lib/ignore-block.mjs";
 
 const CITE = new URL("./cite.mjs", import.meta.url).pathname;
 const TEMPLATE = new URL("../../../knowledge/engagement.md.template", import.meta.url).pathname;
@@ -33,6 +33,81 @@ test("init without engagement.md seeds the template and asks for an edit", () =>
   assert.equal(run(root, "init").code, 2, "a second run on the unedited template still asks for the edit");
 });
 
+const gitIn = (root, ...argv) => {
+  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8" });
+  assert.equal(r.status, 0, `git ${argv.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+};
+
+test("init ignores every private file: git sees none of them", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  assert.equal(run(root, "init").code, 0);
+  const files = ["reviews/r/findings.json", "verify/v/verify.json", "register/events.jsonl", "proposals/TC-001_x.md", "cases/TC-001_x.md", "threat-model.json", "risk-register.md"].map((f) => `.agents/security-testing/${f}`)
+    .concat(["security-lead", "security-reviewer", "threat-modeler"].map((r) => `.agents/memory/${r}/daily/2026-01-01.md`));
+  for (const f of files) { mkdirSync(join(root, f, ".."), { recursive: true }); writeFileSync(join(root, f), "x\n"); }
+  const seen = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" }).stdout;
+  for (const f of files) assert.ok(!seen.includes(f), f);
+  assert.ok(seen.includes(".agents/security-testing/engagement.md"), "the engagement record stays visible");
+});
+
+test("init upgrades a four-line block in place and keeps the lines around it", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  const old = ["reviews", "verify", "register", "proposals"].map((d) => `.agents/security-testing/${d}/`).join("\n");
+  writeFileSync(join(root, ".gitignore"), `before/\n${BLOCK_BEGIN}\n${old}\n${BLOCK_END}\nafter/\n`);
+  assert.ok(run(root, "init").out.includes("IGNORE-BLOCK: written"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), `before/\n${renderBlock()}after/\n`);
+});
+
+test("init stops on a tracked private file and leaves an old four-line block byte-identical", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  const old = ["reviews", "verify", "register", "proposals"].map((d) => `.agents/security-testing/${d}/`).join("\n");
+  const before = `before/\n${BLOCK_BEGIN}\n${old}\n${BLOCK_END}\nafter/\n`;
+  writeFileSync(join(root, ".gitignore"), before);
+  const f = ".agents/memory/security-lead/daily/2026-01-01.md";
+  mkdirSync(join(root, f, ".."), { recursive: true });
+  writeFileSync(join(root, f), "x\n");
+  gitIn(root, "add", "-f", f);
+  gitIn(root, "commit", "-qm", "tracked");
+  const r = run(root, "init");
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes(`TRACKED ${f}`), r.out.join("\n"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), before);
+});
+
+test("init passes after git rm --cached with the removal only staged, and writes the block", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  const f = ".agents/security-testing/threat-model.json";
+  writeFileSync(join(root, f), "{}\n");
+  gitIn(root, "add", "-f", f);
+  gitIn(root, "commit", "-qm", "tracked");
+  assert.equal(run(root, "init").code, 4);
+  gitIn(root, "rm", "--cached", "-q", f);
+  const r = run(root, "init");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes("IGNORE-BLOCK: written"), r.out.join("\n"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), renderBlock());
+  assert.ok(existsSync(join(root, f)), "the file stays on disk");
+});
+
+test("init stops on a tracked threat model, register view or daily log", () => {
+  for (const f of [".agents/security-testing/threat-model.json", ".agents/security-testing/risk-register.md", ".agents/memory/threat-modeler/daily/2026-01-01.md"]) {
+    const { root } = buildRepo();
+    ENG(root);
+    mkdirSync(join(root, f, ".."), { recursive: true });
+    writeFileSync(join(root, f), "x\n");
+    gitIn(root, "add", "-f", f);
+    gitIn(root, "commit", "-qm", "tracked");
+    const r = run(root, "init");
+    assert.equal(r.code, 4, f);
+    assert.ok(r.out.includes(`TRACKED ${f}`), r.out.join("\n"));
+    assert.ok(!existsSync(join(root, ".gitignore")));
+  }
+});
+
 test("init with a valid engagement writes the ignore block once", () => {
   const { root } = buildRepo();
   ENG(root);
@@ -46,7 +121,7 @@ test("init with a valid engagement writes the ignore block once", () => {
   assert.ok(r.out.includes("INIT ok"));
   const ignore = readFileSync(join(root, ".gitignore"), "utf8");
   assert.match(ignore, /# security-testing:begin\n\.agents\/security-testing\/reviews\//);
-  assert.equal(ignore, `${BLOCK_BEGIN}\n.agents/security-testing/reviews/\n.agents/security-testing/verify/\n.agents/security-testing/register/\n.agents/security-testing/proposals/\n${BLOCK_END}\n`);
+  assert.equal(ignore, `${BLOCK_BEGIN}\n.agents/security-testing/reviews/\n.agents/security-testing/verify/\n.agents/security-testing/register/\n.agents/security-testing/proposals/\n.agents/security-testing/cases/\n.agents/security-testing/threat-model.json\n.agents/security-testing/risk-register.md\n.agents/memory/security-lead/daily/\n.agents/memory/security-reviewer/daily/\n.agents/memory/threat-modeler/daily/\n${BLOCK_END}\n`);
 });
 
 test("init keeps the consumer's own .gitignore lines", () => {
@@ -789,11 +864,6 @@ const LONG_STEM = LONG.replace(/\.kt$/, "");
 const LONG_LINES = ["package com.example.widgets.screens", "", "class LongNamedWidget", "val answer = 42"];
 /** 44 chars of base64, assembled at runtime: a secret-shaped value no tracked path contains. */
 const BLOB = ["VGhlIHF1aWNr", "IGJyb3duIGZv", "eCBqdW1wcyBv", "dmVyIGxh"].join("");
-const gitIn = (root, ...argv) => {
-  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8" });
-  assert.equal(r.status, 0, `git ${argv.join(" ")}: ${r.stderr}`);
-  return r.stdout.trim();
-};
 /** Commit LONG on top of a built repo; returns the new head. */
 const addLong = (root) => {
   mkdirSync(join(root, LONG, ".."), { recursive: true });
