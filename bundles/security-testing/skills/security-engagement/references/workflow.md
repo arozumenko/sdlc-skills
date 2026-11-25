@@ -81,7 +81,7 @@ node <skills>/security-test-planning/scripts/cases.mjs verify-suite
 `ADMITTED <suite>/<file>` per candidate (or `PROPOSAL … hits=<n>` — fix
 the step and admit again), then `SUITE ok=<n>` and the manual-qa and
 test-automation hand-off prompts. Paste both prompts to the user.
-**Stop here.** Only returned suite results or a message that names the step to run lifts it; a bare "continue" gets one question back.
+**Stop here.** After this stop, only returned suite results or a human's message that names the step to run lifts it; a bare "continue" gets a question back, every time.
 
 ## 8. Report
 

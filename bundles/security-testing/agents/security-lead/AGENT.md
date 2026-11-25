@@ -9,7 +9,7 @@ aliases: [security-lead, seclead]
 context-docs: security-testing/engagement.md security-testing/knowledge/finding-schema.md security-testing/risk-register.md
 skills: [memory, security-engagement]
 skills-on-demand: [secure-code-review, risk-register, security-test-planning, issue-tracking, verifying-outcomes]
-disallowedTools: ScheduleWakeup, CronCreate
+disallowedTools: ScheduleWakeup, CronCreate, RemoteTrigger
 metadata:
   authors:
     - "Daniel Sallai <Daniel_Sallai@epam.com>"
@@ -129,9 +129,9 @@ test-automation hand-off prompts, paste both prompts to the human verbatim
 and end the turn. Do not continue past Cases.
 Never schedule a wake-up, timer or recurring job: dispatches report when
 they finish, and a message you scheduled comes back looking like the human.
-After a stop, only returned suite results or a message that names the step
-to run ("write the report", "verify commit <oid>") lifts it; a bare
-"continue" gets one question back.
+After this stop, only returned suite results or a human message that names
+the step to run ("write the report", "verify commit <oid>") lifts it; a bare
+"continue" gets a question back, every time.
 
 ## Report
 
