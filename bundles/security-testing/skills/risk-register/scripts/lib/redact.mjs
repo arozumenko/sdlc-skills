@@ -87,3 +87,46 @@ export function redactString(input, rules = DEFAULT_RULES, exempt = undefined) {
   }
   return { text, hits };
 }
+
+const URL_HEAD = /^(?:https?:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\{\{base_url\}\})\/[A-Za-z0-9._~{}/-]*$/;
+const PLAIN_SEGMENT = /^(?:[a-z]{1,20}|[0-9]{1,8}|v[0-9]{1,2})$/;
+const TOKEN_BREAK = /[\s"'`(|<]/;
+const SCAN_LIMIT = 2048;
+
+/**
+ * An `exempt` callback for `redactString`: keep an ordinary long URL, which the
+ * `high-entropy` rule eats because its character class holds `/`. Everything
+ * else redacts. True only when all of these hold:
+ *  - the class is `high-entropy`;
+ *  - walking back from the match to the token start (after whitespace, a quote,
+ *    a backtick, `(`, `|`, `<` or the start of text) takes at most 2048
+ *    characters, and the text from there to the match end is, as a whole,
+ *    `http://` or `https://`, a host of [A-Za-z0-9.-]+ and an optional `:` with
+ *    1-5 digits, or `{{base_url}}`; then `/`; then only [A-Za-z0-9._~{}/-]
+ *    (so a `?`, `#`, `@`, `=`, `;`, `&`, `,`, `)` or `\` before the match ends
+ *    redacts, as does text glued to the URL);
+ *  - no `@` follows in the rest of the same token (to the next token break or
+ *    the end of text; more than 2048 characters ahead is not looked at, so it
+ *    redacts);
+ *  - every `/`-separated segment of the match is empty, 1-20 lowercase
+ *    letters, 1-8 digits, or `v` and 1-2 digits.
+ * It knowingly lets through short plain lowercase or digit tokens in a URL path,
+ * and a hostname or `host:port` as the host. Uppercase or mixed segments and
+ * longer or hex-shaped segments stay redacted.
+ * @param {{class: string, match: string, offset: number, text: string}} hit
+ * @returns {boolean}
+ */
+export function exemptPlainUrl({ class: cls, match, offset, text }) {
+  if (cls !== "high-entropy") return false;
+  let start = offset;
+  while (start > 0 && !TOKEN_BREAK.test(text[start - 1])) {
+    start--;
+    if (offset - start > SCAN_LIMIT) return false;
+  }
+  if (!URL_HEAD.test(text.slice(start, offset + match.length))) return false;
+  const end = offset + match.length;
+  for (let i = end; i < text.length && !TOKEN_BREAK.test(text[i]); i++) {
+    if (text[i] === "@" || i - end >= SCAN_LIMIT) return false;
+  }
+  return match.split("/").every((seg) => seg === "" || PLAIN_SEGMENT.test(seg));
+}

@@ -78,9 +78,10 @@ The four rules of the roster (spec §4); `RULES.md` restates them.
    memory. Product code, tests, CI, `.gitignore`: never.
 3. **You assign every element's, threat's and mitigation's own id
    (`E-nnn`/`T-nnn`/`M-nnn`) — but never a mitigation-review's verdict or
-   the keys `check` stamps.** A file carrying `state`, `oid`,
+   the keys `check` stamps.** A file carrying `state`,
    `snippet_redacted` or `check_stamp` from your hand is `REFUSED
-   agent-written key <key>` (exit 2); `check` stamps those. A
+   agent-written key <key>` (exit 2); `check` stamps those and an `oid`,
+   which you need not write. A
    `mitigation-review`'s `confirmed` / `refuted` / `indeterminate` is the
    reviewer's, not yours.
 4. **Never merge, close, rotate, fix, or admit a case.** No edit to the
@@ -95,7 +96,9 @@ each (`references/dfd-elements.md`) → STRIDE per element, only the letters
 that kind allows (`references/stride.md`) → mitigations as cited claims
 (`references/mitigations-as-claims.md`) → a disposition you can justify
 now (`references/dispositions.md`) → `cite.mjs check <st>/threat-model.json`
-→ fix any `TM-INVALID` by editing the model and checking again → draft
+→ fix any `TM-INVALID` by editing your unstamped source, or by stripping
+`state`, `snippet_redacted` and `check_stamp` from the stamped file (`oid`
+may stay), and checking again → draft
 candidate passive cases at
 `.agents/security-testing/cases/TC-NNN_<slug>.md` for threats worth an
 admitted test, never admitting them yourself.

@@ -63,3 +63,7 @@ test("a zero-line file is one row with no ranges and never counts as examined", 
   assert.equal(r.unexamined, 1);
   assert.throws(() => tileCoverage(["a"], [], new Map()), /line count/);
 });
+
+test("a not-in-scope CoverageError carries the entry index and path", () => {
+  assert.throws(() => tileCoverage(files, [{ path: "a" }, { path: "zz" }], counts), (e) => e instanceof CoverageError && e.index === 1 && e.path === "zz");
+});

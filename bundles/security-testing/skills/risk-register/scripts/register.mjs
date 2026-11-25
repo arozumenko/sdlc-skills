@@ -27,8 +27,12 @@
 // string (payload strings, the actor, an echoed --verify path) passes through
 // `lib/redact.mjs` before it is validated, appended or printed; `finding_id`
 // and `head` are identity, not content, and stay intact only when they are a
-// full 64-/40-hex value. Rendered cells and `status --json` rows pass through
-// it again, so a hand-edited log line never prints raw either.
+// full 64-/40-hex value. One exemption: the `high-entropy` rule keeps a
+// plain URL (`exemptPlainUrl` in lib/redact.mjs: no `?`, `#` or `@` before the
+// kept run, path segments of up to 20 lowercase letters or 8 digits, or
+// `v1`-style), so a ticket link survives; short lowercase or digit tokens in
+// such a path are not detected. Rendered cells and `status --json` rows pass
+// through it again, so a hand-edited log line never prints raw either.
 // Stdlib ESM only; no child process, no network. Imports only from ./lib/.
 
 import { createHash } from "node:crypto";
@@ -38,7 +42,7 @@ import { fileURLToPath } from "node:url";
 
 import { UsageError, runCli } from "./lib/cli.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
-import { redactString } from "./lib/redact.mjs";
+import { exemptPlainUrl, redactString } from "./lib/redact.mjs";
 import { LIVE_STATUSES, PRIORITIES, ROW_ID, STATUSES, TRANSITIONS, TransitionError, applyTransition, isCalendarDay } from "./lib/transitions.mjs";
 
 const LOG_REL = join("register", "events.jsonl");
@@ -56,7 +60,7 @@ const short = (findingId) => `${findingId.slice(0, 8)}…`;
 /** Keys whose value is hex identity (a finding id, a commit) — exempt from redaction only when it is a full oid/sha256 (cite.mjs pattern). */
 const HEX_KEYS = new Set(["finding_id", "head"]);
 const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const clean = (s) => redactString(s).text;
+const clean = (s) => redactString(s, undefined, exemptPlainUrl).text;
 /**
  * Every string in a value redacted, recursively, except a string under one of
  * `HEX_KEYS` that is a full oid/sha256. Arrays pass no key down. Runs on every

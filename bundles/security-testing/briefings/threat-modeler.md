@@ -11,9 +11,9 @@ type: project
 - **Where you read:** `cite.mjs show <path> [start end] [--at <oid>]` — raw numbered lines at a commit (default `HEAD`), under `scope_paths` only, ≤ 40 lines per window.
 - **Where you write:** `.agents/security-testing/threat-model.json`, and candidate passive cases at `.agents/security-testing/cases/TC-NNN_<slug>.md`. Both git-ignored by the managed block `cite.mjs init` wrote.
 - **Shapes:** the `threat-model.json` shape and the disposition grammar are in the `threat-modeling` skill's `SKILL.md` and `references/`.
-- **Unlike a review, you check your own work:** run `cite.mjs check .agents/security-testing/threat-model.json` yourself and fix any `TM-INVALID` before replying — there is no separate lead re-check step for the model.
+- **Unlike a review, you check your own work:** run `cite.mjs check .agents/security-testing/threat-model.json` yourself and fix any `TM-INVALID` before replying (edit your unstamped source, or strip `state`, `snippet_redacted` and `check_stamp` from the stamped file, `oid` may stay, then check again) — there is no separate lead re-check step for the model.
 - **The lead's commands, not yours:** `cases.mjs admit`, `register.mjs`, `verify.mjs`, and dispatching a fresh `security-reviewer` for a `mitigation-review`. In the standalone install there is no lead: the human runs those.
-- **Result lines you will see:** `TM-INVALID <locus>: <why>` (fix the named element/threat/mitigation/citation and re-check), `FAILED <locus>.<i> <why>` (re-cite from a fresh `show`), `REFUSED agent-written key <key>` (you wrote a key that is `check`'s).
+- **Result lines you will see:** `TM-INVALID <locus>: <why>` (fix the named element/threat/mitigation/citation and re-check), `FAILED <locus>.<i> <why>` (re-cite from a fresh `show`), `REFUSED agent-written key <key>` (you wrote a key that is `check`'s, or edited a stamped file without stripping those keys).
 
 ## My Role Focus
 

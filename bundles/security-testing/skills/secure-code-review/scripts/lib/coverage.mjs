@@ -16,9 +16,12 @@
 
 /** An `examined[]` entry that cannot be tiled: not a scope file, or malformed. */
 export class CoverageError extends Error {
-  constructor(message) {
+  /** @param {string} message @param {{index?: number, path?: string}} [at] the entry of `examined[]` that failed, when one did */
+  constructor(message, at = {}) {
     super(message);
     this.name = "CoverageError";
+    this.index = at.index;
+    this.path = at.path;
   }
 }
 
@@ -59,7 +62,7 @@ export function tileCoverage(files, examined, lineCounts) {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) throw new CoverageError(`examined[${i}] must be an object {path, lines?}`);
     const { path, lines } = entry;
     if (typeof path !== "string" || path.length === 0) throw new CoverageError(`examined[${i}].path must be a non-empty string`);
-    if (!inScope.has(path)) throw new CoverageError(`not in scope: ${path}`);
+    if (!inScope.has(path)) throw new CoverageError(`not in scope: ${path}`, { index: i, path });
     if (lines === undefined) {
       whole.add(path);
       return;

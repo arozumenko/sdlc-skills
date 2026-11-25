@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_RULES, RulesError, loadRules, redactString } from "./redact.mjs";
+import { DEFAULT_RULES, RulesError, exemptPlainUrl, loadRules, redactString } from "./redact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "fixtures", "lib");
@@ -107,4 +107,124 @@ test("a rules file without a rules array is a RulesError", () => {
 
 test("redactString requires a string", () => {
   assert.throws(() => redactString(Buffer.from("x")), TypeError);
+});
+
+test("exemptPlainUrl keeps lowercase-word URLs and nothing secret-shaped", () => {
+  const keep = (s) => redactString(s, undefined, exemptPlainUrl).text;
+  for (const s of ["https://gitlab.example.com/group/subgroup/project/backend/issues/123", "Navigate to `{{base_url}}/api/v1/organizations/members/permissions/roles`"]) {
+    assert.ok(redactString(s).hits > 0, "the premise");
+    assert.equal(keep(s), s);
+  }
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  for (const s of [
+    `https://hooks.example.com/services/T${"0".repeat(9)}/B${"0".repeat(9)}/${rnd.slice(0, 24)}`,
+    `https://example.com/${rnd}`,
+    `https://example.com/group/subgroup/project/backend/issues?t=${rnd}`,
+    `https://user:x@example.com/group/subgroup/project/backend/issues/list`,
+    "/api/v1/organizations/members/permissions/roles",
+    "group/subgroup/project/backend/issues/permissions/roles",
+  ]) assert.match(keep(s), /<REDACTED:/, s);
+});
+
+test("exemptPlainUrl edges: each unclear case stays redacted", () => {
+  const keep = (s) => redactString(s, undefined, exemptPlainUrl).text;
+  const base = "https://gitlab.example.com/group/subgroup/project/backend";
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  const hex40 = "0123456789abcdef".repeat(3).slice(0, 40);
+  // redacted: uppercase or mixed segment, 21 letters, 9 digits, hex token last, mid-word placeholder, non-URL token start
+  for (const s of [
+    `${base}/Issues/permissions`,
+    `${base}/issues/abc123def/permissions`,
+    `${base}/${"a".repeat(21)}`,
+    `${base}/issues/${"1".repeat(9)}`,
+    `${base}/${hex40}`,
+    `x{{base_url}}/api/v1/organizations/members/permissions/roles`,
+    `ftp://gitlab.example.com/group/subgroup/project/backend/issues/123`,
+    `${base}/issues/v123`,
+  ]) assert.match(keep(s), /<REDACTED:/, s);
+  // kept: 20 letters, 8 digits, v1/v12, trailing slash, double slash
+  for (const s of [
+    `${base}/${"a".repeat(20)}/${"1".repeat(8)}/v12/`,
+    `${base}//issues/v1/`,
+  ]) assert.equal(keep(s), s);
+  // kept inside parentheses, backticks and quotes
+  for (const w of ["(%)", "`%`", '"%"', "'%'", "|%|"]) {
+    const s = w.replace("%", `${base}/issues/123`);
+    assert.equal(keep(s), s, s);
+  }
+  // a URL directly followed by a secret-shaped run: the run is still redacted
+  const url = `${base}/issues/123`;
+  for (const s of [`${url}${rnd}`, `${url} ${rnd}`, `${url}/${rnd}`, `${url}?${rnd}`, `${url}#${rnd}`, `${url}@${rnd}`]) {
+    const out = keep(s);
+    assert.match(out, /<REDACTED:/, s);
+    assert.ok(!out.includes(rnd.slice(0, 24)), s);
+  }
+});
+
+// Plain runs: every segment passes the segment rule, so only the URL conditions can catch them.
+const PLAIN_RUN = ["abcdefghij", "klmnopqrst", "uvwxyzabcd", "efghijklmn"].join("/"); // 43 chars
+const BASE = "https://gitlab.example.com/group/subgroup/project/backend";
+const keeps = (s) => redactString(s, undefined, exemptPlainUrl).text;
+const redacted = (s) => /<REDACTED:high-entropy>/.test(keeps(s));
+
+test("exemptPlainUrl: userinfo, query-like and text-after-URL conditions redact plain runs", () => {
+  for (const s of [
+    `https://svc:${PLAIN_RUN}@host.example.com`,
+    `https://${PLAIN_RUN}@host.example.com`,
+    `${BASE}/${PLAIN_RUN}@host.example.com`,
+    `${BASE}/a/k=${PLAIN_RUN}`,
+    `${BASE}/a;sid=${PLAIN_RUN}`,
+    `${BASE}/a&k=${PLAIN_RUN}`,
+    `${BASE}/a?next=${PLAIN_RUN}`,
+    `${BASE}/a?${PLAIN_RUN}`,
+    `https://svc@gitlab.example.com/${PLAIN_RUN}`,
+    `${BASE}/a@${PLAIN_RUN}`,
+    `${BASE}/a#${PLAIN_RUN}`,
+    `https://h,${PLAIN_RUN}`,
+    `[t](https://h/a)${PLAIN_RUN}`,
+    `https://h/a\\n${PLAIN_RUN}`,
+    `{{base_url}}${PLAIN_RUN}`,
+  ]) assert.ok(redacted(s), s);
+  assert.equal(keeps(`https://h.example.com:8080/${PLAIN_RUN}`), `https://h.example.com:8080/${PLAIN_RUN}`);
+  assert.ok(redacted(`https://h.example.com:123456/${PLAIN_RUN}`));
+  assert.equal(keeps(`<${BASE}/issues/123>`), `<${BASE}/issues/123>`);
+  assert.equal(keeps(`http://h.example.com/${PLAIN_RUN}`), `http://h.example.com/${PLAIN_RUN}`);
+});
+
+test("exemptPlainUrl: segment caps are 20 letters and 8 digits", () => {
+  const seg = (x) => `${BASE}/${x}/${x}/${x}`;
+  assert.equal(keeps(seg("a".repeat(20))), seg("a".repeat(20)));
+  assert.ok(redacted(seg("a".repeat(21))));
+  assert.equal(keeps(seg("1".repeat(8))), seg("1".repeat(8)));
+  assert.ok(redacted(seg("1".repeat(9))));
+});
+
+test("exemptPlainUrl: class, offset and the 2048 limits", () => {
+  const text = `${BASE}/issues/123`;
+  const off = text.indexOf("com/group");
+  const match = text.slice(off);
+  assert.equal(exemptPlainUrl({ class: "high-entropy", match, offset: off, text }), true, "the premise");
+  assert.equal(exemptPlainUrl({ class: "bearer", match, offset: off, text }), false);
+  // token start more than 2048 characters back (a long host; `-` ends the match, so only the limit can catch it)
+  assert.equal(keeps(`https://${"a-".repeat(1000)}example.com/${PLAIN_RUN}`), `https://${"a-".repeat(1000)}example.com/${PLAIN_RUN}`, "inside the limit");
+  assert.ok(redacted(`https://${"a-".repeat(1100)}example.com/${PLAIN_RUN}`));
+  // text up to the next token break is looked at for an @ only 2048 characters ahead; longer is unknown
+  assert.equal(keeps(`${BASE}/${PLAIN_RUN}${".".repeat(1000)}`), `${BASE}/${PLAIN_RUN}${".".repeat(1000)}`, "inside the limit");
+  assert.ok(redacted(`${BASE}/${PLAIN_RUN}${".".repeat(2100)}`));
+});
+
+test("exemptPlainUrl: the path class and the token start are pinned", () => {
+  // a character outside [A-Za-z0-9._~{}/-] before the match ends redacts a plain run
+  for (const c of [";", "&", ",", ":", "%", ">", "!", "*"]) assert.ok(redacted(`${BASE}/a${c}${PLAIN_RUN}`), `path char ${c}`);
+  // a URL glued to a preceding word is not at a token start
+  for (const pre of ["k=", "x,", "x;", "x>"]) assert.ok(redacted(`${pre}${BASE}/issues/123`), `prefix ${pre}`);
+});
+
+test("exemptPlainUrl: 400 KB of 45-letter runs joined by - finishes", () => {
+  const big = `https://h.example.com/${"a".repeat(45)}-`.concat(`${"b".repeat(45)}-`.repeat(9000));
+  const t0 = Date.now();
+  const out = keeps(big);
+  assert.equal(typeof out, "string");
+  assert.ok(out.length > 0);
+  if (process.env.BENCH === "1") assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
 });

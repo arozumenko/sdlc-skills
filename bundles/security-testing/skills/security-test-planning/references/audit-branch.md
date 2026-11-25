@@ -21,7 +21,7 @@ X-Frame-Options, HSTS, cookies' flags) from that network list against
 the table in `security-audit/references/owasp-checklist.md` ("Security
 Headers to Check"). Nothing in that recipe opens a developer-tools
 panel, reloads a page or fills a form. A passive header check therefore
-says the same three things the auditor does: open the URL, collect the
+says the same three things the auditor does: open the URL, list the
 network requests, inspect one header of the document response.
 
 ## How to write it
@@ -31,7 +31,7 @@ Per header or cookie check, in order:
 1. A Navigate step carrying the URL: `Navigate to {{base_url}}/login`
    (or a literal URL on a host in `targets.browser`). Its Expected
    Result is whatever the page shows.
-2. `Collect the network requests of the page (\`browser_network_requests()\`)`
+2. `List the network requests of the page (\`browser_network_requests()\`)`
    — Expected Result: `The document response for \`<path>\` is listed
    with its response headers`.
 3. One step per header (or per cookie flag): `Inspect the \`<Header>\`
@@ -91,7 +91,7 @@ need to match.
 | # | Action | Expected Result |
 |---|---|---|
 | 1 | Navigate to `{{base_url}}/login` | Login page loads |
-| 2 | Collect the network requests of the page (`browser_network_requests()`) | The document response for `/login` is listed with its response headers |
+| 2 | List the network requests of the page (`browser_network_requests()`) | The document response for `/login` is listed with its response headers |
 | 3 | Inspect the `Content-Security-Policy` response header of the `/login` document | `Content-Security-Policy` is present and does not contain `unsafe-inline` |
 | 4 | Inspect the `Set-Cookie` response headers of the `/login` document | Every cookie carries `Secure` and `HttpOnly` |
 ```

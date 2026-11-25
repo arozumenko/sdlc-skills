@@ -1001,3 +1001,93 @@ test("long tracked paths: SHOW and DIRTY-SCOPE name the file", () => {
   assert.equal(r.code, 2);
   assert.deepEqual(r.out, [`DIRTY-SCOPE ${LONG}`]);
 });
+
+test("a stamped threat model is corrected by stripping state, snippet_redacted and check_stamp (oid stays), then check again", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const m = readDoc(file);
+  delete m.check_stamp;
+  const strip = (cites) => cites.forEach((c) => { delete c.state; delete c.snippet_redacted; });
+  m.elements.forEach((e) => strip(e.citations ?? []));
+  m.threats.forEach((t) => (t.mitigations ?? []).forEach((x) => strip(x.citations ?? [])));
+  m.threats[0].title = "A corrected title";
+  writeDoc(file, m);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+  assert.equal(readDoc(file).threats[0].title, "A corrected title");
+});
+
+test("a stamped model that failed check is refused when edited unstripped, and passes once stripped", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  const bad = readDoc(file);
+  const good = bad.elements[0].citations[0].snippet;
+  bad.elements[0].citations[0].snippet = "nope";
+  writeDoc(file, bad);
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 4, r.out.join("\n"));
+  const m = readDoc(file);
+  m.elements[0].citations[0].snippet = good;
+  writeDoc(file, m);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 2, r.out.join("\n"));
+  assert.match(r.out[0], /^REFUSED agent-written key /);
+  const s = readDoc(file);
+  delete s.check_stamp;
+  const strip = (cites) => cites.forEach((c) => { delete c.state; delete c.snippet_redacted; });
+  s.elements.forEach((e) => strip(e.citations ?? []));
+  s.threats.forEach((t) => (t.mitigations ?? []).forEach((x) => strip(x.citations ?? [])));
+  writeDoc(file, s);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+});
+
+test("a mistyped long path names the nearest tracked directory, never the untracked rest", () => {
+  const { root, file, rel } = longReview();
+  const typo = LONG.replace("LongNamedWidget", "LongNamedWidgt");
+  let r = run(root, "show", typo);
+  assert.equal(r.code, 2);
+  assert.match(r.out[0], new RegExp(`is not in the tree at [0-9a-f]{7}; nearest tracked directory ${LONG_DIR}/\\)$`));
+  assert.ok(!r.out[0].includes("LongNamedWidgt"), "the untracked name stays redacted");
+  writeDoc(file, { ...readDoc(file), examined: [{ path: "src/app.js" }, { path: typo }] });
+  r = run(root, "check", rel);
+  assert.match(r.out[0], new RegExp(`examined: not in scope: .*; examined\\[1\\]; nearest tracked directory ${LONG_DIR}/\\)$`));
+  r = run(root, "show", `src/${BLOB}`);
+  assert.ok(!r.out[0].includes(BLOB));
+});
+
+test("the directory hint: under-scope path, and nothing untracked ever reaches stdout", () => {
+  const { root } = longReview();
+  const secretTail = `${LONG_DIR}/${BLOB}`;
+  const cases = [
+    { arg: secretTail, dir: `${LONG_DIR}/` },
+    { arg: `${LONG_DIR}/${BLOB}/${BLOB}.kt`, dir: `${LONG_DIR}/` },
+    { arg: `src/main/kotlin/com/example/widgets/screens/../${BLOB}`, dir: null },
+    { arg: `/${LONG_DIR}/${BLOB}`, dir: null },
+    { arg: `src\\${BLOB}`, dir: null },
+    { arg: `${LONG_DIR}/${BLOB}\n${BLOB}`, dir: null },
+  ];
+  for (const { arg, dir } of cases) {
+    const r = run(root, "show", arg);
+    const text = r.out.join("\n");
+    assert.equal(r.code, 2, text);
+    assert.ok(!text.includes(BLOB), `an untracked secret-shaped tail reached stdout: ${text}`);
+    if (dir !== null) assert.ok(text.includes(`nearest tracked directory ${dir}`), text);
+    else assert.ok(!text.includes("nearest tracked directory"), text);
+  }
+});
+
+test("the directory hint is for a redacted path only: short and plain messages keep their text", () => {
+  const { root } = longReview();
+  let r = run(root, "show", "src/nope.js");
+  assert.match(r.out[0], /^USAGE\(show: src\/nope\.js is not in the tree at [0-9a-f]{7}\)$/);
+  r = run(root, "show", "docs/x.md");
+  assert.match(r.out[0], /^USAGE\(show: docs\/x\.md is not under scope_paths \([^)]*\)\)$/);
+});
+
+test("show: the scope message gives the hint too when the typo lies outside scope_paths", () => {
+  const { root } = longReview();
+  ENG(root, { scope_paths: ["src/app.js"] });
+  const r = run(root, "show", LONG.replace("LongNamed", "LongNamd"));
+  assert.match(r.out[0], new RegExp(`is not under scope_paths \\(src/app\\.js\\); nearest tracked directory ${LONG_DIR}/\\)$`));
+});

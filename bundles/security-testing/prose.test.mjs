@@ -227,6 +227,18 @@ test("threat-modeler assigns element/threat/mitigation ids itself and never writ
   }
 });
 
+test("the modeler's other files say how to correct a stamped model", () => {
+  const norm = (s) => s.replace(/\s+/g, " ");
+  for (const f of [`${AGENT10}/RULES.md`, `${AGENT10}/AGENT.md`, `${SKILL10}/references/dispositions.md`, "briefings/threat-modeler.md"]) {
+    const text = norm(read(f));
+    assert.ok(text.includes("check_stamp"), `${f}: names check_stamp`);
+    assert.ok(text.includes("strip"), `${f}: says to strip`);
+  }
+  for (const f of [`${AGENT10}/RULES.md`, `${AGENT10}/AGENT.md`]) {
+    assert.doesNotMatch(norm(read(f)), /`state`, `oid`, `snippet_redacted` or `check_stamp` from your hand is `REFUSED/, `${f}: oid is not a REFUSED key`);
+  }
+});
+
 test("threat-modeling SKILL.md starts 'Use when', names the shape and the five dispositions", () => {
   const s = read(`${SKILL10}/SKILL.md`);
   assert.match(s, /^description: "Use when /m);
@@ -640,6 +652,19 @@ test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Veri
     assert.ok(/last/i.test(t) && t.indexOf("cite.mjs redact") > t.indexOf("Verification"), `${name}: redact comes after Verification, last`);
     assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
   }
+});
+
+test("no installed prose points at a path that exists only in this repo, and the modeler re-checks itself", () => {
+  const walk = (d) => readdirSync(join(B, d), { withFileTypes: true }).flatMap((e) => {
+    const p = `${d}/${e.name}`;
+    if (e.isDirectory()) return e.name === "scripts" ? [] : walk(p);
+    return e.name.endsWith(".md") ? [p] : [];
+  });
+  for (const dir of ["skills", "agents", "briefings"]) {
+    if (!existsSync(join(B, dir))) continue;
+    for (const f of walk(dir)) assert.doesNotMatch(read(f), /bundles\/manual-qa\//, f);
+  }
+  assert.doesNotMatch(read("skills/threat-modeling/SKILL.md"), /let the lead re-run/);
 });
 
 test("the lead cannot schedule itself past a stop", () => {

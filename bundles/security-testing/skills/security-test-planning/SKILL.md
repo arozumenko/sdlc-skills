@@ -20,7 +20,7 @@ lint" — a classification about step text, not a claim about the target
 ## Where a candidate lives
 
 A candidate case is a manual-qa test case
-(`bundles/manual-qa/knowledge/test-case-format.md`) at
+(`.agents/manual-qa/knowledge/test-case-format.md`, installed with the manual-qa factory) at
 `.agents/security-testing/cases/TC-NNN_<slug>.md` — directly under
 `cases/`, no per-case subdirectory. The file name must match
 `TC-NNN_<slug>.md` and its frontmatter `id:` must be that same `TC-NNN`.

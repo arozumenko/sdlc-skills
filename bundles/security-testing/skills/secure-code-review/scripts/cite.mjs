@@ -55,7 +55,7 @@ import { GITIGNORE, probeTracked, readGitignore, upsertBlock } from "./lib/ignor
 import { coverageTable, elementsTable, findingsTable, mitigationsTable, tablesSha256, threatsTable } from "./lib/md.mjs";
 import { redactString } from "./lib/redact.mjs";
 import { countOpen, lintThreatModel } from "./lib/threat-model.mjs";
-import { exemptPaths, trackedPaths } from "./lib/tracked-paths.mjs";
+import { exemptPaths, nearestTrackedDir, trackedPaths } from "./lib/tracked-paths.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -92,7 +92,7 @@ const command = (sub, fn) => (args, ctx) => {
     return fn(args, ctx);
   } catch (e) {
     if (e instanceof UsageError) {
-      say(ctx, `USAGE(${sub}: ${e.message})`);
+      say(ctx, `USAGE(${sub}: ${e.message})`, e.exempt);
       return 2;
     }
     if (e instanceof CorruptError) {
@@ -177,6 +177,30 @@ export function underScope(path, scopePaths) {
   });
 }
 
+/**
+ * The hint for a path the user typed that git does not know: `; nearest
+ * tracked directory <dir>/`, or `""`. Only when the path itself would print
+ * redacted (a short path is plain and needs no help) and a tracked directory
+ * is a whole-segment prefix of it; the directory is all it ever names.
+ * @param {string} root
+ * @param {string} path as the message prints it
+ * @param {string[]} refs
+ * @returns {{hint: string, exempt: ReturnType<typeof exemptPaths> | undefined}}
+ */
+function directoryHint(root, path, refs) {
+  if (typeof path !== "string" || redactString(path).hits === 0) return { hint: "", exempt: undefined };
+  const dir = nearestTrackedDir(path, trackedPaths(root, refs));
+  return dir === "" ? { hint: "", exempt: undefined } : { hint: `; nearest tracked directory ${dir}`, exempt: exemptPaths([dir]) };
+}
+
+/** A UsageError for `path`, with the directory hint appended and its exemption attached when there is one. */
+function pathUsageError(root, message, path, refs) {
+  const { hint, exempt } = directoryHint(root, path, refs);
+  const e = new UsageError(message + hint);
+  e.exempt = exempt;
+  return e;
+}
+
 function lineNumber(raw, what) {
   if (!/^[1-9][0-9]*$/.test(raw)) throw new UsageError(`${what} must be a positive integer, got ${raw}`);
   return Number(raw);
@@ -190,7 +214,10 @@ function show(args, ctx) {
   const { record } = readEngagement(root);
   // The header and the git call use the canonical spelling (`./src/x` ⇒ `src/x`), as `check` does.
   const path = canonicalPath(raw);
-  if (path === null || !underScope(path, record.scope_paths)) throw new UsageError(`${raw} is not under scope_paths (${record.scope_paths.join(", ")})`);
+  const at = typeof args.at === "string" ? args.at : "HEAD";
+  if (path === null || !underScope(path, record.scope_paths)) {
+    throw pathUsageError(root, `${raw} is not under scope_paths (${record.scope_paths.join(", ")})`, raw, [at]);
+  }
   let start = 1;
   let end;
   if (startRaw !== undefined) {
@@ -199,7 +226,6 @@ function show(args, ctx) {
     if (end < start) throw new UsageError(`end ${end} is before start ${start}`);
     if (end - start + 1 > MAX_RANGE_LINES) throw new UsageError(`range over ${MAX_RANGE_LINES} lines (${start}-${end})`);
   }
-  const at = typeof args.at === "string" ? args.at : "HEAD";
   let oid;
   try {
     oid = revParse(root, at);
@@ -212,7 +238,7 @@ function show(args, ctx) {
   try {
     bytes = showBytes(root, oid, path);
   } catch (e) {
-    if (e instanceof GitError) throw new UsageError(`${path} is not in the tree at ${oid7}`);
+    if (e instanceof GitError) throw pathUsageError(root, `${path} is not in the tree at ${oid7}`, path, [oid]);
     throw e;
   }
   // Raw lines, as `git show` prints them (D3): split on LF, drop the empty
@@ -540,7 +566,13 @@ function checkFindings(doc, { root, bytes, abs }, ctx) {
   try {
     coverage = tileCoverage(files, doc.examined, counts);
   } catch (e) {
-    if (e instanceof CoverageError) throw new UsageError(`examined: ${e.message}`);
+    if (e instanceof CoverageError) {
+      if (e.path === undefined) throw new UsageError(`examined: ${e.message}`);
+      const { hint, exempt } = directoryHint(root, e.path, [head]);
+      const err = new UsageError(`examined: ${e.message}${redactString(e.path).hits > 0 ? `; examined[${e.index}]${hint}` : ""}`);
+      err.exempt = exempt;
+      throw err;
+    }
     throw e;
   }
   doc.coverage = coverage;

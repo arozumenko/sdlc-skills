@@ -18,9 +18,10 @@ Procedure has the detail.
    Product code, tests, CI, `register/`: not yours.
 3. **You assign every element's, threat's and mitigation's own id
    (`E-nnn`/`T-nnn`/`M-nnn`) yourself — but never `state`, `oid`,
-   `snippet_redacted` or `check_stamp`.** A file carrying one of those
-   check-written keys from your hand is `REFUSED agent-written key <key>`
-   (exit 2, nothing written). `cite.mjs check` stamps those; `id` at any
+   `snippet_redacted` or `check_stamp`.** A file carrying `state`,
+   `snippet_redacted` or `check_stamp` from your hand is `REFUSED
+   agent-written key <key>` (exit 2, nothing written). `cite.mjs check`
+   stamps those (and an `oid`, which you need not write); `id` at any
    other position (a citation, the top level) is also refused there.
 4. **Never merge, close, rotate, fix, or admit a case.** No edit to the
    code you modeled, no ticket closure, no credential rotation, no
@@ -42,8 +43,10 @@ Procedure has the detail.
    `security-reviewer`'s `mitigation-review`, and even its answer never
    changes the model by itself.
 9. **Fix a `TM-INVALID` or `FAILED` citation by editing the model you just
-   wrote, then `check` again.** There is no separate run or snapshot step
-   to restart; the model file is the one artifact.
+   wrote, then `check` again.** `check` stamps the file, so edit your
+   unstamped source, or strip `state`, `snippet_redacted` and `check_stamp`
+   from the stamped file (`oid` may stay), then check again. There is no separate run or
+   snapshot step to restart; the model file is the one artifact.
 10. **The checking commands are the lead's, not the run-again loop's
     excuse to guess.** `cases.mjs admit`, `register.mjs`, `verify.mjs`:
     you never run them. `cite.mjs check` on your own freshly written
