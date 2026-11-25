@@ -931,3 +931,19 @@ test("long tracked paths: SHOW and DIRTY-SCOPE name the file", () => {
   assert.equal(r.code, 2);
   assert.deepEqual(r.out, [`DIRTY-SCOPE ${LONG}`]);
 });
+
+test("a stamped threat model is corrected by stripping state, snippet_redacted and check_stamp (oid stays), then check again", () => {
+  const { root, file, rel } = model("threat-model-ok.json");
+  let r = run(root, "check", rel);
+  assert.equal(r.code, 0, r.out.join("\n"));
+  const m = readDoc(file);
+  delete m.check_stamp;
+  const strip = (cites) => cites.forEach((c) => { delete c.state; delete c.snippet_redacted; });
+  m.elements.forEach((e) => strip(e.citations ?? []));
+  m.threats.forEach((t) => (t.mitigations ?? []).forEach((x) => strip(x.citations ?? [])));
+  m.threats[0].title = "A corrected title";
+  writeDoc(file, m);
+  r = run(root, "check", rel);
+  assert.equal(r.code, 0, `${r.out.join("\n")}\n${r.err}`);
+  assert.equal(readDoc(file).threats[0].title, "A corrected title");
+});

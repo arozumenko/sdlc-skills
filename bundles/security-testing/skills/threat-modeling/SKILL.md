@@ -124,8 +124,9 @@ commands:
 `secure-code-review/SKILL.md` for `init` and `redact`. Every string printed
 or written is redacted (D9); the file is rewritten with `check_stamp` and,
 per citation, `state`, `oid`, `snippet_redacted` — never edit a stamped
-file by hand (`REFUSED agent-written key <key>`); fix the unstamped source
-and let the lead re-run `check`.
+file by hand (`REFUSED agent-written key <key>`); fix your unstamped source,
+or strip state, snippet_redacted and check_stamp from the stamped file (oid
+may stay), then run check again yourself.
 
 ## References
 

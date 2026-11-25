@@ -97,3 +97,11 @@ test("vocabulary constants", () => {
   assert.equal(BASE_URL_PLACEHOLDER, "{{base_url}}");
   assert.ok(Object.isFrozen(LINT_RULES) && Object.isFrozen(FORBIDDEN_PATTERNS));
 });
+
+test("the worked example in audit-branch.md admits with no hit", () => {
+  const md = readFileSync(new URL("../../references/audit-branch.md", import.meta.url), "utf8");
+  const table = /```markdown\n(\| # \| Action[\s\S]*?)```/.exec(md)[1];
+  const text = `---\nid: TC-001\n---\n\n# TC-001: x\n\n## Steps\n\n${table}`;
+  assert.deepEqual(lintCase(text, { browser: [] }).hits, []);
+  assert.doesNotMatch(md, /collect the network/i);
+});

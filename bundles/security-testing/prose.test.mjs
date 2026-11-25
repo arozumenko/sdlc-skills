@@ -641,3 +641,16 @@ test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Veri
     assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
   }
 });
+
+test("no installed prose points at a path that exists only in this repo, and the modeler re-checks itself", () => {
+  const walk = (d) => readdirSync(join(B, d), { withFileTypes: true }).flatMap((e) => {
+    const p = `${d}/${e.name}`;
+    if (e.isDirectory()) return e.name === "scripts" ? [] : walk(p);
+    return e.name.endsWith(".md") ? [p] : [];
+  });
+  for (const dir of ["skills", "agents", "briefings"]) {
+    if (!existsSync(join(B, dir))) continue;
+    for (const f of walk(dir)) assert.doesNotMatch(read(f), /bundles\/manual-qa\//, f);
+  }
+  assert.doesNotMatch(read("skills/threat-modeling/SKILL.md"), /let the lead re-run/);
+});
