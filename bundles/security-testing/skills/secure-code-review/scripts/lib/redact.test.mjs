@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_RULES, RulesError, loadRules, redactString } from "./redact.mjs";
+import { DEFAULT_RULES, RulesError, exemptPlainUrl, loadRules, redactString } from "./redact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "fixtures", "lib");
@@ -107,4 +107,58 @@ test("a rules file without a rules array is a RulesError", () => {
 
 test("redactString requires a string", () => {
   assert.throws(() => redactString(Buffer.from("x")), TypeError);
+});
+
+test("exemptPlainUrl keeps lowercase-word URLs and nothing secret-shaped", () => {
+  const keep = (s) => redactString(s, undefined, exemptPlainUrl).text;
+  for (const s of ["https://gitlab.example.com/group/subgroup/project/backend/issues/123", "Navigate to `{{base_url}}/api/v1/organizations/members/permissions/roles`"]) {
+    assert.ok(redactString(s).hits > 0, "the premise");
+    assert.equal(keep(s), s);
+  }
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  for (const s of [
+    `https://hooks.example.com/services/T${"0".repeat(9)}/B${"0".repeat(9)}/${rnd.slice(0, 24)}`,
+    `https://example.com/${rnd}`,
+    `https://example.com/group/subgroup/project/backend/issues?t=${rnd}`,
+    `https://user:x@example.com/group/subgroup/project/backend/issues/list`,
+    "/api/v1/organizations/members/permissions/roles",
+    "group/subgroup/project/backend/issues/permissions/roles",
+  ]) assert.match(keep(s), /<REDACTED:/, s);
+});
+
+test("exemptPlainUrl edges: each unclear case stays redacted", () => {
+  const keep = (s) => redactString(s, undefined, exemptPlainUrl).text;
+  const base = "https://gitlab.example.com/group/subgroup/project/backend";
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  const hex40 = "0123456789abcdef".repeat(3).slice(0, 40);
+  // redacted: uppercase or mixed segment, 31 letters, 13 digits, hex token last, mid-word placeholder, non-URL token start
+  for (const s of [
+    `${base}/Issues/permissions`,
+    `${base}/issues/abc123def/permissions`,
+    `${base}/${"a".repeat(31)}`,
+    `${base}/issues/${"1".repeat(13)}`,
+    `${base}/${hex40}`,
+    `x{{base_url}}/api/v1/organizations/members/permissions/roles`,
+    `ftp://gitlab.example.com/group/subgroup/project/backend/issues/123`,
+    `${base}/issues/v123`,
+  ]) assert.match(keep(s), /<REDACTED:/, s);
+  // kept: 30 letters, 12 digits, v1/v12, trailing slash, double slash
+  for (const s of [
+    `${base}/${"a".repeat(30)}/${"1".repeat(12)}/v12/`,
+    `${base}//issues/v1/`,
+  ]) assert.equal(keep(s), s);
+  // kept inside parentheses, backticks and quotes
+  for (const w of ["(%)", "`%`", '"%"', "'%'", "|%|"]) {
+    const s = w.replace("%", `${base}/issues/123`);
+    assert.equal(keep(s), s, s);
+  }
+  // a URL directly followed by a secret-shaped run: the run is still redacted
+  const url = `${base}/issues/123`;
+  for (const s of [`${url}${rnd}`, `${url} ${rnd}`, `${url}/${rnd}`, `${url}?${rnd}`, `${url}#${rnd}`, `${url}@${rnd}`]) {
+    const out = keep(s);
+    assert.match(out, /<REDACTED:/, s);
+    assert.ok(!out.includes(rnd.slice(0, 24)), s);
+  }
+  // only the high-entropy class is exempt
+  assert.equal(exemptPlainUrl({ class: "bearer", match: "x", offset: 0, text: "https://a/b" }), false);
 });

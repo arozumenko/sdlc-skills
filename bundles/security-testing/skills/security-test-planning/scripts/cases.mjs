@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { AdmissionError, caseId, lintCase } from "./lib/admission.mjs";
 import { UsageError, runCli } from "./lib/cli.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
-import { redactString } from "./lib/redact.mjs";
+import { exemptPlainUrl, redactString } from "./lib/redact.mjs";
 
 export const ADMITTED_INDEX = ".admitted.json";
 export const CASE_FILE = /^(TC-\d{3})_[a-z0-9-]+\.md$/;
@@ -49,7 +49,7 @@ const BASE_URL_UNSET = "<base_url>";
 const HEADING = /^#[ \t]+(.+?)[ \t]*$/m;
 
 const sha256Hex = (input) => createHash("sha256").update(input).digest("hex");
-const clean = (s) => redactString(s).text;
+const clean = (s) => redactString(s, undefined, exemptPlainUrl).text;
 const posix = (p) => p.split(sep).join("/");
 const suiteRel = (slug) => `tasks/security-${slug}-admitted`;
 

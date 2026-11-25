@@ -226,3 +226,22 @@ test("usage: unknown command, missing command", () => {
   assert.equal(run(root).code, 2);
   assert.equal(run(root, "--help").code, 0);
 });
+
+test("a long {{base_url}} step is ADMITTED with its text intact; a webhook-shaped URL in it is redacted", () => {
+  const step = "Navigate to `{{base_url}}/api/v1/organizations/members/permissions/roles`";
+  const root = withCandidate("TC-001_login-headers.md", "TC-001_acme.md", { ...BROWSER, base_url: "https://staging.example.com" });
+  const file = join(root, CANDIDATES, "TC-001_acme.md");
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  const original = readFileSync(file, "utf8");
+  const stepLine = original.split("\n").find((l) => l.includes("Navigate to `{{base_url}}/login`"));
+  writeFileSync(file, original.replace("Navigate to `{{base_url}}/login`", step));
+  let r = run(root, "admit", `${CANDIDATES}/TC-001_acme.md`);
+  assert.equal(r.out[0], "ADMITTED tasks/security-acme-admitted/TC-001_acme.md", r.out.join("\n") + r.err);
+  assert.ok(readFileSync(join(root, SUITE, "TC-001_acme.md"), "utf8").includes(step), "step text intact");
+  r = run(root, "verify-suite");
+  assert.equal(r.out[0], "SUITE ok=1", r.out.join("\n"));
+
+  writeFileSync(file, original.replace(stepLine, stepLine.replace("`{{base_url}}/login`", `\`{{base_url}}/hooks/T${"0".repeat(9)}/${rnd.slice(0, 24)}\``)));
+  r = run(root, "admit", `${CANDIDATES}/TC-001_acme.md`);
+  assert.ok(!readFileSync(join(root, SUITE, "TC-001_acme.md"), "utf8").includes(rnd.slice(0, 24)), "the secret-shaped segment is redacted");
+});

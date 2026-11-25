@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 
 import { UsageError, runCli } from "./lib/cli.mjs";
 import { readEngagement, stDir } from "./lib/engagement.mjs";
-import { redactString } from "./lib/redact.mjs";
+import { exemptPlainUrl, redactString } from "./lib/redact.mjs";
 import { LIVE_STATUSES, PRIORITIES, ROW_ID, STATUSES, TRANSITIONS, TransitionError, applyTransition, isCalendarDay } from "./lib/transitions.mjs";
 
 const LOG_REL = join("register", "events.jsonl");
@@ -56,7 +56,7 @@ const short = (findingId) => `${findingId.slice(0, 8)}…`;
 /** Keys whose value is hex identity (a finding id, a commit) — exempt from redaction only when it is a full oid/sha256 (cite.mjs pattern). */
 const HEX_KEYS = new Set(["finding_id", "head"]);
 const HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const clean = (s) => redactString(s).text;
+const clean = (s) => redactString(s, undefined, exemptPlainUrl).text;
 /**
  * Every string in a value redacted, recursively, except a string under one of
  * `HEX_KEYS` that is a full oid/sha256. Arrays pass no key down. Runs on every

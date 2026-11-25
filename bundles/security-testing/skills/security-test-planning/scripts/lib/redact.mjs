@@ -87,3 +87,29 @@ export function redactString(input, rules = DEFAULT_RULES, exempt = undefined) {
   }
   return { text, hits };
 }
+
+const URL_TOKEN_START = /^(?:https?:\/\/|\{\{base_url\}\})/;
+const PLAIN_SEGMENT = /^(?:[a-z]{1,30}|[0-9]{1,12}|v[0-9]{1,2})$/;
+const TOKEN_BREAK = /[\s"'`(|]/;
+
+/**
+ * An `exempt` callback for `redactString`: keep an ordinary long URL, which the
+ * `high-entropy` rule eats because its character class holds `/`. True only for
+ * that class, when the match lies in a token that starts with `http://`,
+ * `https://` or `{{base_url}}` (a token starts after whitespace, a quote, a
+ * backtick, `(`, `|` or the start of text), no `?`, `#` or `@` comes before the
+ * match ends, and every `/`-separated segment of the match is empty or a plain
+ * word: 1-30 lowercase letters, 1-12 digits, or `v` and 1-2 digits. An uppercase
+ * or mixed segment, a long run or a hex token stays redacted, so a webhook URL
+ * is. Any unclear case is redacted.
+ * @param {{class: string, match: string, offset: number, text: string}} hit
+ * @returns {boolean}
+ */
+export function exemptPlainUrl({ class: cls, match, offset, text }) {
+  if (cls !== "high-entropy") return false;
+  let start = offset;
+  while (start > 0 && !TOKEN_BREAK.test(text[start - 1])) start--;
+  const token = text.slice(start, offset + match.length);
+  if (!URL_TOKEN_START.test(token) || /[?#@]/.test(token)) return false;
+  return match.split("/").every((seg) => seg === "" || PLAIN_SEGMENT.test(seg));
+}

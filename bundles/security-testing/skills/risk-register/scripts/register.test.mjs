@@ -405,3 +405,25 @@ test("--expect parses an engagement id that itself contains a colon", () => {
   assert.equal(r.code, 0, r.out.join("\n"));
   assert.equal(r.out.at(-1), "MATCH");
 });
+
+test("a plain ticket URL survives redaction in the log and status --json; a webhook-shaped one does not", () => {
+  const root = tmpRepoWithEngagement();
+  assert.equal(run(root, "add", "--finding", FINDING_A, "--priority", "p2", "--title", "x", "--by", "lead").code, 0);
+  const plain = "https://gitlab.example.com/group/subgroup/project/backend/issues/123";
+  const rnd = ["Qm9yZWQg", "b2YgdGVz", "dCBkYXRh", "IGhlcmU5", "Zm9yIHVz"].join("");
+  const hook = `https://hooks.example.com/services/T${"0".repeat(9)}/B${"0".repeat(9)}/${rnd.slice(0, 24)}`;
+  let r = run(root, "ticket", "R-0001", plain);
+  assert.equal(r.code, 0, r.out.join("\n") + r.err);
+  assert.equal(readLog(root).at(-1).payload.ticket_url, plain);
+  assert.equal(JSON.parse(run(root, "status", "--json").out.join("\n")).rows[0].ticket_url, plain);
+  run(root, "render");
+  assert.ok(readFileSync(join(root, ST, "risk-register.md"), "utf8").includes(plain), "the rendered view keeps it");
+
+  r = run(root, "ticket", "R-0001", hook);
+  assert.equal(r.code, 0, r.out.join("\n") + r.err);
+  const logged = readLog(root).at(-1).payload.ticket_url;
+  assert.match(logged, /<REDACTED:/);
+  assert.ok(!logged.includes(rnd.slice(0, 24)));
+  const shown = JSON.parse(run(root, "status", "--json").out.join("\n")).rows[0].ticket_url;
+  assert.match(shown, /<REDACTED:/);
+});
