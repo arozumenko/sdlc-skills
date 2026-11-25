@@ -103,6 +103,12 @@ The right column above, plus two script-wide facts: `GIT-ERROR <message>`
 the one write that bypasses redaction is `.gitignore`, the managed block
 `cite.mjs init` writes there once.
 
+The managed block ignores the private paths: review, verify, register and
+proposal directories, `cases/`, `threat-model.json`, `risk-register.md`, and
+the daily logs of `security-lead`, `security-reviewer` and `threat-modeler`.
+`reports/security/` and `tasks/security-<slug>-admitted/` are hand-over
+outputs and stay visible to git.
+
 ## Hand-offs
 
 Step 6 (Cases) ends with `cases.mjs verify-suite` printing `SUITE ok=<n>`
