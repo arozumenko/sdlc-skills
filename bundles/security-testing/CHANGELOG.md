@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fix: the managed `.gitignore` block written by `init` now ignores ten private
+  paths under `.agents/`: `reviews/`, `verify/`, `register/`, `proposals/`,
+  `cases/`, `threat-model.json` and `risk-register.md` in `security-testing/`,
+  and the daily logs of `security-lead`, `security-reviewer` and
+  `threat-modeler` in `memory/`. The threat model, the cases, the register
+  view and the daily logs were missing before. `init` rewrites an older block
+  in place. A project that tracks one of these paths on purpose now makes
+  `init` stop with `TRACKED <path>` (exit 4): run `git rm --cached <path>`,
+  commit, and run `init` again (git history keeps the old copies). Daily logs
+  no longer travel with git. The roles' memory sections now allow ids, counts,
+  the review or run directory and result lines only: no product file, line,
+  title or description of a finding or threat. The threat modeler logs how
+  many scope files it left uncited, not which.
+
 - Fix: `cite.mjs check` no longer redacts long tracked paths on write-back. A
   path run of 40+ letters, digits and `/` matched the `high-entropy` rule, so
   the first `check` passed and every later one failed and sign-off could not
