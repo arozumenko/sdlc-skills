@@ -658,3 +658,15 @@ test("the memory lists carry no weak file: result lines without detail, a range 
   assert.match(section("threat-modeler"), /the engagement id, `head`/);
   assert.doesNotMatch(section("threat-modeler"), /the scope,/);
 });
+
+test("the TRACKED entry carries the untrack steps itself and points to no changelog", () => {
+  const wf = read("skills/security-engagement/references/workflow.md");
+  assert.ok(wf.includes("git rm --cached"), "workflow.md states the untrack step");
+  const entry = (text) => text.split(/\n(?=- \*\*|\n)/).find((p) => p.includes("TRACKED <path>")) ?? "";
+  const doc = readFileSync(join(B, "../../docs/onboarding/security-testing.md"), "utf8");
+  for (const [n, t] of [["workflow.md", wf], ["onboarding doc", doc]]) {
+    const e = entry(t);
+    assert.ok(e, `${n}: has a TRACKED entry`);
+    assert.doesNotMatch(e, /CHANGELOG/i, n);
+  }
+});

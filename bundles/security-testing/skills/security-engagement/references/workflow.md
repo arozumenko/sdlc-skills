@@ -20,8 +20,17 @@ daily log would be committed and the second `init` would stop. Run it
 again for `IGNORE-BLOCK: written|present` then `INIT ok`.
 
 `TRACKED <path>` (exit 4): a private path is tracked by git. Stop. A human
-untracks it (see the bundle `CHANGELOG.md`, "Unreleased"), then run `init`
-again.
+untracks it:
+
+1. Keep a copy of the private files outside the repository.
+2. Run `git rm --cached <path>`.
+3. Run `cite.mjs init` again. It passes with the removal staged and writes
+   the block.
+4. Commit that removal and `.gitignore` together. Never use `git add -A`.
+
+A pull of that commit deletes a teammate's copy of the file. Checking out an
+older commit that still tracks the file overwrites the local copy (step 9
+can do that), so keep the copy until the engagement is closed.
 
 ## 2. Dispatch the review
 

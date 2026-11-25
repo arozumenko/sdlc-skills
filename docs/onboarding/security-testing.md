@@ -300,8 +300,9 @@ Three rules the team obeys (full detail in the factory README and
   the ` ```json engagement ` block, commit, re-run. If it repeats, the
   `engagement_id` is still the template's `my-product-2026-09` — rename it.
 - **`TRACKED <path>` (exit 4)** → git tracks a private path, so `init` wrote
-  nothing. A human untracks it with the steps in the bundle `CHANGELOG.md`
-  ("Unreleased"). Rasmus stops until you tell him it is done.
+  nothing. A human untracks it with the steps in step 1 of `workflow.md`
+  (`security-engagement/references/workflow.md`). Rasmus stops until you
+  tell him it is done.
 - **`FAILED <locus>.<i> path-not-in-scope`** → the cited file isn't under
   `scope_paths`. Widen the scope in `engagement.md` (and commit), or let
   Rasmus send the finding back to Vera.
