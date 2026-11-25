@@ -36,6 +36,8 @@ test('validation: events, dates, sources, transition, nullable item, estimate, c
   assert.throws(() => base({ event: 'estimated', estimate: { ...EST, unit: 'd' } }), /SCHEMA-INVALID\(estimate\.unit/);
   assert.deepEqual(validateEstimate(EST), []);
   assert.ok(validateEstimate({ ...EST, low: 5 }).some((e) => /low/.test(e)));
+  assert.deepEqual(validateEstimate({ ...EST, mid: 2 }), []); assert.deepEqual(validateEstimate({ ...EST, mid: 1 }), []); assert.deepEqual(validateEstimate({ ...EST, mid: 3 }), []);
+  for (const mid of [0.5, 4, '2', NaN, null]) assert.ok(validateEstimate({ ...EST, mid }).some((e) => /mid/.test(e)), String(mid));
   assert.ok(validateEstimate({ ...EST, probability: 1 }).some((e) => /probability/.test(e)));
   assert.ok(validateEstimate({ ...EST, tier: 'calibrated' }).some((e) => /reference/.test(e)));
   assert.deepEqual(validateEstimate({ ...EST, tier: 'calibrated', reference: { path: 'calibration/x.json', sha256: 'a'.repeat(64), population: 'task/S first-cycle n=12' } }), []);

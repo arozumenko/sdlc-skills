@@ -5,7 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appendObservation, makeObservation } from './events.mjs';
+import { appendObservation, makeObservation, validateEstimate } from './events.mjs';
 import { deliveryDir, runPath } from './paths.mjs';
 import { mkdirSync } from 'node:fs';
 const deliveryDirOf = (repo) => { const d = deliveryDir(repo); mkdirSync(d, { recursive: true }); return d; };
@@ -76,6 +76,22 @@ test('fillEstimates: unestimated tasks get a calibrated, auto-accepted usd range
   assert.match(e.reference.population, /^role=python-dev\|type=feature\|novel=false n=12$/);
   assert.ok(p.missions[0].tasks[0].effort_class);
   assert.equal(p.missions[0].tasks[2].estimate, prevEst, 'a re-cut keeps the estimate the task was planned with');
+});
+
+test('fillEstimates: the calibrated range is the cell p20–p80 with the p50 as mid; a table without p20 keeps p50 as low', () => {
+  const samples = Array.from({ length: 12 }, (_, k) => sample({ ref: `S${k}`, cost_usd: 1 + k }));
+  const cal = buildCalibration(samples, { now: NOW });
+  assert.deepEqual([cal.cells.all.p20_usd, cal.cells.all.p50_usd, cal.cells.all.p80_usd], [3, 6, 10]);
+  const p = { missions: [{ tasks: [{ ref: 'NEW', item_id: 'c/r/task-new' }] }] };
+  fillEstimates(p, { cal, sha256: 'a'.repeat(64) }, { now: NOW });
+  const e = p.missions[0].tasks[0].estimate;
+  assert.deepEqual([e.low, e.mid, e.high], [3, 6, 10]);
+  assert.deepEqual(validateEstimate(e), []);
+  const older = { v: 1, unit: 'usd', min_n: 5, cells: { all: { n: 9, p50_usd: 3, p80_usd: 4, return_rate: 0, effort_class: null, by_model: {} } } };
+  const q = { missions: [{ tasks: [{ ref: 'NEW', item_id: 'c/r/task-new' }] }] };
+  fillEstimates(q, { cal: older, sha256: 'a'.repeat(64) }, { now: NOW });
+  const o = q.missions[0].tasks[0].estimate;
+  assert.deepEqual([o.low, o.mid, o.high], [3, 3, 4], 'a table built before p20 existed gives the old p50–p80 range');
 });
 
 // End to end through the CLI: hooked cost on landed tasks → calibrate → next plan registers with calibrated estimates →
@@ -517,6 +533,8 @@ test('a malformed cell in calibration.json is CALIBRATION-INVALID and names the 
   const bad = { 'no p80': { ...cell, p80_usd: undefined }, 'p80 below p50': { ...cell, p80_usd: 2 }, 'negative p50': { ...cell, p50_usd: -1 }, 'string p50': { ...cell, p50_usd: '3' },
     'NaN p50': { ...cell, p50_usd: NaN }, 'bad class': { ...cell, effort_class: 'E9' }, 'fraction n': { ...cell, n: 2.5 }, 'not an object': 7, 'an array': [],
     'string p80': { ...cell, p80_usd: 'n/a' }, 'NaN p80': { ...cell, p80_usd: NaN }, 'zero p50': { ...cell, p50_usd: 0, p80_usd: 0 }, 'negative n': { ...cell, n: -1 }, 'null cell': null, 'class with a tail': { ...cell, effort_class: 'E12' } };
+  assert.equal(cellProblem({ ...cell, p20_usd: 2 }), null); assert.equal(cellProblem({ ...cell, p20_usd: 3 }), null);
+  Object.assign(bad, { 'p20 above p50': { ...cell, p20_usd: 3.5 }, 'zero p20': { ...cell, p20_usd: 0 }, 'string p20': { ...cell, p20_usd: '2' }, 'NaN p20': { ...cell, p20_usd: NaN } });
   for (const [why, c] of Object.entries(bad)) assert.equal(typeof cellProblem(c), 'string', why);
   const repo = initRepo(), file = writePlan(repo, plan(1, [{ ref: 'T1', role: 'python-dev' }]));
   const table = (cells) => writeFileSync(join(deliveryDirOf(repo), 'calibration.json'), JSON.stringify({ v: 1, min_n: 5, cells }));

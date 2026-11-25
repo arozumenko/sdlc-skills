@@ -136,7 +136,8 @@ reason that applies and is never double-counted):
    A `usd` estimate is not a mismatch: it is scored against the task's cost (`cost_usd`: every dispatch attributed to the
    task, counted once, at current prices, from dispatches started before the effective end; the hook-time cost when the
    report falls back) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
-   `mae_s` is in dollars and rows carry `actual_usd`. The gates apply in this order: `excluded_item`, `unaccepted`,
+   `mae_s` is in dollars and rows carry `actual_usd`. A `usd` range with a `mid` (a calibrated cell p50) is scored on the
+   `mid` in place of the midpoint for the ratio, MRE and MAE; `hit` still means `low ≤ actual ≤ high`. The gates apply in this order: `excluded_item`, `unaccepted`,
    `no_eligible_latest` (both as above; such a task stays in the `usd:` strata and is never counted as hours),
    `late_accepted` (accepted at or after the task's measured start; a task with no measured start is judged against the
    earlier of its first commit and its earliest hooked dispatch of any stage; with neither, the estimate is never late),

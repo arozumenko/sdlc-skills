@@ -109,7 +109,7 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 - A changed cost for the same dispatch (prices corrected, transcript re-read) is a different fact: the hook writes it as the
   next revision of that observation, and the highest revision is read.
 - **Cells** at decreasing detail: `role=…|type=…|novel=…`, `role=…|type=…`, `role=…`, `type=…`, `all`. A feature the plan
-  leaves out is skipped, never matched as null. Each cell: `n`, recency-weighted `p50_usd`/`p80_usd` (weight halves every
+  leaves out is skipped, never matched as null. Each cell: `n`, recency-weighted `p20_usd`/`p50_usd`/`p80_usd` (weight halves every
   `half_life_days`, default 42, relative to the newest sample), `return_rate` (rework observed, `review_returned` or
   `reopened`; reopened tasks stay in the sample with both episodes' cost), `effort_class`,
   `by_model {model: {n, p50_usd, return_rate}}`.
@@ -122,13 +122,15 @@ Identical retries and `--dry-run` never rebuild. No samples leaves the existing 
 `CALIBRATION none:` with the reason. Invalid prices print `WARN PRICES-INVALID`; registration uses the existing table if available.
 
 `plan register` then fills each task that has no `estimate`: the most specific cell with `n ≥ 5` gives
-`{unit: "usd", low: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
+`{unit: "usd", low: p20, mid: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
 reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
-so they are accepted at registration with no human step. A task that already carried a calibrated estimate in the previous
+so they are accepted at registration with no human step. A cell without `p20_usd` (a table built before it existed) gives
+`low: p50`. `mid` is the point the report bands and scores; `high` is what the budget multiplies. A task that already carried a calibrated estimate in the previous
 version keeps it on a re-cut. The planner's own estimates are never replaced. A task with no cell of `n ≥ 5` stays
 unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read or parsed, has no
 `cells` object, has a `v` other than 1, a `unit` other than `usd` or a `min_n` that is not an integer ≥ 1, or has a
-malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `effort_class` not null or
+malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `p20_usd` present but not > 0 or above
+`p50_usd`, `effort_class` not null or
 `E1`–`E4`) stops registration with `CALIBRATION-INVALID` (exit 2) if rebuilding cannot replace it.
 `--no-calibrate` skips rebuilding and new fills; a re-cut still keeps earlier calibrated estimates. The
 registration retry digest is computed before the fill, so a retry is still recognised.
