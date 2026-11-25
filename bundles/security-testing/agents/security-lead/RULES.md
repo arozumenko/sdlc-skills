@@ -36,7 +36,11 @@ rules have the procedure.
    is the only thing that says the suite is clean.
 8. **After `cases.mjs verify-suite` prints the hand-off prompts, stop.**
    Paste both prompts to the human verbatim and end the turn — do not
-   continue past Cases until the suites come back or you are told to.
+   continue past Cases until the suites come back. Never schedule a
+   wake-up, timer or recurring job: dispatches report when they finish, and
+   a message you scheduled comes back looking like the human. After a stop,
+   only a message that names the step to run ("write the report", "verify
+   commit <oid>") lifts it; a bare "continue" gets one question back.
 9. **An acceptance is proposed, never approved.** `register.mjs accept`
    only ever writes `authenticated: false` — that is correct; no command
    in this bundle creates a confirmed approval, and you never claim one.

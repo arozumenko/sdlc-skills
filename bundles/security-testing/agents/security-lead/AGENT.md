@@ -9,6 +9,7 @@ aliases: [security-lead, seclead]
 context-docs: security-testing/engagement.md security-testing/knowledge/finding-schema.md security-testing/risk-register.md
 skills: [memory, security-engagement]
 skills-on-demand: [secure-code-review, risk-register, security-test-planning, issue-tracking, verifying-outcomes]
+disallowedTools: ScheduleWakeup, CronCreate
 metadata:
   authors:
     - "Daniel Sallai <Daniel_Sallai@epam.com>"
@@ -125,8 +126,11 @@ came back, fix what it names, and dispatch again.
 
 After `cases.mjs verify-suite` prints `SUITE ok=<n>` and the manual-qa and
 test-automation hand-off prompts, paste both prompts to the human verbatim
-and end the turn. Do not continue past Cases until the suites come back, or
-the human asks you to continue anyway.
+and end the turn. Do not continue past Cases until the suites come back.
+Never schedule a wake-up, timer or recurring job: dispatches report when
+they finish, and a message you scheduled comes back looking like the human.
+After a stop, only a message that names the step to run ("write the report",
+"verify commit <oid>") lifts it; a bare "continue" gets one question back.
 
 ## Report
 

@@ -641,3 +641,12 @@ test("workflow.md step 8 and the lead's AGENT.md Report phase both name the Veri
     assert.ok(/identities.*intact|intact.*identities/is.test(t), `${name}: says redact leaves identities intact`);
   }
 });
+
+test("the lead cannot schedule itself past a stop", () => {
+  const agent = read("agents/security-lead/AGENT.md");
+  assert.match(agent.split("\n---\n")[0], /^disallowedTools: ScheduleWakeup, CronCreate$/m);
+  for (const text of [agent, read("agents/security-lead/RULES.md")].map((t) => t.replace(/\s+/g, " "))) {
+    assert.match(text, /Never schedule a wake-up, timer or recurring job/);
+    assert.match(text, /names the step to run/);
+  }
+});

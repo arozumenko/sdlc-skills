@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: a wake-up is not a person. In a real run the security lead scheduled
+  itself a fallback wake-up ("continue security engagement"); it arrived as a
+  plain user message and the lead took it as permission to pass its mandatory
+  stop. On Claude Code the lead can no longer call `ScheduleWakeup` or
+  `CronCreate` (`disallowedTools`), and its stop rule says never to schedule
+  anything. After a stop only a message that names the step to run ("write the
+  report", "verify commit <oid>") lifts it; a bare "continue" gets one
+  question back.
 - Fix: `cite.mjs check` no longer redacts long tracked paths on write-back. A
   path run of 40+ letters, digits and `/` matched the `high-entropy` rule, so
   the first `check` passed and every later one failed and sign-off could not
