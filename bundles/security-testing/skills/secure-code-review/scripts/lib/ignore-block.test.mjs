@@ -8,11 +8,11 @@ import * as mod from "./ignore-block.mjs";
 import { BLOCK_BEGIN, BLOCK_END, PATTERNS, probeTracked, readGitignore, renderBlock, stripManagedBlock, upsertBlock } from "./ignore-block.mjs";
 import { must } from "./git.mjs";
 
-const EXPECTED = `${BLOCK_BEGIN}\n.agents/security-testing/reviews/\n.agents/security-testing/verify/\n.agents/security-testing/register/\n.agents/security-testing/proposals/\n${BLOCK_END}\n`;
+const EXPECTED = `${BLOCK_BEGIN}\n.agents/security-testing/reviews/\n.agents/security-testing/verify/\n.agents/security-testing/register/\n.agents/security-testing/proposals/\n.agents/security-testing/cases/\n.agents/security-testing/threat-model.json\n.agents/security-testing/risk-register.md\n.agents/memory/security-lead/daily/\n.agents/memory/security-reviewer/daily/\n.agents/memory/threat-modeler/daily/\n${BLOCK_END}\n`;
 
-test("the trimmed surface is fixed: four patterns, no policy", () => {
+test("the trimmed surface is fixed: ten patterns, no policy", () => {
   assert.deepEqual(Object.keys(mod).sort(), ["BLOCK_BEGIN", "BLOCK_END", "GITIGNORE", "PATTERNS", "probeTracked", "readGitignore", "renderBlock", "stripManagedBlock", "upsertBlock"]);
-  assert.deepEqual([...PATTERNS], [".agents/security-testing/reviews/", ".agents/security-testing/verify/", ".agents/security-testing/register/", ".agents/security-testing/proposals/"]);
+  assert.deepEqual([...PATTERNS], [".agents/security-testing/reviews/", ".agents/security-testing/verify/", ".agents/security-testing/register/", ".agents/security-testing/proposals/", ".agents/security-testing/cases/", ".agents/security-testing/threat-model.json", ".agents/security-testing/risk-register.md", ".agents/memory/security-lead/daily/", ".agents/memory/security-reviewer/daily/", ".agents/memory/threat-modeler/daily/"]);
   assert.equal(renderBlock(), EXPECTED);
 });
 

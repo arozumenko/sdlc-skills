@@ -4,10 +4,12 @@
 // under a managed path is already tracked.
 //
 // The block, between `# security-testing:begin` and `# security-testing:end`,
-// carries the four private paths under `.agents/security-testing/`
-// (`reviews/`, `verify/`, `register/`, `proposals/`), one per line.
+// carries the private paths, one per line: under `.agents/security-testing/`
+// `reviews/`, `verify/`, `register/`, `proposals/`, `cases/`,
+// `threat-model.json` and `risk-register.md`, then the security roles' daily
+// logs under `.agents/memory/<role>/daily/`.
 //
-//   PATTERNS                the four, frozen
+//   PATTERNS                the private paths, frozen
 //   renderBlock()           begin, patterns, end — one line each, LF, trailing LF
 //   upsertBlock(text)       → text with the block written in, idempotent
 //   stripManagedBlock(text) text without the block
@@ -42,8 +44,11 @@ export const BLOCK_END = "# security-testing:end";
 
 const ST = ".agents/security-testing/";
 
-/** The four private paths the block ignores, in block order. */
-export const PATTERNS = Object.freeze([`${ST}reviews/`, `${ST}verify/`, `${ST}register/`, `${ST}proposals/`]);
+/** The private paths the block ignores, in block order. */
+export const PATTERNS = Object.freeze([
+  `${ST}reviews/`, `${ST}verify/`, `${ST}register/`, `${ST}proposals/`, `${ST}cases/`, `${ST}threat-model.json`, `${ST}risk-register.md`,
+  ...["security-lead", "security-reviewer", "threat-modeler"].map((r) => `.agents/memory/${r}/daily/`),
+]);
 
 /**
  * The block text: begin marker, the patterns, end marker, one per line, LF,

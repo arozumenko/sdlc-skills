@@ -14,8 +14,23 @@ repository-relative file arguments.
 node <skills>/secure-code-review/scripts/cite.mjs init
 ```
 `WROTE <path>`, then `EDIT-ENGAGEMENT-AND-RERUN` (exit 2) the first
-time. Fill in `engagement.md`, commit so the scope paths are clean, run
-it again for `IGNORE-BLOCK: written|present` then `INIT ok`.
+time. Fill in `engagement.md`, then commit only `engagement.md` and any
+scope changes so the scope paths are clean. Never `git add -A` here: a
+daily log would be committed and the second `init` would stop. Run it
+again for `IGNORE-BLOCK: written|present` then `INIT ok`.
+
+`TRACKED <path>` (exit 4): a private path is tracked by git. Stop. A human
+untracks it:
+
+1. Keep a copy of the private files outside the repository.
+2. Run `git rm --cached <path>`.
+3. Run `cite.mjs init` again. It passes with the removal staged and writes
+   the block.
+4. Commit that removal and `.gitignore` together. Never use `git add -A`.
+
+A pull of that commit deletes a teammate's copy of the file. Checking out an
+older commit that still tracks the file overwrites the local copy (step 9
+can do that), so keep the copy until the engagement is closed.
 
 ## 2. Dispatch the review
 
@@ -81,7 +96,7 @@ node <skills>/security-test-planning/scripts/cases.mjs verify-suite
 `ADMITTED <suite>/<file>` per candidate (or `PROPOSAL … hits=<n>` — fix
 the step and admit again), then `SUITE ok=<n>` and the manual-qa and
 test-automation hand-off prompts. Paste both prompts to the user.
-**Stop here** until the suites come back or you are asked to continue.
+**Stop here.** After this stop, only returned suite results or a human's message that names the step to run lifts it; a bare "continue" gets a question back, every time.
 
 ## 8. Report
 
