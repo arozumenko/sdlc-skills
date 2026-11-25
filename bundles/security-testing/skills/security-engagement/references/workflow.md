@@ -14,8 +14,14 @@ repository-relative file arguments.
 node <skills>/secure-code-review/scripts/cite.mjs init
 ```
 `WROTE <path>`, then `EDIT-ENGAGEMENT-AND-RERUN` (exit 2) the first
-time. Fill in `engagement.md`, commit so the scope paths are clean, run
-it again for `IGNORE-BLOCK: written|present` then `INIT ok`.
+time. Fill in `engagement.md`, then commit only `engagement.md` and any
+scope changes so the scope paths are clean. Never `git add -A` here: a
+daily log would be committed and the second `init` would stop. Run it
+again for `IGNORE-BLOCK: written|present` then `INIT ok`.
+
+`TRACKED <path>` (exit 4): a private path is tracked by git. Stop. A human
+untracks it (see the bundle `CHANGELOG.md`, "Unreleased"), then run `init`
+again.
 
 ## 2. Dispatch the review
 

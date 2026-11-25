@@ -649,3 +649,12 @@ test("every role's memory section allows no path or description of a finding or 
     assert.doesNotMatch(section, /log ids, paths/i, role);
   }
 });
+
+test("the memory lists carry no weak file: result lines without detail, a range count, the engagement id", () => {
+  const section = (role) => read(`agents/${role}/AGENT.md`).split("## Session End — Memory (MANDATORY)")[1].replace(/\s+/g, " ");
+  assert.match(section("security-lead"), /every script result line, without its path, line or case text/);
+  assert.match(section("security-reviewer"), /how many ranges you declined to read/);
+  assert.doesNotMatch(section("security-reviewer"), /residual exposure/);
+  assert.match(section("threat-modeler"), /the engagement id, `head`/);
+  assert.doesNotMatch(section("threat-modeler"), /the scope,/);
+});

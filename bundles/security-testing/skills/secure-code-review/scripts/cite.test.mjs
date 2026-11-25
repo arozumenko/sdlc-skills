@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { join } from "node:path";
 
 import { APP_LINES, buildRepo } from "./fixtures/cite/build-repo.mjs";
-import { BLOCK_BEGIN, BLOCK_END } from "./lib/ignore-block.mjs";
+import { BLOCK_BEGIN, BLOCK_END, renderBlock } from "./lib/ignore-block.mjs";
 
 const CITE = new URL("./cite.mjs", import.meta.url).pathname;
 const TEMPLATE = new URL("../../../knowledge/engagement.md.template", import.meta.url).pathname;
@@ -57,10 +57,40 @@ test("init upgrades a four-line block in place and keeps the lines around it", (
   const old = ["reviews", "verify", "register", "proposals"].map((d) => `.agents/security-testing/${d}/`).join("\n");
   writeFileSync(join(root, ".gitignore"), `before/\n${BLOCK_BEGIN}\n${old}\n${BLOCK_END}\nafter/\n`);
   assert.ok(run(root, "init").out.includes("IGNORE-BLOCK: written"));
-  const text = readFileSync(join(root, ".gitignore"), "utf8");
-  assert.match(text, /^before\/\n# security-testing:begin\n/);
-  assert.match(text, /# security-testing:end\nafter\/\n$/);
-  assert.ok(text.includes("\n.agents/security-testing/threat-model.json\n"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), `before/\n${renderBlock()}after/\n`);
+});
+
+test("init stops on a tracked private file and leaves an old four-line block byte-identical", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  const old = ["reviews", "verify", "register", "proposals"].map((d) => `.agents/security-testing/${d}/`).join("\n");
+  const before = `before/\n${BLOCK_BEGIN}\n${old}\n${BLOCK_END}\nafter/\n`;
+  writeFileSync(join(root, ".gitignore"), before);
+  const f = ".agents/memory/security-lead/daily/2026-01-01.md";
+  mkdirSync(join(root, f, ".."), { recursive: true });
+  writeFileSync(join(root, f), "x\n");
+  gitIn(root, "add", "-f", f);
+  gitIn(root, "commit", "-qm", "tracked");
+  const r = run(root, "init");
+  assert.equal(r.code, 4, r.out.join("\n"));
+  assert.ok(r.out.includes(`TRACKED ${f}`), r.out.join("\n"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), before);
+});
+
+test("init passes after git rm --cached with the removal only staged, and writes the block", () => {
+  const { root } = buildRepo();
+  ENG(root);
+  const f = ".agents/security-testing/threat-model.json";
+  writeFileSync(join(root, f), "{}\n");
+  gitIn(root, "add", "-f", f);
+  gitIn(root, "commit", "-qm", "tracked");
+  assert.equal(run(root, "init").code, 4);
+  gitIn(root, "rm", "--cached", "-q", f);
+  const r = run(root, "init");
+  assert.equal(r.code, 0, r.out.join("\n"));
+  assert.ok(r.out.includes("IGNORE-BLOCK: written"), r.out.join("\n"));
+  assert.equal(readFileSync(join(root, ".gitignore"), "utf8"), renderBlock());
+  assert.ok(existsSync(join(root, f)), "the file stays on disk");
 });
 
 test("init stops on a tracked threat model, register view or daily log", () => {

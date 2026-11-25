@@ -101,13 +101,16 @@ The right column above, plus two script-wide facts: `GIT-ERROR <message>`
 (exit 2) is the one git-failure line every script — `cite.mjs`,
 `verify.mjs`, `cases.mjs`, `register.mjs` — can print, on any command; and
 the one write that bypasses redaction is `.gitignore`, the managed block
-`cite.mjs init` writes there once.
+`cite.mjs init` writes there (and rewrites in place when an older block
+exists).
 
 The managed block ignores the private paths: review, verify, register and
 proposal directories, `cases/`, `threat-model.json`, `risk-register.md`, and
 the daily logs of `security-lead`, `security-reviewer` and `threat-modeler`.
 `reports/security/` and `tasks/security-<slug>-admitted/` are hand-over
 outputs and stay visible to git.
+A later negation in `.gitignore`, or a nested `.gitignore`, can make ignored
+paths visible again. `init` does not detect that.
 
 ## Hand-offs
 

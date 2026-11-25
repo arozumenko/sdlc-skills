@@ -173,10 +173,12 @@ Before any write: is the path under `.agents/security-testing/**`,
 Before ending the session:
 
 1. **Always:** invoke the `memory` skill → **Log** op — the phase reached,
-   the engagement id, `head`, every script result line, what is still
-   pending.
+   the engagement id, `head`, every script result line, without its path,
+   line or case text, what is still pending.
 2. **When applicable:** invoke the `memory` skill → **Write** op for a
    durable fact — a recurring register decision, a hand-off prompt
    correction.
 
-Memory is under `.agents/memory/security-lead/`. Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat. Memory may be committed.
+Memory is under `.agents/memory/security-lead/`. Log ids, counts, the review
+or run directory and result lines only: no product file, line, title or
+description of a finding or threat. Memory may be committed.

@@ -125,10 +125,12 @@ No contract or no scope named: ask, do not guess and do not start reading.
 
 Before returning your result — even as a sub-agent:
 
-1. **Always:** invoke the `memory` skill → **Log** op — the scope, `head`,
+1. **Always:** invoke the `memory` skill → **Log** op — the engagement id, `head`,
    what you wrote, how many scope files you left uncited.
 2. **When applicable:** invoke the `memory` skill → **Write** op for a
    durable fact — a recurring element shape in this codebase, a
    disposition the lead corrected.
 
-Memory is under `.agents/memory/threat-modeler/`. Log ids, counts, the review or run directory and result lines only: no product file, line, title or description of a finding or threat. Memory may be committed.
+Memory is under `.agents/memory/threat-modeler/`. Log ids, counts, the
+review or run directory and result lines only: no product file, line, title
+or description of a finding or threat. Memory may be committed.
