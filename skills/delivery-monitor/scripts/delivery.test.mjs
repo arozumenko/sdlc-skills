@@ -273,8 +273,7 @@ test('event --from: a non-object JSON line (null/array/scalar) is counted invali
 // Issue 2: a real system error (a thrown fs Error carrying a string .code like EACCES) must not be
 // swallowed as "invalid line" — it must propagate to main()'s INTERNAL/exit-1 catch-all, using the
 // same predicate main() itself uses (`e.code && e.exit`), not a bare `!e.code` check.
-test('event --from: a thrown fs error with a string .code (EACCES) propagates to INTERNAL, not invalid-line (issue 2)', (t) => {
-  if (typeof process.getuid === 'function' && process.getuid() === 0) { t.skip('root ignores permission bits'); return; }
+test('event --from: a thrown fs error with a string .code (EACCES) propagates to INTERNAL, not invalid-line (issue 2)', { skip: process.getuid?.() === 0 && 'root ignores permission bits' }, (t) => {
   const repo = initRepo();
   run(repo, ['plan', 'register', '--from', writePlan(repo, plan()), '--id', 'reg-1']);
   const eventsFile = join(deliveryDir(repo), 'events-tester.jsonl');
