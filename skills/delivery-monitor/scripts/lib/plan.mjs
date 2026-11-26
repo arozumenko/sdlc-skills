@@ -190,7 +190,7 @@ export function mergeCatalogue(prev, next, { keepMissing = false, renameMap = nu
   return out;
 }
 
-const rangeKey = (e) => JSON.stringify([e.unit, e.low, e.high, e.tier]);
+const rangeKey = (e) => JSON.stringify([e.unit, e.low, e.mid ?? null, e.high, e.tier]);
 const acceptedAt = (e) => (e.accepted_by && e.accepted_at ? e.accepted_at : null);
 /** F7: a changed range needs a fresh acceptance pair ('changed' vs 'changed-stale-acceptance'), but
  * an *unchanged* range whose acceptance pair newly appears or is re-affirmed with a later timestamp

@@ -63,6 +63,11 @@ const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length,
 // earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
 const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
   : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
+// A dollar range's point estimate: its `mid` (the calibrated cell p50); a calibrated range from before `mid` existed
+// spans p50-p80, so its `low` is the p50; any other range's midpoint. Every calibrated estimate scores on its cell p50.
+const pointOf = (e, tier = e.tier) => (e.mid != null ? e.mid : tier === 'calibrated' ? e.low : (e.low + e.high) / 2);
+// The estimate a row shows: the range, and its mid when it has one.
+const shown = (e, unit = e.unit) => ({ unit, low: e.low, ...(e.mid != null ? { mid: e.mid } : {}), high: e.high });
 /** Dollar estimates (unit `usd`, from calibration) are scored against the item's `cost_usd` (the report's task cost, or the
  * hook-time cost on fallback) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
@@ -70,7 +75,7 @@ function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;
   const keys = ['usd:all', ...(i.class ? [`usd:${i.class}`] : []), ...(tier ? [`usd:tier:${tier}`] : []), ...(i.effort_class ? [`usd:effort:${i.effort_class}`] : [])];
   const bs = keys.map(eb); bs.forEach((b) => b.n++);
-  const mid = chosen ? (chosen.low + chosen.high) / 2 : null, actual = i.cost_usd;
+  const mid = chosen ? pointOf(chosen) : null, actual = i.cost_usd;
   let reason = null;
   if (excludedItem(i)) reason = 'excluded_item';
   else if (!i.estimate_original) reason = 'unaccepted';
@@ -81,7 +86,7 @@ function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   else if (chosen.accepted_at != null && Date.parse(chosen.accepted_at) >= beganAt(i)) reason = 'late_accepted';
   else if (actual == null || i.cost_incomplete) reason = 'missing_actual';
   else if (mid === 0) reason = 'zero_midpoint';
-  const row = { item_id: i.item_id, ref: i.ref, level, class: i.class, effort_class: i.effort_class ?? null, tier, base: estimateBase, estimate: chosen ? { unit: 'usd', low: chosen.low, high: chosen.high } : null, actual_s: null, actual_basis: null, actual_usd: actual == null ? null : Number(actual.toPrecision(6)), ratio: null, hit: null, reason };
+  const row = { item_id: i.item_id, ref: i.ref, level, class: i.class, effort_class: i.effort_class ?? null, tier, base: estimateBase, estimate: chosen ? shown(chosen, 'usd') : null, actual_s: null, actual_basis: null, actual_usd: actual == null ? null : Number(actual.toPrecision(6)), ratio: null, hit: null, reason };
   if (reason) { bs.forEach((b) => b.excluded[reason]++); data.estimate_rows.push(row); return; }
   bs.forEach((b) => { b.eligible++; b._aes.push(Math.abs(actual - mid)); b._ratios.push(actual / mid); });
   if (actual === 0) bs.forEach((b) => b.excluded.zero_actual++); else bs.forEach((b) => b._mres.push(Math.abs(actual - mid) / actual));
@@ -290,13 +295,14 @@ const tally = (m, a, b) => { m[a] ??= {}; m[a][b] = (m[a][b] ?? 0) + 1; };
 const sortedMatrix = (m) => Object.fromEntries(Object.keys(m).sort().map((k) => [k, Object.fromEntries(Object.keys(m[k]).sort().map((c) => [c, m[k][c]]))]));
 
 /** Estimate quality as effort bands, over exactly the dollar-scoring rows (eligible `usd` rows), judged on each item's cost.
- * The representative estimate: a calibrated range's low (the cell p50), any other range's midpoint, a point's value. Bands use
+ * The representative estimate: a range's `mid` (a calibrated cell p50); a calibrated range from before `mid` existed, its low
+ * (then the cell p50); any other range's midpoint; a point's value. Bands use
  * `classOf`'s inclusive upper bounds; the distance is the band-index difference. Annotates each banded row. */
 export function estimateBands(rows, items, bounds) {
   const out = { n: 0, same: 0, one_off: 0, two_or_more_off: 0, within_one: 0, matrix: {} };
   for (const r of rows) {
     if (r.estimate?.unit !== 'usd' || r.reason != null) continue;
-    const actual = items.get(r.item_id)?.cost_usd, rep = r.tier === 'calibrated' ? r.estimate.low : (r.estimate.low + r.estimate.high) / 2;
+    const actual = items.get(r.item_id)?.cost_usd, rep = pointOf(r.estimate, r.tier);
     const e = classOf(rep, bounds), a = classOf(actual, bounds), d = Math.abs(BANDS.indexOf(e) - BANDS.indexOf(a));
     Object.assign(r, { estimate_rep_usd: rep, estimated_band: e, actual_band: a, band_distance: d });
     out.n++; out[d === 0 ? 'same' : d === 1 ? 'one_off' : 'two_or_more_off']++; if (d <= 1) out.within_one++;

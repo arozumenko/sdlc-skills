@@ -183,10 +183,11 @@ where the hook did not record it). These checks catch only gaps the ledger shows
 build is not seen. `calibrate` prints how many landed tasks it left out and why (`LEFT-OUT …`); the full list of reasons is
 in `references/plan-block.md`, "Calibrated estimates". `plan register` rebuilds the calibration from the ledger
 for every new registration, before filling estimates. It turns the remaining landed tasks into
-`.agents/telemetry/delivery/calibration.json`: per cell (`role|type|novel`, then coarser, then `all`) the p50/p80 cost, the
+`.agents/telemetry/delivery/calibration.json`: per cell (`role|type|novel`, then coarser, then `all`) the p20/p50/p80 cost, the
 return rate (rework, review returned, reopened) and per-model figures, recency-weighted (half-life 42 days), with effort
 classes E1–E4 learned from the cost quartiles. `plan register` fills every task the plan leaves unestimated with the cell's
-p50–p80 as a `usd` range (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class; `--no-calibrate` stops
+p20–p80 as a `usd` range with the p50 as `mid` (`tier: calibrated`, auto-accepted by `calibrate (auto)`) and its effort class.
+The budget reads `high`, the p80. A table built before p20 existed gives p50–p80. `--no-calibrate` stops
 the rebuild and new fills (a re-cut keeps earlier ones). Identical retries and `--dry-run` never rebuild.
 With no samples, registration prints `CALIBRATION none:` and keeps any existing table.
 `plan register` stops with `CALIBRATION-INVALID` (exit 2) if rebuilding cannot replace a broken existing table.
@@ -221,7 +222,7 @@ grows or is re-attributed (`policy.task_cost` says so). Shares are computed over
 `cost_basis` (`c1`), `prices_as_of` and `estimate_bands`. When attribution is unavailable or prices are invalid, the report
 keeps the hook-time costs: `cost_basis: "hook"`, `cost_fallback: {code, reason}`, one caveat, exit 0. Any other error is
 `INTERNAL` (exit 1), in `calibrate` and `status` too. Dollar estimates are judged as effort bands against the current
-calibration's `class_bounds_usd`: an estimate's band is its calibrated p50 (`low`), another range's midpoint or a point's
+calibration's `class_bounds_usd`: an estimate's band is its `mid` (the calibrated p50; `low` for a calibrated range without `mid`), another range's midpoint or a point's
 value; the actual's band is the task cost (bounds inclusive). The headline is same / one off / two or more off, with an
 estimated × actual table; the dollar ratio, MdMRE and "within dollar range" stay as detail under `## Cost`. Bands are
 suppressed, with one reason, on `fallback`, `no-calibration`, `unreadable`, `too-few-samples` or `invalid-bounds`; a

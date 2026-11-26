@@ -75,6 +75,9 @@ ledger record):
 - `low`/`high` must be finite numbers ≥ 0, `low ≤ high` (equal bounds are a valid **point**
   estimate — flows through as `point: true`-equivalent in the metrics exclusion set, see
   `references/metrics.md`).
+- `mid`, if present, must be a finite number with `low ≤ mid ≤ high`, and is allowed only on a calibrated `usd` estimate. A calibrated
+  fill sets it to the cell p50; dollar scoring and estimate bands use it as the estimate's point (`references/metrics.md`).
+  A calibrated `usd` range without `mid` (written by hand, or before `mid` existed) is scored on its `low`, read as the p50.
 - `tier` must be `ROM \| budgetary \| calibrated \| unknown`.
 - **`tier: "calibrated"` requires `reference: {path, sha256, population}`** — `path` and
   `population` non-empty, `sha256` exactly 64 hex characters. A calibrated tier with no saved
@@ -109,7 +112,7 @@ whose hooked dispatches carry a complete priced cost, and writes `.agents/teleme
 - A changed cost for the same dispatch (prices corrected, transcript re-read) is a different fact: the hook writes it as the
   next revision of that observation, and the highest revision is read.
 - **Cells** at decreasing detail: `role=…|type=…|novel=…`, `role=…|type=…`, `role=…`, `type=…`, `all`. A feature the plan
-  leaves out is skipped, never matched as null. Each cell: `n`, recency-weighted `p50_usd`/`p80_usd` (weight halves every
+  leaves out is skipped, never matched as null. Each cell: `n`, recency-weighted `p20_usd`/`p50_usd`/`p80_usd` (weight halves every
   `half_life_days`, default 42, relative to the newest sample), `return_rate` (rework observed, `review_returned` or
   `reopened`; reopened tasks stay in the sample with both episodes' cost), `effort_class`,
   `by_model {model: {n, p50_usd, return_rate}}`.
@@ -122,13 +125,15 @@ Identical retries and `--dry-run` never rebuild. No samples leaves the existing 
 `CALIBRATION none:` with the reason. Invalid prices print `WARN PRICES-INVALID`; registration uses the existing table if available.
 
 `plan register` then fills each task that has no `estimate`: the most specific cell with `n ≥ 5` gives
-`{unit: "usd", low: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
+`{unit: "usd", low: p20, mid: p50, high: p80, tier: "calibrated", proposed_by: "calibrate", accepted_by: "calibrate (auto)",
 reference: {path, sha256 of calibration.json, population: "<cell> n=<n>"}}` plus `effort_class`. The numbers are the table's,
-so they are accepted at registration with no human step. A task that already carried a calibrated estimate in the previous
+so they are accepted at registration with no human step. A cell without `p20_usd` (a table built before it existed) gives
+`low: p50`. `mid` is the point the report bands and scores; `high` is what the budget multiplies. A task that already carried a calibrated estimate in the previous
 version keeps it on a re-cut. The planner's own estimates are never replaced. A task with no cell of `n ≥ 5` stays
 unestimated (`no-cell` in the `CALIBRATED` line). A `calibration.json` that exists but cannot be read or parsed, has no
 `cells` object, has a `v` other than 1, a `unit` other than `usd` or a `min_n` that is not an integer ≥ 1, or has a
-malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `effort_class` not null or
+malformed cell (`n` not an integer ≥ 0, `p50_usd` not > 0, `p80_usd` < `p50_usd`, `p20_usd` present but not > 0 or above
+`p50_usd`, `effort_class` not null or
 `E1`–`E4`) stops registration with `CALIBRATION-INVALID` (exit 2) if rebuilding cannot replace it.
 `--no-calibrate` skips rebuilding and new fills; a re-cut still keeps earlier calibrated estimates. The
 registration retry digest is computed before the fill, so a retry is still recognised.
@@ -152,9 +157,9 @@ item, and drives which `estimated` observations get emitted:
 | Result | When | Registered as |
 |---|---|---|
 | `new` | item had no previous estimate | new `estimated` observation |
-| `changed` | `{unit, low, high, tier}` differ from the previous version, and the new pair has a later `accepted_at` than the old (or the old was never accepted) | new `estimated` observation, `meta.acceptance: "accepted"` |
-| `changed-stale-acceptance` | the range/unit/tier changed but the new `accepted_at` is not later than the old (or missing) | still recorded (so the change itself is never silently dropped), but `meta.acceptance: "stale-acceptance"` — excluded from `estimate_original` until a fresh, later acceptance lands |
-| `accepted` | the range/unit/tier is **unchanged**, but `accepted_at` newly appears or is re-affirmed with a later timestamp than before | new `estimated` observation — the ordinary "propose once, accept later (or re-affirm)" workflow is itself a real, registrable fact, not a no-op |
+| `changed` | `{unit, low, mid, high, tier}` differ from the previous version, and the new pair has a later `accepted_at` than the old (or the old was never accepted) | new `estimated` observation, `meta.acceptance: "accepted"` |
+| `changed-stale-acceptance` | the range (`low`, `mid`, `high`), unit or tier changed but the new `accepted_at` is not later than the old (or missing) | still recorded (so the change itself is never silently dropped), but `meta.acceptance: "stale-acceptance"` — excluded from `estimate_original` until a fresh, later acceptance lands |
+| `accepted` | the range (`low`, `mid`, `high`), unit and tier are **unchanged**, but `accepted_at` newly appears or is re-affirmed with a later timestamp than before | new `estimated` observation — the ordinary "propose once, accept later (or re-affirm)" workflow is itself a real, registrable fact, not a no-op |
 | `none` | genuinely nothing changed | no observation emitted |
 
 **A changed range always needs its own, newer acceptance pair** — you cannot carry an old

@@ -423,7 +423,7 @@ function costLines(p, e) {
   const strata = Object.entries(m.estimates).flatMap(([lv, es]) => Object.entries(es.strata).filter(([st]) => st.startsWith('usd:')).map(([st, x]) => estimateStratumRow(lv, st, x)));
   const rows = m.estimate_rows.filter(isUsdRow);
   if (strata.length || rows.length) {
-    L.push('- dollar detail (ratio = actual ÷ estimate midpoint; within dollar range = actual inside the estimate\'s dollar range):', '', '| level | stratum | n | eligible | cost ratio median | MdMRE | PRED(25) | MAE | within dollar range | excluded |', '|---|---|---|---|---|---|---|---|---|---|', ...strata);
+    L.push('- dollar detail (ratio = actual ÷ the estimate\'s point: its p50 when calibrated, else the range midpoint; within dollar range = actual inside the estimate\'s dollar range):', '', '| level | stratum | n | eligible | cost ratio median | MdMRE | PRED(25) | MAE | within dollar range | excluded |', '|---|---|---|---|---|---|---|---|---|---|', ...strata);
     if (rows.length) L.push('', '| ref | level | class | tier | base | range ($) | estimate | actual | ratio | within dollar range | reason |', '|---|---|---|---|---|---|---|---|---|---|---|',
       ...rows.map((r) => `| ${r.ref} | ${r.level} | ${r.class ?? '—'} | ${r.tier ?? '—'} | ${r.base} | ${r.estimate ? `[$${r.estimate.low}, $${r.estimate.high}]` : '—'} | ${withBand(r.estimate_rep_usd, r.estimated_band)} | ${r.actual_usd != null ? `${withBand(r.actual_usd, r.actual_band)}${r.reason === 'missing_actual' ? ' (incomplete)' : ''}` : '—'} | ${r.ratio ?? '—'} | ${r.hit == null ? '—' : r.hit ? 'yes' : 'no'} | ${r.reason ?? '—'} |`));
   }
@@ -678,7 +678,7 @@ export function renderHtml(doc) {
         const off = e.estimate_bands?.suppressed ? ` Bands not shown: ${esc(e.estimate_bands.suppressed)}.` : '';
         const actual = e.cost_basis === 'c1' ? "the task's cost: every dispatch attributed to it, counted once, at current prices, from dispatches started before the report's end"
           : e.cost_basis === 'hook' ? "the task's hook-time cost (current-price task costs were unavailable)" : "the task's recorded cost";
-        const help = `Bands E1–E4 are the calibration table's cost quartiles. An estimate's band is its calibrated p50 (another range's midpoint, or a point's value); the actual is ${actual}. Within dollar range = the actual falls inside the estimate's dollars.${off}`;
+        const help = `Bands E1–E4 are the calibration table's cost quartiles. An estimate's band is its point: the calibrated p50 (another range's midpoint, or a point's value); the actual is ${actual}. Within dollar range = the actual falls inside the estimate's dollars.${off}`;
         return kpiCard('Cost estimates <span class="stat-sub">vs task cost</span>', cells, help,
           b ? { value: `${b.within_one} <span class="stat-sub">of ${b.n}</span>`, label: 'estimates within one effort band' } : { value: esUsd.hit_rate.rate == null ? '—' : within, label: 'tasks finished within their dollar range' });
       })()] : []),

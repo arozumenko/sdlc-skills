@@ -91,14 +91,14 @@ const withWeights = (list, weightOf) => { const p = list.map((s) => ({ v: s.cost
 function summarize(list, weightOf, bounds) {
   const pairs = withWeights(list, weightOf);
   const wsum = pairs.reduce((n, p) => n + p.w, 0) || 1;
-  const p50 = weightedQuantile(pairs, 0.5), p80 = weightedQuantile(pairs, 0.8);
+  const p20 = weightedQuantile(pairs, 0.2), p50 = weightedQuantile(pairs, 0.5), p80 = weightedQuantile(pairs, 0.8);
   const byModel = {};
   for (const m of new Set(list.map((s) => s.model).filter(Boolean))) {
     const sub = pairs.filter((p) => p.s.model === m), mp = sub.some((p) => p.w > 0) ? sub : sub.map((p) => ({ ...p, w: 1 })), mw = mp.reduce((n, p) => n + p.w, 0);
     byModel[m] = { n: mp.length, p50_usd: r2(weightedQuantile(mp, 0.5)), return_rate: r3(mp.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / (mw || 1)) };
   }
   // The class compares unrounded values; rounding is for the file only.
-  return { n: list.length, p50_usd: r2(p50), p80_usd: r2(p80), return_rate: r3(pairs.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / wsum), effort_class: classOf(p50, bounds), by_model: byModel };
+  return { n: list.length, p20_usd: r2(p20), p50_usd: r2(p50), p80_usd: r2(p80), return_rate: r3(pairs.reduce((n, p) => n + (p.s.returned ? p.w : 0), 0) / wsum), effort_class: classOf(p50, bounds), by_model: byModel };
 }
 
 /** Builds the calibration table from samples. Recency-weighted: a sample's weight halves every `halfLifeDays`, so a model or
@@ -133,6 +133,8 @@ export function cellProblem(c) {
   if (!Number.isInteger(c.n) || c.n < 0) return 'n must be an integer >= 0';
   if (!finite(c.p50_usd) || c.p50_usd <= 0) return 'p50_usd must be a number > 0';
   if (!finite(c.p80_usd) || c.p80_usd < c.p50_usd) return 'p80_usd must be a number >= p50_usd';
+  // Tables built before p20 existed have none; their range stays p50–p80.
+  if (c.p20_usd !== undefined && (!finite(c.p20_usd) || c.p20_usd <= 0 || c.p20_usd > c.p50_usd)) return 'p20_usd must be a number > 0 and <= p50_usd';
   if (c.effort_class != null && !(typeof c.effort_class === 'string' && /^E[1-4]$/.test(c.effort_class))) return 'effort_class must be null or E1-E4';
   return null;
 }
@@ -157,7 +159,8 @@ export function readCalibration(repo) {
 
 /** Fills a calibrated dollar estimate (and learned effort class) into every task the planner left unestimated. Auto-accepted:
  * the numbers are the table's, not anyone's judgement, so there is nothing for a human to sign. A task already carrying a
- * calibrated estimate in the previous version keeps it, so a re-cut does not re-estimate finished planning. Mutates `plan`. */
+ * calibrated estimate in the previous version keeps it, so a re-cut does not re-estimate finished planning. Mutates `plan`.
+ * The range is the cell's p20–p80 with the p50 as `mid`; a table without `p20_usd` gives p50–p80. */
 export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agents/telemetry/delivery/${CALIBRATION_FILE}`, prevItems = [], renameMap = null } = {}) {
   // A task renamed through supersedes.item_map is found under its new id.
   const at = nowIso(now), prevBy = new Map(prevItems.map((i) => [renameMap?.[i.item_id] ?? i.item_id, i]));
@@ -168,7 +171,10 @@ export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agent
     if (prev?.estimate?.tier === 'calibrated') { t.estimate = prev.estimate; if (prev.effort_class) t.effort_class = prev.effort_class; out.kept++; continue; }
     const hit = calib && lookup(calib.cal, t);
     if (!hit || hit.cell.p50_usd == null) { out.no_cell++; continue; }
-    t.estimate = { unit: 'usd', low: hit.cell.p50_usd, high: Math.max(hit.cell.p50_usd, hit.cell.p80_usd), tier: 'calibrated', proposed_by: 'calibrate', proposed_at: at, accepted_by: 'calibrate (auto)', accepted_at: at,
+    // The range is p20–p80, wide enough to hold a typical task's cost; p50–p80 left most tasks outside it. `mid` is the
+    // p50: the point the report bands and scores. `high` stays p80, so the budget is unchanged.
+    const c = hit.cell, low = Math.min(c.p20_usd ?? c.p50_usd, c.p50_usd);
+    t.estimate = { unit: 'usd', low, mid: c.p50_usd, high: Math.max(c.p50_usd, c.p80_usd), tier: 'calibrated', proposed_by: 'calibrate', proposed_at: at, accepted_by: 'calibrate (auto)', accepted_at: at,
       reference: { path: refPath, sha256: calib.sha256, population: `${hit.key} n=${hit.cell.n}` } };
     if (hit.cell.effort_class) t.effort_class = hit.cell.effort_class;
     out.filled++;

@@ -333,6 +333,21 @@ test('6 bands: values on a bound fall in the lower band; equal bounds skip the e
   estimateBands(rows, items, [1, 2, 3]); assert.deepEqual(rows.map((r) => r.actual_band), ['E1', 'E2', 'E3', 'E2']);
   estimateBands(rows, items, [1, 1, 3]); assert.deepEqual(rows.map((r) => r.actual_band), ['E1', 'E3', 'E3', 'E3']);
 });
+test('6 bands: a calibrated range with a mid is banded and scored on the mid; one without falls back to low', () => {
+  const rows = [{ item_id: 'a', estimate: { unit: 'usd', low: 1, mid: 2.5, high: 4 }, tier: 'calibrated', reason: null }, { item_id: 'b', estimate: { unit: 'usd', low: 1.5, high: 4 }, tier: 'calibrated', reason: null }];
+  const items = new Map([['a', { cost_usd: 2, cost_gaps: [] }], ['b', { cost_usd: 2, cost_gaps: [] }]]);
+  estimateBands(rows, items, [1, 2, 3]);
+  assert.deepEqual(rows.map((r) => [r.estimate_rep_usd, r.estimated_band]), [[2.5, 'E3'], [1.5, 'E2']]);
+});
+test('6 dollar scoring: a calibrated range scores on its mid, an old calibrated range on its low (the p50), any other range on its midpoint', async (t) => {
+  // Each costs $3 against a $2-$4 range: the point is 2 for the first two (ratio 1.5) and 3 for the planner range (ratio 1).
+  const f = await banded(t, [['T1', { ...usdEst(1, 4), mid: 2 }, 3], ['T2', usdEst(2, 4), 3], ['T3', usdEst(2, 4, 'ROM'), 3], ['T4', { ...usdEst(1, 4), mid: 2 }, 0.5]]);
+  calibration(f);
+  const doc = await report(f, ['--cutoff', CUT]);
+  assert.deepEqual(['T1', 'T2', 'T3', 'T4'].map((r) => [row(doc, r).ratio, row(doc, r).hit]), [[1.5, true], [1.5, true], [1, true], [0.25, false]]);
+  assert.deepEqual(row(doc, 'T1').estimate, { unit: 'usd', low: 1, mid: 2, high: 4 }, 'the row carries the mid');
+  assert.deepEqual(row(doc, 'T2').estimate, { unit: 'usd', low: 2, high: 4 }, 'an old range has none');
+});
 test('6 bands: each suppression reason keeps the dollar detail and says why', async (t) => {
   const cases = [['no-calibration', null], ['unreadable', '{'], ['too-few-samples', { class_bounds_usd: null }], ['invalid-bounds', { class_bounds_usd: [3, 2, 1] }], ['invalid-bounds', { class_bounds_usd: [1, 2] }],
     ['invalid-bounds', { class_bounds_usd: [-1, 2, 3] }], ['invalid-bounds', { class_bounds_usd: [1, 'x', 3] }], ['fallback', {}]];
