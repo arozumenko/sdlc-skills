@@ -63,12 +63,13 @@ const qualityFor = (arr) => ({ reviewed: null, eligible: null, done: arr.length,
 // earliest hooked dispatch of any stage; with neither, Infinity, so the estimate is never late.
 const beganAt = (i) => (i.started_at ? Date.parse(i.started_at)
   : [i.first_commit_at, ...(i.hook_spans ?? []).map((sp) => sp.from)].filter(Boolean).map((t) => Date.parse(t)).reduce((a, b) => Math.min(a, b), Infinity));
-/** Dollar estimates (unit `usd`, from calibration) are scored against the item's `cost_usd` (the report's task cost, or the
- * hook-time cost on fallback) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
-// A range's point estimate: its `mid` when it has one (a calibrated cell p50), else the midpoint.
-const pointOf = (e) => (e.mid != null ? e.mid : (e.low + e.high) / 2);
+// A dollar range's point estimate: its `mid` (the calibrated cell p50); a calibrated range from before `mid` existed
+// spans p50-p80, so its `low` is the p50; any other range's midpoint. Every calibrated estimate scores on its cell p50.
+const pointOf = (e, tier = e.tier) => (e.mid != null ? e.mid : tier === 'calibrated' ? e.low : (e.low + e.high) / 2);
 // The estimate a row shows: the range, and its mid when it has one.
 const shown = (e, unit = e.unit) => ({ unit, low: e.low, ...(e.mid != null ? { mid: e.mid } : {}), high: e.high });
+/** Dollar estimates (unit `usd`, from calibration) are scored against the item's `cost_usd` (the report's task cost, or the
+ * hook-time cost on fallback) in their own `usd:` strata, so hours and dollars never share a ratio. Rows carry `actual_usd`. */
 function usdAccuracy(i, chosen, level, eb, data, estimateBase) {
   // `chosen` is null when the dollar estimate was never accepted, or when `latest` finds none accepted before the start.
   const tier = (chosen ?? i.estimate_original ?? i.estimates[0]?.estimate)?.tier ?? null;
@@ -301,7 +302,7 @@ export function estimateBands(rows, items, bounds) {
   const out = { n: 0, same: 0, one_off: 0, two_or_more_off: 0, within_one: 0, matrix: {} };
   for (const r of rows) {
     if (r.estimate?.unit !== 'usd' || r.reason != null) continue;
-    const actual = items.get(r.item_id)?.cost_usd, rep = r.estimate.mid != null ? r.estimate.mid : r.tier === 'calibrated' ? r.estimate.low : (r.estimate.low + r.estimate.high) / 2;
+    const actual = items.get(r.item_id)?.cost_usd, rep = pointOf(r.estimate, r.tier);
     const e = classOf(rep, bounds), a = classOf(actual, bounds), d = Math.abs(BANDS.indexOf(e) - BANDS.indexOf(a));
     Object.assign(r, { estimate_rep_usd: rep, estimated_band: e, actual_band: a, band_distance: d });
     out.n++; out[d === 0 ? 'same' : d === 1 ? 'one_off' : 'two_or_more_off']++; if (d <= 1) out.within_one++;

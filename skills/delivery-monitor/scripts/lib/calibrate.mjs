@@ -171,8 +171,8 @@ export function fillEstimates(plan, calib, { now = Date.now(), refPath = `.agent
     if (prev?.estimate?.tier === 'calibrated') { t.estimate = prev.estimate; if (prev.effort_class) t.effort_class = prev.effort_class; out.kept++; continue; }
     const hit = calib && lookup(calib.cal, t);
     if (!hit || hit.cell.p50_usd == null) { out.no_cell++; continue; }
-    // The range is p20–p80 (a walk-forward backtest on two projects' landed tasks put about half inside it; p50–p80 held a
-    // quarter). `mid` is the p50: the point the report bands and scores. `high` stays p80, so the budget is unchanged.
+    // The range is p20–p80, wide enough to hold a typical task's cost; p50–p80 left most tasks outside it. `mid` is the
+    // p50: the point the report bands and scores. `high` stays p80, so the budget is unchanged.
     const c = hit.cell, low = Math.min(c.p20_usd ?? c.p50_usd, c.p50_usd);
     t.estimate = { unit: 'usd', low, mid: c.p50_usd, high: Math.max(c.p50_usd, c.p80_usd), tier: 'calibrated', proposed_by: 'calibrate', proposed_at: at, accepted_by: 'calibrate (auto)', accepted_at: at,
       reference: { path: refPath, sha256: calib.sha256, population: `${hit.key} n=${hit.cell.n}` } };

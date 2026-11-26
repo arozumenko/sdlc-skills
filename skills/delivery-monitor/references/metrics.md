@@ -136,8 +136,10 @@ reason that applies and is never double-counted):
    A `usd` estimate is not a mismatch: it is scored against the task's cost (`cost_usd`: every dispatch attributed to the
    task, counted once, at current prices, from dispatches started before the effective end; the hook-time cost when the
    report falls back) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
-   `mae_s` is in dollars and rows carry `actual_usd`. A `usd` range with a `mid` (a calibrated cell p50) is scored on the
-   `mid` in place of the midpoint for the ratio, MRE and MAE; `hit` still means `low ≤ actual ≤ high`. The gates apply in this order: `excluded_item`, `unaccepted`,
+   `mae_s` is in dollars and rows carry `actual_usd`. The ratio, MRE and MAE use the estimate's point, not the midpoint: its
+   `mid` (a calibrated cell p50); for a calibrated range without `mid` (written before `mid` existed, spanning p50–p80)
+   its `low`, which is that p50; for any other range the midpoint. `hit` still means `low ≤ actual ≤ high`, so a calibrated
+   range from before `mid` existed is a hit on p50–p80 and a newer one on p20–p80: a window that holds both mixes the two. The gates apply in this order: `excluded_item`, `unaccepted`,
    `no_eligible_latest` (both as above; such a task stays in the `usd:` strata and is never counted as hours),
    `late_accepted` (accepted at or after the task's measured start; a task with no measured start is judged against the
    earlier of its first commit and its earliest hooked dispatch of any stage; with neither, the estimate is never late),
@@ -152,7 +154,7 @@ reason that applies and is never double-counted):
 6. `clock_skew` — the item's own duration was itself clock-skew-excluded (no reliable actual to compare against)
 7. `missing_actual` — no measured duration at all (item never entered the flow-time population)
 8. `late_accepted` — `accepted_at ≥ started_at` (the estimate was accepted after work began — not a timely commitment)
-9. `zero_midpoint` — `(low + high) / 2 === 0` (would divide by zero in `work_ratio`)
+9. `zero_midpoint` — `(low + high) / 2 === 0` (would divide by zero in `work_ratio`); for a `usd` estimate, its point (above) is 0
 
 Two further, **non-exclusive** counters apply only to items that passed all nine gates above
 (i.e. are already `eligible`): `zero_actual` (measured duration was exactly 0s — excluded from

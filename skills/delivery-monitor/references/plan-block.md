@@ -75,6 +75,8 @@ ledger record):
 - `low`/`high` must be finite numbers ≥ 0, `low ≤ high` (equal bounds are a valid **point**
   estimate — flows through as `point: true`-equivalent in the metrics exclusion set, see
   `references/metrics.md`).
+- `mid`, if present, must be a finite number with `low ≤ mid ≤ high`, and is allowed only when `unit` is `usd`. A calibrated
+  fill sets it to the cell p50; dollar scoring and estimate bands use it as the estimate's point (`references/metrics.md`).
 - `tier` must be `ROM \| budgetary \| calibrated \| unknown`.
 - **`tier: "calibrated"` requires `reference: {path, sha256, population}`** — `path` and
   `population` non-empty, `sha256` exactly 64 hex characters. A calibrated tier with no saved
@@ -154,7 +156,7 @@ item, and drives which `estimated` observations get emitted:
 | Result | When | Registered as |
 |---|---|---|
 | `new` | item had no previous estimate | new `estimated` observation |
-| `changed` | `{unit, low, high, tier}` differ from the previous version, and the new pair has a later `accepted_at` than the old (or the old was never accepted) | new `estimated` observation, `meta.acceptance: "accepted"` |
+| `changed` | `{unit, low, mid, high, tier}` differ from the previous version, and the new pair has a later `accepted_at` than the old (or the old was never accepted) | new `estimated` observation, `meta.acceptance: "accepted"` |
 | `changed-stale-acceptance` | the range/unit/tier changed but the new `accepted_at` is not later than the old (or missing) | still recorded (so the change itself is never silently dropped), but `meta.acceptance: "stale-acceptance"` — excluded from `estimate_original` until a fresh, later acceptance lands |
 | `accepted` | the range/unit/tier is **unchanged**, but `accepted_at` newly appears or is re-affirmed with a later timestamp than before | new `estimated` observation — the ordinary "propose once, accept later (or re-affirm)" workflow is itself a real, registrable fact, not a no-op |
 | `none` | genuinely nothing changed | no observation emitted |

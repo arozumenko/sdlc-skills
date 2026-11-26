@@ -144,6 +144,10 @@ test('estimateChange / estimateStatus: a changed range needs a NEW acceptance pa
   assert.equal(estimateChange(EST, { ...EST, high: 5 }), 'changed-stale-acceptance');
   assert.equal(estimateChange(EST, { ...EST, high: 5, accepted_at: '2026-09-17T08:00:00Z' }), 'changed');
   assert.equal(estimateChange(EST, { ...EST, high: 5, accepted_by: null, accepted_at: null }), 'changed-stale-acceptance');
+  const USD = { ...EST, unit: 'usd', mid: 2 };
+  assert.equal(estimateChange(USD, { ...USD, mid: 2.5 }), 'changed-stale-acceptance', 'a mid change alone is a change');
+  assert.equal(estimateChange(USD, { ...USD, mid: 2.5, accepted_at: '2026-09-17T08:00:00Z' }), 'changed');
+  assert.equal(estimateChange(USD, { ...USD }), 'none');
   assert.equal(estimateStatus(EST), 'accepted'); assert.equal(estimateStatus({ ...EST, accepted_at: null }), 'unaccepted');
   assert.equal(estimateStatus(EST, { stale: true }), 'unaccepted'); assert.equal(estimateStatus(undefined), 'none');
 });

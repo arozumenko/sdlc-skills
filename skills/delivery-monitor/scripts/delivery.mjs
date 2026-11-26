@@ -295,8 +295,8 @@ function cmdCalibrate(repo, p, io, now) {
     const b = cal.class_bounds_usd;
     out(io, `CALIBRATION samples=${cal.samples} half-life=${cal.half_life_days}d classes=${b ? `E1<=$${usd(b[0])} E2<=$${usd(b[1])} E3<=$${usd(b[2])} E4>$${usd(b[2])}` : 'none (fewer than 12 samples)'}`);
     if (landed > cal.samples) out(io, `LEFT-OUT ${leftOut} landed tasks: ${why}`);
-    out(io, '| cell | n | p50 $ | p80 $ | return rate | class |'); out(io, '|---|---|---|---|---|---|');
-    for (const [k, c] of Object.entries(cal.cells)) out(io, `| ${k} | ${c.n}${c.n < cal.min_n ? ' (too few)' : ''} | ${usd(c.p50_usd)} | ${usd(c.p80_usd)} | ${c.return_rate} | ${c.effort_class ?? '-'} |`);
+    out(io, '| cell | n | p20 $ | p50 $ | p80 $ | return rate | class |'); out(io, '|---|---|---|---|---|---|---|');
+    for (const [k, c] of Object.entries(cal.cells)) out(io, `| ${k} | ${c.n}${c.n < cal.min_n ? ' (too few)' : ''} | ${c.p20_usd == null ? '-' : usd(c.p20_usd)} | ${usd(c.p50_usd)} | ${usd(c.p80_usd)} | ${c.return_rate} | ${c.effort_class ?? '-'} |`);
     for (const o of cal.outliers) out(io, `OUTLIER ${o.run} ${o.ref} $${usd(o.cost_usd)} vs ${o.cell} p50 $${usd(o.p50_usd)} (x${o.ratio})`);
   }
   if (f['dry-run']) { if (!f.json) out(io, 'DRY-RUN not written'); return 0; }
