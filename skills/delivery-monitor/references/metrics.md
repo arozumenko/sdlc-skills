@@ -136,9 +136,9 @@ reason that applies and is never double-counted):
    A `usd` estimate is not a mismatch: it is scored against the task's cost (`cost_usd`: every dispatch attributed to the
    task, counted once, at current prices, from dispatches started before the effective end; the hook-time cost when the
    report falls back) in separate strata `usd:all`, `usd:<class>`, `usd:tier:<tier>`, `usd:effort:<E1-4>`; there
-   `mae_s` is in dollars and rows carry `actual_usd`. The ratio, MRE and MAE use the estimate's point, not the midpoint: its
-   `mid` (a calibrated cell p50); for a calibrated range without `mid` (written before `mid` existed, spanning p50–p80)
-   its `low`, which is that p50; for any other range the midpoint. `hit` still means `low ≤ actual ≤ high`, so a calibrated
+   `mae_s` is in dollars and rows carry `actual_usd`. For `usd` estimates the ratio, MRE and MAE use the estimate's point, not the midpoint: its
+   `mid` (a calibrated cell p50); for a calibrated range without `mid` (written before `mid` existed, spanning p50–p80, or
+   by hand) its `low`, read as that p50; for any other range the midpoint. `hit` still means `low ≤ actual ≤ high`, so a calibrated
    range from before `mid` existed is a hit on p50–p80 and a newer one on p20–p80: a window that holds both mixes the two. The gates apply in this order: `excluded_item`, `unaccepted`,
    `no_eligible_latest` (both as above; such a task stays in the `usd:` strata and is never counted as hours),
    `late_accepted` (accepted at or after the task's measured start; a task with no measured start is judged against the

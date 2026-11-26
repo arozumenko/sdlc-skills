@@ -31,8 +31,8 @@ export function validateEstimate(e, at = 'estimate') {
   if (!num(e.low)) errs.push(`${at}.low must be a finite number ≥ 0`);
   if (!num(e.high)) errs.push(`${at}.high must be a finite number ≥ 0`);
   if (num(e.low) && num(e.high) && e.low > e.high) errs.push(`${at}.low must be ≤ high`);
-  // `mid`: optional point inside a dollar range (a calibrated estimate's cell p50). Hours are scored on the midpoint.
-  if (e.mid !== undefined && e.unit !== 'usd') errs.push(`${at}.mid is allowed only when unit is usd`);
+  // `mid`: optional point inside a calibrated dollar range (the cell p50). Every other estimate is scored on its midpoint.
+  if (e.mid !== undefined && (e.unit !== 'usd' || e.tier !== 'calibrated')) errs.push(`${at}.mid is allowed only on a calibrated usd estimate`);
   else if (e.mid !== undefined && !(num(e.mid) && (!num(e.low) || e.mid >= e.low) && (!num(e.high) || e.mid <= e.high))) errs.push(`${at}.mid must be a finite number within [low, high]`);
   if (!TIERS.includes(e.tier)) errs.push(`${at}.tier must be ROM|budgetary|calibrated|unknown`);
   if (e.tier === 'calibrated') {

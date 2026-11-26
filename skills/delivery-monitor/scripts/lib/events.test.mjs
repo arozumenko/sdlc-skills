@@ -36,10 +36,11 @@ test('validation: events, dates, sources, transition, nullable item, estimate, c
   assert.throws(() => base({ event: 'estimated', estimate: { ...EST, unit: 'd' } }), /SCHEMA-INVALID\(estimate\.unit/);
   assert.deepEqual(validateEstimate(EST), []);
   assert.ok(validateEstimate({ ...EST, low: 5 }).some((e) => /low/.test(e)));
-  const USD = { ...EST, unit: 'usd' };
+  const USD = { ...EST, unit: 'usd', tier: 'calibrated', reference: { path: 'calibration.json', sha256: 'a'.repeat(64), population: 'all' } };
   assert.deepEqual(validateEstimate({ ...USD, mid: 2 }), []); assert.deepEqual(validateEstimate({ ...USD, mid: 1 }), []); assert.deepEqual(validateEstimate({ ...USD, mid: 3 }), []);
   for (const mid of [0.5, 4, '2', NaN, null]) assert.ok(validateEstimate({ ...USD, mid }).some((e) => /mid/.test(e)), String(mid));
-  for (const unit of ['h', 'active_min']) assert.deepEqual(validateEstimate({ ...EST, unit, mid: 2 }), [`estimate.mid is allowed only when unit is usd`], unit);
+  for (const unit of ['h', 'active_min']) assert.deepEqual(validateEstimate({ ...EST, unit, mid: 2 }), [`estimate.mid is allowed only on a calibrated usd estimate`], unit);
+  for (const tier of ['ROM', 'budgetary', 'unknown']) assert.deepEqual(validateEstimate({ ...EST, unit: 'usd', tier, mid: 2 }), [`estimate.mid is allowed only on a calibrated usd estimate`], tier);
   assert.ok(validateEstimate({ ...EST, probability: 1 }).some((e) => /probability/.test(e)));
   assert.ok(validateEstimate({ ...EST, tier: 'calibrated' }).some((e) => /reference/.test(e)));
   assert.deepEqual(validateEstimate({ ...EST, tier: 'calibrated', reference: { path: 'calibration/x.json', sha256: 'a'.repeat(64), population: 'task/S first-cycle n=12' } }), []);

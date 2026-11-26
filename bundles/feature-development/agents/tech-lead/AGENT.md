@@ -293,7 +293,7 @@ it helps — it is recorded for later, the estimate comes from role, type and
 novel. You classify; you do not put numbers on tasks. `plan register` rebuilds
 `.agents/telemetry/delivery/calibration.json` from the ledger for every new registration, then fills
 each unestimated task with a calibrated dollar range (`unit: "usd"`, the
-cell's p50–p80 cost) and an effort class (E1–E4, once there are 12 samples),
+cell's p20–p80 cost, with the p50 as `mid`) and an effort class (E1–E4, once there are 12 samples),
 already accepted from measured history.
 A task with no cell of 5 or more similar landed tasks stays unestimated
 (`CALIBRATED … no-cell=N`), and so does every task before a calibration

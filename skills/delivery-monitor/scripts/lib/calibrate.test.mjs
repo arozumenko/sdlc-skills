@@ -128,6 +128,9 @@ test('CLI: calibrate writes the table from landed tasks; plan register fills cal
   const none = run(initRepo(), ['calibrate']); assert.equal(none.code, 3, 'no plan yet: nothing to calibrate');
   const dry = run(repo, ['calibrate', '--dry-run'], { env: {} });
   assert.equal(dry.code, 0, dry.stderr); assert.match(dry.stdout, /CALIBRATION samples=12 half-life=42d classes=E1<=\$/); assert.match(dry.stdout, /DRY-RUN not written/);
+  assert.match(dry.stdout, /^\| cell \| n \| p20 \$ \| p50 \$ \| p80 \$ \| return rate \| class \|$/m);
+  const [p20, p50, p80] = dry.stdout.match(/^\| all \| 12 \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \|/m).slice(1).map(Number);
+  assert.ok(p20 < p50 && p50 < p80, `the all row shows p20 < p50 < p80: ${p20} ${p50} ${p80}`);
   const c = run(repo, ['calibrate']); assert.equal(c.code, 0, c.stderr);
   const cal = JSON.parse(readFileSync(join(deliveryDir(repo), 'calibration.json'), 'utf8'));
   assert.equal(cal.cells['role=python-dev|type=feature|novel=false'].n, 8);
