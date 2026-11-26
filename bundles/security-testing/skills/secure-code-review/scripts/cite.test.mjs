@@ -9,7 +9,9 @@ import { APP_LINES, buildRepo } from "./fixtures/cite/build-repo.mjs";
 import { BLOCK_BEGIN, BLOCK_END, renderBlock } from "./lib/ignore-block.mjs";
 
 const CITE = new URL("./cite.mjs", import.meta.url).pathname;
-const TEMPLATE = new URL("../../../knowledge/engagement.md.template", import.meta.url).pathname;
+// The skill's own copy: it ships in every install, while knowledge/ exists only in the source tree.
+// prose.test.mjs keeps it byte-identical to the bundle's knowledge/engagement.md.template.
+const TEMPLATE = new URL("../references/engagement.md.template", import.meta.url).pathname;
 
 const run = (root, ...args) => {
   const r = spawnSync(process.execPath, [CITE, ...args], { cwd: root, encoding: "utf8" });
