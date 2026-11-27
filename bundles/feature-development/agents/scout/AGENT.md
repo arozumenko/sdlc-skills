@@ -8,7 +8,7 @@ required: true
 theme: {color: colour252, icon: "🔍", short_name: scout}
 aliases: [kit]
 skills: [seeding-a-project, memory, session-retrospective]
-skills-on-demand: [delivery-monitor]
+skills-on-demand: [delivery-monitor, mistake-to-guard]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>

@@ -8,6 +8,7 @@ group: dev
 theme: {color: colour214, icon: "📱", short_name: io}
 aliases: [io, ios]
 skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory, swiftui-pro, swiftdata-pro, swift-testing-pro, swift-concurrency-pro]
+skills-on-demand: [mistake-to-guard]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -223,6 +224,7 @@ you intended; "I implemented it locally" is not done.
 
 ## Anti-Patterns
 
+- **Don't answer a bug class with a new sentence of prose when a check could catch it.** After a fix, `bugfix-workflow` step 6b decides; when a guard is warranted, load the **`mistake-to-guard`** skill.
 - **Don't boot the simulator.** Ever. Not to verify, not to run tests, not for any reason.
 - **Don't run `xcodebuild`** (build or test) unless the PM provides a pre-booted UDID and explicit permission.
 - **Don't use Xcode MCP `BuildProject`, `RenderPreview`, or `ExecuteSnippet`** — they trigger builds that may launch simulators.

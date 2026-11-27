@@ -60,5 +60,9 @@ and what is still only words.
   reformat working prose.
 - **Defer, don't drop.** Findings the user declines go in the report's
   "deferred" section with the reason.
+- **Guard backlog, not prose.** A finding a check could enforce, but that
+  this run does not build, goes in the report's "Guard backlog" section
+  (pattern, evidence, proposed rung). It does not go into memory or
+  conventions as a sentence in the meantime.
 - **Watermark last.** Advance `.agents/memory/scout/.last-retrospective` only
   after a successful write.

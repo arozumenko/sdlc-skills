@@ -3,9 +3,15 @@
 Pick the **highest** rung that can see the mistake. Each rung down is easier to
 write and easier to get wrong: a type cannot have a false positive; a grep can.
 
-## Rung 1: Type / API shape
+## Rung 1: Structure (architecture and types)
 
-Make the wrong program fail to compile.
+Remove the second way to do it, or make the wrong program fail to compile.
+
+- **One owner per piece of state.** A mistake that comes from two places
+  holding the same fact (a cache and a store, a flag and a derived status)
+  goes away when one of them is deleted and the other derived.
+- **One supported way per task.** Two helpers that do nearly the same thing,
+  and an agent picks the wrong one: migrate callers, delete the other.
 
 - A value class / newtype for an identity that must not be confused with
   another of the same primitive type (`PlayerId` vs cap number, `UserId` vs

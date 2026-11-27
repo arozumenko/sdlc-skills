@@ -31,6 +31,11 @@ memory was not missing and not wrong; it was unreachable. Promotion is the fix.
 
 Fail any one → leave it in `.agents/memory/<role>/`.
 
+**A rule is not a fact.** If the note is a MUST/NEVER about code ("never key X
+by Y", "module A never imports B") and a tool could see a violation, it belongs
+in the gate, not here: use the `mistake-to-guard` skill. Promote the prose only
+with its enforcement tag, `[guard: G-NNN]` or `[unguarded: G-NNN]`.
+
 > **An unverified claim here is worse than silence.** It is committed, so it is trusted. If you
 > cannot state how you verified it, either verify it now or do not write it.
 

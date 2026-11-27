@@ -27,10 +27,11 @@ function repo(files, t) {
 
 const run = (dir) => spawnSync(process.execPath, [GUARD, dir], { encoding: "utf8" });
 
-test("failing fixture: the original mistake is reported", (t) => {
+test("failing fixture: the original mistake is reported, with the fix named", (t) => {
   const r = run(repo({ "docs/plan.md": "Delivered under #39.\n" }, t));
   assert.equal(r.status, 1, r.stderr);
   assert.match(r.stderr, /docs\/plan\.md:1/);
+  assert.match(r.stderr, /instead/);
 });
 
 test("passing fixture: the nearest allowed code is silent", (t) => {
@@ -38,15 +39,38 @@ test("passing fixture: the nearest allowed code is silent", (t) => {
   assert.equal(r.status, 0, r.stderr);
 });
 
-test("allowlisted file and reasoned suppression pass; a bare suppression does not", (t) => {
-  const ok = run(repo({
+test("allowlisted file and a dated, approved, reasoned exception pass", (t) => {
+  const r = run(repo({
     "docs/adr/ADR-023.md": "#39 was closed and superseded.\n",
-    "docs/history.md": "<!-- guard-allow G-NNN: quoting the old title -->\nOld: #39\n",
+    "docs/history.md": "<!-- guard-allow G-NNN until 2999-01-01 by Synthetic1: quoting the old title -->\nOld: #39\n",
   }, t));
-  assert.equal(ok.status, 0, ok.stderr);
-  assert.match(ok.stderr, /1 suppression/);
-  const bare = run(repo({ "docs/history.md": "<!-- guard-allow G-NNN: -->\nOld: #39\n" }, t));
-  assert.equal(bare.status, 1, bare.stderr);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /1 exception/);
+});
+
+test("an exception without expiry, approver or reason, or one that expired, does not pass", (t) => {
+  for (const tag of [
+    "guard-allow G-NNN: quoting the old title",
+    "guard-allow G-NNN until 2999-01-01 by Synthetic1: -->",
+    "guard-allow G-NNN until 2000-01-01 by Synthetic1: quoting the old title",
+  ]) {
+    const r = run(repo({ "docs/history.md": `<!-- ${tag} -->\nOld: #39\n` }, t));
+    assert.equal(r.status, 1, `${tag}\n${r.stderr}`);
+  }
+});
+
+test("ratchet: holds at the count, fails when a change adds one, asks to lower when one goes", (t) => {
+  const files = (n) => ({
+    "tools/guards/G-NNN.ratchet": "2\n",
+    "docs/a.md": "#39\n".repeat(n),
+  });
+  assert.equal(run(repo(files(2), t)).status, 0);
+  const more = run(repo(files(3), t));
+  assert.equal(more.status, 1);
+  assert.match(more.stderr, /adds 1/);
+  const fewer = run(repo(files(1), t));
+  assert.equal(fewer.status, 1);
+  assert.match(fewer.stderr, /lower .* to 1/);
 });
 
 test("fails closed when there is nothing to check", (t) => {

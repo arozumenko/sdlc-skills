@@ -11,12 +11,14 @@
 id: g-NNN-short-slug
 language: kotlin            # kotlin | typescript | tsx | python | swift | java | ...
 severity: error
-message: "G-NNN: <the pattern, in one line>"
+message: "G-NNN: <the pattern, in one line>; use <the fix> instead"
 note: |
   Closes the class behind <incident: bug id / PR / review / retro session>.
   Allowed: <the nearest legitimate code this rule must not flag>.
-  Suppress with ast-grep's own comment on the line above, reason alongside:
-    // guard-allow G-NNN: <reason>
+  Instead: <the file, type or function to use; the error must name the fix>.
+  Exception: ast-grep's own ignore comment on the line above, with the
+  expiry, approver and reason alongside (a ledger audit checks the dates):
+    // guard-allow G-NNN until 2027-03-31 by <approver>: <reason>
     // ast-grep-ignore: g-NNN-short-slug
   (count suppressions with: git grep -c "ast-grep-ignore: g-NNN")
 rule:

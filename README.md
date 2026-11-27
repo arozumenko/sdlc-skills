@@ -58,8 +58,8 @@ install time. Nothing duplicated.
 Most agents and skills live inside factories (`bundles/<id>/agents/` and
 `bundles/<id>/skills/`). The top-level `agents/` and `skills/` directories
 hold only standalone-only "orphan" content: one agent (`personal-assistant`)
-and twelve skills (`deep-research`, `delivery-monitor`, `gathering-context`,
-`knowledge-curation`, `memory`, `microsoft-365`, `obsidian-vault`,
+and thirteen skills (`deep-research`, `delivery-monitor`, `gathering-context`,
+`knowledge-curation`, `memory`, `microsoft-365`, `mistake-to-guard`, `obsidian-vault`,
 `tosca-automation`, `verifying-outcomes`, `visual-testing`, `vividus`,
 `xray-testing`). `skills.json` registers those orphan monorepo skills and
 the 30 external skills fetched from upstream.

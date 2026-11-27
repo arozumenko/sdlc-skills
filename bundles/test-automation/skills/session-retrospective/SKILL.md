@@ -70,7 +70,9 @@ config from code/PR changes (that's scout's normal update flow).
    For anything a previous retrospective already wrote down and that happened
    anyway, don't write it again in firmer words — `finding-to-target.md` has the
    escalation ladder ending in a deterministic guard, and the conditions for
-   proposing one.
+   proposing one. A mistake that shipped in code or config skips the ladder
+   and goes to a guard at the first occurrence. Build guards with the
+   `mistake-to-guard` skill.
 
 5. **Compact the memory index** — for each role whose `MEMORY.md` is over
    budget (the session-start hook names them; or check with

@@ -312,6 +312,12 @@
       "version": "0.3.1"
     },
     {
+      "name": "mistake-to-guard",
+      "source": "./skills/mistake-to-guard",
+      "description": "Use when a bug is fixed, a review finding states a pattern rather than a line, a retrospective finds a correction that recurred, or someone says \"never do X again\" — turns the mistake into a deterministic check (type, lint/ast-grep rule, test, or repo guard script) that runs in the project's gate, instead of another line of prose an agent may not read. Covers choosing the rung, the guard contract (provenance, a fixture that proves it bites, gate wiring, counted suppressions) and the guard ledger. NOT for one-off typos with no class behind them, NOT for process or judgment lessons no tool can see (those stay in memory or conventions), and NOT for writing the regression test of a single bug (bugfix-workflow already does that).",
+      "version": "0.3.1"
+    },
+    {
       "name": "mobile-testing",
       "source": "./bundles/manual-qa/skills/mobile-testing",
       "description": "Use when profiling a mobile app, authoring or sizing mobile TCs, orchestrating a mobile suite run, executing a mobile TC, generating a manual guide, or producing a mobile run report. Mobile-app testing for all manual-qa agents — native Android via plain adb (preferred when a local device is attached), native iOS/Android via Appium MCP and the Mobitru device farm, and PWA/hybrid via Playwright mobile viewport.",

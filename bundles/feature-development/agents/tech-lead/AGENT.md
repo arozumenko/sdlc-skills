@@ -7,7 +7,7 @@ group: core
 theme: {color: colour209, icon: "🏗️", short_name: tl}
 aliases: [tl, rio]
 skills: [code-review, root-cause-analysis, plan-feature, git-workflow, writing-skills, memory]
-skills-on-demand: [delivery-monitor]
+skills-on-demand: [delivery-monitor, mistake-to-guard]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -216,7 +216,10 @@ unless it learns of the rule. For each finding like that:
   memory, if no task exists yet);
 - say in the review comment where you put it.
 
-A rule that lives only in a merged PR's comments is lost.
+A rule that lives only in a merged PR's comments is lost. A rule a tool could
+check is better still as a check: load the **`mistake-to-guard`** skill and
+propose the guard (its own commit or follow-up task, with a failing fixture
+taken from the code under review) instead of, or alongside, the brief line.
 
 ### When You Find a Bug
 

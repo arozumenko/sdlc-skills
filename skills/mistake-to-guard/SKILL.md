@@ -31,6 +31,9 @@ This skill is the step that turns "we got X wrong" into "X can no longer reach
 - **Explicit ask**: "make sure we never do this again", "add a check for that".
 - **Prose audit**: a MUST/NEVER rule in `CLAUDE.md`/`AGENTS.md` that a tool
   could enforce but nothing does.
+- **A written rule was broken anyway.** The rule existed and nothing enforced
+  it, so this is already a repeat: guard it at the highest rung in the same
+  change that fixes the violation, rather than rewording the rule.
 
 Not for: a one-off slip with no class behind it, or a judgment lesson no tool
 can see ("ask the PO before minting an issue"). Those stay in memory or
@@ -48,14 +51,16 @@ conventions, recorded as `unguarded` with the reason (see the ledger).
 
    | Rung | Mechanism | Pick when |
    |---|---|---|
-   | 1 | **Type / API shape** | The wrong thing can be made unrepresentable (value class, sealed type, removing the unsafe overload). |
+   | 1 | **Structure** — one owner per piece of state, one supported way per task, types that make the wrong thing unrepresentable (value class, sealed type, removing the unsafe overload) | The mistake exists because there are two ways to do it, or two places that hold the same fact. Delete the second one, or make the wrong value a compile error. |
    | 2 | **Static rule** — the stack's linter (detekt, Android Lint, ESLint, Ruff, SwiftLint), or an **ast-grep** rule | The mistake is a syntactic or import pattern in one file. ast-grep is the default when the linter has no rule: declarative YAML with built-in test cases. |
    | 3 | **Test** — regression, architecture (Konsist, ArchUnit, import-linter, dependency-cruiser), property | The mistake is behavioral, or about module boundaries. |
    | 4 | **Repo guard script** (`tools/check-*.mjs` or the stack's equivalent) | It spans files, config, CI, docs or board data that no linter parses. |
    | 5 | **Prose**, recorded `unguarded: <reason>` | Nothing above can see it. The reason is mandatory. |
 
    Higher rungs are cheaper to run and harder to bypass. Don't write a script
-   for what an existing linter rule already does: switch the rule on.
+   for what an existing linter rule already does: switch the rule on. If the
+   fix is structural, ship only the structural fix: the prose rule was a
+   symptom, and keeping it alongside invites drift.
 
 3. **Write the guard to the contract** (`references/guard-contract.md`):
    - **Provenance**: a header or rule `message`/`note` naming the incident (bug
@@ -66,17 +71,24 @@ conventions, recorded as `unguarded` with the reason (see the ledger).
      failing on the real mistake proves nothing.
    - **Narrow**: covers the evidenced cases. Say what it would block that
      should be allowed. If you cannot name that, it is too broad.
+   - **The error names the fix**: the file, type, function or command to use
+     instead, not only what was wrong. The agent that trips it should be able
+     to fix the code without reading the ledger.
    - **Wired into the gate**: the project's single gate (`make ci`,
      `npm test`, the CI workflow). Fast checks (< ~1 s) may also go in
      pre-commit. A guard outside the gate is a suggestion.
    - **Fails closed** when it cannot run (missing input, parse error): it
      exits non-zero and says why. It never passes having checked nothing.
-   - **Suppression** only inline, with a reason, in a form the guard counts.
+   - **Exceptions** only on the offending line, with a reason, an expiry date
+     and the human who approved it, in a form the guard counts. An expired
+     exception fails the gate.
 
 4. **Run the whole gate**, not just the new check. A new rule often finds
    existing violations. Fix them in the same change if few and clearly wrong.
-   Otherwise scope the rule (path, baseline file) and record the backlog in the
-   ledger. Never ship a rule that is red on `main`.
+   If the pattern is already common, **ratchet**: record today's count and
+   fail only when a change adds more (and ask for the count to be lowered when
+   a change removes some). Never ship a rule that is red on `main`, and never
+   answer a common pattern with a wall of exceptions.
 
 5. **Record it in the ledger** (`.agents/guards.md`, format in
    `references/guard-contract.md`): id, pattern, rung, where it lives, the
@@ -100,8 +112,9 @@ conventions, recorded as `unguarded` with the reason (see the ledger).
   the fixture → the guard is unproven.
 - **Prose is the last rung, not the first.** But it is a legitimate rung, with
   a written reason. "Too hard" is a reason; silence is not.
-- **Retire guards that stop being true** (the API they police is gone) in the
-  same change that removes the API. Update the ledger.
+- **Retire guards that stop being true** (the API they police is gone, or a
+  structural change made the mistake impossible) in the same change. Update
+  the ledger.
 
 ## Common mistakes
 

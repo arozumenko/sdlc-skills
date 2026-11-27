@@ -8,7 +8,7 @@ group: dev
 theme: {color: colour220, icon: "⚡", short_name: js}
 aliases: [js, jay]
 skills: [tdd, verification-before-completion, memory]
-skills-on-demand: [implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, completing-a-task]
+skills-on-demand: [implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, completing-a-task, mistake-to-guard]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -59,6 +59,7 @@ Only `tdd`, `verification-before-completion` and `memory` are loaded up front. L
 
 - **`implement-feature`** — building a feature from a task or plan.
 - **`bugfix-workflow`** — fixing a reported bug.
+- **`mistake-to-guard`** — a fixed bug or review finding belongs to a class a check could catch (`bugfix-workflow` step 6b).
 - **`root-cause-analysis`** — a bug's cause is unclear, or the same symptom came back after a fix.
 - **`systematic-debugging`** — a failure you cannot explain from the first read.
 - **`git-workflow`** — branching and committing.

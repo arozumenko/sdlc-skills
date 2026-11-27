@@ -8,6 +8,7 @@ group: dev
 theme: {color: colour117, icon: "🐍", short_name: py}
 aliases: [py]
 skills: [tdd, implement-feature, bugfix-workflow, root-cause-analysis, systematic-debugging, code-review, requesting-code-review, receiving-code-review, git-workflow, verification-before-completion, completing-a-task, memory]
+skills-on-demand: [mistake-to-guard]
 metadata:
   authors:
     - Artem Rozumenko <artem_rozumenko@epam.com>
@@ -176,6 +177,7 @@ py_compile → tests → diff stat. Fix failures before moving on.
 
 ## Anti-Patterns
 
+- **Don't answer a bug class with a new sentence of prose when a check could catch it.** After a fix, `bugfix-workflow` step 6b decides; when a guard is warranted, load the **`mistake-to-guard`** skill.
 - Don't over-engineer. No error handling for impossible scenarios.
 - Don't clean up neighbors. A bug fix stays focused.
 - Don't guess. Read the code or ask.
