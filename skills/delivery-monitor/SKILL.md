@@ -153,7 +153,8 @@ its later tool calls cost one small file read; a change to the plan or to the di
 it again.
 At strictly more than the range's high end, `budget_exceeded` flags the task. At strictly more than three times high,
 `budget_stopped` is recorded and the guard refuses the dispatch, or every later tool call of that running subagent that it
-can evaluate. The denial names the task, its cost and the threshold. The orchestrator treats the task as blocked and decides
+can evaluate, except its `SubagentHandback`: that call ends the run and carries the report, so the caller still learns what
+ran and what was refused. The denial names the task, its cost and the threshold. The orchestrator treats the task as blocked and decides
 the next action.
 
 Profile settings `budgetSoftMultiplier` (default 1) and `budgetHardMultiplier` (default 3) are finite positive numbers;

@@ -17,8 +17,10 @@ async function loadEngine() {
   ({ taskCosts, taskKey, liveTaskCost, priorTaskCost } = await import('../scripts/lib/task-costs.mjs'));
   ({ incrementalUsage } = await import('../scripts/lib/transcript-usage.mjs'));
 }
-/** The fast guard, from the payload alone: an Agent/Task dispatch or a subagent's call, on Claude, with a session. */
-const concernsBudget = (payload) => Boolean((payload?.agent_id || ['Agent', 'Task'].includes(payload?.tool_name)) && (!payload.host || payload.host === 'claude') && payload.session_id);
+/** The fast guard, from the payload alone: an Agent/Task dispatch or a subagent's call, on Claude, with a session. A
+ * subagent's SubagentHandback is exempt: it ends the run and is the only way its report reaches the caller, so refusing
+ * it after a stop loses the report and makes the caller retry, which costs more than the stop saved. */
+const concernsBudget = (payload) => Boolean((payload?.agent_id || ['Agent', 'Task'].includes(payload?.tool_name)) && payload?.tool_name !== 'SubagentHandback' && (!payload.host || payload.host === 'claude') && payload.session_id);
 
 const decision = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
 export function handleBudget(payload, { repo, now = Date.now() } = {}) {
