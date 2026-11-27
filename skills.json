@@ -262,6 +262,12 @@
       "description": "Promote hard-won facts from per-role memory into the shared, committed `.agents/knowledge/` layer; audit it for stale or unindexed notes; retire facts that stopped being true."
     },
     {
+      "id": "mistake-to-guard",
+      "monorepo": "sdlc-skills",
+      "name": "mistake-to-guard",
+      "description": "Turn a fixed bug, a pattern-level review finding or a recurring retrospective correction into a deterministic check in the project's gate (type, lint/ast-grep rule, test, or repo guard script) with provenance, a fixture that proves it bites, and a guard ledger, instead of another line of prose."
+    },
+    {
       "id": "visual-testing",
       "monorepo": "sdlc-skills",
       "name": "visual-testing",

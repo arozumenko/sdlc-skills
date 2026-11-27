@@ -1,0 +1,9 @@
+# The rule's fixtures: <testDir>/g-NNN-short-slug-test.yml.
+# `invalid` = the original mistake (from the pre-fix code); `valid` = the
+# nearest allowed code. `ast-grep test --skip-snapshot-tests` fails if
+# either list is misclassified.
+id: g-NNN-short-slug
+valid:
+  - "val sinceBlink = clock.now() - lastBlinkAt"
+invalid:
+  - "val stale = frame.timestamp - previous.timestamp > 3_000"

@@ -30,6 +30,7 @@ hasn't recorded them, ask before assuming GitHub.
 4. Root cause analysis
 5. Implement the fix
 6. Verify
+6b. Generalize: guard the class, not just the instance
 7. Document on ticket
 ```
 
@@ -83,10 +84,30 @@ The failing test from step 3 now passes. Full test suite still passes. Lint
 and type checks clean. If anything fails, fix it before proceeding — don't
 ship a fix that breaks something else.
 
+### 6b. Generalize: guard the class, not just the instance
+
+The regression test from step 3 stops *this* bug coming back. Now ask one
+question: **could the same shape of mistake happen somewhere else and slip
+through the same way?** (The same wrong API, the same confused identifier, the
+same missing failure path, the same forbidden import.)
+
+- **No**, it was a one-off: done. Say so in the ticket comment.
+- **Yes**, and a tool could see it: load the **`mistake-to-guard`** skill and
+  propose the narrowest check (a type, a lint or ast-grep rule, an
+  architecture test, a repo guard script) with a failing fixture taken from the
+  pre-fix code. A guard is separate code with its own ack: put it in its own
+  commit or a follow-up PR, never folded silently into the fix.
+- **Yes**, but no tool can see it: write the one-line lesson to memory and
+  record it as `unguarded: <reason>` in `.agents/guards.md`.
+
+This step is about the class. It does not widen the fix: step 5's "only the
+root cause" still holds.
+
 ### 7. Document on ticket
 
 Post a `✅ **Fixed**` comment with root cause summary, what changed, regression
-test name, and PR number. Commit and open the PR. The `completing-a-task` skill
+test name, the step 6b verdict (guard id, `unguarded: <reason>`, or "one-off"),
+and PR number. Commit and open the PR. The `completing-a-task` skill
 covers the full commit → PR → notify handoff.
 
 ## Command recipes
@@ -100,6 +121,8 @@ need the exact template text.
 
 - Don't fix without reproducing first
 - Don't skip the failing test — no test = no proof of fix
+- Don't answer a bug class with a new sentence in `AGENTS.md` when a check
+  could catch it (step 6b)
 - Don't refactor while fixing — separate concerns into separate PRs
 - Don't close the ticket without documenting what was wrong and what changed
 - Don't fix multiple unrelated bugs in one PR

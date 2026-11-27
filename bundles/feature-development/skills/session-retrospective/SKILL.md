@@ -59,6 +59,13 @@ config from code/PR changes (that's scout's normal update flow).
    isn't seeded — a retrospective refines an existing lens, it doesn't create
    one; run `seeding-a-project` first.
 
+   Before you write a finding as prose, ask whether a tool could catch it. A
+   mistake that shipped in code or config goes to a guard at the first
+   occurrence; a behavioural correction a previous retrospective already wrote
+   down, and that happened anyway, escalates instead of being reworded.
+   `finding-to-target.md` has both routes; build guards with the
+   `mistake-to-guard` skill.
+
 5. **Propose, then wait.** Present each proposed change as a diff plus a
    one-line rationale with its session-id evidence. **Stop and wait for the
    user's ack.** Do not write yet.

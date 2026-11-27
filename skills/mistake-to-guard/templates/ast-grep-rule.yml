@@ -1,0 +1,27 @@
+# Rung-2 starter: one ast-grep rule per guard.
+# Lives at <ruleDir>/g-NNN-<slug>.yml; sgconfig.yml at the repo root lists the
+# rule and test dirs:
+#
+#   ruleDirs: [tools/guards/rules]
+#   testConfigs:
+#     - testDir: tools/guards/rule-tests
+#
+# Gate: `ast-grep scan` (exits non-zero on any `severity: error` match) AND
+# `ast-grep test --skip-snapshot-tests` (proves the rule's own fixtures).
+id: g-NNN-short-slug
+language: kotlin            # kotlin | typescript | tsx | python | swift | java | ...
+severity: error
+message: "G-NNN: <the pattern, in one line>"
+note: |
+  Closes the class behind <incident: bug id / PR / review / retro session>.
+  Allowed: <the nearest legitimate code this rule must not flag>.
+  Suppress with ast-grep's own comment on the line above, reason alongside:
+    // guard-allow G-NNN: <reason>
+    // ast-grep-ignore: g-NNN-short-slug
+  (count suppressions with: git grep -c "ast-grep-ignore: g-NNN")
+rule:
+  # Match the SHAPE, not the incident's identifiers. $X captures one node,
+  # $$$ any number. Combine with all/any/not/inside/has as needed.
+  pattern: $A.timestamp - $B.timestamp
+files:
+  - "**/livefeed/**/*.kt"   # scope it: narrower beats more suppressions
