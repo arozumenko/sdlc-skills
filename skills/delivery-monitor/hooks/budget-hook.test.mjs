@@ -85,6 +85,12 @@ test('in-run incremental usage denies second and all later calls before end; pri
  appendFileSync(c.path,JSON.stringify({type:'result',timestamp:'2099-01-01T00:00:00Z'})+'\n');
  const row=budgets(f).find(o=>o.event==='budget_stopped');assert.equal(row.meta.budget.source,'in-run');assert.equal(row.meta.budget.cost_at_crossing,10.5);assert.ok(row.at<'2099-01-01T00:00:00.000Z');stop(f,c);assert.equal(budgets(f).length,2);
 });
+test('a stopped subagent can still hand back its report: SubagentHandback is never refused',()=>{
+ const f=fixture();stop(f,child(f,'a',2.5));const c=child(f,'b',1);
+ usage(c.path,7,'next');assert.equal(denied(hook(f,c.payload)),true);
+ const handback={...c.payload,tool_name:'SubagentHandback',tool_input:{message:'report'}};
+ assert.deepEqual(hook(f,handback),{});assert.equal(denied(hook(f,c.payload)),true);
+});
 test('parent non-dispatch calls exit without reading ledger, even broken repo/cwd',()=>{
  assert.deepEqual(hook({repo:'/does-not-exist'},{tool_name:'Bash',session_id:'s'}),{});
 });
